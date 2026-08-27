@@ -109,6 +109,44 @@ export function PrintDocument({
 
   const recs = (data.recommendations ?? []).filter((r) => (r as { status?: string }).status === 'approved' || !(r as { status?: string }).status)
 
+  /*
+   * Section numbers are COUNTED, not written down.
+   *
+   * They were literals — «4. Budget Pacing» and «5. Recommendations» — while both sections are
+   * conditional. A report with no budget lines therefore printed 1, 2, 3, 5, and the reader is left
+   * looking for a section 4 that was never generated. On a client-facing PDF that reads as a page
+   * lost in production rather than a section that did not apply, which is the more expensive of the
+   * two misreadings.
+   */
+  let section = 0
+  const n = () => ++section
+
+  const creativeRows = [...(data.top_creatives ?? []), ...(data.worst_creatives ?? [])].map((c: Row) => [
+    String(c.name ?? c.creative_name ?? '—'),
+    String(c.provider ?? c.platform ?? '—'),
+    money(c.spend == null ? null : Number(c.spend), currency),
+    nfmt(c.impressions == null ? null : Number(c.impressions)),
+    c.ctr == null ? '—' : `${nfmt(Number(c.ctr) * 100, { maximumFractionDigits: 2 })}%`,
+  ])
+
+  /*
+   * A squad with no name on file is named as such rather than falling back to its provider id.
+   * `sq-8f21c0` in a client PDF is a raw key: it answers a question nobody asked and hides the one
+   * they did. Same rule as the deck (REPORT-ADSET-001).
+   */
+  const adSetRows = (data.ad_sets ?? [])
+    .slice()
+    .sort((a, b) => Number(b.spend ?? 0) - Number(a.spend ?? 0))
+    .map((r: Row) => [
+      r.name ? String(r.name) : 'Unnamed ad set',
+      money(r.spend == null ? null : Number(r.spend), currency),
+      nfmt(r.impressions == null ? null : Number(r.impressions)),
+      nfmt(r.clicks == null ? null : Number(r.clicks)),
+      r.ctr == null ? '—' : `${nfmt(Number(r.ctr) * 100, { maximumFractionDigits: 2 })}%`,
+    ])
+
+  const adSetsReported = data.entity_grains_reported?.ad_set ?? adSetRows.length > 0
+
   return (
     <div className="doc-root">
       <style>{DOC_CSS}</style>
@@ -128,7 +166,7 @@ export function PrintDocument({
 
       {/* Executive summary */}
       <section className="doc-section">
-        <h2>1. Executive Summary</h2>
+        <h2>{n()}. Executive Summary</h2>
         {(data.summary ?? []).map((s, i) => <p key={i}>{s}</p>)}
         <h3>Key metrics</h3>
         <Table head={['Metric', 'Value']} rows={kpiRows} />
@@ -136,20 +174,42 @@ export function PrintDocument({
 
       {/* Platform performance */}
       <section className="doc-section">
-        <h2>2. Platform Performance</h2>
+        <h2>{n()}. Platform Performance</h2>
         <Table head={['Platform', 'Spend', 'Revenue', 'Results', 'ROAS']} rows={platformRows} />
       </section>
 
       {/* Campaigns — the multi-page table */}
       <section className="doc-section">
-        <h2>3. Campaigns</h2>
+        <h2>{n()}. Campaigns</h2>
         <Table head={['Campaign', 'Platform', 'Status', 'Spend', 'Results', 'CPA']} rows={campaignRows} />
       </section>
+
+      {/* Ad squads — the grain below the campaign (REPORT-ADSET-001) */}
+      <section className="doc-section">
+        <h2>{n()}. Ad Sets</h2>
+        {adSetsReported
+          ? <Table head={['Ad set', 'Spend', 'Impressions', 'Clicks', 'CTR']} rows={adSetRows} />
+          : <p className="doc-empty">The platform did not report ad-set level figures for this period.</p>}
+      </section>
+
+      {/*
+        * Creative performance — present in the deck, absent here until now (REPORT-PRINT-001).
+        *
+        * The section is only drawn when the platform actually named creatives. An empty creative
+        * table in a client PDF states that the campaigns ran without creative, which is never what
+        * happened; what happened is that the connector did not return figures at that grain.
+        */}
+      {creativeRows.length > 0 && (
+        <section className="doc-section">
+          <h2>{n()}. Creative Performance</h2>
+          <Table head={['Creative', 'Platform', 'Spend', 'Impressions', 'CTR']} rows={creativeRows} />
+        </section>
+      )}
 
       {/* Budget */}
       {budgetRows.length > 0 && (
         <section className="doc-section">
-          <h2>4. Budget Pacing</h2>
+          <h2>{n()}. Budget Pacing</h2>
           <Table head={['Line', 'Budget', 'Spent', 'Remaining', 'Pacing']} rows={budgetRows} />
         </section>
       )}
@@ -157,7 +217,7 @@ export function PrintDocument({
       {/* Recommendations */}
       {recs.length > 0 && (
         <section className="doc-section">
-          <h2>5. Recommendations</h2>
+          <h2>{n()}. Recommendations</h2>
           <ol className="doc-recs">
             {recs.map((r, i) => {
               const body = (r as { detail?: string; body?: string }).detail ?? (r as { body?: string }).body
@@ -216,6 +276,7 @@ const DOC_CSS = `
 .doc-table td { padding: 4.5pt 7pt; border-bottom: 1px solid #eef2f6; }
 .doc-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .doc-table td.lead { font-weight: 600; }
+.doc-empty { margin: 0; color: #555; font-style: italic; break-inside: avoid; }
 .doc-recs { margin: 0; padding-left: 18pt; }
 .doc-recs li { margin-bottom: 8pt; break-inside: avoid; }
 .doc-recs p { margin: 2pt 0 0; color: #444; }
