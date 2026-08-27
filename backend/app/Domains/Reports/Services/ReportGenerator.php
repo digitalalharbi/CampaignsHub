@@ -118,7 +118,7 @@ final class ReportGenerator
         // Initialise the slide layout once (from the objective + connected platforms) if not authored yet.
         $config = $report->config;
         if (empty($config['slides'])) {
-            $config = $this->template->defaultConfig($objective, $providerList);
+            $config = $this->template->defaultConfig($objective, $providerList, $adSets !== []);
             $report->forceFill(['config' => $config, 'campaign_objective' => $objective])->saveQuietly();
         }
 

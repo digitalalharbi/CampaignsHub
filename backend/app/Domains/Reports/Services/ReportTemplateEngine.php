@@ -62,8 +62,11 @@ final class ReportTemplateEngine
     // add from the builder, but are NOT emitted automatically — standalone they render sparse.
     private const PER_PLATFORM_SLIDES = ['platform_performance'];
 
-    /** @param list<string> $platforms providers present in the data */
-    public function defaultConfig(string $objective, array $platforms): array
+    /**
+     * @param  list<string>  $platforms  providers present in the data
+     * @param  bool  $adSetsReported  whether any platform broke its figures down to the ad-squad grain
+     */
+    public function defaultConfig(string $objective, array $platforms, bool $adSetsReported = false): array
     {
         $objective = array_key_exists($objective, self::METRIC_SETS) ? $objective : 'custom';
         $ordered = $this->orderPlatforms($platforms);
@@ -98,6 +101,23 @@ final class ReportTemplateEngine
                 ];
             }
         }
+        /*
+         * REPORT-ADSET-001 — the ad-squad slide is emitted only where the grain was actually reported.
+         *
+         * On the same rule as PER_PLATFORM_SLIDES above: a slide that renders sparse is not added
+         * automatically. Most connected accounts do not break their figures down this far, and a deck
+         * that gained a permanent «no ad squads» page on every report would be teaching its readers to
+         * page past a section — which is how a real one stops being read too. It stays available in
+         * the builder either way, so an operator who knows the grain exists can add it back.
+         *
+         * `false` is the default because the one other caller is the template-preview endpoint, which
+         * has no window and therefore no data to answer from. A preview that guessed «yes» would offer
+         * a slide the generated report then dropped.
+         */
+        if ($adSetsReported) {
+            $slides[] = ['id' => 'ad_set_performance', 'type' => 'ad_set_performance', 'order' => $order++, 'visible' => true];
+        }
+
         // Cross-platform closing slides.
         if (count($ordered) > 1) {
             $slides[] = ['id' => 'platform_comparison', 'type' => 'platform_comparison', 'order' => $order++, 'visible' => true];

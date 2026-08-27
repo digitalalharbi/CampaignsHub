@@ -331,3 +331,56 @@ describe('creative analysis by objective', () => {
     expect(screen.queryByText('CPA')).not.toBeInTheDocument()
   })
 })
+
+/**
+ * REPORT-ADSET-001 — the grain below the campaign, and the two empty states that are not the same.
+ *
+ * `entity_daily_metrics` has held ad-squad figures since ANALYTICS-DRILLDOWN-001 and no report read
+ * them. The section that surfaces them has to distinguish «no squads in this scope» from «no platform
+ * reports at this grain», because an empty table silently asserts the first — a statement about the
+ * campaign — when the truth is usually the second, a statement about the platform.
+ */
+describe('the ad-squad slide', () => {
+  const slide: Slide = { id: 'ad_set_performance', type: 'ad_set_performance', order: 1, visible: true }
+
+  const withSquads: ReportData = {
+    ...brand,
+    ad_sets: [
+      { entity_id: 'a', name: 'الرياض · 25-34', spend: 400, impressions: 90_000, clicks: 300, ctr: 0.0033, conversions: 12 },
+      { entity_id: 'b', name: 'جدة · 18-24', spend: 900, impressions: 120_000, clicks: 500, ctr: 0.0042, conversions: 20 },
+    ],
+    entity_grains_reported: { ad_set: true },
+  }
+
+  it('lists the squads, highest spend first', () => {
+    render(<SlideBody slide={slide} data={withSquads} meta={meta} />)
+
+    const names = screen.getAllByText(/الرياض|جدة/).map((n) => n.textContent)
+    expect(names[0]).toContain('جدة')
+    expect(screen.getByText('الرياض · 25-34')).toBeInTheDocument()
+  })
+
+  it('says the platform did not break it down, rather than showing an empty table', () => {
+    render(<SlideBody slide={slide} data={{ ...brand, ad_sets: [], entity_grains_reported: { ad_set: false } }} meta={meta} />)
+
+    expect(screen.getByText(/لم تُرجع المنصة تفاصيل على مستوى المجموعات الإعلانية/)).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+
+  /**
+   * A squad the platform never named says so. Falling back to `external_id` would print `sq-8f21c0`
+   * in a client report — a raw key that answers a question nobody asked and hides the one they did.
+   */
+  it('never prints a provider identifier in place of a missing name', () => {
+    const unnamed: ReportData = {
+      ...brand,
+      ad_sets: [{ entity_id: 'a', external_id: 'sq-8f21c0', name: null, spend: 400, impressions: 90_000, clicks: 300, ctr: 0.0033, conversions: 12 }],
+      entity_grains_reported: { ad_set: true },
+    }
+
+    render(<SlideBody slide={slide} data={unnamed} meta={meta} />)
+
+    expect(screen.queryByText(/sq-8f21c0/)).not.toBeInTheDocument()
+    expect(screen.getByText('مجموعة بلا اسم على المنصة')).toBeInTheDocument()
+  })
+})

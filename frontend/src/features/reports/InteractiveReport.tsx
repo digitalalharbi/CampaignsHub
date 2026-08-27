@@ -55,6 +55,18 @@ export interface ReportData {
   top_creatives?: Row[]
   /** REPORT-WORST-CREATIVES-001 — measured underperformers, never merely unmeasured ones. */
   worst_creatives?: Row[]
+  /**
+   * REPORT-ADSET-001 — the two rungs below the campaign.
+   *
+   * `entity_grains_reported` is separate on purpose: an empty list means either «the scope holds no
+   * ad squads» or «no connected platform breaks its figures down that far», and a reader cannot tell
+   * those apart from an empty table. One of them is a fact about this campaign, the other a fact
+   * about the platform, and printing the first when the second is true is a lie the reader has no
+   * way to catch.
+   */
+  ad_sets?: Row[]
+  ads?: Row[]
+  entity_grains_reported?: { ad_set?: boolean; ad?: boolean }
   platform_notes?: Record<string, { strengths: string[]; weaknesses: string[] }>
   /**
    * The leader board, ranked on the metric this report's money was buying (§14.6).
@@ -205,6 +217,7 @@ export function SlideBody({ slide, data, meta }: { slide: Slide; data: ReportDat
     case 'top_creatives': return <CreativesSlide data={data} platform={slide.platform!} />
     case 'platform_notes': return <NotesSlide data={data} platform={slide.platform!} />
     case 'platform_comparison': return <ComparisonSlide data={data} />
+    case 'ad_set_performance': return <AdSetSlide data={data} />
     case 'objective_performance': return <ObjectiveSplitSlide data={data} />
     case 'funnel': return <FunnelSlide data={data} />
     case 'comparison': return <PeriodComparisonSlide data={data} />
@@ -764,6 +777,72 @@ function NotesSlide({ data, platform }: { data: ReportData; platform: string }) 
         </div>
       </div>
       <p className="mt-2 text-xs text-text-muted">اقتراحات آلية — يعتمدها المستخدم قبل ظهورها للعميل.</p>
+    </div>
+  )
+}
+
+/**
+ * The ad squads behind the campaigns, ranked by spend.
+ *
+ * Two states that must never be rendered the same way: no squads in scope, and no platform that
+ * reports at this grain. The second is by far the more common — most connected accounts do not break
+ * their figures down this far — and an empty table would state, in the reader's mind, that the
+ * campaign ran without ad squads. It did not; nobody told us about them.
+ *
+ * A squad with no name on file shows that it has none rather than falling back to its provider id.
+ * `sq-8f21c0` in a client report is a raw key in visible UI, and it answers a question the reader did
+ * not ask while hiding the one they did.
+ */
+function AdSetSlide({ data }: { data: ReportData }) {
+  const rows = (data.ad_sets ?? []).slice().sort((a, b) => Number(b.spend ?? 0) - Number(a.spend ?? 0))
+  const reported = data.entity_grains_reported?.ad_set ?? rows.length > 0
+
+  if (!reported) {
+    return (
+      <div>
+        <Title sub="التوزيع أسفل مستوى الحملة">أداء المجموعات الإعلانية</Title>
+        <p className="rounded-xl border border-border bg-surface-secondary px-4 py-6 text-center text-sm text-text-secondary">
+          لم تُرجع المنصة تفاصيل على مستوى المجموعات الإعلانية لهذه الفترة.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <Title sub="التوزيع أسفل مستوى الحملة">أداء المجموعات الإعلانية</Title>
+      <ChartCard title="المجموعات حسب الإنفاق">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead>
+              <tr className="border-b border-border text-text-muted">
+                <th className="py-2 text-start">المجموعة</th>
+                <th className="py-2 text-center">الإنفاق</th>
+                <th className="py-2 text-center">الظهور</th>
+                <th className="py-2 text-center">النقرات</th>
+                <th className="py-2 text-center">CTR</th>
+                <th className="py-2 text-center">النتائج</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, idx) => (
+                <tr key={String(r.entity_id ?? idx)} className="border-b border-border last:border-0">
+                  <td className="py-2 font-semibold">
+                    {r.name
+                      ? String(r.name)
+                      : <span className="text-text-muted">مجموعة بلا اسم على المنصة</span>}
+                  </td>
+                  <td className="tnum py-2 text-center">{money(r.spend as number, data.currency)}</td>
+                  <td className="tnum py-2 text-center">{num(r.impressions as number)}</td>
+                  <td className="tnum py-2 text-center">{num(r.clicks as number)}</td>
+                  <td className="tnum py-2 text-center">{percent(r.ctr as number, 2)}</td>
+                  <td className="tnum py-2 text-center">{num(r.conversions as number)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </ChartCard>
     </div>
   )
 }
