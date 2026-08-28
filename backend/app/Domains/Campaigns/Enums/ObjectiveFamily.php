@@ -50,6 +50,29 @@ enum ObjectiveFamily: string
      *
      * @return list<string>
      */
+    /**
+     * The customer-facing objective this family rolls up into — ANALYTICS-OBJECTIVE-SYSTEM-001.
+     *
+     * Eight families, five choices. Awareness, Engagement and Video are one question measured three
+     * ways depending on what a platform publishes, so offering them as separate primary choices asked
+     * a question with no correct answer. The rest each buy a different outcome and stay apart.
+     *
+     * The grouping lives HERE rather than in `CanonicalObjective` because this enum is what the metric
+     * engines already reason about; putting it anywhere else would make the roll-up a second opinion
+     * about the same fact.
+     */
+    public function canonical(): CanonicalObjective
+    {
+        return match ($this) {
+            self::Awareness, self::Engagement, self::Video => CanonicalObjective::AwarenessEngagement,
+            self::Traffic => CanonicalObjective::Traffic,
+            self::Leads => CanonicalObjective::Leads,
+            self::App => CanonicalObjective::AppPromotion,
+            self::Sales => CanonicalObjective::Sales,
+            self::Unknown => CanonicalObjective::Unknown,
+        };
+    }
+
     public function headlineMetrics(): array
     {
         return match ($this) {
