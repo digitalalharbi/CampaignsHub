@@ -6,6 +6,7 @@ use App\Domains\Integrations\Review\ReviewChecklistController;
 use App\Domains\Legal\Http\Controllers\LegalInboxController;
 use App\Domains\Legal\Http\Controllers\PlatformSettingsController;
 use App\Domains\Metrics\Http\Controllers\PlatformCurrencyRateController;
+use App\Domains\Ops\Http\Controllers\ScheduledWorkController;
 use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
@@ -50,6 +51,15 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/email/deliveries', [PlatformEmailController::class, 'index'])->name('email.deliveries');
         Route::get('/email/previews', [PlatformEmailController::class, 'previews'])->name('email.previews');
         Route::get('/email/previews/{key}', [PlatformEmailController::class, 'preview'])->name('email.preview');
+
+        /*
+         * AUTOMATION-FIRST-OPERATIONS-001 — did the automation actually run.
+         *
+         * Read-only, and deliberately without a «run now» control: this requirement exists to move
+         * operational work off manual buttons, and answering a worry about the scheduler by adding one
+         * would reintroduce exactly what it removes.
+         */
+        Route::get('/scheduled-work', ScheduledWorkController::class)->name('scheduled-work');
 
         Route::get('/tenants', [PlatformTenantController::class, 'index'])->name('tenants.index');
         Route::get('/tenants/{tenant}', [PlatformTenantController::class, 'show'])->name('tenants.show');
