@@ -4,7 +4,7 @@ import { QueryFailure } from '@/components/ui/QueryFailure'
 import { metricLabel } from '@/features/analytics/metricLabels'
 
 import { diagnose, type DiagnosticFinding, type DiagnosticStage } from './diagnose'
-import { recommendedActions, type RecommendedAction } from './recommendedActions'
+import { recommendedActions } from './recommendedActions'
 import { Panel } from './components'
 
 /**
