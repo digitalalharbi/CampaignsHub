@@ -137,6 +137,88 @@ final class LeadDeduplicationTest extends TestCase
         $this->assertNull(app(LinkDuplicateLead::class)->handle($second));
     }
 
+    /**
+     * The original is never pointed at a duplicate that arrived after it.
+     *
+     * Ingestion links each lead the moment it is created, so the original is always elected while it is
+     * still alone and this never bites. A backfill, a retry, or a redelivery re-runs the election on a
+     * lead that already has a later twin — and there the outcome used to depend on which of the two was
+     * processed first: elect the original first and it linked forward to its own duplicate, leaving the
+     * later submission as the canonical «person».
+     */
+    public function test_the_original_is_never_pointed_at_a_later_duplicate(): void
+    {
+        $first = $this->lead('نورة', email: 'noura@example.com', provider: 'meta');
+        $second = $this->lead('نورة', email: 'noura@example.com', provider: 'snapchat');
+
+        // Distinct arrival seconds: two submissions a day apart, not two in the same second.
+        $first->forceFill(['created_at' => now()->subDay()])->saveQuietly();
+        $second->forceFill(['created_at' => now()])->saveQuietly();
+
+        // The original is elected FIRST — the order ingestion never produces.
+        $this->assertNull(
+            app(LinkDuplicateLead::class)->handle($first->refresh()),
+            'The original was linked to a lead that arrived after it.',
+        );
+        $this->assertNull($first->refresh()->canonical_lead_id);
+
+        // The later one still links, so the person is counted once either way.
+        $canonical = app(LinkDuplicateLead::class)->handle($second->refresh());
+        $this->assertNotNull($canonical);
+        $this->assertTrue($canonical->is($first));
+    }
+
+    /**
+     * The email says one person, the phone says a different one. It links to neither and says so.
+     *
+     * Picking either would silently collapse two real people, and the arbitrary choice would be
+     * invisible afterwards. Over-counting by one is a figure a human can correct; a person deleted from
+     * the list the sales team works is not recoverable by looking at the data.
+     */
+    public function test_an_ambiguous_identity_links_to_neither_and_says_so(): void
+    {
+        $byEmail = $this->lead('نورة', email: 'noura@example.com', phone: '0500000001');
+        $byPhone = $this->lead('محمد', email: 'mohammed@example.com', phone: '0500000002');
+
+        $ambiguous = $this->lead('؟', email: 'noura@example.com', phone: '0500000002');
+
+        $this->assertNull(app(LinkDuplicateLead::class)->handle($ambiguous));
+
+        $ambiguous->refresh();
+        $this->assertNull($ambiguous->canonical_lead_id, 'An ambiguous identity was resolved by guessing.');
+        $this->assertSame('ambiguous', $ambiguous->duplicate_reason, 'The ambiguity was not recorded.');
+
+        // Neither of the two real people absorbed the other.
+        $this->assertNull($byEmail->refresh()->canonical_lead_id);
+        $this->assertNull($byPhone->refresh()->canonical_lead_id);
+    }
+
+    /**
+     * A link that already exists is left exactly as it was written, not recomputed.
+     *
+     * This is the concurrency guard's observable effect. Under load a second worker can link this lead
+     * between its insert and this election, and re-deciding would overwrite a decision that was already
+     * made and already counted. The election is therefore read-once: if the lead is already linked, that
+     * link stands.
+     *
+     * Written out-of-band with a reason this action would not choose on its own — it matches on email
+     * first, so a preserved `phone` proves the record was left alone rather than recomputed to the same
+     * answer by luck.
+     */
+    public function test_an_existing_link_is_preserved_rather_than_re_decided(): void
+    {
+        $first = $this->lead('نورة', email: 'noura@example.com', phone: '0501234567');
+        $second = $this->lead('نورة', email: 'noura@example.com', phone: '0501234567', provider: 'snapchat');
+
+        $second->forceFill(['canonical_lead_id' => $first->id, 'duplicate_reason' => 'phone'])->saveQuietly();
+
+        $canonical = app(LinkDuplicateLead::class)->handle($second->refresh());
+
+        $this->assertNotNull($canonical);
+        $this->assertTrue($canonical->is($first));
+        $this->assertSame('phone', $second->refresh()->duplicate_reason, 'An existing link was re-decided.');
+    }
+
     private function lead(
         string $name,
         ?string $email = null,
