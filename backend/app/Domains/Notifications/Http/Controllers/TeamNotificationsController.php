@@ -52,6 +52,10 @@ use Illuminate\Support\Facades\DB;
  */
 final class TeamNotificationsController extends Controller
 {
+    /** How many attempts the log shows. Enough to answer «has this been arriving», bounded so a busy
+     *  workspace does not hand a settings screen ten thousand rows. */
+    private const LOG_LIMIT = 100;
+
     public function __construct(
         private readonly DigestScope $scope,
         private readonly NotificationChoices $choices,
@@ -170,6 +174,77 @@ final class TeamNotificationsController extends Controller
             'monthly' => ($digests['monthly'] ?? false) === true,
             'alerts' => ($digests['alerts'] ?? false) === true,
         ];
+    }
+
+    /**
+     * The delivery LOG — EMAIL-SETTINGS-DEPTH-001.
+     *
+     * The records already existed and nothing listed them. «Last send: 08:04» answers «did the last
+     * one work?» and not «has this person been getting them», which is the question somebody asks
+     * when a client says they never see the report.
+     *
+     * Both ledgers, because they are not redundant: `mail_deliveries` holds transactional messages by
+     * address, `digest_sends` holds digests and alerts by user and period. Reading one would show
+     * «nothing has ever been sent» to somebody receiving a digest every morning.
+     *
+     * FAILURES included, with their reason. A log of successes cannot answer the only question
+     * anybody opens it for, and a failure with no reason is only marginally better.
+     */
+    public function deliveries(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('settings.manage'), 403);
+
+        $tenantId = (string) $this->tenants->tenantId();
+
+        $digests = DB::table('digest_sends')
+            ->where('tenant_id', $tenantId)
+            ->orderByDesc('created_at')
+            ->limit(self::LOG_LIMIT)
+            ->get()
+            ->map(fn ($r): array => [
+                'source' => 'digest',
+                'kind' => (string) $r->kind,
+                'recipient' => null,
+                'status' => (string) $r->status,
+                'reason' => $r->reason === null ? null : (string) $r->reason,
+                'attempts' => (int) ($r->attempts ?? 0),
+                'at' => (string) ($r->sent_at ?? $r->created_at),
+                'sort' => (string) $r->created_at,
+            ]);
+
+        /*
+         * `tenant_id` is nullable here ON PURPOSE — a password reset is requested with no session and
+         * no resolved tenant. Those rows belong to nobody's workspace, so this asks for this tenant's
+         * only: showing an unattributed reset under one workspace's log would be a guess.
+         */
+        $transactional = DB::table('mail_deliveries')
+            ->where('tenant_id', $tenantId)
+            ->orderByDesc('created_at')
+            ->limit(self::LOG_LIMIT)
+            ->get()
+            ->map(fn ($r): array => [
+                'source' => 'transactional',
+                'kind' => (string) $r->kind,
+                'recipient' => (string) $r->recipient,
+                'status' => (string) $r->status,
+                'reason' => null,
+                'attempts' => 1,
+                'at' => (string) ($r->sent_at ?? $r->created_at),
+                'sort' => (string) $r->created_at,
+            ]);
+
+        $rows = $digests->concat($transactional)
+            ->sortByDesc('sort')
+            ->take(self::LOG_LIMIT)
+            ->map(function (array $row): array {
+                unset($row['sort']);
+
+                return $row;
+            })
+            ->values()
+            ->all();
+
+        return ApiResponse::success($rows, 'Delivery log.');
     }
 
     /**

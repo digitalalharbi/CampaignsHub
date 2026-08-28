@@ -68,6 +68,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     Route::delete('notifications/recipients/{recipient}', [NotificationRecipientController::class, 'destroy'])->name('notifications.recipients.destroy');
     // MAIL-012 — who on the team is actually being told anything, and what happened to it.
     Route::get('notifications/team', [TeamNotificationsController::class, 'index'])->name('notifications.team');
+    // EMAIL-SETTINGS-DEPTH-001 — what was actually sent, and what failed, from the ledgers that
+    // already record it.
+    Route::get('notifications/deliveries', [TeamNotificationsController::class, 'deliveries'])->name('notifications.deliveries');
 
     // Security (account + org policy).
     Route::get('security/activity', [SecurityController::class, 'activity'])->name('security.activity');
