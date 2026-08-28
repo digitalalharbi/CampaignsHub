@@ -67,13 +67,13 @@ inside ANALYTICS-FILTER-TRUTH-001 and pin with regression coverage.
 - GitHub API and deploy SSH `i/o timeout` recur against the same host. Every affected step succeeded
   on retry. **Instrument failure is not a result** — one gate check reported STALE purely because an
   API timeout returned an empty SHA.
-- **GitHub drops the `pull_request: synchronize` event after several pushes in quick succession.**
-  Seen twice in one session (#147 at `aec1b72`, #153 at `ab3b129`): the branch's only run stays on an
-  older head and nothing fires for the newest. The workflow's `concurrency: cancel-in-progress` is the
-  likely interaction. Not dangerous — merges are pinned to the tested head, so a green on a stale
-  commit can never let a PR land — but the queue silently stops moving while it looks like CI is just
-  slow. **Check that a run exists for the CURRENT head before waiting on it**; an empty commit is the
-  smallest way to ask for one.
+- **A PR with a merge CONFLICT gets no CI run at all — and that is what «GitHub is dropping events»
+  actually was.** `pull_request` workflows need a mergeable ref to build the merge commit they test,
+  so once main moved past #153's branch point the branch went `mergeable=false` and every subsequent
+  push produced silence. I misread that as dropped `synchronize` events and pushed four empty
+  retrigger commits that could never have worked; the fix was a rebase, after which CI started on the
+  first try. **Check `gh api repos/OWNER/REPO/pulls/N --jq .mergeable` before concluding anything
+  about a missing run** — it is one call and it answers the question directly.
 - The gate is a ~60-minute three-browser suite; duration alone is never evidence of a hang.
 - **OBSERVATION — firefox-only gate failures on TWO different PRs, both passing on a same-head
   rerun.** #147 run `33183435257` failed `verify-100.spec.ts:34` («view-cards» never became
