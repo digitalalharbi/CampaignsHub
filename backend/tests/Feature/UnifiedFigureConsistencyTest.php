@@ -276,6 +276,40 @@ final class UnifiedFigureConsistencyTest extends TestCase
         $this->assertSame([], $entities->json('data.entities'), 'entity rows appeared for a campaign-grain sync');
     }
 
+    /**
+     * Content and Alerts read the same ingested window — and say nothing false when it is empty.
+     *
+     * Neither carries a spend total to reconcile, so the property is different and worth stating: a
+     * sync that wrote campaign-grain rows and no creatives must produce an EMPTY creative library
+     * rather than an error or an invented row, and the alert surface must answer for this workspace
+     * alone.
+     *
+     * This is the half of propagation that is easy to get wrong in the other direction — a surface
+     * that errors on an account with no creatives looks broken to a customer whose account is simply
+     * new.
+     */
+    public function test_content_and_alerts_answer_for_this_project_without_inventing_rows(): void
+    {
+        // `data.creatives`, inside a paginated envelope — asserting a bare `data` array would be
+        // asserting a shape this endpoint has never served, and would fail a working product.
+        $creatives = $this->read('creatives')->assertOk();
+        $this->assertIsArray($creatives->json('data.creatives'), 'the creative library did not answer');
+        $this->assertSame([], $creatives->json('data.creatives'), 'a creative appeared for a sync that wrote none');
+        $this->assertSame(0, $creatives->json('data.total'), 'the library counted creatives it did not return');
+
+        /*
+         * Alerts are workspace-scoped rather than project-scoped, so this asks the workspace route
+         * and requires it to answer at all. The isolation that matters here is the tenant's, and the
+         * neighbour's project belongs to a different CLIENT inside the same tenant — so an alert
+         * naming their campaign would be the leak.
+         */
+        $alerts = $this->actingAs($this->operator, 'sanctum')->getJson('/api/v1/alerts/events')->assertOk();
+        $this->assertIsArray($alerts->json('data'), 'the alert surface did not answer');
+
+        $names = array_column((array) $alerts->json('data'), 'title');
+        $this->assertNotContains('حملة أخرى', $names, 'an alert named another client’s campaign');
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────────────────────
 
     /*
