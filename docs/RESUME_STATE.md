@@ -67,7 +67,45 @@ inside ANALYTICS-FILTER-TRUTH-001 and pin with regression coverage.
 - GitHub API and deploy SSH `i/o timeout` recur against the same host. Every affected step succeeded
   on retry. **Instrument failure is not a result** — one gate check reported STALE purely because an
   API timeout returned an empty SHA.
+- **A PR with a merge CONFLICT gets no CI run at all — and that is what «GitHub is dropping events»
+  actually was.** `pull_request` workflows need a mergeable ref to build the merge commit they test,
+  so once main moved past #153's branch point the branch went `mergeable=false` and every subsequent
+  push produced silence. I misread that as dropped `synchronize` events and pushed four empty
+  retrigger commits that could never have worked; the fix was a rebase, after which CI started on the
+  first try. **Check `gh api repos/OWNER/REPO/pulls/N --jq .mergeable` before concluding anything
+  about a missing run** — it is one call and it answers the question directly.
+- **Three PRs, three DIFFERENT browsers, three specs unrelated to their diffs — while many gates ran
+  concurrently.** #147 firefox (`verify-100:34`), #153 firefox (`registration-onboarding:191`,
+  `request-vertical:11`), #148 webkit (`creative-analysis:145`, which failed with «WebKit encountered
+  an internal error» during `page.goto` — a BROWSER CRASH, i.e. instrument failure, not a verdict
+  about the product). None of the three diffs touches the failing area. Same-head reruns passed for
+  #147 and #153. Treat a single-browser failure on a spec outside the diff as **unclassified until a
+  same-head rerun**, and never as «flaky» on its own — but note that a browser internal error is
+  instrument failure by definition. Running six gates at once on shared runners is the obvious
+  suspect for the contention.
 - The gate is a ~60-minute three-browser suite; duration alone is never evidence of a hang.
+- **OBSERVATION — firefox-only gate failures on TWO different PRs, both passing on a same-head
+  rerun.** #147 run `33183435257` failed `verify-100.spec.ts:34` («view-cards» never became
+  `aria-pressed`); attempt 2 on the identical head passed, and #147 was merged on that green with all
+  four pre-merge checks holding. #153 run `33182321129` failed `registration-onboarding.spec.ts:191`
+  and `request-vertical.spec.ts:11`; attempt 2 on the identical head also passed.
+  **A pass-after-fail on one SHA proves NON-DETERMINISM, not correctness** — neither is «fixed», and
+  neither should be recorded as such. Neither reproduces locally: the #147 spec passed 3× in
+  isolation on firefox and again inside a 32-test firefox run under load. Chromium and webkit passed
+  every one of these specs on the same commits. Firefox is the slowest of the three browsers and is
+  where this repository has previously found press/release races (see CLICK-STABLE-001). **Open
+  question worth its own unit:** on `/app/campaigns` the stat-card captions and the attention-count
+  badge both change after data lands, which moves the view switcher under the pointer — that affects
+  real users, not only tests, and is a plausible but UNPROVEN cause.
+- **OBSERVATION — the original #153 detail (run `33182321129`, head `fbca666`):**
+  `registration-onboarding.spec.ts:191` (after sign-in the new company account landed on
+  `/app/dashboard` instead of `/onboarding`) and `request-vertical.spec.ts:11` (the «تم التحقق»
+  marker never appeared). **Not attributable to that branch's scope**, and the evidence for saying so
+  is: its diff touches no registration, onboarding, auth, identity or request file; chromium AND
+  webkit passed the same two specs on the same commit; and the full chromium suite passed locally
+  (408 passed, only the known-stale darwin homepage baselines failing). That is NOT the same as
+  «proven correct» — a same-head rerun is running to establish whether it is deterministic. Firefox
+  is the slowest of the three browsers and has historically been where settling races surface.
 - `retries: 0` is deliberate, so any non-determinism fails the gate outright. Three failure classes
   were seen and must not be collapsed into «flaky»: real product defects (#131, #140), a real
   test-design defect (#133), and intermittent browser/state failures (#132, #137, #138).

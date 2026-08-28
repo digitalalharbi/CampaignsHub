@@ -14,9 +14,11 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
+use App\Domains\Notifications\Services\DailyDigest;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Services\ReportGenerator;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -222,6 +224,170 @@ final class UnifiedFigureConsistencyTest extends TestCase
         // and would have failed a working product.
         $this->assertNotEmpty($freshness->json('data'), 'no source is named beside the figures');
         $this->assertNotNull($freshness->json('meta.summary.state'), 'the figures carry no freshness verdict');
+    }
+
+    /**
+     * PROVIDER-CROSS-SURFACE-PROPAGATION-001 — the surfaces this harness did not reach.
+     *
+     * The four tests above cover the dashboard, the breakdowns, the funnel and the client link. The
+     * requirement names more: budget, the objective view and the campaign detail all read the same
+     * ingested window, and each of them is a place where a second query could quietly appear.
+     *
+     * Asserted against the OTHER surfaces rather than against 100, for the reason the class docblock
+     * gives: pinning only to a literal would still pass on the day three surfaces each grew their own
+     * query and happened to agree.
+     */
+    public function test_budget_and_the_objective_view_read_the_same_window(): void
+    {
+        $dashboard = (float) $this->read('metrics/summary')->json('data.current.spend');
+
+        // `spent`, not `spend` — the budget view names the money already used against a budget, and
+        // asserting the wrong key would have passed a broken product by summing nothing to zero.
+        $budget = $this->sum($this->read('metrics/budget')->json('data'), 'spent');
+        $this->assertSame($dashboard, $budget, 'the budget view disagrees with the dashboard');
+
+        /*
+         * The objective view groups the same spend by family. Summed back up it must be the same
+         * money — a grouping that loses or invents a riyal is a grouping nobody can reconcile.
+         */
+        // `data.paths` — the objective view groups by marketing path, and each path carries its own
+        // spend. Summed back up it must be the same money: a grouping that loses or invents a riyal
+        // is a grouping nobody can reconcile against the dashboard above it.
+        $paths = $this->read('metrics/objective-performance')->json('data.paths');
+        $this->assertIsArray($paths, 'the objective view did not answer');
+        $this->assertNotEmpty($paths, 'a project with spend has no objective path');
+        $this->assertSame(
+            $dashboard,
+            $this->sum($paths, 'spend'),
+            'the objective breakdown does not sum to the dashboard',
+        );
+    }
+
+    /**
+     * The drill-down reads the same pipeline, and says so honestly when there is nothing beneath.
+     *
+     * This sync writes campaign-grain rows only, so the ad-set level has NOTHING — and the endpoint
+     * must say that rather than inventing a level or erroring. «No ad squads» is a fact about this
+     * account's data, and it is the answer a scoped report depends on being right.
+     */
+    public function test_the_drill_down_reports_what_is_beneath_without_inventing_it(): void
+    {
+        $entities = $this->read('metrics/entities/ad_set')->assertOk();
+
+        $this->assertIsArray($entities->json('data.entities'), 'the drill-down did not answer at all');
+        $this->assertSame([], $entities->json('data.entities'), 'entity rows appeared for a campaign-grain sync');
+    }
+
+    /**
+     * Content and Alerts read the same ingested window — and say nothing false when it is empty.
+     *
+     * Neither carries a spend total to reconcile, so the property is different and worth stating: a
+     * sync that wrote campaign-grain rows and no creatives must produce an EMPTY creative library
+     * rather than an error or an invented row, and the alert surface must answer for this workspace
+     * alone.
+     *
+     * This is the half of propagation that is easy to get wrong in the other direction — a surface
+     * that errors on an account with no creatives looks broken to a customer whose account is simply
+     * new.
+     */
+    public function test_content_and_alerts_answer_for_this_project_without_inventing_rows(): void
+    {
+        // `data.creatives`, inside a paginated envelope — asserting a bare `data` array would be
+        // asserting a shape this endpoint has never served, and would fail a working product.
+        $creatives = $this->read('creatives')->assertOk();
+        $this->assertIsArray($creatives->json('data.creatives'), 'the creative library did not answer');
+        $this->assertSame([], $creatives->json('data.creatives'), 'a creative appeared for a sync that wrote none');
+        $this->assertSame(0, $creatives->json('data.total'), 'the library counted creatives it did not return');
+
+        /*
+         * Alerts are workspace-scoped rather than project-scoped, so this asks the workspace route
+         * and requires it to answer at all. The isolation that matters here is the tenant's, and the
+         * neighbour's project belongs to a different CLIENT inside the same tenant — so an alert
+         * naming their campaign would be the leak.
+         */
+        $alerts = $this->actingAs($this->operator, 'sanctum')->getJson('/api/v1/alerts/events')->assertOk();
+        $this->assertIsArray($alerts->json('data'), 'the alert surface did not answer');
+
+        $names = array_column((array) $alerts->json('data'), 'title');
+        $this->assertNotContains('حملة أخرى', $names, 'an alert named another client’s campaign');
+    }
+
+    /**
+     * A generated REPORT carries the same window as the dashboard it was made from.
+     *
+     * The live link is already asserted above; a generated report is the other document a client
+     * receives, and it is built by a different service (`ReportGenerator`) reading the same
+     * aggregator. That is exactly the shape of divergence this harness exists to catch — «a page
+     * grows its own query» applies to documents too, and a report is the copy a client keeps.
+     */
+    public function test_a_generated_report_carries_the_same_spend_as_the_dashboard(): void
+    {
+        $dashboard = (float) $this->read('metrics/summary')->json('data.current.spend');
+
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $report = Report::create([
+            'project_id' => $this->project->id,
+            'name' => 'R2',
+            'type' => 'executive',
+            'status' => 'pending',
+            'currency' => 'SAR',
+            'period_start' => '2026-07-01',
+            'period_end' => '2026-07-31',
+            'data' => [],
+        ]);
+
+        // `generate()` RETURNS the document; persisting it is the job's business, so the returned
+        // array is what to assert — reading `$report->data` back would have tested the job instead.
+        $generated = app(ReportGenerator::class)->generate($report);
+
+        $kpis = (array) ($generated['kpis'] ?? []);
+        $this->assertArrayHasKey('spend', $kpis, 'the generated report carries no spend at all');
+        $this->assertSame(
+            $dashboard,
+            (float) $kpis['spend'],
+            'the generated report disagrees with the dashboard it was made from',
+        );
+
+        app(TenantContext::class)->forget();
+    }
+
+    /**
+     * The digest EMAIL reports the same money as the dashboard — the last surface in the chain.
+     *
+     * This is the one figure in the product that a person reads before they have opened anything:
+     * it arrives on a lock screen, and it is what decides whether they log in at all. A digest that
+     * disagrees with the dashboard sends somebody to look for a problem that is not there, or worse,
+     * reassures them about one that is.
+     *
+     * `buildRange` over the report's own window rather than `build`'s rolling one, so the two are
+     * asked about the SAME days — comparing a seven-day email against a July dashboard would be
+     * comparing two different questions and calling the difference a defect.
+     */
+    public function test_the_digest_email_reports_the_same_spend_as_the_dashboard(): void
+    {
+        $dashboard = (float) $this->read('metrics/summary')->json('data.current.spend');
+
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $digest = app(DailyDigest::class)->buildRange(
+            $this->operator,
+            (string) $this->tenant->id,
+            [(string) $this->project->id],
+            Carbon::parse('2026-07-01'),
+            Carbon::parse('2026-07-31'),
+        );
+
+        $this->assertSame(
+            $dashboard,
+            (float) ($digest['totals']['spend'] ?? -1),
+            'the digest email disagrees with the dashboard',
+        );
+
+        // …and it does not sum the neighbour in, which is the same isolation the pages are held to.
+        $this->assertNotSame(self::SPEND + self::OTHER_SPEND, (float) ($digest['totals']['spend'] ?? -1));
+
+        app(TenantContext::class)->forget();
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────────────────────

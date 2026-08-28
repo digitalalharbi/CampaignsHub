@@ -32,6 +32,7 @@ import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
 import { useT } from '@/lib/i18n'
+import { orderAttention } from './attentionOrdering'
 
 const STATUS_COLORS: Record<string, string> = {
   active: 'var(--success)', paused: 'var(--warning)', completed: 'var(--info)',
@@ -262,10 +263,17 @@ export function CampaignsPage() {
   const visibleCampaigns = lifecycleShown.rows
 
   const attention = useMemo(
-    () => campaigns
+    () => orderAttention(campaigns
       .map((c) => ({ c, flags: attentionFlags(c, metricsByCampaign.get(c.id), summary.data?.currency ?? null) }))
       .filter((x) => x.flags.length > 0)
-      .sort((a, b) => attentionRank(b.flags) - attentionRank(a.flags)),
+      /*
+        ENTITY-RELEVANCE-ORDERING-001 — rank first, then a key that cannot move.
+
+        Severity is a small integer, so a dozen flagged campaigns are mostly ties, and `sort` left
+        those in whatever order the campaigns API returned. An operator working down a half-finished
+        list cannot tell whether it moved because something happened or because nothing did.
+      */
+      .map((x) => ({ ...x, id: x.c.id, rank: attentionRank(x.flags), name: x.c.name }))),
     // The reporting currency decides whether an over-budget comparison is possible at all, so the
     // flags must recompute when it arrives — otherwise the first render's «no verdict» would stick.
     [campaigns, metricsByCampaign, summary.data?.currency],
