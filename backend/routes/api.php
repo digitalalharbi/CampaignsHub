@@ -120,6 +120,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
 
     // Print pipeline: token-gated snapshot for the headless-Chromium print route (no session).
     Route::get('/reports/print/{token}', [ReportPrintController::class, 'data'])->name('reports.print.data');
+    // The mark that document carries, behind the same short-lived token — no asset id in the path.
+    Route::get('/reports/print/{token}/logo', [ReportPrintController::class, 'logo'])->name('reports.print.logo');
 
     // Public brand/domain identity, consumed by the SPA and marketing site.
     Route::get('/brand', fn () => ApiResponse::success([
