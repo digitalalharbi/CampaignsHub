@@ -1,0 +1,104 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, screen } from '@testing-library/react'
+
+import { renderWithProviders, signInWith, signOut } from '@/test/utils'
+import { useProject } from '@/stores/project'
+
+import { CampaignsPage } from './CampaignsPage'
+import type { UnifiedCampaign } from './types'
+
+/**
+ * CAMPAIGN-INTELLIGENCE-HUB — the row's concise state, and «no arbitrary opaque health score».
+ *
+ * A score is what this becomes the moment the row grows its own rules, so the state is the shared
+ * diagnostic engine run over that row's own totals. What the row must never do is show the same thing
+ * for «examined and fine» and «never examined»: that is the opaque score the requirement forbids,
+ * wearing a word instead of a number.
+ */
+vi.mock('./api', () => ({ listCampaigns: vi.fn(), createCampaign: vi.fn(), updateCampaign: vi.fn() }))
+vi.mock('@/features/projects/api', () => ({ listProjects: vi.fn(), listUsers: vi.fn() }))
+
+const metrics = vi.hoisted(() => ({ value: undefined as unknown }))
+
+vi.mock('@/features/analytics/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/analytics/api')>()
+  const empty = { data: undefined, isPending: false, isLoading: false, isError: false }
+  return {
+    ...actual,
+    useSummary: () => empty,
+    useTimeseries: () => empty,
+    usePlatforms: () => empty,
+    useBudget: () => empty,
+    useCampaigns: () => metrics.value,
+  }
+})
+
+import { listCampaigns } from './api'
+import { listProjects, listUsers } from '@/features/projects/api'
+
+const today = new Date().toISOString().slice(0, 10)
+
+const campaign = (id: string, name: string): UnifiedCampaign => ({
+  id, project_id: 'p1', name, objective: 'sales', status: 'active', total_budget: 1000, budget_currency: 'SAR',
+  starts_on: null, ends_on: null, primary_conversion_purpose: null, attribution_model: null,
+  attribution_window: null, owner_id: null, target_kpi: null, audience: null, regions: null,
+  external_campaigns_count: 2, created_at: null,
+})
+
+const REPORTED = { spend: true, impressions: true, clicks: true, landing_page_views: true, conversions: true, revenue: true }
+
+describe('the concise state on a campaign row', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(listProjects).mockResolvedValue([])
+    vi.mocked(listUsers).mockResolvedValue([])
+    vi.mocked(listCampaigns).mockResolvedValue([
+      campaign('broken', 'Not delivering'),
+      campaign('fine', 'Healthy'),
+      campaign('silent', 'Connector sent nothing'),
+    ])
+    metrics.value = {
+      data: [
+        {
+          campaign_id: 'broken', last_active_on: today, reported: REPORTED,
+          spend: 1000, impressions: 0, clicks: 0, landing_page_views: 0, conversions: 0, revenue: 0,
+        },
+        {
+          campaign_id: 'fine', last_active_on: today, reported: REPORTED,
+          spend: 1000, impressions: 100000, clicks: 500, landing_page_views: 400, conversions: 10, revenue: 5000,
+        },
+        // Every figure zero because nothing was ever reported — the coalesced-zero trap, per campaign.
+        { campaign_id: 'silent', last_active_on: today, reported: {}, spend: 0, impressions: 0, clicks: 0 },
+      ],
+      isPending: false, isLoading: false, isError: false,
+    }
+    signInWith(['campaigns.view'])
+    useProject.getState().setCurrentProjectId('p1')
+  })
+  afterEach(() => signOut())
+
+  it('labels the campaign that is not delivering', async () => {
+    renderWithProviders(<CampaignsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('view-cards'))
+
+    expect(await screen.findByTestId('campaign-state-not_delivering')).toBeInTheDocument()
+  })
+
+  /**
+   * The two silences that must not look alike. Neither row carries a state chip — but for opposite
+   * reasons, and neither may be labelled as though it were the other.
+   */
+  it('shows no state for a healthy campaign and none for an unexamined one', async () => {
+    renderWithProviders(<CampaignsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('view-cards'))
+
+    await screen.findByText('Healthy')
+
+    // The healthy row carries no chip at all — nothing to say is not a verdict.
+    // The silent row says «not measured», which is a fact about its connector rather than about it.
+    expect(screen.queryByTestId('campaign-state-not_delivering')).toBeInTheDocument()
+    expect(screen.getByTestId('campaign-state-unmeasured')).toBeInTheDocument()
+    // And exactly one unmeasured chip: the healthy campaign was measured, so it gets neither.
+    expect(screen.queryAllByTestId('campaign-state-unmeasured')).toHaveLength(1)
+  })
+})
