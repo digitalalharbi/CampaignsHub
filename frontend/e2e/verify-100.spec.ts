@@ -333,9 +333,17 @@ test.describe('UX-DASH-001 — the advertiser dashboard', () => {
     const bar = page.getByTestId('dashboard-filters')
     await expect(bar, 'the dashboard has no visible filter bar').toBeVisible({ timeout: 20000 })
 
-    for (const id of ['dashboard-period', 'dashboard-platform', 'dashboard-path', 'dashboard-objective']) {
+    for (const id of ['dashboard-period', 'dashboard-platform', 'dashboard-objective']) {
       await expect(page.getByTestId(id), `${id} is not on the page`).toBeVisible()
     }
+
+    /*
+     * ANALYTICS-OBJECTIVE-SYSTEM-001 — and «المسار التسويقي» is NOT one of them any more.
+     *
+     * A path and an objective were one decision offered twice, and the reader could set the two to
+     * disagree. This assertion is what keeps the removal from being quietly undone.
+     */
+    await expect(page.getByTestId('dashboard-path')).toHaveCount(0)
 
     // Nothing narrowed on arrival, and nothing had to be opened to reach the controls.
     await expect(page.getByTestId('dashboard-applied')).toHaveCount(0)
