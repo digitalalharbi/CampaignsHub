@@ -1,4 +1,5 @@
 import { getData, postData, putData } from '@/lib/api/client'
+import type { SharedBranding } from './sharedBranding'
 import { api } from '@/lib/api/client'
 
 export type ReportStatus = 'draft' | 'processing' | 'completed' | 'failed'
@@ -132,6 +133,16 @@ export async function fetchSharedReport(token: string, password?: string) {
   const body = await res.json()
   return { status: res.status, envelope: body }
 }
+/**
+ * BRANDING-HIERARCHY-001 — the identity this link carries, addressed by the TOKEN alone.
+ *
+ * No asset id, tenant id or scope is sent, because none is accepted: an endpoint that takes one is
+ * an endpoint somebody will enumerate, and a shared report link is exactly where a stranger has a
+ * URL and time.
+ */
+export const sharedBranding = (token: string) =>
+  getData<SharedBranding>(`/reports/shared/${encodeURIComponent(token)}/branding`)
+
 export const sharedDownloadUrl = (token: string, format: ReportFormat) =>
   `/api/v1/reports/shared/${token}/download/${format}`
 
