@@ -4,6 +4,7 @@ import { QueryFailure } from '@/components/ui/QueryFailure'
 import { metricLabel } from '@/features/analytics/metricLabels'
 
 import { diagnose, type DiagnosticFinding, type DiagnosticStage } from './diagnose'
+import { recommendedActions, type RecommendedAction } from './recommendedActions'
 import { Panel } from './components'
 
 /**
@@ -53,6 +54,38 @@ const COPY: Record<string, { ar: string; en: string }> = {
   conversions_without_value: {
     ar: 'هناك تحويلات بقيمة صفر. غالبًا لم تُرسل قيمة الشراء، لا أن الشراء بلا قيمة.',
     en: 'Conversions carry no value. Usually the value was never sent, not that it was zero.',
+  },
+}
+
+/**
+ * What to do, phrased as something the operator does in the platform — never something this product
+ * does to their account. «Check» and «Change» are the only two registers, and which one a finding
+ * gets is decided by `recommendedActions`, not here.
+ */
+const ACTION_COPY: Record<string, { ar: string; en: string }> = {
+  not_delivering: {
+    ar: 'راجع حالة الحملة والميزانية والجمهور في المنصة — لا شيء يُعرض رغم الإنفاق.',
+    en: 'Check the campaign status, budget and audience in the platform — nothing is being delivered despite spend.',
+  },
+  weak_attraction: {
+    ar: 'راجع الرسالة والجمهور قبل تغيير المزايدة — الدليل نسبة، لا قياس مباشر.',
+    en: 'Review the message and audience before changing bids — this rests on a ratio, not a direct measurement.',
+  },
+  clicks_not_arriving: {
+    ar: 'تحقّق من الرابط ومن قياس الزيارات — الضغطات مسجَّلة والوصول ليس كذلك.',
+    en: 'Check the destination link and the visit tracking — clicks are recorded and arrivals are not.',
+  },
+  visits_lost: {
+    ar: 'تحقّق من سرعة الصفحة ومن تحويلات الرابط.',
+    en: 'Check page load time and any redirects on the link.',
+  },
+  no_conversions: {
+    ar: 'تحقّق من إعداد التحويلات في المنصة قبل تغيير الإنفاق.',
+    en: 'Check the conversion setup in the platform before changing spend.',
+  },
+  conversions_without_value: {
+    ar: 'أرسل قيمة الشراء مع حدث التحويل — التحويلات مسجَّلة بقيمة صفر.',
+    en: 'Send the purchase value with the conversion event — conversions are recorded with no value.',
   },
 }
 
@@ -125,6 +158,7 @@ export function DiagnosticPanel({
   }
 
   const d = diagnose({ objective, totals, reported })
+  const actions = recommendedActions(d)
 
   return (
     <Panel title={title} description={ar ? 'يُقرأ على مراحل الرحلة، ولا يُدّعى سبب بلا دليله' : 'Read along the journey, and no cause is claimed without its evidence'}>
@@ -151,6 +185,34 @@ export function DiagnosticPanel({
             <Finding key={f.code} finding={f} ar={ar} />
           ))}
         </ul>
+      )}
+
+      {/*
+        * ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — what to do, only where the evidence carries it.
+        *
+        * Often empty even when findings are shown: an inference is downgraded to something to check,
+        * a finding standing on an unreported metric yields nothing at all, and nothing here changes
+        * live advertising. Every line names a change the operator makes themselves, deliberately.
+        */}
+      {actions.length > 0 && (
+        <div className="mt-4 border-t border-border pt-3" data-testid="diagnostic-actions">
+          <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
+            {ar ? 'ما الذي يمكن فعله' : 'What can be done'}
+          </div>
+          <ul className="mt-2 flex flex-col gap-2">
+            {actions.map((a) => (
+              <li key={a.code} className="flex gap-2 text-sm text-text-secondary" data-testid={`diagnostic-action-${a.code}`}>
+                <span
+                  className="mt-0.5 shrink-0 rounded-full border border-border px-2 py-0.5 text-[11px] text-text-muted"
+                  data-testid={`diagnostic-action-kind-${a.kind}`}
+                >
+                  {a.kind === 'adjust' ? (ar ? 'تغيير' : 'Change') : ar ? 'تحقّق' : 'Check'}
+                </span>
+                <span>{ACTION_COPY[a.code] ? (ar ? ACTION_COPY[a.code].ar : ACTION_COPY[a.code].en) : a.code}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {/*

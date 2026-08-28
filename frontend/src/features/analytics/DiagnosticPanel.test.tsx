@@ -93,6 +93,28 @@ describe('what the diagnostic panel tells the reader', () => {
     expect(screen.queryByTestId('diagnostic-empty-scope')).not.toBeInTheDocument()
   })
 
+  /**
+   * An observed weakness carries something to do; an inferred one only ever carries something to
+   * check. The two registers must be visibly different, because the reader acts on the word.
+   */
+  it('offers a change for a measurement and only a check for an inference', () => {
+    render({ totals: { ...FULL, revenue: 0 } })
+
+    expect(screen.getByTestId('diagnostic-action-conversions_without_value')).toBeInTheDocument()
+    expect(screen.getByTestId('diagnostic-action-kind-adjust')).toHaveTextContent('Change')
+
+    render({ totals: { ...FULL, clicks: 10 } })
+
+    expect(screen.getAllByTestId('diagnostic-action-kind-investigate').length).toBeGreaterThan(0)
+  })
+
+  /** Nothing to do is a real answer — no heading, no empty list, no generic advice. */
+  it('says nothing about what to do when nothing is diagnosable', () => {
+    render({ reported: { spend: true } })
+
+    expect(screen.queryByTestId('diagnostic-actions')).not.toBeInTheDocument()
+  })
+
   it('reads in Arabic without switching the digits', () => {
     render({ ar: true, totals: { ...FULL, impressions: 0 } })
 
