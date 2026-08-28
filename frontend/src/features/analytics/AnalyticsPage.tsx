@@ -35,7 +35,7 @@ import { compact, money, num, percent, ratio, rowCostPer, rowMoney, rowRoas } fr
 import { funnelStageLabel } from './metricLabels'
 import { plotSeries } from './timeseriesMoney'
 import { orderRows } from './tableSort'
-import { useUrlList, useUrlNumber, useUrlState } from './filterUrlState'
+import { useUrlList, useUrlNumber, useUrlState, useUrlWriter } from './filterUrlState'
 import { familyMoney, familyTotal, type FamilyRow, familySpend } from './familyTotals'
 import { readCostPer, readMoney, readRoas } from '@/lib/money/contract'
 
@@ -72,6 +72,10 @@ import { useQuery } from '@tanstack/react-query'
 import { StoreFunnelTab } from './StoreFunnelTab'
 import { AttributionPanel } from './AttributionPanel'
 import { DiagnosticPanel } from './DiagnosticPanel'
+import {
+  decodePath, drillInto, drillUpTo, encodePath, nextLevel, parentFor, rememberName, stepLabel, withNames,
+  type DrillLevel, type DrillStep,
+} from './drilldown'
 
 /*
  * UX-ANALYTICS-TABS-001 — twelve tabs on one line, and six of them began with the same word.
@@ -1452,11 +1456,101 @@ function rateOrDash(value: number | null | undefined): string {
 }
 
 
+/** Rung order, for deciding which crumbs sit above the list on screen. */
+const ORDER_INDEX: Record<DrillLevel, number> = { campaign: 0, ad_set: 1, ad: 2, creative: 3 }
+
+/** Which tab shows each rung. The drill path and the tab are one statement about where the reader is. */
+const TAB_FOR: Record<DrillLevel, string> = {
+  campaign: 'campaigns',
+  ad_set: 'ad_sets',
+  ad: 'ads',
+  creative: 'creative',
+}
+
+/**
+ * Where the reader is, and the way back out.
+ *
+ * Rendered only when a path exists — an always-present «All» crumb over an unnarrowed list would
+ * imply a filter nobody applied. Each crumb steps OUT to that level, keeping everything above it, so
+ * leaving an ad returns to its ad set rather than to the top.
+ */
+function DrillCrumbs({ path, level, ar, onUpTo }: { path: DrillStep[]; level: DrillLevel; ar: boolean; onUpTo: (level: DrillLevel) => void }) {
+  /*
+   * Only the steps ABOVE the list being shown.
+   *
+   * A reader who drills into ads and then clicks the «Ad sets» tab directly has a path still holding
+   * an ad set, while the ad-set list is unnarrowed. Rendering that crumb would caption a
+   * project-wide list with one ad set's name — the lie this whole module exists to prevent. The path
+   * is kept so stepping back down restores it; it is simply not claimed here.
+   */
+  const shown = path.filter((s) => ORDER_INDEX[s.level] < ORDER_INDEX[level])
+
+  if (shown.length === 0) return null
+
+  const LEVEL_LABEL: Record<DrillLevel, { ar: string; en: string }> = {
+    campaign: { ar: 'حملة', en: 'Campaign' },
+    ad_set: { ar: 'مجموعة', en: 'Ad set' },
+    ad: { ar: 'إعلان', en: 'Ad' },
+    creative: { ar: 'محتوى', en: 'Creative' },
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="drill-crumbs">
+      <button
+        type="button"
+        className="text-text-muted hover:underline"
+        data-testid="drill-clear"
+        onClick={() => onUpTo('campaign')}
+      >
+        {ar ? 'كل المشروع' : 'Whole project'}
+      </button>
+      {shown.map((step) => (
+        <span key={`${step.level}:${step.id}`} className="flex items-center gap-2">
+          <span className="text-text-muted">/</span>
+          <button
+            type="button"
+            className="rounded-full border border-border px-2 py-0.5 text-text-primary hover:underline"
+            data-testid={`drill-crumb-${step.level}`}
+            onClick={() => onUpTo(step.level)}
+          >
+            <span className="text-text-muted">{(ar ? LEVEL_LABEL[step.level].ar : LEVEL_LABEL[step.level].en) + ': '}</span>
+            {/* An entity with no name shows its id — a dash would read as «nothing here». */}
+            {stepLabel(step)}
+          </button>
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad_set' | 'ad' }) {
   const ar = useAr()
-  const q = useEntities(projectId, range, level, undefined, filters)
+  /*
+   * HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN — the parent comes from the URL, and it changes the QUERY.
+   *
+   * `parent` was hardcoded `undefined` here since the endpoint shipped, so four levels the backend
+   * could already narrow were served as four flat lists. It is part of the query key as well as the
+   * request, so a cached unfiltered response is never handed back for a drilled-down question.
+   */
+  const [rawPath] = useUrlState('drill', '')
+  const path = useMemo(() => withNames(decodePath(rawPath)), [rawPath])
+  const parent = parentFor(level, path)
+  const q = useEntities(projectId, range, level, parent, filters)
   const rows = q.data?.entities ?? []
   const currency = q.data?.currency ?? null
+  const child = nextLevel(level)
+  /*
+   * Drilling moves the TAB as well as the path.
+   *
+   * Setting only the path would narrow a list the reader is no longer looking at: they clicked an ad
+   * set and would still be on the ad-set tab, now showing one row. The tab is URL state too, so both
+   * halves of «where am I» stay in the link.
+   */
+  const write = useUrlWriter()
+  const go = (next: DrillStep[], to: DrillLevel) => write({
+    drill: { value: encodePath(next), fallback: '' },
+    tab: { value: TAB_FOR[to], fallback: 'performance' },
+  })
 
   const heading = level === 'ad_set'
     ? (ar ? 'المجموعات الإعلانية' : 'Ad sets')
@@ -1488,11 +1582,29 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
 
   const cells = rows.map((row) => [
     <div key={row.entity_id}>
-      <div className="font-medium text-text-primary">
-        {/* An entity the sweep has removed keeps its provider id rather than being called
-            «Unknown», which would hide that it is gone. */}
-        {row.name ?? row.external_id}
-      </div>
+      {/*
+        Only a row with a level BENEATH it is a button. An ad is the last rung this table serves, and
+        a control that looks clickable and does nothing is worse than plain text.
+      */}
+      {child !== null ? (
+        <button
+          type="button"
+          className="text-start font-medium text-brand-600 hover:underline"
+          data-testid={`drill-into-${row.entity_id}`}
+          onClick={() => {
+            rememberName(row.entity_id, row.name)
+            go(drillInto(path, { level, id: row.entity_id, name: row.name }), child)
+          }}
+        >
+          {row.name ?? row.external_id}
+        </button>
+      ) : (
+        <div className="font-medium text-text-primary">
+          {/* An entity the sweep has removed keeps its provider id rather than being called
+              «Unknown», which would hide that it is gone. */}
+          {row.name ?? row.external_id}
+        </div>
+      )}
       <div className="text-xs text-text-secondary">{row.external_id}</div>
     </div>,
     rowMoney(row, 'spend', currency),
@@ -1530,16 +1642,31 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
 
   return (
     <div className="space-y-4">
+      <DrillCrumbs path={path} level={level} ar={ar} onUpTo={(lvl) => go(drillUpTo(path, lvl), lvl)} />
       <Panel
         title={heading}
         description={ar ? 'الأعلى إنفاقًا أولًا — ويمكن الترتيب بأي عمود' : 'Highest spend first — sortable by any column'}
         loading={q.isLoading}
         error={q.isError}
-        empty={!q.isLoading && rows.length === 0}
+        /*
+          A narrowed list with no rows is NOT «no data».
+          The unnarrowed empty state says the project reported nothing; drilled, it must say this
+          parent reported nothing — otherwise a reader concludes the account is dead when what they
+          are looking at is one quiet ad set.
+        */
+        empty={!q.isLoading && rows.length === 0 && parent === null}
       >
-        <div data-testid={`entity-table-${level}`}>
-          <MetricTable head={head} rows={cells} values={values} initialSort={{ column: 1, dir: 'desc' }} />
-        </div>
+        {!q.isLoading && !q.isError && rows.length === 0 && parent !== null ? (
+          <p className="rounded-xl border border-border p-3 text-sm text-text-muted" data-testid={`entity-empty-under-parent-${level}`}>
+            {ar
+              ? 'لم تُسجَّل أي بيانات تحت هذا المستوى في هذه الفترة. هذا ليس «لا توجد بيانات» للمشروع.'
+              : 'Nothing was reported under this parent in this period. That is not «no data» for the project.'}
+          </p>
+        ) : (
+          <div data-testid={`entity-table-${level}`}>
+            <MetricTable head={head} rows={cells} values={values} initialSort={{ column: 1, dir: 'desc' }} />
+          </div>
+        )}
       </Panel>
     </div>
   )
