@@ -236,6 +236,14 @@ export function FilterSelect({
  * reason a folded control is allowed to be folded. Above `searchAfter` options it grows a search
  * box, because a client list is four hundred names long and scrolling is not selecting.
  */
+/**
+ * How many options are drawn at once — UX-MULTISELECT-SCALE-001.
+ *
+ * The number matters less than that a bound EXISTS and is stated. 120 covers a medium account whole,
+ * and keeps a two-thousand-ad selector from putting two thousand buttons in the document.
+ */
+const VISIBLE_OPTIONS = 120
+
 export function FilterMulti({
   label,
   values,
@@ -285,6 +293,20 @@ export function FilterMulti({
     const q = term.trim().toLowerCase()
     return q === '' ? options : options.filter((o) => o.label.toLowerCase().includes(q))
   }, [options, term])
+
+  /*
+   * UX-MULTISELECT-SCALE-001 — the rendered list is BOUNDED, and says what it is not showing.
+   *
+   * This rendered every match. Five campaigns is fine; a real account has two hundred and an
+   * ad-level selector has thousands, and «every option, always» is a popover that takes a second to
+   * open and a keystroke that re-renders the whole estate.
+   *
+   * The cap is stated rather than silent. A list that quietly stops at 120 tells a reader their
+   * campaign does not exist — so when it bites, the control says how many matched and asks them to
+   * narrow, and the search reaches everything regardless of what is drawn.
+   */
+  const visible = useMemo(() => shown.slice(0, VISIBLE_OPTIONS), [shown])
+  const hidden = shown.length - visible.length
 
   /*
    * An axis with nothing to choose from is not a filter — it is a control that can only disappoint.
@@ -363,7 +385,31 @@ export function FilterMulti({
               <p className="px-2 py-3 text-center text-xs text-text-muted">{t('none', ar)}</p>
             )}
 
-            {shown.map((o) => {
+            {/*
+              The scoped bulk action — «select these 111», never «select all».
+
+              It names the number it will select, and that number is the number in front of the
+              reader: the filtered results. An ambiguous global select-all is how a client report
+              comes to include campaigns nobody chose, and the reader cannot tell from the output
+              that it happened. It ADDS to the selection rather than replacing it, so a choice made
+              before searching survives.
+
+              Shown on the same threshold that grows the search box, rather than a second number of
+              its own: that threshold is already this product's answer to «this list is long enough
+              to need help», and a short list does not need a button to click four checkboxes.
+            */}
+            {shown.length > searchAfter && (
+              <button
+                type="button"
+                data-testid={testid ? `${testid}-select-results` : undefined}
+                onClick={() => onChange([...new Set([...values, ...shown.map((o) => o.value)])])}
+                className="mb-1 w-full rounded-lg px-2 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-500/10"
+              >
+                {ar ? `اختر النتائج الظاهرة (${shown.length})` : `Select these ${shown.length}`}
+              </button>
+            )}
+
+            {visible.map((o) => {
               const on = values.includes(o.value)
               return (
                 <button
@@ -384,6 +430,17 @@ export function FilterMulti({
                 </button>
               )
             })}
+
+            {hidden > 0 && (
+              <p
+                data-testid={testid ? `${testid}-truncated` : undefined}
+                className="px-2 py-2 text-center text-xs text-text-muted"
+              >
+                {ar
+                  ? `يُعرض ${visible.length} من ${shown.length} — ابحث للوصول إلى البقية`
+                  : `Showing ${visible.length} of ${shown.length} — search to reach the rest`}
+              </p>
+            )}
 
             {values.length > 0 && (
               <button
