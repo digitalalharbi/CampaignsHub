@@ -73,7 +73,8 @@ import { StoreFunnelTab } from './StoreFunnelTab'
 import { AttributionPanel } from './AttributionPanel'
 import { DiagnosticPanel } from './DiagnosticPanel'
 import {
-  decodePath, drillInto, drillUpTo, encodePath, nextLevel, parentFor, rememberName, stepLabel, withNames,
+  creativeScope, decodePath, drillInto, drillUpTo, encodePath, nextLevel, parentFor, rememberName,
+  stepLabel, withNames,
   type DrillLevel, type DrillStep,
 } from './drilldown'
 
@@ -1832,6 +1833,19 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
  */
 function CreativeTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
+  /*
+   * HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN — the last rung of campaign → ad set → ad → creative.
+   *
+   * The library speaks `ad_ids` / `ad_set_ids` rather than the metrics API's single `parent`, so the
+   * path is translated rather than passed through, and it takes the DEEPEST pinned rung. It is part
+   * of the query key for the same reason `parent` is elsewhere: it changes the request, so a cached
+   * unnarrowed response must never answer a drilled-down question.
+   */
+  const [rawPath] = useUrlState('drill', '')
+  const path = useMemo(() => withNames(decodePath(rawPath)), [rawPath])
+  const scope = creativeScope(path)
+  const write = useUrlWriter()
+  const narrowed = scope.ad_ids !== undefined || scope.ad_set_ids !== undefined
 
   /*
    * ANALYTICS-CREATIVE-SCOPE-001 — this tab ignored the filter bar entirely.
@@ -1848,7 +1862,10 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
    * narrow twice for one choice.
    */
   const q = useQuery({
-    queryKey: ['analytics', 'creatives', projectId, range.from, range.to, filters.provider, filters.campaign],
+    queryKey: [
+      'analytics', 'creatives', projectId, range.from, range.to, filters.provider, filters.campaign,
+      scope.ad_ids?.join(',') ?? '', scope.ad_set_ids?.join(',') ?? '',
+    ],
     queryFn: () => listCreatives(
       {
         from: range.from,
@@ -1856,6 +1873,8 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
         per_page: 24,
         providers: filters.provider?.length ? filters.provider : undefined,
         campaign_ids: filters.campaign?.length ? filters.campaign : undefined,
+        // The drill path, in the library's own dialect — the deepest pinned rung only.
+        ...scope,
       },
       projectId,
     ),
@@ -1867,13 +1886,25 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
 
   return (
     <div className="space-y-4">
+      <DrillCrumbs path={path} level="creative" ar={ar} onUpTo={(lvl) => write({
+        drill: { value: encodePath(drillUpTo(path, lvl)), fallback: '' },
+        tab: { value: TAB_FOR[lvl], fallback: 'performance' },
+      })} />
       <Panel
         title={ar ? 'أداء المحتوى' : 'Creative performance'}
         description={ar ? 'من بيانات المحتوى نفسه — لا تُنسب أرقام الحملة إلى محتوى' : 'From creative-level data — campaign figures are never attributed to a creative'}
         loading={q.isLoading}
         error={q.isError}
-        empty={!q.isLoading && rows.length === 0}
+        /* Narrowed and empty is «nothing under this ad», never «no creatives at all». */
+        empty={!q.isLoading && rows.length === 0 && !narrowed}
       >
+        {!q.isLoading && !q.isError && rows.length === 0 && narrowed && (
+          <p className="rounded-xl border border-border p-3 text-sm text-text-muted" data-testid="creative-empty-under-parent">
+            {ar
+              ? 'لا يوجد محتوى مسجَّل تحت هذا المستوى في هذه الفترة. هذا ليس «لا يوجد محتوى» للمشروع.'
+              : 'No creative was reported under this level in this period. That is not «no creatives» for the project.'}
+          </p>
+        )}
         {/*
           ANALYTICS-TABLES-001 — the canonical table, last of the four hand-rolled ones.
           Numeric columns were `text-start`, so under RTL the figures and their headings sat against
