@@ -74,6 +74,15 @@ inside ANALYTICS-FILTER-TRUTH-001 and pin with regression coverage.
   retrigger commits that could never have worked; the fix was a rebase, after which CI started on the
   first try. **Check `gh api repos/OWNER/REPO/pulls/N --jq .mergeable` before concluding anything
   about a missing run** — it is one call and it answers the question directly.
+- **Three PRs, three DIFFERENT browsers, three specs unrelated to their diffs — while many gates ran
+  concurrently.** #147 firefox (`verify-100:34`), #153 firefox (`registration-onboarding:191`,
+  `request-vertical:11`), #148 webkit (`creative-analysis:145`, which failed with «WebKit encountered
+  an internal error» during `page.goto` — a BROWSER CRASH, i.e. instrument failure, not a verdict
+  about the product). None of the three diffs touches the failing area. Same-head reruns passed for
+  #147 and #153. Treat a single-browser failure on a spec outside the diff as **unclassified until a
+  same-head rerun**, and never as «flaky» on its own — but note that a browser internal error is
+  instrument failure by definition. Running six gates at once on shared runners is the obvious
+  suspect for the contention.
 - The gate is a ~60-minute three-browser suite; duration alone is never evidence of a hang.
 - **OBSERVATION — firefox-only gate failures on TWO different PRs, both passing on a same-head
   rerun.** #147 run `33183435257` failed `verify-100.spec.ts:34` («view-cards» never became
