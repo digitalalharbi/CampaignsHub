@@ -85,6 +85,29 @@ final class SharedReportBrandingTest extends TestCase
         $this->assertNotNull($body['logo_url']);
     }
 
+    /**
+     * A link keeps the identity it was SHARED under, even after the agency rebrands.
+     *
+     * `PublicReportController` freezes `config['branding']` on purpose, with its own comment saying
+     * why. I claimed to preserve that decision while adding live resolution beside it — and a claim
+     * about preserved behaviour with no test behind it is exactly the kind of thing that stops being
+     * true without anyone noticing. So the frozen identity wins here even though a client logo
+     * exists and would otherwise resolve.
+     */
+    public function test_a_link_keeps_the_identity_it_was_shared_under(): void
+    {
+        $this->asset('client', (string) $this->client->id, 'Nakheel logo');
+
+        app(TenantContext::class)->setTenantId($this->agency->id);
+        $this->report->update(['config' => ['branding' => ['name' => 'Nakheel, as it was in July']]]);
+        app(TenantContext::class)->forget();
+
+        $body = $this->read();
+
+        $this->assertSame('Nakheel, as it was in July', $body['name']);
+        $this->assertSame('report', $body['logo_source']);
+    }
+
     /** With no client logo, the agency's stands in — never a blank header. */
     public function test_it_falls_back_to_the_agency_when_the_client_has_no_logo(): void
     {
