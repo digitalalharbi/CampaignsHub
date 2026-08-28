@@ -135,6 +135,30 @@ export function withNames(path: DrillStep[]): DrillStep[] {
   return path.map((s) => (s.name !== null ? s : { ...s, name: NAMES.get(s.id) ?? null }))
 }
 
+/**
+ * How the creative library should be narrowed for this path.
+ *
+ * The library speaks `ad_ids` / `ad_set_ids` rather than one `parent`, and it takes the DEEPEST rung
+ * the reader pinned: an ad if there is one, otherwise the ad set. Sending both would narrow twice for
+ * one choice, and sending the shallower one would show an ad set's whole creative population under a
+ * breadcrumb naming a single ad.
+ *
+ * A path that stops at `campaign` narrows nothing here: the library has no campaign axis of its own
+ * on this route, and inventing one by passing a campaign id into an ad filter would return an empty
+ * list that reads as «this campaign has no creatives».
+ */
+export function creativeScope(path: DrillStep[]): { ad_ids?: string[]; ad_set_ids?: string[] } {
+  const ad = path.find((s) => s.level === 'ad')
+
+  if (ad !== undefined) {
+    return { ad_ids: [ad.id] }
+  }
+
+  const adSet = path.find((s) => s.level === 'ad_set')
+
+  return adSet !== undefined ? { ad_set_ids: [adSet.id] } : {}
+}
+
 /** What a breadcrumb prints for a step — never a dash for an entity that really existed. */
 export function stepLabel(step: DrillStep): string {
   return step.name ?? step.id
