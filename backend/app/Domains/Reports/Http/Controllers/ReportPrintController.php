@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Http\Controllers;
 
+use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Services\ClientReportView;
 use App\Domains\Reports\Services\ExportReadinessGate;
@@ -48,7 +49,7 @@ final class ReportPrintController extends Controller
     }
 
     /** Serve the snapshot for a print token. Token-only auth; single-use is enforced by the caller flow. */
-    public function data(string $token): JsonResponse
+    public function data(string $token, SharedLinkBranding $branding): JsonResponse
     {
         $ctx = Cache::get($this->key($token));
         abort_if($ctx === null, 404, 'Print token invalid or expired.');
@@ -78,7 +79,43 @@ final class ReportPrintController extends Controller
             'checksum' => $report->data['checksum'] ?? null,
             'data_version' => $report->data['data_version'] ?? null,
             'data' => $body,
+            /*
+             * BRANDING-HIERARCHY-001 — whose document this is.
+             *
+             * The print surface hardcoded «CampaignsHub» in the PDF title, the slide meta and the
+             * footer, so every agency's client PDF was stamped with the product's name — on the
+             * artefact a client keeps and forwards. Resolved here rather than in the renderer because
+             * the renderer has no session and no tenant: the token is the only authority, and the
+             * same resolver answers for the shared link.
+             */
+            'branding' => $branding->forReport(
+                $report,
+                (string) $report->tenant_id,
+                fn (): string => url("/api/v1/reports/print/{$token}/logo"),
+            ),
         ], 'Print data.');
+    }
+
+    /**
+     * The logo bytes for a print token — for a renderer with no session.
+     *
+     * Behind the same token as the payload, and re-resolved from the report rather than looked up by
+     * an id in the URL, so there is nothing for a caller to change. A 404 when nothing resolves is
+     * deliberate: the payload already said `logo_url: null`, and a placeholder would put a mark on a
+     * document that carries none.
+     */
+    public function logo(string $token, SharedLinkBranding $branding): mixed
+    {
+        $ctx = Cache::get($this->key($token));
+        abort_if($ctx === null, 404, 'Print token invalid or expired.');
+
+        $report = Report::withoutGlobalScopes()->find($ctx['report_id']);
+        abort_if($report === null, 404);
+
+        $file = $branding->logoFor($report, (string) $report->tenant_id);
+        abort_unless($file !== null, 404);
+
+        return $file;
     }
 
     private function key(string $token): string
