@@ -73,16 +73,39 @@ final class ConnectionWizardController extends Controller
             ->where('tenant_id', $this->tenant->tenantId())
             ->where('status', 'connected')
             ->get()
-            ->map(fn (ProviderConnection $c): array => [
-                'connection' => [
-                    'id' => (string) $c->getKey(),
-                    'provider' => $c->provider,
-                    'label' => ProviderCatalogue::get($c->provider)->label,
-                    'label_ar' => ProviderCatalogue::get($c->provider)->labelAr,
-                    'client_workspace_id' => $c->client_workspace_id,
-                ],
-                ...$this->state->for($c),
-            ])
+            ->map(function (ProviderConnection $c): array {
+                /*
+                 * A provider the catalogue cannot name must not take the page down with it.
+                 *
+                 * `ProviderCatalogue::get()` throws on an unknown key, and this ran it once per row
+                 * with nothing between — so ONE connection carrying a renamed, retired or
+                 * older-build provider value returned a 500 for the whole endpoint, and the
+                 * integrations page rendered nothing for anybody in that tenant. The E2E gate saw it
+                 * as «console errors on /app/integrations».
+                 *
+                 * The row is still listed. A connection that exists and cannot be named is exactly
+                 * the one an operator needs to see in order to remove it; hiding it leaves them with
+                 * a page that looks healthy and a sync that never runs. `catalogued: false` says
+                 * plainly which it is, and the label falls back to the raw key rather than inventing
+                 * a friendly name for something this build does not recognise.
+                 */
+                $known = ProviderCatalogue::has($c->provider);
+                $definition = $known ? ProviderCatalogue::get($c->provider) : null;
+
+                return [
+                    'connection' => [
+                        'id' => (string) $c->getKey(),
+                        'provider' => $c->provider,
+                        'catalogued' => $known,
+                        // Explicit rather than `?->x ?? raw`: the fallback is a decision, not a
+                        // null-safety accident, and it reads as one.
+                        'label' => $definition === null ? $c->provider : $definition->label,
+                        'label_ar' => $definition === null ? $c->provider : $definition->labelAr,
+                        'client_workspace_id' => $c->client_workspace_id,
+                    ],
+                    ...$this->state->for($c),
+                ];
+            })
             ->values();
 
         return ApiResponse::success([
@@ -102,6 +125,19 @@ final class ConnectionWizardController extends Controller
         abort_unless($request->user()->hasPermission('integrations.view'), 403);
 
         $connection = $this->connectionOr404($connectionId);
+
+        /*
+         * Same stored-row hazard as `resumable()` above, one endpoint along: the provider comes off a
+         * row, not off validated input, so a renamed or retired key throws where a refusal belongs.
+         * 404 rather than 500 — this build genuinely cannot describe that connection's hierarchy, and
+         * saying so is an answer; a stack trace is not.
+         */
+        abort_unless(
+            ProviderCatalogue::has($connection->provider),
+            404,
+            'This build does not recognise that connection\'s provider.',
+        );
+
         $definition = ProviderCatalogue::get($connection->provider);
 
         $accounts = ExternalAccount::withoutGlobalScopes()

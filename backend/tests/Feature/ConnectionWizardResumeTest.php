@@ -184,6 +184,52 @@ final class ConnectionWizardResumeTest extends TestCase
 
     // ── Fixtures ──────────────────────────────────────────────────────────────────────────────
 
+    /**
+     * One uncatalogued connection may not take down the integrations page.
+     *
+     * `ProviderCatalogue::get()` THROWS on a provider it does not know, and `resumable()` called it
+     * once per row with nothing between. So a single row carrying a provider the catalogue has since
+     * dropped — a renamed key, a commerce connection, a value written by an older build — returned a
+     * 500 for the whole endpoint, and the integrations page rendered nothing for anybody in that
+     * tenant. The E2E gate caught it as «console errors on /app/integrations».
+     *
+     * The row is still LISTED rather than filtered away. A connection that exists and cannot be named
+     * is exactly the one an operator needs to see in order to remove it; hiding it would leave them
+     * with a page that looks healthy and a sync that never runs.
+     */
+    public function test_an_uncatalogued_provider_does_not_take_down_the_endpoint(): void
+    {
+        $this->connection('meta');
+        $this->connection('a_provider_the_catalogue_never_heard_of');
+
+        $body = $this->actingAs($this->operator, 'sanctum')
+            ->getJson('/api/v1/connections/resumable')
+            ->assertOk()
+            ->json('data');
+
+        $providers = array_column(array_column($body['connections'], 'connection'), 'provider');
+
+        $this->assertContains('meta', $providers, 'the healthy connection was lost with the odd one');
+        $this->assertContains('a_provider_the_catalogue_never_heard_of', $providers, 'the unnameable connection was hidden');
+
+        $odd = collect($body['connections'])
+            ->firstWhere('connection.provider', 'a_provider_the_catalogue_never_heard_of');
+
+        $this->assertFalse($odd['connection']['catalogued'], 'the row does not say it cannot be named');
+        // Falls back to the raw key rather than inventing a friendly name for something unknown.
+        $this->assertSame('a_provider_the_catalogue_never_heard_of', $odd['connection']['label']);
+    }
+
+    /** The same stale row one endpoint along: a refusal, not a stack trace. */
+    public function test_the_hierarchy_of_an_uncatalogued_connection_is_refused_not_crashed(): void
+    {
+        $connection = $this->connection('a_provider_the_catalogue_never_heard_of');
+
+        $this->actingAs($this->operator, 'sanctum')
+            ->getJson("/api/v1/connections/{$connection->getKey()}/hierarchy")
+            ->assertStatus(404);
+    }
+
     private function connection(string $provider, ?Tenant $tenant = null): ProviderConnection
     {
         $credential = new IntegrationCredential([
