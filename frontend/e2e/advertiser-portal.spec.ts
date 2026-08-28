@@ -123,7 +123,14 @@ test.describe('the advertiser portal', () => {
     await page.goto('/app/dashboard')
     await expect(page.locator('main')).toBeVisible()
 
-    await page.getByTestId('dashboard-objective').selectOption('awareness')
+    /*
+     * The canonical bucket, not the raw objective it replaced — ANALYTICS-OBJECTIVE-SYSTEM-001.
+     *
+     * Every seeded campaign on this account carries `sales`, so «الوعي والتفاعل» covers four raw
+     * objectives and matches none of them. That is exactly the scope this test needs: a filter that
+     * really does match nothing, rather than one that happens to be empty today.
+     */
+    await page.getByTestId('dashboard-objective').selectOption('awareness_engagement')
 
     const panel = page.getByTestId('dashboard-metrics-empty-scope')
 

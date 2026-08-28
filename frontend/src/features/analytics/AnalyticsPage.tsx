@@ -52,19 +52,17 @@ import { PageIntro } from '@/components/ui/PageIntro'
 import { listProjects } from '@/features/projects/api'
 import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
 import {
-  MARKETING_PATH_KEYS,
-  marketingPathLabel,
-  objectiveLabel,
-  objectivesForPath,
-  pathOfObjective,
-  providerLabel,
-} from '@/features/campaigns/labels'
+  CANONICAL_OBJECTIVE_KEYS,
+  canonicalObjectiveLabel,
+  rawObjectivesFor,
+  type CanonicalObjectiveKey,
+} from '@/features/campaigns/canonicalObjectives'
+import { providerLabel } from '@/features/campaigns/labels'
 
 /** The six platforms this product unifies, in the product's own order (PLATFORM-ORDER-001). */
 const ANALYTICS_PLATFORMS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
 
 /** The objectives with a layout elsewhere in the product — the same six the dashboard offers. */
-const ANALYTICS_OBJECTIVES = ['awareness', 'traffic', 'leads', 'sales', 'app_installs', 'engagement']
 import { useUi } from '@/stores/ui'
 import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
 import { useProject } from '@/stores/project'
@@ -176,8 +174,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
   const [tab, setTab] = useState<(typeof TABS)[number]['id']>('performance')
   const [providers, setProviders] = useState<string[]>([])
   const [campaignIds, setCampaignIds] = useState<string[]>([])
-  const [path, setPath] = useState('all')
-  const [objective, setObjective] = useState('all')
+  const [objective, setObjective] = useState<CanonicalObjectiveKey | 'all'>('all')
 
   /*
    * ANALYTICS-AS-DASHBOARD-001 — saved views came WITH the dashboard.
@@ -188,10 +185,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
    */
   const savedViews = useSavedViews()
   const applyView = (v: SavedView) => {
-    if (v.filters?.objective) {
-      setObjective(v.filters.objective)
-      setPath(v.filters.objective === 'all' ? 'all' : pathOfObjective(v.filters.objective))
-    }
+    if (v.filters?.objective) setObjective(v.filters.objective as CanonicalObjectiveKey | 'all')
     if (v.filters?.provider) setProviders(v.filters.provider)
     if (v.date_range?.days) setDays(v.date_range.days)
   }
@@ -210,12 +204,15 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
   const projectsQuery = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false), retry: false })
   const projects = projectsQuery.data ?? []
 
-  /** A path is not a server axis — it is its objectives, on the objective filter (see the dashboard). */
-  const objectiveFilter = useMemo(() => {
-    if (objective !== 'all') return [objective]
-
-    return path === 'all' ? [] : objectivesForPath(path)
-  }, [objective, path])
+  /*
+   * ANALYTICS-OBJECTIVE-SYSTEM-001 — one control, and it sends RAW objectives.
+   *
+   * The metrics API filters by raw `CampaignObjective` values, so a canonical choice has to expand
+   * into all of them. Sending the canonical key itself would narrow the label and leave the query
+   * untouched — the KPI row would move and the chart beneath it would not, which is the frontend-only
+   * filtering ANALYTICS-FILTER-TRUTH-001 forbids.
+   */
+  const objectiveFilter = useMemo(() => rawObjectivesFor(objective), [objective])
 
   const filters: MetricFilters = useMemo(
     () => ({ provider: providers, objective: objectiveFilter, campaign: campaignIds }),
@@ -228,7 +225,6 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
     [providers, objectiveFilter],
   ))
 
-  const objectiveChoices = ANALYTICS_OBJECTIVES.filter((key) => path === 'all' || pathOfObjective(key) === path)
 
   const applied: AppliedFilter[] = useMemo(() => {
     const out: AppliedFilter[] = []
@@ -244,14 +240,11 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
       label: campaignOptions.data?.find((c) => String(c.campaign_id) === v)?.campaign_name ?? v,
       onRemove: () => setCampaignIds((prev) => prev.filter((x) => x !== v)),
     }))
-    if (path !== 'all') {
-      out.push({ key: `path:${path}`, axis: ar ? 'المسار' : 'Path', label: marketingPathLabel(path, ar ? 'ar' : 'en'), onRemove: () => setPath('all') })
-    }
     if (objective !== 'all') {
-      out.push({ key: `objective:${objective}`, axis: ar ? 'الهدف' : 'Objective', label: objectiveLabel(objective, ar ? 'ar' : 'en'), onRemove: () => setObjective('all') })
+      out.push({ key: `objective:${objective}`, axis: ar ? 'الهدف' : 'Objective', label: canonicalObjectiveLabel(objective, ar ? 'ar' : 'en'), onRemove: () => setObjective('all') })
     }
     return out
-  }, [providers, campaignIds, campaignOptions.data, path, objective, ar])
+  }, [providers, campaignIds, campaignOptions.data, objective, ar])
 
   /*
    * ANALYTICS-PROVENANCE-001 — the badge needs the summary, and the summary lives in the tab below.
@@ -287,7 +280,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
         id={surface}
         ar={ar}
         applied={applied}
-        onReset={() => { setProviders([]); setCampaignIds([]); setPath('all'); setObjective('all') }}
+        onReset={() => { setProviders([]); setCampaignIds([]); setObjective('all') }}
         advancedActive={savedViews.data?.some((v) => v.is_default) ?? false}
         advanced={
           <div className="grid gap-2">
@@ -345,19 +338,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
           onChange={setCampaignIds}
         />
 
-        <FilterSelect
-          label={ar ? 'المسار التسويقي' : 'Marketing path'}
-          value={path}
-          testid={`${surface}-path`}
-          options={[
-            { value: 'all', label: ar ? 'كل المسارات' : 'All paths' },
-            ...MARKETING_PATH_KEYS.map((key) => ({ value: key, label: marketingPathLabel(key, ar ? 'ar' : 'en') })),
-          ]}
-          onChange={(v) => {
-            setPath(v)
-            if (v !== 'all' && objective !== 'all' && pathOfObjective(objective) !== v) setObjective('all')
-          }}
-        />
+        
 
         <FilterSelect
           label={ar ? 'الهدف' : 'Objective'}
@@ -365,9 +346,9 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
           testid={`${surface}-objective`}
           options={[
             { value: 'all', label: ar ? 'كل الأهداف' : 'All objectives' },
-            ...objectiveChoices.map((key) => ({ value: key, label: objectiveLabel(key, ar ? 'ar' : 'en') })),
+            ...CANONICAL_OBJECTIVE_KEYS.map((key) => ({ value: key, label: canonicalObjectiveLabel(key, ar ? 'ar' : 'en') })),
           ]}
-          onChange={setObjective}
+          onChange={(v) => setObjective(v as CanonicalObjectiveKey | 'all')}
         />
       </FilterBar>
 
@@ -405,7 +386,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
         ))}
       </div>
 
-      {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} path={path} />}
+      {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} />}
       {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'accounts' && <AccountsTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />}
@@ -426,7 +407,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
 type TabProps = { projectId: string | null; range: { from: string; to: string }; filters: MetricFilters }
 
 /** The overview tab also needs the objective, because its KPI row is chosen BY the objective. */
-type OverviewTabProps = TabProps & { objective: string; path: string }
+type OverviewTabProps = TabProps & { objective: string }
 
 /*
  * The store tab takes no filters, and that is the same rule the dashboard's store strip follows:
@@ -434,7 +415,7 @@ type OverviewTabProps = TabProps & { objective: string; path: string }
  * at all, so «Meta's share of the shop's revenue» is not a quantity that exists.
  */
 
-function PerformanceTab({ projectId, range, filters, objective, path }: OverviewTabProps) {
+function PerformanceTab({ projectId, range, filters, objective }: OverviewTabProps) {
   const ar = useAr()
   const s = useSummary(projectId, range, filters)
   const ts = useTimeseries(projectId, range, filters)
@@ -476,7 +457,7 @@ function PerformanceTab({ projectId, range, filters, objective, path }: Overview
    * for. `dashboardMetrics` picks the row the objective is actually judged on, and it is the same
    * function and the same `MetricStrip` the dashboard used, not a second reading of the same totals.
    */
-  const metrics = useMemo(() => dashboardMetrics(objective, path, s.data, ar), [objective, path, s.data, ar])
+  const metrics = useMemo(() => dashboardMetrics(objective, s.data, ar), [objective, s.data, ar])
 
   /*
    * With no comparison window, a delta is not «unchanged» — it does not exist. `undefined` removes
@@ -1563,7 +1544,7 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
     key,
     ar: FAMILY_LABELS[key]!.ar,
     en: FAMILY_LABELS[key]!.en,
-    kpis: layoutFor(key, key).primary,
+    kpis: layoutFor(key).primary,
   }))
 
   const grouped = FAMILIES.map((f) => ({

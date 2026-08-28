@@ -486,20 +486,28 @@ export interface MetricFilters {
   /** UX-DASH-001 — the dashboard's campaign control. Absent means every campaign, never none. */
   campaign?: string[]
 }
-const qf = (f?: MetricFilters) =>
+export const qf = (f?: MetricFilters) =>
   (f?.provider?.length ? `&provider=${f.provider.join(',')}` : '') +
   (f?.objective?.length ? `&objective=${f.objective.join(',')}` : '') +
   (f?.campaign?.length ? `&campaign=${f.campaign.join(',')}` : '')
 
+/**
+ * ANALYTICS-FILTER-TRUTH-001 — every axis that narrows the REQUEST also keys the cache.
+ *
+ * `useEntities` built its key by hand and left `campaign` out of it, so drilling into one campaign's
+ * ad squads was served the response cached for every campaign: a narrowed heading over unnarrowed
+ * rows. One builder now feeds every metrics query, so an axis added to `MetricFilters` cannot be
+ * carried by the URL and forgotten by the key.
+ */
+export const filterKeyParts = (f?: MetricFilters): string[] => [
+  f?.provider?.join(',') ?? '',
+  f?.objective?.join(',') ?? '',
+  f?.campaign?.join(',') ?? '',
+]
+
 function useMetric<T>(key: string, projectId: string | null, range: Range, path: string, filters?: MetricFilters) {
   return useQuery({
-    queryKey: [
-      'metrics', key, projectId, range.from, range.to,
-      filters?.provider?.join(',') ?? '',
-      filters?.objective?.join(',') ?? '',
-      // Part of the key, or the campaign filter would return whatever the unfiltered request cached.
-      filters?.campaign?.join(',') ?? '',
-    ],
+    queryKey: ['metrics', key, projectId, range.from, range.to, ...filterKeyParts(filters)],
     queryFn: () => getData<T>(`${base(projectId!)}/${path}?${q(range)}${qf(filters)}`),
     enabled: Boolean(projectId),
   })
@@ -579,7 +587,7 @@ export const useEntities = (
   f?: MetricFilters,
 ) =>
   useQuery({
-    queryKey: ['metrics', 'entities', level, p, r.from, r.to, parent ?? '', f?.provider?.join(',') ?? '', f?.objective?.join(',') ?? ''],
+    queryKey: ['metrics', 'entities', level, p, r.from, r.to, parent ?? '', ...filterKeyParts(f)],
     queryFn: () =>
       getData<EntityPage>(
         `${base(p!)}/entities/${level}?${q(r)}${qf(f)}${parent === undefined || parent === null ? '' : `&parent=${encodeURIComponent(parent)}`}`,

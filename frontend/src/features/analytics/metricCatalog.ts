@@ -310,20 +310,42 @@ const OBJECTIVE_LAYOUTS: Record<string, Layout> = {
 }
 
 /** A path is coarser than an objective, so it leads with what every objective inside it shares. */
-const PATH_LAYOUTS: Record<string, Layout> = {
-  awareness: {
-    primary: ['impressions', 'reach', 'cpm', 'spend'],
-    secondary: ['frequency', 'video_views', 'video_completion_rate', 'clicks', 'ctr', 'engagements'],
+/**
+ * ANALYTICS-OBJECTIVE-SYSTEM-001 — the headline row for a CANONICAL objective.
+ *
+ * This replaces `PATH_LAYOUTS`, which was keyed by the three «marketing paths». A path and an
+ * objective were two names for one decision, and the reader could set them to disagree; the canonical
+ * five are the only grouping the product now offers, so the headline follows them.
+ *
+ * Only the two canonical keys that span more than one family need an entry. `traffic`, `leads` and
+ * `sales` cover exactly one family each and are already answered, identically, by
+ * `OBJECTIVE_LAYOUTS` — a second copy here could only drift away from it.
+ */
+const CANONICAL_LAYOUTS: Record<string, Layout> = {
+  /*
+   * Awareness, engagement and video are one budget with three units of attention, so the row has to
+   * be the one all three are judged on: how many people, how often, at what cost. Views and the
+   * engagement rate sit in the secondary row — real, but not comparable across the three.
+   */
+  awareness_engagement: {
+    primary: ['reach', 'impressions', 'frequency', 'cpm'],
+    secondary: ['spend', 'video_views', 'video_completion_rate', 'engagements', 'engagement_rate', 'clicks', 'ctr'],
   },
-  traffic: {
-    primary: ['clicks', 'ctr', 'cpc', 'landing_page_views'],
-    secondary: ['spend', 'impressions', 'reach', 'cpm', 'conversion_rate'],
-  },
-  conversion: {
-    primary: ['conversions', 'cpa', 'conversion_rate', 'spend'],
-    secondary: ['purchases', 'add_to_cart', 'revenue', 'roas', 'aov', 'leads', 'cpl', 'clicks', 'ctr'],
+  app_promotion: {
+    primary: ['installs', 'cpi', 'registrations', 'spend'],
+    secondary: ['in_app_events', 'clicks', 'ctr', 'impressions', 'cpm'],
   },
 }
+
+/** The families each canonical objective covers — the frontend mirror of `CanonicalObjective::families()`. */
+const CANONICAL_FAMILIES: Record<string, string[]> = {
+  awareness_engagement: ['awareness', 'engagement', 'video'],
+  traffic: ['traffic'],
+  leads: ['leads'],
+  app_promotion: ['app'],
+  sales: ['sales'],
+}
+
 
 /**
  * Mixed objectives get operational figures ONLY — never a blended ROAS or CPA.
@@ -356,9 +378,31 @@ const OBJECTIVE_LABELS: Record<string, Record<string, { ar: string; en: string }
   sales: { cpa: { ar: 'تكلفة الطلب', en: 'Cost per order' }, conversions: { ar: 'الطلبات', en: 'Orders' } },
 }
 
-export function layoutFor(objective: string, path: string, familiesInScope?: string[]): Layout {
-  if (objective !== 'all' && OBJECTIVE_LAYOUTS[objective]) return OBJECTIVE_LAYOUTS[objective]
-  if (path !== 'all' && PATH_LAYOUTS[path]) return PATH_LAYOUTS[path]
+/**
+ * The headline row for a scope — chosen by the objective, then narrowed by what is actually in it.
+ *
+ * `objective` accepts a canonical key from the page's one objective control, and also a family or
+ * layout key, which is how the report presets and `reportMetrics` address a row directly. Both
+ * resolve here rather than in two places.
+ */
+export function layoutFor(objective: string, familiesInScope?: string[]): Layout {
+  if (objective !== 'all') {
+    /*
+     * A canonical bucket is deliberately wider than a family. When the scope turns out to hold
+     * exactly ONE of that canonical's families, the narrower row is the truer one — a video-only
+     * scope deserves completion rate, not the blended attention row that also has to serve a static
+     * awareness buy. A family from a DIFFERENT canonical never applies: the reader asked for this
+     * objective, and re-headlining the page around another would answer a question nobody asked.
+     */
+    const covered = CANONICAL_FAMILIES[objective]
+    if (covered && familiesInScope?.length === 1 && covered.includes(familiesInScope[0])) {
+      const narrower = OBJECTIVE_LAYOUTS[FAMILY_LAYOUT_KEY[familiesInScope[0]] ?? familiesInScope[0]]
+      if (narrower) return narrower
+    }
+
+    if (CANONICAL_LAYOUTS[objective]) return CANONICAL_LAYOUTS[objective]
+    if (OBJECTIVE_LAYOUTS[objective]) return OBJECTIVE_LAYOUTS[objective]
+  }
 
   /*
    * HEADLINE-SCOPE-001 — «كل الأهداف» is a statement about the filter, not about the data.
@@ -485,11 +529,10 @@ const COST_PER_DENOMINATOR: Record<string, string | ((t: Record<string, number |
 
 export function dashboardMetrics(
   objective: string,
-  path: string,
   summary: Summary | undefined,
   ar: boolean,
 ): { primary: MetricItem[]; secondary: MetricItem[] } {
-  const layout = layoutFor(objective, path, summary?.objective_families_in_scope)
+  const layout = layoutFor(objective, summary?.objective_families_in_scope)
 
   const build = (keys: string[], lead: boolean): MetricItem[] =>
     keys
