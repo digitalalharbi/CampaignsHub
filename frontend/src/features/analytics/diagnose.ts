@@ -81,7 +81,7 @@ export function diagnose({ objective, totals, reported }: DiagnosticInput): Diag
    * objective's. Diagnosing an unknown campaign against the sales chain would blame it for a return
    * nobody bought it for.
    */
-  const canonical = objective === null ? null : canonicalOfRaw(objective)
+  const canonical = objective === null ? null : resolveObjective(objective)
   const stages = CHAIN[canonical ?? ''] ?? ['delivery', 'attraction']
 
   const findings: DiagnosticFinding[] = []
@@ -116,6 +116,22 @@ export function diagnose({ objective, totals, reported }: DiagnosticInput): Diag
     findings,
     missing,
   }
+}
+
+/**
+ * Callers hold an objective at one of two levels, and this accepts both.
+ *
+ * `byCampaign` carries the RAW provider objective; the Analytics filter carries an already-CANONICAL
+ * key. Canonicalising blindly resolved three of the five canonical keys by coincidence — `sales`,
+ * `traffic` and `leads` happen to appear in their own raw lists — and silently returned null for
+ * `app_promotion` and `awareness_engagement`, which are named `app_installs` and `awareness` upstream.
+ * Those two then fell back to the two-stage chain, so an app-promotion account was never judged on
+ * conversion at all and said so nowhere. A partial failure of this kind is worse than a total one: it
+ * looks like it works everywhere it is spot-checked.
+ */
+function resolveObjective(objective: string): string | null {
+  // An exact chain key is already canonical. Only a raw provider value needs translating.
+  return CHAIN[objective] !== undefined ? objective : canonicalOfRaw(objective)
 }
 
 /**
