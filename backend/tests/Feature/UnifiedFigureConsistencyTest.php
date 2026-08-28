@@ -14,6 +14,7 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
+use App\Domains\Notifications\Services\DailyDigest;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
@@ -347,6 +348,44 @@ final class UnifiedFigureConsistencyTest extends TestCase
             (float) $kpis['spend'],
             'the generated report disagrees with the dashboard it was made from',
         );
+
+        app(TenantContext::class)->forget();
+    }
+
+    /**
+     * The digest EMAIL reports the same money as the dashboard — the last surface in the chain.
+     *
+     * This is the one figure in the product that a person reads before they have opened anything:
+     * it arrives on a lock screen, and it is what decides whether they log in at all. A digest that
+     * disagrees with the dashboard sends somebody to look for a problem that is not there, or worse,
+     * reassures them about one that is.
+     *
+     * `buildRange` over the report's own window rather than `build`'s rolling one, so the two are
+     * asked about the SAME days — comparing a seven-day email against a July dashboard would be
+     * comparing two different questions and calling the difference a defect.
+     */
+    public function test_the_digest_email_reports_the_same_spend_as_the_dashboard(): void
+    {
+        $dashboard = (float) $this->read('metrics/summary')->json('data.current.spend');
+
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $digest = app(DailyDigest::class)->buildRange(
+            $this->operator,
+            (string) $this->tenant->id,
+            [(string) $this->project->id],
+            Carbon::parse('2026-07-01'),
+            Carbon::parse('2026-07-31'),
+        );
+
+        $this->assertSame(
+            $dashboard,
+            (float) ($digest['totals']['spend'] ?? -1),
+            'the digest email disagrees with the dashboard',
+        );
+
+        // …and it does not sum the neighbour in, which is the same isolation the pages are held to.
+        $this->assertNotSame(self::SPEND + self::OTHER_SPEND, (float) ($digest['totals']['spend'] ?? -1));
 
         app(TenantContext::class)->forget();
     }
