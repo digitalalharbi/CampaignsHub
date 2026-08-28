@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Console;
 
 use App\Domains\Notifications\Services\DigestDispatcher;
+use App\Domains\Notifications\Support\DigestSchedule;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -170,26 +171,26 @@ final class SendDailyDigests extends Command
      */
     private function weekday(object $row): int
     {
-        $day = (int) ($row->digest_weekday ?? 1);
-
-        return $day >= 1 && $day <= 7 ? $day : 1;
+        return DigestSchedule::weekday($row->digest_weekday ?? null);
     }
 
     /**
      * The day of the month this recipient chose.
      *
-     * Capped at 28 for the reason the migration gives: a report set for the 30th would never arrive
-     * in February, and would do so silently.
+     * 1–28 accepted; anything else falls back to the FIRST. The migration's reason for the 28 is that
+     * a report set for the 30th would never arrive in February and would do so silently.
+     *
+     * Delegated to `DigestSchedule` — EMAIL-SETTINGS-DEPTH-001 — so the settings screen's «next send»
+     * and this sweep cannot answer differently. A screen that promises a date no email arrives on is
+     * worse than one that promises nothing.
      */
     private function monthday(object $row): int
     {
-        $day = (int) ($row->digest_monthday ?? 1);
-
-        return $day >= 1 && $day <= 28 ? $day : 1;
+        return DigestSchedule::monthday($row->digest_monthday ?? null);
     }
 
     private function timezone(string $timezone): string
     {
-        return in_array($timezone, timezone_identifiers_list(), true) ? $timezone : 'UTC';
+        return DigestSchedule::timezone($timezone);
     }
 }
