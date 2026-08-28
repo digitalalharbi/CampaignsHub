@@ -224,6 +224,58 @@ final class UnifiedFigureConsistencyTest extends TestCase
         $this->assertNotNull($freshness->json('meta.summary.state'), 'the figures carry no freshness verdict');
     }
 
+    /**
+     * PROVIDER-CROSS-SURFACE-PROPAGATION-001 — the surfaces this harness did not reach.
+     *
+     * The four tests above cover the dashboard, the breakdowns, the funnel and the client link. The
+     * requirement names more: budget, the objective view and the campaign detail all read the same
+     * ingested window, and each of them is a place where a second query could quietly appear.
+     *
+     * Asserted against the OTHER surfaces rather than against 100, for the reason the class docblock
+     * gives: pinning only to a literal would still pass on the day three surfaces each grew their own
+     * query and happened to agree.
+     */
+    public function test_budget_and_the_objective_view_read_the_same_window(): void
+    {
+        $dashboard = (float) $this->read('metrics/summary')->json('data.current.spend');
+
+        // `spent`, not `spend` — the budget view names the money already used against a budget, and
+        // asserting the wrong key would have passed a broken product by summing nothing to zero.
+        $budget = $this->sum($this->read('metrics/budget')->json('data'), 'spent');
+        $this->assertSame($dashboard, $budget, 'the budget view disagrees with the dashboard');
+
+        /*
+         * The objective view groups the same spend by family. Summed back up it must be the same
+         * money — a grouping that loses or invents a riyal is a grouping nobody can reconcile.
+         */
+        // `data.paths` — the objective view groups by marketing path, and each path carries its own
+        // spend. Summed back up it must be the same money: a grouping that loses or invents a riyal
+        // is a grouping nobody can reconcile against the dashboard above it.
+        $paths = $this->read('metrics/objective-performance')->json('data.paths');
+        $this->assertIsArray($paths, 'the objective view did not answer');
+        $this->assertNotEmpty($paths, 'a project with spend has no objective path');
+        $this->assertSame(
+            $dashboard,
+            $this->sum($paths, 'spend'),
+            'the objective breakdown does not sum to the dashboard',
+        );
+    }
+
+    /**
+     * The drill-down reads the same pipeline, and says so honestly when there is nothing beneath.
+     *
+     * This sync writes campaign-grain rows only, so the ad-set level has NOTHING — and the endpoint
+     * must say that rather than inventing a level or erroring. «No ad squads» is a fact about this
+     * account's data, and it is the answer a scoped report depends on being right.
+     */
+    public function test_the_drill_down_reports_what_is_beneath_without_inventing_it(): void
+    {
+        $entities = $this->read('metrics/entities/ad_set')->assertOk();
+
+        $this->assertIsArray($entities->json('data.entities'), 'the drill-down did not answer at all');
+        $this->assertSame([], $entities->json('data.entities'), 'entity rows appeared for a campaign-grain sync');
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────────────────────
 
     /*
