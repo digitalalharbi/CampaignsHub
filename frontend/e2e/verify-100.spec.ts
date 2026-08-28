@@ -327,6 +327,25 @@ test.describe('DEVSTATUS-001 — the requirement board', () => {
 test.describe('UX-DASH-001 — the advertiser dashboard', () => {
   test.use({ storageState: AUTH.advertiser })
 
+  /*
+   * The project is CHOSEN here, like every other block in this file — and that omission was hiding a
+   * green that meant nothing.
+   *
+   * These tests said nothing about which project they were reading, so they read whichever one the
+   * switcher happened to have. `campaigns-linking.spec.ts` creates a project, and running it first
+   * left the dashboard on that project, which has no metrics at all. The KPI assertion still passed:
+   * with the summary yet to answer, the strip rendered its cards from no data, `metric-purchases`
+   * existed for a moment, and `toBeVisible` was satisfied by a card that was about to be replaced by
+   * «لا توجد بيانات ضمن هذه الفلاتر».
+   *
+   * METRICS-REQUEST-STATE-001 removed that moment — a request that has not answered no longer
+   * renders cards — and the test went red, correctly, on a dependency it never declared. Naming the
+   * project is the fix; loosening the assertion would have restored a green that proved nothing.
+   */
+  test.beforeEach(async ({ page }) => {
+    await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
+  })
+
   test('opens on the figures, with its filters on the page', async ({ page }) => {
     await page.goto('/app/dashboard')
 
