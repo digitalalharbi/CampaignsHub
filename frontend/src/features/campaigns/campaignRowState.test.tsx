@@ -56,6 +56,9 @@ describe('the concise state on a campaign row', () => {
       campaign('broken', 'Not delivering'),
       campaign('fine', 'Healthy'),
       campaign('silent', 'Connector sent nothing'),
+      // Switched ON, but it has not reported a positive figure in weeks. Status alone calls this
+      // «serving»; the shared rule calls it idle, and that difference is the whole point.
+      campaign('stale', 'On but quiet'),
     ])
     metrics.value = {
       data: [
@@ -69,6 +72,10 @@ describe('the concise state on a campaign row', () => {
         },
         // Every figure zero because nothing was ever reported — the coalesced-zero trap, per campaign.
         { campaign_id: 'silent', last_active_on: today, reported: {}, spend: 0, impressions: 0, clicks: 0 },
+        {
+          campaign_id: 'stale', last_active_on: '2026-06-01', reported: REPORTED,
+          spend: 500, impressions: 9000, clicks: 100, landing_page_views: 90, conversions: 5, revenue: 900,
+        },
       ],
       isPending: false, isLoading: false, isError: false,
     }
@@ -100,5 +107,26 @@ describe('the concise state on a campaign row', () => {
     expect(screen.getByTestId('campaign-state-unmeasured')).toBeInTheDocument()
     // And exactly one unmeasured chip: the healthy campaign was measured, so it gets neither.
     expect(screen.queryAllByTestId('campaign-state-unmeasured')).toHaveLength(1)
+  })
+
+  /**
+   * Freshness comes from the shared relevance rule, and a campaign that reported no active day is
+   * NOT «stopped» — the platform never said it ended, and the window is the only evidence there is.
+   * Calling it stopped would be inventing the answer, which is precisely what the rule refuses.
+   */
+  it('names freshness from the shared rule and does not call a silent campaign stopped', async () => {
+    renderWithProviders(<CampaignsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('view-cards'))
+
+    await screen.findByText('Healthy')
+
+    // All three fixtures are `active` with a last-active day of today, except the silent one, which
+    // has none at all — so it is idle, never stopped.
+    expect(screen.queryAllByTestId('campaign-freshness-serving').length).toBeGreaterThan(0)
+    expect(screen.queryByTestId('campaign-freshness-stopped')).not.toBeInTheDocument()
+
+    // «On but quiet» is switched on and has not reported for weeks. Status alone would call it
+    // serving; the shared rule calls it idle, and the row must say what the rule says.
+    expect(screen.getByTestId('campaign-freshness-idle')).toBeInTheDocument()
   })
 })
