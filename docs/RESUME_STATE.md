@@ -75,7 +75,20 @@ inside ANALYTICS-FILTER-TRUTH-001 and pin with regression coverage.
   slow. **Check that a run exists for the CURRENT head before waiting on it**; an empty commit is the
   smallest way to ask for one.
 - The gate is a ~60-minute three-browser suite; duration alone is never evidence of a hang.
-- **OBSERVATION — two firefox-only gate failures on #153 (run `33182321129`, head `fbca666`):**
+- **OBSERVATION — firefox-only gate failures on TWO different PRs, both passing on a same-head
+  rerun.** #147 run `33183435257` failed `verify-100.spec.ts:34` («view-cards» never became
+  `aria-pressed`); attempt 2 on the identical head passed, and #147 was merged on that green with all
+  four pre-merge checks holding. #153 run `33182321129` failed `registration-onboarding.spec.ts:191`
+  and `request-vertical.spec.ts:11`; attempt 2 on the identical head also passed.
+  **A pass-after-fail on one SHA proves NON-DETERMINISM, not correctness** — neither is «fixed», and
+  neither should be recorded as such. Neither reproduces locally: the #147 spec passed 3× in
+  isolation on firefox and again inside a 32-test firefox run under load. Chromium and webkit passed
+  every one of these specs on the same commits. Firefox is the slowest of the three browsers and is
+  where this repository has previously found press/release races (see CLICK-STABLE-001). **Open
+  question worth its own unit:** on `/app/campaigns` the stat-card captions and the attention-count
+  badge both change after data lands, which moves the view switcher under the pointer — that affects
+  real users, not only tests, and is a plausible but UNPROVEN cause.
+- **OBSERVATION — the original #153 detail (run `33182321129`, head `fbca666`):**
   `registration-onboarding.spec.ts:191` (after sign-in the new company account landed on
   `/app/dashboard` instead of `/onboarding`) and `request-vertical.spec.ts:11` (the «تم التحقق»
   marker never appeared). **Not attributable to that branch's scope**, and the evidence for saying so
