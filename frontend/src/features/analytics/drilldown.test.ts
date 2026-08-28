@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  decodePath, drillInto, drillUpTo, encodePath, nextLevel, parentFor, stepLabel, type DrillStep,
+  creativeScope, decodePath, drillInto, drillUpTo, encodePath, nextLevel, parentFor, stepLabel,
+  type DrillStep,
 } from './drilldown'
 
 /**
@@ -74,6 +75,21 @@ describe('the drill path', () => {
 
     expect(drillUpTo(deep, 'ad')).toEqual([step('campaign', 'c1'), step('ad_set', 's1')])
     expect(drillUpTo(deep, 'campaign')).toEqual([])
+  })
+
+  /** The library takes the deepest rung — both would narrow twice for one choice. */
+  it('narrows the creative library by the deepest pinned rung', () => {
+    expect(creativeScope([step('campaign', 'c1'), step('ad_set', 's1'), step('ad', 'a1')])).toEqual({ ad_ids: ['a1'] })
+    expect(creativeScope([step('campaign', 'c1'), step('ad_set', 's1')])).toEqual({ ad_set_ids: ['s1'] })
+  })
+
+  /**
+   * A campaign narrows nothing in the library, which has no campaign axis on this route. Passing a
+   * campaign id into an ad filter would return an empty list reading «this campaign has no creatives».
+   */
+  it('does not invent an ad filter out of a campaign', () => {
+    expect(creativeScope([step('campaign', 'c1')])).toEqual({})
+    expect(creativeScope([])).toEqual({})
   })
 
   it('knows where the hierarchy ends', () => {
