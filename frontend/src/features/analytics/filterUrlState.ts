@@ -48,6 +48,40 @@ export function useUrlState(key: string, fallback: string): [string, (value: str
   return [value, set]
 }
 
+/**
+ * Write several URL keys in ONE update.
+ *
+ * Two `useUrlState` setters called in the same handler do not compose: each functional update is
+ * applied against the params of the render it was created in, so the second silently drops the
+ * first's change. Drilling into an entity writes both the path and the tab — «where am I» is one
+ * statement, and half of it landing is worse than neither, because the breadcrumb would then describe
+ * a scope the request never used.
+ *
+ * A value equal to its fallback is removed rather than written, matching `useUrlState` — a default
+ * does not belong in a shared link.
+ */
+export function useUrlWriter(): (next: Record<string, { value: string; fallback: string }>) => void {
+  const [, setParams] = useSearchParams()
+
+  return useCallback(
+    (next) => {
+      setParams(
+        (current) => {
+          const out = new URLSearchParams(current)
+          for (const [key, { value, fallback }] of Object.entries(next)) {
+            if (value === fallback) out.delete(key)
+            else out.set(key, value)
+          }
+
+          return out
+        },
+        { replace: true },
+      )
+    },
+    [setParams],
+  )
+}
+
 /** A multi-select filter — platforms, campaigns. Empty means every, and writes nothing. */
 export function useUrlList(key: string): [string[], (next: string[] | ((prev: string[]) => string[])) => void] {
   const [params, setParams] = useSearchParams()
