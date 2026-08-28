@@ -1,6 +1,7 @@
 import { useId, useState } from 'react'
 import { Area, AreaChart, ResponsiveContainer } from 'recharts'
 import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Info, Minus } from 'lucide-react'
+import { QueryFailure } from './QueryFailure'
 import { TOUCH_TARGET } from './touch'
 
 /**
@@ -74,6 +75,8 @@ export type MetricItem = {
 const T = {
   notProvided: { ar: 'لم ترسله المنصة', en: 'Not provided' },
   noData: { ar: 'لا توجد بيانات', en: 'No data' },
+  loading: { ar: 'جارِ تحميل المؤشرات', en: 'Loading metrics' },
+  loadFailed: { ar: 'تعذّر تحميل المؤشرات', en: 'These metrics could not be loaded' },
   withheldHint: {
     ar: 'المنصة أرسلت هذا الرقم، ولا يتوفر سعر صرف لتحويله إلى عملة المشروع.',
     en: 'The platform reported this figure; no exchange rate is available to convert it.',
@@ -267,6 +270,9 @@ export function MetricStrip({
   comparisonLabel,
   note,
   hasRows,
+  loading = false,
+  error,
+  onRetry,
 }: {
   id: string
   ar: boolean
@@ -285,8 +291,61 @@ export function MetricStrip({
    * that have no scope to speak of, which keeps every existing use unchanged.
    */
   hasRows?: boolean
+  /**
+   * METRICS-REQUEST-STATE-001 — the request has not answered yet.
+   *
+   * Without this the strip rendered anyway: with no totals to read, every card fell to `no_data` and
+   * printed «لا توجد بيانات» — an absence of evidence rendered as evidence of absence.
+   */
+  loading?: boolean
+  /** The failed request, passed straight to `QueryFailure` so a refusal reads as a refusal. */
+  error?: unknown
+  onRetry?: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
+
+  /*
+   * METRICS-REQUEST-STATE-001 — a failure outranks everything below it.
+   *
+   * Both a failure and an empty scope can be true in the props at once — the previous scope was
+   * empty and the refetch then failed — and «your filter matched nothing» is a claim the failed
+   * request gave no standing to make. `QueryFailure` owns the four arms (refusal, expired session,
+   * missing record, dead server) so this surface cannot drift into a fifth.
+   */
+  if (error !== undefined && error !== null) {
+    return (
+      <section data-testid={`${id}-metrics`} className="space-y-2">
+        <QueryFailure
+          error={error}
+          ar={ar}
+          onRetry={onRetry}
+          fallbackTitle={t('loadFailed', ar)}
+          testId={`${id}-metrics-failure`}
+        />
+      </section>
+    )
+  }
+
+  /*
+   * A request still in flight is not an answer. The skeleton holds the row's shape so the page does
+   * not jump when the figures land, and says nothing about them.
+   */
+  if (loading) {
+    return (
+      <section data-testid={`${id}-metrics`} className="space-y-2">
+        <div
+          data-testid={`${id}-metrics-loading`}
+          aria-busy="true"
+          aria-label={t('loading', ar)}
+          className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4"
+        >
+          {primary.map((item) => (
+            <div key={item.key} className="h-[86px] animate-pulse rounded-2xl border border-border bg-surface-secondary/40" />
+          ))}
+        </div>
+      </section>
+    )
+  }
 
   /*
    * An empty scope has no standing to describe a connector.
