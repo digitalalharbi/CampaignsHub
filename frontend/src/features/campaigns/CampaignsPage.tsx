@@ -11,6 +11,7 @@ import { CAMPAIGN_STATUSES, type UnifiedCampaign } from './types'
 import { CANONICAL_OBJECTIVE_KEYS, canonicalObjectiveLabel, canonicalOfRaw, rawObjectivesFor, type CanonicalObjectiveKey } from './canonicalObjectives'
 import { LIFECYCLE_KEYS, lifecycleView, type Lifecycle } from './campaignLifecycleView'
 import { campaignEfficiency, campaignHeadline, type CampaignHeadline } from './campaignHeadline'
+import { campaignState } from './campaignState'
 
 /** «النشطة» is what an operator still owns this month — serving and switched-on-but-dark alike. */
 const LIFECYCLE_LABELS: Record<Lifecycle, { ar: string; en: string }> = {
@@ -592,6 +593,7 @@ export function CampaignsPage() {
                   locale={locale}
                   headline={campaignHeadline(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)}
                   efficiency={campaignEfficiency(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)}
+                  state={campaignState(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined)}
                   onOpen={() => navigate(`/campaigns/${projectId}/${c.id}`)}
                 />
               ))}
@@ -677,7 +679,17 @@ function ReadingCell({ reading, locale }: { reading: CampaignHeadline; locale: '
   )
 }
 
-function CampaignCard({ c, locale, headline, efficiency, onOpen }: { c: UnifiedCampaign; locale: 'ar' | 'en'; headline?: CampaignHeadline | null; efficiency?: CampaignHeadline | null; onOpen: () => void }) {
+/** The row's own short phrasing — the panel explains, the row labels. */
+const CAMPAIGN_STATE_COPY: Record<string, { ar: string; en: string }> = {
+  not_delivering: { ar: 'لا تُعرض', en: 'Not delivering' },
+  weak_attraction: { ar: 'ضعف الجذب', en: 'Weak attraction' },
+  clicks_not_arriving: { ar: 'الضغطات لا تصل', en: 'Clicks not arriving' },
+  visits_lost: { ar: 'فقد زيارات', en: 'Visits lost' },
+  no_conversions: { ar: 'بلا تحويلات', en: 'No conversions' },
+  conversions_without_value: { ar: 'تحويلات بلا قيمة', en: 'Conversions without value' },
+}
+
+function CampaignCard({ c, locale, headline, efficiency, state, onOpen }: { c: UnifiedCampaign; locale: 'ar' | 'en'; headline?: CampaignHeadline | null; efficiency?: CampaignHeadline | null; state?: ReturnType<typeof campaignState>; onOpen: () => void }) {
   const unlinked = (c.external_campaigns_count ?? 0) === 0
   return (
     <button onClick={onOpen} data-testid="campaign-card" className="flex flex-col gap-2.5 rounded-2xl border border-border bg-surface p-4 text-start shadow-[var(--shadow-small)] transition-colors hover:border-brand-300 hover:bg-surface-hover">
@@ -708,6 +720,42 @@ function CampaignCard({ c, locale, headline, efficiency, onOpen }: { c: UnifiedC
           rather than printing a zero that was never measured.
         */}
         {efficiency && <ReadingCell reading={efficiency} locale={locale} />}
+        {/*
+          CAMPAIGN-INTELLIGENCE-HUB — the concise state, from the shared engine and NOT a score.
+          Rendered only when the row was actually judged: a campaign whose connector reported
+          nothing is unjudged, and showing it the same «fine» as an examined healthy campaign is the
+          opaque score this requirement forbids, wearing a word instead of a number.
+        */}
+        {/*
+          «Not measured» is its own state, and the row says it.
+
+          Without this the unexamined campaign and the examined-healthy one look identical — a blank
+          — which is the opaque score this requirement forbids, expressed as an absence instead of a
+          number. `judged` is false when nothing was spent or nothing was reported, and that is a
+          fact about the connector, not a verdict on the campaign.
+        */}
+        {state?.judged === false && (
+          <span
+            className="inline-flex items-center gap-1 self-start rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-text-muted"
+            data-testid="campaign-state-unmeasured"
+          >
+            {locale === 'ar' ? 'لا قياس بعد' : 'Not measured yet'}
+          </span>
+        )}
+        {state?.judged === true && state.finding !== null && (
+          <span
+            className="inline-flex items-center gap-1 self-start rounded-full border border-border px-2 py-0.5 text-[11px] text-text-secondary"
+            data-testid={`campaign-state-${state.finding.code}`}
+          >
+            <TriangleAlert size={11} className="text-warning" />
+            {CAMPAIGN_STATE_COPY[state.finding.code]
+              ? (locale === 'ar' ? CAMPAIGN_STATE_COPY[state.finding.code].ar : CAMPAIGN_STATE_COPY[state.finding.code].en)
+              : state.finding.code}
+            {state.finding.confidence === 'probable' && (
+              <span className="text-text-muted">{locale === 'ar' ? '· مرجَّح' : '· inferred'}</span>
+            )}
+          </span>
+        )}
       </div>
       {unlinked && <div className="inline-flex items-center gap-1 text-[11px] text-warning"><TriangleAlert size={12} /> {locale === 'ar' ? 'بلا حملات خارجية مرتبطة' : 'No linked platform campaign'}</div>}
     </button>
