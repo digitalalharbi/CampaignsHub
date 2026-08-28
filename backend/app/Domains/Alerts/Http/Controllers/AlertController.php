@@ -13,6 +13,7 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Tenant alerting: manage rules and triage the firing ledger. Tenant + fail-closed scoping comes from the
@@ -38,6 +39,9 @@ final class AlertController extends Controller
      * Until then {@see AlertEvaluator::unevaluated()} logs when such a rule is swept, so a rule that
      * cannot fire is at least visible to whoever reads the logs instead of silently reporting health.
      */
+    /** The threshold keys the evaluator actually reads. Anything else is a typo, not a setting. */
+    private const THRESHOLD_KEYS = ['days', 'pct', 'ratio'];
+
     private const TYPES = [
         'budget_risk', 'cpa_increase', 'cpl_increase', 'roas_drop', 'no_results',
         'sync_failure', 'token_expiry', 'report_failed', 'sla_warning',
@@ -73,15 +77,60 @@ final class AlertController extends Controller
         );
     }
 
+    /**
+     * Refuse a threshold key the evaluator will never read.
+     *
+     * Laravel validates the keys it is given and ignores the rest, so `{"dayz": 7}` would pass every
+     * rule above and be stored — a rule that looks configured and behaves as though nothing was set.
+     */
+    private function rejectUnknownThresholdKeys(Request $request): void
+    {
+        $threshold = $request->input('threshold');
+        if (! is_array($threshold)) {
+            return;
+        }
+
+        $unknown = array_diff(array_keys($threshold), self::THRESHOLD_KEYS);
+        if ($unknown !== []) {
+            throw ValidationException::withMessages([
+                'threshold' => 'حقل غير معروف في الحد: '.implode(', ', $unknown),
+            ]);
+        }
+    }
+
     public function storeRule(Request $request): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('alerts.manage'), 403);
+
+        /*
+         * A key nobody reads is refused, so a typo does not sit on the screen looking configured
+         * while doing nothing. `prohibited_unless` cannot express «no other keys», so the check is
+         * explicit and names what it found.
+         */
+        $this->rejectUnknownThresholdKeys($request);
 
         $data = $request->validate([
             'type' => ['required', 'string', 'in:'.implode(',', self::TYPES)],
             'name' => ['required', 'string', 'min:2', 'max:120'],
             'project_id' => ['nullable', 'uuid'],
+            /*
+             * EMAIL-SETTINGS-DEPTH-001 — a threshold that would SILENCE the alert is refused.
+             *
+             * This was `['nullable', 'array']` and nothing more, so any shape was stored and handed
+             * to an evaluator that reads `(int) $threshold['days']` and `(float) $threshold['pct']`.
+             * The failure that matters is not a crash: `days: 0` gives a window with no days in it
+             * and `pct: -5` a threshold every window clears, so the rule looks configured on the
+             * screen, reports nothing, and is indistinguishable from an account with nothing wrong.
+             * An alert that cannot fire is worse than no alert, because somebody is relying on it.
+             *
+             * `(int) 'soon'` is 0 in PHP, which is why `numeric` matters as much as the ranges.
+             */
             'threshold' => ['nullable', 'array'],
+            'threshold.days' => ['sometimes', 'numeric', 'integer', 'min:1', 'max:365'],
+            'threshold.pct' => ['sometimes', 'numeric', 'min:1', 'max:1000'],
+            // A budget ratio at or above 1 is «tell me after I have overspent», which is not a risk
+            // warning; at or below 0 it fires on every campaign the moment it exists.
+            'threshold.ratio' => ['sometimes', 'numeric', 'gt:0', 'lt:1.5'],
             'cooldown_minutes' => ['nullable', 'integer', 'min:5', 'max:20160'],
             'channels' => ['nullable', 'array'],
             'channels.*' => ['string', 'in:in_app,email,whatsapp'],
