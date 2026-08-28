@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
 import { SlideBody, type Meta, type ReportData, type Slide } from './InteractiveReport'
 import { PrintDocument } from './PrintDocument'
+import { headerIdentity, type SharedBranding } from './sharedBranding'
 import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
 interface PrintPayload {
@@ -17,6 +18,13 @@ interface PrintPayload {
   checksum: string | null
   data_version: number | null
   data: ReportData
+  /**
+   * BRANDING-HIERARCHY-001 — whose document this is, resolved server-side.
+   *
+   * Resolved there and not here because this route is sessionless by design: headless Chromium
+   * fetches it with a short-lived token and no cookie, so it has no tenant to resolve anything with.
+   */
+  branding?: SharedBranding
 }
 
 /**
@@ -63,10 +71,20 @@ export function PrintReport() {
   // NOT leak those internal identifiers into metadata — they get a clean, client-safe title.
   useEffect(() => {
     if (!payload) return
+    /*
+     * The identity in the PDF's own metadata — BRANDING-HIERARCHY-001.
+     *
+     * This was «CampaignsHub» for every report, so an agency's client PDF announced the product in
+     * the file's title bar and beside the attachment in a mail client. The internal arm keeps its
+     * provenance exactly as before: rid/checksum/data-version are what make an internal snapshot
+     * auditable, and they are still withheld from client and executive files.
+     */
+    const who = headerIdentity(payload.branding).name
+
     document.title =
       payload.audience === 'client' || payload.audience === 'executive'
-        ? `CampaignsHub — ${payload.currency} Report`
-        : `CampaignsHub | rid=${payload.report_id} | cs=${payload.checksum ?? ''} | dv=${payload.data_version ?? ''} | cur=${payload.currency}`
+        ? `${who} — ${payload.currency} Report`
+        : `${who} | rid=${payload.report_id} | cs=${payload.checksum ?? ''} | dv=${payload.data_version ?? ''} | cur=${payload.currency}`
   }, [payload])
 
   // Readiness protocol — Chromium waits on these before printing. Also publishes a per-page layout
@@ -113,7 +131,7 @@ export function PrintReport() {
   }
 
   const d = payload.data
-  const meta: Meta = { reportName: payload.name, platforms: (d.platforms ?? []).map((p) => String(p.provider)), isDemo: payload.is_demo, agencyName: 'CampaignsHub' }
+  const meta: Meta = { reportName: payload.name, platforms: (d.platforms ?? []).map((p) => String(p.provider)), isDemo: payload.is_demo, agencyName: headerIdentity(payload.branding).name }
   const landscape = type === 'presentation'
   const period = d.period ? `${d.period.from} → ${d.period.to}` : ''
   const mode = (d.mode as string) === 'live' ? 'Live' : 'Snapshot'
@@ -143,7 +161,8 @@ export function PrintReport() {
                 {d.disclaimer && <PerformanceNotice data={d.disclaimer} variant="footer" />}
               </div>
               <div className="report-footer-meta">
-                <span className="report-footer-brand">CampaignsHub{payload.is_demo ? ' · Demo' : ''}{period ? ` · ${period}` : ''}</span>
+                {/* The footer names whoever the report belongs to, for the same reason the title does. */}
+                <span className="report-footer-brand">{headerIdentity(payload.branding).name}{payload.is_demo ? ' · Demo' : ''}{period ? ` · ${period}` : ''}</span>
                 <span className="report-footer-page">{mode}{updated ? ` · آخر تحديث ${updated}` : ''} · <bdi dir="ltr">{i + 1} / {total}</bdi></span>
               </div>
             </footer>

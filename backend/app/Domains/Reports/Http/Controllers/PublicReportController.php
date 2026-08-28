@@ -423,7 +423,7 @@ final class PublicReportController extends Controller
         $share = $this->shares->resolveActive($token);
         abort_unless((bool) $share, 404);
 
-        $file = $branding->logoFor($share);
+        $file = $branding->logoFor(Report::withoutGlobalScopes()->find($share->report_id), (string) $share->tenant_id);
         abort_unless($file !== null, 404);
 
         return $file;
