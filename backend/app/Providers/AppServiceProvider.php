@@ -13,6 +13,7 @@ use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
+use App\Domains\Ops\Listeners\RecordScheduledRun;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
@@ -23,6 +24,10 @@ use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Console\Events\ScheduledTaskFailed;
+use Illuminate\Console\Events\ScheduledTaskFinished;
+use Illuminate\Console\Events\ScheduledTaskSkipped;
+use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
@@ -109,6 +114,18 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         // Audit authentication lifecycle events.
+        /*
+         * AUTOMATION-FIRST-OPERATIONS-001 — one subscriber records every scheduled command's run.
+         *
+         * Registered here rather than in thirteen commands so a command added later is observed
+         * without anybody editing it, and — the part that matters — so a command that THROWS is still
+         * recorded, which a write at the end of its own handler could never manage.
+         */
+        Event::listen(ScheduledTaskStarting::class, [RecordScheduledRun::class, 'starting']);
+        Event::listen(ScheduledTaskFinished::class, [RecordScheduledRun::class, 'finished']);
+        Event::listen(ScheduledTaskFailed::class, [RecordScheduledRun::class, 'failed']);
+        Event::listen(ScheduledTaskSkipped::class, [RecordScheduledRun::class, 'skipped']);
+
         Event::listen(Login::class, [RecordAuthAudit::class, 'handleLogin']);
         Event::listen(Logout::class, [RecordAuthAudit::class, 'handleLogout']);
 
