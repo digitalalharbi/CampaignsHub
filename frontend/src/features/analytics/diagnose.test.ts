@@ -23,6 +23,29 @@ const input = (o: Partial<DiagnosticInput> = {}): DiagnosticInput => ({
 })
 
 describe('what the diagnostic layer will and will not claim', () => {
+  /**
+   * The Analytics filter holds a canonical key; `byCampaign` holds a raw provider objective. Both
+   * callers are real, and canonicalising blindly resolved only the three canonical keys that happen to
+   * appear in their own raw lists. `app_promotion` and `awareness_engagement` returned null and were
+   * quietly judged on the two-stage fallback chain — an app-promotion account never examined for
+   * conversion, and nothing saying so.
+   *
+   * `app_promotion` is the only key this can be proven on. `awareness_engagement` is the other one
+   * that failed to canonicalise, but its chain — delivery, attraction — is character for character the
+   * fallback it fell back to, so no observation distinguishes the fixed code from the broken code
+   * there. A test asserting it would pass either way and prove nothing.
+   */
+  it('judges an objective the same whether it arrives canonical or raw', () => {
+    const full = { spend: 1000, impressions: 100000, clicks: 500, landing_page_views: 400, conversions: 0, revenue: 0 }
+    const reported = { spend: true, impressions: true, clicks: true, landing_page_views: true, conversions: true, revenue: true }
+
+    const canonical = diagnose({ objective: 'app_promotion', totals: full, reported })
+    const raw = diagnose({ objective: 'app_installs', totals: full, reported })
+
+    expect(canonical.findings.map((f) => f.code)).toEqual(raw.findings.map((f) => f.code))
+    expect(canonical.findings.some((f) => f.stage === 'conversion')).toBe(true)
+  })
+
   it('reads the chain when every step is reported', () => {
     const d = diagnose(input())
 
