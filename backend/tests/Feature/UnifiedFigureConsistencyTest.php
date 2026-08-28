@@ -17,6 +17,7 @@ use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Services\ReportGenerator;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -308,6 +309,46 @@ final class UnifiedFigureConsistencyTest extends TestCase
 
         $names = array_column((array) $alerts->json('data'), 'title');
         $this->assertNotContains('حملة أخرى', $names, 'an alert named another client’s campaign');
+    }
+
+    /**
+     * A generated REPORT carries the same window as the dashboard it was made from.
+     *
+     * The live link is already asserted above; a generated report is the other document a client
+     * receives, and it is built by a different service (`ReportGenerator`) reading the same
+     * aggregator. That is exactly the shape of divergence this harness exists to catch — «a page
+     * grows its own query» applies to documents too, and a report is the copy a client keeps.
+     */
+    public function test_a_generated_report_carries_the_same_spend_as_the_dashboard(): void
+    {
+        $dashboard = (float) $this->read('metrics/summary')->json('data.current.spend');
+
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $report = Report::create([
+            'project_id' => $this->project->id,
+            'name' => 'R2',
+            'type' => 'executive',
+            'status' => 'pending',
+            'currency' => 'SAR',
+            'period_start' => '2026-07-01',
+            'period_end' => '2026-07-31',
+            'data' => [],
+        ]);
+
+        // `generate()` RETURNS the document; persisting it is the job's business, so the returned
+        // array is what to assert — reading `$report->data` back would have tested the job instead.
+        $generated = app(ReportGenerator::class)->generate($report);
+
+        $kpis = (array) ($generated['kpis'] ?? []);
+        $this->assertArrayHasKey('spend', $kpis, 'the generated report carries no spend at all');
+        $this->assertSame(
+            $dashboard,
+            (float) $kpis['spend'],
+            'the generated report disagrees with the dashboard it was made from',
+        );
+
+        app(TenantContext::class)->forget();
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────────────────────
