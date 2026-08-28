@@ -1,6 +1,7 @@
 <?php
 
 use App\Domains\Influencers\Http\Controllers\AttributionController;
+use App\Domains\Reports\Http\Controllers\SharePreviewController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -21,3 +22,14 @@ Route::get('/', function () {
 Route::get('/t/{code}', [AttributionController::class, 'redirect'])
     ->where('code', '[A-Za-z0-9\-]{1,64}')
     ->name('influencers.track');
+
+/*
+ * REPORT-TITLE-METADATA-001 — the preview card a shared report link renders as when pasted.
+ *
+ * A WEB route, like the influencer redirect above and for the same reason: this is fetched by a
+ * stranger's crawler with no session, no tenant and no JSON. The edge sends only crawler
+ * user-agents here; a real browser gets the SPA and never reaches it.
+ */
+Route::get('/r/{token}', [SharePreviewController::class, 'show'])
+    ->where('token', '[A-Za-z0-9]{16,64}')
+    ->name('reports.share.preview');
