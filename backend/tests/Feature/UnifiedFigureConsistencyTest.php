@@ -14,6 +14,7 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
+use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Notifications\Services\DailyDigest;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
@@ -26,6 +27,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
@@ -69,6 +71,11 @@ final class UnifiedFigureConsistencyTest extends TestCase
     private const WINDOW = 'from=2026-07-01&to=2026-07-31';
 
     /** The figure under test. One sync wrote it; every surface must report exactly this. */
+    /** Set by `entityRows()`: `external_campaign_id` is a uuid FK, never the provider's own string id. */
+    private string $campaignA = '';
+
+    private string $campaignB = '';
+
     private const SPEND = 100.0;
 
     private const CLICKS = 50.0;
@@ -279,6 +286,54 @@ final class UnifiedFigureConsistencyTest extends TestCase
     }
 
     /**
+     * PROVIDER-CROSS-SURFACE-PROPAGATION-001 — the drill-down carries the SAME window, to the digit.
+     *
+     * The negative above proves the level does not invent rows. This is its other half, and the one a
+     * reader actually depends on: when a provider really does report ad-set grain, the figures that
+     * reach the drill-down are the figures the campaign level already showed.
+     *
+     * A drill-down is the surface where a second query is most tempting — it needs a parent filter the
+     * campaign breakdown does not — and the divergence it would produce is the most convincing kind,
+     * because the ad-set rows would each look plausible and only their SUM would contradict the
+     * campaign above them.
+     */
+    public function test_the_drill_down_carries_the_same_window_it_drilled_into(): void
+    {
+        $this->entityRows();
+
+        $entities = $this->read('metrics/entities/ad_set')->assertOk();
+        $rows = $entities->json('data.entities');
+
+        $this->assertNotSame([], $rows, 'the ad-set level reported nothing for a sync that wrote it');
+
+        $dashboard = (float) $this->read('metrics/summary')->json('data.current.spend');
+
+        $this->assertSame(
+            $dashboard,
+            $this->sum($rows, 'spend'),
+            'the ad sets beneath the campaign do not add up to the campaign the reader drilled into',
+        );
+    }
+
+    /**
+     * And narrowing to a parent narrows the DATA, not just the label.
+     *
+     * `parent` changes the database scope. A drill-down that filtered on the client would show one
+     * campaign's name over another campaign's rows, and every figure on the page would be real —
+     * which is precisely why nothing on screen would look wrong.
+     */
+    public function test_narrowing_the_drill_down_to_a_parent_excludes_the_other_parent(): void
+    {
+        $this->entityRows();
+
+        $mine = $this->read('metrics/entities/ad_set', '&parent='.$this->campaignA)->assertOk();
+        $names = array_column($mine->json('data.entities'), 'external_id');
+
+        $this->assertContains('sq-a', $names, 'the ad set under the requested campaign was dropped');
+        $this->assertNotContains('sq-b', $names, "another campaign's ad set survived the parent filter");
+    }
+
+    /**
      * Content and Alerts read the same ingested window — and say nothing false when it is empty.
      *
      * Neither carries a spend total to reconcile, so the property is different and worth stating: a
@@ -396,10 +451,10 @@ final class UnifiedFigureConsistencyTest extends TestCase
      * Named `read`, not `get`: `TestCase::get()` is public and PHP refuses to let a subclass
      * narrow it to private, so the whole file was a fatal error before it ran a single assertion.
      */
-    private function read(string $path): TestResponse
+    private function read(string $path, string $extra = ''): TestResponse
     {
         return $this->actingAs($this->operator, 'sanctum')
-            ->getJson("/api/v1/projects/{$this->project->id}/{$path}?".self::WINDOW)
+            ->getJson("/api/v1/projects/{$this->project->id}/{$path}?".self::WINDOW.$extra)
             ->assertOk();
     }
 
@@ -436,6 +491,46 @@ final class UnifiedFigureConsistencyTest extends TestCase
         app(TenantContext::class)->forget();
 
         return $raw;
+    }
+
+    /**
+     * Ad-set grain for THIS project, split across two campaigns so a parent filter has something to
+     * exclude, and summing to exactly the campaign-grain spend the rest of the file asserts.
+     *
+     * Written straight to `entity_daily_metrics` because that is where the syncer puts entity grain —
+     * `UpsertDailyMetrics` is the campaign-grain door. Using the campaign door here would prove the
+     * drill-down agrees with a table it does not read.
+     */
+    private function entityRows(): void
+    {
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $half = round(self::SPEND / 2, 2);
+
+        $this->campaignA = (string) Str::uuid();
+        $this->campaignB = (string) Str::uuid();
+
+        foreach ([[$this->campaignA, 'sq-a'], [$this->campaignB, 'sq-b']] as [$campaignExternalId, $adSetExternalId]) {
+            (new EntityDailyMetric)->forceFill([
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $this->tenant->getKey(),
+                'project_id' => $this->project->getKey(),
+                'external_account_id' => $this->account->getKey(),
+                'provider' => 'meta',
+                'entity_type' => EntityDailyMetric::AD_SET,
+                'entity_id' => (string) Str::uuid(),
+                'external_entity_id' => $adSetExternalId,
+                'external_campaign_id' => $campaignExternalId,
+                'metric_date' => self::DATE,
+                'attribution_window' => 'default',
+                'is_demo' => false,
+                'spend' => $half,
+                'original_currency' => 'SAR',
+                'project_currency' => 'SAR',
+            ])->save();
+        }
+
+        app(TenantContext::class)->forget();
     }
 
     private function sync(Project $project, UnifiedCampaign $campaign, float $spend, float $clicks): void
