@@ -108,6 +108,23 @@ describe('the campaigns workspace, opened cold', () => {
     expect(headline).not.toHaveTextContent('0')
   })
 
+  /*
+   * Result and cost sit side by side, because neither decides anything alone.
+   *
+   * The running campaign spent 10 and its platform reported no purchases, so the card shows the cost
+   * per order as «—» rather than a figure: a cost with nothing to divide does not exist, and
+   * printing one would invent it.
+   */
+  it('shows what the result cost beside the result', async () => {
+    renderWithProviders(<CampaignsPage />, { locale: 'en' })
+    await openList()
+    await screen.findByText('Still running')
+
+    const cost = screen.getByTestId('campaign-headline-cpa')
+    expect(cost).toBeInTheDocument()
+    expect(cost).not.toHaveTextContent('0')
+  })
+
   it('arrives on the lifecycle the link asked for', async () => {
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/campaigns?lifecycle=all' })
     await openList()
