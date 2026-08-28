@@ -572,6 +572,42 @@ final class MetricsAggregator
     }
 
     /**
+     * The same answer, per CAMPAIGN — because a card leads with one campaign's own result.
+     *
+     * `byCampaign()` sums with `COALESCE(..., 0)`, so a metric no platform ever sent for a campaign
+     * arrives as `0`, indistinguishable from a real measurement of none. A card leading a leads
+     * campaign with «العملاء المحتملون 0» when the connector has never sent a lead is the dashboard's
+     * coalesced-zero defect one grain down — and on the screen where somebody decides whether to keep
+     * paying for that campaign.
+     *
+     * @return array<string, array<string,bool>> campaign id → metric key → was it ever sent
+     */
+    public function reportedKeysByCampaign(Carbon $from, Carbon $to): array
+    {
+        $rows = $this->base($from, $to)
+            ->select('unified_campaign_id', 'metric_key')
+            ->distinct()
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            if ($row->unified_campaign_id === null) {
+                continue;
+            }
+
+            $out[(string) $row->unified_campaign_id][(string) $row->metric_key] = true;
+        }
+
+        foreach ($out as $campaign => $present) {
+            foreach (array_keys(self::PIVOT) as $key) {
+                $out[$campaign][$key] = $present[$key] ?? false;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * The same answer, per platform — because «reported» is a fact about a CONNECTOR, not a scope.
      *
      * Meta publishes reach and X does not. A scope-wide map says reach was reported, so an X page
@@ -995,6 +1031,8 @@ final class MetricsAggregator
 
     public function byCampaign(Carbon $from, Carbon $to): array
     {
+        $reported = $this->reportedKeysByCampaign($from, $to);
+
         $rows = $this->base($from, $to)
             ->leftJoin('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
             ->select('daily_metrics.unified_campaign_id as campaign_id', 'unified_campaigns.name as campaign_name', 'unified_campaigns.client_display_name as client_display_name', 'unified_campaigns.objective as objective', 'unified_campaigns.objective_source as objective_source', 'unified_campaigns.status as status')
@@ -1066,6 +1104,11 @@ final class MetricsAggregator
                  * positive figure. Which of them outranks the other is a question for the surface
                  * asking, and an operational listing answers it differently from a report.
                  */
+                /*
+                 * Which metrics THIS campaign's platforms actually sent — never inferred from the
+                 * summed value, which is a coalesced zero for every key nobody reported.
+                 */
+                'reported' => $reported[(string) $r->campaign_id] ?? [],
                 'status' => $r->status === null ? null : CampaignStatus::tryFrom((string) $r->status)?->value,
                 'last_active_on' => $r->last_active_on === null ? null : Carbon::parse((string) $r->last_active_on)->toDateString(),
                 'provider' => $r->provider,
