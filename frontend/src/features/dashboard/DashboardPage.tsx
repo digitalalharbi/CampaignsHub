@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -36,6 +36,7 @@ import { MetricStrip } from '@/components/ui/MetricStrip'
 import { DataFreshness, PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
 import { sortPlatforms } from '@/lib/platforms'
+import { useUrlList, useUrlNumber, useUrlState } from '@/features/analytics/filterUrlState'
 import { useProject } from '@/stores/project'
 import { listClientWorkspaces, listProjects } from '@/features/projects/api'
 import {
@@ -164,12 +165,19 @@ export function DashboardPage() {
   const t = COPY[ar ? 'ar' : 'en']
   const { currentProjectId, setCurrentProjectId } = useProject()
 
-  const [days, setDays] = useState(30)
+  /*
+   * ANALYTICS-FILTER-TRUTH-001 — the filters live in the URL, so a refresh, Back and a shared link
+   * all show the same page. They were `useState` only: narrowing to one platform and one objective
+   * and then reloading gave the unfiltered page back, and the link a reader sent a colleague showed
+   * that colleague a different answer to the question they were discussing.
+   */
+  const [days, setDays] = useUrlNumber('days', 30)
   const range = useLastNDaysRange(days)
-  const [providers, setProviders] = useState<string[]>([])
-  const [campaignIds, setCampaignIds] = useState<string[]>([])
-  const [objective, setObjective] = useState<CanonicalObjectiveKey | 'all'>('all')
-  const [clientId, setClientId] = useState('all')
+  const [providers, setProviders] = useUrlList('provider')
+  const [campaignIds, setCampaignIds] = useUrlList('campaign')
+  const [objectiveRaw, setObjective] = useUrlState('objective', 'all')
+  const objective = objectiveRaw as CanonicalObjectiveKey | 'all'
+  const [clientId, setClientId] = useUrlState('client', 'all')
 
   // The workspace's own shelves — real records, so «Client» and «Project» are choices rather than
   // decoration. Failure is silent by design here: a filter that cannot load must not take the

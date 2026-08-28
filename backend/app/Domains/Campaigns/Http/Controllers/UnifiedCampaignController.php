@@ -39,8 +39,23 @@ final class UnifiedCampaignController extends Controller
         if ($status = $request->string('status')->toString()) {
             $query->where('status', $status);
         }
-        if ($objective = $request->string('objective')->toString()) {
-            $query->where('objective', $objective);
+        /*
+         * ANALYTICS-OBJECTIVE-SYSTEM-001 — a LIST of raw objectives, the same contract the metrics
+         * API has.
+         *
+         * A single value matched with `=` could not express a canonical bucket at all: «الوعي
+         * والتفاعل» covers awareness, reach, video views and engagement, so the one screen where a
+         * reader manages campaigns was the one screen that could not be asked the product's own
+         * question. A single value still works — a list of one is a list — and a blank value is no
+         * filter rather than an objective named empty string, which a cleared control would
+         * otherwise use to empty the page.
+         */
+        $objectives = array_values(array_filter(
+            array_map('trim', explode(',', $request->string('objective')->toString())),
+            static fn (string $o): bool => $o !== '',
+        ));
+        if ($objectives !== []) {
+            $query->whereIn('objective', $objectives);
         }
         foreach (['stage', 'performance_label', 'priority'] as $classField) {
             if ($value = $request->string($classField)->toString()) {
