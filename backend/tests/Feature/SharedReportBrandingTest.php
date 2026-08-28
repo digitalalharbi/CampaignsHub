@@ -194,6 +194,26 @@ final class SharedReportBrandingTest extends TestCase
         $this->getJson("/api/v1/branding/assets/{$rival->id}/file")->assertUnauthorized();
     }
 
+    /**
+     * Branding must not spend the quota that protects the FIGURES.
+     *
+     * This is a regression, and it was found by running the report E2E specs locally rather than by
+     * reasoning: adding one branding request per page load to the shared `share:{ip}` bucket pushed
+     * the public report over its 60/minute ceiling, and it began rendering «تعذّر فتح التقرير — Too
+     * many requests» on a link that had been fine. On this surface that means a paying client is told
+     * their report is broken.
+     */
+    public function test_asking_for_branding_does_not_use_up_the_reports_own_request_quota(): void
+    {
+        // Well past the figures ceiling of 60/minute, on branding alone.
+        for ($i = 0; $i < 70; $i++) {
+            $this->read();
+        }
+
+        // The report itself must still answer — its bucket was never touched.
+        $this->getJson("/api/v1/reports/shared/{$this->token}")->assertOk();
+    }
+
     /** @return array<string,mixed> */
     private function read(array $query = []): array
     {
