@@ -178,6 +178,45 @@ final class CampaignOrderingTest extends TestCase
         $this->assertArrayNotHasKey((string) $outside->id, $rows, 'a campaign outside the window is not in the window');
     }
 
+    /**
+     * A campaign row says which metrics its platforms actually SENT — the coalesced-zero rule, at
+     * campaign grain.
+     *
+     * `byCampaign()` sums with `COALESCE(..., 0)`, so a metric no platform ever reported for this
+     * campaign arrives as `0` and is indistinguishable from a real measurement of none. A card
+     * leading a leads campaign with «العملاء المحتملون 0» when the connector has never sent a lead
+     * is the same defect the dashboard's `reported` map exists to prevent — one grain down, and on
+     * the screen where somebody decides whether to keep paying for it.
+     */
+    public function test_a_campaign_row_says_which_metrics_its_platforms_actually_sent(): void
+    {
+        $campaign = $this->campaign('Reported', 'active');
+        $this->sync($campaign, 120.0, '2026-07-10');
+
+        $rows = collect($this->rows())->keyBy('campaign_id');
+        $reported = $rows[(string) $campaign->id]['reported'];
+
+        // Spend was sent. Leads never were — and that is not a leads count of zero.
+        $this->assertTrue($reported['spend']);
+        $this->assertFalse($reported['leads']);
+        $this->assertFalse($reported['impressions']);
+    }
+
+    /** Two campaigns, two different answers — «reported» is a fact about THIS campaign's platforms. */
+    public function test_one_campaigns_missing_metric_is_not_reported_as_missing_for_another(): void
+    {
+        $withClicks = $this->campaign('Clicks', 'active');
+        $spendOnly = $this->campaign('Spend only', 'active');
+
+        $this->sync($withClicks, 50.0, '2026-07-10', 'clicks', 30.0);
+        $this->sync($spendOnly, 50.0, '2026-07-10');
+
+        $rows = collect($this->rows())->keyBy('campaign_id');
+
+        $this->assertTrue($rows[(string) $withClicks->id]['reported']['clicks']);
+        $this->assertFalse($rows[(string) $spendOnly->id]['reported']['clicks']);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────────────────────
 
     /** @return list<array<string,mixed>> */
@@ -207,7 +246,7 @@ final class CampaignOrderingTest extends TestCase
         ]);
     }
 
-    private function sync(UnifiedCampaign $campaign, float $spend, string $date): void
+    private function sync(UnifiedCampaign $campaign, float $spend, string $date, ?string $extraKey = null, ?float $extraValue = null): void
     {
         $this->holdingTenant((string) $this->tenant->id);
 
@@ -218,20 +257,25 @@ final class CampaignOrderingTest extends TestCase
             'provider' => 'meta', 'external_id' => 'ext-'.uniqid(), 'name' => $campaign->name, 'status' => 'active',
         ]);
 
-        app(UpsertDailyMetrics::class)->handle([
-            new NormalizedMetric(
-                tenantId: (string) $this->tenant->id,
-                projectId: (string) $this->project->id,
-                provider: 'meta',
-                externalAccountId: (string) $this->account->getKey(),
-                externalCampaignId: (string) $external->id,
-                unifiedCampaignId: (string) $campaign->id,
-                metricDate: Carbon::parse($date),
-                metricKey: 'spend',
-                value: $spend,
-                projectCurrency: 'SAR',
-            ),
-        ]);
+        $metric = fn (string $key, ?float $value): NormalizedMetric => new NormalizedMetric(
+            tenantId: (string) $this->tenant->id,
+            projectId: (string) $this->project->id,
+            provider: 'meta',
+            externalAccountId: (string) $this->account->getKey(),
+            externalCampaignId: (string) $external->id,
+            unifiedCampaignId: (string) $campaign->id,
+            metricDate: Carbon::parse($date),
+            metricKey: $key,
+            value: $value,
+            projectCurrency: 'SAR',
+        );
+
+        $rows = [$metric('spend', $spend)];
+        if ($extraKey !== null) {
+            $rows[] = $metric($extraKey, $extraValue);
+        }
+
+        app(UpsertDailyMetrics::class)->handle($rows);
 
         app(TenantContext::class)->forget();
     }
