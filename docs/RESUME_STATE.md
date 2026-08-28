@@ -75,6 +75,15 @@ inside ANALYTICS-FILTER-TRUTH-001 and pin with regression coverage.
   slow. **Check that a run exists for the CURRENT head before waiting on it**; an empty commit is the
   smallest way to ask for one.
 - The gate is a ~60-minute three-browser suite; duration alone is never evidence of a hang.
+- **OBSERVATION — two firefox-only gate failures on #153 (run `33182321129`, head `fbca666`):**
+  `registration-onboarding.spec.ts:191` (after sign-in the new company account landed on
+  `/app/dashboard` instead of `/onboarding`) and `request-vertical.spec.ts:11` (the «تم التحقق»
+  marker never appeared). **Not attributable to that branch's scope**, and the evidence for saying so
+  is: its diff touches no registration, onboarding, auth, identity or request file; chromium AND
+  webkit passed the same two specs on the same commit; and the full chromium suite passed locally
+  (408 passed, only the known-stale darwin homepage baselines failing). That is NOT the same as
+  «proven correct» — a same-head rerun is running to establish whether it is deterministic. Firefox
+  is the slowest of the three browsers and has historically been where settling races surface.
 - `retries: 0` is deliberate, so any non-determinism fails the gate outright. Three failure classes
   were seen and must not be collapsed into «flaky»: real product defects (#131, #140), a real
   test-design defect (#133), and intermittent browser/state failures (#132, #137, #138).
