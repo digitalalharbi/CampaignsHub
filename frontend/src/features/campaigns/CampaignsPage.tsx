@@ -10,6 +10,7 @@ import { campaignStatusLabel, campaignStatusTone, objectiveLabel } from './label
 import { CAMPAIGN_STATUSES, type UnifiedCampaign } from './types'
 import { CANONICAL_OBJECTIVE_KEYS, canonicalObjectiveLabel, canonicalOfRaw, rawObjectivesFor, type CanonicalObjectiveKey } from './canonicalObjectives'
 import { LIFECYCLE_KEYS, lifecycleView, type Lifecycle } from './campaignLifecycleView'
+import { campaignHeadline, type CampaignHeadline } from './campaignHeadline'
 
 /** «النشطة» is what an operator still owns this month — serving and switched-on-but-dark alike. */
 const LIFECYCLE_LABELS: Record<Lifecycle, { ar: string; en: string }> = {
@@ -584,7 +585,15 @@ export function CampaignsPage() {
             />
           ) : view === 'cards' ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {visibleCampaigns.map((c) => <CampaignCard key={c.id} c={c} locale={locale} onOpen={() => navigate(`/campaigns/${projectId}/${c.id}`)} />)}
+              {visibleCampaigns.map((c) => (
+                <CampaignCard
+                  key={c.id}
+                  c={c}
+                  locale={locale}
+                  headline={campaignHeadline(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)}
+                  onOpen={() => navigate(`/campaigns/${projectId}/${c.id}`)}
+                />
+              ))}
             </div>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-small)]">
@@ -647,7 +656,7 @@ function StatCard({ label, value, sub, delta, invert, tone }: { label: string; v
   )
 }
 
-function CampaignCard({ c, locale, onOpen }: { c: UnifiedCampaign; locale: 'ar' | 'en'; onOpen: () => void }) {
+function CampaignCard({ c, locale, headline, onOpen }: { c: UnifiedCampaign; locale: 'ar' | 'en'; headline?: CampaignHeadline | null; onOpen: () => void }) {
   const unlinked = (c.external_campaigns_count ?? 0) === 0
   return (
     <button onClick={onOpen} data-testid="campaign-card" className="flex flex-col gap-2.5 rounded-2xl border border-border bg-surface p-4 text-start shadow-[var(--shadow-small)] transition-colors hover:border-brand-300 hover:bg-surface-hover">
@@ -661,7 +670,26 @@ function CampaignCard({ c, locale, onOpen }: { c: UnifiedCampaign; locale: 'ar' 
       </div>
       <div className="grid grid-cols-2 gap-1.5 text-xs">
         <span className="rounded-lg bg-surface-secondary px-2 py-1.5">{locale === 'ar' ? 'الميزانية' : 'Budget'} <b className="tnum block text-text-primary">{money(c.total_budget, c.budget_currency)}</b></span>
-        <span className="rounded-lg bg-surface-secondary px-2 py-1.5">{locale === 'ar' ? 'مرتبطة' : 'Linked'} <b className="tnum block text-text-primary">{c.external_campaigns_count ?? 0}</b></span>
+        {/*
+          CAMPAIGN-INTELLIGENCE-HUB — the result this campaign was BOUGHT for, beside what it cost.
+          A budget and a count of linked platform campaigns say nothing about whether the money is
+          working; `campaignHeadline` names the metric the objective is judged on and states it, or
+          says the platform never sent it. Never a score.
+        */}
+        {headline ? (
+          <span className="rounded-lg bg-surface-secondary px-2 py-1.5" data-testid={`campaign-headline-${headline.key}`} data-state={headline.reading.kind}>
+            {headline.label}
+            <b className="tnum block text-text-primary">
+              {headline.reading.kind === 'value'
+                ? headline.reading.text
+                : headline.reading.kind === 'not_provided'
+                  ? (locale === 'ar' ? 'لم ترسله المنصة' : 'Not provided')
+                  : '—'}
+            </b>
+          </span>
+        ) : (
+          <span className="rounded-lg bg-surface-secondary px-2 py-1.5">{locale === 'ar' ? 'مرتبطة' : 'Linked'} <b className="tnum block text-text-primary">{c.external_campaigns_count ?? 0}</b></span>
+        )}
       </div>
       {unlinked && <div className="inline-flex items-center gap-1 text-[11px] text-warning"><TriangleAlert size={12} /> {locale === 'ar' ? 'بلا حملات خارجية مرتبطة' : 'No linked platform campaign'}</div>}
     </button>
