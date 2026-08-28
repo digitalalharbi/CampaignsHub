@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Http\Controllers;
 
+use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Metrics\Services\AttributionTransparency;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
@@ -382,6 +383,50 @@ final class PublicReportController extends Controller
         $mime = ['pdf' => 'application/pdf', 'csv' => 'text/csv', 'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'][$format];
 
         return response()->streamDownload(fn () => print ($content), "report.{$format}", ['Content-Type' => $mime]);
+    }
+
+    /**
+     * BRANDING-HIERARCHY-001 — whose identity this report carries.
+     *
+     * Everything is derived from the token: the tenant, the client and the logo. The request's query
+     * string is not read at all, which is the property the isolation test asserts by appending every
+     * parameter an enumerator would reach for and requiring the answer not to move.
+     *
+     * No password gate here on purpose: a header is the frame around the password prompt itself, and
+     * a reader who has not yet typed the password still has to be shown WHOSE report they are being
+     * asked to unlock. It discloses a name and a logo the link already implies, and no figures.
+     */
+    public function sharedBranding(Request $request, string $token, SharedLinkBranding $branding): JsonResponse
+    {
+        $this->throttle($request);
+        $share = $this->shares->resolveActive($token);
+        if (! $share) {
+            return ApiResponse::error('الرابط غير صالح أو انتهت صلاحيته أو أُلغي.', status: 404);
+        }
+
+        $report = Report::withoutGlobalScopes()->find($share->report_id);
+
+        return ApiResponse::success($branding->forShare($share, $token, $report), 'Report branding.');
+    }
+
+    /**
+     * The logo bytes, addressed by the token — never by asset id.
+     *
+     * The asset is re-resolved from the share rather than looked up by an id in the URL, so there is
+     * no id to change. A 404 when nothing resolves is deliberate: the caller has already been told
+     * `logo_url: null` and should not have asked, and inventing a placeholder image here would put a
+     * logo on a report that has none.
+     */
+    public function sharedBrandingLogo(Request $request, string $token, SharedLinkBranding $branding): mixed
+    {
+        $this->throttle($request);
+        $share = $this->shares->resolveActive($token);
+        abort_unless((bool) $share, 404);
+
+        $file = $branding->logoFor($share);
+        abort_unless($file !== null, 404);
+
+        return $file;
     }
 
     private function throttle(Request $request): void
