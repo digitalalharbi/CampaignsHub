@@ -71,6 +71,7 @@ import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { useQuery } from '@tanstack/react-query'
 import { StoreFunnelTab } from './StoreFunnelTab'
 import { AttributionPanel } from './AttributionPanel'
+import { DiagnosticPanel } from './DiagnosticPanel'
 
 /*
  * UX-ANALYTICS-TABS-001 — twelve tabs on one line, and six of them began with the same word.
@@ -521,6 +522,24 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
         loading={s.isPending}
         error={s.isError ? s.error : undefined}
         onRetry={() => void s.refetch()}
+      />
+      {/*
+       * ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — directly beneath the figures that raise the question.
+       *
+       * The strip above says WHAT happened. This says where along the journey it went wrong, reading
+       * the same `useSummary` entry the strip read — the same totals and the same `reported` map, so
+       * the two cannot disagree about the account they are both describing. The request state is
+       * forwarded rather than re-derived for the same reason.
+       */}
+      <DiagnosticPanel
+        objective={objective}
+        totals={s.data?.current as Record<string, number | null | undefined> | undefined}
+        reported={s.data?.reported}
+        rowsInScope={s.data?.rows_in_scope}
+        loading={s.isPending}
+        error={s.isError ? s.error : undefined}
+        onRetry={() => void s.refetch()}
+        ar={ar}
       />
       {/* The comparisons, the details and the alerts — «أ», shared with the marketing preview. */}
       <UnifiedCampaignOverview vm={vm} lang={ar ? 'ar' : 'en'} />
