@@ -38,7 +38,12 @@ import { useUi } from '@/stores/ui'
 import { sortPlatforms } from '@/lib/platforms'
 import { useProject } from '@/stores/project'
 import { listClientWorkspaces, listProjects } from '@/features/projects/api'
-import { MARKETING_PATH_KEYS, marketingPathLabel, objectiveLabel, objectivesForPath, pathOfObjective } from '@/features/campaigns/labels'
+import {
+  CANONICAL_OBJECTIVE_KEYS,
+  canonicalObjectiveLabel,
+  rawObjectivesFor,
+  type CanonicalObjectiveKey,
+} from '@/features/campaigns/canonicalObjectives'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
 /**
@@ -50,15 +55,6 @@ import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
  */
 export const PLATFORM_KEYS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
 
-/**
- * The objectives this page has a layout for.
- *
- * Deliberately the six with a `OBJECTIVE_LAYOUTS` entry rather than all fourteen enum cases: an
- * objective with no layout falls through to the mixed operational set, which would put four generic
- * cards under a heading naming one specific objective — the reader would reasonably conclude those
- * four ARE that objective's metrics.
- */
-const OBJECTIVE_CHOICES = ['awareness', 'traffic', 'leads', 'sales', 'app_installs', 'engagement']
 
 const axis = { stroke: 'var(--text-muted)', fontSize: 12 }
 
@@ -71,11 +67,9 @@ const COPY = {
     project: 'المشروع',
     platform: 'المنصة',
     campaign: 'الحملة',
-    path: 'المسار التسويقي',
     objective: 'الهدف',
     allClients: 'كل العملاء',
     allPlatforms: 'الكل',
-    allPaths: 'كل المسارات',
     allObjectives: 'كل الأهداف',
     noProject: 'لم يُختر مشروع',
     days7: '7 أيام',
@@ -107,11 +101,9 @@ const COPY = {
     project: 'Project',
     platform: 'Platform',
     campaign: 'Campaign',
-    path: 'Marketing path',
     objective: 'Objective',
     allClients: 'All clients',
     allPlatforms: 'All',
-    allPaths: 'All paths',
     allObjectives: 'All objectives',
     noProject: 'No project selected',
     days7: '7 days',
@@ -145,7 +137,7 @@ const COPY = {
  * This page opened with a `Customise` button: the objective, the platforms and the saved views all
  * lived in a dialog (SIMPLIFY-001). The reasoning was sound about the symptom — three bands of
  * chips above the fold is a settings screen — and wrong about the cure. Period, client, project,
- * platform, campaign, path and objective are not configuration; they are the questions this product
+ * platform, campaign and objective are not configuration; they are the questions this product
  * is FOR, and hiding them made the system look thinner than it is. They are inline now, in one
  * compact bar, with the applied ones as removable chips. Saved views stay behind `More filters`,
  * which is what that control is for: the rare thing, not the daily one.
@@ -176,8 +168,7 @@ export function DashboardPage() {
   const range = useLastNDaysRange(days)
   const [providers, setProviders] = useState<string[]>([])
   const [campaignIds, setCampaignIds] = useState<string[]>([])
-  const [path, setPath] = useState('all')
-  const [objective, setObjective] = useState('all')
+  const [objective, setObjective] = useState<CanonicalObjectiveKey | 'all'>('all')
   const [clientId, setClientId] = useState('all')
 
   // The workspace's own shelves — real records, so «Client» and «Project» are choices rather than
@@ -202,17 +193,13 @@ export function DashboardPage() {
   }, [clientId, projects, currentProjectId, setCurrentProjectId])
 
   /**
-   * The objective filter actually sent.
+   * The objective filter actually sent — ANALYTICS-OBJECTIVE-SYSTEM-001.
    *
-   * A path is not a server axis — it is this path's objectives, on the objective filter the metrics
-   * API already supports (see `objectivesForPath`). So picking «التحويل والمبيعات» narrows every
-   * figure on the page exactly as picking its objectives one by one would.
+   * The canonical key is what the reader chose; the metrics API filters on RAW objectives, so it is
+   * expanded here. Sending the canonical key itself would leave every figure unscoped beneath a
+   * heading claiming otherwise — the frontend-only filtering ANALYTICS-FILTER-TRUTH-001 forbids.
    */
-  const objectiveFilter = useMemo(() => {
-    if (objective !== 'all') return [objective]
-
-    return path === 'all' ? [] : objectivesForPath(path)
-  }, [objective, path])
+  const objectiveFilter = useMemo(() => rawObjectivesFor(objective), [objective])
 
   const filters = useMemo(
     () => ({ provider: providers, objective: objectiveFilter, campaign: campaignIds }),
@@ -223,10 +210,7 @@ export function DashboardPage() {
   // Saved views (DASH-010-E-FE): apply restores objective + platforms + date range.
   const savedViews = useSavedViews()
   const applyView = (v: SavedView) => {
-    if (v.filters?.objective) {
-      setObjective(v.filters.objective)
-      setPath(v.filters.objective === 'all' ? 'all' : pathOfObjective(v.filters.objective))
-    }
+    if (v.filters?.objective) setObjective(v.filters.objective as CanonicalObjectiveKey | 'all')
     if (v.filters?.provider) setProviders(v.filters.provider)
     if (v.date_range?.days) setDays(v.date_range.days)
   }
@@ -262,7 +246,7 @@ export function DashboardPage() {
 
   const commerce = summary.data?.commerce ?? null
   const points = series.data ?? []
-  const metrics = useMemo(() => dashboardMetrics(objective, path, summary.data, ar), [objective, path, summary.data, ar])
+  const metrics = useMemo(() => dashboardMetrics(objective, summary.data, ar), [objective, summary.data, ar])
 
   const alerts = useMemo(() => {
     const out: { kind: 'sync' | 'budget' | 'performance'; text: string }[] = []
@@ -390,31 +374,24 @@ export function DashboardPage() {
         onRemove: () => setCampaignIds((prev) => prev.filter((x) => x !== id)),
       })
     })
-    if (path !== 'all') {
-      out.push({ key: `path:${path}`, axis: t.path, label: marketingPathLabel(path, ar ? 'ar' : 'en'), onRemove: () => setPath('all') })
-    }
     if (objective !== 'all') {
       out.push({
         key: `objective:${objective}`,
         axis: t.objective,
-        label: objectiveLabel(objective, ar ? 'ar' : 'en'),
+        label: canonicalObjectiveLabel(objective, ar ? 'ar' : 'en'),
         onRemove: () => setObjective('all'),
       })
     }
 
     return out
-  }, [clientId, clients, providers, campaignIds, campaignOptions.data, path, objective, t, ar])
+  }, [clientId, clients, providers, campaignIds, campaignOptions.data, objective, t, ar])
 
   const resetFilters = () => {
     setClientId('all')
     setProviders([])
     setCampaignIds([])
-    setPath('all')
     setObjective('all')
   }
-
-  // The objectives that belong to the chosen path — so the two controls cannot contradict.
-  const objectiveChoices = OBJECTIVE_CHOICES.filter((key) => path === 'all' || pathOfObjective(key) === path)
 
   return (
     <div className="space-y-5">
@@ -523,30 +500,14 @@ export function DashboardPage() {
         />
 
         <FilterSelect
-          label={t.path}
-          value={path}
-          testid="dashboard-path"
-          options={[
-            { value: 'all', label: t.allPaths },
-            ...MARKETING_PATH_KEYS.map((key) => ({ value: key, label: marketingPathLabel(key, ar ? 'ar' : 'en') })),
-          ]}
-          onChange={(v) => {
-            setPath(v)
-            // An objective outside the new path would make the two controls disagree, and the
-            // objective is the narrower of the two — so it yields.
-            if (v !== 'all' && objective !== 'all' && pathOfObjective(objective) !== v) setObjective('all')
-          }}
-        />
-
-        <FilterSelect
           label={t.objective}
           value={objective}
           testid="dashboard-objective"
           options={[
             { value: 'all', label: t.allObjectives },
-            ...objectiveChoices.map((key) => ({ value: key, label: objectiveLabel(key, ar ? 'ar' : 'en') })),
+            ...CANONICAL_OBJECTIVE_KEYS.map((key) => ({ value: key, label: canonicalObjectiveLabel(key, ar ? 'ar' : 'en') })),
           ]}
-          onChange={setObjective}
+          onChange={(v) => setObjective(v as CanonicalObjectiveKey | 'all')}
         />
       </FilterBar>
 
@@ -556,7 +517,7 @@ export function DashboardPage() {
         primary={metrics.primary}
         secondary={metrics.secondary}
         comparisonLabel={t.previous(days)}
-        note={objective === 'all' && path === 'all' ? t.mixedNote : undefined}
+        note={objective === 'all' ? t.mixedNote : undefined}
         /*
           METRICS-EMPTY-SCOPE-001 — a filter that matches nothing says so ONCE, about the filter.
           Without this every card reads its absence from `reported`, which over an empty scope

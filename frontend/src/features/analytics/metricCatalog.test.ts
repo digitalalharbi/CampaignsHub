@@ -16,10 +16,7 @@ import { SPECS, dashboardMetrics, layoutFor } from './metricCatalog'
  * terrible by construction, which is how a client comes to believe a working campaign has failed.
  */
 
-const KEYS = (objective: string, path = 'all') => [
-  ...layoutFor(objective, path).primary,
-  ...layoutFor(objective, path).secondary,
-]
+const KEYS = (objective: string) => [...layoutFor(objective).primary, ...layoutFor(objective).secondary]
 
 describe('metric vocabulary', () => {
   it('names the sales figures the way a merchant does', () => {
@@ -41,7 +38,7 @@ describe('metric vocabulary', () => {
    */
   it('names the cost-per by what it actually costs', () => {
     const labelOf = (objective: string, key: string) =>
-      dashboardMetrics(objective, 'all', undefined, true).primary.find((m) => m.key === key)?.label
+      dashboardMetrics(objective, undefined, true).primary.find((m) => m.key === key)?.label
 
     // Sales shares `cpa` with the generic conversion path, so it needs the override.
     expect(labelOf('sales', 'cpa')).toBe('تكلفة الطلب')
@@ -57,22 +54,22 @@ describe('objective-aware layouts', () => {
   it('gives an awareness campaign attention metrics and no sales metrics at all', () => {
     const keys = KEYS('awareness')
 
-    expect(layoutFor('awareness', 'all').primary).toEqual(['reach', 'impressions', 'frequency', 'cpm'])
+    expect(layoutFor('awareness').primary).toEqual(['reach', 'impressions', 'frequency', 'cpm'])
     for (const forbidden of ['purchases', 'add_to_cart', 'revenue', 'roas', 'cpa', 'aov']) {
       expect(keys).not.toContain(forbidden)
     }
   })
 
   it('gives a traffic campaign the visit metrics and no sales metrics', () => {
-    expect(layoutFor('traffic', 'all').primary).toEqual(['clicks', 'ctr', 'cpc', 'landing_page_views'])
+    expect(layoutFor('traffic').primary).toEqual(['clicks', 'ctr', 'cpc', 'landing_page_views'])
     for (const forbidden of ['purchases', 'add_to_cart', 'revenue', 'roas']) {
       expect(KEYS('traffic')).not.toContain(forbidden)
     }
   })
 
   it('gives a leads campaign its own count and cost, never a return', () => {
-    expect(layoutFor('leads', 'all').primary).toContain('leads')
-    expect(layoutFor('leads', 'all').primary).toContain('cpl')
+    expect(layoutFor('leads').primary).toContain('leads')
+    expect(layoutFor('leads').primary).toContain('cpl')
     expect(KEYS('leads')).not.toContain('roas')
     expect(KEYS('leads')).not.toContain('revenue')
   })
@@ -86,8 +83,8 @@ describe('objective-aware layouts', () => {
   })
 
   it('gives an app campaign installs and their cost', () => {
-    expect(layoutFor('app_installs', 'all').primary).toContain('installs')
-    expect(layoutFor('app_installs', 'all').primary).toContain('cpi')
+    expect(layoutFor('app_installs').primary).toContain('installs')
+    expect(layoutFor('app_installs').primary).toContain('cpi')
     expect(KEYS('app_installs')).not.toContain('roas')
   })
 
@@ -98,7 +95,7 @@ describe('objective-aware layouts', () => {
    * another objective's events — arithmetic that works and means nothing.
    */
   it('gives a mixed scope no cost-per and no return', () => {
-    const keys = KEYS('all', 'all')
+    const keys = KEYS('all')
 
     for (const forbidden of ['cpa', 'roas', 'revenue', 'purchases']) {
       expect(keys).not.toContain(forbidden)
@@ -126,14 +123,14 @@ describe('the headline follows what is in scope, not what the filter says', () =
   const FAMILIES = ['awareness', 'traffic', 'engagement', 'video', 'leads', 'sales', 'app', 'unknown']
 
   it('headlines a scope holding only sales campaigns with return and cost per order', () => {
-    const keys = layoutFor('all', 'all', ['sales']).primary
+    const keys = layoutFor('all', ['sales']).primary
 
     expect(keys).toContain('roas')
     expect(keys).toContain('cpa')
   })
 
   it('keeps the operational row when the scope really does mix objectives', () => {
-    const keys = layoutFor('all', 'all', ['sales', 'awareness']).primary
+    const keys = layoutFor('all', ['sales', 'awareness']).primary
 
     for (const forbidden of ['cpa', 'roas', 'revenue']) {
       expect(keys).not.toContain(forbidden)
@@ -142,17 +139,17 @@ describe('the headline follows what is in scope, not what the filter says', () =
 
   it('gives every classified family its own headline, including the ones named differently', () => {
     for (const family of FAMILIES.filter((f) => f !== 'unknown')) {
-      const keys = layoutFor('all', 'all', [family]).primary
+      const keys = layoutFor('all', [family]).primary
 
-      expect(keys, `${family} fell through to the operational row`).not.toEqual(layoutFor('all', 'all').primary)
+      expect(keys, `${family} fell through to the operational row`).not.toEqual(layoutFor('all').primary)
     }
   })
 
   it('leaves an unclassified scope on the operational row, which is the honest answer for it', () => {
-    expect(layoutFor('all', 'all', ['unknown']).primary).toEqual(layoutFor('all', 'all').primary)
+    expect(layoutFor('all', ['unknown']).primary).toEqual(layoutFor('all').primary)
   })
 
   it('ignores the scope entirely once the reader has chosen an objective', () => {
-    expect(layoutFor('awareness', 'all', ['sales']).primary).toEqual(layoutFor('awareness', 'all').primary)
+    expect(layoutFor('awareness', ['sales']).primary).toEqual(layoutFor('awareness').primary)
   })
 })

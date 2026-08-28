@@ -76,15 +76,21 @@ describe('the dashboard filter bar', () => {
   afterEach(() => signOut())
 
   /** The claim, plainly: nothing has to be opened to reach the filters this product is used through. */
-  it('puts the period, platform, path and objective controls on the page', async () => {
+  it('puts the period, platform and objective controls on the page', async () => {
     renderWithProviders(<DashboardPage />, { locale: 'en' })
 
     await screen.findByTestId('dashboard-intro')
 
     expect(screen.getByTestId('dashboard-period')).toBeInTheDocument()
     expect(screen.getByTestId('dashboard-platform')).toBeInTheDocument()
-    expect(screen.getByTestId('dashboard-path')).toBeInTheDocument()
     expect(screen.getByTestId('dashboard-objective')).toBeInTheDocument()
+    /*
+     * ANALYTICS-OBJECTIVE-SYSTEM-001 — and there is no «المسار التسويقي» control beside it.
+     *
+     * A path and an objective were one decision offered twice, and the reader could set them to
+     * disagree. The objective is the one that reaches the server, so it is the one that survived.
+     */
+    expect(screen.queryByTestId('dashboard-path')).not.toBeInTheDocument()
     // And no dialog was involved.
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
@@ -120,7 +126,7 @@ describe('the dashboard filter bar', () => {
     // Reach is a secondary concern for a sales campaign — folded, not deleted.
     expect(screen.queryByTestId('metric-reach')).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByTestId('dashboard-objective'), { target: { value: 'awareness' } })
+    fireEvent.change(screen.getByTestId('dashboard-objective'), { target: { value: 'awareness_engagement' } })
     expect(screen.getByTestId('metric-reach')).toBeInTheDocument()
     // …and no cost per order on money that was never meant to sell anything.
     expect(screen.queryByTestId('metric-cpa')).not.toBeInTheDocument()
@@ -137,7 +143,7 @@ describe('the dashboard filter bar', () => {
     renderWithProviders(<DashboardPage />, { locale: 'en' })
     await screen.findByTestId('dashboard-intro')
 
-    fireEvent.change(screen.getByTestId('dashboard-objective'), { target: { value: 'awareness' } })
+    fireEvent.change(screen.getByTestId('dashboard-objective'), { target: { value: 'awareness_engagement' } })
 
     const reach = screen.getByTestId('metric-reach')
     expect(reach).toHaveAttribute('data-state', 'not_provided')
@@ -148,18 +154,21 @@ describe('the dashboard filter bar', () => {
     expect(screen.getByTestId('metric-impressions')).toHaveAttribute('data-state', 'value')
   })
 
-  /** Choosing a path narrows the objectives on offer, so the two controls cannot contradict. */
-  it('offers only the objectives that belong to the chosen path', async () => {
+  /**
+   * The control offers the canonical five and nothing else.
+   *
+   * Written out rather than mapped from `CANONICAL_OBJECTIVE_KEYS`, because a test derived from the
+   * same constant the page renders would agree with any change to it — including one that quietly
+   * put a raw objective back on the list.
+   */
+  it('offers the five canonical objectives, and «all»', async () => {
     renderWithProviders(<DashboardPage />, { locale: 'en' })
     await screen.findByTestId('dashboard-intro')
-
-    fireEvent.change(screen.getByTestId('dashboard-path'), { target: { value: 'traffic' } })
 
     const objectives = Array.from(
       screen.getByTestId('dashboard-objective').querySelectorAll('option'),
     ).map((o) => o.getAttribute('value'))
 
-    expect(objectives).toContain('traffic')
-    expect(objectives).not.toContain('sales')
+    expect(objectives).toEqual(['all', 'awareness_engagement', 'traffic', 'leads', 'app_promotion', 'sales'])
   })
 })

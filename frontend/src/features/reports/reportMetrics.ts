@@ -104,7 +104,7 @@ export function reportMetrics(data: Input, ar = true): ReportMetric[] {
    * and a client link re-rendered a month later must show the report they were sent. `layoutFor` is
    * the fallback for snapshots written before the set was stored.
    */
-  const keys = data.metric_set?.length ? data.metric_set : layoutFor(objective, 'all').primary
+  const keys = data.metric_set?.length ? data.metric_set : layoutFor(objective).primary
   const direct = data.objective_performance?.direct
 
   return keys

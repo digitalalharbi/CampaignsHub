@@ -14,16 +14,16 @@ describe('READY-3 — the objective KPIs come from the catalogue', () => {
   it('gives leads its cost per lead, which the private list omitted', () => {
     // The screen whose whole purpose is judging each family by what it was bought for could not
     // show a leads family its CPL.
-    expect(layoutFor('leads', 'leads').primary).toContain('cpl')
+    expect(layoutFor('leads').primary).toContain('cpl')
   })
 
   it('gives sales its cost per acquisition', () => {
-    expect(layoutFor('sales', 'sales').primary).toContain('cpa')
+    expect(layoutFor('sales').primary).toContain('cpa')
   })
 
   it('names only metrics the catalogue defines, for every family', () => {
     for (const f of ['awareness', 'traffic', 'engagement', 'video', 'leads', 'sales', 'app']) {
-      const primary = layoutFor(f, f).primary
+      const primary = layoutFor(f).primary
       expect(primary.length, `${f} has no primary KPIs`).toBeGreaterThan(0)
     }
   })
