@@ -24,25 +24,19 @@ export interface CampaignHeadline {
   reading: MetricReading
 }
 
-export function campaignHeadline(
-  objective: string | null,
-  row: Record<string, unknown> | undefined,
-  ar: boolean,
-): CampaignHeadline | null {
-  if (row === undefined) return null
-
-  /*
-   * The layout is asked for the campaign's own objective — through the canonical bucket, so a
-   * `video_views` campaign is headlined like the attention buy it is rather than falling to the
-   * mixed row that exists for scopes spanning several objectives.
-   */
+/** The headline row this campaign's objective is judged on — the shared catalogue, asked once. */
+function headlineKeys(objective: string | null): string[] {
   const canonical = objective === null ? null : canonicalOfRaw(objective)
+
   /*
    * An objective the taxonomy does not recognise falls to the mixed row, which is the honest answer
    * for it — a headline chosen for an objective we cannot name would be a guess about what this
    * money was for.
    */
-  const key = layoutFor(canonical ?? 'all').primary[0]
+  return layoutFor(canonical ?? 'all').primary
+}
+
+function reading(key: string, row: Record<string, unknown>, ar: boolean): CampaignHeadline | null {
   const spec = SPECS[key]
   if (spec === undefined) return null
 
@@ -55,11 +49,46 @@ export function campaignHeadline(
    * measurement rendered as a failure, on the screen where somebody decides to stop paying for it.
    */
   const map = row.reported as Record<string, boolean> | undefined
-  const reported = { [key]: map?.[key] === true }
 
   return {
     key,
     label: ar ? spec.label.ar : spec.label.en,
-    reading: readMetric(key, spec, row as Record<string, number | null>, reported),
+    reading: readMetric(key, spec, row as Record<string, number | null>, { [key]: map?.[key] === true }),
   }
+}
+
+export function campaignHeadline(
+  objective: string | null,
+  row: Record<string, unknown> | undefined,
+  ar: boolean,
+): CampaignHeadline | null {
+  if (row === undefined) return null
+
+  const key = headlineKeys(objective)[0]
+
+  return key === undefined ? null : reading(key, row, ar)
+}
+
+/**
+ * What that result COST — the objective's own cost-per.
+ *
+ * A result on its own does not decide anything: forty orders is good or bad depending on what was
+ * paid for them. The metric is FOUND rather than mapped — the first key in the objective's headline
+ * row that the catalogue marks `invertGood`, which is exactly the property «lower is better» that
+ * makes a metric a cost. A second hand-written objective→cost map would be a fourth place the
+ * taxonomy lives, and the first new objective would put it out of step with the other three.
+ *
+ * `readMetric` refuses a cost with nothing to divide: a campaign that spent money and produced no
+ * orders has no cost per order, and printing one would invent it.
+ */
+export function campaignEfficiency(
+  objective: string | null,
+  row: Record<string, unknown> | undefined,
+  ar: boolean,
+): CampaignHeadline | null {
+  if (row === undefined) return null
+
+  const key = headlineKeys(objective).find((k) => SPECS[k]?.invertGood === true)
+
+  return key === undefined ? null : reading(key, row, ar)
 }

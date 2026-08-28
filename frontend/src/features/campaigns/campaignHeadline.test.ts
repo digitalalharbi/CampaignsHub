@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { campaignHeadline } from './campaignHeadline'
+import { campaignEfficiency, campaignHeadline } from './campaignHeadline'
 
 /**
  * CAMPAIGN-INTELLIGENCE-HUB — the row carries the result the campaign was BOUGHT for.
@@ -77,5 +77,51 @@ describe('the result a campaign row leads with', () => {
 
   it('has no headline for an objective it does not know', () => {
     expect(campaignHeadline(null, row(), false)?.key).toBe('spend')
+  })
+})
+
+/**
+ * The second figure: what that result COST.
+ *
+ * A result on its own does not decide anything — 40 orders is good or bad depending on what was paid
+ * for them. The efficiency metric is the objective's own cost-per, and it is found rather than
+ * mapped: the first metric in the objective's headline row that the catalogue marks `invertGood`,
+ * which is exactly the property «lower is better» that makes a metric a cost.
+ *
+ * A second hand-written objective→cost map would be a fourth place the taxonomy lives, and the first
+ * new objective would put it out of step with the other three.
+ */
+describe('what the result cost', () => {
+  it('pairs a sales campaign with its cost per order', () => {
+    expect(campaignEfficiency('sales', row({ cpa: 41.6 }), false)?.key).toBe('cpa')
+  })
+
+  it('pairs a leads campaign with its cost per lead', () => {
+    expect(campaignEfficiency('leads', row({ cpl: 125 }), false)?.key).toBe('cpl')
+  })
+
+  /* Awareness money buys attention, and the price of attention is what a thousand views cost. */
+  it('pairs an awareness campaign with its cost per thousand, not with frequency', () => {
+    const e = campaignEfficiency('awareness', row({ cpm: 12, frequency: 1.4, reported: { impressions: true } }), false)
+
+    expect(e?.key).toBe('cpm')
+  })
+
+  it('pairs a traffic campaign with its cost per click', () => {
+    expect(campaignEfficiency('traffic', row({ cpc: 3.2 }), false)?.key).toBe('cpc')
+  })
+
+  it('pairs an app campaign with its cost per install', () => {
+    expect(campaignEfficiency('app_installs', row({ cpi: 8 }), false)?.key).toBe('cpi')
+  })
+
+  /*
+   * A cost with nothing to divide is not «0». A campaign that spent money and produced no orders has
+   * no cost per order — the figure does not exist, and printing one would invent it.
+   */
+  it('states no cost when the campaign produced nothing to divide by', () => {
+    const e = campaignEfficiency('sales', row({ cpa: null, conversions: 0, purchases: 0 }), false)
+
+    expect(e?.reading.kind).not.toBe('value')
   })
 })
