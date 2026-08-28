@@ -196,6 +196,20 @@ export interface CampaignRow extends MetricTotals {
    */
   objective_family: string | null
   objective_source: string | null
+  /**
+   * ENTITY-RELEVANCE-ORDERING-001 — two facts about relevance, neither of them a verdict.
+   *
+   * `status` is the canonical `CampaignStatus`, normalised from each platform's own vocabulary by the
+   * backend rather than guessed from a provider string here. `last_active_on` is the most recent day
+   * INSIDE the requested window on which this campaign reported a positive figure — null when it
+   * reported none, which is a different fact from a day of zeros.
+   *
+   * They exist so an operational listing can keep a campaign serving today apart from one that
+   * stopped three weeks ago and still leads on spend. The rows arrive spend-first regardless, because
+   * the same breakdown feeds reports and the digest, where «top campaigns» means largest spend.
+   */
+  status: string | null
+  last_active_on: string | null
 }
 /**
  * One stage of the project (or campaign) funnel — FUNNEL-NULL-001.
