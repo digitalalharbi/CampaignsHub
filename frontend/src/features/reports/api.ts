@@ -104,12 +104,22 @@ export const revokeShare = (p: string, reportId: string, shareId: string) =>
 // ---- LIVEREP-002: build a live link from a choice, not from a document ---------------------------
 
 export interface LiveBuilderOptions {
-  campaigns: Array<{ id: string; name: string; status: string | null }>
+  /**
+   * REPORT-SCOPE-SELECTION-001 — `last_active_on` is answered for the REPORT'S WINDOW.
+   *
+   * The last day inside the requested period on which the campaign reported a positive figure, or
+   * null when it reported none. Null also means «no period was asked about», and the builder makes
+   * no claim in that case rather than sorting campaigns against a window nobody named.
+   */
+  campaigns: Array<{ id: string; name: string; status: string | null; last_active_on: string | null }>
   providers: string[]
   metrics: Array<{ key: string; ar: string; en: string }>
 }
 
-export const liveBuilderOptions = (p: string) => getData<LiveBuilderOptions>(`${base(p)}/live/options`)
+export const liveBuilderOptions = (p: string, period?: { from: string; to: string }) =>
+  getData<LiveBuilderOptions>(
+    `${base(p)}/live/options${period ? `?from=${encodeURIComponent(period.from)}&to=${encodeURIComponent(period.to)}` : ''}`,
+  )
 
 export const createLiveLink = (p: string, body: Record<string, unknown>) =>
   postData<{ report_id: string; share_id: string; url: string; token: string }>(`${base(p)}/live`, body)
