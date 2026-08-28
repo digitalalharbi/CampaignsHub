@@ -35,6 +35,7 @@ import { compact, money, num, percent, ratio, rowCostPer, rowMoney, rowRoas } fr
 import { funnelStageLabel } from './metricLabels'
 import { plotSeries } from './timeseriesMoney'
 import { orderRows } from './tableSort'
+import { useUrlList, useUrlNumber, useUrlState } from './filterUrlState'
 import { familyMoney, familyTotal, type FamilyRow, familySpend } from './familyTotals'
 import { readCostPer, readMoney, readRoas } from '@/lib/money/contract'
 
@@ -170,11 +171,18 @@ const useAr = () => useUi((u) => u.locale) === 'ar'
 export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics' | 'dashboard' } = {}) {
   const ar = useAr()
   const { currentProjectId, setCurrentProjectId } = useProject()
-  const [days, setDays] = useState(30)
-  const [tab, setTab] = useState<(typeof TABS)[number]['id']>('performance')
-  const [providers, setProviders] = useState<string[]>([])
-  const [campaignIds, setCampaignIds] = useState<string[]>([])
-  const [objective, setObjective] = useState<CanonicalObjectiveKey | 'all'>('all')
+  /*
+   * ANALYTICS-FILTER-TRUTH-001 — the filters live in the URL, so a refresh, Back and a shared link
+   * all show the same page. They were `useState` only: narrowing to one platform and one objective
+   * and then reloading gave the unfiltered page back, and the link a reader sent a colleague showed
+   * that colleague a different answer to the question they were discussing.
+   */
+  const [days, setDays] = useUrlNumber('days', 30)
+  const [tab, setTab] = useUrlState('tab', 'performance') as [(typeof TABS)[number]['id'], (v: string) => void]
+  const [providers, setProviders] = useUrlList('provider')
+  const [campaignIds, setCampaignIds] = useUrlList('campaign')
+  const [objectiveRaw, setObjective] = useUrlState('objective', 'all')
+  const objective = objectiveRaw as CanonicalObjectiveKey | 'all'
 
   /*
    * ANALYTICS-AS-DASHBOARD-001 — saved views came WITH the dashboard.
