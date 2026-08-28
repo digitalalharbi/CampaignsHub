@@ -44,9 +44,23 @@ describe('what a campaign is, operationally', () => {
     expect(campaignRelevance(row({ status: 'active', last_active_on: null }), WINDOW_END)).toBe('idle')
   })
 
-  it('calls anything not running «stopped», whatever it spent', () => {
-    for (const status of ['paused', 'completed', 'archived', 'draft', 'pending']) {
+  it('calls a halted, finished or filed campaign «stopped», whatever it spent', () => {
+    for (const status of ['paused', 'completed', 'archived']) {
       expect(campaignRelevance(row({ status, last_active_on: '2026-07-31', spend: 90000 }), WINDOW_END)).toBe('stopped')
+    }
+  })
+
+  /*
+   * A draft has not stopped — it has not STARTED, and that distinction was bought with a real defect.
+   *
+   * A campaign is created as `draft`, so filing draft under «stopped» made the campaign an operator
+   * had just created disappear from the list they created it in. Both `campaigns.spec.ts` and
+   * `campaigns-linking.spec.ts` caught it. Unfinished work is work in hand, and belongs beside the
+   * running campaigns rather than in the history.
+   */
+  it('does not file work that has not started yet with work that has finished', () => {
+    for (const status of ['draft', 'pending']) {
+      expect(campaignRelevance(row({ status, last_active_on: null }), WINDOW_END)).toBe('idle')
     }
   })
 
