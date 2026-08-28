@@ -7,7 +7,9 @@ import { CampaignFormModal } from './CampaignFormModal'
 import { CampaignComparison } from './CampaignComparison'
 import { attentionFlags, attentionRank, type AttentionMetrics } from './campaignInsights'
 import { campaignStatusLabel, campaignStatusTone, objectiveLabel } from './labels'
-import { CAMPAIGN_OBJECTIVES, CAMPAIGN_STATUSES, type UnifiedCampaign } from './types'
+import { CAMPAIGN_STATUSES, type UnifiedCampaign } from './types'
+import { CANONICAL_OBJECTIVE_KEYS, canonicalObjectiveLabel, canonicalOfRaw, rawObjectivesFor, type CanonicalObjectiveKey } from './canonicalObjectives'
+import { useUrlNumber, useUrlState } from '@/features/analytics/filterUrlState'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
@@ -47,22 +49,46 @@ export function CampaignsPage() {
   const canCreate = useAuth((s) => s.hasPermission('campaigns.create'))
   const { currentProjectId: projectId } = useProject()
 
-  const [days, setDays] = useState(30)
+  const [days, setDays] = useUrlNumber('days', 30)
   // PERF-CAMPAIGNS-001: the page opens on the CARD LIST, not the chart-heavy overview. Four charts plus
   // five metric queries on first paint made the page slow to become interactive on Firefox under load —
   // and a page called "campaigns" should show campaigns first anyway. Overview is one click away.
   const [view, setView] = useState<ViewMode>('cards')
   const [compareIds, setCompareIds] = useState<string[]>([])
-  const [status, setStatus] = useState('')
-  const [objective, setObjective] = useState('')
+  /*
+   * ANALYTICS-FILTER-TRUTH-001 — these live in the URL, so a refresh, Back and a shared link all
+   * show the same list. `search` deliberately does not: it is typed a character at a time, and
+   * writing every keystroke into the history would make Back unusable on this page.
+   */
+  const [status, setStatus] = useUrlState('status', '')
+  const [objective, setObjective] = useUrlState('objective', '')
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const range = useLastNDaysRange(days)
 
+  /*
+   * The canonical key expanded into the raw objectives the API filters on — the same expansion the
+   * dashboard and Analytics do, through the same mirror. Undefined rather than an empty string when
+   * nothing is chosen, because an empty value is «no filter» and must not be sent as one.
+   */
+  const objectiveParam = useMemo(() => {
+    const raw = rawObjectivesFor(objective === '' ? 'all' : (objective as CanonicalObjectiveKey))
+
+    return raw.length === 0 ? undefined : raw.join(',')
+  }, [objective])
+
   // Everything below is PROJECT-SCOPED — cache keys + endpoints carry projectId; disabled without one.
   const campaignsQuery = useQuery({
-    queryKey: ['project', projectId, 'campaigns', { status, objective, search }],
-    queryFn: () => listCampaigns(projectId!, { status: status || undefined, objective: objective || undefined, search: search || undefined }),
+    /*
+     * ANALYTICS-OBJECTIVE-SYSTEM-001 — the reader picks a canonical objective, the server gets the
+     * raw ones it covers.
+     *
+     * `objectiveParam` is part of the key as well as the request: it is what actually narrows the
+     * query, and keying on the canonical label instead would be one cache entry per label over
+     * whatever the previous scope fetched.
+     */
+    queryKey: ['project', projectId, 'campaigns', { status, objective: objectiveParam, search }],
+    queryFn: () => listCampaigns(projectId!, { status: status || undefined, objective: objectiveParam, search: search || undefined }),
     enabled: Boolean(projectId),
   })
   const summary = useSummary(projectId, range)
@@ -412,7 +438,7 @@ export function CampaignsPage() {
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={ar ? 'ابحث في حملات المشروع…' : 'Search this project’s campaigns…'} className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
               </div>
               <Select value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
-              <Select value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CAMPAIGN_OBJECTIVES.map((o) => ({ value: o, label: objectiveLabel(o, locale) }))]} />
+              <Select value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CANONICAL_OBJECTIVE_KEYS.map((o) => ({ value: o, label: canonicalObjectiveLabel(o, locale) }))]} />
             </div>
             {/* Taxonomy chips — the same taxonomy the selects use, one tap away, with live counts. */}
             <div className="flex flex-wrap gap-1.5">
@@ -422,9 +448,14 @@ export function CampaignsPage() {
                   {campaignStatusLabel(s, locale)} <span className="tnum">{counts[s]}</span>
                 </Chip>
               ))}
-              {CAMPAIGN_OBJECTIVES.filter((o) => campaigns.some((c) => c.objective === o)).map((o) => (
+              {/*
+                The chips offer the canonical objectives this project actually HAS campaigns for —
+                `canonicalOfRaw` maps each campaign's raw objective up, so a project of video buys
+                offers «الوعي والتفاعل» rather than a chip nobody can use.
+              */}
+              {CANONICAL_OBJECTIVE_KEYS.filter((o) => campaigns.some((c) => c.objective !== null && canonicalOfRaw(c.objective) === o)).map((o) => (
                 <Chip key={o} active={objective === o} onClick={() => setObjective(objective === o ? '' : o)}>
-                  {objectiveLabel(o, locale)}
+                  {canonicalObjectiveLabel(o, locale)}
                 </Chip>
               ))}
             </div>
