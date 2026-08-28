@@ -58,7 +58,7 @@ final class IngestProviderLeadsTest extends TestCase
     {
         $out = app(IngestProviderLeads::class)->handle((string) $this->tenant->id, [$this->providerLead()]);
 
-        $this->assertSame(['ingested' => 1, 'redelivered' => 0, 'uncontactable' => 0], $out);
+        $this->assertSame(['ingested' => 1, 'redelivered' => 0, 'uncontactable' => 0, 'duplicates' => 0], $out);
 
         $lead = Lead::first();
         $this->assertSame('meta', $lead->provider);
@@ -69,6 +69,26 @@ final class IngestProviderLeadsTest extends TestCase
         $this->assertSame('2026-08-26 10:00:00', $lead->received_at->format('Y-m-d H:i:s'));
     }
 
+    /**
+     * LEAD-DEDUP-001 — a second submission by the same person is ingested AND counted as a duplicate.
+     *
+     * `ingested` deliberately still counts it. The lead is a real acquisition event that real money
+     * bought, and subtracting it from «received» would understate what the spend produced. «Received»
+     * and «unique» are different figures, and this is the second one.
+     */
+    public function test_a_repeat_submission_is_stored_and_counted_as_a_duplicate(): void
+    {
+        $svc = app(IngestProviderLeads::class);
+        $svc->handle((string) $this->tenant->id, [$this->providerLead()]);
+
+        // A different provider lead id — a genuinely new submission, not a webhook redelivery.
+        $out = $svc->handle((string) $this->tenant->id, [$this->providerLead(['providerLeadId' => 'lead-2'])]);
+
+        $this->assertSame(1, $out['ingested'], 'The duplicate was dropped instead of recorded.');
+        $this->assertSame(1, $out['duplicates']);
+        $this->assertSame(2, Lead::count(), 'Both acquisition events must survive.');
+    }
+
     public function test_a_redelivery_is_a_success_and_is_counted_apart(): void
     {
         $svc = app(IngestProviderLeads::class);
@@ -77,7 +97,7 @@ final class IngestProviderLeadsTest extends TestCase
         // The provider retries because our 2xx was lost, or a backfill sees what the webhook saw.
         $out = $svc->handle((string) $this->tenant->id, [$this->providerLead()]);
 
-        $this->assertSame(['ingested' => 0, 'redelivered' => 1, 'uncontactable' => 0], $out);
+        $this->assertSame(['ingested' => 0, 'redelivered' => 1, 'uncontactable' => 0, 'duplicates' => 0], $out);
         $this->assertSame(1, Lead::count(), 'a retry must not create a second lead');
     }
 
