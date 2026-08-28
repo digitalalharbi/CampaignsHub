@@ -90,6 +90,24 @@ describe('the campaigns workspace, opened cold', () => {
     expect(await screen.findByText('Last year')).toBeInTheDocument()
   })
 
+  /*
+   * The card names the result the campaign was bought for, and never prints a coalesced zero as one.
+   *
+   * `sales` here, so the headline is what it sold. The running campaign's platform never sent
+   * `purchases`, and «الطلبات 0» on the card an operator judges it by is not a measurement — it is
+   * the absence of one, and it reads as a campaign that failed.
+   */
+  it('leads the card with the objective\'s result, and says when the platform never sent it', async () => {
+    renderWithProviders(<CampaignsPage />, { locale: 'en' })
+    await openList()
+    await screen.findByText('Still running')
+
+    const headline = screen.getByTestId('campaign-headline-purchases')
+    expect(headline).toHaveAttribute('data-state', 'not_provided')
+    expect(headline).toHaveTextContent('Not provided')
+    expect(headline).not.toHaveTextContent('0')
+  })
+
   it('arrives on the lifecycle the link asked for', async () => {
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/campaigns?lifecycle=all' })
     await openList()
