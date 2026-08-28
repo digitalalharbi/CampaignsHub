@@ -318,10 +318,25 @@ export interface TeamNotificationPerson {
   state: string
 }
 
+import type { DeliveryRow } from './deliveryLog'
+
 export interface TeamNotifications {
   people: TeamNotificationPerson[]
   email_provider_configured: boolean
   available_categories: string[]
+}
+
+/**
+ * EMAIL-SETTINGS-DEPTH-001 — the delivery log, from the ledgers that already record every attempt.
+ *
+ * Separate from the team board because it answers a different question: that one says who is
+ * subscribed to what, this one says what actually left the building.
+ */
+export function useDeliveryLog() {
+  return useQuery({
+    queryKey: ['settings', 'notif-deliveries'],
+    queryFn: () => getData<DeliveryRow[]>('/settings/notifications/deliveries'),
+  })
 }
 
 export function useTeamNotifications() {
