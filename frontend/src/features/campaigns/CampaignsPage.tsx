@@ -10,7 +10,7 @@ import { campaignStatusLabel, campaignStatusTone, objectiveLabel } from './label
 import { CAMPAIGN_STATUSES, type UnifiedCampaign } from './types'
 import { CANONICAL_OBJECTIVE_KEYS, canonicalObjectiveLabel, canonicalOfRaw, rawObjectivesFor, type CanonicalObjectiveKey } from './canonicalObjectives'
 import { LIFECYCLE_KEYS, lifecycleView, type Lifecycle } from './campaignLifecycleView'
-import { campaignHeadline, type CampaignHeadline } from './campaignHeadline'
+import { campaignEfficiency, campaignHeadline, type CampaignHeadline } from './campaignHeadline'
 
 /** «النشطة» is what an operator still owns this month — serving and switched-on-but-dark alike. */
 const LIFECYCLE_LABELS: Record<Lifecycle, { ar: string; en: string }> = {
@@ -583,6 +583,7 @@ export function CampaignsPage() {
                   c={c}
                   locale={locale}
                   headline={campaignHeadline(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)}
+                  efficiency={campaignEfficiency(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)}
                   onOpen={() => navigate(`/campaigns/${projectId}/${c.id}`)}
                 />
               ))}
@@ -648,7 +649,27 @@ function StatCard({ label, value, sub, delta, invert, tone }: { label: string; v
   )
 }
 
-function CampaignCard({ c, locale, headline, onOpen }: { c: UnifiedCampaign; locale: 'ar' | 'en'; headline?: CampaignHeadline | null; onOpen: () => void }) {
+/** One named figure, or the honest reason there is not one. Never a score. */
+function ReadingCell({ reading, locale }: { reading: CampaignHeadline; locale: 'ar' | 'en' }) {
+  return (
+    <span
+      className="rounded-lg bg-surface-secondary px-2 py-1.5"
+      data-testid={`campaign-headline-${reading.key}`}
+      data-state={reading.reading.kind}
+    >
+      {reading.label}
+      <b className="tnum block text-text-primary">
+        {reading.reading.kind === 'value'
+          ? reading.reading.text
+          : reading.reading.kind === 'not_provided'
+            ? (locale === 'ar' ? 'لم ترسله المنصة' : 'Not provided')
+            : '—'}
+      </b>
+    </span>
+  )
+}
+
+function CampaignCard({ c, locale, headline, efficiency, onOpen }: { c: UnifiedCampaign; locale: 'ar' | 'en'; headline?: CampaignHeadline | null; efficiency?: CampaignHeadline | null; onOpen: () => void }) {
   const unlinked = (c.external_campaigns_count ?? 0) === 0
   return (
     <button onClick={onOpen} data-testid="campaign-card" className="flex flex-col gap-2.5 rounded-2xl border border-border bg-surface p-4 text-start shadow-[var(--shadow-small)] transition-colors hover:border-brand-300 hover:bg-surface-hover">
@@ -660,7 +681,7 @@ function CampaignCard({ c, locale, headline, onOpen }: { c: UnifiedCampaign; loc
         <Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge>
         <Badge tone="neutral">{objectiveLabel(c.objective, locale)}</Badge>
       </div>
-      <div className="grid grid-cols-2 gap-1.5 text-xs">
+      <div className="grid grid-cols-3 gap-1.5 text-[11px]">
         <span className="rounded-lg bg-surface-secondary px-2 py-1.5">{locale === 'ar' ? 'الميزانية' : 'Budget'} <b className="tnum block text-text-primary">{money(c.total_budget, c.budget_currency)}</b></span>
         {/*
           CAMPAIGN-INTELLIGENCE-HUB — the result this campaign was BOUGHT for, beside what it cost.
@@ -669,19 +690,16 @@ function CampaignCard({ c, locale, headline, onOpen }: { c: UnifiedCampaign; loc
           says the platform never sent it. Never a score.
         */}
         {headline ? (
-          <span className="rounded-lg bg-surface-secondary px-2 py-1.5" data-testid={`campaign-headline-${headline.key}`} data-state={headline.reading.kind}>
-            {headline.label}
-            <b className="tnum block text-text-primary">
-              {headline.reading.kind === 'value'
-                ? headline.reading.text
-                : headline.reading.kind === 'not_provided'
-                  ? (locale === 'ar' ? 'لم ترسله المنصة' : 'Not provided')
-                  : '—'}
-            </b>
-          </span>
+          <ReadingCell reading={headline} locale={locale} />
         ) : (
           <span className="rounded-lg bg-surface-secondary px-2 py-1.5">{locale === 'ar' ? 'مرتبطة' : 'Linked'} <b className="tnum block text-text-primary">{c.external_campaigns_count ?? 0}</b></span>
         )}
+        {/*
+          What that result COST — a result on its own decides nothing. Forty orders is good or bad
+          depending on what was paid for them, and `readMetric` refuses a cost with nothing to divide
+          rather than printing a zero that was never measured.
+        */}
+        {efficiency && <ReadingCell reading={efficiency} locale={locale} />}
       </div>
       {unlinked && <div className="inline-flex items-center gap-1 text-[11px] text-warning"><TriangleAlert size={12} /> {locale === 'ar' ? 'بلا حملات خارجية مرتبطة' : 'No linked platform campaign'}</div>}
     </button>
