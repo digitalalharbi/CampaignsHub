@@ -46,6 +46,7 @@ function route(byLevel: { ad_set?: unknown[]; ad?: unknown[] }) {
 }
 
 const entityCalls = () => urls.filter((u) => u.includes('/entities/'))
+const creativeCalls = () => urls.filter((u) => u.includes('creative'))
 
 describe('drilling from an ad set into its ads', () => {
   beforeEach(() => {
@@ -119,6 +120,25 @@ describe('drilling from an ad set into its ads', () => {
       expect(entityCalls().some((u) => u.includes('/entities/ad_set'))).toBe(true)
     })
     expect(entityCalls().every((u) => !u.includes('parent='))).toBe(true)
+  })
+
+  /**
+   * The last rung: an ad drills into the creatives that ran under it.
+   *
+   * The library takes `ad_ids` rather than the metrics API's `parent`, so this asserts the translated
+   * request rather than the heading — a filter applied to the rendered rows would pass a test that
+   * only looked at the table.
+   */
+  it('narrows the creative library to the ad the reader drilled into', async () => {
+    route({ ad_set: [AD_SET], ad: [{ ...AD_SET, entity_id: 'a1', external_id: 'ext-a1', name: 'Video 9x16' }] })
+    await openAdSets()
+
+    fireEvent.click(await screen.findByTestId('drill-into-s1'))
+    fireEvent.click(await screen.findByTestId('drill-into-a1'))
+
+    await waitFor(() => {
+      expect(creativeCalls().some((u) => u.includes('ad_ids'))).toBe(true)
+    })
   })
 
   /**
