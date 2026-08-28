@@ -9,6 +9,14 @@ import { attentionFlags, attentionRank, type AttentionMetrics } from './campaign
 import { campaignStatusLabel, campaignStatusTone, objectiveLabel } from './labels'
 import { CAMPAIGN_STATUSES, type UnifiedCampaign } from './types'
 import { CANONICAL_OBJECTIVE_KEYS, canonicalObjectiveLabel, canonicalOfRaw, rawObjectivesFor, type CanonicalObjectiveKey } from './canonicalObjectives'
+import { LIFECYCLE_KEYS, lifecycleView, type Lifecycle } from './campaignLifecycleView'
+
+/** «النشطة» is what an operator still owns this month — serving and switched-on-but-dark alike. */
+const LIFECYCLE_LABELS: Record<Lifecycle, { ar: string; en: string }> = {
+  active: { ar: 'النشطة', en: 'Active' },
+  inactive: { ar: 'غير النشطة', en: 'Inactive' },
+  all: { ar: 'الكل', en: 'All' },
+}
 import { useUrlNumber, useUrlState } from '@/features/analytics/filterUrlState'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -60,6 +68,7 @@ export function CampaignsPage() {
    * show the same list. `search` deliberately does not: it is typed a character at a time, and
    * writing every keystroke into the history would make Back unusable on this page.
    */
+  const [lifecycle, setLifecycle] = useUrlState('lifecycle', 'active') as [Lifecycle, (v: string) => void]
   const [status, setStatus] = useUrlState('status', '')
   const [objective, setObjective] = useUrlState('objective', '')
   const [search, setSearch] = useState('')
@@ -221,6 +230,36 @@ export function CampaignsPage() {
     }
     return map
   }, [metricCampaigns.data])
+
+  /*
+   * CAMPAIGN-INTELLIGENCE-HUB — the workspace opens on what is RUNNING.
+   *
+   * It listed every campaign the project has ever had, newest first, so a project with two years of
+   * history opened on whatever was created last. The lifecycle is read through the shared
+   * `campaignRelevance` rule — status alone is the definition REPORT-SCOPE-SELECTION-001 warns
+   * against — joined to the two facts the metrics window carries.
+   *
+   * `metricsKnown` is the honest half: relevance cannot be computed before those rows arrive, and
+   * «active only» over unknown relevance would render an empty workspace as a statement about the
+   * account rather than about a request that has not answered.
+   */
+  const metricsKnown = !metricCampaigns.isPending && !metricCampaigns.isError
+
+  const lifecycleRows = useMemo(
+    () => campaigns.map((c) => {
+      const m = metricsByCampaign.get(c.id) as (AttentionMetrics & { last_active_on?: string | null }) | undefined
+
+      return { ...c, last_active_on: m?.last_active_on ?? null, spend: m?.spend ?? null }
+    }),
+    [campaigns, metricsByCampaign],
+  )
+
+  const lifecycleShown = useMemo(
+    () => lifecycleView(lifecycleRows, { lifecycle, windowEnd: range.to, metricsKnown }),
+    [lifecycleRows, lifecycle, range.to, metricsKnown],
+  )
+
+  const visibleCampaigns = lifecycleShown.rows
 
   const attention = useMemo(
     () => campaigns
@@ -442,6 +481,17 @@ export function CampaignsPage() {
             </div>
             {/* Taxonomy chips — the same taxonomy the selects use, one tap away, with live counts. */}
             <div className="flex flex-wrap gap-1.5">
+              {/*
+                CAMPAIGN-INTELLIGENCE-HUB — what is RUNNING, first.
+                Inactive is one click away with its count beside it: a campaign silently missing from a
+                list is worse than one sorted low.
+              */}
+              {LIFECYCLE_KEYS.map((key) => (
+                <Chip key={key} testid="lifecycle-chip" active={lifecycleShown.applied === key} onClick={() => setLifecycle(key)}>
+                  {LIFECYCLE_LABELS[key][ar ? 'ar' : 'en']}{' '}
+                  <span className="tnum" data-testid={`lifecycle-count-${key}`}>{lifecycleShown.counts[key]}</span>
+                </Chip>
+              ))}
               <Chip active={status === '' && objective === ''} onClick={() => { setStatus(''); setObjective('') }}>{ar ? 'الكل' : 'All'} <span className="tnum">{counts.total}</span></Chip>
               {CAMPAIGN_STATUSES.filter((s) => (counts[s] ?? 0) > 0).map((s) => (
                 <Chip key={s} active={status === s} onClick={() => setStatus(status === s ? '' : s)}>
@@ -459,6 +509,21 @@ export function CampaignsPage() {
                 </Chip>
               ))}
             </div>
+            {/*
+              A view that could not be computed is not «nothing is running».
+            
+              Relevance is read from the metrics window; before it arrives, or when it failed, every
+              campaign looks dark. Showing «active only» then would render an empty workspace as a fact
+              about the account rather than about a request that has not answered — so everything is
+              shown, and the page says why.
+            */}
+            {lifecycleShown.degraded && (
+              <p data-testid="lifecycle-degraded" className="text-xs text-text-secondary">
+                {ar
+                  ? 'يُعرض كل الحملات — تعذّر تحديد النشِط منها حتى تصل مؤشرات الفترة.'
+                  : 'Showing every campaign — which of them are running cannot be told until this period’s metrics arrive.'}
+              </p>
+            )}
           </div>
 
           {/* Campaign list */}
@@ -495,16 +560,30 @@ export function CampaignsPage() {
                 ))}
               </div>
             )
+          ) : visibleCampaigns.length === 0 ? (
+            /*
+              A real empty active view — every campaign in this project has finished. The reader is told
+              that, with the count of what is there instead, rather than being shown the history as
+              though it were live.
+            */
+            <EmptyState
+              title={ar ? 'لا توجد حملات نشطة في هذه الفترة' : 'Nothing is running in this period'}
+              description={
+                ar
+                  ? `${lifecycleShown.counts.inactive} حملة متوقفة أو منتهية — اعرض «غير النشطة» للاطلاع عليها.`
+                  : `${lifecycleShown.counts.inactive} campaigns have stopped or finished — open «Inactive» to see them.`
+              }
+            />
           ) : view === 'cards' ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {campaigns.map((c) => <CampaignCard key={c.id} c={c} locale={locale} onOpen={() => navigate(`/campaigns/${projectId}/${c.id}`)} />)}
+              {visibleCampaigns.map((c) => <CampaignCard key={c.id} c={c} locale={locale} onOpen={() => navigate(`/campaigns/${projectId}/${c.id}`)} />)}
             </div>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-small)]">
               <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                 <thead><tr className="border-b border-border text-text-muted"><th className="p-3 text-start">{ar ? 'الحملة' : 'Campaign'}</th><th className="p-3 text-start">{ar ? 'الهدف' : 'Objective'}</th><th className="p-3 text-start">{ar ? 'الحالة' : 'Status'}</th><th className="p-3 text-end">{ar ? 'الميزانية' : 'Budget'}</th><th className="p-3 text-end">{ar ? 'مرتبطة' : 'Linked'}</th></tr></thead>
                 <tbody>
-                  {campaigns.map((c) => (
+                  {visibleCampaigns.map((c) => (
                     <tr key={c.id} data-testid="campaign-row" className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-hover" onClick={() => navigate(`/campaigns/${projectId}/${c.id}`)}>
                       <td className="p-3 font-semibold text-text-primary">{c.name}</td>
                       <td className="p-3 text-text-secondary">{objectiveLabel(c.objective, locale)}</td>
@@ -525,10 +604,17 @@ export function CampaignsPage() {
   )
 }
 
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+/**
+ * `testid` defaults to `taxonomy-chip` — the status and objective chips, which narrow the QUERY.
+ *
+ * The lifecycle chips pass their own, because they are a different kind of control: they group the
+ * campaigns already fetched by whether they are running, and a test reaching for «the second
+ * taxonomy chip» must not silently land on one of them.
+ */
+function Chip({ active, onClick, children, testid = 'taxonomy-chip' }: { active: boolean; onClick: () => void; children: React.ReactNode; testid?: string }) {
   return (
     <button
-      data-testid="taxonomy-chip"
+      data-testid={testid}
       aria-pressed={active}
       onClick={onClick}
       className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
