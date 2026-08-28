@@ -4,6 +4,7 @@ import { canonicalPlatform } from '@/lib/platforms'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Check, Copy, Link2 } from 'lucide-react'
 import { createLiveLink, liveBuilderOptions } from './api'
+import { groupByLifecycle } from './reportScopeLifecycle'
 import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
 import { Field } from '@/components/ui/Field'
@@ -43,7 +44,6 @@ const isoDaysAgo = (days: number) => {
 
 export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const ar = useUi((s) => s.locale) === 'ar'
-  const options = useQuery({ queryKey: ['live-builder', projectId], queryFn: () => liveBuilderOptions(projectId) })
 
   const [name, setName] = useState('')
   const [campaigns, setCampaigns] = useState<string[]>([])
@@ -51,6 +51,23 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const [metrics, setMetrics] = useState<string[]>([])
   const [from, setFrom] = useState(isoDaysAgo(30))
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10))
+
+  /*
+   * REPORT-SCOPE-SELECTION-001 — the options are asked for THIS report's window.
+   *
+   * The period is part of the key as well as the request: which campaigns ran is a different answer
+   * for June than for July, and serving June's answer from cache for a July report is how a campaign
+   * that ran all July ends up filed under «did not run».
+   */
+  const options = useQuery({
+    queryKey: ['live-builder', projectId, from, to],
+    queryFn: () => liveBuilderOptions(projectId, { from, to }),
+  })
+
+  const lifecycle = useMemo(
+    () => groupByLifecycle(options.data?.campaigns ?? [], { periodKnown: Boolean(from && to) }),
+    [options.data, from, to],
+  )
   const [password, setPassword] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
   const [hideSpend, setHideSpend] = useState(false)
@@ -163,8 +180,35 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             {options.data!.campaigns.length === 0 ? (
               <p className="text-xs text-text-muted">{ar ? 'لا توجد حملات في هذا المشروع بعد.' : 'No campaigns in this project yet.'}</p>
             ) : (
-              <div className="grid max-h-32 gap-1 overflow-y-auto">
-                {options.data!.campaigns.map((c) => (
+              <div className="grid max-h-40 gap-1 overflow-y-auto" data-testid="live-builder-campaigns">
+                {/*
+                  REPORT-SCOPE-SELECTION-001 — grouped by what ran IN THIS REPORT'S WINDOW.
+
+                  Not by today's status: a campaign that finished last week ran through the whole of
+                  the period being reported on, and leaving it out would silently remove its spend
+                  from the client's report. Nothing is hidden — the headings decide order and
+                  emphasis, never membership.
+                */}
+                {lifecycle.periodKnown && lifecycle.ran.length > 0 && (
+                  <p className="pt-1 text-[11px] font-bold text-text-muted" data-testid="lifecycle-ran">
+                    {ar ? `عملت خلال هذه الفترة (${lifecycle.ran.length})` : `Ran in this period (${lifecycle.ran.length})`}
+                  </p>
+                )}
+                {lifecycle.ran.map((c) => (
+                  <label key={c.id} className="flex items-center gap-2 text-xs">
+                    <input type="checkbox" checked={campaigns.includes(c.id)} onChange={() => toggle(setCampaigns, c.id)} className="h-3.5 w-3.5 accent-brand-600" />
+                    <span className="truncate">{c.name}</span>
+                  </label>
+                ))}
+
+                {lifecycle.periodKnown && lifecycle.didNotRun.length > 0 && (
+                  <p className="pt-2 text-[11px] font-bold text-text-muted" data-testid="lifecycle-did-not-run">
+                    {ar
+                      ? `لم تعمل خلال هذه الفترة (${lifecycle.didNotRun.length})`
+                      : `Did not run in this period (${lifecycle.didNotRun.length})`}
+                  </p>
+                )}
+                {lifecycle.didNotRun.map((c) => (
                   <label key={c.id} className="flex items-center gap-2 text-xs">
                     <input type="checkbox" checked={campaigns.includes(c.id)} onChange={() => toggle(setCampaigns, c.id)} className="h-3.5 w-3.5 accent-brand-600" />
                     <span className="truncate">{c.name}</span>
