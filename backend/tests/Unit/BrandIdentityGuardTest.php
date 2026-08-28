@@ -130,4 +130,45 @@ final class BrandIdentityGuardTest extends TestCase
         $this->assertSame('info@campaignshub.io', $brand['support_email']);
         $this->assertSame('campaignshub.io', $brand['domain']);
     }
+
+    /**
+     * REPORT-TITLE-METADATA-001 — the shell's own title is the Arabic tagline, from ONE source.
+     *
+     * `config/brand.php` holds the official tagline in both languages and this file already pins it.
+     * The app shell carried an English copy of the same sentence, hard-coded — a second source for a
+     * string that has one, and the copy is the one a crawler and a browser tab actually show.
+     *
+     * The product declares `og:locale = ar_SA` to every crawler. Presenting it an English title under
+     * an Arabic locale is not a preference, it is two statements about the same page that disagree.
+     *
+     * Asserted against `brand.tagline.ar` rather than a literal, so the day somebody changes the
+     * tagline this fails instead of leaving the tab quietly wrong.
+     */
+    public function test_the_app_shell_carries_the_arabic_tagline(): void
+    {
+        $shell = dirname(__DIR__, 3).'/frontend/index.html';
+
+        $this->assertFileExists($shell, 'the app shell moved; this guard now checks nothing');
+
+        // Read the config file directly: this case is a plain PHPUnit test with no Laravel container,
+        // which is also what keeps it fast enough to be a guard rather than a suite.
+        $brand = require dirname(__DIR__, 2).'/config/brand.php';
+
+        $html = (string) file_get_contents($shell);
+        $expected = $brand['tagline']['ar'].' — '.$brand['name'];
+
+        $this->assertStringContainsString(
+            '<title>'.$expected.'</title>',
+            $html,
+            'the browser tab does not carry the official Arabic tagline',
+        );
+
+        foreach (['og:title', 'twitter:title'] as $tag) {
+            $this->assertMatchesRegularExpression(
+                '/(property|name)="'.preg_quote($tag, '/').'" content="'.preg_quote($expected, '/').'"/u',
+                $html,
+                "«{$tag}» does not carry the official Arabic tagline — a shared link would preview in the wrong language",
+            );
+        }
+    }
 }
