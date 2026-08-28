@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Services;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\CampaignStatus;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Services\CreativeFunnel;
 use App\Domains\Integrations\Models\ExternalAccount;
@@ -996,8 +997,17 @@ final class MetricsAggregator
     {
         $rows = $this->base($from, $to)
             ->leftJoin('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
-            ->select('daily_metrics.unified_campaign_id as campaign_id', 'unified_campaigns.name as campaign_name', 'unified_campaigns.client_display_name as client_display_name', 'unified_campaigns.objective as objective', 'unified_campaigns.objective_source as objective_source')
+            ->select('daily_metrics.unified_campaign_id as campaign_id', 'unified_campaigns.name as campaign_name', 'unified_campaigns.client_display_name as client_display_name', 'unified_campaigns.objective as objective', 'unified_campaigns.objective_source as objective_source', 'unified_campaigns.status as status')
             ->selectRaw('MAX(daily_metrics.provider) AS provider')
+            /*
+             * ENTITY-RELEVANCE-ORDERING-001 — the last day this campaign actually DID something.
+             *
+             * Filtered on a positive value, because a day of zeros is not a day the campaign ran. A
+             * campaign dark all month still has a row for every day of it, and reading those as
+             * activity would rank it alongside one serving right now — the same confusion between
+             * «no data» and «zero» the money contract exists to prevent, one grain up.
+             */
+            ->selectRaw('MAX(daily_metrics.metric_date) FILTER (WHERE daily_metrics.value > 0) AS last_active_on')
             /*
              * MONEY-TRUTH-002 — the same provenance, qualified for the join.
              *
@@ -1027,7 +1037,7 @@ final class MetricsAggregator
              * Neither can change the row count: both are columns of `unified_campaigns` and the group
              * is already keyed by that table's id.
              */
-            ->groupBy('daily_metrics.unified_campaign_id', 'unified_campaigns.name', 'unified_campaigns.client_display_name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
+            ->groupBy('daily_metrics.unified_campaign_id', 'unified_campaigns.name', 'unified_campaigns.client_display_name', 'unified_campaigns.objective', 'unified_campaigns.objective_source', 'unified_campaigns.status')
             ->get()
             ->map(fn ($r) => [
                 'campaign_id' => $r->campaign_id,
@@ -1047,11 +1057,52 @@ final class MetricsAggregator
                     ? ObjectiveFamily::Unknown->value
                     : (CampaignObjective::tryFrom((string) $r->objective)?->family() ?? ObjectiveFamily::Unknown)->value,
                 'objective_source' => $r->objective_source,
+                /*
+                 * ENTITY-RELEVANCE-ORDERING-001 — two FACTS, not a verdict.
+                 *
+                 * Nothing downstream could tell a campaign running today from one that stopped three
+                 * weeks ago and still leads on spend, because the row never said. `status` is the
+                 * canonical one and `last_active_on` is the most recent day inside the window with a
+                 * positive figure. Which of them outranks the other is a question for the surface
+                 * asking, and an operational listing answers it differently from a report.
+                 */
+                'status' => $r->status === null ? null : CampaignStatus::tryFrom((string) $r->status)?->value,
+                'last_active_on' => $r->last_active_on === null ? null : Carbon::parse((string) $r->last_active_on)->toDateString(),
                 'provider' => $r->provider,
             ] + $this->withDerived((array) $r))
             ->all();
 
-        usort($rows, fn ($a, $b) => $b['spend'] <=> $a['spend']);
+        return self::orderCampaignRows($rows);
+    }
+
+    /**
+     * The one ordering rule for a campaign breakdown — ENTITY-RELEVANCE-ORDERING-001.
+     *
+     * Spend first, and then something that never ties. Sorting on spend ALONE returns 0 for two
+     * campaigns that spent the same, which leaves them in whatever order the query produced — and the
+     * query above has no `ORDER BY`, so PostgreSQL guarantees nothing about it. A project full of
+     * campaigns that spent nothing is made entirely of such ties. This is not a defect anyone has
+     * watched happen; it is an order the database has never promised to keep, and every table
+     * downstream sorts stably, so whatever it is handed is what a reader sees.
+     *
+     * It is a static function rather than a closure inside the query so it can be tested on rows
+     * handed to it in a deliberately scrambled order. Proving it through the database is not
+     * possible here: the rows come back in id order anyway, so a database test passes with or without
+     * the tiebreak and would be decoration.
+     *
+     * The RANKING stays spend-first deliberately. `byCampaign()` feeds reports, live report links and
+     * the daily digest, where «the top campaigns» means the ones that spent the most; re-ranking them
+     * by how recently they ran would change what those documents say. Relevance ordering belongs to
+     * the operational surface that asks for it, built on the `status` and `last_active_on` these rows
+     * now carry.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    public static function orderCampaignRows(array $rows): array
+    {
+        usort($rows, static fn (array $a, array $b): int => [(float) $b['spend'], (string) $a['campaign_id']]
+            <=> [(float) $a['spend'], (string) $b['campaign_id']]);
 
         return $rows;
     }
