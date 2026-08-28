@@ -10,9 +10,8 @@ Operational authority: `Git → REQUIREMENTS_TRACEABILITY_MATRIX.md → RESUME_S
 ## 1. Current state
 
 ```
-origin/main = beb35f4  (#142 merged and deployed 2026-08-28)
-production  = https://campaignshub.io/  HTTP 200
-open PRs    = #143 … #149, ONE linear stack, each based on the one below it
+origin/main = f003bac  (#143 merged and deployed 2026-08-28, production HTTP 200)
+open PRs    = #144 … #149, ONE linear stack, each based on the one below it
 ```
 
 **The stack merges bottom-up.** Every merge stales the ones above it, so each is rebased onto the
@@ -21,7 +20,6 @@ do not merge on a green that predates the base below it.
 
 | PR | branch | what it delivers |
 |---|---|---|
-| #143 | `feat/single-objective-filter` | one objective control; «المسار التسويقي» removed; `useEntities` cache-key defect |
 | #144 | `feat/metric-strip-request-state` | a failed or in-flight request is not «لا توجد بيانات» |
 | #145 | `feat/entity-relevance-ordering` | campaign `status` + `last_active_on`; total order; shared `campaignRelevance` |
 | #146 | `feat/filter-url-state` | filters survive refresh/Back/shared link; campaigns list takes canonical objectives |
@@ -29,10 +27,27 @@ do not merge on a green that predates the base below it.
 | #148 | `feat/campaign-row-decision` | the row's objective-primary result; `reportedKeysByCampaign()` |
 | #149 | `feat/campaign-row-efficiency` | what that result cost, found by `invertGood` rather than mapped |
 
-**#143's first gate run failed and it was MY omission, not flakiness:** two E2E specs still described
-the control I had removed and the raw objective I had replaced. Both fixed on #143 and re-verified
-locally against the real stack on chromium. A deletion with no test against it comes back, so the
-spec now asserts `dashboard-path` has count 0.
+**#143 is merged (`f003bac`) and deployed.** Its first gate run failed and it was MY omission, not
+flakiness: two E2E specs still described the control I had removed and the raw objective I had
+replaced. A deletion with no test against it comes back, so the spec now asserts `dashboard-path` has
+count 0.
+
+**Two more defects were found by running the local chromium suite before the gate did**, and both
+were real:
+
+  * A campaign is created as `draft`, and `campaignRelevance` filed draft under «stopped» — so a
+    campaign vanished from the list it had just been created in. «Stopped» now means halted, done or
+    filed away; a draft has not stopped, it has not started.
+  * `UX-DASH-001` in `verify-100.spec.ts` never named a project, so it read whichever one the
+    switcher had — and with `campaigns-linking.spec.ts` first, that was a project with no metrics.
+    It passed anyway: the strip rendered cards from a summary that had not answered, and
+    `toBeVisible` was satisfied by a card about to be replaced by «لا توجد بيانات ضمن هذه الفلاتر».
+    METRICS-REQUEST-STATE-001 removed that moment, so the test went red on a dependency it never
+    declared. **It was green on a project with no data.**
+
+Known local-only artefact, NOT a defect: `home-*-chromium-darwin.png` was last written by #85 and the
+marketing homepage changed in #97 without it being regenerated, so the two homepage visual tests fail
+on macOS and pass in CI on the linux baselines. Nothing in this stack touches `features/marketing`.
 
 ## 2. This session's drain — merged AND deployed, per commit
 
