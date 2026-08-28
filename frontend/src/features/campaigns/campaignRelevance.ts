@@ -39,8 +39,18 @@ const SERVING_WITHIN_DAYS = 3
 
 const DAY = 86_400_000
 
-/** Statuses that mean the campaign is not running. `unknown` is deliberately absent — see below. */
-const NOT_RUNNING = new Set(['paused', 'completed', 'archived', 'draft', 'pending'])
+/**
+ * Statuses that mean the campaign is FINISHED WITH — halted, done, filed away.
+ *
+ * `draft` and `pending` are deliberately absent, and that absence was bought with a real defect: a
+ * campaign is created as `draft`, so filing draft under «stopped» meant the campaign an operator had
+ * just created disappeared from the list they created it in. A draft has not stopped — it has not
+ * started, which is work still in hand and belongs beside the running ones. `campaigns.spec.ts` and
+ * `campaigns-linking.spec.ts` both caught it.
+ *
+ * `unknown` is absent for a different reason — see below.
+ */
+const NOT_RUNNING = new Set(['paused', 'completed', 'archived'])
 
 export function campaignRelevance(row: RelevanceRow, windowEnd: string): CampaignRelevance {
   /*
@@ -49,6 +59,12 @@ export function campaignRelevance(row: RelevanceRow, windowEnd: string): Campaig
    * the first thing an operator saw was a campaign they could do nothing about.
    */
   if (row.status !== null && NOT_RUNNING.has(row.status)) return 'stopped'
+
+  /*
+   * A campaign that has not started yet is not serving and is not finished. `idle` is the bucket for
+   * «switched on and producing nothing», and a draft is the same shape of thing: the operator's own
+   * unfinished work, which they should see.
+   */
 
   /*
    * `unknown` and null are NOT read as stopped. The platform did not tell us the state; the
