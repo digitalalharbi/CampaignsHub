@@ -61,7 +61,15 @@ jobs:
           envs: PROJECT,CHUNK,APPLY
           script: |
             set -Eeuo pipefail
-            cd /opt/campaignshub/backend
+
+            # Production runs in Docker, so artisan is reached the way `deploy-production.sh` reaches
+            # it — through the backend service. The first version of this ran bare `php artisan` on the
+            # host and died with «php: command not found»: there is no PHP on the host at all, only in
+            # the container. The dry run is what caught it, having written nothing, which is the whole
+            # reason it defaults to dry.
+            cd /opt/campaignshub
+            COMPOSE_FILE="deploy/docker-compose.production.yml"
+            ENV_FILE="deploy/backend.production.env"
 
             args=""
             # Quoted, and only ever appended as an argument — the command itself is fixed above.
@@ -74,4 +82,5 @@ jobs:
               echo "== DRY RUN: nothing will be written =="
             fi
 
-            php artisan metrics:renormalise-currency $args
+            docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+              exec -T backend php artisan metrics:renormalise-currency $args
