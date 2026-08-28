@@ -240,6 +240,31 @@ final class DigestMailRenderTest extends TestCase
     }
 
     /**
+     * EMAIL-SETTINGS-DEPTH-001 — the section appears only when there is something in it.
+     *
+     * The digest carries `recommendations: []` both when the reader switched them off and when there
+     * are none, and the mail must render nothing either way. An empty heading would read as «nobody
+     * has any advice for you», which is a claim the product has not made — and a heading rendered for
+     * somebody who opted out would be the switch not working.
+     */
+    public function test_approved_recommendations_are_rendered_only_when_there_are_some(): void
+    {
+        $with = $this->rich();
+        $with['projects'][0]['recommendations'] = [
+            ['id' => 'r1', 'title' => 'ارفع ميزانية المجموعة الأعلى', 'body' => 'هي الوحيدة تحت التكلفة المستهدفة.', 'priority' => 'high', 'campaign_id' => 'c1', 'due_date' => null],
+        ];
+
+        $html = $this->renderOf($with);
+        $this->assertStringContainsString('التوصيات المعتمدة', $html);
+        $this->assertStringContainsString('ارفع ميزانية المجموعة الأعلى', $html);
+
+        $without = $this->rich();
+        $without['projects'][0]['recommendations'] = [];
+
+        $this->assertStringNotContainsString('التوصيات المعتمدة', $this->renderOf($without));
+    }
+
+    /**
      * A digest with the new sections, built by hand.
      *
      * @return array<string,mixed>
