@@ -94,7 +94,9 @@ final class NotificationPreferenceController extends Controller
             'frequency' => $row->frequency ?? 'realtime',
             'project_ids' => $row->project_ids,
             'available_categories' => self::LEGACY_CATEGORIES,
-            'digests' => ($row->digests ?? []) + ['daily' => false, 'weekly' => false, 'alerts' => false],
+            // `recommendations` defaults false beside the rest: a row stored before the setting
+            // existed has no key, and an absent preference is not consent.
+            'digests' => ($row->digests ?? []) + ['daily' => false, 'weekly' => false, 'alerts' => false, 'recommendations' => false],
             'available_digests' => self::DIGESTS,
             // The reader's own clock and language, which is what makes «daily» mean their morning.
             'timezone' => $row->timezone ?? 'Asia/Riyadh',
@@ -134,6 +136,14 @@ final class NotificationPreferenceController extends Controller
             'digests.daily' => ['boolean'],
             'digests.weekly' => ['boolean'],
             'digests.alerts' => ['boolean'],
+            /*
+             * EMAIL-SETTINGS-DEPTH-001 — whether this person's digest carries approved recommendations.
+             *
+             * Validated explicitly rather than riding along inside the `digests` array, so an unknown
+             * key cannot be stored by a client that guessed at the shape, and so this one is written
+             * only when it actually arrives.
+             */
+            'digests.recommendations' => ['boolean'],
             /*
              * The timezone is validated against PHP's OWN list rather than a regex.
              *

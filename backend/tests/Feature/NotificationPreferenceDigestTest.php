@@ -133,4 +133,40 @@ final class NotificationPreferenceDigestTest extends TestCase
         $this->assertSame(1, DB::table('notification_preferences')->where('user_id', $this->user->id)->count());
         $this->assertSame(0, DB::table('notification_preferences')->where('user_id', $other->id)->count());
     }
+
+    /**
+     * EMAIL-SETTINGS-DEPTH-001 — the recommendations toggle round-trips, and defaults off.
+     *
+     * It rides in the `digests` map beside the daily/weekly opt-ins rather than in a column of its
+     * own, so a preferences row written before the setting existed simply has no key — and `show`
+     * must answer `false` for it rather than omitting it, or a client cannot render the switch at all.
+     */
+    public function test_the_recommendations_toggle_defaults_off_and_round_trips(): void
+    {
+        $body = $this->actingAs($this->user, 'sanctum')
+            ->getJson('/api/v1/settings/notifications')->assertOk()->json('data');
+
+        $this->assertFalse($body['digests']['recommendations'], 'An untouched account was opted in.');
+
+        $this->actingAs($this->user, 'sanctum')
+            ->putJson('/api/v1/settings/notifications', $this->payload([
+                'digests' => ['daily' => true, 'weekly' => false, 'recommendations' => true],
+            ]))->assertOk();
+
+        $body = $this->actingAs($this->user, 'sanctum')
+            ->getJson('/api/v1/settings/notifications')->assertOk()->json('data');
+
+        $this->assertTrue($body['digests']['recommendations']);
+
+        // And it can be turned back off — a switch that only latches on is not a switch.
+        $this->actingAs($this->user, 'sanctum')
+            ->putJson('/api/v1/settings/notifications', $this->payload([
+                'digests' => ['daily' => true, 'weekly' => false, 'recommendations' => false],
+            ]))->assertOk();
+
+        $body = $this->actingAs($this->user, 'sanctum')
+            ->getJson('/api/v1/settings/notifications')->assertOk()->json('data');
+
+        $this->assertFalse($body['digests']['recommendations']);
+    }
 }

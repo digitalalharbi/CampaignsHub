@@ -278,6 +278,15 @@ final class DailyDigestMail extends Mailable
                 'funnel' => $this->funnel($p, $ar, $block['funnel'] ?? []),
                 'creatives' => $this->creatives($block['creatives'] ?? null),
                 /*
+                  EMAIL-SETTINGS-DEPTH-001 — passed through as the digest produced it.
+
+                  Nothing is re-decided here. `DigestRecommendations` has already applied the
+                  approved-only rule, the tenant, the window and the cap; this block builds its view
+                  from an explicit whitelist, so a section absent from THIS list renders nowhere no
+                  matter how completely it was plumbed underneath.
+                */
+                'recommendations' => array_values($block['recommendations'] ?? []),
+                /*
                   The budget is NOT a section of its own.
 
                   `ReportObservations` already produces a budget-pace note with the money in it, and
@@ -376,6 +385,7 @@ final class DailyDigestMail extends Mailable
             'projects' => 'المشاريع',
             'funnel' => 'المسار',
             'content' => 'المحتوى',
+            'recommendations' => 'التوصيات المعتمدة',
             'best_content' => 'الأفضل',
             'declining' => 'يتراجع',
             'fatigued' => 'يحتاج تجديدًا',
@@ -402,6 +412,7 @@ final class DailyDigestMail extends Mailable
             'projects' => 'Projects',
             'funnel' => 'Funnel',
             'content' => 'Content',
+            'recommendations' => 'Approved recommendations',
             'best_content' => 'Best',
             'declining' => 'Slipping',
             'fatigued' => 'Needs refreshing',
