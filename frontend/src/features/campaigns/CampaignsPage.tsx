@@ -11,6 +11,7 @@ import { CAMPAIGN_STATUSES, type UnifiedCampaign } from './types'
 import { CANONICAL_OBJECTIVE_KEYS, canonicalObjectiveLabel, canonicalOfRaw, rawObjectivesFor, type CanonicalObjectiveKey } from './canonicalObjectives'
 import { LIFECYCLE_KEYS, lifecycleView, type Lifecycle } from './campaignLifecycleView'
 import { campaignEfficiency, campaignHeadline, type CampaignHeadline } from './campaignHeadline'
+import { campaignRelevance, type CampaignRelevance } from './campaignRelevance'
 import { campaignState } from './campaignState'
 
 /** «النشطة» is what an operator still owns this month — serving and switched-on-but-dark alike. */
@@ -594,6 +595,25 @@ export function CampaignsPage() {
                   headline={campaignHeadline(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)}
                   efficiency={campaignEfficiency(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)}
                   state={campaignState(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined)}
+                  /*
+                    Freshness from the SHARED relevance rule — the same one the lifecycle view and the
+                    ordering already read. A second definition of «is this still running» is how the
+                    list and the chip on its own rows end up disagreeing.
+                  */
+                  freshness={{
+                    relevance: campaignRelevance(
+                      {
+                        campaign_id: c.id,
+                        status: c.status,
+                        last_active_on: (metricsByCampaign.get(c.id) as { last_active_on?: string | null } | undefined)?.last_active_on ?? null,
+                        // Not read by the rule — spend decides ORDER, never relevance — but the row
+                        // shape is shared with the ordering, so it is supplied rather than widened.
+                        spend: (metricsByCampaign.get(c.id) as { spend?: number | null } | undefined)?.spend ?? null,
+                      },
+                      range.to,
+                    ),
+                    lastActiveOn: (metricsByCampaign.get(c.id) as { last_active_on?: string | null } | undefined)?.last_active_on ?? null,
+                  }}
                   onOpen={() => navigate(`/campaigns/${projectId}/${c.id}`)}
                 />
               ))}
@@ -679,6 +699,13 @@ function ReadingCell({ reading, locale }: { reading: CampaignHeadline; locale: '
   )
 }
 
+/** Freshness, in the shared rule's own vocabulary — never a second definition of «running». */
+const FRESHNESS_COPY: Record<CampaignRelevance, { ar: string; en: string }> = {
+  serving: { ar: 'تعمل', en: 'Serving' },
+  idle: { ar: 'خاملة', en: 'Idle' },
+  stopped: { ar: 'متوقفة', en: 'Stopped' },
+}
+
 /** The row's own short phrasing — the panel explains, the row labels. */
 const CAMPAIGN_STATE_COPY: Record<string, { ar: string; en: string }> = {
   not_delivering: { ar: 'لا تُعرض', en: 'Not delivering' },
@@ -689,7 +716,7 @@ const CAMPAIGN_STATE_COPY: Record<string, { ar: string; en: string }> = {
   conversions_without_value: { ar: 'تحويلات بلا قيمة', en: 'Conversions without value' },
 }
 
-function CampaignCard({ c, locale, headline, efficiency, state, onOpen }: { c: UnifiedCampaign; locale: 'ar' | 'en'; headline?: CampaignHeadline | null; efficiency?: CampaignHeadline | null; state?: ReturnType<typeof campaignState>; onOpen: () => void }) {
+function CampaignCard({ c, locale, headline, efficiency, state, freshness, onOpen }: { c: UnifiedCampaign; locale: 'ar' | 'en'; headline?: CampaignHeadline | null; efficiency?: CampaignHeadline | null; state?: ReturnType<typeof campaignState>; freshness?: { relevance: CampaignRelevance; lastActiveOn: string | null }; onOpen: () => void }) {
   const unlinked = (c.external_campaigns_count ?? 0) === 0
   return (
     <button onClick={onOpen} data-testid="campaign-card" className="flex flex-col gap-2.5 rounded-2xl border border-border bg-surface p-4 text-start shadow-[var(--shadow-small)] transition-colors hover:border-brand-300 hover:bg-surface-hover">
@@ -734,6 +761,24 @@ function CampaignCard({ c, locale, headline, efficiency, state, onOpen }: { c: U
           number. `judged` is false when nothing was spent or nothing was reported, and that is a
           fact about the connector, not a verdict on the campaign.
         */}
+        {/*
+          CAMPAIGN-INTELLIGENCE-HUB — freshness, said as a fact rather than a verdict.
+
+          A campaign that reported no active day in this window is NOT «stopped»: the platform did
+          not say it ended, and the window is the only evidence there is. So the chip names the
+          shared relevance rule's own answer and, where there is one, the day itself.
+        */}
+        {freshness !== undefined && (
+          <span
+            className="inline-flex items-center gap-1 self-start text-[11px] text-text-muted"
+            data-testid={`campaign-freshness-${freshness.relevance}`}
+          >
+            {locale === 'ar' ? FRESHNESS_COPY[freshness.relevance].ar : FRESHNESS_COPY[freshness.relevance].en}
+            {freshness.lastActiveOn !== null
+              ? ` · ${freshness.lastActiveOn}`
+              : ` · ${locale === 'ar' ? 'لا يوم نشط في هذه الفترة' : 'no active day in this window'}`}
+          </span>
+        )}
         {state?.judged === false && (
           <span
             className="inline-flex items-center gap-1 self-start rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-text-muted"
