@@ -33,6 +33,8 @@ import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter }
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { displaySpend, withheldCurrencyOf } from './platformMoney'
 import { MetricStrip } from '@/components/ui/MetricStrip'
+
+import { ConciseFindingLine } from './ConciseFindingLine'
 import { DataFreshness, PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
 import { sortPlatforms } from '@/lib/platforms'
@@ -519,6 +521,19 @@ export function DashboardPage() {
         />
       </FilterBar>
 
+      {/*
+        ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — one line, from the SAME engine the panel reads.
+        A second, smaller rule set for the headline would eventually disagree with the panel one
+        click away, and the reader could not tell which was lying. This chooses; it does not reason.
+      */}
+      <ConciseFindingLine
+        objective={objective}
+        totals={summary.data?.current as Record<string, number | null | undefined> | undefined}
+        reported={summary.data?.reported}
+        rowsInScope={summary.data?.rows_in_scope}
+        pending={summary.isPending || summary.isError}
+        ar={ar}
+      />
       <MetricStrip
         id="dashboard"
         ar={ar}
