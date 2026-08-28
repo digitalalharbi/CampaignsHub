@@ -398,7 +398,7 @@ final class PublicReportController extends Controller
      */
     public function sharedBranding(Request $request, string $token, SharedLinkBranding $branding): JsonResponse
     {
-        $this->throttle($request);
+        $this->throttleBranding($request);
         $share = $this->shares->resolveActive($token);
         if (! $share) {
             return ApiResponse::error('الرابط غير صالح أو انتهت صلاحيته أو أُلغي.', status: 404);
@@ -419,7 +419,7 @@ final class PublicReportController extends Controller
      */
     public function sharedBrandingLogo(Request $request, string $token, SharedLinkBranding $branding): mixed
     {
-        $this->throttle($request);
+        $this->throttleBranding($request);
         $share = $this->shares->resolveActive($token);
         abort_unless((bool) $share, 404);
 
@@ -433,6 +433,23 @@ final class PublicReportController extends Controller
     {
         $key = 'share:'.$request->ip();
         abort_if(RateLimiter::tooManyAttempts($key, 60), 429, 'Too many requests.');
+        RateLimiter::hit($key, 60);
+    }
+
+    /**
+     * A separate bucket for branding — it must not spend the quota that protects the FIGURES.
+     *
+     * Adding a second request per page load to the shared `share:{ip}` bucket is a real cost, and it
+     * showed up immediately: the public report started rendering «تعذّر فتح التقرير — Too many
+     * requests» on a link that had been fine, which on this surface means a paying client is told the
+     * report is broken. The figures endpoint is what the 60/minute ceiling exists to protect;
+     * branding is one small, idempotent response per page that carries no figures at all, so it gets
+     * its own ceiling rather than eating that one.
+     */
+    private function throttleBranding(Request $request): void
+    {
+        $key = 'share-branding:'.$request->ip();
+        abort_if(RateLimiter::tooManyAttempts($key, 120), 429, 'Too many requests.');
         RateLimiter::hit($key, 60);
     }
 }
