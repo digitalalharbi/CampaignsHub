@@ -59,10 +59,10 @@ final class SharedLinkBranding
      * @param  callable(): T  $work
      * @return T
      */
-    private function inTenant(ReportShare $share, callable $work): mixed
+    private function inTenant(string $tenantId, callable $work): mixed
     {
         $previous = $this->tenant->tenantId();
-        $this->tenant->setTenantId((string) $share->tenant_id);
+        $this->tenant->setTenantId($tenantId);
 
         try {
             return $work();
@@ -96,8 +96,31 @@ final class SharedLinkBranding
             ];
         }
 
-        $tenant = Tenant::withoutGlobalScopes()->find($share->tenant_id);
-        $client = $this->client($share);
+        return $this->forReport(
+            $report,
+            (string) $share->tenant_id,
+            fn (): string => $this->tokenUrl("/api/v1/reports/shared/{$rawToken}/branding/logo"),
+        );
+    }
+
+    /**
+     * The same identity for a report with no share — the EXPORTED document.
+     *
+     * The print route is sessionless by design (headless Chromium fetches it with a short-lived token
+     * and no cookie), so the identity has to arrive resolved in the payload. It hardcoded
+     * «CampaignsHub» in the PDF title, the slide meta and the footer, which stamped the product's
+     * name on every agency's client PDF — the artefact a client keeps and forwards.
+     *
+     * One resolver for both surfaces: the only thing that differs is how the logo is addressed, which
+     * is why that is a callable rather than a second copy of this method.
+     *
+     * @param  callable(): string  $logoUrl
+     * @return array{name: string, logo_url: ?string, logo_source: string, by: ?string}
+     */
+    public function forReport(?Report $report, string $tenantId, callable $logoUrl): array
+    {
+        $tenant = Tenant::withoutGlobalScopes()->find($tenantId);
+        $client = $this->clientOfReport($report, $tenantId);
 
         /*
          * The scope is derived, never supplied. A share bound to a client resolves at the client
@@ -107,7 +130,7 @@ final class SharedLinkBranding
             ? ['client', (string) $client->id]
             : ['tenant', null];
 
-        $asset = $this->inTenant($share, fn () => $this->pickLogo($scope, $scopeId));
+        $asset = $this->inTenant($tenantId, fn () => $this->pickLogo($scope, $scopeId));
 
         return [
             /*
@@ -116,7 +139,7 @@ final class SharedLinkBranding
              * PHPStan named it.
              */
             'name' => (string) ($client->name ?? $tenant->name ?? 'CampaignsHub'),
-            'logo_url' => $asset === null ? null : $this->tokenUrl($rawToken),
+            'logo_url' => $asset === null ? null : $logoUrl(),
             /*
              * Where the LOGO came from — a separate question from whose NAME is shown.
              *
@@ -136,7 +159,7 @@ final class SharedLinkBranding
     }
 
     /** The workspace this share's report belongs to, resolved through the report's project. */
-    private function client(ReportShare $share): ?ClientWorkspace
+    private function clientOfReport(?Report $report, string $tenantId): ?ClientWorkspace
     {
         /*
          * `withoutGlobalScopes()`, and that is not a shortcut.
@@ -147,7 +170,7 @@ final class SharedLinkBranding
          * name. The isolation is not the global scope here; it is the explicit tenant comparison
          * below, which is checked rather than assumed.
          */
-        $projectId = Report::withoutGlobalScopes()->find($share->report_id)?->project_id;
+        $projectId = $report?->project_id;
         if ($projectId === null) {
             return null;
         }
@@ -165,7 +188,7 @@ final class SharedLinkBranding
          * for its own tenant, and a guard that is only correct while the data is correct is not a
          * guard.
          */
-        return $client !== null && (string) $client->tenant_id === (string) $share->tenant_id ? $client : null;
+        return $client !== null && (string) $client->tenant_id === $tenantId ? $client : null;
     }
 
     /**
@@ -174,9 +197,9 @@ final class SharedLinkBranding
      * An id in the path is an id somebody will change. There is nothing to change here: the same
      * token that proves the reader may see the report is the only thing that selects the logo.
      */
-    private function tokenUrl(string $rawToken): string
+    private function tokenUrl(string $path): string
     {
-        return url("/api/v1/reports/shared/{$rawToken}/branding/logo");
+        return url($path);
     }
 
     /**
@@ -186,12 +209,12 @@ final class SharedLinkBranding
      * named. Null rather than a placeholder: a report with no logo has no logo, and inventing an
      * image would put a brand on a document that carries none.
      */
-    public function logoFor(ReportShare $share): ?StreamedResponse
+    public function logoFor(?Report $report, string $tenantId): ?StreamedResponse
     {
-        $client = $this->client($share);
+        $client = $this->clientOfReport($report, $tenantId);
         [$scope, $scopeId] = $client !== null ? ['client', (string) $client->id] : ['tenant', null];
 
-        $asset = $this->inTenant($share, fn () => $this->pickLogo($scope, $scopeId));
+        $asset = $this->inTenant($tenantId, fn () => $this->pickLogo($scope, $scopeId));
 
         if ($asset === null || ! Storage::disk($asset->disk)->exists($asset->path)) {
             return null;
