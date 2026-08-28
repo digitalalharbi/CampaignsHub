@@ -525,6 +525,16 @@ export function DashboardPage() {
           dashboard claim the platform sends no impressions.
         */
         hasRows={summary.data === undefined ? undefined : summary.data.rows_in_scope}
+        /*
+          METRICS-REQUEST-STATE-001 — and a request that failed or has not answered says so.
+
+          `data` is undefined for a failure and for a load alike, so without these the row rendered with
+          nothing to read and every card printed «لا توجد بيانات» — a confident statement about this
+          account's advertising, made by a request that never came back.
+        */
+        loading={summary.isPending}
+        error={summary.isError ? summary.error : undefined}
+        onRetry={() => void summary.refetch()}
       />
 
       {/*

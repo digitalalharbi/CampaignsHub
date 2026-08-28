@@ -503,6 +503,16 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
         primary={strip.primary}
         secondary={strip.secondary}
         hasRows={s.data === undefined ? undefined : s.data.rows_in_scope}
+        /*
+          METRICS-REQUEST-STATE-001 — and a request that failed or has not answered says so.
+
+          `data` is undefined for a failure and for a load alike, so without these the row rendered with
+          nothing to read and every card printed «لا توجد بيانات» — a confident statement about this
+          account's advertising, made by a request that never came back.
+        */
+        loading={s.isPending}
+        error={s.isError ? s.error : undefined}
+        onRetry={() => void s.refetch()}
       />
       {/* The comparisons, the details and the alerts — «أ», shared with the marketing preview. */}
       <UnifiedCampaignOverview vm={vm} lang={ar ? 'ar' : 'en'} />
