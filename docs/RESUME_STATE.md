@@ -67,6 +67,13 @@ inside ANALYTICS-FILTER-TRUTH-001 and pin with regression coverage.
 - GitHub API and deploy SSH `i/o timeout` recur against the same host. Every affected step succeeded
   on retry. **Instrument failure is not a result** — one gate check reported STALE purely because an
   API timeout returned an empty SHA.
+- **GitHub drops the `pull_request: synchronize` event after several pushes in quick succession.**
+  Seen twice in one session (#147 at `aec1b72`, #153 at `ab3b129`): the branch's only run stays on an
+  older head and nothing fires for the newest. The workflow's `concurrency: cancel-in-progress` is the
+  likely interaction. Not dangerous — merges are pinned to the tested head, so a green on a stale
+  commit can never let a PR land — but the queue silently stops moving while it looks like CI is just
+  slow. **Check that a run exists for the CURRENT head before waiting on it**; an empty commit is the
+  smallest way to ask for one.
 - The gate is a ~60-minute three-browser suite; duration alone is never evidence of a hang.
 - `retries: 0` is deliberate, so any non-determinism fails the gate outright. Three failure classes
   were seen and must not be collapsed into «flaky»: real product defects (#131, #140), a real
