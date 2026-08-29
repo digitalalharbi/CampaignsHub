@@ -52,6 +52,15 @@ const FOR_CODE: Record<string, ActionKind> = {
   visits_lost: 'investigate',
   no_conversions: 'investigate',
   conversions_without_value: 'adjust',
+  /*
+   * `investigate`, not `adjust`, even though the finding is OBSERVED.
+   *
+   * The observation is solid — leads arrived and none qualified — but the fix is not: it may be the
+   * targeting, the form's questions, the offer, or a sales team that has not been passing feedback
+   * back. «Adjust» would name a change to make, and this product does not know which one. What it
+   * knows is where to look.
+   */
+  leads_none_qualified: 'investigate',
 }
 
 /**

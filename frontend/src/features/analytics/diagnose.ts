@@ -20,7 +20,7 @@ import { canonicalOfRaw } from '@/features/campaigns/canonicalObjectives'
  * The journey is a DIAGNOSTIC MODEL — الوصول → الاهتمام → الزيارة → التحويل → القيمة — and never
  * another primary filter. It exists to locate a weakness, not to slice the data.
  */
-export type DiagnosticStage = 'delivery' | 'attraction' | 'visit' | 'conversion' | 'value'
+export type DiagnosticStage = 'delivery' | 'attraction' | 'visit' | 'conversion' | 'value' | 'quality'
 
 export interface DiagnosticFinding {
   stage: DiagnosticStage
@@ -48,7 +48,16 @@ export interface Diagnosis {
 /** The chain each canonical objective is judged along. `value` belongs only to money objectives. */
 const CHAIN: Record<string, DiagnosticStage[]> = {
   sales: ['delivery', 'attraction', 'visit', 'conversion', 'value'],
-  leads: ['delivery', 'attraction', 'visit', 'conversion'],
+  /*
+   * Leads end at QUALITY, not at conversion.
+   *
+   * «Twelve leads» is where this chain used to stop, and it is not the question a lead-gen advertiser
+   * has. Twelve leads none of which the sales team could use is a worse outcome than four that
+   * converted, and a diagnosis that ends at the count says the campaign is fine. `value` is the same
+   * idea one objective across: a sale without revenue is not a sale, and a lead nobody qualified is
+   * not a lead.
+   */
+  leads: ['delivery', 'attraction', 'visit', 'conversion', 'quality'],
   traffic: ['delivery', 'attraction', 'visit'],
   app_promotion: ['delivery', 'attraction', 'conversion'],
   awareness_engagement: ['delivery', 'attraction'],
@@ -61,6 +70,13 @@ const EVIDENCE: Record<DiagnosticStage, string[]> = {
   visit: ['clicks', 'landing_page_views'],
   conversion: ['clicks', 'conversions'],
   value: ['conversions', 'revenue'],
+  /*
+   * Both, and `qualified_leads` is the one that is usually absent: it comes back from a CRM rather
+   * than from the ad platform, so most accounts will name it in `missing[]` and be judged no further.
+   * That is the correct outcome — «we cannot see whether your leads were any good» is a real answer,
+   * and inferring quality from the platform's own count would be inventing the feedback.
+   */
+  quality: ['leads', 'qualified_leads'],
 }
 
 const n = (v: number | null | undefined): number => (typeof v === 'number' ? v : 0)
@@ -184,5 +200,23 @@ function judge(stage: DiagnosticStage, totals: DiagnosticInput['totals']): Diagn
       return revenue === 0
         ? { stage, confidence: 'observed', evidence: ['conversions', 'revenue'], code: 'conversions_without_value' }
         : null
+
+    /*
+     * Leads arrived and none of them qualified — OBSERVED, and deliberately the only thing this
+     * stage says.
+     *
+     * There is no ratio here on purpose. «What share of leads should qualify» has no cross-account
+     * answer: a mortgage broker and a gym are both healthy at rates an order of magnitude apart, and
+     * a threshold picked here would be a benchmark this product invented and then reported as a
+     * finding. Zero out of a real number of leads needs no benchmark to be worth saying.
+     */
+    case 'quality': {
+      const leads = n(totals.leads)
+      if (leads === 0) return null
+
+      return n(totals.qualified_leads) === 0
+        ? { stage, confidence: 'observed', evidence: ['leads', 'qualified_leads'], code: 'leads_none_qualified' }
+        : null
+    }
   }
 }

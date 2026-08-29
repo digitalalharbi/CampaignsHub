@@ -87,6 +87,17 @@ const ACTION_COPY: Record<string, { ar: string; en: string }> = {
     ar: 'أرسل قيمة الشراء مع حدث التحويل — التحويلات مسجَّلة بقيمة صفر.',
     en: 'Send the purchase value with the conversion event — conversions are recorded with no value.',
   },
+  /*
+   * The action is about the FORM and the audience, not about spending less.
+   *
+   * Leads arriving that nobody could use is usually a targeting or a qualifying-question problem,
+   * and «reduce the budget» would treat a quality problem as a volume one — spending less to receive
+   * fewer unusable leads.
+   */
+  leads_none_qualified: {
+    ar: 'راجع أسئلة النموذج والاستهداف — العملاء يصلون ولا يتأهّل أحد منهم.',
+    en: 'Review the form questions and the targeting — leads are arriving and none of them qualify.',
+  },
 }
 
 const STAGE: Record<DiagnosticStage, { ar: string; en: string }> = {
@@ -95,6 +106,7 @@ const STAGE: Record<DiagnosticStage, { ar: string; en: string }> = {
   visit: { ar: 'الزيارة', en: 'Visit' },
   conversion: { ar: 'التحويل', en: 'Conversion' },
   value: { ar: 'القيمة', en: 'Value' },
+  quality: { ar: 'جودة العملاء المحتملين', en: 'Lead quality' },
 }
 
 export function DiagnosticPanel({

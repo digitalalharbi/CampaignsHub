@@ -86,3 +86,37 @@ describe('what the recommendation layer will and will not propose', () => {
     expect(actions).toEqual([])
   })
 })
+
+/**
+ * The lead-quality finding is something to LOOK AT, not something to change.
+ *
+ * The observation is solid — leads arrived and none qualified — but the fix is not: it may be the
+ * targeting, the form's questions, the offer, or a sales team that has not been passing feedback
+ * back. `adjust` would name a change to make, and this product does not know which one. So an
+ * OBSERVED finding is deliberately paired with `investigate`, which is the one place in this table
+ * where confidence in the observation does not translate into confidence in the remedy.
+ */
+describe('the lead quality action', () => {
+  it('is offered to investigate, never to adjust', () => {
+    const actions = recommendedActions({
+      state: 'diagnosed',
+      missing: [],
+      findings: [{ stage: 'quality', confidence: 'observed', evidence: ['leads', 'qualified_leads'], code: 'leads_none_qualified' }],
+    })
+
+    expect(actions).toHaveLength(1)
+    expect(actions[0].kind).toBe('investigate')
+    expect(actions[0].evidence).toEqual(['leads', 'qualified_leads'])
+  })
+
+  /** And it carries no action at all when the CRM never reported the qualification. */
+  it('is withheld when the evidence it stands on was never read', () => {
+    const actions = recommendedActions({
+      state: 'diagnosed',
+      missing: ['qualified_leads'],
+      findings: [{ stage: 'quality', confidence: 'observed', evidence: ['leads', 'qualified_leads'], code: 'leads_none_qualified' }],
+    })
+
+    expect(actions).toEqual([])
+  })
+})
