@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Services;
 
+use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Metrics\Models\EntityDailyMetric;
+use App\Domains\Metrics\Support\EntityScope;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -68,6 +71,7 @@ final class EntityMetricsAggregator
         Carbon $to,
         ?array $parentIds = null,
         ?string $attributionWindow = null,
+        ?EntityScope $scope = null,
     ): array {
         $select = ['entity_id', 'external_entity_id', 'external_campaign_id', 'external_ad_set_id'];
 
@@ -111,12 +115,66 @@ final class EntityMetricsAggregator
             $query->where('attribution_window', $attributionWindow);
         }
 
+        $this->applyScope($query, $scope);
+
         return $query
             ->groupBy('entity_id', 'external_entity_id', 'external_campaign_id', 'external_ad_set_id')
             ->selectRaw(implode(', ', $select))
             ->get()
             ->map(fn ($row): array => $this->shape((array) $row->getAttributes()))
             ->all();
+    }
+
+    /**
+     * ANALYTICS-FILTER-TRUTH-001 at the entity grain.
+     *
+     * ## The objective comes from `unified_campaigns`, not from `external_campaigns`
+     *
+     * Both tables carry an `objective` column, and reading the wrong one is the failure this method
+     * is most likely to be rewritten into. `external_campaigns.objective` is what the provider said;
+     * `unified_campaigns.objective` is the campaign's objective in this product, and it is what the
+     * campaign grain filters on. Reading the provider's copy here would make the ad table disagree
+     * with the campaign table directly above it whenever an operator has corrected an objective —
+     * two rows on one screen, narrowed by one chip, answering different questions.
+     *
+     * ## An unmatched campaign filter empties the table
+     *
+     * The subqueries return nothing when the chosen campaigns have no external campaign, and the
+     * `whereIn` then matches no row. That is the answer: «this campaign has no ads» is a fact, and
+     * the alternative — an unmatched filter widening back to every ad in the project — is the shape
+     * of leak this requirement exists to prevent.
+     */
+    private function applyScope(mixed $query, ?EntityScope $scope): void
+    {
+        if ($scope === null || $scope->isEmpty()) {
+            return;
+        }
+
+        if ($scope->providers !== []) {
+            // A column on this table: no join needed, and the same canonical keys the strip uses.
+            $query->whereIn('provider', $scope->providers);
+        }
+
+        if ($scope->campaigns !== []) {
+            $query->whereIn(
+                'external_campaign_id',
+                ExternalCampaign::query()
+                    ->select('id')
+                    ->whereIn('unified_campaign_id', $scope->campaigns),
+            );
+        }
+
+        if ($scope->objectives !== []) {
+            $query->whereIn(
+                'external_campaign_id',
+                ExternalCampaign::query()
+                    ->select('id')
+                    ->whereIn(
+                        'unified_campaign_id',
+                        UnifiedCampaign::query()->select('id')->whereIn('objective', $scope->objectives),
+                    ),
+            );
+        }
     }
 
     /** Whether this scope holds any real row — see DEMO-LIVE-AGGREGATION-ISOLATION-001. */
