@@ -24,12 +24,21 @@ export function LeadsPage() {
 
   const [status, setStatus] = useState('')
   const [source, setSource] = useState('')
+  const [uniqueOnly, setUniqueOnly] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
 
   const leadsQuery = useQuery({
-    queryKey: ['leads', { status, source }],
-    queryFn: () => listLeads({ status: status || undefined, source: source || undefined, per_page: 100 }),
+    queryKey: ['leads', { status, source, uniqueOnly }],
+    queryFn: () =>
+      listLeads({
+        status: status || undefined,
+        source: source || undefined,
+        unique: uniqueOnly ? 1 : undefined,
+        per_page: 100,
+      }),
   })
+
+  const counts = leadsQuery.data?.counts ?? null
 
   const convertMutation = useMutation({
     mutationFn: convertLead,
@@ -48,6 +57,35 @@ export function LeadsPage() {
       key: 'status',
       header: t('status_label'),
       render: (r) => <Badge tone={statusTone(r.status)}>{statusLabel(r.status, locale)}</Badge>,
+    },
+    {
+      /*
+       * LEAD-DEDUP-001 on the row. The same person arriving twice is recorded twice and counted
+       * once, and this column is where «counted once» stops being a claim about the database.
+       *
+       * Three distinct states, deliberately not two. `ambiguous` is not a kind of duplicate: the
+       * email says one person and the phone says another, so the lead was linked to NEITHER on
+       * purpose. Showing it as a duplicate would present a refusal to guess as a resolved match,
+       * and showing it as an ordinary lead would hide the one row a human should look at.
+       */
+      key: 'duplicate',
+      header: locale === 'ar' ? 'التكرار' : 'Duplicate',
+      render: (r) =>
+        r.duplicate_reason === 'ambiguous' ? (
+          <Badge tone="warning" data-testid={`lead-ambiguous-${r.id}`}>
+            {locale === 'ar' ? 'هوية متضاربة' : 'Conflicting identity'}
+          </Badge>
+        ) : r.canonical_lead_id != null ? (
+          <Badge tone="neutral" data-testid={`lead-duplicate-${r.id}`}>
+            {locale === 'ar' ? 'تكرار' : 'Duplicate'}
+          </Badge>
+        ) : (r.duplicate_count ?? 0) > 0 ? (
+          <span className="tnum text-text-secondary" data-testid={`lead-absorbed-${r.id}`}>
+            {locale === 'ar' ? `+${r.duplicate_count} وصول` : `+${r.duplicate_count} arrivals`}
+          </span>
+        ) : (
+          <span className="text-text-muted">—</span>
+        ),
     },
     {
       key: 'estimated_value',
@@ -108,7 +146,33 @@ export function LeadsPage() {
 
       {convertError && <Alert severity="danger" title={convertError.message} />}
 
+      {/*
+        Both figures, always, side by side.
+
+        A single «total» would have to be arrivals or people, and whichever it was would be wrong for
+        the other question with nothing on screen to say which: an operator judging a campaign wants
+        arrivals, a salesperson working the list wants people. Rendered only when the server actually
+        sent them — a client that invented a zero would be stating something it was never told.
+      */}
+      {counts !== null && (
+        <p data-testid="lead-counts" className="text-sm text-text-secondary">
+          {locale === 'ar'
+            ? `وصل ${counts.received} — منهم ${counts.unique} شخصًا مختلفًا`
+            : `${counts.received} received — ${counts.unique} distinct people`}
+        </p>
+      )}
+
       <div className="flex flex-wrap gap-2">
+        <Select
+          value={uniqueOnly ? 'unique' : 'all'}
+          onChange={(e) => setUniqueOnly(e.target.value === 'unique')}
+          className="w-auto"
+          data-testid="lead-dedup-view"
+          options={[
+            { value: 'all', label: locale === 'ar' ? 'كل الوصولات' : 'Every arrival' },
+            { value: 'unique', label: locale === 'ar' ? 'الأشخاص فقط' : 'Distinct people only' },
+          ]}
+        />
         <Select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
