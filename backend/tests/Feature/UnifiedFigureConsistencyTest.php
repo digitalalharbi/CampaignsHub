@@ -340,6 +340,112 @@ final class UnifiedFigureConsistencyTest extends TestCase
     }
 
     /**
+     * HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN — the two grains are read from their own tables, and
+     * neither one's figures leak into the other.
+     *
+     * `daily_metrics` answers at the campaign grain and `entity_daily_metrics` beneath it. They come
+     * from separate provider endpoints, so this deliberately does NOT assert that the children sum to
+     * the parent: a provider's own arithmetic is allowed to disagree across its endpoints, and a test
+     * demanding equality would eventually fail on truthful data and teach somebody to weaken it.
+     *
+     * What must hold is about OUR reading, and there are exactly two ways to get it wrong:
+     *
+     *   * **Duplication** — the same ad set counted under both campaigns, or its figure repeated per
+     *     matching row. Each ad set must carry exactly what was stored for it.
+     *   * **Overwrite** — the drill-down's arrival changing what the campaign grain says. The
+     *     campaign total is read from a different table and must be untouched by anything below it.
+     *
+     * Both are silent in production: the numbers stay plausible, and a client's report is off by a
+     * factor nobody can trace back to a join.
+     */
+    public function test_each_grain_reports_its_own_table_without_leaking_into_the_other(): void
+    {
+        $campaignSpend = (float) $this->read('metrics/summary')->json('data.current.spend');
+
+        $this->entityRows();
+
+        $rows = $this->read('metrics/entities/ad_set')->assertOk()->json('data.entities');
+        $bySet = array_column($rows, null, 'external_id');
+
+        $this->assertCount(2, $rows, 'the drill-down duplicated or dropped an ad set');
+
+        $half = round(self::SPEND / 2, 2);
+        foreach (['sq-a', 'sq-b'] as $adSet) {
+            $this->assertArrayHasKey($adSet, $bySet);
+            $this->assertEqualsWithDelta(
+                $half,
+                (float) $bySet[$adSet]['spend'],
+                0.01,
+                "{$adSet} does not carry the spend that was stored for it",
+            );
+        }
+
+        $this->assertEqualsWithDelta(
+            $campaignSpend,
+            (float) $this->read('metrics/summary')->json('data.current.spend'),
+            0.01,
+            'the campaign grain changed when entity rows arrived — one table is reading the other',
+        );
+    }
+
+    /**
+     * A parent-narrowed drill-down reports the child's OWN figure, not the parent's.
+     *
+     * The mistake this catches is a join that carries the campaign's spend down onto every ad set
+     * beneath it: the list looks right, the names are right, and every row shows the whole campaign's
+     * money. It reads as an ad set that spent everything.
+     */
+    public function test_a_narrowed_drill_down_reports_the_childs_figure_not_the_parents(): void
+    {
+        /*
+         * TWO ad sets under ONE campaign, and the split is uneven on purpose.
+         *
+         * The shared fixture puts one ad set under each campaign, which cannot catch this at all: with
+         * a single child, «the child's spend» and «the campaign's spend» are the same number, and a
+         * join that carried the parent's total down onto every row would pass. Two children whose
+         * figures differ is the smallest fixture where the defect is visible.
+         */
+        $campaign = (string) Str::uuid();
+        $this->adSetRow($campaign, 'sq-big', 900.0);
+        $this->adSetRow($campaign, 'sq-small', 100.0);
+
+        $rows = $this->read('metrics/entities/ad_set', '&parent='.$campaign)->assertOk()->json('data.entities');
+        $spend = array_column($rows, 'spend', 'external_id');
+
+        $this->assertCount(2, $rows);
+        $this->assertEqualsWithDelta(900.0, (float) $spend['sq-big'], 0.01);
+        $this->assertEqualsWithDelta(100.0, (float) $spend['sq-small'], 0.01, "the small ad set was given the campaign's total");
+        /* And neither carries the 1,000 the campaign spent between them. */
+        $this->assertNotEqualsWithDelta(1000.0, (float) $spend['sq-small'], 0.01);
+    }
+
+    /** One ad-set row, written where the syncer writes entity grain. */
+    private function adSetRow(string $campaignExternalId, string $externalId, float $spend): void
+    {
+        $this->holdingTenant((string) $this->tenant->id);
+
+        (new EntityDailyMetric)->forceFill([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'external_account_id' => $this->account->getKey(),
+            'provider' => 'meta',
+            'entity_type' => EntityDailyMetric::AD_SET,
+            'entity_id' => (string) Str::uuid(),
+            'external_entity_id' => $externalId,
+            'external_campaign_id' => $campaignExternalId,
+            'metric_date' => self::DATE,
+            'attribution_window' => 'default',
+            'is_demo' => false,
+            'spend' => $spend,
+            'original_currency' => 'SAR',
+            'project_currency' => 'SAR',
+        ])->save();
+
+        app(TenantContext::class)->forget();
+    }
+
+    /**
      * MONEY-USD-002 — every surface states the SAME unit for the same window.
      *
      * The harness above proves the figures match. A figure is only half a statement: 100 rendered under
