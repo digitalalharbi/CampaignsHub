@@ -31,7 +31,15 @@ export interface ConciseFinding {
   hasAction: boolean
 }
 
-const ORDER = ['delivery', 'attraction', 'visit', 'conversion', 'value'] as const
+/*
+ * The chain's own order, and `quality` sits at the end beside `value`.
+ *
+ * The line names the EARLIEST weakness, because fixing a later one first is wasted work: leads that
+ * nobody qualified is a real problem and not the one to act on while the ads are not being delivered
+ * at all. Leaving `quality` out of this list would sort it to index -1 and make it always earliest —
+ * the loudest finding on the page for the wrong reason.
+ */
+const ORDER = ['delivery', 'attraction', 'visit', 'conversion', 'value', 'quality'] as const
 
 export function conciseFinding(input: DiagnosticInput): ConciseFinding | null {
   const d = diagnose(input)
