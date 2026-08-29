@@ -1120,15 +1120,7 @@ final class ClientPortalController
          * portal is already scoped to. With two or more reachable spaces the merged view still gets
          * the tenant brand, which remains correct — no one brand may stand for the others.
          */
-        $spaceId = $this->selectedSpaceId($token);
-        if ($spaceId === null) {
-            // The membership-aware list, not the one derived from request rows: an invited client
-            // with no requests yet still has exactly one space, and still has a name.
-            $reachable = $this->contactOwnedWorkspaceIds($token);
-            $spaceId = count($reachable) === 1 ? $reachable[0] : null;
-        }
-
-        $scope = $spaceId === null ? 'tenant' : 'client';
+        [$scope, $spaceId] = $this->brandingScope($token);
 
         $assets = app(BrandingService::class)->resolve($scope, $spaceId, BrandingSpec::THEME_ANY);
         $settings = BrandingSetting::query()
@@ -1143,11 +1135,91 @@ final class ClientPortalController
             'colors' => $settings?->colors ?? [],
             'fonts' => $settings?->fonts ?? [],
             'white_label_requested' => (bool) ($settings?->white_label ?? false),
+            /*
+             * The portal's OWN logo route, not the Branding Center's.
+             *
+             * This handed the client `branding/assets/{id}/file`, which sits behind
+             * `auth:sanctum` + `portal:app,agency`. A portal contact holds a cookie session tied to a
+             * verified contact and is not a Sanctum user, so that URL answered 401 — to the one
+             * audience it was being handed to. The portal header renders `<img src>` from it and
+             * skips its own fallback precisely BECAUSE a logo exists, so an agency that uploaded a
+             * client logo got a broken image where the brand should be. Verified: the probe that
+             * followed this URL with a real portal session came back 401.
+             *
+             * The replacement carries a `kind`, never an id. `kind` is one of a fixed list and
+             * selects among the assets THIS session's own space already resolves to, so there is
+             * nothing tenant-identifying to manipulate — the same shape the shared-report logo route
+             * uses, and for the same reason.
+             */
             'logos' => collect($assets)->map(fn (BrandingAsset $a, string $kind) => [
                 'kind' => $kind,
-                'url' => route('api.v1.branding.assets.file', ['brandingAsset' => $a->getKey()]),
+                'url' => route('api.v1.client.branding.logo', ['kind' => $kind]),
             ])->values()->all(),
         ]]);
+    }
+
+    /**
+     * GET /client/branding/logo?kind=… — the bytes behind the URL `branding()` hands out.
+     *
+     * There is no asset id in this request, by construction. `kind` names one of a fixed list of
+     * roles and picks among the assets this session's own space already resolves to, so the only
+     * thing a client can change by editing the URL is which of THEIR OWN logos they receive. That is
+     * the same guarantee the shared-report logo route gives, arrived at the same way: the scope comes
+     * from the session, never from a parameter.
+     *
+     * An unknown kind, or a kind this space has no asset for, is a 404 — not a fallback to somebody
+     * else's mark, and not a 200 with no bytes.
+     */
+    public function brandingLogo(Request $request): StreamedResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+
+        $kind = $request->string('kind')->toString();
+        abort_unless(in_array($kind, BrandingSpec::KINDS, true), 404);
+
+        [$scope, $spaceId] = $this->brandingScope($token);
+
+        $asset = app(BrandingService::class)->resolve($scope, $spaceId, BrandingSpec::THEME_ANY)[$kind] ?? null;
+        abort_unless($asset instanceof BrandingAsset, 404);
+        abort_unless(Storage::disk($asset->disk)->exists($asset->path), 404);
+
+        return Storage::disk($asset->disk)->download(
+            $asset->path,
+            $kind.'.'.($asset->mime === 'image/svg+xml' ? 'svg' : 'png'),
+        );
+    }
+
+    /**
+     * The branding scope for this session — resolved ONCE, for the payload and the bytes alike.
+     *
+     * With one space and none selected, the one space IS the answer. A contact who reaches a single
+     * client is deliberately never asked to choose (see `spaces()`), so they live on the spaceless
+     * `/client/*` routes — and branding, alone among the readers, treated "no slug in the URL" as
+     * "no client", answering with the tenant's brand. The visible result was a portal that greeted
+     * the client by name on its home page and called itself «CampaignsHub» on every other one.
+     *
+     * This narrows nothing and widens nothing: it resolves the same single id the rest of the portal
+     * is already scoped to. With two or more reachable spaces the merged view still gets the tenant
+     * brand, which remains correct — no one brand may stand for the others.
+     *
+     * Shared rather than duplicated because the name and the logo must come from the SAME space. Two
+     * copies of this rule is how a portal ends up showing one client's mark above another's name.
+     *
+     * @return array{0: string, 1: string|null}
+     */
+    private function brandingScope(ClientPortalToken $token): array
+    {
+        $spaceId = $this->selectedSpaceId($token);
+
+        if ($spaceId === null) {
+            // The membership-aware list, not the one derived from request rows: an invited client
+            // with no requests yet still has exactly one space, and still has a name.
+            $reachable = $this->contactOwnedWorkspaceIds($token);
+            $spaceId = count($reachable) === 1 ? $reachable[0] : null;
+        }
+
+        return [$spaceId === null ? 'tenant' : 'client', $spaceId];
     }
 
     /**

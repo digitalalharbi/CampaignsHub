@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { LogOut, Megaphone, Moon, Sun } from 'lucide-react'
@@ -56,7 +56,24 @@ export function PortalShell({
   const moreItems = PORTAL_NAV.filter((i) => !PRIMARY.includes(i.to))
     .map((i) => ({ to: spaceTo(i.to), ar: i.ar, en: i.en, icon: i.icon, end: i.end }))
   // The primary mark if the agency uploaded one; otherwise the platform's own.
-  const logo = branding?.logos.find((l) => l.kind === 'primary_horizontal' || l.kind === 'client_logo')
+  const uploaded = branding?.logos.find((l) => l.kind === 'primary_horizontal' || l.kind === 'client_logo')
+
+  /*
+   * BRANDING-HIERARCHY-001 — «never a broken image or blank header».
+   *
+   * The fallback below is skipped precisely BECAUSE a logo exists, so a mark that fails to load left
+   * the header showing a browser's broken-image glyph and no name at all — the one outcome that
+   * requirement rules out, and the one this header was previously guaranteed to produce, since the
+   * URL it was handed answered 401 to every portal session.
+   *
+   * The URL is fixed on the server. This is the second half: a mark that cannot be drawn for any
+   * other reason — a deleted file, an offline CDN, a corrupt upload — falls back to the same mark and
+   * name a client with no logo sees, instead of to nothing. `onError` is the only signal a browser
+   * gives for that, and it is per-URL, so a new logo gets its own chance rather than inheriting the
+   * previous one's failure.
+   */
+  const [brokenLogo, setBrokenLogo] = useState<string | null>(null)
+  const logo = uploaded !== undefined && uploaded.url !== brokenLogo ? uploaded : undefined
 
   const signOut = async () => {
     try { await portalLogout() } catch { /* clearing the local session is enough to sign the user out */ }
@@ -81,7 +98,13 @@ export function PortalShell({
             ) : (
               // alt is the space's name, so a screen reader hears whose portal this is rather than
               // "logo".
-              <img src={logo.url} alt={branding?.space?.name ?? 'CampaignsHub'} className="h-9 max-w-[140px] object-contain" />
+              <img
+                src={logo.url}
+                onError={() => setBrokenLogo(logo.url)}
+                alt={branding?.space?.name ?? 'CampaignsHub'}
+                data-testid="portal-logo"
+                className="h-9 max-w-[140px] object-contain"
+              />
             )}
             {logo === undefined && (
               <span className="font-heading text-base font-extrabold">
