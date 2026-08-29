@@ -32,6 +32,7 @@ import {
 } from './hooks'
 import { scopeNote, type FilterScope } from './filterScope'
 import { CAMPAIGN_RELEVANCE_ORDER, orderByRelevanceWith, relevanceOf } from '@/features/campaigns/campaignRelevance'
+import { useCampaignOptionSource } from './useCampaignOptionSource'
 import { Panel, ProvenanceBadge, RateTrend, SERIES, platformColor, tooltipProps } from './components'
 import { listCreatives } from '@/features/content/api'
 import { compact, money, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
@@ -236,11 +237,14 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
     [providers, objectiveFilter, campaignIds],
   )
 
-  /* Unnarrowed by campaign, so choosing one does not collapse the list it was chosen from. */
-  const campaignOptions = useCampaigns(currentProjectId, range, useMemo(
-    () => ({ provider: providers, objective: objectiveFilter }),
-    [providers, objectiveFilter],
-  ))
+  /*
+   * The campaign axis reads the server's option endpoint, NOT the breakdown.
+   *
+   * It is unnarrowed by campaign, so choosing one does not collapse the list it was chosen from —
+   * and unwindowed by the period, so a campaign that reported nothing in the range is still
+   * reachable. That silence is usually why the reader came looking for it.
+   */
+  const campaignSource = useCampaignOptionSource(currentProjectId, campaignIds)
 
 
   const applied: AppliedFilter[] = useMemo(() => {
@@ -254,14 +258,14 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
     campaignIds.forEach((v) => out.push({
       key: `campaign:${v}`,
       axis: ar ? 'الحملة' : 'Campaign',
-      label: campaignOptions.data?.find((c) => String(c.campaign_id) === v)?.campaign_name ?? v,
+      label: campaignSource.labelOf(v),
       onRemove: () => setCampaignIds((prev) => prev.filter((x) => x !== v)),
     }))
     if (objective !== 'all') {
       out.push({ key: `objective:${objective}`, axis: ar ? 'الهدف' : 'Objective', label: canonicalObjectiveLabel(objective, ar ? 'ar' : 'en'), onRemove: () => setObjective('all') })
     }
     return out
-  }, [providers, campaignIds, campaignOptions.data, objective, ar])
+  }, [providers, campaignIds, campaignSource, objective, ar])
 
   /*
    * ANALYTICS-PROVENANCE-001 — the badge needs the summary, and the summary lives in the tab below.
@@ -351,7 +355,8 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
           ar={ar}
           values={campaignIds}
           testid={`${surface}-campaign`}
-          options={(campaignOptions.data ?? []).map((c) => ({ value: String(c.campaign_id), label: c.campaign_name ?? String(c.campaign_id) }))}
+          options={campaignSource.options}
+          search={campaignSource.search}
           onChange={setCampaignIds}
         />
 
