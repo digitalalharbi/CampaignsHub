@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -51,6 +52,8 @@ final class DigestDispatcher
         private readonly DailyDigest $daily,
         private readonly ProviderRegistry $providers,
         private readonly TenantContext $tenants,
+        // The ONE branding resolver. Injected rather than newed so this class cannot grow a second.
+        private readonly SharedLinkBranding $branding,
     ) {}
 
     /**
@@ -150,7 +153,27 @@ final class DigestDispatcher
                 return $this->finish($user, $kind, $periodKey, 'awaiting_credentials', 'no_email_provider');
             }
 
-            Mail::to($user->email)->send(new DailyDigestMail($digest, $locale, (string) $user->name, $kind));
+            /*
+             * BRANDING-HIERARCHY-001 — the digest goes out under the AGENCY's name, not the product's.
+             *
+             * Resolved through the same `SharedLinkBranding` the reports and the shared links use,
+             * with a null report so it settles at the tenant layer: a digest can span several of that
+             * agency's clients, and naming one of them on a summary about all of them would be wrong
+             * in a way the reader could not detect.
+             *
+             * Only the NAME. An email cannot hide a broken image the way the report header now does —
+             * there is no `onError` in an inbox — so a logo that 404s would be permanent, and shipping
+             * the half that is safe is better than shipping the half that cannot be repaired.
+             */
+            $identity = $this->branding->forReport(null, $tenantId, static fn (): string => '');
+
+            Mail::to($user->email)->send(new DailyDigestMail(
+                $digest,
+                $locale,
+                (string) $user->name,
+                $kind,
+                is_string($identity['name'] ?? null) ? $identity['name'] : null,
+            ));
 
             return $this->finish($user, $kind, $periodKey, 'sent', null, sentAt: Carbon::now());
         } catch (Throwable $e) {
