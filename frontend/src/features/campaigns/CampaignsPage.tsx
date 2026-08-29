@@ -13,6 +13,7 @@ import { LIFECYCLE_KEYS, lifecycleView, type Lifecycle } from './campaignLifecyc
 import { campaignEfficiency, campaignHeadline, type CampaignHeadline } from './campaignHeadline'
 import { campaignRelevance, type CampaignRelevance } from './campaignRelevance'
 import { campaignState } from './campaignState'
+import { landingAnswer } from './campaignsLanding'
 
 /** «النشطة» is what an operator still owns this month — serving and switched-on-but-dark alike. */
 const LIFECYCLE_LABELS: Record<Lifecycle, { ar: string; en: string }> = {
@@ -265,6 +266,20 @@ export function CampaignsPage() {
 
   const visibleCampaigns = lifecycleShown.rows
 
+  /*
+   * Computed over the campaigns the reader is actually looking at, not the whole project: an answer
+   * about «what needs attention» must describe the same set the list below it shows, or the two
+   * disagree and the reader cannot tell which is wrong.
+   */
+  const landing = useMemo(
+    () => landingAnswer(
+      visibleCampaigns.map((c) => ({ id: c.id, objective: c.objective })),
+      metricsByCampaign as Map<string, Record<string, unknown>>,
+      budget.data,
+    ),
+    [visibleCampaigns, metricsByCampaign, budget.data],
+  )
+
   const attention = useMemo(
     () => orderAttention(campaigns
       .map((c) => ({ c, flags: attentionFlags(c, metricsByCampaign.get(c.id), summary.data?.currency ?? null) }))
@@ -492,6 +507,14 @@ export function CampaignsPage() {
             </div>
             {/* Taxonomy chips — the same taxonomy the selects use, one tap away, with live counts. */}
             <div className="flex flex-wrap gap-1.5">
+            {/*
+              CAMPAIGN-INTELLIGENCE-HUB — what the workspace answers before the reader scrolls.
+
+              Counts of rows that carry their own evidence, never a score. «Nothing needs attention»
+              and «nothing could be examined» are separate answers, and a pacing question nobody
+              could measure is not answered «no».
+            */}
+            <LandingAnswer answer={landing} ar={ar} />
               {/*
                 CAMPAIGN-INTELLIGENCE-HUB — what is RUNNING, first.
                 Inactive is one click away with its count beside it: a campaign silently missing from a
@@ -718,6 +741,55 @@ const CAMPAIGN_STATE_COPY: Record<string, { ar: string; en: string }> = {
   visits_lost: { ar: 'فقد زيارات', en: 'Visits lost' },
   no_conversions: { ar: 'بلا تحويلات', en: 'No conversions' },
   conversions_without_value: { ar: 'تحويلات بلا قيمة', en: 'Conversions without value' },
+}
+
+/**
+ * The three answers, and the silences between them.
+ *
+ * Each count is rows that carry their own evidence — the diagnostic engine's finding, the backend's
+ * own pacing — never a derived score. A count of zero is shown; a count that could not be computed
+ * is said in words, because «0 overspending» and «nothing could be paced» are different answers and
+ * a zero is read as the first.
+ */
+function LandingAnswer({ answer, ar }: { answer: ReturnType<typeof landingAnswer>; ar: boolean }) {
+  const nothing = answer.needsAttention === 0 && answer.healthy === 0 && answer.unexamined === 0
+
+  if (nothing) return null
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="campaigns-landing-answer">
+      {answer.needsAttention > 0 && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-text-primary" data-testid="landing-attention">
+          <TriangleAlert size={13} className="text-warning" />
+          {ar ? `${answer.needsAttention} تحتاج انتباهًا` : `${answer.needsAttention} need attention`}
+        </span>
+      )}
+      {answer.healthy > 0 && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-text-secondary" data-testid="landing-healthy">
+          {ar ? `${answer.healthy} بلا ملاحظات` : `${answer.healthy} with nothing to flag`}
+        </span>
+      )}
+      {/*
+        Never folded into «healthy». A campaign whose connector reported nothing is not a healthy
+        campaign, and counting it as one publishes an absence of evidence as evidence of health on the
+        first figure a reader sees.
+      */}
+      {answer.unexamined > 0 && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-text-muted" data-testid="landing-unexamined">
+          {ar ? `${answer.unexamined} بلا قياس` : `${answer.unexamined} not measured`}
+        </span>
+      )}
+      {answer.overpacing === null ? (
+        <span className="text-[11px] text-text-muted" data-testid="landing-pacing-unknown">
+          {ar ? 'لا يمكن قياس وتيرة الصرف لأي حملة' : 'No campaign’s pacing could be measured'}
+        </span>
+      ) : answer.overpacing > 0 ? (
+        <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-text-primary" data-testid="landing-overpacing">
+          {ar ? `${answer.overpacing} تصرف أسرع من الخطة` : `${answer.overpacing} spending ahead of plan`}
+        </span>
+      ) : null}
+    </div>
+  )
 }
 
 function CampaignCard({ c, locale, headline, efficiency, state, freshness, trend, onOpen }: { c: UnifiedCampaign; locale: 'ar' | 'en'; headline?: CampaignHeadline | null; efficiency?: CampaignHeadline | null; state?: ReturnType<typeof campaignState>; freshness?: { relevance: CampaignRelevance; lastActiveOn: string | null }; trend?: { change: number | null; hasBaseline: boolean }; onOpen: () => void }) {
