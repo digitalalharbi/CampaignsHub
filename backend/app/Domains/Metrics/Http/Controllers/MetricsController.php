@@ -347,6 +347,58 @@ final class MetricsController extends Controller
         $q = trim($request->string('q')->toString());
 
         /*
+         * `ids` — resolving names for campaigns the reader has ALREADY chosen.
+         *
+         * The selection lives in the URL, so a shared link arrives carrying campaign ids and nothing
+         * else. Search alone cannot answer for them: the page is the first 120 campaigns by name, and
+         * a chosen campaign is very often not in it — so the control and the applied-filter chips
+         * rendered the reader's own choice as a bare uuid, on exactly the deep link somebody sent a
+         * colleague. That is a defect this endpoint created by moving the list to the server, and it
+         * belongs here rather than in a second endpoint: the same scope, the same shape, the same
+         * isolation.
+         *
+         * A resolution is not a search. `q` is ignored when ids are asked for, the cap does not apply
+         * to a set the reader already holds, and `has_more` is false because there is no more.
+         */
+        $ids = array_values(array_filter(array_map(
+            'trim',
+            is_array($raw = $request->query('ids', [])) ? $raw : explode(',', (string) $raw),
+        )));
+
+        if ($ids !== []) {
+            /*
+             * Bounded anyway. The filter row cannot hold thousands of selections, and an unbounded
+             * `whereIn` from a query string is a request somebody else can make expensive.
+             */
+            $ids = array_slice(array_unique($ids), 0, self::OPTION_LIMIT);
+
+            /*
+             * Non-uuid input is dropped rather than queried. These are uuid columns, so a hand-edited
+             * link would otherwise come back as a 500 out of the driver — and a pasted-around link is
+             * an ordinary thing to arrive malformed.
+             */
+            $ids = array_values(array_filter(
+                $ids,
+                static fn (string $id): bool => preg_match('/^[0-9a-fA-F-]{36}$/', $id) === 1,
+            ));
+
+            $named = $ids === [] ? collect() : UnifiedCampaign::query()
+                ->where('project_id', $projectId)
+                ->whereIn('id', $ids)
+                ->orderBy('name')
+                ->orderBy('id')
+                ->get(['id', 'name']);
+
+            return ApiResponse::success([
+                'options' => $named
+                    ->map(static fn ($c): array => ['id' => (string) $c->id, 'name' => (string) $c->name])
+                    ->values(),
+                'has_more' => false,
+                'limit' => self::OPTION_LIMIT,
+            ], 'Campaign options.');
+        }
+
+        /*
          * The explicit `project_id` is legibility, NOT the isolation.
          *
          * `UnifiedCampaign` is project- and tenant-scoped by global scopes that read the request's
