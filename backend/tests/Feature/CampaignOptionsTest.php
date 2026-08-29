@@ -102,6 +102,100 @@ final class CampaignOptionsTest extends TestCase
         $this->assertSame(['id', 'name'], array_keys($data['options'][0]));
     }
 
+    /**
+     * The names of campaigns the reader ALREADY chose, resolved by id.
+     *
+     * The selection lives in the URL, so a shared link arrives carrying ids and nothing else — and
+     * the option page is the first 120 campaigns by name, which very often does not contain them.
+     * Without this the control and the applied-filter chips render the reader's own choice as a bare
+     * uuid, on exactly the deep link somebody sent a colleague.
+     */
+    public function test_it_resolves_the_names_of_campaigns_already_chosen(): void
+    {
+        $wanted = $this->campaign('Zulu last by name');
+        $this->campaign('Alpha first by name');
+
+        $data = $this->fetchOptions('?ids='.$wanted->getKey());
+
+        $this->assertSame(['Zulu last by name'], array_column($data['options'], 'name'));
+        $this->assertFalse($data['has_more'], 'a resolution has no more');
+    }
+
+    /**
+     * A resolution is not a search: `q` does not narrow it.
+     *
+     * Applying the term to an id lookup would answer «that campaign does not exist» whenever the
+     * reader's search happened not to match their own selection — which is most of the time, since
+     * the reason they are typing is to find something else.
+     */
+    public function test_a_search_term_does_not_narrow_a_resolution(): void
+    {
+        $wanted = $this->campaign('Zulu last by name');
+
+        $data = $this->fetchOptions('?q=alpha&ids='.$wanted->getKey());
+
+        $this->assertSame(['Zulu last by name'], array_column($data['options'], 'name'));
+    }
+
+    /** Ids from another project are not resolved — the scope is the same one the search obeys. */
+    public function test_it_will_not_resolve_a_campaign_outside_this_project(): void
+    {
+        $otherClient = ClientWorkspace::create([
+            'tenant_id' => $this->tenant->getKey(), 'name' => 'C3', 'slug' => 'c3-'.uniqid(),
+            'mode' => 'managed', 'status' => 'active',
+        ]);
+        $other = Project::create([
+            'tenant_id' => $this->tenant->getKey(), 'client_workspace_id' => $otherClient->getKey(),
+            'name' => 'P3', 'status' => 'active',
+        ]);
+
+        $mine = $this->campaign('Mine');
+        $theirs = $this->campaign('Theirs', $other);
+
+        $names = array_column($this->fetchOptions('?ids='.$mine->getKey().','.$theirs->getKey())['options'], 'name');
+
+        $this->assertSame(['Mine'], $names);
+    }
+
+    /**
+     * A hand-edited link is refused quietly, not queried.
+     *
+     * These are uuid columns, so a truncated id goes into the WHERE clause and comes back as a 500
+     * out of the driver. A link that gets pasted around is an ordinary thing to arrive malformed.
+     */
+    public function test_a_malformed_id_is_dropped_rather_than_queried(): void
+    {
+        $mine = $this->campaign('Mine');
+
+        $data = $this->fetchOptions('?ids=not-a-uuid,'.$mine->getKey());
+
+        $this->assertSame(['Mine'], array_column($data['options'], 'name'));
+    }
+
+    /**
+     * Two hundred campaigns: the page stays bounded and says so, and a chosen one is still named.
+     *
+     * This is the cardinality the requirement is about. The old client downloaded every campaign to
+     * fill a filter; the page now stops at the cap, states that there are more, and the reader's own
+     * selection survives regardless of where it falls in the ordering.
+     */
+    public function test_at_two_hundred_campaigns_the_page_is_bounded_and_a_selection_still_resolves(): void
+    {
+        $ids = [];
+        for ($i = 0; $i < 200; $i++) {
+            $ids[] = (string) $this->campaign(sprintf('Campaign %03d', $i))->getKey();
+        }
+
+        $page = $this->fetchOptions();
+        $this->assertCount(120, $page['options'], 'the page is not bounded at the cap');
+        $this->assertTrue($page['has_more'], 'two hundred campaigns did not report more');
+
+        // The 199th by name is nowhere in that page — and is still resolvable by id.
+        $last = $ids[199];
+        $this->assertNotContains($last, array_column($page['options'], 'id'));
+        $this->assertSame(['Campaign 199'], array_column($this->fetchOptions('?ids='.$last)['options'], 'name'));
+    }
+
     /** The search runs on the server, so it reaches campaigns the client never downloaded. */
     public function test_it_searches_on_the_server(): void
     {
