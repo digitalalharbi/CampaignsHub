@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Access\Models\Role;
+use App\Domains\Branding\Models\BrandingAsset;
 use App\Domains\Branding\Models\BrandingSetting;
 use App\Domains\Branding\Services\BrandingService;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
@@ -21,6 +22,8 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -92,6 +95,26 @@ final class AgencyWhiteLabelTest extends TestCase
             'contact_name' => 'Client', 'contact_email' => $email, 'contact_phone' => '+966500000001',
             'client_id' => $space->id, 'submitted_at' => now(),
         ]);
+    }
+
+    /** One uploaded mark for a space, distinct per space so the bytes can be told apart. */
+    private function logoFor(ClientWorkspace $space): BrandingAsset
+    {
+        return app(BrandingService::class)->storeAsset(
+            'client',
+            (string) $space->id,
+            'primary_horizontal',
+            'any',
+            UploadedFile::fake()->image('logo-'.$space->slug.'.png', 64, strlen($space->name) + 16),
+        );
+    }
+
+    /** The path and query of an absolute URL, which is what the test client takes. */
+    private function pathOf(string $url): string
+    {
+        $parts = parse_url($url);
+
+        return $parts['path'].(isset($parts['query']) ? '?'.$parts['query'] : '');
     }
 
     private function portalLogin(string $email): string
@@ -175,6 +198,124 @@ final class AgencyWhiteLabelTest extends TestCase
         $this->actingAs($owner, 'sanctum')->putJson('/api/v1/branding/settings', [
             'scope' => 'client', 'scope_id' => null, 'colors' => ['primary' => '#fff'],
         ])->assertStatus(422);
+    }
+
+    /**
+     * The logo the portal hands a client is one the client can actually LOAD.
+     *
+     * `branding()` returned `branding/assets/{id}/file`, which sits behind `auth:sanctum` and
+     * `portal:app,agency`. A portal contact holds a cookie session tied to a verified contact and is
+     * not a Sanctum user, so that URL answered **401 — to the one audience it was handed to**. The
+     * portal header renders an `<img>` from it and skips its own fallback precisely BECAUSE a logo
+     * exists, so an agency that uploaded a client logo got a broken image where its brand should be.
+     * BRANDING-HIERARCHY-001 forbids exactly that: never a broken image, never a blank header.
+     *
+     * Every existing test here read the COLOURS out of that payload. Following the URL is the only
+     * assertion that could have caught this, which is why it is now the first one.
+     */
+    public function test_a_client_can_load_the_logo_the_portal_hands_them(): void
+    {
+        Storage::fake('local');
+
+        $alpha = $this->client('Alpha');
+        $this->contactIn($alpha, 'lead@logo.test');
+        $this->logoFor($alpha);
+
+        $token = $this->portalLogin('lead@logo.test');
+        $headers = $this->auth($token, $alpha->slug);
+
+        $logos = $this->withHeaders($headers)->getJson('/api/v1/client/branding')->assertOk()->json('data.logos');
+        $this->assertNotEmpty($logos, 'the portal offered no logo at all');
+
+        $this->withHeaders($headers)->get($this->pathOf((string) $logos[0]['url']))->assertOk();
+    }
+
+    /**
+     * The URL carries a ROLE, never an id.
+     *
+     * This is the isolation property stated structurally rather than by trying ids and hoping they
+     * are refused: with no identifier in the request, asking for another tenant's asset is not
+     * expressible. The shared-report logo route reaches the same guarantee the same way.
+     */
+    public function test_the_logo_url_names_a_role_and_carries_no_asset_id(): void
+    {
+        Storage::fake('local');
+
+        $alpha = $this->client('Alpha');
+        $this->contactIn($alpha, 'lead@role.test');
+        $asset = $this->logoFor($alpha);
+
+        $token = $this->portalLogin('lead@role.test');
+        $url = (string) $this->withHeaders($this->auth($token, $alpha->slug))
+            ->getJson('/api/v1/client/branding')->assertOk()->json('data.logos.0.url');
+
+        $this->assertStringContainsString('kind=primary_horizontal', $url);
+        $this->assertStringNotContainsString((string) $asset->getKey(), $url, 'the URL carried an asset id');
+        $this->assertDoesNotMatchRegularExpression('/[0-9a-f]{8}-[0-9a-f]{4}-/i', $url, 'the URL carried a uuid');
+    }
+
+    /**
+     * A kind this space has no asset for is a 404 — never somebody else's mark.
+     *
+     * The tempting failure mode is to fall back through the hierarchy on a miss, which would serve
+     * the AGENCY's logo under a request for the client's. The payload decides what exists; this route
+     * only serves what the payload already named.
+     */
+    public function test_an_unknown_or_unset_kind_is_refused_rather_than_substituted(): void
+    {
+        Storage::fake('local');
+
+        $alpha = $this->client('Alpha');
+        $this->contactIn($alpha, 'lead@miss.test');
+        $this->logoFor($alpha);
+
+        $headers = $this->auth($this->portalLogin('lead@miss.test'), $alpha->slug);
+
+        $this->withHeaders($headers)->get('/api/v1/client/branding/logo?kind=not_a_kind')->assertNotFound();
+        $this->withHeaders($headers)->get('/api/v1/client/branding/logo?kind=email_header')->assertNotFound();
+    }
+
+    /** The bytes need a portal session, exactly as the payload does. */
+    public function test_the_logo_route_needs_a_portal_session(): void
+    {
+        $this->get('/api/v1/client/branding/logo?kind=primary_horizontal')->assertUnauthorized();
+    }
+
+    /**
+     * The name and the mark come from the SAME space.
+     *
+     * Two copies of the space-resolution rule is how a portal ends up showing one client's logo above
+     * another client's name — which is worse than showing neither, because it is legible and wrong.
+     * One contact on two spaces, asked twice, must get two different marks.
+     */
+    public function test_the_logo_follows_the_same_space_as_the_name(): void
+    {
+        Storage::fake('local');
+
+        $alpha = $this->client('Alpha');
+        $beta = $this->client('Beta');
+        $this->contactIn($alpha, 'lead@two.test');
+        $this->contactIn($beta, 'lead@two.test');
+        $this->logoFor($alpha);
+        $this->logoFor($beta);
+
+        $token = $this->portalLogin('lead@two.test');
+
+        $forAlpha = $this->withHeaders($this->auth($token, $alpha->slug))
+            ->getJson('/api/v1/client/branding')->assertOk()->json('data');
+        $forBeta = $this->withHeaders($this->auth($token, $beta->slug))
+            ->getJson('/api/v1/client/branding')->assertOk()->json('data');
+
+        $this->assertSame('Alpha', $forAlpha['space']['name']);
+        $this->assertSame('Beta', $forBeta['space']['name']);
+
+        // Same role, same URL — and the BYTES differ, because the space differs.
+        $alphaBytes = $this->withHeaders($this->auth($token, $alpha->slug))
+            ->get($this->pathOf((string) $forAlpha['logos'][0]['url']))->assertOk()->streamedContent();
+        $betaBytes = $this->withHeaders($this->auth($token, $beta->slug))
+            ->get($this->pathOf((string) $forBeta['logos'][0]['url']))->assertOk()->streamedContent();
+
+        $this->assertNotSame($alphaBytes, $betaBytes, 'both spaces served the same bytes');
     }
 
     /** The client sees THEIR space's brand, resolved from their own session. */
