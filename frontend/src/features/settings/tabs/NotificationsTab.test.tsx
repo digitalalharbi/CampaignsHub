@@ -176,4 +176,24 @@ describe('the notification preferences centre', () => {
     expect(screen.getByLabelText('سرعة استهلاك الميزانية — بريد')).toBeDisabled()
     expect(screen.getByText(/البريد مغلق كليًا/)).toBeInTheDocument()
   })
+
+  /**
+   * EMAIL-SETTINGS-DEPTH-001 — the toggle the API already round-trips, on screen at last.
+   *
+   * `digests.recommendations` has been stored, validated and honoured by the digest since #156, and
+   * no screen rendered it — a setting a person cannot reach is a setting they do not have. The note
+   * beneath it states what switching it on actually admits into their inbox: a colleague's approved
+   * judgement, quoted, never advice this product derived from their figures.
+   */
+  it('renders the recommendations toggle and submits it with everything else', async () => {
+    open(prefs({ digests: { daily: true, weekly: false, monthly: false, alerts: false, recommendations: false } }))
+
+    expect(screen.getByTestId('recommendations-note')).toHaveTextContent('لن تصلك التوصيات بالبريد')
+
+    fireEvent.click(screen.getByLabelText('أدرج التوصيات المعتمدة في الملخص'))
+    fireEvent.click(screen.getByText('حفظ التفضيلات'))
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
+    expect(mutateAsync.mock.calls[0]?.[0].digests.recommendations).toBe(true)
+  })
 })

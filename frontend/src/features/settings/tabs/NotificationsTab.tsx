@@ -287,6 +287,30 @@ export function NotificationsTab() {
           )}
         </div>
 
+        <div className="mt-4">
+          <Switch
+            checked={p.digests.recommendations}
+            onCheckedChange={(v) => setP({ ...p, digests: { ...p.digests, recommendations: v } })}
+            label={ar ? 'أدرج التوصيات المعتمدة في الملخص' : 'Include approved recommendations in the summary'}
+          />
+          {/*
+            EMAIL-SETTINGS-DEPTH-001 — what this opts INTO, said plainly.
+
+            The digest quotes recommendations somebody wrote and somebody approved; it derives no
+            advice of its own. A reader deciding whether to switch this on is deciding whether a
+            colleague's approved judgement should arrive in their inbox, and the sentence says that
+            rather than describing a feature.
+          */}
+          <p className="mt-2 max-w-2xl text-[13px] leading-6 text-text-muted" data-testid="recommendations-note">
+            {p.digests.recommendations
+              ? (ar
+                ? 'يقتبس الملخص التوصيات المعتمدة فقط، ضمن الفترة التي يغطيها. لا يُنشئ النظام توصيات من الأرقام.'
+                : 'The summary quotes approved recommendations only, from the period it covers. Nothing here is generated from your figures.')
+              : (ar
+                ? 'مع إيقاف هذا الخيار لن تصلك التوصيات بالبريد، وتبقى ظاهرة في «التوصيات» داخل النظام.'
+                : 'With this off, no recommendation reaches your inbox. They stay visible under Recommendations in the product.')}
+          </p>
+        </div>
         <div className="mt-5 grid gap-4 sm:grid-cols-3">
           <Field label={ar ? 'ساعة وصول الملخص' : 'Summary arrives at'} htmlFor="digest-hour">
             <Select
