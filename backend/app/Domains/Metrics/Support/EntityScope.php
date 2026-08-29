@@ -20,9 +20,9 @@ namespace App\Domains\Metrics\Support;
 final readonly class EntityScope
 {
     /**
-     * @param  list<string>  $providers   canonical platform keys
+     * @param  list<string>  $providers  canonical platform keys
      * @param  list<string>  $objectives  RAW objectives, as the metrics API filters on
-     * @param  list<string>  $campaigns   UNIFIED campaign ids, as the filter row emits them
+     * @param  list<string>  $campaigns  UNIFIED campaign ids, as the filter row emits them
      */
     public function __construct(
         public array $providers = [],
