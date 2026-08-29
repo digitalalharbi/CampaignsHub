@@ -171,7 +171,6 @@ final class ImportExternalStructure
                 'tenant_id' => $campaign->tenant_id,
                 'campaign_id' => $campaign->unified_campaign_id,
                 'external_campaign_id' => $campaign->id,
-                'external_ad_id' => $adExternalId,
                 'name' => (string) ($creative['name'] ?? $creative['external_id']),
                 'format' => (string) ($creative['format'] ?? 'image'),
                 'thumbnail_url' => $creative['thumbnail_url'] ?? null,

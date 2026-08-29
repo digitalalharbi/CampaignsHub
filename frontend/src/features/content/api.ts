@@ -109,14 +109,13 @@ export interface CreativeCard {
   campaign_name: string | null
   /** The two rungs between the campaign and the creative — the dashboard's drill-down needs both. */
   ad_set_id: string | null
-  ad_id: string | null
   /**
-   * CREATIVE-FRONTEND-ADS-001 — every ad running this creative, not just the first one found.
+   * CREATIVE-FRONTEND-ADS-001 — every ad running this creative.
    *
-   * `ad_id` is one ad chosen from many by row order; the canonical relation is `external_ads
-   * .creative_id`, and one asset is routinely placed by several ads across squads. The backend has
-   * sent this array since the presenter was fixed; nothing consumed it, so the library kept
-   * implying each creative belonged to exactly one ad.
+   * The singular `ad_id` that used to sit here is gone. It read a column the importer rewrites on
+   * every upsert, so it named whichever ad was imported last: on the live Snapchat account four ads
+   * share each creative, and a card built from it pointed at one of four while looking definite.
+   * `external_ads.creative_id` is the canonical relation, and it is the only one now.
    */
   ads: CreativeAd[]
   preview: CreativePreview
@@ -326,7 +325,7 @@ export interface CreativeDetail {
     copy: { body: string | null; headline: string | null; description: string | null; cta: string | null }
     dimensions: { width: number | null; height: number | null; aspect_ratio: string | null; file_size: number | null }
     destination_url: string | null
-    external_ids: { creative: string; ad: string | null; ad_set: string | null; campaign: string | null }
+    external_ids: { creative: string; ad_set: string | null; campaign: string | null }
   }
   period: { from: string; to: string; days: number }
   previous_period: { from: string; to: string }

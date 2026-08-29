@@ -39,7 +39,6 @@ const card = (): CreativeCard => ({
   campaign_id: 'camp1',
   campaign_name: 'Always-On — Sales',
   ad_set_id: null,
-  ad_id: null,
   ads: [],
   preview: {
     state: 'available', kind: 'image', image_url: 'https://example.test/a.png',
@@ -62,7 +61,7 @@ const detail = (): CreativeDetail => ({
     copy: { body: 'Free delivery this week', headline: 'New season', description: null, cta: 'Shop now' },
     dimensions: { width: 1080, height: 1080, aspect_ratio: '1:1', file_size: null },
     destination_url: 'https://shop.test/new',
-    external_ids: { creative: 'x1', ad: null, ad_set: null, campaign: null },
+    external_ids: { creative: 'x1', ad_set: null, campaign: null },
   },
   period: { from: '2026-07-09', to: '2026-08-07', days: 30 },
   previous_period: { from: '2026-06-09', to: '2026-07-08' },
