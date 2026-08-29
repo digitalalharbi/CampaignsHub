@@ -14,6 +14,18 @@ export interface Lead {
   converted_opportunity_id: string | null
   converted_at: string | null
   created_at: string | null
+  /*
+   * LEAD-DEDUP-001 — the duplicate RELATIONSHIP. Never a deletion, never a hidden row.
+   *
+   * `duplicate_reason` is separate from the link because `ambiguous` is not a kind of duplicate: it
+   * is an identity whose email says one person and whose phone says another, deliberately linked to
+   * NEITHER. A row can carry a reason and no canonical, and that combination is the product
+   * declining to guess rather than a missing value.
+   */
+  canonical_lead_id?: string | null
+  duplicate_reason?: string | null
+  /** How many later arrivals this lead absorbed. Absent unless the list asked for it. */
+  duplicate_count?: number
 }
 
 export interface Opportunity {
