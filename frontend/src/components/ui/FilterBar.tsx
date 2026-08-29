@@ -251,6 +251,7 @@ export function FilterMulti({
   onChange,
   testid,
   searchAfter = 8,
+  search,
   ar,
 }: {
   label: string
@@ -260,10 +261,28 @@ export function FilterMulti({
   testid?: string
   /** Above this many options the popover grows a search box. */
   searchAfter?: number
+  /**
+   * Server-side search. When present the control stops filtering `options` itself: the term is
+   * lifted to the caller, which refetches, and whatever comes back IS the result set.
+   *
+   * Filtering locally on top of that would be wrong rather than merely redundant. Between a
+   * keystroke and its response the list on screen is the PREVIOUS term's answer, and a local filter
+   * would empty it against the new term — telling the reader nothing matched while the request that
+   * would have said otherwise is still open.
+   */
+  search?: {
+    term: string
+    onTerm: (term: string) => void
+    /** The server matched more than it returned. Never a total — the endpoint does not count. */
+    hasMore?: boolean
+    loading?: boolean
+  }
   ar: boolean
 }) {
   const [open, setOpen] = useState(false)
-  const [term, setTerm] = useState('')
+  const [localTerm, setLocalTerm] = useState('')
+  const term = search ? search.term : localTerm
+  const setTerm = search ? search.onTerm : setLocalTerm
   const box = useRef<HTMLDivElement>(null)
 
   /*
@@ -289,10 +308,13 @@ export function FilterMulti({
     }
   }, [open])
 
+  /* Identity, not the object: callers rebuild `search` every render and a memo keyed on it never holds. */
+  const remote = search !== undefined
   const shown = useMemo(() => {
+    if (remote) return options
     const q = term.trim().toLowerCase()
     return q === '' ? options : options.filter((o) => o.label.toLowerCase().includes(q))
-  }, [options, term])
+  }, [options, term, remote])
 
   /*
    * UX-MULTISELECT-SCALE-001 — the rendered list is BOUNDED, and says what it is not showing.
@@ -324,7 +346,27 @@ export function FilterMulti({
    *
    * `disabled` still refuses the interaction. It just refuses it in place.
    */
-  const empty = options.length === 0
+  /*
+   * Every label this control has ever seen for a value, kept across option-list changes.
+   *
+   * In server mode the option list is the CURRENT term's matches, so a campaign the reader already
+   * selected routinely is not in it. The closed button reads its label out of `options`, so without
+   * this it falls back to the raw value and a selected campaign reads as a bare uuid the moment the
+   * reader types anything that does not match it.
+   */
+  const seen = useRef(new Map<string, string>())
+  for (const o of options) seen.current.set(o.value, o.label)
+  const labelOf = (value: string) => seen.current.get(value) ?? value
+
+  /*
+   * An axis with nothing to choose from is disabled — but in server mode «nothing came back» is not
+   * the same fact. A term that matches no campaign returns an empty page, and disabling on that
+   * closes the popover the reader is typing in and leaves them no way to clear the term: the
+   * control would be unreachable for exactly as long as the search is wrong, which is when they
+   * most need it. So an active search, or a request still in flight, keeps it alive.
+   */
+  const empty =
+    options.length === 0 && (!search || (term.trim() === '' && search.loading !== true))
 
   const toggle = (value: string) =>
     onChange(values.includes(value) ? values.filter((v) => v !== value) : [...values, value])
@@ -348,7 +390,7 @@ export function FilterMulti({
               : values.length === 0
                 ? t('all', ar)
                 : values.length === 1
-                  ? (options.find((o) => o.value === values[0])?.label ?? values[0])
+                  ? labelOf(values[0])
                   : `${values.length}`}
           </span>
           <ChevronDown size={14} aria-hidden className="shrink-0 text-text-muted" />
@@ -361,7 +403,13 @@ export function FilterMulti({
             data-testid={testid ? `${testid}-options` : undefined}
             className="absolute top-full z-30 mt-1 max-h-72 w-64 overflow-auto rounded-xl border border-border-strong bg-surface p-1.5 shadow-[var(--shadow-medium)] start-0"
           >
-            {options.length > searchAfter && (
+            {/*
+              In server mode the box is ALWAYS drawn. `options.length` is a bounded page, not the
+              size of the estate, so it cannot answer «is this list long enough to need search» —
+              and the one case where it reads as short is a narrow term matching two campaigns,
+              which is precisely when removing the input would strand the reader mid-search.
+            */}
+            {(search !== undefined || options.length > searchAfter) && (
               <div className="sticky top-0 bg-surface pb-1.5">
                 <span className="relative block">
                   <Search
@@ -381,9 +429,22 @@ export function FilterMulti({
               </div>
             )}
 
-            {shown.length === 0 && (
-              <p className="px-2 py-3 text-center text-xs text-text-muted">{t('none', ar)}</p>
-            )}
+            {/*
+              «Nothing matched» and «nothing has arrived yet» are different answers and the reader
+              acts on them differently — one means retype, the other means wait. Reporting the
+              second as the first is the whole reason this branch checks `loading` first.
+            */}
+            {shown.length === 0 &&
+              (search?.loading === true ? (
+                <p
+                  data-testid={testid ? `${testid}-loading` : undefined}
+                  className="px-2 py-3 text-center text-xs text-text-muted"
+                >
+                  {ar ? 'جارِ البحث…' : 'Searching…'}
+                </p>
+              ) : (
+                <p className="px-2 py-3 text-center text-xs text-text-muted">{t('none', ar)}</p>
+              ))}
 
             {/*
               The scoped bulk action — «select these 111», never «select all».
@@ -439,6 +500,22 @@ export function FilterMulti({
                 {ar
                   ? `يُعرض ${visible.length} من ${shown.length} — ابحث للوصول إلى البقية`
                   : `Showing ${visible.length} of ${shown.length} — search to reach the rest`}
+              </p>
+            )}
+
+            {/*
+              The server's own «there are more». It states no total, because the endpoint counts
+              nothing: it fetches one row past the cap so «more exist» is a fact, and inventing a
+              denominator here would be the client reporting a number nobody measured.
+            */}
+            {search?.hasMore === true && (
+              <p
+                data-testid={testid ? `${testid}-has-more` : undefined}
+                className="px-2 py-2 text-center text-xs text-text-muted"
+              >
+                {ar
+                  ? `يُعرض ${shown.length} فقط — ضيّق البحث للوصول إلى البقية`
+                  : `Showing ${shown.length} — narrow the search to reach the rest`}
               </p>
             )}
 
