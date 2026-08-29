@@ -4,7 +4,7 @@ import { useParams } from 'react-router-dom'
 import { Download, Lock } from 'lucide-react'
 import { fetchSharedReport, sharedBranding, sharedDownloadUrl } from './api'
 import type { ReportFormat } from './api'
-import { headerIdentity, type SharedBranding } from './sharedBranding'
+import { headerIdentity, hideBrokenLogo, type SharedBranding } from './sharedBranding'
 import { InteractiveReport } from './InteractiveReport'
 import { LiveSharedReport } from './LiveSharedReport'
 import { SharedAttributionSection } from './SharedAttributionSection'
@@ -121,7 +121,7 @@ export function PublicReport() {
           */}
           <span className="flex items-center gap-2">
             {identity.logoUrl && (
-              <img src={identity.logoUrl} alt="" data-testid="shared-report-logo" className="h-7 w-auto max-w-[160px] object-contain" />
+              <img src={identity.logoUrl} alt="" data-testid="shared-report-logo" onError={hideBrokenLogo} className="h-7 w-auto max-w-[160px] object-contain" />
             )}
             <span className="font-heading text-lg font-extrabold tracking-tight" data-testid="shared-report-name">{identity.name}</span>
             {identity.by && (

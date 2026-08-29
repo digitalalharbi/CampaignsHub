@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { headerIdentity, type SharedBranding } from './sharedBranding'
+import { headerIdentity, hideBrokenLogo, type SharedBranding } from './sharedBranding'
 
 /**
  * BRANDING-HIERARCHY-001 — whose name and mark a client sees on their own report.
@@ -57,5 +57,24 @@ describe('the identity a shared report header shows', () => {
     expect(headerIdentity(b({ name: '' })).name).toBe('CampaignsHub')
     expect(headerIdentity(undefined).name).toBe('CampaignsHub')
     expect(headerIdentity(undefined).logoUrl).toBeNull()
+  })
+
+  /**
+   * The half `headerIdentity` cannot cover.
+   *
+   * It refuses an empty or missing url, but the backend resolved a real one — it cannot know the
+   * asset was since deleted or that storage will refuse it. The browser then paints its broken-image
+   * icon on a client's report, and «never a broken image or blank header» is exactly what this
+   * requirement forbids. Worse, a broken mark beside a real name reads as a broken REPORT.
+   *
+   * Hiding the image leaves the name, which is already the last link of the
+   * client → agency → CampaignsHub chain — so the header is never empty either.
+   */
+  it('hides a logo that resolved and then failed to load', () => {
+    const img = { currentTarget: { style: { display: '' } } }
+
+    hideBrokenLogo(img)
+
+    expect(img.currentTarget.style.display).toBe('none')
   })
 })
