@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Models\CampaignAnnotation;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
@@ -16,6 +17,7 @@ use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Notifications\Services\DailyDigest;
+use App\Domains\Notifications\Services\DigestRecommendations;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
@@ -93,6 +95,9 @@ final class UnifiedFigureConsistencyTest extends TestCase
 
     private UnifiedCampaign $campaign;
 
+    /** The neighbouring CLIENT's campaign — the name that must never appear on this project's surfaces. */
+    private UnifiedCampaign $otherCampaign;
+
     private ExternalAccount $account;
 
     protected function setUp(): void
@@ -136,6 +141,7 @@ final class UnifiedFigureConsistencyTest extends TestCase
             'name' => 'حملة أخرى', 'status' => 'active', 'objective' => 'sales',
             'total_budget' => 1000, 'budget_currency' => 'SAR',
         ]);
+        $this->otherCampaign = $otherCampaign;
 
         // ONE sync writes the figure under test; a second writes the neighbour's.
         $this->sync($this->project, $this->campaign, self::SPEND, self::CLICKS);
@@ -438,6 +444,80 @@ final class UnifiedFigureConsistencyTest extends TestCase
     }
 
     /**
+     * RECOMMENDATIONS: the screen and the digest agree, and neither publishes a retraction.
+     *
+     * This is the surface the harness had never reconciled. It carries no spend, so «the same figure
+     * everywhere» is the wrong property — what propagates here is a set of human judgements, read by
+     * two different services. `CampaignAnnotationController::projectIndex` builds the screen with a
+     * join and an ordering of its own; `DigestRecommendations::forProject` builds the email with an
+     * explicit tenant and project bound as values. Two readers, one table, and no reason they agree
+     * beyond having been written to agree — which is exactly the shape this harness exists to catch.
+     *
+     * Three properties, and the third is the one that would embarrass a customer:
+     *
+     *   1. The two surfaces name the SAME approved recommendations.
+     *   2. Neither carries the neighbouring client's, even though both clients live in this tenant.
+     *   3. A recommendation that was never approved reaches the screen — where its status is visible
+     *      and a reviewer can act on it — and NEVER the email. `hidden` and `rejected` are decisions
+     *      to stop showing something, and an inbox is the one surface that cannot be retracted.
+     */
+    public function test_recommendations_reach_the_screen_and_the_email_as_the_same_set(): void
+    {
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+
+        $approved = $this->recommendation($this->project->id, $this->campaign->id, 'approved', 'ارفع ميزانية الحملة');
+        $this->recommendation($this->project->id, $this->campaign->id, 'draft', 'مسودة لم تُراجع بعد');
+        $this->recommendation($this->project->id, $this->campaign->id, 'rejected', 'اقتراح مرفوض');
+        $neighbour = $this->recommendation(
+            $this->otherProject->id,
+            $this->otherCampaign->id,
+            'approved',
+            'توصية لعميل آخر',
+        );
+
+        app(TenantContext::class)->forget();
+
+        $screen = (array) $this->actingAs($this->operator, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->project->id}/recommendations?status=approved")
+            ->assertOk()
+            ->json('data');
+
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+        $email = app(DigestRecommendations::class)->forProject(
+            (string) $this->tenant->id,
+            (string) $this->project->id,
+            Carbon::today()->subDays(30),
+            Carbon::today(),
+        );
+        app(TenantContext::class)->forget();
+
+        $onScreen = array_column($screen, 'id');
+        $inEmail = array_column($email, 'id');
+
+        $this->assertSame([(string) $approved->id], $onScreen, 'the screen did not show the approved recommendation alone');
+        $this->assertSame($onScreen, $inEmail, 'the screen and the digest disagree about which recommendations exist');
+
+        // The neighbour, by id AND by title — an id match alone would pass a surface that leaked a
+        // sentence while renumbering it.
+        $this->assertNotContains((string) $neighbour->id, $inEmail, 'the digest carried another client’s recommendation');
+        $this->assertNotContains('توصية لعميل آخر', array_column($email, 'title'));
+        $this->assertNotContains('توصية لعميل آخر', array_column($screen, 'title'));
+
+        // The retraction rule, stated as an assertion rather than as a docblock.
+        $this->assertNotContains('مسودة لم تُراجع بعد', array_column($email, 'title'), 'a draft was mailed');
+        $this->assertNotContains('اقتراح مرفوض', array_column($email, 'title'), 'a rejected recommendation was mailed');
+
+        $unfiltered = array_column(
+            (array) $this->actingAs($this->operator, 'sanctum')
+                ->getJson("/api/v1/projects/{$this->project->id}/recommendations")
+                ->assertOk()
+                ->json('data'),
+            'title',
+        );
+        $this->assertContains('مسودة لم تُراجع بعد', $unfiltered, 'the draft vanished from the screen too — a reviewer cannot act on what they cannot see');
+    }
+
+    /**
      * A generated REPORT carries the same window as the dashboard it was made from.
      *
      * The live link is already asserted above; a generated report is the other document a client
@@ -521,6 +601,21 @@ final class UnifiedFigureConsistencyTest extends TestCase
      * Named `read`, not `get`: `TestCase::get()` is public and PHP refuses to let a subclass
      * narrow it to private, so the whole file was a fatal error before it ran a single assertion.
      */
+    /** One human-written recommendation, in a given lifecycle state. */
+    private function recommendation(string $projectId, string $campaignId, string $status, string $title): CampaignAnnotation
+    {
+        return CampaignAnnotation::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $projectId,
+            'campaign_id' => $campaignId,
+            'kind' => 'recommendation',
+            'status' => $status,
+            'title' => $title,
+            'priority' => 'high',
+            'created_by' => $this->operator->getKey(),
+        ]);
+    }
+
     private function read(string $path, string $extra = ''): TestResponse
     {
         return $this->actingAs($this->operator, 'sanctum')
