@@ -88,7 +88,6 @@ const member = (over: Partial<CreativeCard> = {}): CreativeCard =>
     campaign_id: 'cmp-1',
     campaign_name: 'Sale',
     ad_set_id: null,
-    ad_id: null,
     preview: {
       state: 'available',
       kind: 'video',

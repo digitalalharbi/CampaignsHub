@@ -77,7 +77,6 @@ const card = (over: Partial<CreativeCard> = {}): CreativeCard =>
     campaign_id: 'c1',
     campaign_name: 'National Day Sale',
     ad_set_id: null,
-    ad_id: null,
     preview: {
       state: 'available',
       kind: 'image',

@@ -92,7 +92,15 @@ final class HierarchyCountsTest extends TestCase
             ->assertSuccessful();
 
         $this->assertSame(1, ExternalAdSet::withoutGlobalScopes()->whereNotNull('external_campaign_id')->count());
-        $this->assertSame(1, ExternalCreative::withoutGlobalScopes()->whereNotNull('external_ad_id')->count());
+        /*
+         * The creative is linked through `external_ads.creative_id` — CREATIVE-COLUMN-RETIRE-001.
+         *
+         * This counted creatives whose `external_ad_id` was set, which asked «has this creative ever
+         * been linked to an ad» of a column holding whichever ad was imported LAST. The relation
+         * answers the same question without the false singular, and it is the column the report
+         * itself reads.
+         */
+        $this->assertSame(1, ExternalAd::withoutGlobalScopes()->whereNotNull('creative_id')->count());
     }
 
     /**
@@ -460,7 +468,6 @@ final class HierarchyCountsTest extends TestCase
             'tenant_id' => $this->tenant->id,
             'project_id' => $this->project->id,
             'external_campaign_id' => $campaign?->id,
-            'external_ad_id' => $ad?->id,
             'provider' => 'snapchat',
             'external_creative_id' => $externalId,
             'name' => "Creative {$externalId}",

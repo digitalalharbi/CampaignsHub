@@ -442,7 +442,22 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
           <Fact k={t.platform} v={providerLabel(creative.provider, locale)} block />
           <Fact k={t.campaign} v={creative.campaign_name ?? t.notProvided} block />
           <Fact k={t.adSet} v={creative.external_ids.ad_set ?? t.notProvided} block ltr />
-          <Fact k={t.ad} v={creative.external_ids.ad ?? t.notProvided} block ltr />
+          {/*
+            Every ad's provider id, not one of them.
+
+            This read `external_ids.ad`, which was whichever ad the importer wrote last — a single
+            value under a label that reads as «the ad's id», on an account where four ads routinely
+            share a creative. The ads come from `external_ads.creative_id` now, so the fact is the
+            same kind of fact and is no longer a false singular.
+          */}
+          <Fact
+            k={t.ad}
+            v={(creative.ads ?? []).length > 0
+              ? (creative.ads ?? []).map((ad) => ad.external_id).join(' · ')
+              : t.notProvided}
+            block
+            ltr
+          />
           <Fact k={t.objective} v={creative.objective ? objectiveLabel(creative.objective, locale) : t.notProvided} block />
           <Fact k={t.path} v={marketingPathLabel(data.path, locale)} block />
           <Fact k={t.kind} v={creativeKindLabel(preview.kind, ar)} block />
