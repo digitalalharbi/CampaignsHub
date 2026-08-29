@@ -70,6 +70,18 @@ Route::prefix('client')->name('client.')->group(function (): void {
     Route::get('/branding', [ClientPortalController::class, 'branding'])->name('branding.show')
         ->middleware('throttle:120,1');
 
+    /*
+     * The bytes behind the logo URL `branding()` hands out. `kind`, never an id — the space comes
+     * from the session, so the only thing editing this URL can change is which of this client's own
+     * marks they receive.
+     *
+     * Its own throttle ceiling, above the payload's: a page renders one branding payload and may
+     * request several marks (header, favicon), and a browser re-requests images on navigation. A
+     * shared bucket would tell a paying client their portal is broken because it drew its own logo.
+     */
+    Route::get('/branding/logo', [ClientPortalController::class, 'brandingLogo'])->name('branding.logo')
+        ->middleware('throttle:240,1');
+
     Route::get('/requests', [ClientPortalController::class, 'index'])->name('requests.index')
         ->middleware('throttle:120,1');
     Route::get('/requests/{reference}', [ClientPortalController::class, 'show'])->name('requests.show')
