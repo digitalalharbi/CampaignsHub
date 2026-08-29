@@ -23,6 +23,23 @@ export interface HeaderIdentity {
   by: string | null
 }
 
+/**
+ * A logo that WAS a valid URL and then failed to load.
+ *
+ * `headerIdentity` can only refuse an empty or missing url — the backend resolved a real one. It
+ * cannot know that the asset was since deleted, or that the storage layer will refuse it. When that
+ * happens the browser paints its broken-image icon on a client's report, which is precisely the
+ * «never a broken image or blank header» this requirement forbids, and it looks like the REPORT
+ * failed rather than the logo.
+ *
+ * So the consumer hides the image on error and lets the name stand alone. The name is already the
+ * last link of the client → agency → CampaignsHub chain, so there is always something to fall back
+ * to and never an empty header.
+ */
+export function hideBrokenLogo(event: { currentTarget: { style: { display: string } } }): void {
+  event.currentTarget.style.display = 'none'
+}
+
 export function headerIdentity(branding: SharedBranding | undefined): HeaderIdentity {
   /*
    * An empty name is not a name. A header with no text is indistinguishable from a page that failed
