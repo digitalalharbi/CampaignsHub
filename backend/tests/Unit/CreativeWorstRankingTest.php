@@ -45,7 +45,14 @@ final class CreativeWorstRankingTest extends TestCase
         $worst = $this->service->worst('awareness', $this->items());
 
         $this->assertSame('Weak', $worst[0]['campaign_name']);
-        $this->assertStringContainsString('CPM', $worst[0]['reason']);
+        /*
+         * The Arabic metric name, not the Latin acronym. The sentence is built from `RankingMetric`
+         * now — the same source the leaders' reason already used — so both ends of the list read the
+         * same way and a metric added to a layout is explained without editing the reason builder.
+         * The acronym went with the hardcoded phrasing whose `default` arm named ROAS for every
+         * objective it had not been taught.
+         */
+        $this->assertStringContainsString('تكلفة الألف ظهور', $worst[0]['reason']);
     }
 
     /**
@@ -87,7 +94,7 @@ final class CreativeWorstRankingTest extends TestCase
     {
         $worst = $this->service->worst('sales', $this->items());
 
-        $this->assertStringContainsString('ROAS', $worst[0]['reason']);
+        $this->assertStringContainsString('العائد على الإنفاق', $worst[0]['reason']);
         $this->assertStringContainsString('0.40', $worst[0]['reason']);
     }
 }
