@@ -1029,9 +1029,60 @@ final class MetricsAggregator
         return $out;
     }
 
-    public function byCampaign(Carbon $from, Carbon $to): array
+    /**
+     * Spend per campaign for one window — the light query behind a row's trend.
+     *
+     * Deliberately not `byCampaign()` recursively: that joins the campaign table, resolves objectives
+     * and asks `reportedKeysByCampaign()`, none of which a comparison figure needs. A campaign absent
+     * from the result has NO row in that window, which is a different fact from a zero and is what
+     * lets the caller refuse to invent a trend.
+     *
+     * @return array<string,float>
+     */
+    public function spendByCampaign(Carbon $from, Carbon $to): array
+    {
+        return $this->base($from, $to)
+            ->select('daily_metrics.unified_campaign_id as campaign_id')
+            ->selectRaw("COALESCE(SUM(daily_metrics.value) FILTER (WHERE daily_metrics.metric_key = 'spend'), 0) AS spend")
+            ->whereNotNull('daily_metrics.unified_campaign_id')
+            ->groupBy('daily_metrics.unified_campaign_id')
+            ->get()
+            ->mapWithKeys(static fn ($r): array => [(string) $r->campaign_id => (float) $r->spend])
+            ->all();
+    }
+
+    /**
+     * The change from a previous spend to this one, or null when no honest change exists.
+     *
+     * Null for an absent baseline (the campaign was not there) and null for a zero baseline (every
+     * rise from nothing is infinite). Both are «we cannot say», and the row renders that rather than
+     * a number the reader would act on.
+     */
+    public static function spendChange(?float $previous, float $current): ?float
+    {
+        if ($previous === null || $previous <= 0.0) {
+            return null;
+        }
+
+        return round(($current - $previous) / $previous, 4);
+    }
+
+    public function byCampaign(Carbon $from, Carbon $to, ?Carbon $prevFrom = null, ?Carbon $prevTo = null): array
     {
         $reported = $this->reportedKeysByCampaign($from, $to);
+
+        /*
+         * CAMPAIGN-INTELLIGENCE-HUB — the previous window is OPTIONAL, and its absence means «no
+         * trend», never «no change».
+         *
+         * Six callers read this method — the digest, two report services, the live link and the
+         * metrics endpoint — and only an operational listing has a comparison window to offer. Making
+         * it required would have forced five of them to invent one, and a trend measured against a
+         * window nobody chose is a figure that looks computed and is not.
+         */
+        $previousSpend = $prevFrom !== null && $prevTo !== null
+            ? $this->spendByCampaign($prevFrom, $prevTo)
+            : null;
 
         $rows = $this->base($from, $to)
             ->leftJoin('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
@@ -1109,6 +1160,29 @@ final class MetricsAggregator
                  * summed value, which is a coalesced zero for every key nobody reported.
                  */
                 'reported' => $reported[(string) $r->campaign_id] ?? [],
+                /*
+                 * The previous window's spend for THIS campaign, and the change against it.
+                 *
+                 * Both are null unless there is something real to compare with, and the two nulls mean
+                 * different things a reader must not be handed as one:
+                 *
+                 *   - no previous window was asked for — this caller does not do trends;
+                 *   - the campaign has no row in that window at all — it did not exist yet, or nothing
+                 *     was reported for it. Rendering that as «-100%» would invent a collapse for a
+                 *     campaign that simply launched this period, which is the most convincing wrong
+                 *     figure this row could carry.
+                 *
+                 * A previous spend of exactly 0 is a real measurement and is kept, but no CHANGE is
+                 * derived from it: every increase from zero is an infinite one, and «+∞%» is not a
+                 * fact about advertising.
+                 */
+                'previous_spend' => $previousSpend === null
+                    ? null
+                    : ($previousSpend[(string) $r->campaign_id] ?? null),
+                'spend_change' => self::spendChange(
+                    $previousSpend === null ? null : ($previousSpend[(string) $r->campaign_id] ?? null),
+                    (float) ($r->spend ?? 0),
+                ),
                 'status' => $r->status === null ? null : CampaignStatus::tryFrom((string) $r->status)?->value,
                 'last_active_on' => $r->last_active_on === null ? null : Carbon::parse((string) $r->last_active_on)->toDateString(),
                 'provider' => $r->provider,

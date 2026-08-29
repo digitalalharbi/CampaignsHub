@@ -314,7 +314,20 @@ final class MetricsController extends Controller
         $this->authorizeView($request);
         [$from, $to] = $this->range($request);
 
-        return ApiResponse::success($this->scoped($request)->byCampaign($from, $to), 'Metrics by campaign.', meta: $this->meta($from, $to));
+        /*
+         * CAMPAIGN-INTELLIGENCE-HUB — the same immediately-preceding window `summary()` compares
+         * against, computed the same way, so the row's trend and the strip's deltas cannot disagree
+         * about what «previous» means for one request.
+         */
+        $len = $from->diffInDays($to) + 1;
+        $prevTo = $from->copy()->subDay();
+        $prevFrom = $prevTo->copy()->subDays($len - 1);
+
+        return ApiResponse::success(
+            $this->scoped($request)->byCampaign($from, $to, $prevFrom, $prevTo),
+            'Metrics by campaign.',
+            meta: $this->meta($from, $to),
+        );
     }
 
     public function funnel(Request $request): JsonResponse

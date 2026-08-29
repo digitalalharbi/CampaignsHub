@@ -210,6 +210,19 @@ export interface CampaignRow extends MetricTotals {
    */
   status: string | null
   last_active_on: string | null
+  /**
+   * CAMPAIGN-INTELLIGENCE-HUB — the previous window, and the change against it.
+   *
+   * Both are nullable and the nulls are load-bearing. `previous_spend` is null when this campaign has
+   * NO row in the comparison window — it did not exist yet, or nothing was reported — which is a
+   * different fact from having spent zero. `spend_change` is additionally null for a zero baseline,
+   * because every rise from nothing is infinite.
+   *
+   * A caller that asked for no comparison window gets null for both, and «no trend» must never be
+   * rendered as «no change».
+   */
+  previous_spend: number | null
+  spend_change: number | null
 }
 /**
  * One stage of the project (or campaign) funnel — FUNNEL-NULL-001.

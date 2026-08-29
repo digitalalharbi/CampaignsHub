@@ -600,6 +600,10 @@ export function CampaignsPage() {
                     ordering already read. A second definition of «is this still running» is how the
                     list and the chip on its own rows end up disagreeing.
                   */
+                  trend={{
+                    change: (metricsByCampaign.get(c.id) as { spend_change?: number | null } | undefined)?.spend_change ?? null,
+                    hasBaseline: ((metricsByCampaign.get(c.id) as { previous_spend?: number | null } | undefined)?.previous_spend ?? null) !== null,
+                  }}
                   freshness={{
                     relevance: campaignRelevance(
                       {
@@ -716,7 +720,7 @@ const CAMPAIGN_STATE_COPY: Record<string, { ar: string; en: string }> = {
   conversions_without_value: { ar: 'تحويلات بلا قيمة', en: 'Conversions without value' },
 }
 
-function CampaignCard({ c, locale, headline, efficiency, state, freshness, onOpen }: { c: UnifiedCampaign; locale: 'ar' | 'en'; headline?: CampaignHeadline | null; efficiency?: CampaignHeadline | null; state?: ReturnType<typeof campaignState>; freshness?: { relevance: CampaignRelevance; lastActiveOn: string | null }; onOpen: () => void }) {
+function CampaignCard({ c, locale, headline, efficiency, state, freshness, trend, onOpen }: { c: UnifiedCampaign; locale: 'ar' | 'en'; headline?: CampaignHeadline | null; efficiency?: CampaignHeadline | null; state?: ReturnType<typeof campaignState>; freshness?: { relevance: CampaignRelevance; lastActiveOn: string | null }; trend?: { change: number | null; hasBaseline: boolean }; onOpen: () => void }) {
   const unlinked = (c.external_campaigns_count ?? 0) === 0
   return (
     <button onClick={onOpen} data-testid="campaign-card" className="flex flex-col gap-2.5 rounded-2xl border border-border bg-surface p-4 text-start shadow-[var(--shadow-small)] transition-colors hover:border-brand-300 hover:bg-surface-hover">
@@ -768,6 +772,27 @@ function CampaignCard({ c, locale, headline, efficiency, state, freshness, onOpe
           not say it ended, and the window is the only evidence there is. So the chip names the
           shared relevance rule's own answer and, where there is one, the day itself.
         */}
+        {/*
+          CAMPAIGN-INTELLIGENCE-HUB — spend against the previous window, and only where there IS one.
+
+          A campaign with no row in that window did not exist yet or reported nothing, and a pill
+          reading «-100%» there is a collapse that never happened. The row says «لا أساس للمقارنة»
+          instead, because a missing trend and a flat trend are different facts and a muted pill
+          reading «—» is easily taken for the second.
+        */}
+        {trend !== undefined && (
+          trend.change !== null ? (
+            <span className="self-start" data-testid="campaign-trend">
+              <TrendPill delta={trend.change} />
+            </span>
+          ) : (
+            <span className="self-start text-[11px] text-text-muted" data-testid="campaign-trend-no-baseline">
+              {trend.hasBaseline
+                ? (locale === 'ar' ? 'لا تغيّر يمكن قياسه' : 'No measurable change')
+                : (locale === 'ar' ? 'لا أساس للمقارنة' : 'No baseline to compare')}
+            </span>
+          )
+        )}
         {freshness !== undefined && (
           <span
             className="inline-flex items-center gap-1 self-start text-[11px] text-text-muted"

@@ -246,6 +246,79 @@ final class CampaignOrderingTest extends TestCase
         ]);
     }
 
+    /**
+     * CAMPAIGN-INTELLIGENCE-HUB — a trend, and the two silences that must not become numbers.
+     *
+     * `spendChange` is where an operational row stops describing and starts implying a direction, so
+     * it refuses in the two cases where any number would be invented:
+     *
+     *   - **no baseline.** The campaign has no row in the previous window at all — it launched this
+     *     period, or nothing was reported for it. «-100%» there is a collapse that never happened, and
+     *     it is the most convincing wrong figure this row could carry.
+     *   - **a zero baseline.** Every rise from nothing is infinite, and «+∞%» is not a fact about
+     *     advertising. The measured zero is still carried; only the derived change is withheld.
+     */
+    public function test_a_campaign_with_no_previous_window_gets_no_trend(): void
+    {
+        $this->assertNull(MetricsAggregator::spendChange(null, 900.0), 'a launch was rendered as a change');
+        $this->assertNull(MetricsAggregator::spendChange(0.0, 900.0), 'a rise from zero was given a percentage');
+    }
+
+    /** With a real baseline it is ordinary arithmetic, and it keeps its sign. */
+    public function test_a_real_baseline_produces_the_change_against_it(): void
+    {
+        $this->assertSame(0.5, MetricsAggregator::spendChange(100.0, 150.0));
+        $this->assertSame(-0.25, MetricsAggregator::spendChange(200.0, 150.0));
+        $this->assertSame(0.0, MetricsAggregator::spendChange(100.0, 100.0));
+    }
+
+    /**
+     * Through the database: the row carries the previous window's spend, and a campaign that did not
+     * exist then carries null rather than a zero it never measured.
+     */
+    public function test_the_row_carries_its_previous_spend_and_refuses_to_invent_one(): void
+    {
+        $running = $this->campaign('Running both periods', 'active');
+        $launched = $this->campaign('Launched this period', 'active');
+
+        // Previous window: only one of them reported anything at all.
+        $this->sync($running, 100.0, '2026-06-10');
+        // Current window: both did.
+        $this->sync($running, 150.0, '2026-07-10');
+        $this->sync($launched, 900.0, '2026-07-10');
+
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $rows = app(MetricsAggregator::class)
+            ->forProjects([(string) $this->project->id])
+            ->byCampaign(
+                Carbon::parse(self::WINDOW_FROM),
+                Carbon::parse(self::WINDOW_TO),
+                Carbon::parse('2026-06-01'),
+                Carbon::parse('2026-06-30'),
+            );
+
+        $by = collect($rows)->keyBy('campaign_id');
+
+        $this->assertSame(100.0, $by[(string) $running->id]['previous_spend']);
+        $this->assertSame(0.5, $by[(string) $running->id]['spend_change']);
+
+        $this->assertNull($by[(string) $launched->id]['previous_spend'], 'a campaign that did not exist got a baseline');
+        $this->assertNull($by[(string) $launched->id]['spend_change'], 'a launch was rendered as a change');
+    }
+
+    /** Without a previous window nothing pretends to know one — five other callers depend on that. */
+    public function test_a_caller_that_asks_for_no_trend_gets_none(): void
+    {
+        $c = $this->campaign('No trend asked', 'active');
+        $this->sync($c, 150.0, '2026-07-10');
+
+        $rows = $this->rows();
+
+        $this->assertNull($rows[0]['previous_spend']);
+        $this->assertNull($rows[0]['spend_change']);
+    }
+
     private function sync(UnifiedCampaign $campaign, float $spend, string $date, ?string $extraKey = null, ?float $extraValue = null): void
     {
         $this->holdingTenant((string) $this->tenant->id);
