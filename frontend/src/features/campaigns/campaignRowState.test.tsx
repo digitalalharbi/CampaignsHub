@@ -64,10 +64,14 @@ describe('the concise state on a campaign row', () => {
       data: [
         {
           campaign_id: 'broken', last_active_on: today, reported: REPORTED,
+          // A real baseline, so this row can carry a measurable change.
+          previous_spend: 500, spend_change: 1.0,
           spend: 1000, impressions: 0, clicks: 0, landing_page_views: 0, conversions: 0, revenue: 0,
         },
         {
           campaign_id: 'fine', last_active_on: today, reported: REPORTED,
+          // No row in the comparison window at all — it launched this period.
+          previous_spend: null, spend_change: null,
           spend: 1000, impressions: 100000, clicks: 500, landing_page_views: 400, conversions: 10, revenue: 5000,
         },
         // Every figure zero because nothing was ever reported — the coalesced-zero trap, per campaign.
@@ -128,5 +132,24 @@ describe('the concise state on a campaign row', () => {
     // «On but quiet» is switched on and has not reported for weeks. Status alone would call it
     // serving; the shared rule calls it idle, and the row must say what the rule says.
     expect(screen.getByTestId('campaign-freshness-idle')).toBeInTheDocument()
+  })
+
+  /**
+   * A trend is shown only where there is a baseline to measure against.
+   *
+   * The campaign that launched this period has no row in the comparison window, and a pill reading
+   * «-100%» there is a collapse that never happened. The row says it has no baseline instead — a
+   * missing trend and a flat trend are different facts, and a muted «—» pill is easily read as the
+   * second.
+   */
+  it('shows a trend where there is a baseline and says so where there is not', async () => {
+    renderWithProviders(<CampaignsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('view-cards'))
+
+    await screen.findByText('Healthy')
+
+    expect(screen.queryAllByTestId('campaign-trend').length).toBeGreaterThan(0)
+    expect(screen.queryAllByTestId('campaign-trend-no-baseline').length).toBeGreaterThan(0)
+    expect(screen.getAllByTestId('campaign-trend-no-baseline')[0]).toHaveTextContent('No baseline')
   })
 })
