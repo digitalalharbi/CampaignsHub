@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Queue;
 
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -78,6 +79,50 @@ final class QueueContract
         ksort($timeouts);
 
         return $timeouts;
+    }
+
+    /**
+     * AUTOMATION-FIRST-OPERATIONS-001 — the retry STANCE every queued job has to take.
+     *
+     * `jobTimeouts()` above answers «how long may this run». This answers the other half the
+     * requirement names: retry, backoff and failure classification. Discovered the same way and for
+     * the same reason — a written list is the thing nobody updates, and the failure being guarded
+     * against is a NEW job shipping with no stance at all.
+     *
+     * Two numbers, both read from the class rather than from a convention:
+     *
+     *   - `tries`: Laravel treats an absent or zero `$tries` as «retry forever» unless `retryUntil()`
+     *     bounds it. Unbounded is not a stance — it is how a deterministic product defect becomes a
+     *     job that fails every ninety seconds until somebody notices the queue, which is precisely
+     *     the «automatic retry that hides a deterministic defect» this requirement forbids.
+     *   - `backoff`: only meaningful when a job retries at all. Three immediate attempts against a
+     *     throttled provider is not a retry policy; it is the same failure three times in a second,
+     *     and against a rate limiter it is how a 429 becomes a longer 429.
+     *
+     * `retryUntil` counts as a bound, and `failed` as a declared classification, so a job may satisfy
+     * the policy in more than one way — the point is that it says something, not that it says this.
+     *
+     * @return array<class-string, array{tries: int|null, retryUntil: bool, backoff: bool, failed: bool, unique: bool}>
+     */
+    public static function jobRetryStances(): array
+    {
+        $stances = [];
+
+        foreach (array_keys(self::jobTimeouts()) as $class) {
+            $reflection = new ReflectionClass($class);
+
+            $stances[$class] = [
+                'tries' => $reflection->hasProperty('tries')
+                    ? $reflection->getProperty('tries')->getDefaultValue()
+                    : null,
+                'retryUntil' => $reflection->hasMethod('retryUntil'),
+                'backoff' => $reflection->hasMethod('backoff') || $reflection->hasProperty('backoff'),
+                'failed' => $reflection->hasMethod('failed'),
+                'unique' => $reflection->implementsInterface(ShouldBeUnique::class),
+            ];
+        }
+
+        return $stances;
     }
 
     /**

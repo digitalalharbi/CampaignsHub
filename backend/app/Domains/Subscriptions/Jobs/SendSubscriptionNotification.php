@@ -38,6 +38,23 @@ final class SendSubscriptionNotification implements ShouldQueue
 
     public int $tries = 3;
 
+    /**
+     * Mail throttling is the reason this exists.
+     *
+     * SES and every SMTP relay answer a burst with a temporary refusal, and three immediate attempts
+     * against one is not a retry policy — it is the same rejection three times inside a second,
+     * spending the attempts while the limiter is still counting, and turning a transient 421 into a
+     * subscription notice the customer never receives. The ladder is minutes rather than seconds
+     * because that is the timescale a sending limit resets on, and because nothing about a renewal
+     * notice needs to arrive in the next ten seconds.
+     *
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [60, 300, 900];
+    }
+
     public function __construct(private readonly string $notificationId) {}
 
     public function handle(): void

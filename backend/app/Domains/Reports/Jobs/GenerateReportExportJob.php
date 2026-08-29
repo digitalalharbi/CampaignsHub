@@ -23,6 +23,22 @@ final class GenerateReportExportJob implements ShouldQueue
 
     public int $timeout = 180;
 
+    /**
+     * Three attempts, not three attempts in one second.
+     *
+     * A render fails for reasons that are still true a moment later — memory pressure on the box, a
+     * storage endpoint refusing writes, a font or binary temporarily unavailable. Retrying instantly
+     * repeats the failure while its cause is at its worst, spends the attempts, and reports a
+     * permanent failure for a condition that would have cleared. Longer than the data job's ladder
+     * because a render costs more and its failures are more often about resources than about input.
+     *
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [30, 90, 300];
+    }
+
     public function __construct(public readonly string $exportId)
     {
         $this->onQueue('reports');
