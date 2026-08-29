@@ -265,6 +265,47 @@ final class DigestMailRenderTest extends TestCase
     }
 
     /**
+     * BRANDING-HIERARCHY-001 — the digest goes out under the AGENCY's name, not the product's.
+     *
+     * An agency's operator opening their morning summary should see their own firm on it. The subject
+     * line and the body both carried `config('brand.name')` unconditionally, so every installation's
+     * mail said CampaignsHub — the one surface where the white-label the operator configured was
+     * silently ignored.
+     *
+     * The agency layer is the right one for a digest specifically: it can span several of that
+     * agency's clients, and naming one client on a summary about all of them would be wrong in a way
+     * the reader could not detect.
+     */
+    public function test_the_digest_carries_the_agencys_name_rather_than_the_products(): void
+    {
+        $html = (new DailyDigestMail($this->digest(), 'en', 'Mohammed', 'daily', 'Nakheel Media'))->render();
+
+        $this->assertStringContainsString('Nakheel Media', $html);
+
+        $subject = (new DailyDigestMail($this->digest(), 'en', 'Mohammed', 'daily', 'Nakheel Media'))
+            ->envelope()->subject;
+
+        $this->assertStringStartsWith('Nakheel Media —', $subject, 'the subject still announced the product');
+    }
+
+    /**
+     * Safe fallback, the last link of the same chain.
+     *
+     * An installation with no agency identity — and the mail gallery, which has no tenant at all —
+     * gets the product's name. A blank sender is not an option: an email from nobody is worse than an
+     * email from the platform.
+     */
+    public function test_an_unbranded_installation_still_sends_under_the_products_name(): void
+    {
+        foreach ([null, '', '   '] as $absent) {
+            $subject = (new DailyDigestMail($this->digest(), 'en', 'Mohammed', 'daily', $absent))
+                ->envelope()->subject;
+
+            $this->assertStringStartsWith((string) config('brand.name').' —', $subject);
+        }
+    }
+
+    /**
      * A digest with the new sections, built by hand.
      *
      * @return array<string,mixed>
