@@ -334,6 +334,76 @@ final class UnifiedFigureConsistencyTest extends TestCase
     }
 
     /**
+     * MONEY-USD-002 — every surface states the SAME unit for the same window.
+     *
+     * The harness above proves the figures match. A figure is only half a statement: 100 rendered under
+     * «SAR» when it is 100 USD is a 3.75× error that looks entirely correct, and it is the one kind of
+     * wrongness a reader cannot detect by looking. The client link is where it would survive longest —
+     * read by somebody with no session, no second surface to compare against, and no way to ask.
+     *
+     * The metrics surfaces derive the unit from the rows themselves (`rangeCurrency`). A report carries
+     * a STORED `currency` column instead. Those are two sources for one fact, which is the shape every
+     * divergence in this file has taken, so the parity is asserted rather than assumed.
+     */
+    public function test_every_surface_states_the_same_currency_for_the_window(): void
+    {
+        $summary = $this->read('metrics/summary')->json('data.currency');
+
+        $this->assertNotNull($summary, 'the dashboard did not say what its money is in');
+
+        $stated = [
+            'dashboard' => $summary,
+            'entities' => $this->read('metrics/entities/ad_set')->json('data.currency'),
+        ];
+
+        // The generated report and the client link — the two surfaces furthest from the aggregator.
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $report = Report::create([
+            'project_id' => $this->project->id,
+            'name' => 'Currency parity',
+            'type' => 'executive',
+            // Completed with a document, because an unpublished report has no client link to read —
+            // the same shape the share test above uses.
+            'status' => 'completed',
+            // Stamped SAR at creation, which is what a report carries today: a STORED unit rather than
+            // one derived from the rows. If the two can disagree, this is where it shows.
+            'currency' => 'SAR',
+            'period_start' => '2026-07-01',
+            'period_end' => '2026-07-31',
+            'data' => ['kpis' => ['spend' => self::SPEND]],
+        ]);
+
+        $generated = app(ReportGenerator::class)->generate($report);
+        $stated['report'] = $generated['currency'] ?? null;
+
+        [, $raw] = app(ShareService::class)->create($report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [$this->campaign->id],
+                'providers' => ['meta'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        app(ProjectContext::class)->forget();
+        app(TenantContext::class)->forget();
+
+        $stated['client_link'] = $this->getJson('/api/v1/reports/shared/'.$raw)
+            ->assertOk()
+            ->json('data.currency');
+
+        foreach ($stated as $surface => $currency) {
+            $this->assertSame(
+                $summary,
+                $currency,
+                "«{$surface}» states {$currency} for a window the dashboard states {$summary} for — one of them is mislabelling real money",
+            );
+        }
+    }
+
+    /**
      * Content and Alerts read the same ingested window — and say nothing false when it is empty.
      *
      * Neither carries a spend total to reconcile, so the property is different and worth stating: a
