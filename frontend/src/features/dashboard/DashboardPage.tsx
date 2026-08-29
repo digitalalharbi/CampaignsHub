@@ -22,6 +22,7 @@ import {
   useSummary,
   useTimeseries,
 } from '../analytics/hooks'
+import { useCampaignOptionSource } from '../analytics/useCampaignOptionSource'
 import { Panel, ProvenanceBadge, SERIES, tooltipProps } from '../analytics/components'
 import { compact, money, num, percent, ratio } from '../analytics/format'
 import { UnifiedCampaignOverview, providerName, type OverviewVM } from '@/features/campaigns/overview/UnifiedCampaignOverview'
@@ -244,15 +245,14 @@ export function DashboardPage() {
   const freshness = useFreshness(currentProjectId, range, filters)
 
   /*
-   * The campaign OPTIONS come from an unnarrowed request.
+   * The campaign OPTIONS come from the server's option endpoint, unnarrowed.
    *
    * Reading them off `campaigns` would collapse the list to the one campaign already chosen, and a
-   * multi-select you cannot add a second value to is a single-select that lies about it.
+   * multi-select you cannot add a second value to is a single-select that lies about it. The
+   * endpoint is also unwindowed by the period, so a campaign that reported nothing this month is
+   * still selectable — which is the point, since its silence is what the reader is investigating.
    */
-  const campaignOptions = useCampaigns(currentProjectId, range, useMemo(
-    () => ({ provider: providers, objective: objectiveFilter }),
-    [providers, objectiveFilter],
-  ))
+  const campaignSource = useCampaignOptionSource(currentProjectId, campaignIds)
 
   const commerce = summary.data?.commerce ?? null
   const points = series.data ?? []
@@ -380,7 +380,7 @@ export function DashboardPage() {
       out.push({
         key: `campaign:${id}`,
         axis: t.campaign,
-        label: campaignOptions.data?.find((c) => String(c.campaign_id) === id)?.campaign_name ?? id,
+        label: campaignSource.labelOf(id),
         onRemove: () => setCampaignIds((prev) => prev.filter((x) => x !== id)),
       })
     })
@@ -394,7 +394,7 @@ export function DashboardPage() {
     }
 
     return out
-  }, [clientId, clients, providers, campaignIds, campaignOptions.data, objective, t, ar])
+  }, [clientId, clients, providers, campaignIds, campaignSource, objective, t, ar])
 
   const resetFilters = () => {
     setClientId('all')
@@ -502,10 +502,8 @@ export function DashboardPage() {
           ar={ar}
           values={campaignIds}
           testid="dashboard-campaign"
-          options={(campaignOptions.data ?? []).map((c) => ({
-            value: String(c.campaign_id),
-            label: c.campaign_name ?? String(c.campaign_id),
-          }))}
+          options={campaignSource.options}
+          search={campaignSource.search}
           onChange={setCampaignIds}
         />
 

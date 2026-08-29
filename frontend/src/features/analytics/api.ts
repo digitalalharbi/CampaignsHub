@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { getData } from '@/lib/api/client'
 import type { FilterScope } from './filterScope'
 
@@ -644,6 +644,71 @@ export const useAccounts = (p: string | null, r: Range, f?: MetricFilters) =>
   useMetric<AccountRow[]>('accounts', p, r, 'accounts', f)
 
 export const useCampaigns = (p: string | null, r: Range, f?: MetricFilters) => useMetric<CampaignRow[]>('campaigns', p, r, 'campaigns', f)
+/**
+ * UX-MULTISELECT-SCALE-002 — the campaign selector's options come from the SERVER.
+ *
+ * The selector used to read `useCampaigns`, the breakdown. That is the wrong source twice over.
+ *
+ * It is windowed by the chosen period, so a campaign that reported nothing in the range is absent
+ * from the control — and «this campaign went quiet» is frequently the exact question the reader
+ * opened the filter to ask. And it carries a full metrics row per campaign to populate a list that
+ * needs an id and a name, so the wire cost of opening a filter scales with the estate.
+ *
+ * `q` is the reader's term, sent to the server. The endpoint answers a bounded page and states
+ * `has_more` as a fact rather than leaving the client to infer it from a full page.
+ */
+export interface CampaignOption {
+  id: string
+  name: string
+}
+
+export interface CampaignOptionPage {
+  options: CampaignOption[]
+  /** The server matched more than it returned. NOT a count — the endpoint deliberately never counts. */
+  has_more: boolean
+  limit: number
+}
+
+/**
+ * The NAMES of campaigns the reader has already chosen.
+ *
+ * The selection lives in the URL, so a shared link arrives carrying ids and nothing else — and the
+ * option page is the first 120 campaigns by name, which very often does not contain them. Without
+ * this the control and the applied-filter chips render the reader's own choice as a bare uuid on
+ * exactly the deep link somebody sent a colleague.
+ *
+ * A separate query rather than a widened one: it is keyed by the ids, so it is cached per selection
+ * and is not refetched by every keystroke in the search box.
+ */
+export const useCampaignNames = (projectId: string | null, ids: string[]) =>
+  useQuery({
+    queryKey: ['metrics', 'campaign-names', projectId, [...ids].sort().join(',')],
+    queryFn: () =>
+      getData<CampaignOptionPage>(
+        `${base(projectId!)}/campaign-options?ids=${encodeURIComponent(ids.join(','))}`,
+      ),
+    enabled: Boolean(projectId) && ids.length > 0,
+    /* Names do not change while a page is open, and a re-render must not re-ask. */
+    staleTime: 5 * 60_000,
+  })
+
+export const useCampaignOptions = (projectId: string | null, term: string) =>
+  useQuery({
+    queryKey: ['metrics', 'campaign-options', projectId, term],
+    queryFn: () =>
+      getData<CampaignOptionPage>(
+        `${base(projectId!)}/campaign-options${term === '' ? '' : `?q=${encodeURIComponent(term)}`}`,
+      ),
+    enabled: Boolean(projectId),
+    /*
+     * The previous page stays on screen while the next term is in flight. Without this every
+     * keystroke empties the list for the duration of a round trip, and an empty list is how the
+     * control tells a reader their campaign does not exist — so it would say that, repeatedly and
+     * wrongly, to anyone who types at a normal speed.
+     */
+    placeholderData: keepPreviousData,
+  })
+
 export const useFunnel = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FunnelStage[]>('funnel', p, r, 'funnel', f)
 export const useBudget = (p: string | null, r: Range, f?: MetricFilters) => useMetric<BudgetRow[]>('budget', p, r, 'budget', f)
 export const useAccountBudgets = (p: string | null, r: Range, f?: MetricFilters) =>
