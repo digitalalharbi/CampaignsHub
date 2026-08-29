@@ -48,7 +48,6 @@ const card = (over: Record<string, unknown> = {}) => ({
   campaign_id: 'camp1',
   campaign_name: 'Always-On',
   ad_set_id: null,
-  ad_id: null,
   ads: [],
   preview: PREVIEW,
   aspect_ratio: null,
