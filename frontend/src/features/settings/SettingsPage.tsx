@@ -6,6 +6,7 @@ import { TeamTab } from './tabs/TeamTab'
 import { NotificationsTab } from './tabs/NotificationsTab'
 import { NotificationRecipients } from './tabs/NotificationRecipients'
 import { TeamNotifications } from './tabs/TeamNotifications'
+import { DeliveryLog } from './tabs/DeliveryLog'
 import { SecurityTab } from './tabs/SecurityTab'
 import { BrandingTab } from './tabs/BrandingTab'
 import { ClientsTab } from './tabs/ClientsTab'
@@ -94,6 +95,13 @@ export function SettingsPage({ only, title, subtitle }: Props = {}) {
                 change things rather than above them.
               */}
               <TeamNotifications />
+              {/*
+                EMAIL-SETTINGS-DEPTH-001 — last, because it is read after the two boards above have
+                failed to explain something. «Who is subscribed» is checked first; «what actually
+                left» is what somebody opens when the subscription looks right and the mail is not
+                arriving.
+              */}
+              <DeliveryLog />
             </div>
           )}
           {tab === 'security' && <SecurityTab />}
