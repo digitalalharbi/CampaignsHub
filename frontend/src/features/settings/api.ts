@@ -149,7 +149,13 @@ export interface NotifPrefs {
   frequency: 'realtime' | 'hourly' | 'daily'
   project_ids: string[] | null
   projects: { id: string; name: string; client_name: string | null }[]
-  digests: { daily: boolean; weekly: boolean; monthly: boolean; alerts: boolean }
+  /**
+   * EMAIL-SETTINGS-DEPTH-001 — `recommendations` rides here beside the rhythm opt-ins rather than in
+   * a column of its own, so a preferences row written before the setting existed simply has no key.
+   * The API defaults it to `false`: an absent preference is not consent to put a colleague's approved
+   * judgement into somebody's inbox.
+   */
+  digests: { daily: boolean; weekly: boolean; monthly: boolean; alerts: boolean; recommendations: boolean }
   available_digests: string[]
   timezone: string
   locale: 'ar' | 'en'
