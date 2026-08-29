@@ -59,7 +59,25 @@ final class DailyDigestMail extends Mailable
          * that breaks.
          */
         private readonly string $kind = 'daily',
+        /*
+         * BRANDING-HIERARCHY-001 — whose product this email is from.
+         *
+         * Null means «the platform», which is what an unbranded installation and the mail gallery
+         * both want. The AGENCY layer is the right one for a digest: it can span several of that
+         * agency's clients, so a client identity would name one of them on a summary about all of
+         * them. Resolved by the caller through the same `SharedLinkBranding` the reports use — this
+         * class must not grow a second branding engine, and the requirement says so in capitals.
+         */
+        private readonly ?string $senderName = null,
     ) {}
+
+    /** The name this email presents itself under — the agency's, or the product's. */
+    private function brandName(): string
+    {
+        $name = trim((string) ($this->senderName ?? ''));
+
+        return $name !== '' ? $name : (string) config('brand.name');
+    }
 
     public function envelope(): Envelope
     {
@@ -82,8 +100,8 @@ final class DailyDigestMail extends Mailable
 
         return new Envelope(
             subject: $ar
-                ? config('brand.name')." — {$spend} {$when}، {$results} نتيجة"
-                : config('brand.name')." — {$spend} {$when}, {$results} results",
+                ? $this->brandName()." — {$spend} {$when}، {$results} نتيجة"
+                : $this->brandName()." — {$spend} {$when}, {$results} results",
         );
     }
 
@@ -108,7 +126,7 @@ final class DailyDigestMail extends Mailable
                 // The side a border sits on. Logical properties do not exist in Outlook, so the
                 // direction is resolved once here rather than guessed at in the template.
                 'startSide' => $ar ? 'right' : 'left',
-                'brand' => (string) config('brand.name'),
+                'brand' => $this->brandName(),
                 'year' => date('Y'),
                 'subject' => $this->envelope()->subject,
                 'preheader' => $ar
