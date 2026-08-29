@@ -114,7 +114,7 @@ const TAB_GROUPS = [
       { id: 'campaigns', ar: 'الحملات', en: 'Campaigns' },
       { id: 'ad_sets', ar: 'المجموعات', en: 'Ad sets' },
       { id: 'ads', ar: 'الإعلانات', en: 'Ads' },
-      { id: 'creative', ar: 'المحتوى', en: 'Creative' },
+      { id: 'creative', ar: 'الإعلان', en: 'Ad' },
     ],
   },
   {
@@ -1519,7 +1519,7 @@ function DrillCrumbs({ path, level, ar, onUpTo }: { path: DrillStep[]; level: Dr
     campaign: { ar: 'حملة', en: 'Campaign' },
     ad_set: { ar: 'مجموعة', en: 'Ad set' },
     ad: { ar: 'إعلان', en: 'Ad' },
-    creative: { ar: 'محتوى', en: 'Creative' },
+    creative: { ar: 'إعلان', en: 'Ad' },
   }
 
   return (
@@ -1989,8 +1989,8 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
         tab: { value: TAB_FOR[lvl], fallback: 'performance' },
       })} />
       <Panel
-        title={ar ? 'أداء المحتوى' : 'Creative performance'}
-        description={ar ? 'من بيانات المحتوى نفسه — لا تُنسب أرقام الحملة إلى محتوى' : 'From creative-level data — campaign figures are never attributed to a creative'}
+        title={ar ? 'أداء الإعلانات' : 'Ad performance'}
+        description={ar ? 'من بيانات الإعلان نفسه — لا تُنسب أرقام الحملة إلى إعلان' : 'From ad-level data — campaign figures are never attributed to a ad'}
         loading={q.isLoading}
         error={q.isError}
         /* Narrowed and empty is «nothing under this ad», never «no creatives at all». */
@@ -1999,8 +1999,8 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
         {!q.isLoading && !q.isError && rows.length === 0 && narrowed && (
           <p className="rounded-xl border border-border p-3 text-sm text-text-muted" data-testid="creative-empty-under-parent">
             {ar
-              ? 'لا يوجد محتوى مسجَّل تحت هذا المستوى في هذه الفترة. هذا ليس «لا يوجد محتوى» للمشروع.'
-              : 'No creative was reported under this level in this period. That is not «no creatives» for the project.'}
+              ? 'لا يوجد إعلان مسجَّل تحت هذا المستوى في هذه الفترة. هذا ليس «لا يوجد إعلان» للمشروع.'
+              : 'No ad was reported under this level in this period. That is not «no ads» for the project.'}
           </p>
         )}
         {/*
@@ -2012,7 +2012,7 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
         <div data-testid="creative-analysis-table">
           <MetricTable
             head={[
-              ar ? 'المحتوى' : 'Creative',
+              ar ? 'الإعلان' : 'Ad',
               ar ? 'الحملة' : 'Campaign',
               ar ? 'الهدف' : 'Objective',
               ar ? 'الإنفاق' : 'Spend',

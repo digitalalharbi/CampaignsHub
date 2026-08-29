@@ -769,8 +769,8 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
   const rows = creatives.data ?? []
 
   if (creatives.isLoading) return <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-56" />)}</div>
-  if (creatives.isError) return <ErrorState error={creatives.error} title="تعذّر تحميل المحتويات" onRetry={() => creatives.refetch()} />
-  if (rows.length === 0) return <EmptyState title="لا محتويات" description="لا توجد محتويات مزامنة لهذه الحملة بعد. تظهر تلقائيًا بعد مزامنة الإعلانات من المنصة." />
+  if (creatives.isError) return <ErrorState error={creatives.error} title="تعذّر تحميل الإعلانات" onRetry={() => creatives.refetch()} />
+  if (rows.length === 0) return <EmptyState title="لا إعلانات" description="لا توجد إعلانات مزامنة لهذه الحملة بعد. تظهر تلقائيًا بعد مزامنة الإعلانات من المنصة." />
 
   const cls = (k: string) => CREATIVE_CLASS[k] ?? CREATIVE_CLASS.insufficient_data
   const Preview = ({ c }: { c: import('./metrics').CampaignCreative }) => (
@@ -815,7 +815,7 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border">
           <table className="w-full text-sm">
-            <thead className="bg-surface-secondary text-xs text-text-muted"><tr>{['المحتوى', 'المنصة', 'الإنفاق', 'النتائج', 'CPA', 'ROAS', 'CTR', 'التصنيف'].map((h) => <th key={h} className="p-2 text-start font-semibold">{h}</th>)}</tr></thead>
+            <thead className="bg-surface-secondary text-xs text-text-muted"><tr>{['الإعلان', 'المنصة', 'الإنفاق', 'النتائج', 'CPA', 'ROAS', 'CTR', 'التصنيف'].map((h) => <th key={h} className="p-2 text-start font-semibold">{h}</th>)}</tr></thead>
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id} className="border-t border-border">
