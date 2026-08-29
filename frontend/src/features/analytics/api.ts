@@ -598,6 +598,8 @@ export interface EntityRow extends MoneyProvenance {
 }
 
 export interface EntityPage {
+  /** ANALYTICS-FILTER-TRUTH-001 — the drill-down applies all three axes; this states that it did. */
+  filter_scope?: FilterScope
   entities: EntityRow[]
   entity_type: string
   period: { from: string; to: string }

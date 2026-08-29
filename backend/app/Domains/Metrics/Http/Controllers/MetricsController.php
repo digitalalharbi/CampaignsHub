@@ -18,6 +18,7 @@ use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\EntityMetricsAggregator;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
+use App\Domains\Metrics\Support\EntityScope;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -860,8 +861,15 @@ final class MetricsController extends Controller
      * difference matters on an account with 5,706 ads: post-filtering means fetching all of them to
      * show twenty, and it means a paginated total that lies about how many there are.
      *
-     * The window, provider, objective and attribution basis all come from the same request helpers
-     * every other metric endpoint uses, so a drill-down cannot silently change basis as it descends.
+     * The window, provider, objective, campaign and attribution basis all come from the same request
+     * helpers every other metric endpoint uses, so a drill-down cannot silently change basis as it
+     * descends.
+     *
+     * That sentence used to be false. This method read the window, the parent and the attribution
+     * basis and nothing else, so the ad-set and ad tables answered for the WHOLE project under chips
+     * naming one campaign — directly beneath a campaign table that had narrowed correctly. A comment
+     * describing an intention rather than the code is worse than no comment: it is the reason the
+     * gap survived a reading.
      */
     public function entities(Request $request, string $project, string $level): JsonResponse
     {
@@ -896,6 +904,11 @@ final class MetricsController extends Controller
             $to,
             $parents,
             $request->filled('attribution_window') ? $request->string('attribution_window')->toString() : null,
+            new EntityScope(
+                providers: $this->providerFilter($request),
+                objectives: $this->objectiveFilter($request),
+                campaigns: $this->campaignFilter($request),
+            ),
         );
 
         return ApiResponse::success([
@@ -905,6 +918,8 @@ final class MetricsController extends Controller
             // What the money on these rows is IN — the same statement every other surface makes.
             'currency' => $this->rangeCurrency($from, $to),
             'attribution_window' => $request->string('attribution_window')->toString() ?: null,
+            /* Every axis this endpoint is sent, and it now narrows by all three. */
+            'filter_scope' => $this->filterScope($request, ['provider', 'objective', 'campaign']),
         ], 'Entity metrics.');
     }
 
