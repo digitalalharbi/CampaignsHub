@@ -349,6 +349,23 @@ final class MetricsAggregator
     private ?bool $excludesDemo = null;
 
     /**
+     * The canonical filter predicate, for a caller writing its own `daily_metrics` query.
+     *
+     * Three endpoints built their own query over this table and re-implemented one axis of the
+     * narrowing — the provider — while the request also carried an objective and a campaign. A
+     * second copy of a predicate is how two panels under one set of filter chips come to answer two
+     * different questions, so there is no second copy: this is the same method every aggregation
+     * already goes through, made reachable.
+     *
+     * Scope the aggregator first (`forProviders`/`forObjectives`/`forCampaigns`), then hand it the
+     * query.
+     */
+    public function applyScope(mixed $query): mixed
+    {
+        return $this->scoped($query);
+    }
+
+    /**
      * The scope filters alone: tenant, project, campaign, provider, account, objective. No date, no
      * demo policy.
      *
