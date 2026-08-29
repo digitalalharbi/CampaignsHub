@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { getData } from '@/lib/api/client'
+import type { FilterScope } from './filterScope'
 
 /** KPI bundle returned by every aggregation (base sums + derived ratios; nulls when undefined). */
 export interface MetricTotals extends MoneyProvenance {
@@ -371,6 +372,8 @@ export interface MetricDefinitionRow {
   is_additive: boolean
 }
 export interface Normalization {
+  /** ANALYTICS-FILTER-TRUTH-001 — which requested axes this endpoint actually narrowed by. */
+  filter_scope?: FilterScope
   project_currency: string | null
   project_currencies: string[]
   currencies: CurrencyBasis[]
@@ -426,6 +429,8 @@ export interface DuplicatedShop {
 }
 
 export interface Attribution {
+  /** ANALYTICS-FILTER-TRUTH-001 — the campaign axis is declined here, and the response says so. */
+  filter_scope?: FilterScope
   period: Range
   platform_reported: {
     label_ar: string
