@@ -26,6 +26,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 /**
  * Read-only metrics aggregation for the active project (project + tenant scope enforced by
@@ -803,7 +804,28 @@ final class MetricsController extends Controller
 
         $raw = $request->string('parent')->toString();
 
-        return $raw === '' ? [] : array_values(array_filter(explode(',', $raw)));
+        if ($raw === '') {
+            return [];
+        }
+
+        $ids = array_values(array_filter(explode(',', $raw)));
+
+        /*
+         * These are uuid columns, and an unvalidated value goes straight into the WHERE clause: a
+         * malformed `parent` came back as a 500 out of the driver rather than a refusal. A drill-down
+         * is a linkable URL, so a truncated or hand-edited one is an ordinary event, not an attack —
+         * and it must be told it is malformed rather than shown a stack trace or, worse, an empty list
+         * that reads as «this campaign has no ad sets».
+         */
+        foreach ($ids as $id) {
+            abort_unless(
+                Str::isUuid($id),
+                422,
+                'A parent must be an entity id.',
+            );
+        }
+
+        return $ids;
     }
 
     /**

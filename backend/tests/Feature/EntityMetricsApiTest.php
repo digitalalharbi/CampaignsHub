@@ -253,6 +253,34 @@ final class EntityMetricsApiTest extends TestCase
             ->json('data.entities');
     }
 
+    /**
+     * A malformed `parent` is refused, not answered.
+     *
+     * These are uuid columns and the value went straight into the WHERE clause, so a truncated or
+     * hand-edited link came back as a 500 out of the database driver. A drill-down URL is meant to be
+     * pasted around, so a broken one is an ordinary event — and the two wrong answers are a stack
+     * trace and an empty list, the second being worse because it reads as «this campaign has no ad
+     * sets».
+     */
+    public function test_a_malformed_parent_is_refused_rather_than_queried(): void
+    {
+        $this->actingAs($this->operator, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->project->getKey()}/metrics/entities/ad_set?from=2026-08-01&to=2026-08-02&parent=not-a-uuid")
+            ->assertStatus(422);
+    }
+
+    /** An explicitly empty parent still means «the parent I chose has no children». */
+    public function test_an_empty_parent_is_not_the_same_as_no_parent(): void
+    {
+        $this->metric((string) Str::uuid(), ['spend' => 10], (string) Str::uuid());
+
+        $empty = $this->actingAs($this->operator, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->project->getKey()}/metrics/entities/ad_set?from=2026-08-01&to=2026-08-02&parent=")
+            ->assertOk();
+
+        $this->assertSame([], $empty->json('data.entities'));
+    }
+
     /** @param array<string,mixed> $values */
     private function metric(
         string $entityId,
