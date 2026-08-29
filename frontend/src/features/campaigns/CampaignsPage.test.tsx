@@ -32,12 +32,15 @@ function campaign(id: string, name: string, status = 'draft'): UnifiedCampaign {
 
 import { useProject } from '@/stores/project'
 
+/* The list endpoint answers with a page — rows plus whether the server had to stop. */
+const listPage = (campaigns: UnifiedCampaign[]) => ({ campaigns, truncated: false, limit: 500 })
+
 describe('CampaignsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(listProjects).mockResolvedValue([project('p1', 'Project A'), project('p2', 'Project B')])
     vi.mocked(listUsers).mockResolvedValue([])
-    vi.mocked(listCampaigns).mockResolvedValue([campaign('c1', 'National Day')])
+    vi.mocked(listCampaigns).mockResolvedValue(listPage([campaign('c1', 'National Day')]))
     useProject.getState().setCurrentProjectId('p1')
   })
 
@@ -99,7 +102,7 @@ describe('CampaignsPage', () => {
   })
 
   it('renders an empty state when there are no campaigns', async () => {
-    vi.mocked(listCampaigns).mockResolvedValue([])
+    vi.mocked(listCampaigns).mockResolvedValue(listPage([]))
     signInWith(['campaigns.view'])
     renderWithProviders(<CampaignsPage />)
     await openList()

@@ -10,10 +10,26 @@ export interface CampaignListParams {
   search?: string
 }
 
-export function listCampaigns(projectId: string, params: CampaignListParams = {}): Promise<UnifiedCampaign[]> {
-  return api
-    .get<ApiEnvelope<UnifiedCampaign[]>>(base(projectId), { params })
-    .then((r) => r.data.data)
+/**
+ * The workspace list, and whether it is all of it.
+ *
+ * The server bounds this at 500 and reports when it stopped. An operator whose campaign is missing
+ * has two possible explanations — it was never synced, or the list stopped — and they lead to
+ * opposite actions, so the page has to be able to tell them apart.
+ */
+export interface CampaignListPage {
+  campaigns: UnifiedCampaign[]
+  /** Null when the server did not say. Not the same as «complete», and rendered as nothing. */
+  truncated: boolean | null
+  limit: number | null
+}
+
+export function listCampaigns(projectId: string, params: CampaignListParams = {}): Promise<CampaignListPage> {
+  return api.get<ApiEnvelope<UnifiedCampaign[]>>(base(projectId), { params }).then((r) => ({
+    campaigns: r.data.data,
+    truncated: typeof r.data.meta?.truncated === 'boolean' ? r.data.meta.truncated : null,
+    limit: typeof r.data.meta?.limit === 'number' ? r.data.meta.limit : null,
+  }))
 }
 
 export function getCampaign(projectId: string, campaignId: string): Promise<UnifiedCampaign> {

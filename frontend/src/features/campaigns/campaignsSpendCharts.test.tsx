@@ -16,6 +16,9 @@ import { listCampaigns } from './api'
 import { listProjects, listUsers } from '@/features/projects/api'
 import { getData } from '@/lib/api/client'
 
+/* The list endpoint answers with a page — rows plus whether the server had to stop. */
+const listPage = (campaigns: UnifiedCampaign[]) => ({ campaigns, truncated: false, limit: 500 })
+
 /**
  * PARTIAL-WITHHELD-001 — the two spend CHARTS on this page, held to the same rule as the cards.
  *
@@ -94,7 +97,7 @@ describe('the spend charts over withheld money', () => {
     signInWith(['campaigns.view'])
     vi.mocked(listProjects).mockResolvedValue([])
     vi.mocked(listUsers).mockResolvedValue([])
-    vi.mocked(listCampaigns).mockResolvedValue([campaign('c1')])
+    vi.mocked(listCampaigns).mockResolvedValue(listPage([campaign('c1')]))
     useProject.getState().setCurrentProjectId('p1')
   })
 

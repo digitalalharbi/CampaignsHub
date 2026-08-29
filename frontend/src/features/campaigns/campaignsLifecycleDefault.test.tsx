@@ -33,6 +33,9 @@ vi.mock('@/features/analytics/api', async (importOriginal) => {
 import { listCampaigns } from './api'
 import { listProjects, listUsers } from '@/features/projects/api'
 
+/* The list endpoint answers with a page — rows plus whether the server had to stop. */
+const listPage = (campaigns: UnifiedCampaign[]) => ({ campaigns, truncated: false, limit: 500 })
+
 const campaign = (id: string, name: string, status: string): UnifiedCampaign => ({
   id, project_id: 'p1', name, objective: 'sales', status, total_budget: 1000, budget_currency: 'SAR',
   starts_on: null, ends_on: null, primary_conversion_purpose: null, attribution_model: null,
@@ -48,10 +51,10 @@ describe('the campaigns workspace, opened cold', () => {
     vi.clearAllMocks()
     vi.mocked(listProjects).mockResolvedValue([])
     vi.mocked(listUsers).mockResolvedValue([])
-    vi.mocked(listCampaigns).mockResolvedValue([
+    vi.mocked(listCampaigns).mockResolvedValue(listPage([
       campaign('running', 'Still running', 'active'),
       campaign('finished', 'Last year', 'completed'),
-    ])
+    ]))
     metrics.value = {
       data: [
         { campaign_id: 'running', spend: 10, last_active_on: today },

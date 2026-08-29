@@ -30,6 +30,14 @@ use Illuminate\Validation\Rule;
  */
 final class UnifiedCampaignController extends Controller
 {
+    /**
+     * How many campaigns the workspace list returns before it says «there are more».
+     *
+     * Matches the report scope builder's ceiling, because they are the same question asked by two
+     * screens and a reader who learns the number on one should not meet a different one on the other.
+     */
+    private const LIST_LIMIT = 500;
+
     public function index(Request $request): JsonResponse
     {
         abort_unless($request->user()->hasPermission('campaigns.view'), 403);
@@ -69,7 +77,30 @@ final class UnifiedCampaignController extends Controller
             $query->where('name', 'ilike', "%{$search}%");
         }
 
-        return ApiResponse::success(UnifiedCampaignResource::collection($query->get()), 'Unified campaigns retrieved.');
+        /*
+         * CAMPAIGN-INTELLIGENCE-HUB — the workspace list is BOUNDED, and says when it stopped.
+         *
+         * This ended `->get()`: every campaign in the project, on the one screen an operator opens
+         * first, on the account with the most of them. The weight is the smaller half of the problem.
+         * The larger half is that a list which returns everything and a list which stops silently
+         * look identical to the reader — so the day somebody adds a limit for performance, the screen
+         * starts lying without anything changing on it.
+         *
+         * One row past the cap is fetched so «there are more» is measured rather than inferred: at
+         * exactly 500 campaigns an inference would report more that are not there, and an operator
+         * told their list is incomplete goes looking for something that was never missing.
+         *
+         * The filters above narrow this server-side already — status, objective, search — so the cap
+         * is the ceiling on an unfiltered browse rather than the answer to «show me my campaign».
+         */
+        $rows = $query->limit(self::LIST_LIMIT + 1)->get();
+        $truncated = $rows->count() > self::LIST_LIMIT;
+
+        return ApiResponse::success(
+            UnifiedCampaignResource::collection($rows->take(self::LIST_LIMIT)),
+            'Unified campaigns retrieved.',
+            meta: ['truncated' => $truncated, 'limit' => self::LIST_LIMIT],
+        );
     }
 
     public function show(Request $request, string $project, string $campaign): JsonResponse

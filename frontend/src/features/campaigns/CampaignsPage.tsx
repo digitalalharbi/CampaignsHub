@@ -111,7 +111,9 @@ export function CampaignsPage() {
   const budget = useBudget(projectId, range)
   const metricCampaigns = useCampaigns(projectId, range)
 
-  const campaigns = campaignsQuery.data ?? []
+  const campaigns = campaignsQuery.data?.campaigns ?? []
+  const listTruncated = campaignsQuery.data?.truncated === true
+  const listLimit = campaignsQuery.data?.limit
   const counts = useMemo(() => {
     const c: Record<string, number> = { total: campaigns.length }
     for (const s of CAMPAIGN_STATUSES) c[s] = campaigns.filter((x) => x.status === s).length
@@ -515,6 +517,25 @@ export function CampaignsPage() {
               could measure is not answered «no».
             */}
             <LandingAnswer answer={landing} ar={ar} />
+
+            {/*
+              CAMPAIGN-INTELLIGENCE-HUB — the list stopped, and the workspace says so.
+
+              An operator whose campaign is missing has two explanations available — it was never
+              synced, or the list stopped at the server's cap — and they lead to opposite actions.
+              Rendered only when the server actually said it stopped: silence is «I was not told»,
+              and printing «complete» would be the page making a promise on the server's behalf.
+
+              The filters above narrow server-side, so the sentence points at them rather than
+              telling a reader to scroll.
+            */}
+            {listTruncated && (
+              <p data-testid="campaigns-truncated" className="text-xs font-semibold text-warning">
+                {ar
+                  ? `يُعرض ${listLimit ?? campaigns.length} حملة فقط — استخدم البحث أو الفلاتر أعلاه للوصول إلى البقية`
+                  : `Showing ${listLimit ?? campaigns.length} campaigns only — use the search or filters above to reach the rest`}
+              </p>
+            )}
               {/*
                 CAMPAIGN-INTELLIGENCE-HUB — what is RUNNING, first.
                 Inactive is one click away with its count beside it: a campaign silently missing from a

@@ -16,6 +16,9 @@ import { listCampaigns } from './api'
 import { listProjects, listUsers } from '@/features/projects/api'
 import { getData } from '@/lib/api/client'
 
+/* The list endpoint answers with a page — rows plus whether the server had to stop. */
+const listPage = (campaigns: UnifiedCampaign[]) => ({ campaigns, truncated: false, limit: 500 })
+
 /**
  * PARTIAL-WITHHELD-001 — the project budget card must not sum a withheld spend as a zero.
  *
@@ -74,7 +77,7 @@ describe('the project budget card over withheld spend', () => {
     signInWith(['campaigns.view'])
     vi.mocked(listProjects).mockResolvedValue([])
     vi.mocked(listUsers).mockResolvedValue([])
-    vi.mocked(listCampaigns).mockResolvedValue([campaign('c1')])
+    vi.mocked(listCampaigns).mockResolvedValue(listPage([campaign('c1')]))
     useProject.getState().setCurrentProjectId('p1')
   })
 
