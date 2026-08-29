@@ -33,10 +33,24 @@ describe('the brand identity', () => {
     }
   })
 
+  /**
+   * REPORT-TITLE-METADATA-001 — the shell speaks the language it declares.
+   *
+   * This asserted the ENGLISH tagline, which contradicted the official identity named in this file's
+   * own docblock and the `og:locale = ar_SA` the shell sends every crawler: two statements about one
+   * page that disagreed, with the English one being what a browser tab and a shared link showed.
+   *
+   * Built from `brand` rather than literals so the shell cannot drift from the module the rest of the
+   * product reads — which is what caught a hand-written Arabic description here that was a second
+   * source for a sentence that already had one.
+   */
   it('puts the same sentence in the title, the description and the social card', () => {
-    expect(html).toContain('<title>CampaignsHub — All your paid campaigns in one place</title>')
-    expect(html).toContain('og:title" content="CampaignsHub — All your paid campaigns in one place"')
-    expect(html).toContain(`og:description" content="${brand.description}"`)
+    const title = `${brand.taglineAr} — ${brand.name}`
+
+    expect(html).toContain(`<title>${title}</title>`)
+    expect(html).toContain(`og:title" content="${title}"`)
+    expect(html).toContain(`twitter:title" content="${title}"`)
+    expect(html).toContain(`og:description" content="${brand.descriptionAr}"`)
   })
 
   /** Structured data a search engine will actually parse, naming both languages. */
