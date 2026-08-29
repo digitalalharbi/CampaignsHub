@@ -35,6 +35,15 @@ use Illuminate\Support\Str;
  */
 final class MetricsController extends Controller
 {
+    /**
+     * How many options one request returns.
+     *
+     * Matches what `FilterMulti` will draw, so the client never holds rows it cannot show — and the
+     * search that reaches everything now reaches it through the server rather than through a payload
+     * the browser already downloaded.
+     */
+    private const OPTION_LIMIT = 120;
+
     public function __construct(
         private readonly MetricsAggregator $agg,
         private readonly DataFreshnessService $freshness,
@@ -307,6 +316,70 @@ final class MetricsController extends Controller
             'Metrics by ad account.',
             meta: $this->meta($from, $to),
         );
+    }
+
+    /**
+     * UX-MULTISELECT-SCALE-001 — the campaign filter's OPTIONS, searched on the server.
+     *
+     * The selector was populated from `campaigns()`, the full metric breakdown. `FilterMulti` already
+     * refuses to draw more than 120 rows, so the DOM was safe — but a project with 400 campaigns
+     * still shipped 400 complete metric rows over the wire to fill a dropdown, and that cost is paid
+     * on every filter change by the reader with the largest estate, who is exactly the reader this
+     * requirement is about.
+     *
+     * This returns an id and a name. It does NOT return figures: an option list that carried spend
+     * would become a second source for it, and the two would eventually disagree with the breakdown
+     * on the same screen.
+     *
+     * Deliberately NOT windowed. A campaign the reader wants to filter to may have reported nothing
+     * in the current range — that is frequently WHY they are looking for it — and hiding it because
+     * the window is narrow would make the filter unable to reach the campaign whose silence is the
+     * question.
+     */
+    public function campaignOptions(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+
+        $projectId = app(ProjectContext::class)->projectId();
+        abort_if($projectId === null, 400, 'A project is required to list campaign options.');
+
+        $q = trim($request->string('q')->toString());
+
+        /*
+         * The explicit `project_id` is legibility, NOT the isolation.
+         *
+         * `UnifiedCampaign` is project- and tenant-scoped by global scopes that read the request's
+         * context, and that is what actually keeps one project's campaigns out of another's filter —
+         * removing this line changes no behaviour, and its test still passes, which is how I know
+         * which of the two is load-bearing. It stays because a reader of this query should not have
+         * to know the model's scopes to see what it returns.
+         */
+        $rows = UnifiedCampaign::query()
+            ->where('project_id', $projectId)
+            ->when($q !== '', fn ($b) => $b->whereRaw('LOWER(name) LIKE ?', ['%'.mb_strtolower($q).'%']))
+            /*
+             * Name, then id. The id tiebreak is not decoration: a project with many identically named
+             * campaigns is made entirely of ties, and rows that swap between two identical reads tell
+             * a reader something changed when nothing did — the same rule the breakdown follows.
+             */
+            ->orderBy('name')
+            ->orderBy('id')
+            ->limit(self::OPTION_LIMIT + 1)
+            ->get(['id', 'name']);
+
+        /*
+         * One more than the cap is fetched so «there are more» is a FACT rather than an inference
+         * from a full page. A list that silently stops tells a reader their campaign does not exist.
+         */
+        $more = $rows->count() > self::OPTION_LIMIT;
+
+        return ApiResponse::success([
+            'options' => $rows->take(self::OPTION_LIMIT)
+                ->map(static fn ($c): array => ['id' => (string) $c->id, 'name' => (string) $c->name])
+                ->values(),
+            'has_more' => $more,
+            'limit' => self::OPTION_LIMIT,
+        ], 'Campaign options.');
     }
 
     public function campaigns(Request $request): JsonResponse

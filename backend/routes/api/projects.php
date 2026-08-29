@@ -70,6 +70,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('metrics/accounts', [MetricsController::class, 'accounts'])->name('metrics.accounts');
     Route::get('metrics/campaigns', [MetricsController::class, 'campaigns'])->name('metrics.campaigns');
     /*
+     * UX-MULTISELECT-SCALE-001 — the filter's options, searched on the server rather than filled from
+     * the full metric breakdown. Declared beside it so the two stay visibly related: one carries
+     * figures, the other deliberately does not.
+     */
+    Route::get('metrics/campaign-options', [MetricsController::class, 'campaignOptions'])->name('metrics.campaign-options');
+    /*
      * ANALYTICS-DRILLDOWN-001 — the two rungs beneath a campaign.
      *
      * `{level}` is `ad_set` or `ad`; anything else is refused in the controller rather than
