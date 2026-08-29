@@ -52,7 +52,25 @@ const DAY = 86_400_000
  */
 const NOT_RUNNING = new Set(['paused', 'completed', 'archived'])
 
+/**
+ * The two facts the rule actually reads.
+ *
+ * Named separately from `RelevanceRow` because ad sets and ads carry exactly these and no
+ * `campaign_id` — and «is this still running» is the same question at every rung. Splitting the
+ * INPUT rather than copying the rule is the whole point: the ad table asking its own version of this
+ * is how two surfaces come to disagree about which things are live.
+ */
+export interface RelevanceFacts {
+  status: string | null
+  last_active_on: string | null
+}
+
 export function campaignRelevance(row: RelevanceRow, windowEnd: string): CampaignRelevance {
+  return relevanceOf(row, windowEnd)
+}
+
+/** The rule itself, over the two facts — usable at any rung of the hierarchy. */
+export function relevanceOf(row: RelevanceFacts, windowEnd: string): CampaignRelevance {
   /*
    * A stopped campaign is stopped however much it spent. This is the ordering defect stated as a
    * rule: a finished campaign that outspent every running one used to lead the operational list, so
@@ -81,14 +99,18 @@ export function campaignRelevance(row: RelevanceRow, windowEnd: string): Campaig
 }
 
 /**
- * Relevance first, then spend, then a key that cannot move.
+ * The same ordering, for any rung that carries the two facts, a spend and a stable id.
  *
- * The id tiebreak matters for the same reason it does in the aggregator: a listing full of campaigns
- * that spent nothing is made entirely of ties, and rows that swap between two identical reads tell a
- * reader something changed when nothing did.
+ * Ad sets and ads are ordered by the identical rule the campaigns workspace uses, because «serving
+ * first, then by spend» is one product decision and not three. The id accessor is a parameter rather
+ * than a fixed field name only because the rungs name their key differently.
  */
-export function orderByRelevance<T extends RelevanceRow>(rows: T[], windowEnd: string): T[] {
-  const rank = (r: T) => CAMPAIGN_RELEVANCE_ORDER.indexOf(campaignRelevance(r, windowEnd))
+export function orderByRelevanceWith<T extends RelevanceFacts & { spend: number | null }>(
+  rows: T[],
+  windowEnd: string,
+  idOf: (row: T) => string,
+): T[] {
+  const rank = (r: T) => CAMPAIGN_RELEVANCE_ORDER.indexOf(relevanceOf(r, windowEnd))
 
   return [...rows].sort((a, b) => {
     const byState = rank(a) - rank(b)
@@ -97,6 +119,20 @@ export function orderByRelevance<T extends RelevanceRow>(rows: T[], windowEnd: s
     const bySpend = (b.spend ?? 0) - (a.spend ?? 0)
     if (bySpend !== 0) return bySpend
 
-    return a.campaign_id < b.campaign_id ? -1 : a.campaign_id > b.campaign_id ? 1 : 0
+    const ia = idOf(a)
+    const ib = idOf(b)
+
+    return ia < ib ? -1 : ia > ib ? 1 : 0
   })
+}
+
+/**
+ * Relevance first, then spend, then a key that cannot move.
+ *
+ * The id tiebreak matters for the same reason it does in the aggregator: a listing full of campaigns
+ * that spent nothing is made entirely of ties, and rows that swap between two identical reads tell a
+ * reader something changed when nothing did.
+ */
+export function orderByRelevance<T extends RelevanceRow>(rows: T[], windowEnd: string): T[] {
+  return orderByRelevanceWith(rows, windowEnd, (row) => row.campaign_id)
 }
