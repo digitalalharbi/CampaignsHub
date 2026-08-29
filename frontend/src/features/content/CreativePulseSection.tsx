@@ -707,14 +707,34 @@ function DrillPath({ creative, drill, t, locale }: { creative: CreativeCard; dri
       to: drill({ providers: [creative.provider], campaign_ids: creative.campaign_id ? [creative.campaign_id] : undefined, ad_set_ids: [creative.ad_set_id] }),
     })
   }
-  if (creative.ad_id) {
+  /*
+   * CREATIVE-FRONTEND-ADS-001 — the ad step narrows to EVERY ad running this creative.
+   *
+   * This read `creative.ad_id`, which is one ad chosen from many by row order: the column behind it
+   * is rewritten on every import, so it names whichever ad was imported last. On the live Snapchat
+   * account four ads share each creative, so «Ad ›» in a breadcrumb pointed at one of four and said
+   * nothing about the other three — and a reader who followed it to decide whether to pause the
+   * creative was shown a quarter of the evidence.
+   *
+   * `creative.ads` is the canonical relation (`external_ads.creative_id`). The step carries all of
+   * them, and says how many when there is more than one, because a link labelled «Ad» that filters
+   * to four is only honest if it admits to four.
+   */
+  /*
+   * `?? []` is not defensive noise. A deployed frontend meets whatever backend is live, and a
+   * response from before this field existed carries no `ads` — which must produce no ad step, the
+   * same as a creative with no ads, rather than throwing and taking the whole pulse section down.
+   */
+  const adIds = (creative.ads ?? []).map((ad) => ad.external_id).filter(Boolean)
+
+  if (adIds.length > 0) {
     steps.push({
-      label: t.ad,
+      label: adIds.length > 1 ? `${t.ad} (${adIds.length})` : t.ad,
       to: drill({
         providers: [creative.provider],
         campaign_ids: creative.campaign_id ? [creative.campaign_id] : undefined,
         ad_set_ids: creative.ad_set_id ? [creative.ad_set_id] : undefined,
-        ad_ids: [creative.ad_id],
+        ad_ids: adIds,
       }),
     })
   }
