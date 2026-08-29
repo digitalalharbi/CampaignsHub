@@ -87,20 +87,19 @@ final class CreativePresenter
              */
             'ad_set_id' => $creative->external_ad_set_id === null ? null : (string) $creative->external_ad_set_id,
             /*
-             * CREATIVE-PRESENTER-ADS-BACKEND-001 — the singular `ad_id` above is LEGACY and is kept
-             * only until the frontend migrates.
+             * CREATIVE-PRESENTER-ADS-BACKEND-001 — the ads running this creative, and only these.
              *
-             * It reads `external_creatives.external_ad_id`, which `creativeFor()` rewrites on every
-             * upsert, so it names whichever ad was imported last. On the live Snapchat account four
-             * ads share each creative, so the drill-down built from it points at one of four and
-             * says nothing about the rest.
+             * A singular `ad_id` used to sit here, reading `external_creatives.external_ad_id` —
+             * which `creativeFor()` rewrites on every upsert, so it named whichever ad was imported
+             * last. On the live Snapchat account four ads share each creative, so a drill-down built
+             * from it pointed at one of four while looking definite. The frontend has migrated, so
+             * it is gone rather than kept as a field that looks like a relation and is not.
              *
-             * `ads` below is the truthful collection, read through `ExternalCreative::ads()` — the
-             * `hasMany` on `external_ads.creative_id`, which is the canonical relation. Ordered by
-             * `external_id` so the same creative renders identically on every request; an unordered
-             * collection would make a card's first ad depend on the database's row order.
+             * Read through `ExternalCreative::ads()` — the `hasMany` on `external_ads.creative_id`,
+             * which is the canonical relation. Ordered by `external_id` so the same creative renders
+             * identically on every request; an unordered collection would make a card's first ad
+             * depend on the database's row order.
              */
-            'ad_id' => $creative->external_ad_id === null ? null : (string) $creative->external_ad_id,
             'ads' => $creative->ads
                 ->sortBy('external_id')
                 ->map(static fn (ExternalAd $ad): array => [
@@ -158,9 +157,17 @@ final class CreativePresenter
              * automatically would be following a link chosen by whoever wrote the ad.
              */
             'destination_url' => $creative->destination_url,
+            /*
+             * No `ad` here either, and for the same reason as the card's `ad_id`.
+             *
+             * A provider id labelled «Ad» reads as THE ad's id. It was
+             * `external_creatives.external_ad_id` — whichever ad was imported last — so on an account
+             * where four ads share a creative it named one and looked authoritative. The ads are in
+             * `ads` above, each with its own `external_id`, which is the same fact without the
+             * false singular.
+             */
             'external_ids' => [
                 'creative' => $creative->external_creative_id,
-                'ad' => $creative->external_ad_id,
                 'ad_set' => $creative->external_ad_set_id === null ? null : (string) $creative->external_ad_set_id,
                 'campaign' => $creative->external_campaign_id === null ? null : (string) $creative->external_campaign_id,
             ],
