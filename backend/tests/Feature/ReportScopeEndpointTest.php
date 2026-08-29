@@ -25,6 +25,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Ramsey\Uuid\Uuid;
 use Tests\TestCase;
 
@@ -209,6 +210,110 @@ final class ReportScopeEndpointTest extends TestCase
      * KPIs and forgotten by the campaign list produces a report whose parts do not add up to its own
      * total — and that is a defect a reader discovers in front of their client.
      */
+    /**
+     * REPORT-SCOPE-SELECTION-001 — every axis states whether its list is complete.
+     *
+     * With nothing truncated, every flag is false. That is the case worth pinning first: a picker
+     * that always warned would be a picker nobody reads the warning on.
+     */
+    public function test_the_options_endpoint_says_nothing_was_truncated_when_nothing_was(): void
+    {
+        $data = $this->actingAs($this->operator, 'sanctum')
+            ->getJson($this->url('/scope/options'))->assertOk()->json('data');
+
+        $this->assertSame(
+            ['campaigns' => false, 'ad_sets' => false, 'ads' => false, 'creatives' => false],
+            $data['truncated'],
+        );
+        $this->assertSame(500, $data['limit']);
+    }
+
+    /**
+     * The campaign list had NO limit — it sent every campaign in the project into the builder.
+     *
+     * That is the cardinality this requirement is about, and the failure is not only weight: an
+     * operator scanning five hundred chips is choosing a report scope by scrolling. The list is now
+     * bounded, and — because a list that stops without saying so tells an operator their campaign
+     * does not exist — the response says it stopped.
+     */
+    public function test_a_project_past_the_cap_is_bounded_and_says_so(): void
+    {
+        for ($i = 0; $i < 501; $i++) {
+            UnifiedCampaign::create([
+                'tenant_id' => $this->tenant->getKey(),
+                'project_id' => $this->project->getKey(),
+                'name' => sprintf('Bulk %04d', $i),
+                'objective' => 'sales',
+                'status' => 'active',
+            ]);
+        }
+
+        $data = $this->actingAs($this->operator, 'sanctum')
+            ->getJson($this->url('/scope/options'))->assertOk()->json('data');
+
+        $this->assertCount(500, $data['campaigns'], 'the campaign list is not bounded');
+        $this->assertTrue($data['truncated']['campaigns'], 'the cap was reached and not reported');
+        /* The other axes are untouched by a campaign flood — the flags are per axis, not one flag. */
+        $this->assertFalse($data['truncated']['ads']);
+    }
+
+    /**
+     * The cap is applied by the DATABASE, not by trimming an array that was already loaded.
+     *
+     * Worth asserting separately, and only discovered by trying: removing `limit()` from the query
+     * leaves every other assertion here green, because the response is trimmed afterwards and still
+     * looks right. The response being right was never the point — the requirement is that a project
+     * with four hundred thousand ads does not load them to show five hundred, and a test that reads
+     * only the response cannot tell the difference.
+     */
+    public function test_the_cap_is_applied_in_the_query_and_not_after_it(): void
+    {
+        DB::enableQueryLog();
+        $this->actingAs($this->operator, 'sanctum')->getJson($this->url('/scope/options'))->assertOk();
+        $queries = DB::getQueryLog();
+        DB::disableQueryLog();
+
+        foreach (['unified_campaigns', 'external_ad_sets', 'external_ads', 'external_creatives'] as $table) {
+            $selects = array_values(array_filter(
+                array_column($queries, 'query'),
+                static fn (string $sql): bool => str_contains($sql, '"'.$table.'"') && str_starts_with($sql, 'select'),
+            ));
+
+            $this->assertNotEmpty($selects, "no select was issued against {$table}");
+            $this->assertTrue(
+                (bool) array_filter($selects, static fn (string $sql): bool => str_contains($sql, 'limit')),
+                "the options query against {$table} fetches every row and trims afterwards",
+            );
+        }
+    }
+
+    /**
+     * Exactly at the cap is NOT truncated.
+     *
+     * The off-by-one that matters: inferring «more» from a full page reports entities that do not
+     * exist, and an operator told their list is incomplete when it is complete goes looking for
+     * something that was never missing. One row past the cap is fetched so the answer is measured.
+     */
+    public function test_exactly_at_the_cap_is_not_reported_as_truncated(): void
+    {
+        // Two already exist from setUp, so 498 more makes exactly 500.
+        for ($i = 0; $i < 498; $i++) {
+            UnifiedCampaign::create([
+                'tenant_id' => $this->tenant->getKey(),
+                'project_id' => $this->project->getKey(),
+                'name' => sprintf('Exact %04d', $i),
+                'objective' => 'sales',
+                'status' => 'active',
+            ]);
+        }
+
+        $data = $this->actingAs($this->operator, 'sanctum')
+            ->getJson($this->url('/scope/options'))->assertOk()->json('data');
+
+        $this->assertCount(500, $data['campaigns']);
+        $this->assertFalse($data['truncated']['campaigns'], 'a full page was reported as truncated');
+    }
+
     public function test_excluding_a_campaign_removes_its_spend_and_results_from_every_section(): void
     {
         $whole = $this->generate($this->report());
