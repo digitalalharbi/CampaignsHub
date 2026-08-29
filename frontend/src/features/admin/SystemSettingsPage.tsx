@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Activity, FileText, Globe, Layers, MessageSquareQuote, Plug, ShieldCheck } from 'lucide-react'
+import { Activity, Clock, FileText, Globe, Layers, MessageSquareQuote, Plug, ShieldCheck } from 'lucide-react'
 import { PublicPagesSettingsPage } from '@/features/settings/PublicPagesSettingsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { TaxonomyManagerPage } from '@/features/taxonomy/TaxonomyManagerPage'
-import { IntegrationsTab, PermissionsTab, StatusTab } from './PlatformOpsTabs'
+import { IntegrationsTab, PermissionsTab, ScheduledWorkTab, StatusTab } from './PlatformOpsTabs'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -20,7 +20,7 @@ import { useUi } from '@/stores/ui'
  * The engines behind each tab are the existing ones, mounted here — not reimplemented.
  */
 
-type TabKey = 'public-site' | 'portals' | 'taxonomies' | 'services' | 'permissions' | 'integrations' | 'status'
+type TabKey = 'public-site' | 'portals' | 'taxonomies' | 'services' | 'permissions' | 'integrations' | 'status' | 'scheduled'
 
 const TABS: { key: TabKey; ar: string; en: string; icon: typeof Globe }[] = [
   { key: 'public-site', ar: 'الموقع العام', en: 'Public site', icon: Globe },
@@ -32,6 +32,14 @@ const TABS: { key: TabKey; ar: string; en: string; icon: typeof Globe }[] = [
   { key: 'permissions', ar: 'الصلاحيات العامة', en: 'Permissions', icon: ShieldCheck },
   { key: 'integrations', ar: 'التكاملات', en: 'Integrations', icon: Plug },
   { key: 'status', ar: 'الحالة التشغيلية', en: 'Operational status', icon: Activity },
+  /*
+   * AUTOMATION-FIRST-OPERATIONS-001 — beside «Operational status» rather than inside it.
+   *
+   * That tab answers «are the services up». This one answers «did the work run», which is a
+   * different question with different failure modes: every service can be running while a nightly
+   * command has failed four nights in a row.
+   */
+  { key: 'scheduled', ar: 'المهام المجدولة', en: 'Scheduled work', icon: Clock },
 ]
 
 export function SystemSettingsPage() {
@@ -86,6 +94,7 @@ export function SystemSettingsPage() {
         {tab === 'permissions' && <PermissionsTab />}
         {tab === 'integrations' && <IntegrationsTab />}
         {tab === 'status' && <StatusTab />}
+        {tab === 'scheduled' && <ScheduledWorkTab />}
         {tab === 'services' && (
           <div className="rounded-2xl border border-border bg-surface p-5">
             <p className="text-sm text-text-secondary">
