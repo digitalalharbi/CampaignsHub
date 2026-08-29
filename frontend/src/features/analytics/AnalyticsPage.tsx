@@ -27,9 +27,11 @@ import {
   usePlatforms,
   useSummary,
   useTimeseries,
+  type EntityRow,
   type MetricFilters,
 } from './hooks'
 import { scopeNote, type FilterScope } from './filterScope'
+import { CAMPAIGN_RELEVANCE_ORDER, orderByRelevanceWith, relevanceOf } from '@/features/campaigns/campaignRelevance'
 import { Panel, ProvenanceBadge, RateTrend, SERIES, platformColor, tooltipProps } from './components'
 import { listCreatives } from '@/features/content/api'
 import { compact, money, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
@@ -1549,6 +1551,30 @@ function DrillCrumbs({ path, level, ar, onUpTo }: { path: DrillStep[]; level: Dr
   )
 }
 
+/**
+ * What an ad set or ad is doing right now, in one word.
+ *
+ * The same three states the campaigns workspace uses, from the same rule — a stopped ad that
+ * outspent everything running is still stopped, and an operator scanning this table needs to see
+ * that without inferring it from row order.
+ */
+function EntityState({ row, windowEnd, ar }: { row: EntityRow; windowEnd: string; ar: boolean }) {
+  const state = relevanceOf(row, windowEnd)
+
+  if (state === 'serving') return <span className="text-text-muted">—</span>
+
+  return (
+    <span
+      data-testid={`entity-state-${row.entity_id}`}
+      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+        state === 'stopped' ? 'bg-surface-secondary text-text-secondary' : 'bg-warning/10 text-warning'
+      }`}
+    >
+      {state === 'stopped' ? (ar ? 'متوقف' : 'Stopped') : (ar ? 'خامل' : 'Idle')}
+    </span>
+  )
+}
+
 function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad_set' | 'ad' }) {
   const ar = useAr()
   /*
@@ -1562,7 +1588,32 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
   const path = useMemo(() => withNames(decodePath(rawPath)), [rawPath])
   const parent = parentFor(level, path)
   const q = useEntities(projectId, range, level, parent, filters)
-  const rows = q.data?.entities ?? []
+  /*
+   * ENTITY-RELEVANCE-ORDERING-001 — «currently-serving ads must not be mixed with stopped historical
+   * ads without clear grouping».
+   *
+   * This table rendered the rows exactly as the aggregator returned them: spend-first, which is
+   * right for a report and wrong for an operator. An ad that stopped three weeks ago and outspent
+   * everything still running led the list, so the first row somebody saw was one they could do
+   * nothing about — and nothing on it said so.
+   *
+   * The rule is `campaignRelevance`, unchanged and not re-implemented: it reads `status` and
+   * `last_active_on`, which every rung carries, and the campaigns workspace already orders by it.
+   * Two surfaces disagreeing about which things are live is worse than either order alone.
+   */
+  /*
+   * Judged against the window the RESPONSE describes, not the one the picker currently shows.
+   *
+   * They are the same in the ordinary case and diverge exactly when it matters: while a new range is
+   * in flight the rows on screen are still the previous window's, and reading «is this still
+   * serving» against a window those figures do not cover would relabel every row for as long as the
+   * request takes. The response is the authority on what its own numbers are about.
+   */
+  const windowEnd = q.data?.period?.to ?? range.to
+  const rows = useMemo(
+    () => orderByRelevanceWith(q.data?.entities ?? [], windowEnd, (row) => row.entity_id),
+    [q.data?.entities, windowEnd],
+  )
   const currency = q.data?.currency ?? null
   const child = nextLevel(level)
   /*
@@ -1594,6 +1645,7 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
    */
   const head = [
     ar ? 'الاسم' : 'Name',
+    ar ? 'الحالة' : 'State',
     ar ? 'الإنفاق' : 'Spend',
     ar ? 'الظهور' : 'Impressions',
     ar ? 'الوصول' : 'Reach',
@@ -1633,6 +1685,14 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
       )}
       <div className="text-xs text-text-secondary">{row.external_id}</div>
     </div>,
+    /*
+     * The state, beside the row rather than only in its position.
+     *
+     * Ordering alone is not «clear grouping»: a reader who sorts by spend, or lands mid-table, loses
+     * it entirely. `—` for serving, because the ordinary case does not need a badge and a table where
+     * every row is decorated says nothing.
+     */
+    <EntityState key={`state-${row.entity_id}`} row={row} windowEnd={windowEnd} ar={ar} />,
     rowMoney(row, 'spend', currency),
     metricOrDash(row.impressions),
     metricOrDash(row.reach),
@@ -1654,6 +1714,12 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
 
   const values: SortValues[] = rows.map((row) => [
     row.name ?? row.external_id ?? '',
+    /*
+     * The state sorts by how much attention it deserves — serving, idle, stopped — not
+     * alphabetically. A reader sorting this column is asking «what is running», and «Idle» before
+     * «Stopped» before nothing is the alphabet answering a different question.
+     */
+    CAMPAIGN_RELEVANCE_ORDER.indexOf(relevanceOf(row, windowEnd)),
     money(row),
     row.impressions ?? null,
     row.reach ?? null,
@@ -1690,7 +1756,14 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
           </p>
         ) : (
           <div data-testid={`entity-table-${level}`}>
-            <MetricTable head={head} rows={cells} values={values} initialSort={{ column: 1, dir: 'desc' }} />
+            {/*
+              No initial sort. The rows arrive in the operational order — serving first, then by
+              spend — and re-sorting them by spend here would discard it, which is what happened when
+              the state column was added and the table went on sorting by «column 1». Every column is
+              still sortable; the reader chooses, and the default is the answer to the question they
+              opened the tab with.
+            */}
+            <MetricTable head={head} rows={cells} values={values} />
           </div>
         )}
       </Panel>

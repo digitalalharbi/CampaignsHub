@@ -86,6 +86,64 @@ describe('the ad set analysis tab', () => {
     expect(screen.getByText('45,000')).toBeInTheDocument()
   })
 
+  /**
+   * ENTITY-RELEVANCE-ORDERING-001 — «currently-serving ads must not be mixed with stopped historical
+   * ads without clear grouping».
+   *
+   * The table rendered rows exactly as the aggregator returned them: spend-first, which is right for
+   * a report and wrong for an operator. A stopped ad set that outspent everything still running led
+   * the list, so the first row somebody saw was one they could do nothing about — with nothing on it
+   * saying so.
+   */
+  it('puts what is still running above what has stopped, whatever it spent', async () => {
+    route([
+      { ...ROW, entity_id: 'dead', external_id: 'sq-dead', name: 'Big spender, paused', status: 'paused', spend: 9000, spend_original: null, spend_withheld_rows: 0, money_original_currency: null },
+      { ...ROW, entity_id: 'live', external_id: 'sq-live', name: 'Still running', status: 'active', last_active_on: '2026-08-09', spend: 10, spend_original: null, spend_withheld_rows: 0, money_original_currency: null },
+    ])
+
+    await openAdSets()
+
+    const table = await screen.findByTestId('entity-table-ad_set')
+    const text = table.textContent ?? ''
+
+    expect(text.indexOf('Still running')).toBeLessThan(text.indexOf('Big spender, paused'))
+  })
+
+  /**
+   * And the state is ON the row, not only in its position.
+   *
+   * Ordering alone is not clear grouping: a reader who lands mid-table, or who later sorts by spend,
+   * loses it entirely. Serving rows carry no badge — a table where every row is decorated says
+   * nothing.
+   */
+  it('marks a stopped ad set as stopped, and leaves a running one unmarked', async () => {
+    route([
+      { ...ROW, entity_id: 'dead', external_id: 'sq-dead', name: 'Paused one', status: 'paused' },
+      /* One day before the window's end: inside the three-day reporting-lag allowance, so serving. */
+      { ...ROW, entity_id: 'live', external_id: 'sq-live', name: 'Running one', status: 'active', last_active_on: '2026-08-09' },
+    ])
+
+    await openAdSets()
+
+    expect(await screen.findByTestId('entity-state-dead')).toHaveTextContent('Stopped')
+    expect(screen.queryByTestId('entity-state-live')).not.toBeInTheDocument()
+  })
+
+  /**
+   * A campaign the platform stopped reporting for is IDLE, not stopped.
+   *
+   * «The platform told us it is paused» and «the platform has said nothing for three weeks» are
+   * different facts and lead to different actions — one is a decision somebody made, the other is a
+   * question somebody should ask.
+   */
+  it('separates a silent ad set from a paused one', async () => {
+    route([{ ...ROW, entity_id: 'quiet', external_id: 'sq-quiet', name: 'Gone quiet', status: 'active', last_active_on: '2026-07-01' }])
+
+    await openAdSets()
+
+    expect(await screen.findByTestId('entity-state-quiet')).toHaveTextContent('Idle')
+  })
+
   /** The defect this product keeps producing: an unavailable figure rendered as zero. */
   it('prints a dash for a metric nobody reported, never a zero', async () => {
     route([ROW])
