@@ -38,6 +38,12 @@ final class ScheduledWorkController extends Controller
                 'failing' => count(array_filter($rows, static fn (array $r): bool => $r['last_outcome'] === 'failed')),
                 'overdue' => count(array_filter($rows, static fn (array $r): bool => $r['overdue'] === true)),
                 'never_observed' => count(array_filter($rows, static fn (array $r): bool => $r['state'] === 'never_observed')),
+                /*
+                 * Counted apart from `failing` on purpose. A command that failed once may be a
+                 * transient the next run clears; one failing repeatedly is broken and nobody has
+                 * looked. Folding them together produces a number that is true and useless.
+                 */
+                'failing_repeatedly' => count(array_filter($rows, static fn (array $r): bool => ($r['consecutive_failures'] ?? 0) > 1)),
             ],
         ], 'Scheduled work status.');
     }

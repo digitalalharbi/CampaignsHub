@@ -30,6 +30,15 @@ use Illuminate\Support\Carbon;
  */
 final class ScheduledWorkStatus
 {
+    /**
+     * How far back a streak is counted.
+     *
+     * Bounded because the answer an operator needs is «is this broken now», and a command failing
+     * fifty times is not a different decision from one failing ten. An unbounded scan would also grow
+     * with the ledger for a number that stops being informative long before that.
+     */
+    private const STREAK_DEPTH = 20;
+
     public function __construct(private readonly Schedule $schedule) {}
 
     /**
@@ -69,12 +78,54 @@ final class ScheduledWorkStatus
                  * answer», and the surface must render that as its own thing rather than as «fine».
                  */
                 'overdue' => $last === null ? null : $this->overdue($event->expression, $last->started_at, $now),
+                /*
+                 * AUTOMATION-FIRST-OPERATIONS-001 — «failed once» and «failing every night» are
+                 * different problems, and the console showed the same thing for both.
+                 *
+                 * One failure beside a scheduler that has otherwise been fine is a transient the next
+                 * run may clear; the same failure four nights running is a broken command nobody has
+                 * looked at. An operator triages those in opposite orders, and the last run alone
+                 * cannot tell them apart.
+                 *
+                 * Counted from the most recent run backwards and stopping at the first success, so a
+                 * command that failed last week and has run cleanly since reads as 0 rather than
+                 * carrying its history forever.
+                 */
+                'consecutive_failures' => $this->consecutiveFailures($command),
             ];
         }
 
         ksort($out);
 
         return array_values($out);
+    }
+
+    /**
+     * How many times in a row this command has failed, most recent first.
+     *
+     * Stops at the first `completed`. A `skipped` run neither breaks the streak nor extends it: the
+     * overlap guard refusing a second copy says nothing about whether the command works, and reading
+     * it either way would put a number on the screen that means something else.
+     */
+    private function consecutiveFailures(string $command): int
+    {
+        $recent = ScheduledRun::query()
+            ->where('command', $command)
+            ->whereIn('outcome', [ScheduledRun::COMPLETED, ScheduledRun::FAILED])
+            ->orderByDesc('started_at')
+            ->limit(self::STREAK_DEPTH)
+            ->pluck('outcome');
+
+        $streak = 0;
+        foreach ($recent as $outcome) {
+            if ($outcome !== ScheduledRun::FAILED) {
+                break;
+            }
+
+            $streak++;
+        }
+
+        return $streak;
     }
 
     /**
