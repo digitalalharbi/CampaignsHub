@@ -182,3 +182,81 @@ describe('drilling from an ad set into its ads', () => {
     expect(await screen.findByTestId('entity-empty-under-parent-ad')).toBeInTheDocument()
   })
 })
+
+/**
+ * HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN — «deep-link + refresh», which is a different test from
+ * every one above.
+ *
+ * Those click through the hierarchy: the path is built by the page, in memory, while it is already
+ * mounted. A shared link is the opposite — the page mounts COLD with the path already in the URL and
+ * nothing to rebuild it from. `drilldown.test.ts` proves the encoder round-trips, which is not the
+ * same claim: an encoder can round-trip perfectly while the page ignores what it decodes on first
+ * render and issues an unnarrowed request.
+ *
+ * That failure is quiet in the worst way. The breadcrumb reads correctly off the URL, so the link
+ * looks like it worked, while the table beneath it lists the whole project.
+ */
+describe('a drill-down link opened cold', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    urls.length = 0
+    useProject.setState({ currentProjectId: 'p1' })
+    signInWith(['campaigns.view'])
+  })
+  afterEach(() => signOut())
+
+  it('narrows the very first request to the pinned parent', async () => {
+    route({ ad: [{ ...AD_SET, entity_id: 'a1', external_id: 'ad-1', name: 'Riyadh video' }] })
+
+    renderWithProviders(<AnalyticsPage />, {
+      locale: 'en',
+      route: '/app/analytics?tab=ads&drill=campaign:c1~ad_set:sq-9',
+    })
+
+    expect(await screen.findByText('Riyadh video')).toBeInTheDocument()
+
+    const first = entityCalls()[0]
+    expect(first).toContain('/entities/ad')
+    expect(first).toContain('parent=sq-9')
+  })
+
+  it('names the pinned rungs in the breadcrumb without a click', async () => {
+    route({ ad: [{ ...AD_SET, entity_id: 'a1', external_id: 'ad-1', name: 'Riyadh video' }] })
+
+    renderWithProviders(<AnalyticsPage />, {
+      locale: 'en',
+      route: '/app/analytics?tab=ads&drill=campaign:c1~ad_set:sq-9',
+    })
+
+    await screen.findByText('Riyadh video')
+
+    /*
+     * The crumbs are rebuilt from the URL alone. Names are not in the link — only ids are — so a
+     * cold-opened path shows the ad set by its id until the row it came from is on screen, which is
+     * honest: inventing a name for an id nobody has resolved would be worse than showing the id.
+     */
+    const crumbs = screen.getByTestId('drill-crumbs')
+    expect(crumbs).toHaveTextContent('sq-9')
+  })
+
+  /**
+   * A link somebody edited by hand keeps the part that still makes sense.
+   *
+   * Answering a broken link with the whole project is the failure mode that matters: the reader sees
+   * a plausible table and no sign that their link was wrong.
+   */
+  it('keeps the trustworthy prefix of a hand-edited link', async () => {
+    route({ ad_set: [{ ...AD_SET, entity_id: 's1', external_id: 'sq-1', name: 'Riyadh · 18-34' }] })
+
+    renderWithProviders(<AnalyticsPage />, {
+      locale: 'en',
+      route: '/app/analytics?tab=ad_sets&drill=campaign:c1~nonsense:zz',
+    })
+
+    expect(await screen.findByText('Riyadh · 18-34')).toBeInTheDocument()
+
+    const first = entityCalls()[0]
+    expect(first).toContain('/entities/ad_set')
+    expect(first).toContain('parent=c1')
+  })
+})
