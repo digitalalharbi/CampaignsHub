@@ -22,6 +22,20 @@ final class DevQueuePingJob implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
+    /**
+     * Once. A heartbeat that retries is a heartbeat that lies.
+     *
+     * The whole value of this job is that a worker drained it NOW — `dev:queue-ping` waits for the
+     * cache key and reports the queue healthy when it appears. A retry an hour later would write
+     * `now()` from that later moment and refresh a heartbeat for a worker that had been dead the
+     * whole time, which is worse than no heartbeat: it is a green light nobody can distinguish from
+     * a real one.
+     *
+     * It also had no `$tries` at all, which Laravel reads as «retry forever» — an unbounded dev job
+     * on a shared queue.
+     */
+    public int $tries = 1;
+
     public function __construct(public string $token) {}
 
     public function handle(): void
