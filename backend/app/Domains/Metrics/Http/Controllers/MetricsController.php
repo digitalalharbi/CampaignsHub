@@ -440,10 +440,19 @@ final class MetricsController extends Controller
         $this->authorizeView($request);
         [$from, $to] = $this->range($request);
 
-        $scope = fn () => DailyMetric::query()
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
-            ->when($this->providerFilter($request) !== [], fn ($q) => $q->whereIn('provider', $this->providerFilter($request)))
-            ->toBase();
+        /*
+         * The canonical predicate, not a second copy of one axis of it.
+         *
+         * This clause narrowed by provider and silently ignored the objective and campaign the same
+         * request carried — so an operator who filtered to one campaign was told the currency and
+         * timezone story of the entire project, under chips naming that campaign. Every row this
+         * audit reads is a `daily_metrics` row, and every one of the three axes bounds it exactly.
+         */
+        $agg = $this->scoped($request);
+        $scope = fn () => $agg->applyScope(
+            DailyMetric::query()
+                ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+        )->toBase();
 
         // Money rows only. `original_currency` is null on impressions and clicks — a count has no
         // currency, and treating those nulls as an unknown currency would invent a warning.
@@ -531,6 +540,8 @@ final class MetricsController extends Controller
             'objectives' => $this->objectivesInRange($scope()),
             'catalogue' => $this->catalogue(),
             'unread_metric_keys' => $this->unreadMetricKeys($scope()),
+            /* Every axis this endpoint was sent, and it narrows by all three. */
+            'filter_scope' => $this->filterScope($request, ['provider', 'objective', 'campaign']),
         ], 'How these numbers were normalized.', meta: $this->meta($from, $to));
     }
 
@@ -699,6 +710,19 @@ final class MetricsController extends Controller
         }, $state['sources']);
 
         return ApiResponse::success($out, 'Data freshness.', meta: $this->meta($from, $to) + [
+            /*
+             * Provider narrows this; objective and campaign do NOT, and the response says so.
+             *
+             * A source's health is a property of a connection — when Meta last answered, whether the
+             * sweep failed, how many days of the window it covered. A campaign cannot make that
+             * verdict truer or falser, and narrowing the day count by campaign while leaving the
+             * verdict alone would produce rows reading «connected, fresh, 0 days with data», which
+             * describes the filter rather than the source and reads as an outage.
+             *
+             * So the filter is declined here rather than half-applied, and the strip is told, so it
+             * can say «across the project» instead of implying a narrowing that never happened.
+             */
+            'filter_scope' => $this->filterScope($request, ['provider']),
             'summary' => [
                 'state' => $state['state'],
                 'last_sync_at' => $state['last_sync_at'],
@@ -727,7 +751,18 @@ final class MetricsController extends Controller
         abort_if($tenantId === '' || $projectId === '', 400, 'No active project.');
 
         return ApiResponse::success(
-            $transparency->build($tenantId, $projectId, $from, $to, $this->providerFilter($request)),
+            $transparency->build($tenantId, $projectId, $from, $to, $this->providerFilter($request))
+                /*
+                 * This report compares what the platforms reported against what the store confirmed,
+                 * and only ONE of those two sides has a campaign on it. Narrowing the platform side
+                 * to a campaign while the store ledger stays whole would not answer a narrower
+                 * question — it would invent a discrepancy out of the filter and present it as an
+                 * attribution gap, which is the exact failure this endpoint exists to expose.
+                 *
+                 * So it declines the axis and says it declined, rather than ignoring it in silence
+                 * under chips that promise otherwise.
+                 */
+                + ['filter_scope' => $this->filterScope($request, ['provider'])],
             'Attribution transparency and de-duplication.',
             meta: $this->meta($from, $to),
         );
@@ -958,6 +993,46 @@ final class MetricsController extends Controller
         $list = is_array($raw) ? $raw : ($raw === '' ? [] : explode(',', (string) $raw));
 
         return array_values(array_filter(array_map('trim', $list)));
+    }
+
+    /**
+     * ANALYTICS-FILTER-TRUTH-001 — which axes this endpoint ACTUALLY narrowed by.
+     *
+     * The client sends `provider`, `objective` and `campaign` to every metrics endpoint. Three of
+     * them read only the provider and dropped the rest on the floor, which is a worse failure than
+     * frontend-only filtering rather than a milder one: the request looks filtered, the response is
+     * shaped like a filtered response, and the panel sits under chips that name a campaign while
+     * answering for the whole project. Nothing on the screen could tell the reader.
+     *
+     * So every axis the request asked for is accounted for here, and an axis this endpoint does not
+     * apply is NAMED. A panel that cannot narrow is not a bug in every case — source health is a
+     * property of a connection, not of a campaign, and the store side of an attribution
+     * reconciliation has no campaign to narrow by at all, so narrowing only the platform side would
+     * manufacture a discrepancy out of the filter. What is a bug is not saying so.
+     *
+     * @param  list<string>  $applies  the axes this endpoint genuinely narrows by
+     * @return array{applied: list<string>, unapplied: list<string>}
+     */
+    private function filterScope(Request $request, array $applies): array
+    {
+        $requested = [];
+
+        if ($this->providerFilter($request) !== []) {
+            $requested[] = 'provider';
+        }
+
+        if ($this->objectiveFilter($request) !== []) {
+            $requested[] = 'objective';
+        }
+
+        if ($this->campaignFilter($request) !== []) {
+            $requested[] = 'campaign';
+        }
+
+        return [
+            'applied' => array_values(array_intersect($requested, $applies)),
+            'unapplied' => array_values(array_diff($requested, $applies)),
+        ];
     }
 
     /** The aggregator scoped by the dashboard's platform, objective and campaign filters. */
