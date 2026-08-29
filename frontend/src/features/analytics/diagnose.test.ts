@@ -152,3 +152,78 @@ describe('what the diagnostic layer will and will not claim', () => {
     expect(d.findings.every((f) => f.stage !== 'value')).toBe(true)
   })
 })
+
+/**
+ * The lead-quality arm — the chain's last stage for a leads campaign.
+ *
+ * «Twelve leads» is where this chain used to stop, and it is not the question a lead-gen advertiser
+ * has. Twelve leads none of which the sales team could use is a worse outcome than four that
+ * converted, and a diagnosis that ends at the count calls that campaign healthy.
+ *
+ * The stage says exactly one thing, and the restraint is the point: leads arrived, none qualified.
+ * There is no ratio, because «what share of leads should qualify» has no cross-account answer — a
+ * mortgage broker and a gym are both healthy at rates an order of magnitude apart, and a threshold
+ * chosen here would be a benchmark this product invented and then reported back as a finding.
+ */
+describe('the lead quality stage', () => {
+  const leads = (o: Partial<DiagnosticInput> = {}): DiagnosticInput => ({
+    objective: 'leads',
+    totals: { spend: 1000, impressions: 50000, clicks: 400, landing_page_views: 380, conversions: 12, leads: 12, qualified_leads: 3 },
+    reported: { spend: true, impressions: true, clicks: true, landing_page_views: true, conversions: true, leads: true, qualified_leads: true },
+    ...o,
+  })
+
+  it('says nothing when leads are qualifying', () => {
+    const d = diagnose(leads())
+
+    expect(d.state).toBe('diagnosed')
+    expect(d.findings.map((f) => f.code)).not.toContain('leads_none_qualified')
+  })
+
+  it('names it when leads arrive and none of them qualify', () => {
+    const d = diagnose(leads({
+      totals: { spend: 1000, impressions: 50000, clicks: 400, landing_page_views: 380, conversions: 12, leads: 12, qualified_leads: 0 },
+    }))
+
+    const finding = d.findings.find((f) => f.code === 'leads_none_qualified')
+    expect(finding).toBeDefined()
+    /* Observed, not probable: it is a count, not an inference from a ratio. */
+    expect(finding?.confidence).toBe('observed')
+    expect(finding?.evidence).toEqual(['leads', 'qualified_leads'])
+  })
+
+  /**
+   * `qualified_leads` comes back from a CRM, not from the ad platform, so most accounts do not
+   * report it. That must be NAMED rather than judged — inferring quality from the platform's own
+   * count would be inventing the feedback the account has not given.
+   */
+  it('names the missing evidence rather than judging without it', () => {
+    const d = diagnose(leads({
+      reported: { spend: true, impressions: true, clicks: true, landing_page_views: true, conversions: true, leads: true },
+    }))
+
+    expect(d.missing).toContain('qualified_leads')
+    expect(d.findings.map((f) => f.code)).not.toContain('leads_none_qualified')
+  })
+
+  /** No leads at all is the conversion stage's finding. Saying both would report one problem twice. */
+  it('stays silent when there were no leads to qualify', () => {
+    const d = diagnose(leads({
+      totals: { spend: 1000, impressions: 50000, clicks: 400, landing_page_views: 380, conversions: 0, leads: 0, qualified_leads: 0 },
+    }))
+
+    expect(d.findings.map((f) => f.code)).toContain('no_conversions')
+    expect(d.findings.map((f) => f.code)).not.toContain('leads_none_qualified')
+  })
+
+  /** A sales campaign is not judged on lead quality — it did not buy leads. */
+  it('belongs to the leads chain alone', () => {
+    const d = diagnose({
+      objective: 'sales',
+      totals: { spend: 1000, impressions: 50000, clicks: 400, landing_page_views: 380, conversions: 12, revenue: 9000, leads: 12, qualified_leads: 0 },
+      reported: { spend: true, impressions: true, clicks: true, landing_page_views: true, conversions: true, revenue: true, leads: true, qualified_leads: true },
+    })
+
+    expect(d.findings.map((f) => f.code)).not.toContain('leads_none_qualified')
+  })
+})
