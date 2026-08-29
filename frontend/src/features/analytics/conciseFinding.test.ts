@@ -60,3 +60,33 @@ describe('the concise dashboard finding', () => {
     expect(f?.confidence).toBe('probable')
   })
 })
+
+/**
+ * The line names the EARLIEST weakness, and `quality` is the last stage — not the first.
+ *
+ * Written because the opposite is what happens by omission: a stage missing from `ORDER` gets
+ * `indexOf` -1 and sorts ahead of everything, so a leads campaign that is not being delivered at all
+ * would report «none of your leads qualified» as its headline. Fixing lead quality while the ads are
+ * not running is wasted work, and the line would have sent somebody to do it.
+ */
+describe('the concise line with a lead-quality finding', () => {
+  it('names the delivery problem, not the quality one, when both are true', () => {
+    const finding = conciseFinding({
+      objective: 'leads',
+      totals: { spend: 1000, impressions: 0, clicks: 0, landing_page_views: 0, conversions: 12, leads: 12, qualified_leads: 0 },
+      reported: { spend: true, impressions: true, clicks: true, landing_page_views: true, conversions: true, leads: true, qualified_leads: true },
+    })
+
+    expect(finding?.code).toBe('not_delivering')
+  })
+
+  it('names the quality problem when it is the only one', () => {
+    const finding = conciseFinding({
+      objective: 'leads',
+      totals: { spend: 1000, impressions: 50000, clicks: 400, landing_page_views: 380, conversions: 12, leads: 12, qualified_leads: 0 },
+      reported: { spend: true, impressions: true, clicks: true, landing_page_views: true, conversions: true, leads: true, qualified_leads: true },
+    })
+
+    expect(finding?.code).toBe('leads_none_qualified')
+  })
+})
