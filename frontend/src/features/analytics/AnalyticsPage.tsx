@@ -29,6 +29,7 @@ import {
   useTimeseries,
   type MetricFilters,
 } from './hooks'
+import { scopeNote, type FilterScope } from './filterScope'
 import { Panel, ProvenanceBadge, RateTrend, SERIES, platformColor, tooltipProps } from './components'
 import { listCreatives } from '@/features/content/api'
 import { compact, money, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
@@ -1083,13 +1084,16 @@ function AttributionSection({ projectId, range, filters }: TabProps) {
   const a = useAttribution(projectId, range, filters)
 
   return (
-    <AttributionPanel
-      data={a.data}
-      loading={a.isLoading}
-      error={a.isError}
-      locale={locale}
-      className="mt-4"
-    />
+    <>
+      <AttributionPanel
+        data={a.data}
+        loading={a.isLoading}
+        error={a.isError}
+        locale={locale}
+        className="mt-4"
+      />
+      <ScopeNote scope={a.data?.filter_scope} testid="attribution-scope" />
+    </>
   )
 }
 
@@ -1109,6 +1113,26 @@ function AttributionSection({ projectId, range, filters }: TabProps) {
  * (a second currency, a second attribution window, demo rows among real ones) are called out rather
  * than resolved quietly.
  */
+/**
+ * What a panel says when it could not honour one of the filters it was sent.
+ *
+ * Silence was the defect: three panels read only the provider off a request carrying an objective
+ * and a campaign too, so they sat under chips naming one campaign and answered for the whole
+ * project. Declining an axis can be right — see `filterScope` for the two cases where narrowing
+ * would invent a figure rather than reveal one — but declining without saying so is not.
+ */
+function ScopeNote({ scope, testid }: { scope?: FilterScope; testid: string }) {
+  const ar = useAr()
+  const note = scopeNote(scope, ar)
+  if (note === null) return null
+
+  return (
+    <p data-testid={testid} className="text-xs font-semibold text-text-muted">
+      {note}
+    </p>
+  )
+}
+
 function NormalizationPanel({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const n = useNormalization(projectId, range, filters)
@@ -1138,6 +1162,7 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
       className="mt-4"
     >
       <div data-testid="normalization" className="grid gap-3 text-sm">
+        <ScopeNote scope={d?.filter_scope} testid="normalization-scope" />
         {/* Currency. Silence here is a claim: a converted figure that says nothing reads as native. */}
         <Basis label={ar ? 'العملة' : 'Currency'}>
           {converted.length > 0
