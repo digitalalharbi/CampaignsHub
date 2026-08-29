@@ -152,4 +152,34 @@ describe('the concise state on a campaign row', () => {
     expect(screen.queryAllByTestId('campaign-trend-no-baseline').length).toBeGreaterThan(0)
     expect(screen.getAllByTestId('campaign-trend-no-baseline')[0]).toHaveTextContent('No baseline')
   })
+
+  /**
+   * The landing answer describes the same set the list shows, and keeps its silences apart.
+   *
+   * The fixtures hold one broken campaign, one healthy, one whose connector reported nothing, and one
+   * on-but-quiet. «Not measured» must appear as its own answer rather than being absorbed into the
+   * healthy count — that absorption is the opaque score this requirement forbids, on the first figure
+   * a reader sees.
+   */
+  it('answers what needs attention without folding the unmeasured into the healthy', async () => {
+    renderWithProviders(<CampaignsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('view-cards'))
+
+    await screen.findByText('Healthy')
+
+    const landing = screen.getByTestId('campaigns-landing-answer')
+    expect(landing).toHaveTextContent('need attention')
+    expect(screen.getByTestId('landing-unexamined')).toHaveTextContent('not measured')
+  })
+
+  /** No budget row can be paced in these fixtures, so pacing is said to be unmeasurable, not zero. */
+  it('says pacing could not be measured rather than answering zero', async () => {
+    renderWithProviders(<CampaignsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('view-cards'))
+
+    await screen.findByText('Healthy')
+
+    expect(screen.getByTestId('landing-pacing-unknown')).toBeInTheDocument()
+    expect(screen.queryByTestId('landing-overpacing')).not.toBeInTheDocument()
+  })
 })
