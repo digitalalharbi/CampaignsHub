@@ -36,6 +36,15 @@ final class CreativeRankingService
 
         [$sortKey, $direction, $reason] = $this->strategy($objective, $items);
 
+        /*
+         * No rankable metric means no leaders. An empty section is honest; an arbitrary five
+         * creatives under the heading «الأفضل أداءً» is a claim the data does not support, and the
+         * report is the copy a client keeps.
+         */
+        if ($sortKey === null) {
+            return [];
+        }
+
         usort($items, function ($a, $b) use ($sortKey, $direction) {
             $va = $a[$sortKey] ?? null;
             $vb = $b[$sortKey] ?? null;
@@ -76,6 +85,10 @@ final class CreativeRankingService
     {
         [$sortKey, $direction] = $this->strategy($objective, $items);
 
+        if ($sortKey === null) {
+            return [];
+        }
+
         // Spending, and actually measured on the metric it is being judged by.
         $measured = array_values(array_filter(
             $items,
@@ -96,7 +109,7 @@ final class CreativeRankingService
             return $direction === 'desc' ? $cmp : -$cmp;
         });
 
-        $reason = $this->weakness($objective);
+        $reason = $this->weakness($sortKey);
 
         return array_map(
             fn ($i) => $i + ['reason' => $reason($i, $avgCpa, $avgCtr)],
@@ -107,27 +120,42 @@ final class CreativeRankingService
     /**
      * Why this creative is on the list — the figure that put it there, not a verdict.
      *
+     * Built from the metric that ACTUALLY decided the order, exactly as the leaders' reason already
+     * was. This was a `match` on the objective with its own hardcoded phrasing per arm, and its
+     * `default` arm named ROAS — so a scope ranked on spend, because spend was all the provider
+     * reported, came back reading «أقل عائد على الإنفاق (ROAS —)». A sentence naming a different
+     * number from the one that produced the order is worse than no sentence: the reader checks the
+     * number they were given, finds nothing, and cannot tell whether the order or the figure is
+     * wrong.
+     *
+     * `RankingMetric` carries the Arabic name and the direction, so the phrasing follows the metric
+     * and a metric added to a layout is explained without editing this file.
+     *
      * @return callable(array<string, mixed>, ?float, ?float): string
      */
-    private function weakness(string $objective): callable
+    private function weakness(string $metric): callable
     {
-        return match ($objective) {
-            'awareness', 'video' => fn ($i) => sprintf('أعلى تكلفة ألف ظهور (CPM %s) في هذه الفترة.', $this->fmt($i['cpm'] ?? null)),
-            'traffic' => fn ($i, $avgCpa, $avgCtr) => sprintf(
-                'أقل CTR (%s)%s.',
-                $this->pct($i['ctr'] ?? null),
-                $avgCtr && ($i['ctr'] ?? 0) < $avgCtr ? ' دون متوسط الحملة' : '',
-            ),
-            'leads', 'app_installs' => fn ($i, $avgCpa) => sprintf(
-                'أعلى تكلفة نتيجة (CPA %s)%s.',
-                $this->fmt($i['cpa'] ?? null),
-                $avgCpa && ($i['cpa'] ?? 0) > $avgCpa ? ' فوق متوسط الحملة' : '',
-            ),
-            default => fn ($i, $avgCpa) => sprintf(
-                'أقل عائد على الإنفاق (ROAS %s×)%s.',
-                $this->num($i['roas'] ?? null),
-                $avgCpa && ($i['cpa'] ?? 0) > $avgCpa ? ' مع CPA فوق المتوسط' : '',
-            ),
+        $spec = RankingMetric::of($metric);
+        $label = $spec->labelAr;
+
+        // «Worst» is the far end of «best», so the adjective flips: the worst of a cost metric is the
+        // HIGHEST, and the worst of a return is the lowest.
+        $lead = $spec->direction === RankingDirection::LowerIsBetter ? 'أعلى' : 'أقل';
+
+        return function (array $i) use ($metric, $label, $lead): string {
+            $value = $i[$metric] ?? null;
+
+            if (! is_numeric($value)) {
+                return sprintf('%s %s (—).', $lead, $label);
+            }
+
+            $shown = match ($metric) {
+                'ctr', 'engagement_rate', 'conversion_rate', 'video_completion_rate' => $this->pct((float) $value),
+                'roas' => $this->num((float) $value).'×',
+                default => $this->fmt((float) $value),
+            };
+
+            return sprintf('%s %s (%s) في هذه الفترة.', $lead, $label, $shown);
         };
     }
 
@@ -146,14 +174,25 @@ final class CreativeRankingService
      * The objective strings arriving here are the report's own vocabulary — `app_installs` rather
      * than `app` — so they are mapped to the canonical family instead of being assumed to match.
      *
-     * @return array{0:string,1:string,2:callable} sort key, direction, reason builder
+     * @return array{0:?string,1:string,2:callable} sort key (null ⇒ this scope cannot be ranked),
+     *                                              direction, reason builder
      */
     private function strategy(string $objective, array $items = []): array
     {
+        /*
+         * An objective this map does not recognise is UNKNOWN, not Sales.
+         *
+         * `default => Sales` meant every unrecognised objective was ranked by ROAS — the exact thing
+         * ANALYTICS-OBJECTIVE-SYSTEM-001 forbids, «All must never rank unlike objectives by one
+         * universal metric such as ROAS». It is silent, too: an awareness report whose objective
+         * string this map has not learned would be ordered by return on ad spend and read as though
+         * somebody had chosen that. `Unknown` carries a null primary precisely so this case has an
+         * answer that is not a guess.
+         */
         $family = ObjectiveFamily::tryFrom($objective) ?? match ($objective) {
             'app_installs' => ObjectiveFamily::App,
             'conversions', 'purchases' => ObjectiveFamily::Sales,
-            default => ObjectiveFamily::Sales,
+            default => ObjectiveFamily::Unknown,
         };
 
         /*
@@ -164,7 +203,37 @@ final class CreativeRankingService
          * the old private map it replaced. `resolveMetric` takes the primary when anything reports
          * it and otherwise the first secondary that does, in efficiency-before-volume order.
          */
-        $key = $this->ranking->resolveMetric($items, $family) ?? RankingMetric::forObjective($family)['primary'] ?? 'roas';
+        /*
+         * `resolveMetric` alone. There is no fallback to the layout's primary, because that fallback
+         * only ever fired in the one case it must not: `resolveMetric` already returns the primary
+         * whenever any row reports it, and the first reported secondary otherwise — so reaching past
+         * it means NOTHING in this objective's layout was reported. Taking the primary anyway ranked
+         * creatives by a figure none of them had, and the reason line said so out loud: «أقل تكلفة
+         * الألف ظهور (—)», an order explained by a number that is not there.
+         */
+        $key = $items === []
+            /*
+             * With no rows there is nothing to rank, and the honest answer to «what WOULD this be
+             * judged on» is the objective's own primary — which is the question the contract parity
+             * tests ask. Availability cannot decide when there is nothing available to inspect, and
+             * answering null here would make the contract unaskable rather than making it truthful.
+             */
+            ? RankingMetric::forObjective($family)['primary']
+            : $this->ranking->resolveMetric($items, $family);
+
+        /*
+         * Nothing in this objective's layout was reported by anyone, so there is no order to give.
+         *
+         * This used to end `?? 'roas'`, which contradicted the contract it was calling:
+         * `resolveMetric` returns null on purpose, and its own docblock says «this scope cannot be
+         * ranked» is an answer, and a better one than an arbitrary order. Falling through to ROAS
+         * made that answer unreachable and put a revenue ordering on creatives nobody measured
+         * revenue for — in a client's report, where an order reads as a judgement.
+         */
+        if ($key === null) {
+            return [null, 'desc', static fn (): string => ''];
+        }
+
         $spec = RankingMetric::of($key);
         $direction = $spec->direction === RankingDirection::LowerIsBetter ? 'asc' : 'desc';
 
