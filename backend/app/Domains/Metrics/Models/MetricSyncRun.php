@@ -64,14 +64,34 @@ final class MetricSyncRun extends Model
         };
     }
 
-    /** How long it took, or null while it is still running. */
+    /**
+     * How long it took, or null while it is still running.
+     *
+     * ## Why this threw, and why it threw INTERMITTENTLY
+     *
+     * `diffInSeconds()` returns a FLOAT in Carbon 3 — always, `11.0` for eleven whole seconds — and
+     * `max(0, 11.0)` returns that float, against a declared `?int`. So this method raised a
+     * `TypeError` for every run that took a measurable amount of time.
+     *
+     * It did not fail every time because of how `max()` breaks a tie: `max(0, 0.0)` returns the
+     * FIRST argument, the int `0`. A run that started and finished inside the same second therefore
+     * came back as a clean int, and that is what most of the suite's fake syncs do. The failure rode
+     * on how busy the machine was — the same commit passed 2,710 tests on one CI run and failed one
+     * assertion on the next with nothing relevant changed between them.
+     *
+     * The surface it crashes is the sync log, which is the page an operator opens BECAUSE something
+     * already looks wrong.
+     *
+     * Whole seconds throughout: the model's datetime cast stores `Y-m-d H:i:s`, so microseconds are
+     * gone long before this is called, and there is no fraction here left to round.
+     */
     public function durationSeconds(): ?int
     {
         if ($this->started_at === null || $this->finished_at === null) {
             return null;
         }
 
-        return max(0, $this->finished_at->diffInSeconds($this->started_at, absolute: true));
+        return (int) max(0, $this->finished_at->diffInSeconds($this->started_at, absolute: true));
     }
 
     /**
