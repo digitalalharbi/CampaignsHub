@@ -223,7 +223,13 @@ export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
           // `title` rather than a custom tooltip: it is the one hover that also works for a keyboard
           // user's screen reader and survives being inside a chart card, a table cell or a PDF print.
           title={item.reading.exact}
-          className={`text-text-primary ${item.lead ? METRIC_VALUE : METRIC_VALUE_DENSE}`}
+          /*
+           * `dir="ltr"` and `text-start` are two different settings and the card needs both. The
+           * first keeps «56.3K SAR» in digit order inside an Arabic page; without the second the
+           * span inherits its own LTR alignment, so the figure drifts to the left edge while its
+           * label stays at the right — the pair stops reading as one thing.
+           */
+          className={`block text-start text-text-primary ${item.lead ? METRIC_VALUE : METRIC_VALUE_DENSE}`}
         >
           {item.reading.text}
         </span>
@@ -236,7 +242,7 @@ export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
           order inside an RTL page, exactly as a converted figure is kept.
         */
         <span className="flex flex-col gap-0.5">
-          <span dir="ltr" className={`text-text-primary ${item.lead ? METRIC_VALUE : METRIC_VALUE_DENSE}`}>
+          <span dir="ltr" className={`block text-start text-text-primary ${item.lead ? METRIC_VALUE : METRIC_VALUE_DENSE}`}>
             {item.reading.original}
           </span>
           <span className={`inline-flex items-center gap-1 font-medium text-text-muted ${METRIC_HINT}`}>
@@ -352,7 +358,7 @@ export function MetricStrip({
           data-testid={`${id}-metrics-loading`}
           aria-busy="true"
           aria-label={t('loading', ar)}
-          className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4"
+          className={`grid grid-cols-2 ${CARD_GAP} lg:grid-cols-3 xl:grid-cols-4`}
         >
           {primary.map((item) => (
             <div key={item.key} className="h-[96px] animate-pulse rounded-2xl border border-border bg-surface-secondary/40" />
@@ -412,7 +418,7 @@ export function MetricStrip({
         </div>
       )}
 
-      <div className={`grid ${CARD_GAP} sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`}>
+      <div className={`grid grid-cols-2 ${CARD_GAP} lg:grid-cols-3 xl:grid-cols-4`}>
         {primary.map((item) => (
           <MetricCard key={item.key} item={item} ar={ar} />
         ))}
@@ -434,7 +440,7 @@ export function MetricStrip({
           {expanded && (
             <div
               data-testid={`${id}-metrics-secondary`}
-              className={`grid ${CARD_GAP} sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`}
+              className={`grid grid-cols-2 ${CARD_GAP} lg:grid-cols-3 xl:grid-cols-4`}
             >
               {secondary.map((item) => (
                 <MetricCard key={item.key} item={item} ar={ar} />
