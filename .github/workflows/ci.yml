@@ -104,22 +104,45 @@ jobs:
   # ── The browser gate, on a runner that is only running the gate ────────────────────────────────
   #
   # `npm run gate` verbatim: same script, same Playwright config, same three projects, same
-  # `workers: 1`. Nothing about what the gate MEANS changes here — only where it runs.
+  # `workers: 1`. Nothing about what the gate MEANS changes here — only where, and now in how many
+  # jobs, it runs.
   #
   # It was run on a developer's laptop, and that is the whole reason for this job. A gate competing
   # with a browser, an editor and Spotlight produced single layout assertions taking fifty-seven
   # minutes and wholesale firefox failures across specs that had passed on chromium minutes earlier
   # — an environment collapsing, reported as a hundred product defects. A verdict that depends on
   # what else the machine happens to be doing is not a verdict.
+  # One JOB per browser, because the gate was already one isolated RUN per browser.
+  #
+  # `run-gate.mjs` gives chromium, firefox and webkit their own database reset, their own servers and
+  # their own Node process — deliberately, so that firefox never meets what chromium created. Nothing
+  # is shared between them, which is exactly the property that makes them separable jobs.
+  #
+  # In one job they ran in sequence: 13.5 + 22.5 + 22.5 ≈ 59 minutes of tests, and 49–70 minutes of
+  # wall clock. That hour is the queue's whole throughput — a merge invalidates every other open head,
+  # so the drain lands about one pull request per gate. Three jobs cost the same runner-minutes and
+  # finish in the time of the slowest browser.
+  #
+  # Each also installs only the browser it runs. Installing all three took several minutes per job to
+  # download two engines it would never open.
   gate:
     runs-on: ubuntu-latest
+    strategy:
+      # Every browser reports its own verdict. `fail-fast: false` because «webkit failed» and
+      # «webkit failed AND firefox failed» are different bugs, and cancelling the others hides the
+      # second one until somebody fixes the first.
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    name: gate (${{ matrix.browser }})
     # A gate that cannot START its tests is not a verdict, and must not look like one.
     #
-    # Sized from measurement: chromium 13.5m + firefox 22.5m + webkit 22.5m is ~59 minutes of tests,
-    # and observed job durations have run 49–70 minutes. Two hours is real headroom. GitHub's default
-    # is SIX, which is how a stalled browser download sat `in_progress` for 2h40m on run 32224855943
-    # with backend and frontend long since green and not one test executed.
-    timeout-minutes: 120
+    # Sized from measurement: the slowest single browser is ~22.5 minutes of tests, and the job also
+    # installs a browser and boots two servers. Ninety minutes is real headroom for one of them, where
+    # two hours was headroom for all three. GitHub's default is SIX, which is how a stalled browser
+    # download sat `in_progress` for 2h40m on run 32224855943 with backend and frontend long since
+    # green and not one test executed.
+    timeout-minutes: 90
     services:
       postgres:
         image: postgres:16
@@ -162,13 +185,13 @@ jobs:
       - name: Browsers
         working-directory: frontend
         timeout-minutes: 15
-        run: npx playwright install --with-deps chromium firefox webkit
+        run: npx playwright install --with-deps ${{ matrix.browser }}
       # The report exporter's Arabic text-layer pass (CAMPAIGNSHUB-PDF-TEXTLAYER) shells out to
       # python3 + pikepdf. It is best-effort and never blocks an export, but leaving it absent here
       # would mean the gate exercises a different code path than a developer's machine does.
       - name: Arabic text-layer toolchain
         run: python3 -m pip install --quiet pikepdf
-      - name: Gate — chromium, firefox, webkit
+      - name: Gate — ${{ matrix.browser }}
         working-directory: frontend
         env:
           DB_CONNECTION: pgsql
@@ -177,6 +200,8 @@ jobs:
           DB_PASSWORD: postgres
           REDIS_HOST: 127.0.0.1
           REDIS_CLIENT: phpredis
+          # The default is all three; a job that runs one names it.
+          GATE_BROWSERS: ${{ matrix.browser }}
         # No `continue-on-error`, no retry wrapper: the script exits with the first non-zero code it
         # saw, and that code is the gate's verdict.
         run: npm run gate
