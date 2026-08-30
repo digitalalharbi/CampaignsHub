@@ -446,6 +446,79 @@ final class UnifiedFigureConsistencyTest extends TestCase
     }
 
     /**
+     * PROVIDER-CROSS-SURFACE-PROPAGATION-001 — the BASIS of the figures, asserted directly.
+     *
+     * Everything else in this file compares figures to each other. That catches a surface growing its
+     * own query and cannot catch the other half of the requirement: currency, timezone and attribution
+     * were only ever asserted INDIRECTLY, by the figures happening to match.
+     *
+     * They are different kinds of wrong. A dashboard that adds a 7-day-click campaign to a
+     * 1-day-view one is not wrong in its arithmetic — every figure reconciles, every surface agrees —
+     * and the reader still draws a conclusion the data does not support. `metrics/normalization`
+     * exists to state the basis, and this asserts it states what is actually in the range rather than
+     * a default: the currency PAIR with its conversion, the timezone shift with both zones named, and
+     * every attribution window present, counted separately.
+     *
+     * The second window is the part that matters. Collapsing two windows into one row — taking the
+     * first, or the commonest — is exactly the silence the endpoint was built to break.
+     */
+    public function test_the_basis_of_the_window_is_stated_rather_than_defaulted(): void
+    {
+        // A second campaign in the SAME project, collected under a different attribution window.
+        $this->syncWindow('1d_view', 40.0);
+
+        $norm = $this->read('metrics/normalization')->json('data');
+
+        $currencies = $norm['currencies'] ?? [];
+        $this->assertNotSame([], $currencies, 'the window reported no currency at all');
+        $this->assertSame('SAR', $currencies[0]['from']);
+        $this->assertSame('SAR', $currencies[0]['to']);
+        $this->assertFalse($currencies[0]['converted'], 'nothing was converted here, and saying otherwise is a claim about a rate');
+
+        $timezones = $norm['timezones'] ?? [];
+        $this->assertNotSame([], $timezones, 'the window reported no timezone at all');
+        $this->assertSame('UTC', $timezones[0]['from']);
+        $this->assertSame('Asia/Riyadh', $timezones[0]['to']);
+        $this->assertTrue($timezones[0]['shifted'], 'a day boundary was moved and the reader was not told');
+
+        $windows = array_column((array) ($norm['attribution_windows'] ?? []), 'rows', 'window');
+        $this->assertArrayHasKey('7d_click', $windows);
+        $this->assertArrayHasKey('1d_view', $windows, 'two attribution windows were collapsed into one — the figures still add up, and the comparison does not');
+    }
+
+    /**
+     * And the window's EDGES are the same edges everywhere.
+     *
+     * A surface that computes its own range — or applies a timezone to a `metric_date` that is already
+     * a date — is off by one day at the boundary. It is invisible in the middle of a month and it is
+     * the whole of a Monday report: the day that matters most is the one that just ended.
+     *
+     * So a row on the last day of the window must be counted by every surface, and a row on the first
+     * day AFTER it by none of them. Asserted through the same three readers the rest of this file
+     * reconciles — the dashboard, the platform breakdown and the campaign list.
+     */
+    public function test_the_last_day_counts_everywhere_and_the_day_after_counts_nowhere(): void
+    {
+        $before = (float) $this->read('metrics/summary')->json('data.current.spend');
+
+        $this->syncOn('2026-07-31', 25.0);
+        $this->syncOn('2026-08-01', 999.0);
+
+        $summary = (float) $this->read('metrics/summary')->json('data.current.spend');
+        $platforms = $this->sum($this->read('metrics/platforms')->json('data'), 'spend');
+        $campaigns = $this->sum($this->read('metrics/campaigns')->json('data'), 'spend');
+
+        $this->assertEqualsWithDelta($before + 25.0, $summary, 0.01, 'the last day of the window is inside it');
+        $this->assertEqualsWithDelta($summary, $platforms, 0.01);
+        $this->assertEqualsWithDelta($summary, $campaigns, 0.01);
+        $this->assertLessThan(
+            $before + 100.0,
+            $summary,
+            'the day after the window was counted — a boundary that moves is a Monday report about the wrong week',
+        );
+    }
+
+    /**
      * MONEY-USD-002 — every surface states the SAME unit for the same window.
      *
      * The harness above proves the figures match. A figure is only half a statement: 100 rendered under
@@ -800,6 +873,66 @@ final class UnifiedFigureConsistencyTest extends TestCase
                 'project_currency' => 'SAR',
             ])->save();
         }
+
+        app(TenantContext::class)->forget();
+    }
+
+    /** One more day of spend for the campaign under test, on a date of the caller's choosing. */
+    private function syncOn(string $date, float $spend): void
+    {
+        $this->writeSpend($this->campaign, $date, '7d_click', $spend);
+    }
+
+    /** A second campaign in this project whose rows were collected under another attribution window. */
+    private function syncWindow(string $window, float $spend): void
+    {
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $campaign = UnifiedCampaign::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'name' => 'حملة '.$window, 'status' => 'active', 'objective' => 'sales',
+            'total_budget' => 500, 'budget_currency' => 'SAR',
+        ]);
+
+        app(TenantContext::class)->forget();
+
+        $this->writeSpend($campaign, self::DATE, $window, $spend);
+    }
+
+    private function writeSpend(UnifiedCampaign $campaign, string $date, string $window, float $spend): void
+    {
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $external = ExternalCampaign::withoutGlobalScopes()->firstOrCreate(
+            ['unified_campaign_id' => $campaign->id, 'provider' => 'meta'],
+            [
+                'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+                'external_account_id' => $this->account->getKey(),
+                'external_id' => 'ext-'.uniqid(), 'name' => $campaign->name, 'status' => 'active',
+            ],
+        );
+
+        app(UpsertDailyMetrics::class)->handle([
+            new NormalizedMetric(
+                tenantId: (string) $this->tenant->id,
+                projectId: (string) $this->project->id,
+                provider: 'meta',
+                externalAccountId: (string) $this->account->getKey(),
+                externalCampaignId: (string) $external->getKey(),
+                unifiedCampaignId: (string) $campaign->id,
+                metricDate: Carbon::parse($date),
+                metricKey: 'spend',
+                value: $spend,
+                originalCurrency: 'SAR',
+                projectCurrency: 'SAR',
+                exchangeRate: 1.0,
+                originalTimezone: 'UTC',
+                projectTimezone: 'Asia/Riyadh',
+                attributionWindow: $window,
+                sourceType: 'api',
+                dataFreshnessAt: Carbon::parse($date)->endOfDay(),
+            ),
+        ]);
 
         app(TenantContext::class)->forget();
     }
