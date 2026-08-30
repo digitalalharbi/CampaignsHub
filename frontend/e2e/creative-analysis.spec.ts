@@ -134,7 +134,7 @@ test.describe('the creative library', () => {
 
     await expect.poll(() => cards(page).count(), { timeout: 20000 }).toBe(0)
     await expect(
-      page.getByText(/لا توجد محتويات تطابق هذا التحديد|No creatives match this selection/),
+      page.getByText(/لا توجد إعلانات تطابق هذا التحديد|No ads match this selection/),
     ).toBeVisible()
   })
 })
