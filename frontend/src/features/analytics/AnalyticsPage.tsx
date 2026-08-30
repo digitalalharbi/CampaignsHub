@@ -24,6 +24,8 @@ import {
   useLastNDaysRange,
   useAttribution,
   useNormalization,
+  useObjectiveExplanations,
+  useObjectiveLeaders,
   usePlatformObjectives,
   usePlatforms,
   useSummary,
@@ -37,6 +39,7 @@ import { scopeNote, type FilterScope } from './filterScope'
 import { CAMPAIGN_RELEVANCE_ORDER, orderByRelevanceWith, relevanceOf } from '@/features/campaigns/campaignRelevance'
 import { useCampaignOptionSource } from './useCampaignOptionSource'
 import { Panel, ProvenanceBadge, RateTrend, SERIES, platformColor, tooltipProps } from './components'
+import { PathAnalysis } from './PathAnalysis'
 import { listCreatives } from '@/features/content/api'
 import { compact, money, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
@@ -753,6 +756,16 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
   const p = usePlatforms(projectId, range, filters)
   const byPath = usePlatformObjectives(projectId, range, filters)
   const rows = p.data ?? []
+  /*
+   * PLATFORM-DECISION-ANALYTICS-001 — the chart above compares platforms across the whole
+   * programme, which answers «how is each platform doing» and cannot answer «which platform is
+   * contributing most to THIS objective». The path blocks below answer that, inside each path,
+   * and say so where a path cannot support a comparison at all.
+   */
+  const leaders = useObjectiveLeaders(projectId, range, filters)
+  const explanations = useObjectiveExplanations(projectId, range, filters)
+  const summary = useSummary(projectId, range, filters)
+
   return (
     <div className="space-y-4">
       {/*
@@ -830,6 +843,20 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
           initialSort={{ column: 1, dir: 'desc' }}
         />
       </Panel>
+
+      {/*
+        The contribution per path is `PlatformPaths` above; this is the half it does not answer —
+        which campaign inside the path is carrying it, and what the figures say about the distance
+        between the two ends.
+      */}
+      <PathAnalysis
+        locale={ar ? 'ar' : 'en'}
+        currency={summary.data?.currency ?? null}
+        leaders={leaders.data?.paths ?? []}
+        explanations={explanations.data?.paths ?? []}
+        loading={leaders.isLoading}
+        error={leaders.isError}
+      />
     </div>
   )
 }
@@ -1989,6 +2016,13 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
   const s = useSummary(projectId, range, filters)
   const currency = s.data?.currency ?? null
   const rows = c.data ?? []
+  /*
+   * OBJECTIVE-ANALYTICS-DEPTH-001 · FUNNEL-ANALYTICAL-PATTERN-001 — the family cards below say what
+   * each objective spent and produced. They do not say which campaign inside a family is carrying it,
+   * which is the question an operator opens this tab with, and they do not read the figures back.
+   */
+  const leaders = useObjectiveLeaders(projectId, range, filters)
+  const explanations = useObjectiveExplanations(projectId, range, filters)
 
   /*
    * READY-3 — the catalogue owns which KPIs an objective is judged by, and this kept its own copy.
@@ -2125,6 +2159,15 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
           })}
         </div>
       </Panel>
+
+      <PathAnalysis
+        locale={ar ? 'ar' : 'en'}
+        currency={currency}
+        leaders={leaders.data?.paths ?? []}
+        explanations={explanations.data?.paths ?? []}
+        loading={leaders.isLoading}
+        error={leaders.isError}
+      />
     </div>
   )
 }
