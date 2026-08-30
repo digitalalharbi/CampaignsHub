@@ -385,7 +385,12 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
       <div
         role="tablist"
         aria-label={ar ? 'أقسام التحليلات' : 'Analytics sections'}
-        className="flex flex-wrap items-end gap-x-1 gap-y-1.5 overflow-x-auto border-b border-border pb-px"
+        /*
+         * `flex-wrap` AND `overflow-x-auto` was a contradiction: a wrapping row never scrolls, so on
+         * a phone eleven tabs became three stacked lines and the last one still sat under the edge.
+         * One row that scrolls below `sm`, the wrap restored from `sm` up where the row fits.
+         */
+        className="flex snap-x snap-mandatory items-end gap-x-1 gap-y-1.5 overflow-x-auto border-b border-border pb-px [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:snap-none [&::-webkit-scrollbar]:hidden"
       >
         {TAB_GROUPS.map((group, index) => (
           <div key={group.key} className="flex items-end">
@@ -398,7 +403,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
                   role="tab"
                   aria-selected={tab === t.id}
                   onClick={() => setTab(t.id)}
-                  className={`relative whitespace-nowrap rounded-t-lg px-2.5 py-2 text-sm font-semibold transition-colors ${
+                  className={`relative shrink-0 snap-start whitespace-nowrap rounded-t-lg px-3 py-3 text-sm font-semibold transition-colors sm:px-2.5 sm:py-2 ${
                     tab === t.id ? 'text-brand-600' : 'text-text-secondary hover:text-text-primary'
                   }`}
                 >
