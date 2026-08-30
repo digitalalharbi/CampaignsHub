@@ -8,6 +8,7 @@ import {
   type Connector, type PlatformState, type ResumableConnection,
 } from './api'
 import { ConnectionWizard } from './ConnectionWizard'
+import { ProviderErrorNote } from './ProviderErrorNote'
 import { AccountsPanel } from './AccountsPanel'
 import { StoresPanel } from '@/features/commerce/StoresPanel'
 import { listClientWorkspaces } from '@/features/projects/api'
@@ -523,7 +524,7 @@ function ConnectorCard({
               : 'This platform is not open for connecting yet. The platform operator is setting it up.'}
           </span>
         ) : state === 'error' ? (
-          <span className="text-danger" data-testid={`connector-error-${c.key}`}>{c.connection_error}</span>
+          <ProviderErrorNote error={c.connection_error} locale={ar ? 'ar' : 'en'} testId={`connector-error-${c.key}`} />
         ) : wizard?.state === 'needs_selection' ? (
           /* Authorised, with an inventory nobody has chosen from yet. Available and connected are
            * different numbers and are shown as different numbers. */

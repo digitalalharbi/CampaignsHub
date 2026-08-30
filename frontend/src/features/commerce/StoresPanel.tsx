@@ -5,6 +5,7 @@ import { listStoreProviders, startStoreOAuth, syncStore, type StoreProvider, typ
 import { listClientWorkspaces } from '@/features/projects/api'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { ProviderErrorNote } from '@/features/integrations/ProviderErrorNote'
 import { Card, CardDescription, CardTitle } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
@@ -220,7 +221,13 @@ export function StoresPanel() {
               ) : (
                 <>
                   {provider.state === 'error' && provider.connection_error && (
-                    <p data-testid={`store-error-${provider.key}`} className="text-sm text-danger">{provider.connection_error}</p>
+                    <div className="text-sm">
+                      <ProviderErrorNote
+                        error={provider.connection_error}
+                        locale={ar ? 'ar' : 'en'}
+                        testId={`store-error-${provider.key}`}
+                      />
+                    </div>
                   )}
 
                   {provider.stores.length === 0 ? (
