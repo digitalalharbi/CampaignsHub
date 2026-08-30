@@ -270,7 +270,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
       </FilterBar>
 
       {capped && (
-        <p data-testid="alert-events-capped" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5 text-[12.5px] text-text-secondary">
+        <p data-testid="alert-events-capped" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5 text-[12px] text-text-secondary">
           {/*
             The queue is ordered open → snoozed → resolved, so what a cap drops is the oldest resolved
             events. Saying which end was cut is the difference between a bounded list and a list that
