@@ -40,7 +40,7 @@ import { CAMPAIGN_RELEVANCE_ORDER, orderByRelevanceWith, relevanceOf } from '@/f
 import { useCampaignOptionSource } from './useCampaignOptionSource'
 import { Panel, ProvenanceBadge, RateTrend, SERIES, platformColor, tooltipProps } from './components'
 import { PathAnalysis } from './PathAnalysis'
-import { listCreatives } from '@/features/content/api'
+import { listCreatives, type CreativeCard } from '@/features/content/api'
 import { compact, money, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
 import { plotSeries } from './timeseriesMoney'
@@ -82,6 +82,8 @@ import { useQuery } from '@tanstack/react-query'
 import { StoreFunnelTab } from './StoreFunnelTab'
 import { AttributionPanel } from './AttributionPanel'
 import { DiagnosticPanel } from './DiagnosticPanel'
+import { AdPoster } from '@/features/content/AdPoster'
+import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
 import {
   creativeScope, decodePath, drillInto, drillUpTo, encodePath, nextLevel, parentFor, rememberName,
   stepLabel, withNames,
@@ -1855,6 +1857,48 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
   )
   const currency = q.data?.currency ?? null
   const child = nextLevel(level)
+
+  /*
+   * AD-PREVIEW-001 — the ads table had no media at all.
+   *
+   * It is the one surface in the product that lists ads by name and number and shows nothing of what
+   * ran: a reader deciding which of eleven ads to stop was choosing between eleven strings. The
+   * pictures come from the same library endpoint every other surface reads — filtered by the ads ON
+   * SCREEN, so the request scales with the page rather than with the estate — and open in place,
+   * because this is a comparison table and a navigation costs the reader the comparison.
+   *
+   * Ad sets have no media of their own, so the query is asked for ads only.
+   */
+  const adIds = useMemo(
+    () => (level === 'ad' ? rows.map((row) => row.external_id).filter((id): id is string => Boolean(id)) : []),
+    [level, rows],
+  )
+  const previews = useQuery({
+    queryKey: ['analytics', 'ad-previews', projectId, range.from, range.to, adIds.join(',')],
+    queryFn: () => listCreatives(
+      { from: range.from, to: range.to, per_page: Math.max(adIds.length, 1), ad_ids: adIds },
+      projectId ?? undefined,
+    ),
+    enabled: level === 'ad' && adIds.length > 0 && Boolean(projectId),
+  })
+
+  /*
+   * An ad's creative, by the ad's own provider id.
+   *
+   * One creative can be carried by several ads — that relation is why `creative.ads` is a list — so
+   * the map is built from the relation rather than from a column naming one ad.
+   */
+  const creativeByAd = useMemo(() => {
+    const map = new Map<string, CreativeCard>()
+    for (const creative of previews.data?.creatives ?? []) {
+      for (const ad of creative.ads ?? []) {
+        if (ad.external_id) map.set(ad.external_id, creative)
+      }
+    }
+    return map
+  }, [previews.data])
+
+  const [openAd, setOpenAd] = useState<{ creative: CreativeCard; figures: { label: string; value: string }[] } | null>(null)
   /*
    * Drilling moves the TAB as well as the path.
    *
@@ -1898,7 +1942,41 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
   ]
 
   const cells = rows.map((row) => [
-    <div key={row.entity_id}>
+    <div key={row.entity_id} className="flex items-center gap-2">
+      {/*
+        The still, where there is one. A row whose ad the library has no creative for renders no
+        thumbnail at all rather than a grey placeholder — an empty frame beside eleven real ones
+        reads as «this ad has no media», which is a claim about the ad and not about our sync.
+      */}
+      {level === 'ad' && creativeByAd.has(row.external_id ?? '') && (
+        <button
+          type="button"
+          data-testid={`ad-preview-open-${row.entity_id}`}
+          title={ar ? 'معاينة الإعلان' : 'Preview this ad'}
+          onClick={() => {
+            const creative = creativeByAd.get(row.external_id ?? '')
+            if (!creative) return
+            setOpenAd({
+              creative,
+              // The row's own figures — the numbers the reader is looking at, not a second query.
+              figures: [
+                { label: ar ? 'الإنفاق' : 'Spend', value: rowMoney(row, 'spend', currency) },
+                { label: ar ? 'الظهور' : 'Impressions', value: metricOrDash(row.impressions) },
+                { label: 'CTR', value: rateOrDash(row.ctr) },
+              ],
+            })
+          }}
+          className="shrink-0 overflow-hidden rounded-lg border border-border transition-colors hover:border-brand-500"
+        >
+          <AdPoster
+            preview={creativeByAd.get(row.external_id ?? '')?.preview}
+            name={row.name ?? row.external_id ?? ''}
+            className="h-9 w-9"
+            testid={`ad-thumb-${row.entity_id}`}
+          />
+        </button>
+      )}
+      <div className="min-w-0">
       {/*
         Only a row with a level BENEATH it is a button. An ad is the last rung this table serves, and
         a control that looks clickable and does nothing is worse than plain text.
@@ -1923,6 +2001,7 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
         </div>
       )}
       <div className="text-xs text-text-secondary">{row.external_id}</div>
+      </div>
     </div>,
     /*
      * The state, beside the row rather than only in its position.
@@ -2003,6 +2082,15 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
               opened the tab with.
             */}
             <MetricTable head={head} rows={cells} values={values} />
+
+            {openAd && (
+              <AdPreviewDialog
+                creative={openAd.creative}
+                locale={ar ? 'ar' : 'en'}
+                figures={openAd.figures}
+                onClose={() => setOpenAd(null)}
+              />
+            )}
           </div>
         )}
       </Panel>
