@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Concerns\ProjectScope;
+use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -162,6 +163,113 @@ final class ObjectivePerformance
     }
 
     /** One row per campaign, with its objective and its results, from the one metrics table. */
+    /**
+     * PLATFORM-DECISION-ANALYTICS-001 — each platform's contribution to each marketing path.
+     *
+     * ## The question the Platforms surface could not answer
+     *
+     * It listed platforms with one set of figures. «Which platform is contributing most to THIS
+     * objective» had no answer, and the only comparison available — one number per platform, across
+     * every objective at once — is the comparison that must never be made: a platform running
+     * awareness and a platform running sales are not better or worse than each other, and a ranking
+     * that puts them in one column invents a verdict out of the mix of work each was given.
+     *
+     * ## Grouped by PATH first, platform second
+     *
+     * Within a path the comparison is real: two platforms both buying reach can be compared on cost
+     * per thousand. Across paths it is not, and the shape of this payload is what stops the second
+     * one being written — there is no list that contains platforms from two paths.
+     *
+     * ## Comparable is a per-path fact, and often false
+     *
+     * A path where one platform ran is not a ranking, it is a single row; saying «Meta is the best
+     * platform for awareness» when Meta is the only platform that ran awareness is a sentence with
+     * no evidence behind it. `comparable` is true only where at least two platforms actually spent
+     * on that path, and the reason travels with it.
+     *
+     * Reuses `rows()` — the same query, the same objective classification, the same fail-closed
+     * bounds. A second query would eventually disagree with the paths above it about which campaign
+     * is a sales campaign.
+     *
+     * @return array<string,mixed>
+     */
+    public function byPlatform(Carbon $from, Carbon $to): array
+    {
+        $paths = [];
+
+        foreach (MarketingPath::cases() as $path) {
+            $paths[$path->value] = [
+                'path' => $path->value,
+                'label_ar' => $path->labels()['ar'],
+                'label_en' => $path->labels()['en'],
+                'headline_metrics' => $path->headlineMetrics(),
+                'platforms' => [],
+            ];
+        }
+
+        foreach ($this->rows($from, $to) as $row) {
+            $objective = CampaignObjective::tryFrom((string) $row->objective) ?? CampaignObjective::Other;
+            $provider = (string) $row->provider;
+            $bucket = &$paths[$objective->path()->value]['platforms'];
+
+            $bucket[$provider] ??= [
+                'provider' => $provider,
+                'spend' => 0.0, 'impressions' => 0.0, 'clicks' => 0.0,
+                'landing_page_views' => 0.0, 'orders' => 0.0, 'revenue' => 0.0,
+                'campaigns' => 0,
+            ];
+
+            foreach (['spend', 'impressions', 'clicks', 'landing_page_views', 'orders', 'revenue'] as $key) {
+                $bucket[$provider][$key] += (float) $row->{$key};
+            }
+            $bucket[$provider]['campaigns']++;
+        }
+
+        $out = [];
+
+        foreach ($paths as $path) {
+            $platforms = array_values($path['platforms']);
+            $spending = array_values(array_filter($platforms, static fn (array $p): bool => $p['spend'] > 0));
+            $total = array_sum(array_map(static fn (array $p): float => $p['spend'], $platforms));
+
+            foreach ($platforms as $i => $platform) {
+                // Share of the PATH's spend, never of the project's: «40% of awareness» is a fact
+                // about a decision somebody made; «40% of everything» is a fact about the mix.
+                $platforms[$i]['spend_share'] = $total > 0 ? round($platform['spend'] / $total, 4) : null;
+                foreach (['spend', 'impressions', 'clicks', 'landing_page_views', 'orders', 'revenue'] as $key) {
+                    $platforms[$i][$key] = round($platform[$key], 2);
+                }
+            }
+
+            $path['platforms'] = AdPlatforms::sortRows($platforms, 'provider');
+            $path['spend'] = round($total, 2);
+            /*
+             * Two platforms that SPENT, not two that exist. A connected platform with no campaign on
+             * this path contributes a row of zeros, and «Meta beat TikTok on awareness» where TikTok
+             * ran no awareness is the fabricated verdict this flag exists to prevent.
+             */
+            $path['comparable'] = count($spending) > 1;
+            $path['comparable_reason'] = match (true) {
+                count($spending) > 1 => 'two_or_more_platforms_spent',
+                count($spending) === 1 => 'only_one_platform_spent',
+                default => 'nothing_spent_on_this_path',
+            };
+            unset($path['platforms']['__none__']);
+            $out[] = $path;
+        }
+
+        return [
+            'paths' => $out,
+            /*
+             * Said in the payload rather than left to each surface to remember: this is the sentence
+             * a «best platform» card would have to contradict in order to exist.
+             */
+            'cross_path_comparison' => false,
+            'cross_path_reason_ar' => 'المنصات لا تُقارن عبر المسارات: منصة تشتري وعيًا ومنصة تشتري مبيعات لا تفضل إحداهما الأخرى — الفرق في العمل المُسند إليها، لا في أدائها.',
+            'cross_path_reason_en' => 'Platforms are not compared across paths: one buying awareness and one buying sales are not better or worse than each other — what differs is the work each was given.',
+        ];
+    }
+
     private function rows(Carbon $from, Carbon $to): Collection
     {
         $query = DailyMetric::query()
@@ -182,8 +290,10 @@ final class ObjectivePerformance
                 'daily_metrics.external_account_id',
                 $this->accountIds ?: ['00000000-0000-0000-0000-000000000000'],
             ))
-            ->groupBy('daily_metrics.unified_campaign_id', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
-            ->select('daily_metrics.unified_campaign_id', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
+            // `provider` joins the key so one row per (campaign, platform) exists — the grain
+            // `byPlatform()` reads. The path totals above sum these rows and are unchanged by it.
+            ->groupBy('daily_metrics.unified_campaign_id', 'daily_metrics.provider', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
+            ->select('daily_metrics.unified_campaign_id', 'daily_metrics.provider', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
             ->selectRaw($this->sum('spend'))
             ->selectRaw($this->sum('impressions'))
             ->selectRaw($this->sum('clicks'))

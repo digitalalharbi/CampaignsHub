@@ -457,6 +457,33 @@ final class MetricsController extends Controller
         );
     }
 
+    /**
+     * PLATFORM-DECISION-ANALYTICS-001 — platforms inside each marketing path, never across them.
+     *
+     * `platforms` answers «how is each platform doing» with one row per platform over every
+     * objective at once. That row cannot answer «which platform is contributing most to this
+     * objective», and the comparison it invites — one number per platform across a mixed programme —
+     * is the one that must never be made: a platform buying awareness and a platform buying sales
+     * are not better or worse than each other, and ranking them together invents a verdict out of
+     * the work each was given.
+     */
+    public function platformObjectives(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        $campaigns = array_values(array_filter((array) $request->input('campaign_ids', [])));
+
+        return ApiResponse::success(
+            (new ObjectivePerformance(
+                campaignIds: $campaigns === [] ? null : $campaigns,
+                providers: $this->providerFilter($request) === [] ? null : $this->providerFilter($request),
+            ))->byPlatform($from, $to),
+            'Platform contribution by objective.',
+            meta: $this->meta($from, $to),
+        );
+    }
+
     public function budget(Request $request): JsonResponse
     {
         $this->authorizeView($request);
