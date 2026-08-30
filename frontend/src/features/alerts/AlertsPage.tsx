@@ -437,7 +437,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     <div className="grid gap-4 md:grid-cols-[1fr_320px]">
       <div className="flex flex-col gap-2">
         {capped && (
-          <p data-testid="alert-rules-capped" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5 text-[12.5px] text-text-secondary">
+          <p data-testid="alert-rules-capped" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5 text-[12px] text-text-secondary">
             {locale === 'ar'
               ? `تُعرض أحدث ${rules.length} قاعدة من ${total}.`
               : `Showing the most recent ${rules.length} of ${total} rules.`}

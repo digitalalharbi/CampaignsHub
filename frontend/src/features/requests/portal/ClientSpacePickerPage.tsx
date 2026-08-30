@@ -77,7 +77,7 @@ export function ClientSpacePickerPage() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-[15px] font-bold text-text-primary">{space.name}</span>
-                    <span className="mt-0.5 block truncate text-[12.5px] text-text-muted" dir="ltr">{space.slug}</span>
+                    <span className="mt-0.5 block truncate text-[12px] text-text-muted" dir="ltr">{space.slug}</span>
                   </span>
                   <Arrow size={16} className="shrink-0 text-text-muted" />
                 </Link>
