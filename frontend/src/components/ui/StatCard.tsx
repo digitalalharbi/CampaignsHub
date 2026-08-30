@@ -57,6 +57,7 @@ export function StatCard({
   tone = 'neutral',
   dot = false,
   trailing,
+  spark,
   testid,
 }: {
   label: string
@@ -75,6 +76,15 @@ export function StatCard({
   dot?: boolean
   /** A delta pill, a link, an icon — whatever the surface puts beside the label. */
   trailing?: ReactNode
+  /**
+   * A sparkline, drawn by the surface that has the series.
+   *
+   * A SLOT rather than a chart: this component decides how a labelled figure looks and nothing else.
+   * Two surfaces drew their own card because they needed a spark under the number, and the copy came
+   * with its own label size, its own value size and its own padding — the spark was the reason, and
+   * the drift was the cost.
+   */
+  spark?: ReactNode
   testid?: string
 }) {
   return (
@@ -100,6 +110,8 @@ export function StatCard({
       </span>
 
       {hint && <span className="text-[11px] text-text-tertiary">{hint}</span>}
+
+      {spark}
     </div>
   )
 }
