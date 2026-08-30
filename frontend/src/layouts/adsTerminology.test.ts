@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
 
 /**
  * ADS-TERMINOLOGY-001 — the advertising entity has ONE user-facing name.
@@ -27,7 +25,23 @@ import { join } from 'node:path'
  *     different domain and not an advertising entity at all.
  */
 
-const ROOT = process.cwd()
+/*
+ * Read through Vite rather than `node:fs`: this suite's tsconfig carries no Node types, and adding
+ * them to type a few `readFileSync` calls would widen the app's type surface to buy nothing. The
+ * glob is eager and resolved at build time, so its keys are repository paths in every runner.
+ */
+const TREE: Record<string, string> = import.meta.glob('/src/**/*.{ts,tsx}', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+})
+
+/** The file's source, or a failure naming it — a guard that reads nothing must not pass. */
+function read(path: string): string {
+  const source = TREE['/' + path]
+  if (source === undefined) throw new Error(`${path} is not in the source tree — this guard reads a file that moved`)
+  return source
+}
 
 /** The words that must not name an advertising entity in navigation. */
 const COMPETING = ['المحتوى', 'المحتويات', 'الإبداعات']
@@ -35,7 +49,7 @@ const COMPETING = ['المحتوى', 'المحتويات', 'الإبداعات']
 type Leaf = { to: string; ar: string; en: string }
 
 function leaves(file: string): Leaf[] {
-  const source = readFileSync(join(ROOT, 'src/layouts', file), 'utf8')
+  const source = read(`src/layouts/${file}`)
 
   return [...source.matchAll(/\{\s*to:\s*'([^']+)',\s*ar:\s*'([^']+)',\s*en:\s*'([^']+)'/g)].map(
     ([, to, ar, en]) => ({ to: to!, ar: ar!, en: en! }),
@@ -85,7 +99,7 @@ describe('ADS-TERMINOLOGY-001 — page titles on the ads surfaces', () => {
      * `title` of its own — it is opened from the library and titled by the creative's name — so a
      * scan for `title` alone silently found nothing there and passed.
      */
-    const titles = [...readFileSync(join(ROOT, path), 'utf8').matchAll(/\b(?:title|heading|library|details|kind|members):\s*'([^']+)'/g)]
+    const titles = [...read(path).matchAll(/\b(?:title|heading|library|details|kind|members):\s*'([^']+)'/g)]
       .map(([, text]) => text!)
 
     expect(titles.length, 'no titles were found — the parser is agreeing with itself').toBeGreaterThan(0)
@@ -96,7 +110,7 @@ describe('ADS-TERMINOLOGY-001 — page titles on the ads surfaces', () => {
 /** Nothing above can pass by accident: the words really are still in the tree, in their own domain. */
 describe('the influencer surfaces keep their own word', () => {
   it('still says «المحتوى» where a creator made it', () => {
-    const source = readFileSync(join(ROOT, 'src/features/auth/AuthPanel.tsx'), 'utf8')
+    const source = read('src/features/auth/AuthPanel.tsx')
 
     expect(source).toContain('المحتوى')
   })
@@ -105,7 +119,9 @@ describe('the influencer surfaces keep their own word', () => {
 /** A directory walk exists so the two describes above cannot silently point at deleted files. */
 describe('the files this guard names still exist', () => {
   it('finds every layout it reads', () => {
-    const present = readdirSync(join(ROOT, 'src/layouts')).filter((f) => statSync(join(ROOT, 'src/layouts', f)).isFile())
+    const present = Object.keys(TREE)
+      .filter((path) => path.startsWith('/src/layouts/'))
+      .map((path) => path.slice('/src/layouts/'.length))
 
     expect(present).toEqual(expect.arrayContaining(['appNav.ts', 'agencyNav.ts']))
   })
