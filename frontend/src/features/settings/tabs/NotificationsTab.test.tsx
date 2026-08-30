@@ -54,6 +54,8 @@ function prefs(over: Partial<NotifPrefs> = {}): NotifPrefs {
     timezone: 'Asia/Riyadh',
     locale: 'ar',
     digest_hour: 8,
+    digest_weekday: 1,
+    digest_monthday: 1,
     available_timezones: ['Asia/Riyadh', 'Europe/London'],
     available_categories: [],
     ...over,
@@ -195,5 +197,46 @@ describe('the notification preferences centre', () => {
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
     expect(mutateAsync.mock.calls[0]?.[0].digests.recommendations).toBe(true)
+  })
+})
+
+/**
+ * EMAIL-SETTINGS-DEPTH-001 — the day a digest arrives on is now reachable.
+ *
+ * `digest_weekday` and `digest_monthday` existed as columns, the sender honoured them, and the
+ * settings screen's «next send» computed from them — and nothing wrote them. Every row in the
+ * product held the defaults, so a weekly digest arrived on Monday because 1 is the default, not
+ * because anybody chose Monday. A setting a person cannot reach is a setting they do not have.
+ */
+describe('the day the digest arrives on', () => {
+  it('offers the weekday in the sender’s own numbering, and saves it', async () => {
+    open()
+
+    // ISO-8601: Sunday is 7 — the same numbering `$local->dayOfWeekIso` uses in the sweep.
+    const weekday = (await screen.findByLabelText('يوم الملخص الأسبوعي')) as HTMLSelectElement
+    fireEvent.change(weekday, { target: { value: '7' } })
+    expect(weekday.value).toBe('7')
+    fireEvent.click(screen.getByText('حفظ التفضيلات'))
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
+    /*
+     * The LAST call, not the first.
+     *
+     * `mutateAsync` is a file-level mock and the tests above this one already saved through it, so
+     * `calls[0]` is somebody else's payload — which is how this assertion first «failed» against a
+     * component that was working perfectly.
+     */
+    expect(mutateAsync.mock.calls.at(-1)?.[0]).toMatchObject({ digest_weekday: 7 })
+  })
+
+  /** The month day stops at 28: a report set for the 30th would never arrive in February. */
+  it('offers no month day that could skip a month', async () => {
+    open()
+
+    const monthday = (await screen.findByLabelText('يوم الملخص الشهري')) as HTMLSelectElement
+    const values = [...monthday.options].map((o) => Number(o.value))
+
+    expect(Math.max(...values)).toBe(28)
+    expect(values).toHaveLength(28)
   })
 })

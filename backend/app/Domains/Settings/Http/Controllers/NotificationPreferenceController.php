@@ -102,6 +102,9 @@ final class NotificationPreferenceController extends Controller
             'timezone' => $row->timezone ?? 'Asia/Riyadh',
             'locale' => $row->locale ?? 'ar',
             'digest_hour' => (int) ($row->digest_hour ?? 8),
+            // Read back so the screen shows the day that was chosen rather than the day it defaults to.
+            'digest_weekday' => (int) ($row->digest_weekday ?? 1),
+            'digest_monthday' => (int) ($row->digest_monthday ?? 1),
             'available_timezones' => timezone_identifiers_list(),
             // MAIL-011 — the catalogue, and this person's effective answer for every entry in it.
             'catalogue' => $this->catalogue(),
@@ -153,6 +156,27 @@ final class NotificationPreferenceController extends Controller
             'timezone' => ['sometimes', 'nullable', 'string', Rule::in(timezone_identifiers_list())],
             'locale' => ['sometimes', 'nullable', 'in:ar,en'],
             'digest_hour' => ['sometimes', 'nullable', 'integer', 'between:0,23'],
+            /*
+             * EMAIL-SETTINGS-DEPTH-001 — the DAY a weekly or monthly digest arrives on.
+             *
+             * Both columns have existed since the scheduling migration, `SendDailyDigests` honours
+             * them, and `DigestSchedule` computes «next send» from them — and nothing wrote them.
+             * They held their defaults on every row in the product, so a weekly digest arrived on
+             * Monday because 1 is the default, not because anybody chose Monday, and the settings
+             * screen's «next send» was reading a preference nobody could express.
+             *
+             * ISO-8601 for the weekday, so 1 is Monday and 7 is Sunday — the same numbering
+             * `$local->dayOfWeekIso` uses in the sweep, because two numberings for one column is how
+             * a Sunday digest arrives on Monday.
+             *
+             * The month day stops at 28 deliberately, and the migration says why: a report set for
+             * the 30th would simply never arrive in February, silently. A schedule that skips a
+             * month without saying so is worse than one that lands a few days early — and refusing
+             * 30 at the door is better than accepting it and quietly sending on the 1st, which is
+             * what the sweep's fallback does with a value it should never receive.
+             */
+            'digest_weekday' => ['sometimes', 'nullable', 'integer', 'between:1,7'],
+            'digest_monthday' => ['sometimes', 'nullable', 'integer', 'between:1,28'],
         ]);
 
         if (array_key_exists('types', $data)) {
@@ -177,7 +201,7 @@ final class NotificationPreferenceController extends Controller
                 $write[$json] = $data[$json] === null ? null : json_encode($data[$json]);
             }
         }
-        foreach (['frequency', 'timezone', 'locale', 'digest_hour'] as $scalar) {
+        foreach (['frequency', 'timezone', 'locale', 'digest_hour', 'digest_weekday', 'digest_monthday'] as $scalar) {
             if (array_key_exists($scalar, $data) && $data[$scalar] !== null) {
                 $write[$scalar] = $data[$scalar];
             }
@@ -377,6 +401,7 @@ final class NotificationPreferenceController extends Controller
         return $row ?? (object) [
             'channels' => null, 'categories' => null, 'types' => null, 'quiet_hours' => null, 'frequency' => null,
             'project_ids' => null, 'digests' => null, 'timezone' => null, 'locale' => null, 'digest_hour' => null,
+            'digest_weekday' => null, 'digest_monthday' => null,
         ];
     }
 

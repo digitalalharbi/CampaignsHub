@@ -91,6 +91,8 @@ export function NotificationsTab() {
       timezone: p.timezone,
       locale: p.locale,
       digest_hour: p.digest_hour,
+      digest_weekday: p.digest_weekday,
+      digest_monthday: p.digest_monthday,
     })
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
@@ -318,6 +320,38 @@ export function NotificationsTab() {
               value={String(p.digest_hour)}
               onChange={(e) => setP({ ...p, digest_hour: Number(e.target.value) })}
               options={Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${h}:00` }))}
+            />
+          </Field>
+          {/*
+            EMAIL-SETTINGS-DEPTH-001 — the DAY, beside the hour it has always sat next to.
+            Both columns existed, the sender honoured them and «next send» computed from them, and
+            nothing wrote them: every weekly digest arrived on Monday because 1 is the default, not
+            because anybody chose Monday.
+          */}
+          <Field label={ar ? 'يوم الملخص الأسبوعي' : 'Weekly summary day'} htmlFor="digest-weekday">
+            <Select
+              id="digest-weekday"
+              value={String(p.digest_weekday)}
+              onChange={(e) => setP({ ...p, digest_weekday: Number(e.target.value) })}
+              /* ISO-8601 — 1 Monday … 7 Sunday, the sender's own numbering. */
+              options={[
+                { value: '1', label: ar ? 'الاثنين' : 'Monday' },
+                { value: '2', label: ar ? 'الثلاثاء' : 'Tuesday' },
+                { value: '3', label: ar ? 'الأربعاء' : 'Wednesday' },
+                { value: '4', label: ar ? 'الخميس' : 'Thursday' },
+                { value: '5', label: ar ? 'الجمعة' : 'Friday' },
+                { value: '6', label: ar ? 'السبت' : 'Saturday' },
+                { value: '7', label: ar ? 'الأحد' : 'Sunday' },
+              ]}
+            />
+          </Field>
+          <Field label={ar ? 'يوم الملخص الشهري' : 'Monthly summary day'} htmlFor="digest-monthday">
+            <Select
+              id="digest-monthday"
+              value={String(p.digest_monthday)}
+              onChange={(e) => setP({ ...p, digest_monthday: Number(e.target.value) })}
+              /* 1–28 only: a report set for the 30th would never arrive in February, and silently. */
+              options={Array.from({ length: 28 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))}
             />
           </Field>
           <Field label={ar ? 'المنطقة الزمنية' : 'Timezone'} htmlFor="tz">

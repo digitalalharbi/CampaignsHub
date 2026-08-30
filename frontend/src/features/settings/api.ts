@@ -160,6 +160,15 @@ export interface NotifPrefs {
   timezone: string
   locale: 'ar' | 'en'
   digest_hour: number
+  /**
+   * EMAIL-SETTINGS-DEPTH-001 — the DAY the weekly and monthly digests arrive on.
+   *
+   * ISO-8601 for the weekday: 1 is Monday, 7 is Sunday — the same numbering the sender uses, because
+   * two numberings for one column is how a Sunday digest arrives on Monday. The month day stops at
+   * 28: a report set for the 30th would never arrive in February, silently.
+   */
+  digest_weekday: number
+  digest_monthday: number
   available_timezones: string[]
   available_categories: string[]
 }
@@ -172,7 +181,7 @@ export interface NotifPrefs {
  * server wrote them anyway from defaults — so saving a checkbox silently cleared somebody's digest.
  */
 export type NotifPrefsInput = Partial<
-  Pick<NotifPrefs, 'channels' | 'categories' | 'types' | 'quiet_hours' | 'frequency' | 'project_ids' | 'digests' | 'timezone' | 'locale' | 'digest_hour'>
+  Pick<NotifPrefs, 'channels' | 'categories' | 'types' | 'quiet_hours' | 'frequency' | 'project_ids' | 'digests' | 'timezone' | 'locale' | 'digest_hour' | 'digest_weekday' | 'digest_monthday'>
 >
 
 export function useNotifPrefs() {
