@@ -120,7 +120,7 @@ export function NominationsPage() {
               type="button"
               data-testid={`nomination-filter-${value || 'all'}`}
               onClick={() => setFilter(value as '' | Nomination['status'])}
-              className={`rounded-full border px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+              className={`rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors ${
                 filter === value ? 'border-brand-500 bg-brand-primary-soft text-brand-700' : 'border-border text-text-secondary hover:bg-surface-hover'
               }`}
             >

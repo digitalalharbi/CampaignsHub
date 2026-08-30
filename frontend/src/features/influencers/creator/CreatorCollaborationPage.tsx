@@ -85,7 +85,7 @@ function TermsPanel({ c, ar, id }: { c: CreatorCollaboration; ar: boolean; id: s
             ? ar ? 'قبلت هذه الشروط' : 'You accepted these terms'
             : ar ? 'اعتذرت عن هذه الشروط' : 'You declined these terms'}
         </span>
-        <p className="mt-1.5 text-[12.5px] text-text-muted">
+        <p className="mt-1.5 text-[12px] text-text-muted">
           {ar
             ? 'لتغيير الاتفاق تحتاج الوكالة إلى إرسال شروط معدّلة.'
             : 'Changing the agreement means the agency sends revised terms.'}
@@ -99,14 +99,14 @@ function TermsPanel({ c, ar, id }: { c: CreatorCollaboration; ar: boolean; id: s
       <h2 className="font-heading text-[15px] font-bold text-text-primary">
         {ar ? 'شروط بانتظار ردّك' : 'Terms awaiting your answer'}
       </h2>
-      <p className="mt-1 text-[12.5px] text-text-secondary">
+      <p className="mt-1 text-[12px] text-text-secondary">
         {ar
           ? 'يمكنك الرد مرة واحدة. بعدها يلزم إرسال شروط معدّلة من الوكالة.'
           : 'You can answer once. After that, changing it means the agency sends revised terms.'}
       </p>
 
       {respond.isError && (
-        <p role="alert" className="mt-3 rounded-lg bg-danger/10 px-3 py-2 text-[12.5px] font-semibold text-danger">
+        <p role="alert" className="mt-3 rounded-lg bg-danger/10 px-3 py-2 text-[12px] font-semibold text-danger">
           {ar ? 'تعذّر حفظ ردّك. حدّث الصفحة وحاول مجددًا.' : 'Your answer could not be saved. Refresh and try again.'}
         </p>
       )}
@@ -179,7 +179,7 @@ function DeliverableRow({
         <div className="min-w-0">
           <Ltr className="font-heading text-sm font-bold text-text-primary">
             {d.type}
-            {d.platform && <span className="ps-2 font-sans text-[12.5px] font-semibold text-text-muted">{d.platform}</span>}
+            {d.platform && <span className="ps-2 font-sans text-[12px] font-semibold text-text-muted">{d.platform}</span>}
           </Ltr>
           {d.due_on && (
             <span className="mt-1 flex items-center gap-1.5 text-[12px] text-text-muted">
@@ -191,7 +191,7 @@ function DeliverableRow({
             </span>
           )}
         </div>
-        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11.5px] font-bold ${status.tone}`}>
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${status.tone}`}>
           {ar ? status.ar : status.en}
         </span>
       </div>
@@ -201,7 +201,7 @@ function DeliverableRow({
       {d.feedback && d.status === 'rejected' && (
         <p
           data-testid="creator-feedback"
-          className="mt-3 flex gap-2 rounded-lg bg-danger/10 px-3 py-2 text-[12.5px] text-danger"
+          className="mt-3 flex gap-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger"
         >
           <MessageSquareWarning size={15} className="mt-px shrink-0" aria-hidden />
           <span dir="auto">{d.feedback}</span>
@@ -213,7 +213,7 @@ function DeliverableRow({
           href={d.submitted_url}
           target="_blank"
           rel="noreferrer noopener"
-          className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-brand-600 hover:underline"
+          className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-semibold text-brand-600 hover:underline"
         >
           <ExternalLink size={13} aria-hidden />
           {ar ? 'ما سلّمته' : 'What you submitted'}
@@ -242,7 +242,7 @@ function DeliverableRow({
                 />
               </Field>
               {submit.isError && (
-                <p role="alert" className="text-[12.5px] font-semibold text-danger">
+                <p role="alert" className="text-[12px] font-semibold text-danger">
                   {ar ? 'تعذّر التسليم. تأكد من الرابط وحاول مجددًا.' : 'That could not be submitted. Check the link and try again.'}
                 </p>
               )}
@@ -323,7 +323,7 @@ export function CreatorCollaborationPage() {
       <div>
         <Link
           to="/influencers/me"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-text-muted hover:text-text-primary"
+          className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-text-muted hover:text-text-primary"
         >
           <ArrowRight size={14} className="rtl:rotate-180" aria-hidden />
           {ar ? 'أعمالك' : 'Your work'}
@@ -338,19 +338,19 @@ export function CreatorCollaborationPage() {
           surface at all — see the api module. */}
       <dl className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-border bg-surface p-4">
-          <dt className="text-[11.5px] font-semibold text-text-muted">{ar ? 'أجرك' : 'Your fee'}</dt>
+          <dt className="text-[11px] font-semibold text-text-muted">{ar ? 'أجرك' : 'Your fee'}</dt>
           <dd className="mt-1 font-heading text-lg font-extrabold text-text-primary">
             {c.fee === null ? (ar ? 'غير محدّد' : 'Not set') : <Ltr>{money(c.fee, c.currency)}</Ltr>}
           </dd>
         </div>
         <div className="rounded-2xl border border-border bg-surface p-4">
-          <dt className="text-[11.5px] font-semibold text-text-muted">{ar ? 'الفترة' : 'Period'}</dt>
+          <dt className="text-[11px] font-semibold text-text-muted">{ar ? 'الفترة' : 'Period'}</dt>
           <dd className="mt-1 text-sm font-semibold text-text-primary" dir="ltr">
             {c.starts_on || c.ends_on ? `${c.starts_on ?? '—'} → ${c.ends_on ?? '—'}` : ar ? 'غير محدّدة' : 'Not set'}
           </dd>
         </div>
         <div className="rounded-2xl border border-border bg-surface p-4">
-          <dt className="text-[11.5px] font-semibold text-text-muted">{ar ? 'بانتظارك' : 'Awaiting you'}</dt>
+          <dt className="text-[11px] font-semibold text-text-muted">{ar ? 'بانتظارك' : 'Awaiting you'}</dt>
           <dd className="mt-1 font-heading text-lg font-extrabold text-text-primary">{c.progress.awaiting_me}</dd>
         </div>
       </dl>

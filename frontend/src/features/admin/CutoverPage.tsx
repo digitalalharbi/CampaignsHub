@@ -247,7 +247,7 @@ export function CutoverPage() {
               <li key={c.id} data-testid={`conflict-${c.id}`} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border px-4 py-3">
                 <div className="min-w-0">
                   <p className="text-[14px] font-bold text-text-primary" dir="ltr">{c.contact_email ?? c.contact_phone}</p>
-                  <p className="mt-0.5 text-[12.5px] text-text-muted">
+                  <p className="mt-0.5 text-[12px] text-text-muted">
                     {REASON_LABELS[c.reason] ? (ar ? REASON_LABELS[c.reason].ar : REASON_LABELS[c.reason].en) : c.reason}
                     {c.tenant_name && ` · ${c.tenant_name}`}
                     {/* The consequence, before the choice. */}

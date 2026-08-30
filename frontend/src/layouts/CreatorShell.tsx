@@ -45,7 +45,7 @@ export function CreatorShell() {
               {/* Silent for someone who is not a creator here: "your work with the agency" over a
                   panel explaining they have none is the header contradicting the page. */}
               {!notACreator && (
-                <span className="block truncate text-[11.5px] text-text-muted">
+                <span className="block truncate text-[11px] text-text-muted">
                   {ar ? 'أعمالك مع الوكالة' : 'Your work with the agency'}
                 </span>
               )}
