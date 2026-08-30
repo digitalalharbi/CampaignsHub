@@ -38,6 +38,7 @@ final class ReportGenerator
         private readonly DisclaimerResolver $disclaimers,
         private readonly ReportObservations $observations,
         private readonly DataFreshnessService $freshness,
+        private readonly ReportStructure $structure,
     ) {}
 
     public function generate(Report $report): array
@@ -223,6 +224,16 @@ final class ReportGenerator
         // checksum lets the print pipeline verify it rendered the snapshot it was given.
         // Now that every figure is in place, read them back and say what happened (§14.7).
         $data['observations'] = $this->observations->build($lens, $data);
+
+        /*
+         * REPORT-ANALYTICAL-DEPTH-001 — the report's own structure, derived from what it holds.
+         *
+         * After the figures, deliberately: a contents page decided before the data is read is a
+         * promise the report may not keep — an objective breakdown over one objective, a findings
+         * heading over an empty state. `ReportStructure` reads the assembled snapshot, so a section
+         * is present because its evidence is, and an absent one carries the reason it is absent.
+         */
+        $data['outline'] = $this->structure->sections($data);
 
         /*
          * REPORTS-RECONCILIATION-001 — which CONTRACT a snapshot's figures were computed under.
