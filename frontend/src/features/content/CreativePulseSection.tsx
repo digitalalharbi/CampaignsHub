@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ArrowDownRight, ArrowUpRight, ChevronLeft, ChevronRight, ImageIcon, PlayCircle, TriangleAlert } from 'lucide-react'
 import { CreativeInsightCard } from './CreativeInsightCard'
+import { posterSource, readPreview } from './adPreview'
 import { getCreativePulse, type CreativeMove, type CreativeWinner, type PathComparison, type SpendByKind } from './pulse'
 import { formatMetric, metricLabel, metricState } from './metrics'
 import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
@@ -43,30 +44,30 @@ import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/ca
 
 const COPY = {
   ar: {
-    title: 'تحليل المحتوى الإعلاني',
+    title: 'تحليل الإعلان',
     subtitle: 'من الأرقام نفسها التي تقرأها المكتبة والتقارير — لا مصدر ثانٍ.',
     openLibrary: 'فتح المكتبة',
-    empty: 'لا توجد محتويات ضمن هذا التحديد.',
-    error: 'تعذّر تحميل تحليل المحتوى.',
+    empty: 'لا توجد إعلانات ضمن هذا التحديد.',
+    error: 'تعذّر تحميل تحليل الإعلان.',
     bestByObjective: 'الأفضل حسب هدف الحملة',
     bestImage: 'أفضل صورة',
     bestVideo: 'أفضل فيديو',
     growing: 'الأسرع نموًا',
-    declining: 'المحتويات المتراجعة',
-    fatigue: 'حالة إجهاد المحتوى',
+    declining: 'الإعلانات المتراجعة',
+    fatigue: 'حالة إجهاد الإعلان',
     alerts: 'تنبيهات الإجهاد',
-    spendAtRisk: 'إنفاق مستمر على محتوى مُجهَد',
-    spendByKind: 'توزيع الإنفاق حسب نوع المحتوى',
+    spendAtRisk: 'إنفاق مستمر على إعلان مُجهَد',
+    spendByKind: 'توزيع الإنفاق حسب نوع الإعلان',
     imageVsVideo: 'الصور مقابل الفيديو',
-    bestPlatform: 'أفضل منصة لكل محتوى',
+    bestPlatform: 'أفضل منصة لكل إعلان',
     lastSync: 'آخر مزامنة',
     never: 'لم تتم بعد',
-    creatives: 'محتوى',
+    creatives: 'إعلان',
     of: 'من',
     showing: 'المعروض',
-    noWinner: 'لا توجد بيانات كافية لترشيح محتوى.',
-    lowEvidence: 'ترشيح مبدئي — لم يبلغ أي محتوى الحد الأدنى من الظهور.',
-    evidenceNote: (n: string) => `مرشَّح من ${n} محتوى`,
+    noWinner: 'لا توجد بيانات كافية لترشيح إعلان.',
+    lowEvidence: 'ترشيح مبدئي — لم يبلغ أي إعلان الحد الأدنى من الظهور.',
+    evidenceNote: (n: string) => `مرشَّح من ${n} إعلان`,
     minImpressions: (n: string) => `الحد الأدنى للترشيح: ${n} ظهور`,
     path: 'المسار',
     metric: 'المؤشر',
@@ -85,13 +86,22 @@ const COPY = {
     campaign: 'الحملة',
     adSet: 'المجموعة الإعلانية',
     ad: 'الإعلان',
-    creative: 'المحتوى',
+    /*
+     * ADS-TERMINOLOGY-001 draws a line here.
+     *
+     * The user-facing name for an advertising entity is «الإعلان», and that is what the level ABOVE
+     * is called. The rung below it is a different object — one creative can be carried by several
+     * ads — and naming both «الإعلان» produced a breadcrumb reading «… › الإعلان › الإعلان», where
+     * two adjacent links go to different places under one word. «المادة الإعلانية» keeps the rung in
+     * the same vocabulary without competing with it.
+     */
+    creative: 'المادة الإعلانية',
     all: 'الكل',
     period: 'الفترة',
     client: 'العميل',
     project: 'المشروع',
     objective: 'الهدف',
-    kind: 'نوع المحتوى',
+    kind: 'نوع الإعلان',
     lastDays: (n: string) => `آخر ${n} يومًا`,
     provisional: 'مبدئي',
     applied: 'مطبَّق',
@@ -106,30 +116,30 @@ const COPY = {
     } as Record<string, string>,
   },
   en: {
-    title: 'Creative analysis',
+    title: 'Ad analysis',
     subtitle: 'From the same figures the library and the reports read — never a second source.',
     openLibrary: 'Open the library',
-    empty: 'No creatives match this selection.',
-    error: 'The creative analysis could not be loaded.',
+    empty: 'No ads match this selection.',
+    error: 'The ad analysis could not be loaded.',
     bestByObjective: 'Best by campaign objective',
     bestImage: 'Best image',
     bestVideo: 'Best video',
     growing: 'Fastest growing',
     declining: 'Declining',
-    fatigue: 'Creative fatigue',
+    fatigue: 'Ad fatigue',
     alerts: 'Fatigue alerts',
-    spendAtRisk: 'Still spending on fatigued creatives',
-    spendByKind: 'Spend by creative type',
+    spendAtRisk: 'Still spending on fatigued ads',
+    spendByKind: 'Spend by ad type',
     imageVsVideo: 'Images vs videos',
-    bestPlatform: 'Best platform per creative',
+    bestPlatform: 'Best platform per ad',
     lastSync: 'Last sync',
     never: 'Not yet',
     creatives: 'creatives',
     of: 'of',
     showing: 'Showing',
-    noWinner: 'Not enough data to name a creative.',
-    lowEvidence: 'Provisional — no creative reached the minimum impressions.',
-    evidenceNote: (n: string) => `Chosen from ${n} creatives`,
+    noWinner: 'Not enough data to name an ad.',
+    lowEvidence: 'Provisional — no ad reached the minimum impressions.',
+    evidenceNote: (n: string) => `Chosen from ${n} ads`,
     minImpressions: (n: string) => `Minimum to qualify: ${n} impressions`,
     path: 'Path',
     metric: 'Metric',
@@ -148,13 +158,13 @@ const COPY = {
     campaign: 'Campaign',
     adSet: 'Ad set',
     ad: 'Ad',
-    creative: 'Creative',
+    creative: 'Ad asset',
     all: 'All',
     period: 'Period',
     client: 'Client',
     project: 'Project',
     objective: 'Objective',
-    kind: 'Creative type',
+    kind: 'Ad type',
     lastDays: (n: string) => `Last ${n} days`,
     provisional: 'provisional',
     applied: 'Filtered by',
@@ -662,9 +672,17 @@ type Drill = (extra: LibraryQuery & { creative?: string }) => string
 
 /** The poster — never a `<video>`, and never a fabricated image when the platform withheld one. */
 function Poster({ creative, label }: { creative: CreativeCard; label: string }) {
-  const src = creative.preview.thumbnail_url ?? creative.preview.image_url
+  /*
+   * AD-PREVIEW-001 — through the canonical reader, which this used to reimplement.
+   *
+   * The two rules here were `thumbnail ?? image` and «state must be available», which agreed with
+   * the shared reader by coincidence rather than by construction: they had no opinion about a video
+   * whose poster is the only thing that arrived, and none about a creative the presenter calls
+   * available while every URL on it is null.
+   */
+  const src = posterSource(readPreview(creative.preview, false))
 
-  if (creative.preview.state !== 'available' || !src) {
+  if (!src) {
     return (
       <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-center text-[10px] leading-tight text-text-muted">
         {label}

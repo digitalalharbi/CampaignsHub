@@ -150,7 +150,7 @@ describe('CreativesPage', () => {
 
     const bar = within(screen.getByTestId('content-filters'))
 
-    for (const axis of ['Client', 'Project', 'Platform', 'Campaign', 'Objective', 'Marketing path', 'Creative type', 'Fatigue']) {
+    for (const axis of ['Client', 'Project', 'Platform', 'Campaign', 'Objective', 'Marketing path', 'Ad type', 'Fatigue']) {
       expect(bar.getByText(axis)).toBeInTheDocument()
     }
     // Reachable without opening anything.
@@ -281,7 +281,7 @@ describe('CreativesPage', () => {
    * because each one fetches its own metadata. Cards render a poster; the player exists only inside
    * the viewer, after somebody opens a creative.
    */
-  it('renders posters on cards and mounts no video element until a creative is opened', async () => {
+  it('renders posters on cards and mounts no video element until a ad is opened', async () => {
     vi.mocked(listCreatives).mockResolvedValue(
       page({
         creatives: [
@@ -367,7 +367,7 @@ describe('CreativesPage', () => {
   })
 
   /** `?creative=<id>` is the last rung of the drill-down — it opens that creative, not that index. */
-  it('opens the creative the address names', async () => {
+  it('opens the ad the address names', async () => {
     vi.mocked(listCreatives).mockResolvedValue(
       page({
         creatives: [card({ id: 'cr-1', name: 'Hero image' }), card({ id: 'cr-2', name: 'Brand film' })],
@@ -382,7 +382,7 @@ describe('CreativesPage', () => {
   })
 
   /** An id that this selection filtered out leaves the library open — it does not open a neighbour. */
-  it('opens nothing when the named creative is not in the results', async () => {
+  it('opens nothing when the named ad is not in the results', async () => {
     renderWithProviders(<CreativesPage />, { locale: 'en', route: '/app/content?creative=cr-missing' })
 
     await screen.findByRole('article')
@@ -428,7 +428,7 @@ describe('CreativesPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Merge as one asset/ }))
 
     await waitFor(() => expect(vi.mocked(groupCreatives)).toHaveBeenCalledWith(['cr-1', 'cr-2']))
-    expect(await screen.findByText('2 creatives were merged as one asset.')).toBeInTheDocument()
+    expect(await screen.findByText('2 ads were merged as one asset.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open group' })).toHaveAttribute(
       'href',
       expect.stringContaining('groups?group=grp-9'),
@@ -472,7 +472,7 @@ describe('CreativesPage', () => {
    * shipped one canonical reader that nothing was wired to. These render the real library.
    */
 
-  it('tells a creative that did not run apart from one whose data failed to arrive', async () => {
+  it('tells a ad that did not run apart from one whose data failed to arrive', async () => {
     vi.mocked(listCreatives).mockResolvedValue(
       page({
         creatives: [card({ metrics: null })],
@@ -504,7 +504,7 @@ describe('CreativesPage', () => {
     expect(el).toHaveTextContent('Rate limited by the platform (429).')
   })
 
-  it('says a platform reports no creative performance rather than implying data is missing', async () => {
+  it('says a platform reports no ad performance rather than implying data is missing', async () => {
     vi.mocked(listCreatives).mockResolvedValue(
       page({
         creatives: [card({ metrics: null, provider: 'tiktok' })],
@@ -518,7 +518,7 @@ describe('CreativesPage', () => {
   })
 
   /** A creative WITH figures keeps its metric grid — the reason replaces nothing real. */
-  it('leaves a delivering creative its numbers', async () => {
+  it('leaves a delivering ad its numbers', async () => {
     vi.mocked(listCreatives).mockResolvedValue(page())
 
     renderWithProviders(<CreativesPage />, { locale: 'en' })

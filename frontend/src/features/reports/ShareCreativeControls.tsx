@@ -59,11 +59,11 @@ const GROUPS: Array<{
         ar: 'تحميل الأصل',
         en: 'Download the asset',
         note: [
-          'إيقافه يزيل الزر ورابط الملف. لمنع الوصول إلى محتوى فعليًا، استبعده أعلاه.',
-          'Turning this off removes the button and the file URL. To truly withhold a creative, exclude it above.',
+          'إيقافه يزيل الزر ورابط الملف. لمنع الوصول إلى إعلان فعليًا، استبعده أعلاه.',
+          'Turning this off removes the button and the file URL. To truly withhold a ad, exclude it above.',
         ],
       },
-      { key: 'comparison', ar: 'مقارنة المحتويات', en: 'Compare creatives' },
+      { key: 'comparison', ar: 'مقارنة الإعلانات', en: 'Compare ads' },
     ],
   },
   {
@@ -149,15 +149,15 @@ export function ShareCreativeControls({
         className="flex w-full items-center justify-between px-3 py-2.5 text-start"
       >
         <span className="text-sm">
-          <b className="block font-semibold">{ar ? 'المحتوى الإعلاني' : 'Ad creatives'}</b>
+          <b className="block font-semibold">{ar ? 'الإعلان' : 'Ad ads'}</b>
           <span className="text-xs text-text-secondary">
             {on('creatives')
               ? ar
                 ? `مسموح — ${Object.values(value.permissions).filter(Boolean).length} خيار مفعّل`
                 : `Shown — ${Object.values(value.permissions).filter(Boolean).length} options on`
               : ar
-                ? 'لا يعرض هذا الرابط أي محتوى'
-                : 'This link shows no creatives'}
+                ? 'لا يعرض هذا الرابط أي إعلان'
+                : 'This link shows no ads'}
           </span>
         </span>
         {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -166,7 +166,7 @@ export function ShareCreativeControls({
       {open && (
         <div className="grid gap-3 border-t border-border p-3">
           <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border bg-surface-secondary px-3 py-2 text-sm">
-            <span className="font-semibold">{ar ? 'عرض قسم المحتوى للعميل' : 'Show the creative section'}</span>
+            <span className="font-semibold">{ar ? 'عرض قسم الإعلان للعميل' : 'Show the ad section'}</span>
             <input
               type="checkbox"
               data-testid="creatives-master"
@@ -181,14 +181,14 @@ export function ShareCreativeControls({
               {/* The ceiling first: it decides what exists, before anything decides what is shown. */}
               <div className="grid gap-2 rounded-xl border border-border p-3">
                 <span className="text-xs font-bold text-text-muted">
-                  {ar ? 'أي محتوى يستطيع هذا الرابط الوصول إليه؟' : 'Which creatives may this link reach?'}
+                  {ar ? 'أي إعلان يستطيع هذا الرابط الوصول إليه؟' : 'Which ads may this link reach?'}
                 </span>
 
                 {creatives.isLoading ? (
                   <Skeleton className="h-24 w-full" />
                 ) : rows.length === 0 ? (
                   <p className="text-xs text-text-muted">
-                    {ar ? 'لا يوجد محتوى مُزامَن في هذا المشروع بعد.' : 'No synced creatives in this project yet.'}
+                    {ar ? 'لا يوجد إعلان مُزامَن في هذا المشروع بعد.' : 'No synced ads in this project yet.'}
                   </p>
                 ) : (
                   <div className="grid max-h-48 gap-1 overflow-y-auto" data-testid="creative-ceiling">
@@ -239,8 +239,8 @@ export function ShareCreativeControls({
 
                 <p className="text-[11px] text-text-muted">
                   {ar
-                    ? 'اترك التحديد فارغًا ليشمل الرابط كل محتوى النطاق. المستبعَد لا يُفتح بأي رابط أو معرّف.'
-                    : 'Leave the selection empty to cover every creative in the link’s scope. An excluded creative cannot be opened by any address or id.'}
+                    ? 'اترك التحديد فارغًا ليشمل الرابط كل إعلان النطاق. المستبعَد لا يُفتح بأي رابط أو معرّف.'
+                    : 'Leave the selection empty to cover every ad in the link’s scope. An excluded ad cannot be opened by any address or id.'}
                 </p>
               </div>
 

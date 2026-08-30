@@ -46,7 +46,7 @@ export const appNavGroups: readonly NavGroup[] = [
     leaves: [
       { to: '/app/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban, ent: 'projects' },
       { to: '/app/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone, ent: 'campaigns' },
-      { to: '/app/content', ar: 'المحتوى', en: 'Content', icon: Images, ent: 'content' },
+      { to: '/app/content', ar: 'الإعلانات', en: 'Ads', icon: Images, ent: 'content' },
       /*
        * UX-NAV-001 — tasks and files sit with the work they belong to.
        *

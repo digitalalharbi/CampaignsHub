@@ -718,7 +718,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
               { key: 'executive_summary' as const, ar: 'ملخص تنفيذي', en: 'Executive summary',
                 hintAr: 'صفحات قليلة للقرار', hintEn: 'A few pages, for the decision' },
               { key: 'detailed' as const, ar: 'تقرير تفصيلي', en: 'Detailed report',
-                hintAr: 'كل المنصات والفانل والمحتويات', hintEn: 'Every platform, funnel and creative' },
+                hintAr: 'كل المنصات والفانل والإعلانات', hintEn: 'Every platform, funnel and ad' },
             ]).map((o) => (
               <button
                 key={o.key}

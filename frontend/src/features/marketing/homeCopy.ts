@@ -196,7 +196,7 @@ const ar: HomeCopy = {
   },
   preview: {
     kpis: { spend: 'إجمالي الإنفاق', results: 'النتائج', active: 'الحملات النشطة', cpr: 'متوسط تكلفة النتيجة' },
-    tabs: { comparison: 'مقارنة أداء المنصات', distribution: 'توزيع الإنفاق', creatives: 'أفضل المحتويات الإعلانية', campaigns: 'أعلى الحملات أداءً' },
+    tabs: { comparison: 'مقارنة أداء المنصات', distribution: 'توزيع الإنفاق', creatives: 'أفضل الإعلانات', campaigns: 'أعلى الحملات أداءً' },
     cols: { platform: 'المنصة', spend: 'الإنفاق', results: 'النتائج', active: 'نشطة', cpr: 'التكلفة', roas: 'العائد', sync: 'آخر مزامنة' },
     roasNote: '* العائد يظهر عند ملاءمة هدف الحملة.',
     syncPrefix: 'قبل',
@@ -384,7 +384,7 @@ const ar: HomeCopy = {
       { title: 'مقارنة الأداء', desc: 'قارن الحملات والمنصات واكتشف الأفضل بسرعة.' },
       { title: 'التقارير', desc: 'تقارير حسب الهدف، جاهزة للعميل أو للفريق.' },
       { title: 'الميزانيات', desc: 'راقب سرعة الصرف وتوقّع التجاوز مبكرًا.' },
-      { title: 'المحتويات الإعلانية', desc: 'قارن أداء الإعلانات واعرف الأفضل تأثيرًا.' },
+      { title: 'الإعلانات', desc: 'قارن أداء الإعلانات واعرف الأفضل تأثيرًا.' },
       { title: 'التنبيهات', desc: 'تنبيه عند ارتفاع التكلفة أو توقف المزامنة.' },
     ],
   },
@@ -512,7 +512,7 @@ const en: HomeCopy = {
   },
   preview: {
     kpis: { spend: 'Total spend', results: 'Results', active: 'Active campaigns', cpr: 'Avg cost per result' },
-    tabs: { comparison: 'Platform performance', distribution: 'Spend distribution', creatives: 'Top creatives', campaigns: 'Top campaigns' },
+    tabs: { comparison: 'Platform performance', distribution: 'Spend distribution', creatives: 'Top ads', campaigns: 'Top campaigns' },
     cols: { platform: 'Platform', spend: 'Spend', results: 'Results', active: 'Active', cpr: 'Cost', roas: 'Return', sync: 'Last sync' },
     roasNote: '* Return is shown when it fits the campaign objective.',
     syncPrefix: '',

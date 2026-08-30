@@ -57,7 +57,7 @@ export const agencyNavGroups: readonly NavGroup[] = [
     ar: 'الحملات', en: 'Campaigns', icon: Megaphone,
     leaves: [
       { to: '/agency/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone },
-      { to: '/agency/content', ar: 'المحتوى', en: 'Content', icon: Images },
+      { to: '/agency/content', ar: 'الإعلانات', en: 'Ads', icon: Images },
     ],
   },
   {

@@ -29,7 +29,7 @@ async function openLibrary(page: Page, request: APIRequestContext): Promise<stri
   const projectId = await seededProject(request, STORE_PROJECT)
   await selectProject(page, projectId)
   await page.goto('/agency/content')
-  await expect(page.getByRole('heading', { name: /مكتبة المحتويات|Creative library/ })).toBeVisible({ timeout: 30000 })
+  await expect(page.getByRole('heading', { name: /مكتبة الإعلانات|Ads library/ })).toBeVisible({ timeout: 30000 })
 
   return projectId
 }
@@ -122,7 +122,7 @@ test.describe('the creative library', () => {
     await expect(page).toHaveURL(/providers/)
 
     await page.reload()
-    await expect(page.getByRole('heading', { name: /مكتبة المحتويات|Creative library/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /مكتبة الإعلانات|Ads library/ })).toBeVisible()
     await expect(page).toHaveURL(/providers/)
   })
 
@@ -134,7 +134,7 @@ test.describe('the creative library', () => {
 
     await expect.poll(() => cards(page).count(), { timeout: 20000 }).toBe(0)
     await expect(
-      page.getByText(/لا توجد محتويات تطابق هذا التحديد|No creatives match this selection/),
+      page.getByText(/لا توجد إعلانات تطابق هذا التحديد|No ads match this selection/),
     ).toBeVisible()
   })
 })

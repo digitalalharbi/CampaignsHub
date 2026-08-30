@@ -72,7 +72,7 @@ function detailFields(module: string): { key: string; labelAr: string; labelEn: 
         { key: 'audience', labelAr: 'الجمهور المستهدف', labelEn: 'Target audience' },
         { key: 'regions', labelAr: 'المناطق', labelEn: 'Regions' },
         { key: 'landing_url', labelAr: 'صفحة الهبوط أو المتجر', labelEn: 'Landing page / store' },
-        { key: 'creatives_status', labelAr: 'حالة المحتويات الإعلانية', labelEn: 'Creatives status' },
+        { key: 'creatives_status', labelAr: 'حالة الإعلانات', labelEn: 'Creatives status' },
         { key: 'tracking_status', labelAr: 'حالة القياس والتتبع', labelEn: 'Tracking status' },
       ]
     case 'tracking':

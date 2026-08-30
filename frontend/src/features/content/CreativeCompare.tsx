@@ -24,7 +24,7 @@ import { objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 
 const COPY = {
   ar: {
-    title: 'مقارنة المحتويات',
+    title: 'مقارنة الإعلانات',
     close: 'إغلاق',
     metric: 'المؤشر',
     winner: 'الأفضل في هذا المؤشر',
@@ -35,7 +35,7 @@ const COPY = {
     noWinner: 'لا يمكن الترجيح',
   },
   en: {
-    title: 'Compare creatives',
+    title: 'Compare ads',
     close: 'Close',
     metric: 'Metric',
     winner: 'Best on this metric',

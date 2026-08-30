@@ -184,7 +184,7 @@ describe('CreativeDetailPage', () => {
   })
 
   /** The window in the address is the window that is fetched — that is what makes a link shareable. */
-  it('asks for the creative in the window carried by the address', async () => {
+  it('asks for the ad in the window carried by the address', async () => {
     render()
 
     await screen.findByText('Hero image')
@@ -207,11 +207,11 @@ describe('CreativeDetailPage', () => {
     expect(href).toContain('providers%5B%5D=meta')
     // Not the creative itself: that would send the reader back to a library that reopened the
     // creative they just left.
-    expect(href).not.toContain('creative=')
+    expect(href).not.toContain('ad=')
   })
 
   /** Nothing mounts a player until somebody asks. An image page has no `<video>` at all. */
-  it('mounts no video element for an image creative', async () => {
+  it('mounts no video element for an image ad', async () => {
     const { container } = render()
 
     await screen.findByText('Hero image')
@@ -264,7 +264,7 @@ describe('CreativeDetailPage', () => {
   })
 
   /** An awareness creative is judged on watching, never on a cost per order it never had. */
-  it('never shows cpa or roas as a headline for an awareness creative', async () => {
+  it('never shows cpa or roas as a headline for an awareness ad', async () => {
     mocked.mockResolvedValue(
       detail({
         path: 'awareness',
@@ -349,10 +349,10 @@ describe('CreativeDetailPage', () => {
   })
 
   /** A creative outside the caller's reach is a refusal, not an empty page pretending to be one. */
-  it('says the creative is unavailable rather than rendering an empty shell', async () => {
+  it('says the ad is unavailable rather than rendering an empty shell', async () => {
     mocked.mockRejectedValue(new Error('not found'))
 
     render()
-    expect(await screen.findByText(/Could not open this creative/)).toBeInTheDocument()
+    expect(await screen.findByText(/Could not open this ad/)).toBeInTheDocument()
   })
 })
