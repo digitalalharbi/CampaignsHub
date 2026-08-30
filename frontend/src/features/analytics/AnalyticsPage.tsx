@@ -34,14 +34,15 @@ import {
   type MetricFilters,
 } from './hooks'
 import { findingsFor, windowConfidence, type QualityFinding, type WindowConfidence } from './dataQualityFindings'
-import type { PlatformObjectives } from './api'
+import { efficiencyFor, returnFor } from './pathEfficiency'
+import type { FreshnessRow, PlatformObjectives } from './api'
 import { scopeNote, type FilterScope } from './filterScope'
 import { CAMPAIGN_RELEVANCE_ORDER, orderByRelevanceWith, relevanceOf } from '@/features/campaigns/campaignRelevance'
 import { useCampaignOptionSource } from './useCampaignOptionSource'
 import { Panel, ProvenanceBadge, RateTrend, SERIES, platformColor, tooltipProps } from './components'
 import { PathAnalysis } from './PathAnalysis'
 import { listCreatives, type CreativeCard } from '@/features/content/api'
-import { compact, money, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
+import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
 import { plotSeries } from './timeseriesMoney'
 import { orderRows } from './tableSort'
@@ -677,11 +678,21 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
  */
 function PlatformPaths({
   data,
+  freshness,
   loading,
   error,
   ar,
 }: {
   data: PlatformObjectives | undefined
+  /**
+   * PLATFORM-DECISION-ANALYTICS-001 — a comparison between a complete platform and a half-reported
+   * one is not a comparison, and the reader cannot see the difference from the figures.
+   *
+   * The same rows the data-quality tab reads, on the surface where the comparison is actually made.
+   * Stating it here is the point: sending somebody to another tab to find out whether the ranking
+   * they are looking at is sound means they will read the ranking.
+   */
+  freshness: FreshnessRow[]
   loading: boolean
   error: boolean
   ar: boolean
@@ -698,6 +709,16 @@ function PlatformPaths({
   }
 
   const paths = (data?.paths ?? []).filter((p) => p.platforms.length > 0)
+
+  /** What this window is missing, per platform — keyed the way the payload names them. */
+  const gaps = new Map<string, { missing: number; status: string | null }>()
+  for (const row of freshness) {
+    const key = canonicalPlatform(row.provider)
+    const prior = gaps.get(key)
+    const missing = (prior?.missing ?? 0) + (row.missing_days ?? 0)
+    const status = row.last_sync_status === 'fresh' ? (prior?.status ?? null) : (row.last_sync_status ?? null)
+    gaps.set(key, { missing, status })
+  }
 
   return (
     <Panel
@@ -726,19 +747,69 @@ function PlatformPaths({
             </div>
 
             <ul className="flex flex-col gap-1">
-              {path.platforms.map((row) => (
-                <li key={row.provider} className="flex items-center justify-between gap-3 text-sm">
-                  <PlatformCell provider={row.provider} />
-                  <span className="flex items-center gap-3">
-                    <span className="tnum text-text-secondary" dir="ltr">{money(row.spend)}</span>
-                    {/* Share of the PATH. «40% of awareness» is a decision somebody made; «40% of
-                        everything» is the mix, and reading the second as performance is the defect. */}
-                    <span className="tnum text-text-muted" dir="ltr">
-                      {row.spend_share === null ? '—' : percent(row.spend_share, 0)}
+              {path.platforms.map((row) => {
+                const efficiency = efficiencyFor(path.path, row)
+                const returned = returnFor(path.path, row)
+                const gap = gaps.get(canonicalPlatform(row.provider))
+
+                return (
+                  <li key={row.provider} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
+                    <span className="flex items-center gap-2">
+                      <PlatformCell provider={row.provider} />
+                      {/*
+                        The gap, beside the platform it belongs to. A platform three days short in
+                        this window is not a platform that performed worse, and the share above says
+                        nothing about which of the two it is.
+                      */}
+                      {gap !== undefined && (gap.missing > 0 || gap.status !== null) && (
+                        <span
+                          data-testid={`path-gap-${path.path}-${row.provider}`}
+                          className="rounded-full bg-warning/10 px-2 py-0.5 text-[11px] text-warning"
+                        >
+                          {gap.missing > 0
+                            ? (ar ? `ناقص ${gap.missing} يومًا` : `${gap.missing} days missing`)
+                            : (ar ? 'آخر مزامنة لم تنجح' : 'last sync did not succeed')}
+                        </span>
+                      )}
                     </span>
-                  </span>
-                </li>
-              ))}
+
+                    <span className="flex flex-wrap items-center gap-3">
+                      <span className="tnum text-text-secondary" dir="ltr">{money(row.spend)}</span>
+                      {/* Share of the PATH. «40% of awareness» is a decision somebody made; «40% of
+                          everything» is the mix, and reading the second as performance is the defect. */}
+                      <span className="tnum text-text-muted" dir="ltr">
+                        {row.spend_share === null ? '—' : percent(row.spend_share, 0)}
+                      </span>
+
+                      {/*
+                        The cost that names what this path was BUYING — never a fixed four columns
+                        with two of them empty, which is the cross-objective comparison this section
+                        exists to refuse, printed one column at a time.
+                      */}
+                      <span
+                        data-testid={`path-efficiency-${path.path}-${row.provider}`}
+                        className="tnum text-[11px] text-text-muted"
+                        dir="ltr"
+                      >
+                        {(ar ? efficiency.labelAr : efficiency.labelEn)}
+                        {' '}
+                        {/*
+                          `moneyExact`, not `money`: a per-unit cost is where rounding lies. `money`
+                          compacts, and a cost per thousand of 6.67 printed «7 SAR» — a seven per cent
+                          error in the figure the comparison is actually about.
+                        */}
+                        {efficiency.value === null ? '—' : moneyExact(efficiency.value)}
+                      </span>
+
+                      {returned.value !== null && (
+                        <span className="tnum text-[11px] text-text-muted" dir="ltr">
+                          {ratio(returned.value)}
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                )
+              })}
             </ul>
           </div>
         ))}
@@ -769,6 +840,8 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
   const leaders = useObjectiveLeaders(projectId, range, filters)
   const explanations = useObjectiveExplanations(projectId, range, filters)
   const summary = useSummary(projectId, range, filters)
+  /* The same rows the data-quality tab reads — the comparison is made here, so the gaps are said here. */
+  const freshness = useFreshness(projectId, range, filters)
 
   return (
     <div className="space-y-4">
@@ -778,7 +851,13 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
         platform is doing over every objective at once. Read as a ranking it compares a platform
         buying awareness against one buying sales, which is a verdict about the work each was given.
       */}
-      <PlatformPaths data={byPath.data} loading={byPath.isLoading} error={byPath.isError} ar={ar} />
+      <PlatformPaths
+        data={byPath.data}
+        freshness={freshness.data ?? []}
+        loading={byPath.isLoading}
+        error={byPath.isError}
+        ar={ar}
+      />
       <Panel title={ar ? 'مقارنة المنصات' : 'Platform comparison'} description={ar ? 'الإنفاق مقابل ROAS لكل منصة' : 'Spend against ROAS, per platform'} loading={p.isLoading} error={p.isError} empty={!p.isLoading && rows.length === 0}>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
