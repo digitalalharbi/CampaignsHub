@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { KeyRound, Loader2, Plug, RefreshCw } from 'lucide-react'
@@ -188,6 +188,7 @@ export function AdPlatformsPanel() {
     ? outcomeMessage(outcome, params.get('reason'), params.get('accounts'), ar)
     : null
 
+
   /** The six come first and in the products order; everything else keeps its place behind them. */
   const connectors = sortByPlatform(query.data ?? [], (c) => c.key)
 
@@ -217,6 +218,32 @@ export function AdPlatformsPanel() {
     (wizardStates.data?.connections ?? []).map((w) => [w.connection.provider, w]),
   )
   const unfinished = wizardStates.data?.resumable ?? []
+
+  /*
+   * INTEGRATION-DATASOURCE-WIZARD-001 §2 — coming back from OAuth resumes the SAME wizard.
+   *
+   * The callback lands here with `?provider=…&outcome=connected`, and until now that produced a
+   * green banner, a nudge, and a «Resume» button: three pieces of interface telling somebody who
+   * had just authorised a provider that there was one more thing to do, without doing it. The
+   * consent screen is the middle of a journey, not the end of one.
+   *
+   * Opened once per return — the ref, not the params — so dismissing the wizard does not reopen it
+   * on the next render while the query string is still in the address bar.
+   */
+  const resumedFromCallback = useRef(false)
+
+  useEffect(() => {
+    if (resumedFromCallback.current) return
+    if (outcome !== 'connected') return
+
+    const provider = params.get('provider')
+    const match = unfinished.find((u) => u.connection.provider === provider)
+    if (!match) return
+
+    resumedFromCallback.current = true
+    setManagingProjectId(null)
+    setWizardConnectionId(match.connection.id)
+  }, [outcome, params, unfinished])
   const [wizardConnectionId, setWizardConnectionId] = useState<string | null>(null)
   /*
    * INTEGRATION-DATASOURCE-WIZARD-001 §8 — the wizard opens in one of two modes.
