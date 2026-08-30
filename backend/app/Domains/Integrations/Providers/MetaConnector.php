@@ -223,7 +223,8 @@ final class MetaConnector extends ApiAdvertisingConnector
         $ads = [];
 
         foreach ($this->readAll($tokens, "{$adAccountId}/ads", 'ads', [
-            'fields' => 'id,name,status,effective_status,adset_id,campaign_id,preview_shareable_link,creative{id,name,thumbnail_url,object_type}',
+            'fields' => 'id,name,status,effective_status,adset_id,campaign_id,preview_shareable_link,'
+                .'creative{id,name,thumbnail_url,object_type,image_url,object_story_spec}',
             'limit' => 500,
         ]) as $a) {
             if (($a['id'] ?? null) === null) {
@@ -240,20 +241,92 @@ final class MetaConnector extends ApiAdvertisingConnector
                 'name' => (string) ($a['name'] ?? $a['id']),
                 'status' => strtolower((string) ($a['status'] ?? 'unknown')),
                 'review_status' => $this->reviewStatus($a['effective_status'] ?? null),
-                'destination_url' => null, // Meta states it inside the creative's story spec, not on the ad
-                'creative' => isset($creative['id']) ? array_filter([
-                    'external_id' => (string) $creative['id'],
-                    'name' => isset($creative['name']) ? (string) $creative['name'] : null,
-                    'format' => $this->creativeFormat($creative['object_type'] ?? null),
-                    // Passed through when Meta sends one; never constructed.
-                    'thumbnail_url' => isset($creative['thumbnail_url']) ? (string) $creative['thumbnail_url'] : null,
-                    'preview_url' => isset($a['preview_shareable_link']) ? (string) $a['preview_shareable_link'] : null,
-                ], static fn ($v) => $v !== null) : null,
+                'destination_url' => null, // Read from the creative's story spec below, where Meta states it
+                'creative' => isset($creative['id']) ? $this->creativeFrom($creative, $a) : null,
                 'raw' => (array) $a,
             ], static fn ($v) => $v !== null);
         }
 
         return $ads;
+    }
+
+    /**
+     * AD-MEDIA-RECOVERY-001 — the ad's media, from the fields Meta actually offers.
+     *
+     * ## What was asked for, and what that cost
+     *
+     * The ads request asked for `creative{id,name,thumbnail_url,object_type}` and nothing else. Meta
+     * answers that faithfully, so:
+     *
+     *   * `asset_url` was NEVER written for Meta. The only image that ever arrived was
+     *     `thumbnail_url` — a small square Meta generates for listings — and a card asked to render
+     *     a preview from it showed a postage stamp or, on a video with no thumbnail, the
+     *     «this platform does not expose the creative's asset» state. That sentence is about Meta,
+     *     and it was really about this field list.
+     *   * A CAROUSEL always rendered as one picture. `object_story_spec.link_data.child_attachments`
+     *     is where its cards live; `ExternalCreative::$casts` has held a `cards` column since the
+     *     presenter was written, the presenter reads it, the shared report reads it, and NOTHING HAS
+     *     EVER WRITTEN IT.
+     *   * `destination_url` was hardcoded null with a comment saying Meta states it inside the story
+     *     spec — an accurate note about a field nobody then read.
+     *
+     * ## Nothing here is constructed
+     *
+     * Every value is a string Meta sent. A video's poster comes from `video_data.image_url`, which is
+     * the frame Meta itself shows for that video — not a frame derived here, and not a placeholder.
+     * A creative with no media in its response still stores nulls and still reaches the honest
+     * «no preview» state, which is the whole reason those columns are nullable.
+     *
+     * `video_url` stays unset on purpose: Meta gives `video_id`, and turning it into a playable
+     * source is a separate `/{video_id}?fields=source` call PER ASSET. That is the same per-asset
+     * cost the TikTok connector declines, and it is a decision about sync budget rather than a
+     * mapping — so the poster is read (free, already in this response) and the source is not.
+     *
+     * @param  array<string,mixed>  $creative
+     * @param  array<string,mixed>  $ad
+     * @return array<string,mixed>
+     */
+    private function creativeFrom(array $creative, array $ad): array
+    {
+        $spec = (array) ($creative['object_story_spec'] ?? []);
+        $link = (array) ($spec['link_data'] ?? []);
+        $video = (array) ($spec['video_data'] ?? []);
+
+        $str = static fn (mixed $v): ?string => is_string($v) && trim($v) !== '' ? $v : null;
+
+        $children = array_values(array_filter(
+            (array) ($link['child_attachments'] ?? []),
+            static fn (mixed $c): bool => is_array($c),
+        ));
+
+        return array_filter([
+            'external_id' => (string) $creative['id'],
+            'name' => $str($creative['name'] ?? null),
+            'format' => $this->creativeFormat($creative['object_type'] ?? null),
+            // The full-size image, then the story spec's own picture. Both are Meta's, never built here.
+            'asset_url' => $str($creative['image_url'] ?? null) ?? $str($link['picture'] ?? null),
+            // A video's poster is an image Meta already chose for it; a listing thumbnail is the fallback.
+            'thumbnail_url' => $str($creative['thumbnail_url'] ?? null) ?? $str($video['image_url'] ?? null),
+            'preview_url' => $str($ad['preview_shareable_link'] ?? null),
+            'destination_url' => $str($link['link'] ?? null)
+                ?? $str($video['call_to_action']['value']['link'] ?? null),
+            /*
+             * `null` when Meta sent no `child_attachments`, `[]` when it sent an empty list — two
+             * different sentences the presenter already knows how to tell apart, and the reason an
+             * empty array must survive the filter below. It does: only nulls are dropped.
+             */
+            'cards' => $children === []
+                ? (isset($link['child_attachments']) ? [] : null)
+                : array_map(
+                    static fn (array $c): array => array_filter([
+                        'name' => $str($c['name'] ?? null),
+                        'description' => $str($c['description'] ?? null),
+                        'image_url' => $str($c['picture'] ?? null) ?? $str($c['image_url'] ?? null),
+                        'destination_url' => $str($c['link'] ?? null),
+                    ], static fn ($v) => $v !== null),
+                    $children,
+                ),
+        ], static fn ($v) => $v !== null);
     }
 
     /**
