@@ -129,7 +129,8 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   const [type, setType] = useState<'all' | string>('all')
   const [term, setTerm] = useState('')
   // Live update: poll every 20s so newly-raised alerts appear without a manual refresh.
-  // Fetch the full ledger once (backend caps at 200) so the summary cards and filters stay client-side.
+  // One read of the ledger, filtered client-side. The server caps the page at 200 and sends the
+  // counts separately, because filtering a capped array is how the summary cards came to be wrong.
   const q = useQuery({ queryKey: ['alert-events', 'all'], queryFn: () => listAlertEvents(), refetchInterval: 20_000 })
   const invalidate = () => qc.invalidateQueries({ queryKey: ['alert-events'] })
 
@@ -141,13 +142,22 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     onSuccess: (_d, e) => setTasked((t) => ({ ...t, [e.id]: true })),
   })
 
-  const all = q.data ?? []
+  const all = q.data?.events ?? []
+  const total = q.data?.total ?? all.length
+  /*
+   * From the server, over the whole ledger — NOT by filtering `all`.
+   *
+   * `all` is the capped page. Counting it produced badges that said «12 open» when the ledger held
+   * 40, because the twenty-eight that did not fit were counted as though they did not exist. A badge
+   * is the one thing on this page nobody re-reads; it has to be right or absent.
+   */
   const summary = {
-    open: all.filter((e) => e.status === 'open').length,
-    critical: all.filter((e) => e.status === 'open' && e.severity === 'critical').length,
-    snoozed: all.filter((e) => e.status === 'snoozed').length,
-    resolved: all.filter((e) => e.status === 'resolved').length,
+    open: q.data?.counts.open ?? 0,
+    critical: q.data?.counts.open_critical ?? 0,
+    snoozed: q.data?.counts.snoozed ?? 0,
+    resolved: q.data?.counts.resolved ?? 0,
   }
+  const capped = total > all.length
 
   const filters: { id: EventFilter; label: string }[] = [
     { id: 'open', label: c.active }, { id: 'snoozed', label: c.snoozed }, { id: 'resolved', label: c.resolved },
@@ -180,14 +190,15 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
           empty ledger reads as the good news it is instead of an unactioned pile.
         */}
         <SummaryCard
+          testid="open"
           label={c.sum_open}
           value={summary.open}
           hint={summary.open > 0 ? c.sum_open_hint : c.sum_open_clear}
           tone={summary.open > 0 ? 'brand' : 'success'}
         />
-        <SummaryCard label={c.sum_critical} value={summary.critical} tone="danger" />
-        <SummaryCard label={c.sum_snoozed} value={summary.snoozed} tone="warning" />
-        <SummaryCard label={c.sum_resolved} value={summary.resolved} tone="success" />
+        <SummaryCard testid="critical" label={c.sum_critical} value={summary.critical} tone="danger" />
+        <SummaryCard testid="snoozed" label={c.sum_snoozed} value={summary.snoozed} tone="warning" />
+        <SummaryCard testid="resolved" label={c.sum_resolved} value={summary.resolved} tone="success" />
       </div>
 
       {/*
@@ -258,6 +269,19 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
         )}
       </FilterBar>
 
+      {capped && (
+        <p data-testid="alert-events-capped" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5 text-[12.5px] text-text-secondary">
+          {/*
+            The queue is ordered open → snoozed → resolved, so what a cap drops is the oldest resolved
+            events. Saying which end was cut is the difference between a bounded list and a list that
+            has quietly stopped being the ledger.
+          */}
+          {locale === 'ar'
+            ? `تُعرض ${all.length} تنبيهًا من ${total} — الأقدم من المُغلقة غير معروضة.`
+            : `Showing ${all.length} of ${total} alerts — the oldest resolved ones are not listed.`}
+        </p>
+      )}
+
       {events.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">
           {/*
@@ -314,10 +338,12 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   )
 }
 
-function SummaryCard({ label, value, hint, tone }: { label: string; value: number; hint?: string; tone: 'brand' | 'danger' | 'warning' | 'success' }) {
+function SummaryCard({ label, value, hint, tone, testid }: { label: string; value: number; hint?: string; tone: 'brand' | 'danger' | 'warning' | 'success'; testid?: string }) {
   const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', danger: 'bg-danger', warning: 'bg-warning', success: 'bg-success' }
   return (
-    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
+    // The testid names the CARD. Its label is a word the severity filter also uses, so a test that
+    // reaches for the text finds two nodes and cannot say which number it just read.
+    <div data-testid={testid ? `alert-summary-${testid}` : undefined} className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
       <div className="flex items-center gap-1.5">
         <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
         <span className="text-xs font-semibold text-text-secondary">{label}</span>
