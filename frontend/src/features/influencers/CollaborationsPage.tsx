@@ -129,7 +129,7 @@ function AgreementStrip({ c, ar }: { c: Collaboration; ar: boolean }) {
 
   if (a.decision === 'accepted') {
     return (
-      <p data-testid="agreement-state" className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-success">
+      <p data-testid="agreement-state" className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-semibold text-success">
         <CheckCircle2 size={14} aria-hidden />
         {ar ? 'قبل المؤثر الشروط' : 'The creator accepted the terms'}
       </p>
@@ -138,7 +138,7 @@ function AgreementStrip({ c, ar }: { c: Collaboration; ar: boolean }) {
 
   if (a.decision === 'declined') {
     return (
-      <p data-testid="agreement-state" className="mt-3 text-[12.5px] font-semibold text-danger">
+      <p data-testid="agreement-state" className="mt-3 text-[12px] font-semibold text-danger">
         {ar ? 'اعتذر المؤثر' : 'The creator declined'}
         {/* The reason they gave, in their own words — it is the whole value of a decline. */}
         {a.decline_reason && <span dir="auto" className="ms-1.5 font-normal text-text-secondary">— {a.decline_reason}</span>}
@@ -148,7 +148,7 @@ function AgreementStrip({ c, ar }: { c: Collaboration; ar: boolean }) {
 
   if (a.offered_at !== null) {
     return (
-      <p data-testid="agreement-state" className="mt-3 text-[12.5px] font-semibold text-warning">
+      <p data-testid="agreement-state" className="mt-3 text-[12px] font-semibold text-warning">
         {ar ? 'أُرسلت الشروط — بانتظار رد المؤثر' : 'Terms sent — awaiting the creator'}
       </p>
     )
@@ -198,7 +198,7 @@ function CollaborationCard({ c, ar, canSeeCosts }: { c: Collaboration; ar: boole
             {c.client && <span className="text-text-muted">· {c.client.name}</span>}
           </p>
         </div>
-        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${label?.tone ?? 'bg-surface-secondary text-text-muted'}`}>
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${label?.tone ?? 'bg-surface-secondary text-text-muted'}`}>
           {label ? (ar ? label.ar : label.en) : c.status}
         </span>
       </div>
@@ -244,7 +244,7 @@ function CollaborationCard({ c, ar, canSeeCosts }: { c: Collaboration; ar: boole
         {c.deliverables.length > 0 && (
           <ul className="mt-3 grid gap-1.5">
             {c.deliverables.map((d) => (
-              <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-[12.5px]">
+              <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-[12px]">
                 <span className="font-semibold text-text-primary">
                   {d.type}
                   {d.platform && <span className="ms-1.5 font-normal text-text-muted">· {d.platform}</span>}
@@ -280,7 +280,7 @@ function CollaborationCard({ c, ar, canSeeCosts }: { c: Collaboration; ar: boole
 function Figure({ label, value, ar }: { label: string; value: string | null; ar: boolean }) {
   return (
     <span className="flex flex-col">
-      <span className="text-[11.5px] uppercase tracking-wide text-text-muted">{label}</span>
+      <span className="text-[11px] uppercase tracking-wide text-text-muted">{label}</span>
       <span className="tnum font-bold text-text-primary" dir="ltr">
         {value ?? <span className="font-normal text-text-muted">{ar ? 'غير محدّد' : 'Not set'}</span>}
       </span>

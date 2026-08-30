@@ -91,12 +91,12 @@ export function IntegrationsTab() {
           {query.data.providers.map((p) => (
             <li key={p.provider} data-testid={`provider-${p.provider}`} className="rounded-2xl border border-border bg-surface p-5">
               <p className="font-heading text-[15px] font-bold text-text-primary" dir="ltr">{p.provider}</p>
-              <p className="tnum mt-0.5 text-[12.5px] text-text-muted" dir="ltr">
+              <p className="tnum mt-0.5 text-[12px] text-text-muted" dir="ltr">
                 {p.tenants} {ar ? 'مستأجرًا' : 'tenants'}
               </p>
               <ul className="mt-3 flex flex-wrap gap-1.5">
                 {Object.entries(p.by_status).map(([status, count]) => (
-                  <li key={status} className="rounded-full bg-surface-secondary px-2.5 py-1 text-[11.5px] font-semibold text-text-secondary">
+                  <li key={status} className="rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] font-semibold text-text-secondary">
                     <span dir="ltr">{status}</span>: <span className="tnum" dir="ltr">{count}</span>
                   </li>
                 ))}
@@ -135,7 +135,7 @@ export function StatusTab() {
         {services.map(([key, label, state]) => (
           <li key={key} data-testid={`status-${key}`} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3">
             <span className="text-[14px] font-semibold text-text-primary">{label}</span>
-            <span className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${
+            <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
               state === 'running' ? 'bg-success/15 text-success'
                 : state === 'stopped' ? 'bg-danger/15 text-danger'
                   : 'bg-surface-secondary text-text-muted'
@@ -158,7 +158,7 @@ export function StatusTab() {
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-[11.5px] uppercase tracking-wide text-text-muted">{label}</dt>
+      <dt className="text-[11px] uppercase tracking-wide text-text-muted">{label}</dt>
       <dd className="truncate font-semibold text-text-primary" dir="ltr">{value}</dd>
     </div>
   )
@@ -297,7 +297,7 @@ function ScheduledState({ row, ar }: { row: ScheduledWorkRow; ar: boolean }) {
             : [ar ? 'تعمل' : 'ok', 'bg-success/15 text-success']
 
   return (
-    <span data-testid={`scheduled-state-${row.command}`} className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${tone}`}>
+    <span data-testid={`scheduled-state-${row.command}`} className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${tone}`}>
       {label}
     </span>
   )

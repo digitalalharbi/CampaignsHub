@@ -190,7 +190,7 @@ function PlatformIdentity({ collapsed }: { collapsed?: boolean }) {
           <span className="block truncate font-heading text-[15px] font-extrabold tracking-tight text-text-primary">
             CampaignsHub
           </span>
-          <span data-testid="admin-scope-note" className="block truncate text-[11.5px] text-text-muted">
+          <span data-testid="admin-scope-note" className="block truncate text-[11px] text-text-muted">
             {ar ? 'إدارة المنصة' : 'Platform administration'}
           </span>
         </div>
