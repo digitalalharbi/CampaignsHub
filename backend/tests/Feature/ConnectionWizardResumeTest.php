@@ -118,6 +118,80 @@ final class ConnectionWizardResumeTest extends TestCase
         $this->assertNull($state['next_step']);
     }
 
+    // ── INTEGRATION-DATASOURCE-WIZARD-001 §14 — the state a READER is shown ───────────────────
+
+    /**
+     * One vocabulary, derived from the record, and no surface adds a tenth.
+     *
+     * The integrations card said «متصل», the wizard said «needs selection» and the project page
+     * said «قيد المزامنة» — three names for one connection, and none of them agreed about a
+     * connection whose accounts were bound but had never produced a row.
+     */
+    public function test_the_reader_state_follows_the_record(): void
+    {
+        $connection = $this->connection('snapchat');
+        $this->discover($connection, 4);
+
+        $this->assertSame(
+            ConnectionWizardState::USER_ACCOUNT_SELECTION_REQUIRED,
+            app(ConnectionWizardState::class)->for($connection)['user_state'],
+        );
+
+        $account = ExternalAccount::withoutGlobalScopes()->first();
+        $this->assign($account);
+
+        $this->assertSame(
+            ConnectionWizardState::USER_SYNCING,
+            app(ConnectionWizardState::class)->for($connection)['user_state'],
+            'bindings with no row yet is SYNCING — «connected» over an empty dashboard reads as «my data is gone»',
+        );
+
+        $account->forceFill(['last_synced_at' => now()])->save();
+
+        $this->assertSame(
+            ConnectionWizardState::USER_HEALTHY,
+            app(ConnectionWizardState::class)->for($connection)['user_state'],
+        );
+    }
+
+    /**
+     * One account in trouble outranks nine that are fine.
+     *
+     * Ten accounts behind one authorisation, nine syncing and one whose access was withdrawn, used
+     * to render as a single green «متصل» — and that one account was the only fact anybody needed.
+     */
+    public function test_an_account_that_needs_attention_outranks_a_healthy_connection(): void
+    {
+        $connection = $this->connection('snapchat');
+        $this->discover($connection, 2);
+
+        foreach (ExternalAccount::withoutGlobalScopes()->get() as $account) {
+            $this->assign($account);
+            $account->forceFill(['last_synced_at' => now()])->save();
+        }
+
+        $broken = ExternalAccount::withoutGlobalScopes()->first();
+        $broken->forceFill(['access_lost_at' => now()])->save();
+
+        $this->assertSame(
+            ConnectionWizardState::USER_ATTENTION_REQUIRED,
+            app(ConnectionWizardState::class)->for($connection)['user_state'],
+        );
+    }
+
+    /** A revoked authorisation asks for consent again, and says so in the reader's vocabulary. */
+    public function test_a_revoked_connection_reads_as_needing_reauthorisation(): void
+    {
+        $connection = $this->connection('snapchat');
+        $this->discover($connection, 3);
+        $connection->forceFill(['status' => 'revoked'])->save();
+
+        $this->assertSame(
+            ConnectionWizardState::USER_REAUTH_REQUIRED,
+            app(ConnectionWizardState::class)->for($connection->refresh())['user_state'],
+        );
+    }
+
     /** A revoked authorisation is not resumable — it needs consent, and says so. */
     public function test_a_revoked_connection_asks_to_reconnect(): void
     {
