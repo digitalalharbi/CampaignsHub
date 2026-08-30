@@ -128,6 +128,199 @@ final class AdPlatformStructureSyncTest extends TestCase
     }
 
     /**
+     * AD-MEDIA-RECOVERY-001 — the media, from the fields Meta actually offers.
+     *
+     * The ads request asked for `creative{id,name,thumbnail_url,object_type}`. Meta answered that
+     * faithfully, so `asset_url` was never written for a Meta creative in the product's history: the
+     * only image that ever arrived was the small square Meta generates for listings, and a video with
+     * no square reached «this platform does not expose the creative's asset» — a sentence about Meta
+     * that was really about this field list.
+     *
+     * Three shapes, one response, because that is how they arrive:
+     *
+     *   * an IMAGE ad, whose full-size file is `creative.image_url`;
+     *   * a VIDEO ad, whose poster is `object_story_spec.video_data.image_url` — the frame Meta
+     *     itself shows, not one derived here;
+     *   * a CAROUSEL, whose cards are `object_story_spec.link_data.child_attachments` and which had
+     *     rendered as ONE PICTURE on every surface since the column was added.
+     */
+    public function test_meta_reads_the_image_the_poster_and_the_carousel_cards(): void
+    {
+        $this->configure('meta');
+        $account = $this->account('meta');
+
+        Http::fake([
+            'graph.facebook.com/*/campaigns*' => Http::response(['data' => [
+                ['id' => '120', 'name' => 'Ramadan', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES'],
+            ]]),
+            'graph.facebook.com/*/adsets*' => Http::response(['data' => [
+                ['id' => '220', 'campaign_id' => '120', 'name' => 'Riyadh', 'status' => 'ACTIVE'],
+            ]]),
+            'graph.facebook.com/*/ads*' => Http::response(['data' => [
+                [
+                    'id' => '301', 'adset_id' => '220', 'campaign_id' => '120', 'name' => 'Still',
+                    'status' => 'ACTIVE',
+                    'creative' => [
+                        'id' => '401', 'name' => 'Hero still', 'object_type' => 'SHARE',
+                        'thumbnail_url' => 'https://scontent.example/small.jpg',
+                        'image_url' => 'https://scontent.example/full.jpg',
+                        'object_story_spec' => ['link_data' => ['link' => 'https://shop.example/eid']],
+                    ],
+                ],
+                [
+                    'id' => '302', 'adset_id' => '220', 'campaign_id' => '120', 'name' => 'Film',
+                    'status' => 'ACTIVE',
+                    'creative' => [
+                        'id' => '402', 'name' => 'Hero film', 'object_type' => 'VIDEO',
+                        'object_story_spec' => [
+                            'video_data' => [
+                                'video_id' => '9001',
+                                'image_url' => 'https://scontent.example/poster.jpg',
+                                'call_to_action' => ['value' => ['link' => 'https://shop.example/film']],
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'id' => '303', 'adset_id' => '220', 'campaign_id' => '120', 'name' => 'Carousel',
+                    'status' => 'ACTIVE',
+                    'creative' => [
+                        'id' => '403', 'name' => 'Five cards', 'object_type' => 'SHARE',
+                        'object_story_spec' => ['link_data' => [
+                            'picture' => 'https://scontent.example/cover.jpg',
+                            'link' => 'https://shop.example/collection',
+                            'child_attachments' => [
+                                ['name' => 'Abaya', 'description' => 'From 199', 'picture' => 'https://scontent.example/c1.jpg', 'link' => 'https://shop.example/abaya'],
+                                ['name' => 'Thobe', 'picture' => 'https://scontent.example/c2.jpg', 'link' => 'https://shop.example/thobe'],
+                            ],
+                        ]],
+                    ],
+                ],
+            ]]),
+        ]);
+
+        $this->assertSame('success', app(AccountStructureSyncer::class)->sync($account)->status);
+
+        /*
+         * The request ASKED for these fields.
+         *
+         * Everything below reads a faked response, which arrives whatever we asked for — so with only
+         * those assertions, reverting the field list to `creative{id,name,thumbnail_url,object_type}`
+         * left the whole suite green while the live sync went back to returning no media at all. A
+         * mapping test that cannot see the request is a test of the fixture.
+         */
+        Http::assertSent(function ($request): bool {
+            if (! str_contains($request->url(), '/ads?') && ! str_contains($request->url(), '/ads&')) {
+                return false;
+            }
+
+            $fields = urldecode($request->url());
+
+            return str_contains($fields, 'image_url')
+                && str_contains($fields, 'object_story_spec')
+                && str_contains($fields, 'thumbnail_url');
+        });
+
+        $still = ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '401')->firstOrFail();
+        $this->assertSame('https://scontent.example/full.jpg', $still->asset_url, 'the full-size image was never read');
+        $this->assertSame('https://scontent.example/small.jpg', $still->thumbnail_url);
+        $this->assertSame('https://shop.example/eid', $still->destination_url, 'the destination sits in the story spec Meta was never asked for');
+        $this->assertNull($still->cards, 'an ad with no child attachments reports no breakdown, not an empty one');
+
+        $film = ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '402')->firstOrFail();
+        $this->assertSame('video', $film->format);
+        $this->assertSame('https://scontent.example/poster.jpg', $film->thumbnail_url, 'a video with no square thumbnail still has the poster Meta chose');
+        $this->assertSame('https://shop.example/film', $film->destination_url);
+        /* No `video_url`: turning `video_id` into a playable source is a separate call per asset. */
+        $this->assertNull($film->video_url);
+
+        $carousel = ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '403')->firstOrFail();
+        $this->assertSame('https://scontent.example/cover.jpg', $carousel->asset_url);
+        $this->assertCount(2, (array) $carousel->cards, 'a carousel rendered as one picture on every surface');
+        /*
+         * `assertEquals`, not `assertSame`: the column is `jsonb`, which does not store key order —
+         * Postgres returns keys shortest-first, so `name, image_url, description` comes back from a
+         * row written as `name, description, image_url`. The ORDER OF THE CARDS is what matters and
+         * is asserted; the order of a card's keys is a storage detail, and a test that pinned it
+         * would fail on a rename of a field it does not care about.
+         */
+        $this->assertEquals([
+            ['name' => 'Abaya', 'description' => 'From 199', 'image_url' => 'https://scontent.example/c1.jpg', 'destination_url' => 'https://shop.example/abaya'],
+            ['name' => 'Thobe', 'image_url' => 'https://scontent.example/c2.jpg', 'destination_url' => 'https://shop.example/thobe'],
+        ], $carousel->cards);
+        $this->assertSame(['Abaya', 'Thobe'], array_column((array) $carousel->cards, 'name'), 'the cards must stay in the order they ran');
+    }
+
+    /**
+     * And a creative Meta sends no media for is stored with nulls, not with something invented.
+     *
+     * This is the half that makes the test above safe to trust. A mapping that reached for a
+     * placeholder — the account's picture, a derived frame, the thumbnail of another ad — would make
+     * every assertion above pass and would put a picture of the wrong thing on a client's report.
+     */
+    public function test_meta_invents_no_media_when_the_response_carries_none(): void
+    {
+        $this->configure('meta');
+        $account = $this->account('meta');
+
+        Http::fake([
+            'graph.facebook.com/*/campaigns*' => Http::response(['data' => [
+                ['id' => '120', 'name' => 'Ramadan', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES'],
+            ]]),
+            'graph.facebook.com/*/adsets*' => Http::response(['data' => [
+                ['id' => '220', 'campaign_id' => '120', 'name' => 'Riyadh', 'status' => 'ACTIVE'],
+            ]]),
+            'graph.facebook.com/*/ads*' => Http::response(['data' => [
+                [
+                    'id' => '304', 'adset_id' => '220', 'campaign_id' => '120', 'name' => 'Bare',
+                    'status' => 'ACTIVE',
+                    'creative' => ['id' => '404', 'name' => 'Bare', 'object_type' => 'VIDEO'],
+                ],
+            ]]),
+        ]);
+
+        $this->assertSame('success', app(AccountStructureSyncer::class)->sync($account)->status);
+
+        $bare = ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '404')->firstOrFail();
+
+        $this->assertNull($bare->asset_url);
+        $this->assertNull($bare->thumbnail_url);
+        $this->assertNull($bare->video_url);
+        $this->assertNull($bare->destination_url);
+        $this->assertNull($bare->cards);
+    }
+
+    /** An empty `child_attachments` is «it sent a breakdown and it was empty» — a third sentence. */
+    public function test_an_empty_card_list_is_not_the_same_as_no_card_list(): void
+    {
+        $this->configure('meta');
+        $account = $this->account('meta');
+
+        Http::fake([
+            'graph.facebook.com/*/campaigns*' => Http::response(['data' => [
+                ['id' => '120', 'name' => 'R', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES'],
+            ]]),
+            'graph.facebook.com/*/adsets*' => Http::response(['data' => [
+                ['id' => '220', 'campaign_id' => '120', 'name' => 'S', 'status' => 'ACTIVE'],
+            ]]),
+            'graph.facebook.com/*/ads*' => Http::response(['data' => [
+                [
+                    'id' => '305', 'adset_id' => '220', 'campaign_id' => '120', 'name' => 'Empty',
+                    'status' => 'ACTIVE',
+                    'creative' => [
+                        'id' => '405', 'name' => 'Empty', 'object_type' => 'SHARE',
+                        'object_story_spec' => ['link_data' => ['child_attachments' => []]],
+                    ],
+                ],
+            ]]),
+        ]);
+
+        $this->assertSame('success', app(AccountStructureSyncer::class)->sync($account)->status);
+
+        $this->assertSame([], ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '405')->firstOrFail()->cards);
+    }
+
+    /**
      * Meta's `effective_status` answers two questions and only one of them is about review.
      *
      * `PAUSED` says somebody turned the ad off. Reading it as a review verdict would print «مرفوض» or
