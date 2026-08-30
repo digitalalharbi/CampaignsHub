@@ -38,7 +38,7 @@ namespace App\Domains\Reports\Services;
 final class ReportStructure
 {
     /**
-     * The seven sections, in the order a report is read.
+     * The eight sections, in the order a report is read.
      *
      * Fixed order, because the sequence is itself an argument: what happened, then how it performed
      * overall, then where it happened, then what it was bought for, then which campaigns and ads
@@ -47,22 +47,24 @@ final class ReportStructure
      */
     private const ORDER = [
         'executive_summary',
-        'overall_performance',
+        'performance',
         'platforms',
         'objectives',
-        'entities',
+        'campaigns',
         'ads',
         'findings',
+        'recommendations',
     ];
 
     private const TITLES = [
         'executive_summary' => ['ar' => 'الملخّص التنفيذي', 'en' => 'Executive summary'],
-        'overall_performance' => ['ar' => 'الأداء العام', 'en' => 'Overall performance'],
+        'performance' => ['ar' => 'الأداء العام', 'en' => 'Overall performance'],
         'platforms' => ['ar' => 'تفصيل المنصات', 'en' => 'Platform breakdown'],
         'objectives' => ['ar' => 'التفصيل حسب الهدف', 'en' => 'Breakdown by objective'],
-        'entities' => ['ar' => 'الحملات', 'en' => 'Campaigns'],
+        'campaigns' => ['ar' => 'الحملات', 'en' => 'Campaigns'],
         'ads' => ['ar' => 'الإعلانات والمواد', 'en' => 'Ads and media'],
-        'findings' => ['ar' => 'النتائج والتوصيات', 'en' => 'Findings and recommendations'],
+        'findings' => ['ar' => 'النتائج', 'en' => 'Findings'],
+        'recommendations' => ['ar' => 'التوصيات', 'en' => 'Recommendations'],
     ];
 
     /**
@@ -70,12 +72,16 @@ final class ReportStructure
      * translate it and a test can assert on it.
      */
     private const REASONS = [
-        'no_spend_in_period' => ['ar' => 'لا إنفاق في هذه الفترة.', 'en' => 'Nothing was spent in this period.'],
-        'one_platform_only' => ['ar' => 'منصة واحدة فقط — لا تفصيل يُقارَن.', 'en' => 'One platform only — there is no breakdown to compare.'],
-        'one_objective_only' => ['ar' => 'هدف واحد فقط — «التفصيل حسب الهدف» صف واحد يحمل عنوان مقارنة.', 'en' => 'One objective only — a breakdown by objective would be a single row under a comparison heading.'],
-        'no_campaigns' => ['ar' => 'لا حملات ضمن نطاق هذا التقرير.', 'en' => 'No campaigns fall inside this report’s scope.'],
-        'no_ads_in_scope' => ['ar' => 'لم تُرفَق إعلانات بهذا التقرير.', 'en' => 'No ads were included in this report.'],
-        'nothing_supported_by_evidence' => ['ar' => 'لا نتيجة تدعمها الأرقام في هذه الفترة.', 'en' => 'No finding is supported by the figures in this period.'],
+        'no_summary_could_be_composed' => ['ar' => 'لا ملخّص يمكن تكوينه من أرقام هذه الفترة.', 'en' => 'No summary could be composed from this period’s figures.'],
+        'no_figures_in_this_window' => ['ar' => 'لا أرقام في هذه الفترة.', 'en' => 'There are no figures in this window.'],
+        'no_platform_reported_in_this_window' => ['ar' => 'لم تُبلّغ أي منصة بأرقام في هذه الفترة.', 'en' => 'No platform reported figures in this window.'],
+        'no_objective_split_available' => ['ar' => 'لا تقسيم حسب الهدف متاح لهذه الفترة.', 'en' => 'No objective split is available for this window.'],
+        'no_campaign_spent_in_this_window' => ['ar' => 'لا حملة أنفقت في هذه الفترة.', 'en' => 'No campaign spent in this window.'],
+        'no_creatives_in_window' => ['ar' => 'لا إعلانات ضمن نطاق هذا التقرير وفترته.', 'en' => 'No ads fall inside this report’s scope and window.'],
+        'no_rankable_metric_for_this_objective' => ['ar' => 'لا مقياس يصح ترتيب الإعلانات به لهذا الهدف.', 'en' => 'No metric ranks ads honestly for this objective.'],
+        'no_ads_to_show' => ['ar' => 'لا إعلانات تُعرض.', 'en' => 'There are no ads to show.'],
+        'no_finding_the_figures_support' => ['ar' => 'لا نتيجة تدعمها الأرقام في هذه الفترة.', 'en' => 'No finding is supported by the figures in this period.'],
+        'no_recommendation_the_figures_support' => ['ar' => 'لا توصية تدعمها الأرقام في هذه الفترة.', 'en' => 'No recommendation is supported by the figures in this period.'],
     ];
 
     /**
@@ -86,30 +92,41 @@ final class ReportStructure
      */
     public function sections(array $data): array
     {
-        $platforms = $this->rows($data, 'platforms');
-        $campaigns = $this->rows($data, 'campaigns');
-        $ads = $this->rows($data, 'ads');
-        $findings = $this->rows($data, 'findings');
-        $recommendations = $this->rows($data, 'recommendations');
-        $objectives = $this->objectiveRowsWithSpend($data);
-        $spend = (float) ($this->kpi($data, 'spend') ?? 0.0);
+        $has = fn (string $key): bool => $this->rows($data, $key) !== [];
 
         $present = [
-            'executive_summary' => true,
-            'overall_performance' => true,
-            'platforms' => count($platforms) > 1,
-            'objectives' => count($objectives) > 1,
-            'entities' => $campaigns !== [],
-            'ads' => $ads !== [],
-            'findings' => $findings !== [] || $recommendations !== [],
+            'executive_summary' => ($data['summary'] ?? $data['executive_summary'] ?? null) !== null,
+            // The KPI block is present whenever the window has figures at all; an empty scope is the
+            // one state where a report has nothing to say and says so at the top instead of below.
+            'performance' => ($data['kpis']['spend'] ?? null) !== null,
+            'platforms' => $has('platforms'),
+            // `objective_performance` is the block; its `paths` list is what makes it worth showing.
+            'objectives' => ($data['objective_performance']['paths'] ?? []) !== [],
+            'campaigns' => $has('campaigns'),
+            'ads' => $has('ads'),
+            /*
+             * Findings and recommendations are LAST and are absent when nothing is supported.
+             *
+             * They are the only sections that make a claim rather than report a figure, and a claim
+             * shown before its evidence — or shown as an empty box — is the part of a report a client
+             * remembers wrongly.
+             */
+            'findings' => $has('findings'),
+            'recommendations' => $has('recommendations'),
         ];
 
         $reason = [
-            'platforms' => $spend <= 0.0 && $platforms === [] ? 'no_spend_in_period' : 'one_platform_only',
-            'objectives' => $objectives === [] ? 'no_spend_in_period' : 'one_objective_only',
-            'entities' => 'no_campaigns',
-            'ads' => 'no_ads_in_scope',
-            'findings' => 'nothing_supported_by_evidence',
+            'executive_summary' => 'no_summary_could_be_composed',
+            'performance' => 'no_figures_in_this_window',
+            'platforms' => 'no_platform_reported_in_this_window',
+            'objectives' => 'no_objective_split_available',
+            'campaigns' => 'no_campaign_spent_in_this_window',
+            // The ads section states its OWN reason — «no creative in the window» and «no metric
+            // ranks ads honestly for this objective» are different facts, and only the section that
+            // built the list knows which applies.
+            'ads' => is_string($data['ads_absent_reason'] ?? null) ? $data['ads_absent_reason'] : 'no_ads_to_show',
+            'findings' => 'no_finding_the_figures_support',
+            'recommendations' => 'no_recommendation_the_figures_support',
         ];
 
         /*
@@ -119,19 +136,20 @@ final class ReportStructure
          */
         $figures = [
             'executive_summary' => ['spend', 'results', 'cost_per_result'],
-            'overall_performance' => ['spend', 'impressions', 'clicks', 'ctr', 'results'],
+            'performance' => ['spend', 'impressions', 'clicks', 'ctr', 'results'],
             'platforms' => ['spend', 'results', 'share'],
             'objectives' => ['spend', 'results', 'cost_per_result'],
-            'entities' => ['spend', 'results'],
+            'campaigns' => ['spend', 'results'],
             'ads' => ['impressions', 'clicks', 'ctr'],
             'findings' => [],
+            'recommendations' => [],
         ];
 
         $repeat = [
-            'overall_performance' => 'the summary states the headline; this section is the same figures over the whole period, with the components the headline hides',
+            'performance' => 'the summary states the headline; this section is the same figures over the whole period, with the components the headline hides',
             'platforms' => 'the same spend, divided by where it went',
             'objectives' => 'the same spend, divided by what it was bought for — and its cost per result is DIRECT rather than the blended one above',
-            'entities' => 'the same spend, divided by the campaign that decided it',
+            'campaigns' => 'the same spend, divided by the campaign that decided it',
             'ads' => 'delivery figures beneath the campaigns, never money — an ad’s share of a campaign’s spend is not a figure any platform reports',
         ];
 
@@ -147,46 +165,29 @@ final class ReportStructure
                 'present' => $isPresent,
             ];
 
+            /*
+             * `absent_reason` is always PRESENT as a key and null when the section is — a renderer
+             * that has to ask whether the key exists before reading it is a renderer that will one
+             * day print «undefined» to a client.
+             */
+            $section['absent_reason'] = null;
+
             if ($isPresent) {
                 $section['figures'] = $figures[$key];
                 if (isset($repeat[$key])) {
                     $section['repeat_reason'] = $repeat[$key];
                 }
             } else {
-                $code = $reason[$key] ?? 'no_spend_in_period';
+                $code = $reason[$key];
                 $section['absent_reason'] = $code;
-                $section['absent_reason_ar'] = self::REASONS[$code]['ar'];
-                $section['absent_reason_en'] = self::REASONS[$code]['en'];
+                $section['absent_reason_ar'] = self::REASONS[$code]['ar'] ?? $code;
+                $section['absent_reason_en'] = self::REASONS[$code]['en'] ?? $code;
             }
 
             $out[] = $section;
         }
 
         return $out;
-    }
-
-    /**
-     * The objective paths that actually SPENT.
-     *
-     * A path with no spend is not an objective this report can break down: it contributes a row of
-     * zeros, and counting it would make «one objective only» read as a comparison of four.
-     *
-     * @param  array<string,mixed>  $data
-     * @return list<array<string,mixed>>
-     */
-    private function objectiveRowsWithSpend(array $data): array
-    {
-        $performance = $data['objective_performance'] ?? null;
-        $rows = is_array($performance) ? ($performance['paths'] ?? $performance['objectives'] ?? $performance) : [];
-
-        if (! is_array($rows)) {
-            return [];
-        }
-
-        return array_values(array_filter(
-            array_filter($rows, 'is_array'),
-            static fn (array $row): bool => (float) ($row['spend'] ?? 0) > 0,
-        ));
     }
 
     /**
@@ -198,13 +199,5 @@ final class ReportStructure
         $value = $data[$key] ?? [];
 
         return is_array($value) ? array_values(array_filter($value, 'is_array')) : [];
-    }
-
-    /** @param array<string,mixed> $data */
-    private function kpi(array $data, string $key): ?float
-    {
-        $kpis = $data['kpis'] ?? [];
-
-        return is_array($kpis) && isset($kpis[$key]) && is_numeric($kpis[$key]) ? (float) $kpis[$key] : null;
     }
 }
