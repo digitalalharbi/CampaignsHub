@@ -196,3 +196,28 @@ describe('the compact value keeps the exact one within reach', () => {
     expect(screen.getByText('940 SAR')).not.toHaveAttribute('title')
   })
 })
+
+/**
+ * UX-KPI-PRESENTATION-001 — the figure sits under its own label, in every language.
+ *
+ * `dir="ltr"` and `text-start` are two different settings. The first keeps «56.3K SAR» in digit
+ * order inside an Arabic page and is not optional; on its own it also makes the span align its
+ * contents to the LEFT, so on a phone — where a card is the full width of the screen — the figure
+ * drifted to the far edge while its Arabic label stayed at the near one, and the pair stopped
+ * reading as one thing.
+ */
+describe('the value is placed by the reader’s direction, not by its own', () => {
+  it('keeps digit order and starts where the label starts', () => {
+    render(
+      <MetricStrip
+        id="t"
+        ar
+        primary={[item({ key: 'spend', label: 'الإنفاق', reading: { kind: 'value', text: '56.3K SAR' } })]}
+      />,
+    )
+
+    const value = screen.getByText('56.3K SAR')
+    expect(value).toHaveAttribute('dir', 'ltr')
+    expect(value.className).toContain('text-start')
+  })
+})
