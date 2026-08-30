@@ -304,6 +304,13 @@ export const router = createBrowserRouter(withErrorBoundary([
            * `surface` only prefixes the filter testids, so the suite's assertions against
            * `/app/dashboard` keep addressing the controls they always did.
            */
+          /*
+           * `/app` itself is an address people reach — a bookmark, a typed URL, a link that dropped
+           * its last segment — and it rendered a blank screen, because this tree had every child
+           * except an index. The agency tree has carried the equivalent redirect since ADR 0002;
+           * the advertiser portal simply never got one.
+           */
+          { index: true, element: <Navigate to="/app/dashboard" replace /> },
           { path: 'dashboard', element: <AnalyticsPage surface="dashboard" /> },
           { path: 'analytics', element: <AnalyticsPage /> },
           /*
