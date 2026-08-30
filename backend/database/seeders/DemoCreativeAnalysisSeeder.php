@@ -116,7 +116,6 @@ final class DemoCreativeAnalysisSeeder extends Seeder
                     'project_id' => $project->getKey(),
                     'campaign_id' => $campaign->getKey(),
                     'provider' => $case['provider'],
-                    'external_ad_id' => 'demo-ad-'.$case['key'],
                     'name' => $case['name'],
                     'format' => $case['format'],
                     'status' => $case['status'] ?? 'active',

@@ -20,7 +20,7 @@ final class ExternalCreative extends Model
 
     protected $fillable = [
         'tenant_id', 'project_id', 'campaign_id', 'external_campaign_id', 'external_ad_set_id', 'provider',
-        'external_creative_id', 'external_ad_id', 'name', 'client_display_name', 'format',
+        'external_creative_id', 'name', 'client_display_name', 'format',
         'thumbnail_url', 'preview_url', 'asset_url', 'video_url', 'destination_url', 'status', 'source_type',
         'width', 'height', 'aspect_ratio', 'duration_seconds', 'file_size', 'file_hash',
         'body', 'headline', 'description', 'cta',

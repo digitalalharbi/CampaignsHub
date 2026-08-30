@@ -61,7 +61,6 @@ const detail = (over: Partial<CreativeDetail> = {}): CreativeDetail =>
       campaign_id: 'c1',
       campaign_name: 'National Day Sale',
       ad_set_id: 'set-1',
-      ad_id: 'ad-1',
       preview: {
         state: 'available',
         kind: 'image',
@@ -94,7 +93,7 @@ const detail = (over: Partial<CreativeDetail> = {}): CreativeDetail =>
       copy: { body: 'Some ad copy', headline: 'A headline', description: null, cta: 'SHOP_NOW' },
       dimensions: { width: 1080, height: 1080, aspect_ratio: '1:1', file_size: 204800 },
       destination_url: 'https://example.test/product',
-      external_ids: { creative: 'x-cr', ad: 'x-ad', ad_set: 'x-set', campaign: 'x-camp' },
+      external_ids: { creative: 'x-cr', ad_set: 'x-set', campaign: 'x-camp' },
     },
     period: { from: '2026-07-08', to: '2026-08-06', days: 30 },
     previous_period: { from: '2026-06-08', to: '2026-07-07' },

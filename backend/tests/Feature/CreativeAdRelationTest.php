@@ -137,17 +137,32 @@ final class CreativeAdRelationTest extends TestCase
     }
 
     /**
-     * FAIL-FIRST: the reverse column keeps one ad of the four, and it is the last one imported.
+     * The column that used to hold one of the four is GONE — CREATIVE-COLUMN-RETIRE-001.
+     *
+     * A test asserting the defect stood here: `external_creatives.external_ad_id` held `ad-4`, the
+     * last ad imported, and the assertion existed so nobody could mistake the column for a relation.
+     * It has served its purpose. The column is dropped, every reader has migrated to
+     * `external_ads.creative_id`, and `CreativeSingleAdColumnRetiredTest` is what keeps it gone —
+     * a stronger guarantee than an assertion about what it contained.
+     *
+     * What is asserted here now is the property that outlives it: the sync records the relation on
+     * the ads, and nothing on the creative claims a single one.
      */
-    public function test_the_reverse_column_remembers_only_the_last_ad_and_is_not_a_relation(): void
+    public function test_the_creative_makes_no_claim_about_a_single_ad(): void
     {
         $this->sync();
 
-        $this->assertSame(
-            'ad-4',
-            $this->sharedCreative()->external_ad_id,
-            'This is the defect, asserted so it cannot be mistaken for a relation: the column holds '
-            .'the LAST ad imported, and says nothing about the other three.',
+        $creative = $this->sharedCreative();
+
+        $this->assertFalse(
+            array_key_exists('external_ad_id', $creative->getAttributes()),
+            'the retired column is back on the creative',
+        );
+
+        $this->assertCount(
+            4,
+            ExternalAd::withoutGlobalScopes()->where('creative_id', $creative->getKey())->get(),
+            'the relation is where the ads live, and all four must be on it',
         );
     }
 

@@ -63,7 +63,14 @@ const card = (over: Partial<CreativeCard> = {}): CreativeCard =>
     campaign_id: 'c1',
     campaign_name: 'National Day Sale',
     ad_set_id: 'set-1',
-    ad_id: 'ad-1',
+    /*
+     * The canonical relation. Two ads, because one asset placed by several ads is the ordinary case
+     * on a real account — and the case the singular `ad_id` above could never represent.
+     */
+    ads: [
+      { id: 'a1', external_id: 'ad-1', name: 'Ad one', status: 'active', external_ad_set_id: 'set-1', external_campaign_id: 'c1' },
+      { id: 'a2', external_id: 'ad-2', name: 'Ad two', status: 'active', external_ad_set_id: 'set-1', external_campaign_id: 'c1' },
+    ],
     preview: {
       state: 'available',
       kind: 'image',
@@ -219,6 +226,18 @@ const pulse = (over: Partial<CreativePulse> = {}): CreativePulse => ({
 
 const mocked = vi.mocked(getCreativePulse)
 
+/** A pulse whose one winner carries exactly these ads — the drill-down's ad step reads them. */
+const withAds = (ads: CreativeCard['ads']): CreativePulse =>
+  pulse({
+    best_by_objective: [
+      {
+        objective: 'sales', path: 'conversion', creatives: 3, spend: 2700, metric: 'roas',
+        higher_wins: true, value: 5, candidates: 3, evidenced: 3, low_evidence: false,
+        creative: card({ ads }),
+      },
+    ],
+  })
+
 describe('CreativePulseSection', () => {
   beforeEach(() => {
     mocked.mockReset()
@@ -315,8 +334,55 @@ describe('CreativePulseSection', () => {
     expect(adSet.getAttribute('href')).toContain('ad_set_ids%5B%5D=set-1')
     expect(adSet.getAttribute('href')).toContain('campaign_ids%5B%5D=c1')
 
-    const ad = within(nav).getByRole('link', { name: 'Ad' })
+    /*
+     * EVERY ad running this creative, and the label admits how many.
+     *
+     * This asserted a single `ad-1`, taken from `creative.ad_id` — one ad chosen from many by row
+     * order, rewritten on every import. On the live Snapchat account four ads share each creative,
+     * so a reader following «Ad ›» to decide whether to pause it was shown a quarter of the
+     * evidence. The canonical relation is `external_ads.creative_id`, and the step now narrows to
+     * all of it.
+     */
+    const ad = within(nav).getByRole('link', { name: 'Ad (2)' })
     expect(ad.getAttribute('href')).toContain('ad_ids%5B%5D=ad-1')
+    expect(ad.getAttribute('href')).toContain('ad_ids%5B%5D=ad-2')
+  })
+
+  /** One ad is not announced as a count — «Ad (1)» is noise where «Ad» is the whole truth. */
+  it('does not count a single ad', async () => {
+    mocked.mockResolvedValue(withAds([
+      { id: 'a1', external_id: 'ad-1', name: 'Ad one', status: 'active', external_ad_set_id: 'set-1', external_campaign_id: 'c1' },
+    ]))
+    render()
+
+    const nav = (await screen.findAllByRole('navigation', { name: 'Drill down' }))[0]
+
+    expect(within(nav).getByRole('link', { name: 'Ad' })).toBeInTheDocument()
+  })
+
+  /** A creative no ad is running gets no ad step. */
+  it('offers no ad step when no ad is running the creative', async () => {
+    mocked.mockResolvedValue(withAds([]))
+    render()
+
+    const nav = (await screen.findAllByRole('navigation', { name: 'Drill down' }))[0]
+
+    expect(within(nav).queryByRole('link', { name: /^Ad( \(\d+\))?$/ })).not.toBeInTheDocument()
+  })
+
+  /**
+   * And a response that never carried `ads` behaves the same way rather than throwing.
+   *
+   * A deployed frontend meets whatever backend is live, and a payload from before this field
+   * existed must produce no ad step — not a crash that takes the whole pulse section down.
+   */
+  it('survives a response that predates the ads relation', async () => {
+    mocked.mockResolvedValue(withAds(undefined as never))
+    render()
+
+    const nav = (await screen.findAllByRole('navigation', { name: 'Drill down' }))[0]
+
+    expect(within(nav).queryByRole('link', { name: /^Ad( \(\d+\))?$/ })).not.toBeInTheDocument()
   })
 
   /** A dashboard is the worst page to mount players on — it is the one most often left open. */
