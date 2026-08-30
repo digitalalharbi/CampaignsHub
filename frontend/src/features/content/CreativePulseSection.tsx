@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ArrowDownRight, ArrowUpRight, ChevronLeft, ChevronRight, ImageIcon, PlayCircle, TriangleAlert } from 'lucide-react'
 import { CreativeInsightCard } from './CreativeInsightCard'
+import { posterSource, readPreview } from './adPreview'
 import { getCreativePulse, type CreativeMove, type CreativeWinner, type PathComparison, type SpendByKind } from './pulse'
 import { formatMetric, metricLabel, metricState } from './metrics'
 import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
@@ -671,9 +672,17 @@ type Drill = (extra: LibraryQuery & { creative?: string }) => string
 
 /** The poster — never a `<video>`, and never a fabricated image when the platform withheld one. */
 function Poster({ creative, label }: { creative: CreativeCard; label: string }) {
-  const src = creative.preview.thumbnail_url ?? creative.preview.image_url
+  /*
+   * AD-PREVIEW-001 — through the canonical reader, which this used to reimplement.
+   *
+   * The two rules here were `thumbnail ?? image` and «state must be available», which agreed with
+   * the shared reader by coincidence rather than by construction: they had no opinion about a video
+   * whose poster is the only thing that arrived, and none about a creative the presenter calls
+   * available while every URL on it is null.
+   */
+  const src = posterSource(readPreview(creative.preview, false))
 
-  if (creative.preview.state !== 'available' || !src) {
+  if (!src) {
     return (
       <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-center text-[10px] leading-tight text-text-muted">
         {label}
