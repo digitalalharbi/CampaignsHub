@@ -12,12 +12,12 @@ const tones: Record<Tone, string> = {
 
 /** Status is never conveyed by color alone — always pair with a label/icon (dot below). */
 export function Badge({
-  tone = 'neutral', children, 'data-testid': testId,
-}: { tone?: Tone; children: ReactNode; 'data-testid'?: string }) {
+  tone = 'neutral', children, className = '', 'data-testid': testId,
+}: { tone?: Tone; children: ReactNode; className?: string; 'data-testid'?: string }) {
   return (
     <span
       data-testid={testId}
-      className={`inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] px-2.5 py-0.5 text-xs font-bold ${tones[tone]}`}
+      className={`inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] px-2.5 py-0.5 text-xs font-bold ${tones[tone]} ${className}`}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
       {children}

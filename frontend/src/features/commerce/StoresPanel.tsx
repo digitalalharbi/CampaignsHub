@@ -145,7 +145,7 @@ export function StoresPanel() {
   return (
     <section className="space-y-4" data-testid="stores-panel">
       <div>
-        <h2 className="font-[var(--font-heading)] text-lg font-extrabold">
+        <h2 className="font-[var(--font-heading)] text-lg font-extrabold" data-testid="stores-heading">
           {ar ? 'المتاجر' : 'Stores'}
         </h2>
         <p className="mt-1 text-sm text-text-secondary">
@@ -183,13 +183,24 @@ export function StoresPanel() {
           const needsOperator = NEEDS_OPERATOR.includes(provider.state)
 
           return (
-            <Card key={provider.key} className="space-y-3">
+            /*
+              `store-card` and `data-platform` name this as THE card for this store — the one the
+              integrations page used to draw twice. `integrations.spec.ts` counts them to hold
+              INTEG-STORES-001: the two stores complete the eight sources, in their own section.
+            */
+            <Card key={provider.key} className="space-y-3" data-testid="store-card" data-platform={provider.key}>
               <div data-testid={`store-provider-${provider.key}`} className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Store size={16} className="text-text-muted" />
+                <div className="flex min-w-0 items-center gap-2">
+                  <Store size={16} className="shrink-0 text-text-muted" />
                   <CardTitle>{ar ? (LABEL_AR[provider.key] ?? provider.label) : provider.label}</CardTitle>
                 </div>
-                <Badge tone={meta.tone}>{ar ? meta.ar : meta.en}</Badge>
+                <Badge
+                  tone={meta.tone}
+                  data-testid={`store-state-${provider.key}`}
+                  className="shrink-0 self-start whitespace-nowrap"
+                >
+                  {ar ? meta.ar : meta.en}
+                </Badge>
               </div>
 
               {needsOperator ? (

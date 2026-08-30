@@ -30,6 +30,7 @@ const SURFACES: [string, string, string][] = [
   ['spend-limits', 'advertiser@campaignshub.io', '/app/spend-limits'],
   ['reports', 'advertiser@campaignshub.io', '/app/reports'],
   ['agency', 'agency@campaignshub.io', '/agency'],
+  ['integrations', 'agency@campaignshub.io', '/agency/integrations'],
 ]
 
 for (const [name, account, path] of SURFACES) {
