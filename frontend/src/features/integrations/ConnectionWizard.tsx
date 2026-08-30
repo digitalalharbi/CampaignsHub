@@ -377,6 +377,19 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
               <ul className="flex flex-col gap-1" data-testid="wizard-account-list">
                 {(accounts.data?.accounts ?? []).map((a: DiscoveredAccount) => {
                   const checked = selected.has(a.id)
+                  /*
+                   * Assigned ELSEWHERE is what disables a row — not assigned at all.
+                   *
+                   * «Manage accounts» opens on the accounts this project already holds, and every
+                   * one of them is assigned by definition. Disabling on `assigned` alone made the
+                   * bound rows the only ones a reader could not untick, which is the entire purpose
+                   * of the screen. An account feeding ANOTHER project stays disabled, because the
+                   * server refuses it with a 409 and a control that cannot succeed should not invite
+                   * the click.
+                   */
+                  const boundHere = managing && a.assigned_project_id === manageProjectId
+                  const lockedElsewhere = a.assigned && !boundHere
+
                   return (
                     <li key={a.id}>
                       <label
@@ -386,7 +399,7 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
                         <input
                           type="checkbox"
                           checked={checked}
-                          disabled={a.assigned}
+                          disabled={lockedElsewhere}
                           onChange={() => setSelected((prev) => {
                             const next = new Set(prev)
                             if (next.has(a.id)) next.delete(a.id); else next.add(a.id)
@@ -397,7 +410,7 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
                         <span className="flex min-w-0 flex-1 flex-col">
                           <span className="truncate font-medium">{a.name}</span>
                           <span className="truncate text-xs text-text-muted" dir="ltr">
-                            {a.external_id}{a.currency ? ` · ${a.currency}` : ''}{a.timezone ? ` · ${a.timezone}` : ''}
+                            {a.external_id}{a.parent_name ? ` · ${a.parent_name}` : ''}{a.currency ? ` · ${a.currency}` : ''}{a.timezone ? ` · ${a.timezone}` : ''}
                           </span>
                         </span>
                         {/*
@@ -408,7 +421,9 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
                         */}
                         {a.assigned && (
                           <span className={`shrink-0 text-xs ${accountHealthTone(a.health)}`}>
-                            {accountHealthLabel(a.health, ar)}
+                            {lockedElsewhere
+                              ? (ar ? 'مربوط بمشروع آخر' : 'Connected to another project')
+                              : accountHealthLabel(a.health, ar)}
                           </span>
                         )}
                       </label>
@@ -416,6 +431,39 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
                   )
                 })}
               </ul>
+
+              {/*
+                Select-all applies to the PAGE, and says so.
+                A control that ticked all three hundred accounts behind one press would commit a
+                decision nobody could review — and on a plan with room for five it would fail at the
+                confirm step having looked like it worked.
+              */}
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <Button
+                  variant="secondary" size="sm"
+                  data-testid="wizard-select-page"
+                  onClick={() => setSelected((prev) => {
+                    const next = new Set(prev)
+                    for (const a of accounts.data?.accounts ?? []) {
+                      if (!(a.assigned && !(managing && a.assigned_project_id === manageProjectId))) next.add(a.id)
+                    }
+                    return next
+                  })}
+                >
+                  {ar ? 'تحديد هذه الصفحة' : 'Select this page'}
+                </Button>
+                <Button
+                  variant="ghost" size="sm"
+                  data-testid="wizard-clear-page"
+                  onClick={() => setSelected((prev) => {
+                    const next = new Set(prev)
+                    for (const a of accounts.data?.accounts ?? []) next.delete(a.id)
+                    return next
+                  })}
+                >
+                  {ar ? 'إلغاء تحديد الصفحة' : 'Clear this page'}
+                </Button>
+              </div>
 
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                 <span data-testid="wizard-selected-count">
