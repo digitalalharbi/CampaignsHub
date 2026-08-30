@@ -24,6 +24,7 @@ import {
   useLastNDaysRange,
   useAttribution,
   useNormalization,
+  usePlatformObjectives,
   usePlatforms,
   useSummary,
   useTimeseries,
@@ -31,6 +32,7 @@ import {
   type MetricFilters,
 } from './hooks'
 import { findingsFor, type QualityFinding } from './dataQualityFindings'
+import type { PlatformObjectives } from './api'
 import { scopeNote, type FilterScope } from './filterScope'
 import { CAMPAIGN_RELEVANCE_ORDER, orderByRelevanceWith, relevanceOf } from '@/features/campaigns/campaignRelevance'
 import { Panel, ProvenanceBadge, RateTrend, SERIES, platformColor, tooltipProps } from './components'
@@ -644,12 +646,112 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
   )
 }
 
+
+/**
+ * Each platform inside each marketing path — PLATFORM-DECISION-ANALYTICS-001.
+ *
+ * The shape is the argument. There is no list here that contains platforms from two paths, because a
+ * «best platform» card can only be written against one, and a platform buying awareness is not worse
+ * than one buying sales — what differs is the work each was given.
+ *
+ * A path where one platform spent shows its figures and NO comparison: «Meta is the best platform
+ * for awareness», said of the only platform that ran awareness, is a sentence with no evidence
+ * behind it, and it is exactly what a reader writes for themselves when handed a sorted list of one.
+ */
+function PlatformPaths({
+  data,
+  loading,
+  error,
+  ar,
+}: {
+  data: PlatformObjectives | undefined
+  loading: boolean
+  error: boolean
+  ar: boolean
+}) {
+  const REASON: Record<string, { ar: string; en: string }> = {
+    only_one_platform_spent: {
+      ar: 'منصة واحدة فقط أنفقت على هذا المسار — رقم، وليس مقارنة.',
+      en: 'Only one platform spent on this path — a figure, not a comparison.',
+    },
+    nothing_spent_on_this_path: {
+      ar: 'لم يُنفق شيء على هذا المسار في هذه الفترة.',
+      en: 'Nothing was spent on this path in this period.',
+    },
+  }
+
+  const paths = (data?.paths ?? []).filter((p) => p.platforms.length > 0)
+
+  return (
+    <Panel
+      title={ar ? 'مساهمة المنصات حسب الهدف' : 'Platform contribution by objective'}
+      description={ar
+        ? 'داخل كل مسار، لا عبره — المقارنة الوحيدة التي تصحّ'
+        : 'Inside each path, never across them — the only comparison that holds'}
+      loading={loading}
+      error={error}
+      empty={!loading && paths.length === 0}
+    >
+      <div data-testid="platform-paths" className="flex flex-col gap-4">
+        {paths.map((path) => (
+          <div key={path.path} data-testid={`platform-path-${path.path}`} className="rounded-xl border border-border p-3.5">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-bold text-text-primary">{ar ? path.label_ar : path.label_en}</span>
+              <span className="text-[11px] text-text-muted" dir="ltr">{money(path.spend)}</span>
+              {!path.comparable && (
+                <span
+                  data-testid={`platform-path-${path.path}-not-comparable`}
+                  className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] text-text-secondary"
+                >
+                  {ar ? REASON[path.comparable_reason]?.ar : REASON[path.comparable_reason]?.en}
+                </span>
+              )}
+            </div>
+
+            <ul className="flex flex-col gap-1">
+              {path.platforms.map((row) => (
+                <li key={row.provider} className="flex items-center justify-between gap-3 text-sm">
+                  <PlatformCell provider={row.provider} />
+                  <span className="flex items-center gap-3">
+                    <span className="tnum text-text-secondary" dir="ltr">{money(row.spend)}</span>
+                    {/* Share of the PATH. «40% of awareness» is a decision somebody made; «40% of
+                        everything» is the mix, and reading the second as performance is the defect. */}
+                    <span className="tnum text-text-muted" dir="ltr">
+                      {row.spend_share === null ? '—' : percent(row.spend_share, 0)}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+
+        {/*
+          Said on the page, not only in the payload. It is the sentence a «best platform» card would
+          have to contradict in order to exist.
+        */}
+        <p data-testid="platform-paths-cross" className="text-[11px] text-text-tertiary">
+          {ar ? data?.cross_path_reason_ar : data?.cross_path_reason_en}
+        </p>
+      </div>
+    </Panel>
+  )
+}
+
 function PlatformsTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const p = usePlatforms(projectId, range, filters)
+  const byPath = usePlatformObjectives(projectId, range, filters)
   const rows = p.data ?? []
   return (
     <div className="space-y-4">
+      {/*
+        PLATFORM-DECISION-ANALYTICS-001 — «which platform is contributing most to THIS objective».
+        Above the comparison chart, because that chart answers a different question: how each
+        platform is doing over every objective at once. Read as a ranking it compares a platform
+        buying awareness against one buying sales, which is a verdict about the work each was given.
+      */}
+      <PlatformPaths data={byPath.data} loading={byPath.isLoading} error={byPath.isError} ar={ar} />
       <Panel title={ar ? 'مقارنة المنصات' : 'Platform comparison'} description={ar ? 'الإنفاق مقابل ROAS لكل منصة' : 'Spend against ROAS, per platform'} loading={p.isLoading} error={p.isError} empty={!p.isLoading && rows.length === 0}>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
