@@ -95,6 +95,17 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('commerce/funnel', [StoreFunnelController::class, 'show'])->name('commerce.funnel');
     // REPORT-OBJECTIVE-001: spend and results split by marketing path, Direct and Blended apart.
     Route::get('metrics/objective-performance', [MetricsController::class, 'objectivePerformance'])->name('metrics.objective');
+    /*
+     * PLATFORM-DECISION-ANALYTICS-001 — each platform's contribution to each marketing path.
+     *
+     * Separate from `metrics/platforms`, which answers «how is each platform doing» with one set of
+     * figures across every objective at once. This one answers «which platform is contributing most
+     * to THIS objective», which is the question an operator actually has, and it is the only shape in
+     * which platforms may be compared at all.
+     */
+    Route::get('metrics/platform-objectives', [MetricsController::class, 'platformObjectives'])->name('metrics.platform-objectives');
+    Route::get('metrics/objective-leaders', [MetricsController::class, 'objectiveLeaders'])->name('metrics.objective-leaders');
+    Route::get('metrics/objective-explanations', [MetricsController::class, 'objectiveExplanations'])->name('metrics.objective-explanations');
     Route::get('metrics/budget', [MetricsController::class, 'budget'])->name('metrics.budget');
     /*
      * BUDGET-GOVERNANCE-001 — the workspace's OWN limits, which the two routes above are not.
