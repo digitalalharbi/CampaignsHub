@@ -99,16 +99,18 @@ for (const p of PAGES) {
            * layout to prove that a control it deliberately hides is readable.
            */
           /*
-           * The first visible element that actually SAYS something.
+           * A FILTER's label, which means the controls have to be open.
            *
-           * Two things in this bar are visible spans with no text: the coloured dot on a platform
-           * chip and the tone dot on a card. A dot paints its own background and inherits its text
-           * colour, so «contrast» for it is text-on-brand — about 1.5:1, and meaningless, since there
-           * is no text to read. Whether one of them came first depended on which filters happened to
-           * be applied, which is why this passed locally and failed in the full gate.
+           * Below `sm` the bar folds behind a summary (MOBILE-FILTERS-001), so on a phone the first
+           * visible thing inside it is the fold control rather than a filter — and its own count
+           * badge is a tinted pill, which is not a label and whose contrast is not this claim. The
+           * check opens the fold, exactly as a reader does, and then reads the first visible element
+           * that actually says something: the coloured dot on a platform chip is a visible span with
+           * no text, and «contrast» for a dot is text-on-brand — about 1.5:1, and meaningless.
            */
+          await openFilters(page, p.id)
           const label = page
-            .getByTestId(`${p.id}-filters`)
+            .getByTestId(`${p.id}-filters-controls`)
             .locator('label:visible, span:visible')
             .filter({ hasText: /\S/ })
             .first()
