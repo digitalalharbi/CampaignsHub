@@ -30,6 +30,7 @@ import {
   type EntityRow,
   type MetricFilters,
 } from './hooks'
+import { findingsFor, type QualityFinding } from './dataQualityFindings'
 import { scopeNote, type FilterScope } from './filterScope'
 import { CAMPAIGN_RELEVANCE_ORDER, orderByRelevanceWith, relevanceOf } from '@/features/campaigns/campaignRelevance'
 import { Panel, ProvenanceBadge, RateTrend, SERIES, platformColor, tooltipProps } from './components'
@@ -1031,12 +1032,28 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
   )
 }
 
-function QualityTab({ projectId, range, filters }: TabProps) {
+export function QualityTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const f = useFreshness(projectId, range, filters)
   const rows = f.data ?? []
+  /*
+   * DATA-QUALITY-OPERATOR-UX-001 — the findings, above the table that implies them.
+   *
+   * The table below is true and administrator-shaped: platform · latest date · last sync · days with
+   * data · missing days · status. The person who opens this tab is an account manager whose client
+   * has just asked why last week looks thin, and they need what is wrong, what it affects, how much
+   * it matters, what they can check and who can end it — derived, every time, from six columns whose
+   * relationship they have to already know.
+   *
+   * Nothing is hidden: the table stays underneath, and the findings are read from the same rows. A
+   * second source for «is this platform healthy» is how two surfaces come to disagree about one
+   * account.
+   */
+  const findings = useMemo(() => findingsFor(rows, new Date()), [rows])
+
   return (
     <div>
+      <QualityFindings findings={findings} ar={ar} loading={f.isLoading} />
       <Panel title={ar ? 'جودة البيانات والإسناد' : 'Data quality & attribution'} description={ar ? 'آخر مزامنة، حداثة البيانات، والأيام الناقصة لكل منصة' : 'Last sync, how fresh the data is, and the missing days per platform'} loading={f.isLoading} error={f.isError} empty={!f.isLoading && rows.length === 0}>
       <MetricTable
         head={ar ? ['المنصة', 'آخر تاريخ', 'آخر مزامنة', 'أيام ببيانات', 'أيام ناقصة', 'الحالة'] : ['Platform', 'Latest date', 'Last sync', 'Days with data', 'Missing days', 'Status']}
@@ -1078,6 +1095,70 @@ function QualityTab({ projectId, range, filters }: TabProps) {
        */}
       <AttributionSection projectId={projectId} range={range} filters={filters} />
     </div>
+  )
+}
+
+/**
+ * What is wrong, what it affects, what you can check — and who can end it.
+ *
+ * The owner is the answer an operator needs first, and it is the one the old table could not give at
+ * all: «the platform», «you», «somebody with the credentials», «the system, on its own». A finding
+ * that does not say which of those it is sends its reader to the wrong place, and a reader sent to
+ * the wrong place twice stops opening the tab.
+ */
+function QualityFindings({ findings, ar, loading }: { findings: QualityFinding[]; ar: boolean; loading: boolean }) {
+  if (loading) {
+    return null
+  }
+
+  const OWNER: Record<QualityFinding['owner'], { ar: string; en: string }> = {
+    system: { ar: 'النظام — تلقائيًا', en: 'The system, on its own' },
+    operator: { ar: 'أنت — خطوة واحدة', en: 'You — one step' },
+    credentials: { ar: 'يحتاج بيانات اعتماد', en: 'Needs credentials' },
+    provider: { ar: 'يحتاج فحصًا على المنصة', en: 'Needs a look on the platform' },
+  }
+
+  const TONE: Record<QualityFinding['severity'], string> = {
+    critical: 'border-danger/40 bg-danger/5',
+    attention: 'border-warning/40 bg-warning/5',
+    watch: 'border-border bg-surface-secondary',
+  }
+
+  if (findings.length === 0) {
+    return (
+      <p data-testid="quality-findings-clear" className="mb-4 rounded-xl border border-success/30 bg-success/5 p-3.5 text-sm text-text-secondary">
+        {/*
+          «لا يوجد شيء» would read as a page that failed to load. Every source being current IS the
+          answer, and saying which sources were checked is what makes it believable.
+        */}
+        {ar
+          ? 'كل مصدر في هذه الفترة محدَّث ومكتمل — لا شيء يحتاج انتباهك هنا.'
+          : 'Every source in this window is current and complete — nothing here needs your attention.'}
+      </p>
+    )
+  }
+
+  return (
+    <ul data-testid="quality-findings" className="mb-4 flex flex-col gap-2">
+      {findings.map((finding) => (
+        <li key={finding.key} data-testid={`quality-finding-${finding.provider}`} className={`rounded-xl border p-3.5 ${TONE[finding.severity]}`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-bold text-text-primary">{finding.name ?? finding.provider}</span>
+            <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+              {ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en}
+            </span>
+            {finding.coverage !== null && (
+              <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] text-text-muted" dir="ltr">
+                {ar ? 'التغطية' : 'Coverage'} {Math.round(finding.coverage * 100)}%
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-sm text-text-primary">{ar ? finding.what.ar : finding.what.en}</p>
+          <p className="mt-0.5 text-xs text-text-secondary">{ar ? finding.affects.ar : finding.affects.en}</p>
+          <p className="mt-0.5 text-xs text-text-muted">{ar ? finding.check.ar : finding.check.en}</p>
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -1185,11 +1266,18 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
                 : `${num(withheld)} rows (${withheldFrom.join(' · ')}) have no trustworthy rate for their date and are in none of the amounts above. The figures shown are short by that much.`}
             </span>
           )}
-          {(d?.project_currencies.length ?? 0) > 1 && (
+          {/*
+            `d?.project_currencies?.length`, not `d?.project_currencies.length`.
+            The optional chain stopped at `d`, so a payload that HAS data and lacks this one array
+            threw `Cannot read properties of undefined` from inside the render — and took the whole
+            Data quality tab down with it, findings, table and all. The `?? 0` beside it reads as a
+            guard and guards nothing: it only ever catches `d` being absent.
+          */}
+          {(d?.project_currencies?.length ?? 0) > 1 && (
             <span className="mt-1 block font-semibold text-warning">
               {ar
-                ? `هذه الفترة تحتوي أكثر من عملة عرض (${d?.project_currencies.join(' · ')}) — لا تُجمع المبالغ كرقم واحد.`
-                : `This period holds more than one display currency (${d?.project_currencies.join(' · ')}) — the amounts are not one total.`}
+                ? `هذه الفترة تحتوي أكثر من عملة عرض (${d?.project_currencies?.join(' · ')}) — لا تُجمع المبالغ كرقم واحد.`
+                : `This period holds more than one display currency (${d?.project_currencies?.join(' · ')}) — the amounts are not one total.`}
             </span>
           )}
         </Basis>
@@ -1274,15 +1362,15 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
 
         {/* Stored but read by nothing. An empty answer is stated, never left as an empty space. */}
         <Basis label={ar ? 'مقاييس غير محسوبة' : 'Metrics nothing reads'}>
-          {(d?.unread_metric_keys.length ?? 0) === 0
+          {(d?.unread_metric_keys?.length ?? 0) === 0
             ? (ar ? 'كل مقياس في بياناتك يدخل في مؤشر واحد على الأقل.' : 'Every metric key in your data feeds at least one KPI.')
             : (ar
-                ? `مخزّنة ولا يقرؤها أي مؤشر: ${d?.unread_metric_keys.join('، ')}.`
-                : `Stored but read by no KPI: ${d?.unread_metric_keys.join(', ')}.`)}
+                ? `مخزّنة ولا يقرؤها أي مؤشر: ${d?.unread_metric_keys?.join('، ')}.`
+                : `Stored but read by no KPI: ${d?.unread_metric_keys?.join(', ')}.`)}
         </Basis>
 
         {/* The catalogue: what a metric means and whether it may be summed at all. */}
-        {d?.catalogue.available && (
+        {d?.catalogue?.available && (
           <details className="rounded-xl border border-border bg-surface-secondary px-4 py-3">
             <summary className="cursor-pointer text-sm font-semibold text-text-primary">
               {ar ? `تعريفات المقاييس (${num(d.catalogue.metrics.length)})` : `Metric definitions (${num(d.catalogue.metrics.length)})`}
