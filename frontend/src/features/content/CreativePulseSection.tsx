@@ -17,6 +17,7 @@ import {
 } from './api'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
+import { days as countedDays } from '@/lib/counted'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 
 /**
@@ -102,7 +103,7 @@ const COPY = {
     project: 'المشروع',
     objective: 'الهدف',
     kind: 'نوع الإعلان',
-    lastDays: (n: string) => `آخر ${n} يومًا`,
+    lastDays: (n: string) => `آخر ${countedDays(Number(n), 'ar')}`,
     provisional: 'مبدئي',
     applied: 'مطبَّق',
     noPreview: 'لا تتوفر معاينة',
@@ -165,7 +166,7 @@ const COPY = {
     project: 'Project',
     objective: 'Objective',
     kind: 'Ad type',
-    lastDays: (n: string) => `Last ${n} days`,
+    lastDays: (n: string) => `Last ${countedDays(Number(n), 'en')}`,
     provisional: 'provisional',
     applied: 'Filtered by',
     noPreview: 'No preview available',

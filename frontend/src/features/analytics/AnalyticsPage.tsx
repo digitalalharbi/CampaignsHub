@@ -75,6 +75,7 @@ const ANALYTICS_PLATFORMS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snap
 
 /** The objectives with a layout elsewhere in the product — the same six the dashboard offers. */
 import { useUi } from '@/stores/ui'
+import { accounts as countedAccounts } from '@/lib/counted'
 import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
 import { useProject } from '@/stores/project'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
@@ -1033,7 +1034,7 @@ function AccountBudgets({ projectId, range, filters }: TabProps) {
         <p data-testid="budget-at-risk" className="mb-3 rounded-lg border border-warning/40 bg-[var(--warning-background)] px-3 py-2 text-xs text-text-primary">
           <span className="font-semibold">{ar ? 'تنبيه: ' : 'Heads up: '}</span>
           {ar
-            ? `${atRisk.length} حساب اقترب من حدّه أو يسير لتجاوزه قبل نهاية الفترة.`
+            ? `${countedAccounts(atRisk.length, 'ar')} اقترب من حدّه أو يسير لتجاوزه قبل نهاية الفترة.`
             : `${atRisk.length} account(s) are near their ceiling or on course to pass it before the period ends.`}
         </p>
       )}
