@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { useUi } from '@/stores/ui'
+import { CARD_GAP, CARD_PAD, METRIC_HINT, METRIC_LABEL, METRIC_VALUE_DENSE } from '@/styles/scale'
 
 /**
  * UX-KPI-PRESENTATION-001 — one card, and one grid, for every figure the product leads with.
@@ -80,10 +81,10 @@ export function StatCard({
   return (
     <div
       data-testid={testid}
-      className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-small)]"
+      className={`flex flex-col gap-1.5 rounded-2xl border border-border bg-surface ${CARD_PAD} shadow-[var(--shadow-small)]`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary">
+        <span className={`flex items-center gap-1.5 text-text-secondary ${METRIC_LABEL}`}>
           {dot && <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[tone]}`} aria-hidden />}
           {label}
         </span>
@@ -94,12 +95,12 @@ export function StatCard({
         dir="ltr"
         title={exact}
         data-testid={testid ? `${testid}-value` : undefined}
-        className={`tnum min-h-8 text-start text-2xl font-extrabold leading-none tracking-tight ${VALUE_TONE[tone]}`}
+        className={`min-h-9 text-start ${METRIC_VALUE_DENSE} ${VALUE_TONE[tone]}`}
       >
         {value}
       </span>
 
-      {hint && <span className="text-[11px] text-text-tertiary">{hint}</span>}
+      {hint && <span className={`text-text-tertiary ${METRIC_HINT}`}>{hint}</span>}
     </div>
   )
 }
@@ -114,13 +115,13 @@ export function StatCard({
  * The minimum is what stops them colliding: below it the grid drops a column instead of squeezing a
  * number until it wraps mid-figure.
  */
-export function StatGrid({ children, min = '11rem' }: { children: ReactNode; min?: string }) {
+export function StatGrid({ children, min = '11.5rem' }: { children: ReactNode; min?: string }) {
   const ar = useUi((s) => s.locale) === 'ar'
 
   return (
     <div
       dir={ar ? 'rtl' : 'ltr'}
-      className="grid gap-3"
+      className={`grid ${CARD_GAP}`}
       style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(${min}, 100%), 1fr))` }}
     >
       {children}
