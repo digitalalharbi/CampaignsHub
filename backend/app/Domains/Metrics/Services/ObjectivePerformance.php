@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Concerns\ProjectScope;
+use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -162,6 +163,315 @@ final class ObjectivePerformance
     }
 
     /** One row per campaign, with its objective and its results, from the one metrics table. */
+    /**
+     * PLATFORM-DECISION-ANALYTICS-001 — each platform's contribution to each marketing path.
+     *
+     * ## The question the Platforms surface could not answer
+     *
+     * It listed platforms with one set of figures. «Which platform is contributing most to THIS
+     * objective» had no answer, and the only comparison available — one number per platform, across
+     * every objective at once — is the comparison that must never be made: a platform running
+     * awareness and a platform running sales are not better or worse than each other, and a ranking
+     * that puts them in one column invents a verdict out of the mix of work each was given.
+     *
+     * ## Grouped by PATH first, platform second
+     *
+     * Within a path the comparison is real: two platforms both buying reach can be compared on cost
+     * per thousand. Across paths it is not, and the shape of this payload is what stops the second
+     * one being written — there is no list that contains platforms from two paths.
+     *
+     * ## Comparable is a per-path fact, and often false
+     *
+     * A path where one platform ran is not a ranking, it is a single row; saying «Meta is the best
+     * platform for awareness» when Meta is the only platform that ran awareness is a sentence with
+     * no evidence behind it. `comparable` is true only where at least two platforms actually spent
+     * on that path, and the reason travels with it.
+     *
+     * Reuses `rows()` — the same query, the same objective classification, the same fail-closed
+     * bounds. A second query would eventually disagree with the paths above it about which campaign
+     * is a sales campaign.
+     *
+     * @return array<string,mixed>
+     */
+    public function byPlatform(Carbon $from, Carbon $to): array
+    {
+        /**
+         * The shape is declared because the accumulation below reaches it through a REFERENCE, and a
+         * reference is where static analysis loses the type: from `'platforms' => []` alone the
+         * platform map is an empty array forever, and every read of it afterwards is «offset does
+         * not exist on array{}». Writing the shape down is also the only place a reader can see what
+         * a platform row contains without executing the loop.
+         *
+         * @var array<string, array{
+         *     path: string, label_ar: string, label_en: string, headline_metrics: list<string>,
+         *     platforms: array<string, array<string, float|int|string|null>>
+         * }> $paths
+         */
+        $paths = [];
+
+        foreach (MarketingPath::cases() as $path) {
+            $paths[$path->value] = [
+                'path' => $path->value,
+                'label_ar' => $path->labels()['ar'],
+                'label_en' => $path->labels()['en'],
+                'headline_metrics' => $path->headlineMetrics(),
+                'platforms' => [],
+            ];
+        }
+
+        foreach ($this->rows($from, $to) as $row) {
+            $objective = CampaignObjective::tryFrom((string) $row->objective) ?? CampaignObjective::Other;
+            $provider = (string) $row->provider;
+            $bucket = &$paths[$objective->path()->value]['platforms'];
+
+            $bucket[$provider] ??= [
+                'provider' => $provider,
+                'spend' => 0.0, 'impressions' => 0.0, 'clicks' => 0.0,
+                'landing_page_views' => 0.0, 'orders' => 0.0, 'revenue' => 0.0,
+                'campaigns' => 0,
+            ];
+
+            foreach (['spend', 'impressions', 'clicks', 'landing_page_views', 'orders', 'revenue'] as $key) {
+                $bucket[$provider][$key] += (float) $row->{$key};
+            }
+            $bucket[$provider]['campaigns']++;
+        }
+
+        $out = [];
+
+        foreach ($paths as $path) {
+            $platforms = array_values($path['platforms']);
+            $spending = array_values(array_filter($platforms, static fn (array $p): bool => $p['spend'] > 0));
+            $total = array_sum(array_map(static fn (array $p): float => $p['spend'], $platforms));
+
+            foreach ($platforms as $i => $platform) {
+                // Share of the PATH's spend, never of the project's: «40% of awareness» is a fact
+                // about a decision somebody made; «40% of everything» is a fact about the mix.
+                $platforms[$i]['spend_share'] = $total > 0 ? round($platform['spend'] / $total, 4) : null;
+                foreach (['spend', 'impressions', 'clicks', 'landing_page_views', 'orders', 'revenue'] as $key) {
+                    $platforms[$i][$key] = round($platform[$key], 2);
+                }
+            }
+
+            $path['platforms'] = AdPlatforms::sortRows($platforms, 'provider');
+            $path['spend'] = round($total, 2);
+            /*
+             * Two platforms that SPENT, not two that exist. A connected platform with no campaign on
+             * this path contributes a row of zeros, and «Meta beat TikTok on awareness» where TikTok
+             * ran no awareness is the fabricated verdict this flag exists to prevent.
+             */
+            $path['comparable'] = count($spending) > 1;
+            $path['comparable_reason'] = match (true) {
+                count($spending) > 1 => 'two_or_more_platforms_spent',
+                count($spending) === 1 => 'only_one_platform_spent',
+                default => 'nothing_spent_on_this_path',
+            };
+            $out[] = $path;
+        }
+
+        return [
+            'paths' => $out,
+            /*
+             * Said in the payload rather than left to each surface to remember: this is the sentence
+             * a «best platform» card would have to contradict in order to exist.
+             */
+            'cross_path_comparison' => false,
+            'cross_path_reason_ar' => 'المنصات لا تُقارن عبر المسارات: منصة تشتري وعيًا ومنصة تشتري مبيعات لا تفضل إحداهما الأخرى — الفرق في العمل المُسند إليها، لا في أدائها.',
+            'cross_path_reason_en' => 'Platforms are not compared across paths: one buying awareness and one buying sales are not better or worse than each other — what differs is the work each was given.',
+        ];
+    }
+
+    /**
+     * OBJECTIVE-ANALYTICS-DEPTH-001 — the strongest and weakest campaign INSIDE each path.
+     *
+     * The same rule as `byPlatform()`, one level down. A leads campaign and an awareness campaign
+     * are not better or worse than each other, so a single «top campaigns» list across a mixed
+     * programme ranks them by whichever metric happens to be shared — which is how a brand campaign
+     * comes to sit at the bottom of a table for not producing revenue it never sought.
+     *
+     * Within a path the comparison is real, and the metric is the path's own.
+     *
+     * `comparable` is false where fewer than two campaigns spent on the path: a strongest of one is
+     * a figure wearing a superlative, and «your best sales campaign» said of the only sales campaign
+     * tells a client nothing they did not already know while implying a choice was made.
+     *
+     * @return array<string,mixed>
+     */
+    public function leadersByPath(Carbon $from, Carbon $to): array
+    {
+        /** @var array<string, array<string, array<string, float|int|string|null>>> $byPath */
+        $byPath = [];
+
+        foreach ($this->rows($from, $to) as $row) {
+            $objective = CampaignObjective::tryFrom((string) $row->objective) ?? CampaignObjective::Other;
+            $id = (string) $row->unified_campaign_id;
+            $bucket = &$byPath[$objective->path()->value][$id];
+
+            $bucket ??= [
+                'id' => $id,
+                'name' => (string) $row->name,
+                'objective' => $objective->value,
+                'spend' => 0.0, 'impressions' => 0.0, 'clicks' => 0.0,
+                'landing_page_views' => 0.0, 'orders' => 0.0, 'revenue' => 0.0,
+            ];
+
+            foreach (['spend', 'impressions', 'clicks', 'landing_page_views', 'orders', 'revenue'] as $key) {
+                $bucket[$key] += (float) $row->{$key};
+            }
+        }
+
+        $out = [];
+
+        foreach (MarketingPath::cases() as $path) {
+            $campaigns = array_values($byPath[$path->value] ?? []);
+            $spending = array_values(array_filter($campaigns, static fn (array $c): bool => $c['spend'] > 0));
+
+            foreach ($spending as $i => $campaign) {
+                // The derived figures the ranker reads. Computed here from this path's own sums, so a
+                // campaign's CPA is its own and never the programme's blended one.
+                $spending[$i]['cpa'] = $campaign['orders'] > 0 ? round($campaign['spend'] / $campaign['orders'], 2) : null;
+                $spending[$i]['roas'] = $campaign['spend'] > 0 ? round($campaign['revenue'] / $campaign['spend'], 3) : null;
+                $spending[$i]['ctr'] = $campaign['impressions'] > 0 ? round($campaign['clicks'] / $campaign['impressions'], 4) : null;
+                $spending[$i]['cpm'] = $campaign['impressions'] > 0 ? round($campaign['spend'] / $campaign['impressions'] * 1000, 2) : null;
+            }
+
+            $comparable = count($spending) > 1;
+
+            $out[] = [
+                'path' => $path->value,
+                'label_ar' => $path->labels()['ar'],
+                'label_en' => $path->labels()['en'],
+                'metric' => $path->headlineMetrics()[1] ?? 'spend',
+                'comparable' => $comparable,
+                'comparable_reason' => match (true) {
+                    $comparable => 'two_or_more_campaigns_spent',
+                    count($spending) === 1 => 'only_one_campaign_spent',
+                    default => 'nothing_spent_on_this_path',
+                },
+                /*
+                 * Both ends, or neither. A list of winners with no counterpart is where a report
+                 * stops saying what to STOP — and the weakest campaign is the one an operator can
+                 * act on this week.
+                 */
+                'strongest' => $comparable ? $this->extreme($spending, $path, best: true) : null,
+                'weakest' => $comparable ? $this->extreme($spending, $path, best: false) : null,
+                'campaigns' => count($spending),
+            ];
+        }
+
+        return ['paths' => $out, 'cross_path_comparison' => false];
+    }
+
+    /**
+     * FUNNEL-ANALYTICAL-PATTERN-001 — the funnel's shape, applied to the objective paths.
+     *
+     * The funnel does not draw a chart and leave the reader to interpret it. It says: here is the
+     * SIGNAL, here is the CONTEXT it is measured against, here is the EXPLANATION of where it sits,
+     * here is the EVIDENCE that supports it, and here is the ACTION — if the evidence supports one.
+     * That sequence is the product's most-praised surface and it exists nowhere else.
+     *
+     * ## Every step can say nothing, and often does
+     *
+     * A path nobody ran has no signal. A path one campaign ran has no comparison, so it has no
+     * signal either — a range needs two ends. Where there is no signal there is no action, and the
+     * reason travels in its place. An action offered without evidence is worse than silence: it is
+     * the product spending somebody's afternoon on its own guess.
+     *
+     * ## Nothing here is a benchmark
+     *
+     * The signal is the RANGE the path's own campaigns produced — «the cheapest order cost 10 and
+     * the dearest 50» — which is arithmetic over this account's rows. No industry figure, no «good»
+     * threshold, no multiple that triggers an alarm: those are numbers nobody here is entitled to
+     * invent, and a reader who is told 50 is «bad» has been told something we do not know.
+     *
+     * The action names both ends and leaves the decision where it belongs.
+     *
+     * @return array<string,mixed>
+     */
+    public function explainByPath(Carbon $from, Carbon $to): array
+    {
+        $out = [];
+
+        foreach ($this->leadersByPath($from, $to)['paths'] as $path) {
+            $strongest = $path['strongest'];
+            $weakest = $path['weakest'];
+            $comparable = $path['comparable'] && $strongest !== null && $weakest !== null;
+
+            $out[] = [
+                'path' => $path['path'],
+                'label_ar' => $path['label_ar'],
+                'label_en' => $path['label_en'],
+                /*
+                 * The signal is a RANGE, not a verdict. Two campaigns bought for the same thing, and
+                 * what each one cost — the reader can see the distance without being told what to
+                 * think about it.
+                 */
+                'signal' => $comparable ? [
+                    'metric' => $strongest['metric'],
+                    'best' => ['campaign' => $strongest['name'], 'value' => $strongest['value']],
+                    'worst' => ['campaign' => $weakest['name'], 'value' => $weakest['value']],
+                ] : null,
+                // What it is measured against: this path, in this window, and nothing outside it.
+                'context' => $comparable ? [
+                    'scope' => $path['path'],
+                    'campaigns' => $path['campaigns'],
+                    'from' => $from->toDateString(),
+                    'to' => $to->toDateString(),
+                ] : null,
+                'explanation' => $comparable ? [
+                    'ar' => 'الحملتان اشتُريتا لنفس الغرض على هذا المسار، فالفارق بينهما فارق في التنفيذ لا في الهدف.',
+                    'en' => 'Both campaigns were bought for the same thing on this path, so the distance between them is a difference in execution rather than in intent.',
+                ] : null,
+                // The keys the reading rests on, named — so «why does it say that» has an answer.
+                'evidence' => $comparable ? ['spend', $strongest['metric']] : [],
+                /*
+                 * An action ONLY where two comparable campaigns exist. It names both ends and stops:
+                 * moving budget is a decision with a client's money in it, and the product's part is
+                 * to put the two figures in front of the person who makes it.
+                 */
+                'action' => $comparable ? [
+                    'ar' => "قارن «{$weakest['name']}» بـ«{$strongest['name']}» قبل أن يأخذ الأضعف مزيدًا من ميزانية هذا المسار.",
+                    'en' => "Compare «{$weakest['name']}» against «{$strongest['name']}» before the weaker one takes more of this path's budget.",
+                ] : null,
+                // Why there is nothing to say, when there is nothing to say.
+                'silent_reason' => $comparable ? null : $path['comparable_reason'],
+            ];
+        }
+
+        return ['paths' => $out];
+    }
+
+    /**
+     * The best or worst campaign on a path, by the path's own metric.
+     *
+     * Cost metrics invert: the lowest cost per order is the strongest, and reading them the same way
+     * round as a volume metric is how «best» came to name the most expensive campaign.
+     *
+     * @param  list<array<string,mixed>>  $campaigns
+     * @return array<string,mixed>|null
+     */
+    private function extreme(array $campaigns, MarketingPath $path, bool $best): ?array
+    {
+        $metric = match ($path) {
+            MarketingPath::Awareness => 'cpm',
+            MarketingPath::Traffic => 'ctr',
+            MarketingPath::Conversion => 'cpa',
+        };
+        $lowerIsBetter = in_array($metric, ['cpm', 'cpa'], true);
+
+        $withMetric = array_values(array_filter($campaigns, static fn (array $c): bool => $c[$metric] !== null));
+
+        if ($withMetric === []) {
+            return null;
+        }
+
+        usort($withMetric, static fn (array $a, array $b): int => $a[$metric] <=> $b[$metric]);
+
+        $row = $best === $lowerIsBetter ? $withMetric[0] : $withMetric[count($withMetric) - 1];
+
+        return ['id' => $row['id'], 'name' => $row['name'], 'metric' => $metric, 'value' => $row[$metric]];
+    }
+
     private function rows(Carbon $from, Carbon $to): Collection
     {
         $query = DailyMetric::query()
@@ -182,8 +492,10 @@ final class ObjectivePerformance
                 'daily_metrics.external_account_id',
                 $this->accountIds ?: ['00000000-0000-0000-0000-000000000000'],
             ))
-            ->groupBy('daily_metrics.unified_campaign_id', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
-            ->select('daily_metrics.unified_campaign_id', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
+            // `provider` joins the key so one row per (campaign, platform) exists — the grain
+            // `byPlatform()` reads. The path totals above sum these rows and are unchanged by it.
+            ->groupBy('daily_metrics.unified_campaign_id', 'daily_metrics.provider', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
+            ->select('daily_metrics.unified_campaign_id', 'daily_metrics.provider', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
             ->selectRaw($this->sum('spend'))
             ->selectRaw($this->sum('impressions'))
             ->selectRaw($this->sum('clicks'))
