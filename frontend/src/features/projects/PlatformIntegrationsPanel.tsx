@@ -27,15 +27,15 @@ import { useUi } from '@/stores/ui'
  * Each names a different next action. «جاهزة» over an account whose metrics are failing is the
  * sentence this whole programme exists to remove.
  */
-function accountHealthLabel(health: string | undefined): string {
+function accountHealthLabel(health: string | undefined, ar: boolean): string {
   switch (health) {
-    case 'healthy': return 'تعمل'
-    case 'pending_first_sync': return 'بانتظار أول مزامنة'
-    case 'delayed': return 'متأخرة'
-    case 'failed': return 'فشلت آخر محاولة'
-    case 'access_lost': return 'تعذّر الوصول'
-    case 'revoked': return 'الربط ملغى'
-    default: return 'مرتبطة'
+    case 'healthy': return ar ? 'تعمل' : 'Healthy'
+    case 'pending_first_sync': return ar ? 'بانتظار أول مزامنة' : 'Awaiting the first sync'
+    case 'delayed': return ar ? 'متأخرة' : 'Delayed'
+    case 'failed': return ar ? 'فشلت آخر محاولة' : 'Last attempt failed'
+    case 'access_lost': return ar ? 'تعذّر الوصول' : 'Access lost'
+    case 'revoked': return ar ? 'الربط ملغى' : 'Authorisation revoked'
+    default: return ar ? 'مرتبطة' : 'Linked'
   }
 }
 
@@ -114,13 +114,28 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
 
   const { platforms, summary } = q.data
 
+  /* What this project actually uses, which is the count a project page owes its reader. */
+  const linkedAccounts = platforms.reduce((n, p) => n + p.accounts.length, 0)
+
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="المنصات المدعومة" value={String(summary.total)} sub="ميتا · جوجل · تيك توك · سناب · X · لينكدإن" />
-        <Stat label="لديها بيانات اعتماد" value={String(summary.with_credentials)} tone={summary.with_credentials === 0 ? 'warning' : 'success'} sub={summary.with_credentials === 0 ? 'لا توجد مفاتيح حقيقية بعد' : undefined} />
-        <Stat label="لديها حسابات إعلانية" value={String(summary.with_accounts)} />
-        <Stat label="حملات مكتشفة" value={String(summary.discovered_campaigns)} />
+        {/*
+          INTEGRATION-DATASOURCE-WIZARD-001 §12 — a project screen states what the PROJECT has.
+
+          «لديها بيانات اعتماد: 0» was on this page: a count of how many platforms this INSTALL has
+          keys for. It is the platform operator's number, it reads on a customer's project as «zero
+          of your platforms work», and no action on this page could change it. It is replaced by the
+          number a project reader came for — how many of their accounts are feeding this project.
+        */}
+        <Stat
+          label={ar ? 'المنصات المدعومة' : 'Platforms supported'}
+          value={String(summary.total)}
+          sub={ar ? 'ميتا · جوجل · تيك توك · سناب · X · لينكدإن' : 'Meta · Google · TikTok · Snapchat · X · LinkedIn'}
+        />
+        <Stat label={ar ? 'منصات تُغذّي هذا المشروع' : 'Platforms feeding this project'} value={String(summary.with_accounts)} />
+        <Stat label={ar ? 'حسابات مرتبطة' : 'Accounts linked'} value={String(linkedAccounts)} />
+        <Stat label={ar ? 'حملات مكتشفة' : 'Campaigns discovered'} value={String(summary.discovered_campaigns)} />
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -137,9 +152,15 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
                     <span className="block text-[11px] text-text-muted">{p.connector_label ?? p.label_en}</span>
                   </span>
                 </span>
-                {p.has_credentials
-                  ? <Badge tone="success"><Check size={11} /> جاهزة</Badge>
-                  : <Badge tone="warning"><KeyRound size={11} /> بانتظار بيانات اعتماد</Badge>}
+                {/*
+                  §12 — «بانتظار بيانات اعتماد» is a fact about this INSTALL's keys, and the project
+                  reader can do nothing with it. What they can act on is whether this platform feeds
+                  their project, so that is what the chip says; the platform's own readiness is
+                  stated once, in the sources screen, to the person who can change it.
+                */}
+                {p.accounts.length > 0
+                  ? <Badge tone="success"><Check size={11} /> {ar ? 'تُغذّي المشروع' : 'Feeding this project'}</Badge>
+                  : <Badge tone="neutral"><KeyRound size={11} /> {ar ? 'لا حسابات هنا' : 'No accounts here'}</Badge>}
               </header>
 
               {/*
@@ -148,9 +169,9 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
                 tenant had ever discovered, which on the live connection meant 309 on a page about one.
               */}
               <div className="grid grid-cols-3 gap-2 text-center">
-                <Mini label="حسابات مرتبطة" value={p.accounts.length} />
-                <Mini label="حملات مكتشفة" value={p.discovered_campaigns} />
-                <Mini label="مرتبطة بحملة" value={p.linked_campaigns} />
+                <Mini label={ar ? 'حسابات مرتبطة' : 'Accounts linked'} value={p.accounts.length} />
+                <Mini label={ar ? 'حملات مكتشفة' : 'Campaigns found'} value={p.discovered_campaigns} />
+                <Mini label={ar ? 'مرتبطة بحملة' : 'Linked to a campaign'} value={p.linked_campaigns} />
               </div>
 
               {/* Capabilities are listed even when disabled — the build is done, the secret is missing. */}
@@ -158,12 +179,14 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
                 {p.capabilities.map((c) => (
                   <li
                     key={c.key}
-                    title={c.enabled ? 'مفعّلة' : 'مبنيّة وتُفعَّل فور إضافة بيانات الاعتماد'}
+                    title={c.enabled
+                      ? (ar ? 'مفعّلة' : 'Active')
+                      : (ar ? 'غير متاحة على هذا الربط بعد' : 'Not available on this connection yet')}
                     className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
                       c.enabled ? 'border-success/40 bg-success/10 text-success' : 'border-border text-text-muted'
                     }`}
                   >
-                    {c.enabled ? <Check size={10} /> : <KeyRound size={10} />} {c.ar}
+                    {c.enabled ? <Check size={10} /> : <KeyRound size={10} />} {ar ? c.ar : c.en}
                   </li>
                 ))}
               </ul>
@@ -176,7 +199,7 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
                         <span className="flex items-center gap-1.5">
                           <Link2 size={12} className="text-text-muted" />
                           <span className="truncate font-semibold text-text-primary">{a.name}</span>
-                          {a.is_demo && <Badge tone="warning">تجريبي</Badge>}
+                          {a.is_demo && <Badge tone="warning">{ar ? 'تجريبي' : 'Demo'}</Badge>}
                         </span>
                         {/* Name first, then the organisation it sits under, then the id. */}
                         <span className="mt-0.5 block text-[11px] text-text-muted">
@@ -184,9 +207,17 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
                           <span className="tnum" dir="ltr">{a.external_id}</span>
                         </span>
                         <span className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px]">
-                          <span className={accountHealthTone(a.health)}>{accountHealthLabel(a.health)}</span>
-                          {a.last_synced_at && <span className="tnum text-text-muted">آخر نجاح: {fmtDateTime(a.last_synced_at)}</span>}
-                          {a.next_sync_at && <span className="tnum text-text-muted">التالية: {fmtDateTime(a.next_sync_at)}</span>}
+                          <span className={accountHealthTone(a.health)}>{accountHealthLabel(a.health, ar)}</span>
+                          {a.last_synced_at && (
+                            <span className="tnum text-text-muted">
+                              {ar ? 'آخر نجاح: ' : 'Last success: '}{fmtDateTime(a.last_synced_at)}
+                            </span>
+                          )}
+                          {a.next_sync_at && (
+                            <span className="tnum text-text-muted">
+                              {ar ? 'التالية: ' : 'Next: '}{fmtDateTime(a.next_sync_at)}
+                            </span>
+                          )}
                         </span>
                       </span>
                       {canManage && (
@@ -196,7 +227,7 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
                           disabled={sync.isPending}
                           className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[11px] font-semibold text-text-secondary hover:bg-surface-hover disabled:opacity-50"
                         >
-                          <RefreshCw size={11} /> مزامنة الآن
+                          <RefreshCw size={11} /> {ar ? 'مزامنة الآن' : 'Sync now'}
                         </button>
                       )}
                     </li>
@@ -209,16 +240,20 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
                 {p.last_sync && syncMeta ? (
                   <>
                     <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-text-muted">آخر مزامنة:</span>
+                      <span className="text-text-muted">{ar ? 'آخر مزامنة:' : 'Last sync:'}</span>
                       <Badge tone={syncMeta.tone}>{syncMeta.ar}</Badge>
                       <span className="tnum text-text-muted">{p.last_sync.finished_at ? fmtDateTime(p.last_sync.finished_at) : '—'}</span>
-                      <span className="tnum text-text-muted">· {p.last_sync.metrics_upserted} قياسًا</span>
-                      {p.last_sync.is_demo && <Badge tone="warning">تجريبية</Badge>}
+                      <span className="tnum text-text-muted">
+                        · {ar ? `${p.last_sync.metrics_upserted} قياسًا` : `${p.last_sync.metrics_upserted} measurements`}
+                      </span>
+                      {p.last_sync.is_demo && <Badge tone="warning">{ar ? 'تجريبية' : 'Demo'}</Badge>}
                     </span>
                     {p.last_sync.error && <p className="rounded bg-danger/10 p-1.5 text-danger" dir="ltr">{p.last_sync.error}</p>}
                   </>
                 ) : (
-                  <span className="flex items-center gap-1.5 text-text-muted"><X size={12} /> لم تُنفَّذ أي مزامنة لهذه المنصة بعد.</span>
+                  <span className="flex items-center gap-1.5 text-text-muted">
+                    <X size={12} /> {ar ? 'لم تُنفَّذ أي مزامنة لهذه المنصة بعد.' : 'No sync has run for this platform yet.'}
+                  </span>
                 )}
                 {p.connections.map((c) => c.last_error && (
                   <p key={c.id} className="flex items-start gap-1.5 rounded bg-warning/10 p-1.5 text-warning">
@@ -226,9 +261,17 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
                     <span dir="ltr">{c.last_error}</span>
                   </p>
                 ))}
-                {!p.has_credentials && (
+                {/*
+                  §12 — what used to be here described THIS PRODUCT's build state to a customer:
+                  «the structure is complete (OAuth, accounts, campaign discovery, sync, the log) and
+                  works as soon as the keys are added». It is true, it is ours, and it is not an
+                  answer to «why is there nothing from Meta on my project».
+                */}
+                {p.accounts.length === 0 && (
                   <p className="text-[11px] text-text-muted">
-                    البنية كاملة (OAuth، الحسابات، اكتشاف الحملات، المزامنة، السجل) وتعمل فور إضافة مفاتيح اعتماد {p.label_ar} — لا تُعرض أي بيانات مُفترضة قبل ذلك.
+                    {ar
+                      ? `لا يُغذّي ${p.label_ar} هذا المشروع بعد — اختر حساباته من «إدارة مصادر البيانات».`
+                      : `${p.label_en} is not feeding this project yet — choose its accounts from «Manage data sources».`}
                   </p>
                 )}
               </footer>
@@ -240,8 +283,10 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
       {sync.isSuccess && (
         <p className="rounded-xl border border-border bg-surface-secondary p-3 text-sm text-text-secondary">
           {sync.data?.will_fetch
-            ? 'تم جدولة المزامنة وسيتم جلب البيانات من المنصة.'
-            : 'تم تسجيل طلب المزامنة، لكن هذه المنصة بلا بيانات اعتماد — سيُسجَّل التشغيل بحالة «بانتظار بيانات اعتماد» ولن يُجلب أي رقم.'}
+            ? (ar ? 'تم جدولة المزامنة وسيتم جلب البيانات من المنصة.' : 'The sync is queued and will fetch from the platform.')
+            : (ar
+                ? 'تم تسجيل طلب المزامنة، لكن هذه المنصة غير مهيأة بعد — سيُسجَّل التشغيل ولن يُجلب أي رقم.'
+                : 'The sync request was recorded, but this platform is not set up yet — the run is logged and no figure is fetched.')}
         </p>
       )}
     </div>
