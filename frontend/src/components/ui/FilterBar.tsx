@@ -121,7 +121,12 @@ export function FilterBar({
           {applied.length > 0 && (
             <span
               data-testid={`${id}-filters-count`}
-              className="tnum inline-flex min-w-5 items-center justify-center rounded-full bg-brand-500/15 px-1.5 text-xs font-bold text-brand-600"
+              /*
+                `text-text-primary`, not the brand colour: a mid-green on a translucent green tint is
+                about 1.5:1 in dark mode — below the floor for text at any size, and the count is the
+                one part of this control carrying information rather than decoration.
+              */
+              className="tnum inline-flex min-w-5 items-center justify-center rounded-full bg-brand-500/20 px-1.5 text-xs font-bold text-text-primary"
             >
               {applied.length}
             </span>
