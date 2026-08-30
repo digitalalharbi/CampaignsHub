@@ -6,6 +6,7 @@ import { listPortalRequests, type PortalRequestCard } from '../clientPortalApi'
 import { listPortalInvoices, listPortalQuotes, listPortalThreads, formatDate } from './portalAccountApi'
 import { PortalShell } from './PortalShell'
 import { usePortalGuard } from './usePortalGuard'
+import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { useUi } from '@/stores/ui'
 import { useClientSpacePath } from './clientSpace'
 
@@ -55,12 +56,12 @@ export function ClientDashboardPage() {
         <p className="mt-1 text-sm text-text-secondary">{t.subtitle}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard to={spaceTo('/requests')} icon={FileText} label={t.open_requests} value={openRequests} loading={loading} />
-        <StatCard to={spaceTo('/quotes')} icon={ScrollText} label={t.pending_quotes} value={pendingQuotes} loading={loading} tone={pendingQuotes > 0 ? 'warning' : undefined} />
-        <StatCard to={spaceTo('/invoices')} icon={Receipt} label={t.unpaid_invoices} value={unpaidInvoices} loading={loading} tone={unpaidInvoices > 0 ? 'warning' : undefined} />
-        <StatCard to={spaceTo('/messages')} icon={MessagesSquare} label={t.unread_messages} value={unreadMessages} loading={loading} tone={unreadMessages > 0 ? 'brand' : undefined} />
-      </div>
+      <StatGrid>
+        <PortalStat to={spaceTo('/requests')} icon={FileText} label={t.open_requests} value={openRequests} loading={loading} />
+        <PortalStat to={spaceTo('/quotes')} icon={ScrollText} label={t.pending_quotes} value={pendingQuotes} loading={loading} tone={pendingQuotes > 0 ? 'warning' : undefined} />
+        <PortalStat to={spaceTo('/invoices')} icon={Receipt} label={t.unpaid_invoices} value={unpaidInvoices} loading={loading} tone={unpaidInvoices > 0 ? 'warning' : undefined} />
+        <PortalStat to={spaceTo('/messages')} icon={MessagesSquare} label={t.unread_messages} value={unreadMessages} loading={loading} tone={unreadMessages > 0 ? 'brand' : undefined} />
+      </StatGrid>
 
       <section className="mt-6 rounded-2xl border border-border bg-surface p-5">
         <div className="mb-3 flex items-center justify-between">
@@ -81,16 +82,32 @@ export function ClientDashboardPage() {
   )
 }
 
-function StatCard({ to, icon: Icon, label, value, loading, tone }: {
+/**
+ * UX-KPI-PRESENTATION-001 — the portal's tile was a second component called `StatCard`.
+ *
+ * Same name, same idea, different object: the figure above its name, a 12px label against the
+ * product's 13px, its own padding. A client moving from this page to a report met two designs of one
+ * thing, and the shared card could not be found by the name it already had.
+ *
+ * What stays: the icon square that names the queue, the link, and the tone — «overdue» is a warning
+ * here and nowhere else.
+ */
+function PortalStat({ to, icon: Icon, label, value, loading, tone }: {
   to: string; icon: LucideIcon; label: string; value: number; loading: boolean
   tone?: 'warning' | 'brand'
 }) {
-  const toneClass = tone === 'warning' ? 'text-warning' : tone === 'brand' ? 'text-brand-600' : 'text-text-primary'
   return (
-    <Link to={to} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 hover:border-brand-400">
-      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-secondary text-text-secondary"><Icon size={16} /></span>
-      {loading ? <div className="h-7 w-10 animate-pulse rounded bg-surface-secondary" /> : <span className={`tnum text-2xl font-extrabold ${toneClass}`}>{value}</span>}
-      <span className="text-xs text-text-secondary">{label}</span>
+    <Link to={to} className="block h-full hover:opacity-90">
+      <StatCard
+        label={label}
+        tone={tone ?? 'neutral'}
+        value={loading ? <span className="block h-7 w-10 animate-pulse rounded bg-surface-secondary" /> : value}
+        trailing={
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-secondary text-text-secondary">
+            <Icon size={16} />
+          </span>
+        }
+      />
     </Link>
   )
 }
