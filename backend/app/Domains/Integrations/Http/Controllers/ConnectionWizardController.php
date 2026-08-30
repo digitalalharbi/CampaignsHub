@@ -219,6 +219,12 @@ final class ConnectionWizardController extends Controller
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
         ]);
 
+        /* Bound to ANY project of this tenant — the picker is opened per project, but «in use» is
+         * the fact that decides an account's place in the list. */
+        $boundHere = ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('is_active', true)
+            ->select('external_account_id');
+
         $query = ExternalAccount::withoutGlobalScopes()
             ->where('provider_connection_id', $connection->getKey())
             ->where('tenant_id', $this->tenant->tenantId())
@@ -231,6 +237,19 @@ final class ConnectionWizardController extends Controller
                 $term = '%'.str_replace('%', '\%', (string) $validated['q']).'%';
                 $q->where(fn ($w) => $w->where('name', 'ilike', $term)->orWhere('external_id', 'ilike', $term));
             })
+            /*
+             * INTEGRATION-DATASOURCE-WIZARD-001 §11 — what this project already uses, first.
+             *
+             * «Manage accounts» opens on a picker whose ticked rows are the ones that matter, and
+             * alphabetical order scatters them through thirteen pages of a three-hundred-account
+             * estate. Relevance first, then name and external id, so the order is stable and two
+             * reads never disagree.
+             */
+            ->orderByRaw(
+                'CASE WHEN external_accounts.id IN ('.$boundHere->toSql().') THEN 0 ELSE 1 END',
+                $boundHere->getBindings(),
+            )
+            ->orderByRaw("CASE WHEN external_accounts.status = 'active' THEN 0 ELSE 1 END")
             ->orderBy('name')
             ->orderBy('external_id');
 
