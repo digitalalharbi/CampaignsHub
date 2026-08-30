@@ -737,3 +737,96 @@ export const useAccountBudgets = (p: string | null, r: Range, f?: MetricFilters)
 export const useFreshness = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FreshnessRow[]>('freshness', p, r, 'freshness', f)
 export const useNormalization = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Normalization>('normalization', p, r, 'normalization', f)
 export const useAttribution = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Attribution>('attribution', p, r, 'attribution', f)
+
+/**
+ * PLATFORM-DECISION-ANALYTICS-001 · OBJECTIVE-ANALYTICS-DEPTH-001 · FUNNEL-ANALYTICAL-PATTERN-001
+ *
+ * Three readings of the same rows, all keyed by marketing PATH and none of them across paths.
+ *
+ * The refusal these carry is the point: a platform buying awareness and a platform buying sales are
+ * not better or worse than each other, and a single ranking across a mixed programme invents a
+ * verdict out of the work each was given. Every shape below therefore says which path it is talking
+ * about, whether a comparison inside that path is even possible, and — where it is not — why.
+ */
+export interface PathPlatformRow {
+  provider: string
+  spend: number
+  impressions: number
+  clicks: number
+  landing_page_views: number
+  orders: number
+  revenue: number
+  campaigns: number
+  /** Share of THIS path's spend, never of the project's. Null where the path spent nothing. */
+  spend_share: number | null
+}
+
+export interface PathPlatforms {
+  path: string
+  label_ar: string
+  label_en: string
+  headline_metrics: string[]
+  platforms: PathPlatformRow[]
+  spend: number
+  /** Two platforms that SPENT, not two that exist. */
+  comparable: boolean
+  comparable_reason: string
+}
+
+export interface PlatformObjectives {
+  paths: PathPlatforms[]
+  /** Always false, and said out loud: this payload is what a «best platform» card would contradict. */
+  cross_path_comparison?: boolean
+}
+
+export interface PathLeader {
+  id: string
+  name: string
+  objective: string
+  metric: string
+  value: number | null
+}
+
+export interface PathLeaders {
+  path: string
+  label_ar: string
+  label_en: string
+  metric: string
+  comparable: boolean
+  comparable_reason: string
+  strongest: PathLeader | null
+  weakest: PathLeader | null
+  campaigns: number
+}
+
+export interface ObjectiveLeaders {
+  paths: PathLeaders[]
+  cross_path_comparison: boolean
+}
+
+/** The funnel's shape — signal, context, explanation, evidence, action — applied to a path. */
+export interface PathExplanation {
+  path: string
+  label_ar: string
+  label_en: string
+  signal: {
+    metric: string
+    best: { campaign: string; value: number | null }
+    worst: { campaign: string; value: number | null }
+  } | null
+  context: { scope: string; campaigns: number; from: string; to: string } | null
+  explanation: { ar: string; en: string } | null
+  evidence: string[]
+  action: { ar: string; en: string } | null
+  /** Why there is nothing to say, when there is nothing to say. */
+  silent_reason: string | null
+}
+
+export const usePlatformObjectives = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<PlatformObjectives>('platform-objectives', p, r, 'platform-objectives', f)
+
+export const useObjectiveLeaders = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<ObjectiveLeaders>('objective-leaders', p, r, 'objective-leaders', f)
+
+export const useObjectiveExplanations = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<{ paths: PathExplanation[] }>('objective-explanations', p, r, 'objective-explanations', f)
