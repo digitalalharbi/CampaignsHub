@@ -124,7 +124,19 @@ final class AccountInventoryController extends Controller
             $query->whereNotIn('id', $linkedIds());
         }
 
-        $page = $query->orderBy('provider')->orderBy('name')->orderBy('external_id')
+        /*
+         * INTEGRATION-DATASOURCE-WIZARD-001 §11 — linked first, then live, then the rest.
+         *
+         * `provider, name` is deterministic and answers the wrong question. A reader opening this
+         * list is looking for what this workspace actually uses; on the live Snapchat estate that is
+         * a handful of accounts among three hundred, and alphabetical order scatters them through
+         * thirteen pages. Ordering by relevance puts the answer on page one and leaves the ordering
+         * stable — name and external id still break every tie, so two reads never disagree.
+         */
+        $page = $query
+            ->orderByRaw('CASE WHEN external_accounts.id IN ('.$linkedIds()->toSql().') THEN 0 ELSE 1 END', $linkedIds()->getBindings())
+            ->orderByRaw("CASE WHEN external_accounts.status = 'active' THEN 0 ELSE 1 END")
+            ->orderBy('provider')->orderBy('name')->orderBy('external_id')
             ->paginate((int) ($validated['per_page'] ?? 25));
 
         /** @var list<ExternalAccount> $rows */
