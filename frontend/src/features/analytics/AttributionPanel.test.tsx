@@ -271,12 +271,9 @@ describe('AttributionPanel', () => {
    * attribution panel, not the one block that was missing. Every nested read here is optional now.
    */
   it('renders when the envelope is missing whole blocks', async () => {
-    const partial = payload()
-    delete (partial as Record<string, unknown>).unattributed
-    delete (partial as Record<string, unknown>).models
-    delete (partial as Record<string, unknown>).platform_reported
+    const { unattributed: _u, models: _m, platform_reported: _p, ...partial } = payload()
 
-    render(partial)
+    render(partial as Attribution)
 
     expect(await screen.findByTestId('attribution')).toBeInTheDocument()
   })
