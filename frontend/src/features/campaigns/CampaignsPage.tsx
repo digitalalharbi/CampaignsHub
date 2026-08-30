@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { StatCard as SharedStatCard } from '@/components/ui/StatCard'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { BarChart3, GitCompare, LayoutGrid, Plus, Rows, Search, TriangleAlert } from 'lucide-react'
@@ -693,16 +694,21 @@ function Chip({ active, onClick, children, testid = 'taxonomy-chip' }: { active:
   )
 }
 
+/**
+ * UX-KPI-PRESENTATION-001 — the shared card.
+ *
+ * This one drew its value with no `dir`, which in an Arabic layout lets the bidi algorithm reorder
+ * «1.2K SAR» into «SAR 1.2K» and move a minus sign to the wrong end of a delta.
+ */
 function StatCard({ label, value, sub, delta, invert, tone }: { label: string; value: string; sub?: string; delta?: number | null; invert?: boolean; tone?: 'success' | 'warning' }) {
   return (
-    <div className="rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)]">
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-text-secondary">{label}</span>
-        {delta !== undefined && <TrendPill delta={delta} invertGood={invert} />}
-      </div>
-      <div className={`tnum mt-1 text-2xl font-extrabold ${tone === 'success' ? 'text-success' : tone === 'warning' ? 'text-warning' : 'text-text-primary'}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-xs text-text-muted">{sub}</div>}
-    </div>
+    <SharedStatCard
+      label={label}
+      value={value}
+      hint={sub}
+      tone={tone ?? 'neutral'}
+      trailing={delta !== undefined ? <TrendPill delta={delta} invertGood={invert} /> : undefined}
+    />
   )
 }
 
