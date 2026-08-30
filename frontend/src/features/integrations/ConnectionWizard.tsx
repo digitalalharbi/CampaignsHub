@@ -98,6 +98,32 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
 
   const hasParent = hierarchy.data?.has_parent ?? false
 
+  /*
+   * INTEGRATION-DATASOURCE-WIZARD-001 §4 — the parent step is shown when there is a CHOICE to make.
+   *
+   * `has_parent` is a fact about the PROVIDER: LinkedIn has organisations, Meta has business
+   * managers, and Snapchat has organisations. It is not a fact about this authorisation. The
+   * ordinary case — one agency, one business manager — met a step that listed a single option and
+   * required a press to accept it, which is a question with one answer.
+   *
+   * With exactly one parent it is chosen here and stated on the steps that follow, so the reader
+   * still sees WHICH organisation their accounts came from; they are simply not asked to pick it.
+   * With none discovered the step would be empty, and an empty step is a dead end rather than a
+   * question, so the wizard opens on the accounts.
+   */
+  const parents = hierarchy.data?.parents ?? []
+
+  /*
+   * A single organisation WITHOUT A NAME is the one case where the step earns its keep.
+   *
+   * That is the live Snapchat shape: 309 accounts catalogued before `parent_name` was recorded, so
+   * the organisation reads «الاسم غير متاح» — and the step is where the reader presses «refresh the
+   * catalogue», which re-asks the provider with the token it already has. Skipping past it would
+   * take away the fix along with the question.
+   */
+  const soleParent = hasParent && parents.length === 1 && parents[0].name ? parents[0].external_id : null
+  const parentStepNeeded = hasParent && parents.length > 0 && soleParent === null
+
   const [parent, setParent] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [projectId, setProjectId] = useState<string | null>(null)
@@ -107,7 +133,7 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
 
   // The opening step is the connection's own state, so a wizard reopened days later resumes where it
   // stopped instead of starting again (ORCH-100 §39).
-  const current: Step = step ?? (hasParent ? 'parent' : 'accounts')
+  const current: Step = step ?? (parentStepNeeded ? 'parent' : 'accounts')
 
   /*
    * What this project holds right now — read ONCE, before the catalogue's first page.
@@ -136,9 +162,12 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
     setSeeded(true)
   }, [managing, seeded, bindings.data, boundIds])
 
+  /* Chosen by the reader, or the only one there was. */
+  const activeParent = parent ?? soleParent
+
   const accounts = useQuery({
-    queryKey: ['discovered-accounts', connectionId, parent, search, page],
-    queryFn: () => fetchDiscoveredAccounts(connectionId, { parent, q: search || null, page, perPage: 25 }),
+    queryKey: ['discovered-accounts', connectionId, activeParent, search, page],
+    queryFn: () => fetchDiscoveredAccounts(connectionId, { parent: activeParent, q: search || null, page, perPage: 25 }),
     enabled: current === 'accounts' || current === 'review',
   })
 
@@ -359,6 +388,18 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
 
       {current === 'accounts' && (
         <section className="flex flex-col gap-3" data-testid="wizard-step-accounts">
+          {/*
+            §4 — the reader was not asked which organisation, so they are told which one.
+            Skipping a question with one answer must not also hide the answer.
+          */}
+          {soleParent !== null && parent === null && (
+            <p className="text-xs text-text-muted" data-testid="wizard-sole-parent">
+              {ar
+                ? `الحسابات تحت ${h.parent_label?.labelAr ?? 'المؤسسة'}: ${parents[0]?.name ?? soleParent}`
+                : `Accounts under the one ${h.parent_label?.label ?? 'organization'} on this authorisation: ${parents[0]?.name ?? soleParent}`}
+            </p>
+          )}
+
           <label className="relative flex items-center">
             <Search className="pointer-events-none absolute mx-3 h-4 w-4 text-text-muted" aria-hidden />
             <input
@@ -597,11 +638,11 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
               <dt className="text-text-muted">{ar ? 'المنصة' : 'Provider'}</dt>
               <dd className="font-medium">{providerLabel}</dd>
             </div>
-            {parent && (
+            {activeParent && (
               <div className="flex justify-between gap-3">
                 <dt className="text-text-muted">{ar ? h.parent_label?.labelAr : h.parent_label?.label}</dt>
-                <dd className="font-medium">
-                  {h.parents.find((p) => p.external_id === parent)?.name ?? parent}
+                <dd className="font-medium" data-testid="wizard-review-parent">
+                  {h.parents.find((p) => p.external_id === activeParent)?.name ?? activeParent}
                 </dd>
               </div>
             )}
@@ -679,7 +720,7 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
         <Button variant="ghost" onClick={onClose}>{ar ? 'إغلاق' : 'Close'}</Button>
 
         <span className="flex items-center gap-2">
-          {current !== 'done' && current !== (hasParent ? 'parent' : 'accounts') && (
+          {current !== 'done' && current !== (parentStepNeeded ? 'parent' : 'accounts') && (
             <Button
               variant="secondary"
               onClick={() => setStep(
