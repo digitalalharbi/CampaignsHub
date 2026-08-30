@@ -10,6 +10,7 @@ use App\Domains\Alerts\Services\AlertEvaluator;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -156,18 +157,87 @@ final class AlertController extends Controller
         return ApiResponse::success($rule, 'Alert rule created.', status: 201);
     }
 
+    /** How many events one response carries. The order below is what decides WHICH ones. */
+    private const EVENT_PAGE_SIZE = 200;
+
+    /**
+     * The firing ledger, in the order somebody triaging it would work down.
+     *
+     * It used to be `latest('last_triggered_at')` capped at 200, and both halves were wrong together.
+     *
+     * **The order was not an order.** The evaluator writes every event of a sweep in one pass, so a
+     * dozen alerts commonly share a `last_triggered_at` to the second, and the rows behind them come
+     * back in whatever order Postgres finds convenient. An operator who resolves three, refreshes,
+     * and sees the list rearranged cannot tell whether something fired or nothing did. Ordering ends
+     * on the id for that reason — a total order, not a mostly-order.
+     *
+     * **And recency is the wrong axis anyway.** A critical alert that opened this morning outranks an
+     * info alert that fired a minute ago, and a resolved one outranks nothing at all. So: open, then
+     * snoozed, then resolved; within a status, critical before warning before info; within that,
+     * newest first.
+     *
+     * **The cap was silent, and it lied twice.** The page reads this endpoint ONCE with no status and
+     * derives its tab counts — open / critical / snoozed / resolved — by filtering the array it got
+     * back. Those counts were therefore counts of the first 200 rows by recency, presented as counts
+     * of everything. On a tenant past 200 events the badges were simply wrong, with nothing on screen
+     * admitting it, and the sibling `rules()` endpoint had already been given `meta.total` for exactly
+     * this reason. `meta.counts` is computed over the WHOLE ledger, so the badges stay true no matter
+     * where the cap falls; `meta.total` and `meta.limit` let the list say it is showing 200 of 431.
+     *
+     * The ordering also makes the cap safe rather than merely smaller: what a cap drops is now the
+     * oldest RESOLVED events — the rows nobody is triaging — instead of an open critical alert that
+     * happened to fire last week.
+     */
     public function events(Request $request): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('alerts.view'), 403);
 
-        $query = AlertEvent::query()->latest('last_triggered_at');
+        $query = AlertEvent::query();
         if ($status = $request->string('status')->toString()) {
             if (in_array($status, ['open', 'snoozed', 'resolved'], true)) {
                 $query->where('status', $status);
             }
         }
 
-        return ApiResponse::success($query->limit(200)->get()->all(), 'Alert events.');
+        $counts = (clone $query)
+            ->selectRaw('status, severity, count(*) as n')
+            ->groupBy('status', 'severity')
+            ->get();
+
+        return ApiResponse::success(
+            $this->triageOrder(clone $query)->limit(self::EVENT_PAGE_SIZE)->get()->all(),
+            'Alert events.',
+            [
+                'total' => (int) $counts->sum('n'),
+                'limit' => self::EVENT_PAGE_SIZE,
+                'counts' => [
+                    'open' => (int) $counts->where('status', 'open')->sum('n'),
+                    'snoozed' => (int) $counts->where('status', 'snoozed')->sum('n'),
+                    'resolved' => (int) $counts->where('status', 'resolved')->sum('n'),
+                    'open_critical' => (int) $counts->where('status', 'open')->where('severity', 'critical')->sum('n'),
+                ],
+            ],
+        );
+    }
+
+    /**
+     * Status, then severity, then recency, then id.
+     *
+     * Written as CASE expressions rather than a stored rank column because the rank is a reading
+     * decision, not a fact about the row: a second surface is free to rank the same ledger
+     * differently, and a column would quietly become the one true answer for all of them.
+     *
+     * An unknown status or severity sorts LAST rather than first. A value this application does not
+     * recognise is not evidence of urgency, and putting it at the top of a triage queue would let a
+     * bad write push real alerts off the screen.
+     */
+    private function triageOrder(Builder $query): Builder
+    {
+        return $query
+            ->orderByRaw("case status when 'open' then 0 when 'snoozed' then 1 when 'resolved' then 2 else 3 end")
+            ->orderByRaw("case severity when 'critical' then 0 when 'warning' then 1 when 'info' then 2 else 3 end")
+            ->orderByRaw('last_triggered_at desc nulls last')
+            ->orderBy('id');
     }
 
     public function resolve(Request $request, AlertEvent $alertEvent, AlertEvaluator $evaluator): JsonResponse
