@@ -36,7 +36,25 @@
  */
 import { spawnSync } from 'node:child_process'
 
-const PROJECTS = ['chromium', 'firefox', 'webkit']
+/**
+ * Which browsers this invocation is responsible for.
+ *
+ * All three by default, which is what a developer runs and what this script has always done. CI now
+ * gives each browser its own JOB — they already had their own database, their own servers and their
+ * own process, so nothing is shared and they were separable all along — and each job names the one
+ * it owns. The loop below is unchanged: one isolated run per project, whether that is three of them
+ * or one.
+ */
+const PROJECTS = (process.env.GATE_BROWSERS ?? 'chromium,firefox,webkit')
+  .split(',')
+  .map((name) => name.trim())
+  .filter(Boolean)
+
+if (PROJECTS.length === 0) {
+  // An empty list would exit 0 having tested nothing, which is the one verdict a gate must never give.
+  process.stderr.write('[gate] GATE_BROWSERS is set and empty — refusing to pass without running anything\n')
+  process.exit(2)
+}
 const results = []
 
 for (const project of PROJECTS) {
