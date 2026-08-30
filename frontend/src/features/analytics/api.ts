@@ -780,3 +780,52 @@ export const usePlatformObjectives = (p: string | null, r: Range, f?: MetricFilt
 export const useFreshness = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FreshnessRow[]>('freshness', p, r, 'freshness', f)
 export const useNormalization = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Normalization>('normalization', p, r, 'normalization', f)
 export const useAttribution = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Attribution>('attribution', p, r, 'attribution', f)
+
+export interface PathLeader {
+  id: string
+  name: string
+  objective: string
+  metric: string
+  value: number | null
+}
+
+export interface PathLeaders {
+  path: string
+  label_ar: string
+  label_en: string
+  metric: string
+  comparable: boolean
+  comparable_reason: string
+  strongest: PathLeader | null
+  weakest: PathLeader | null
+  campaigns: number
+}
+
+export interface ObjectiveLeaders {
+  paths: PathLeaders[]
+  cross_path_comparison: boolean
+}
+
+/** The funnel's shape — signal, context, explanation, evidence, action — applied to a path. */
+export interface PathExplanation {
+  path: string
+  label_ar: string
+  label_en: string
+  signal: {
+    metric: string
+    best: { campaign: string; value: number | null }
+    worst: { campaign: string; value: number | null }
+  } | null
+  context: { scope: string; campaigns: number; from: string; to: string } | null
+  explanation: { ar: string; en: string } | null
+  evidence: string[]
+  action: { ar: string; en: string } | null
+  /** Why there is nothing to say, when there is nothing to say. */
+  silent_reason: string | null
+}
+
+export const useObjectiveLeaders = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<ObjectiveLeaders>('objective-leaders', p, r, 'objective-leaders', f)
+
+export const useObjectiveExplanations = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<{ paths: PathExplanation[] }>('objective-explanations', p, r, 'objective-explanations', f)
