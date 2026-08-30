@@ -17,6 +17,7 @@ import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 import { usePortalPath } from '@/app/portalPath'
 import { toApiError } from '@/lib/api/client'
+import { StatCard, StatGrid } from '@/components/ui/StatCard'
 
 type Tab = 'overview' | 'projects' | 'campaigns' | 'analytics' | 'reports' | 'requests' | 'billing' | 'messages' | 'team' | 'files' | 'activity' | 'settings'
 
@@ -116,14 +117,16 @@ export function ClientCommandCenterPage() {
 
         <div className="mt-5">
           {tab === 'overview' && (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            /*
+              UX-KPI-PRESENTATION-001 — the shared card, and the same grid every other row uses.
+              These were centred figures over centred labels in a `bg-surface-secondary` box: a fifth
+              design for a labelled number, on a page a reader reaches from the dashboard.
+            */
+            <StatGrid min="9rem">
               {[[t('col_projects'), d.overview.projects], [t('col_active_campaigns'), d.overview.active_campaigns], ['Draft', d.overview.draft_campaigns], [t('col_open_requests'), d.overview.open_requests]].map(([label, val]) => (
-                <div key={String(label)} className="rounded-xl border border-border bg-surface-secondary p-4 text-center">
-                  <div className="tnum text-2xl font-extrabold text-text-primary">{val as number}</div>
-                  <div className="mt-1 text-xs text-text-muted">{label as string}</div>
-                </div>
+                <StatCard key={String(label)} label={label as string} value={val as number} />
               ))}
-            </div>
+            </StatGrid>
           )}
 
           {tab === 'projects' && (

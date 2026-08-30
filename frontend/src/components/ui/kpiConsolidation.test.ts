@@ -41,11 +41,7 @@ const NOT_YET_MIGRATED = [
   'src/features/agency/AgencyDashboardPage.tsx',
   'src/features/billing/FinanceOverviewPage.tsx',
   'src/features/billing/InvoicesPage.tsx',
-  'src/features/clients/ClientCommandCenterPage.tsx',
-  'src/features/drive/DrivePage.tsx',
-  'src/features/files/FilesLibraryPage.tsx',
   'src/features/projects/PlatformIntegrationsPanel.tsx',
-  'src/features/requests/RequestsDashboardPage.tsx',
   'src/features/requests/portal/ClientDashboardPage.tsx',
 ]
 
