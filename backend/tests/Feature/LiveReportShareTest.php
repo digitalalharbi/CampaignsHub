@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Commerce\Models\CommerceOrder;
@@ -19,6 +20,7 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -128,6 +130,69 @@ final class LiveReportShareTest extends TestCase
      * themselves rather than one happy request, because a middleware added to the group later would
      * pass every functional test in this file while breaking every real link in the field.
      */
+    /**
+     * REPORT-AD-PREVIEW-001 — the client's link carries the ads, built by the deck's own service.
+     *
+     * The live link computes its figures from the metrics engine so an operator's dashboard and a
+     * client's link cannot disagree about a number. It had no ads at all: the part of the report a
+     * client recognises — the picture that ran — existed in the generated snapshot and nowhere else.
+     *
+     * Giving this path its own ad query would have been the fast way, and it is how «the best ad»
+     * comes to mean two different things in two documents about one campaign. It calls `ReportAds`,
+     * with this link's own scope.
+     */
+    public function test_a_live_link_carries_the_ads_that_ran(): void
+    {
+        $creative = ExternalCreative::create([
+            'tenant_id' => $this->report->tenant_id,
+            'project_id' => $this->project->getKey(),
+            'campaign_id' => $this->shared->getKey(),
+            'provider' => 'meta',
+            'external_creative_id' => 'cr-'.Str::random(8),
+            'name' => 'Eid film',
+            'format' => 'image',
+            'status' => 'active',
+            'asset_url' => 'https://cdn.example.test/eid.jpg',
+            'last_active_at' => Carbon::parse('2026-07-10'),
+            'last_synced_at' => Carbon::parse('2026-07-10'),
+        ]);
+
+        DB::table('creative_daily_metrics')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->report->tenant_id,
+            'project_id' => $this->project->getKey(),
+            'creative_id' => $creative->getKey(),
+            'campaign_id' => $creative->campaign_id,
+            'metric_date' => '2026-07-10',
+            'spend' => 300, 'impressions' => 10000, 'clicks' => 400, 'conversions' => 20, 'revenue' => 1500,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $token = $this->liveLink();
+
+        $res = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk();
+
+        $this->assertSame('ad', $res->json('data.ads_level'));
+        $this->assertNull($res->json('data.ads_absent_reason'));
+        $this->assertContains('Eid film', array_column((array) $res->json('data.ads'), 'name'));
+    }
+
+    /**
+     * A link whose window holds no ad-level rows says so, and does not pretend the section is missing.
+     *
+     * An empty grid under «الإعلانات» reads as «your ads were so bad there is nothing to show» — a
+     * claim about the client's advertising made by a gap in ours.
+     */
+    public function test_a_live_link_with_no_ads_says_why(): void
+    {
+        $token = $this->liveLink();
+
+        $res = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk();
+
+        $this->assertSame([], $res->json('data.ads'));
+        $this->assertSame('no_creatives_in_window', $res->json('data.ads_absent_reason'));
+    }
+
     public function test_no_public_report_route_sits_behind_an_authentication_middleware(): void
     {
         $guarded = [];
