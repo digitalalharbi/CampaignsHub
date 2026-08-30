@@ -151,13 +151,13 @@ function MemberRow({
           <p className="font-heading text-[15px] font-bold text-text-primary">{member.user.name ?? '—'}</p>
           <p className="mt-0.5 truncate text-[13px] text-text-muted" dir="ltr">{member.user.email}</p>
         </div>
-        <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-[11.5px] font-semibold text-text-secondary">
+        <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] font-semibold text-text-secondary">
           {member.role}
         </span>
       </div>
 
       <div className="mt-4">
-        <p className="text-[12.5px] font-semibold uppercase tracking-wide text-text-muted">
+        <p className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">
           {ar ? 'الوصول إلى العملاء' : 'Client access'}
         </p>
 
@@ -197,7 +197,7 @@ function MemberRow({
         )}
 
         {member.is_self && !member.has_unrestricted_permission && (
-          <p data-testid="scope-self" className="mt-3 text-[12.5px] text-text-muted">
+          <p data-testid="scope-self" className="mt-3 text-[12px] text-text-muted">
             {ar
               ? 'هذه عضويتك. لا يمكنك توسيع وصولك بنفسك — اطلب ذلك من زميل يملك صلاحية أوسع.'
               : 'This is your own membership. You cannot widen your own access — ask a colleague with wider access.'}

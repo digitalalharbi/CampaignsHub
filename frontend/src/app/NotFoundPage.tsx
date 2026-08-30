@@ -44,7 +44,7 @@ export function NotFoundPage() {
               : 'The address may have changed, or been typed incorrectly.'}
         </p>
         {/* The address itself, isolated LTR so the path reads in the order it was typed. */}
-        <p dir="ltr" className="mt-3 truncate rounded-lg bg-surface-secondary px-3 py-2 font-mono text-[12.5px] text-text-muted">
+        <p dir="ltr" className="mt-3 truncate rounded-lg bg-surface-secondary px-3 py-2 font-mono text-[12px] text-text-muted">
           {location.pathname}
         </p>
         <Link

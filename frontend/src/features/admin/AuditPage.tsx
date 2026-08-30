@@ -93,7 +93,7 @@ function Entry({ entry, ar }: { entry: AuditEntry; ar: boolean }) {
   return (
     <li className="rounded-xl border border-border bg-surface px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-[13.5px] font-bold text-text-primary">
+        <span className="flex items-center gap-2 text-[13px] font-bold text-text-primary">
           <ScrollText size={14} className="shrink-0 text-text-muted" aria-hidden />
           <span dir="ltr">{entry.action}</span>
         </span>
@@ -107,7 +107,7 @@ function Entry({ entry, ar }: { entry: AuditEntry; ar: boolean }) {
         actor or workspace has since been deleted, rather than filled with «Unknown» — which reads as
         a name and is not one. Unattended lifecycle work has no actor at all, and «النظام» says so.
       */}
-      <p className="mt-1 text-[12.5px] text-text-muted">
+      <p className="mt-1 text-[12px] text-text-muted">
         <span className="font-semibold text-text-secondary">{entry.user_name ?? (ar ? 'النظام' : 'The system')}</span>
         {entry.tenant_name && <span> · {entry.tenant_name}</span>}
       </p>

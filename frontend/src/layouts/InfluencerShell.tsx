@@ -107,7 +107,7 @@ function InfluencerIdentity({ collapsed }: { collapsed?: boolean }) {
           <span className="block truncate font-heading text-[15px] font-extrabold tracking-tight text-text-primary">
             {current?.tenant.name ?? 'CampaignsHub'}
           </span>
-          <span data-testid="influencer-scope-note" className="block truncate text-[11.5px] text-text-muted">
+          <span data-testid="influencer-scope-note" className="block truncate text-[11px] text-text-muted">
             {ar ? 'بوابة المؤثرين وUGC' : 'Influencers & UGC'}
             {scoped && ` · ${ar ? 'عملاء محدّدون' : 'Selected clients'}`}
           </span>

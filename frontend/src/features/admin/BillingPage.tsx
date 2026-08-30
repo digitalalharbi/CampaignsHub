@@ -125,7 +125,7 @@ function PlansTab({ ar }: { ar: boolean }) {
           {plans.data.plans.map((p: PlatformPlan) => (
             <li key={p.id} data-testid={`plan-${p.code}`} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3">
               <div className="min-w-0">
-                <p className="text-[14.5px] font-bold text-text-primary">
+                <p className="text-[14px] font-bold text-text-primary">
                   {p.name}
                   {!p.is_active && (
                     <span className="ms-2 rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-muted">
@@ -133,7 +133,7 @@ function PlansTab({ ar }: { ar: boolean }) {
                     </span>
                   )}
                 </p>
-                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12.5px] text-text-muted">
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-text-muted">
                   <span className="tnum" dir="ltr">{money(p.price_monthly, p.currency)}/{ar ? 'شهر' : 'mo'}</span>
                   {/* Active vs total, because a plan with 40 cancelled subscribers has no customers. */}
                   <span className="tnum" dir="ltr">
@@ -290,7 +290,7 @@ function PlanTerms({ plan, ar, saving, onSave }: {
   return (
     <div className="flex flex-col gap-2" data-testid={`plan-prices-${plan.code}`}>
       <div className="flex flex-wrap items-end gap-2">
-        <label className="text-[11.5px] font-semibold text-text-muted">
+        <label className="text-[11px] font-semibold text-text-muted">
           <span className="mb-1 block">{ar ? 'شهري' : 'Monthly'}</span>
           <input
             data-testid={`plan-price-monthly-${plan.code}`}
@@ -298,7 +298,7 @@ function PlanTerms({ plan, ar, saving, onSave }: {
             value={monthly} onChange={(e) => setMonthly(e.target.value)}
           />
         </label>
-        <label className="text-[11.5px] font-semibold text-text-muted">
+        <label className="text-[11px] font-semibold text-text-muted">
           <span className="mb-1 block">{ar ? 'سنوي' : 'Annual'}</span>
           <input
             data-testid={`plan-price-annual-${plan.code}`}
@@ -337,7 +337,7 @@ function PlanTerms({ plan, ar, saving, onSave }: {
         meant to justify on another.
       */}
       <div className="flex flex-wrap items-end gap-2">
-        <label className="text-[11.5px] font-semibold text-text-muted">
+        <label className="text-[11px] font-semibold text-text-muted">
           <span className="mb-1 block">{ar ? 'سعر تمهيدي' : 'Intro price'}</span>
           <input
             data-testid={`plan-intro-fee-${plan.code}`}
@@ -345,7 +345,7 @@ function PlanTerms({ plan, ar, saving, onSave }: {
             value={introFee} onChange={(e) => setIntroFee(e.target.value)}
           />
         </label>
-        <label className="text-[11.5px] font-semibold text-text-muted">
+        <label className="text-[11px] font-semibold text-text-muted">
           <span className="mb-1 block">{ar ? 'مدته (يوم)' : 'Intro days'}</span>
           <input
             data-testid={`plan-intro-days-${plan.code}`}
@@ -353,7 +353,7 @@ function PlanTerms({ plan, ar, saving, onSave }: {
             value={introDays} onChange={(e) => setIntroDays(e.target.value)}
           />
         </label>
-        <label className="text-[11.5px] font-semibold text-text-muted">
+        <label className="text-[11px] font-semibold text-text-muted">
           <span className="mb-1 block">{ar ? 'التزام (شهر)' : 'Commitment (mo)'}</span>
           <input
             data-testid={`plan-commitment-${plan.code}`}
@@ -366,7 +366,7 @@ function PlanTerms({ plan, ar, saving, onSave }: {
       {/* The caps, every one of which the backend counts and enforces. Empty means unlimited. */}
       <div className="flex flex-wrap items-end gap-2">
         {Object.entries(LIMIT_LABELS).map(([key, label]) => (
-          <label key={key} className="text-[11.5px] font-semibold text-text-muted">
+          <label key={key} className="text-[11px] font-semibold text-text-muted">
             <span className="mb-1 block">{label[ar ? 'ar' : 'en']}</span>
             <input
               data-testid={`plan-limit-${plan.code}-${key}`}
@@ -440,16 +440,16 @@ function SubscriptionsTab({ ar }: { ar: boolean }) {
             <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3">
               <span className="min-w-0">
                 <span className="block text-[14px] font-bold text-text-primary">{s.tenant_name ?? '—'}</span>
-                <span className="mt-0.5 block text-[12.5px] text-text-muted">
+                <span className="mt-0.5 block text-[12px] text-text-muted">
                   {s.plan ?? (ar ? 'خطة محذوفة' : 'Removed plan')}
                   {s.seats !== null && <span className="tnum" dir="ltr"> · {s.seats} {ar ? 'مقعد' : 'seats'}</span>}
                 </span>
               </span>
               <span className="flex items-center gap-2.5">
                 {s.current_period_end && (
-                  <span className="tnum text-[12.5px] text-text-muted" dir="ltr">{s.current_period_end}</span>
+                  <span className="tnum text-[12px] text-text-muted" dir="ltr">{s.current_period_end}</span>
                 )}
-                <span className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${
+                <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                   s.status === 'active' ? 'bg-success/15 text-success' : 'bg-surface-secondary text-text-muted'
                 }`}>
                   {s.status}
@@ -658,7 +658,7 @@ function StreamsTab({ ar }: { ar: boolean }) {
             </p>
           )}
 
-          <p className="mt-3 text-[12.5px] leading-relaxed text-text-secondary">{ar ? COPY[s.key].note.ar : COPY[s.key].note.en}</p>
+          <p className="mt-3 text-[12px] leading-relaxed text-text-secondary">{ar ? COPY[s.key].note.ar : COPY[s.key].note.en}</p>
         </section>
       ))}
     </div>
