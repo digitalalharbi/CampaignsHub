@@ -98,7 +98,20 @@ for (const p of PAGES) {
            * first in the DOM and hidden from `sm` up, so an unqualified `.first()` asks a desktop
            * layout to prove that a control it deliberately hides is readable.
            */
-          const label = page.getByTestId(`${p.id}-filters`).locator('label:visible, span:visible').first()
+          /*
+           * The first visible element that actually SAYS something.
+           *
+           * Two things in this bar are visible spans with no text: the coloured dot on a platform
+           * chip and the tone dot on a card. A dot paints its own background and inherits its text
+           * colour, so «contrast» for it is text-on-brand — about 1.5:1, and meaningless, since there
+           * is no text to read. Whether one of them came first depended on which filters happened to
+           * be applied, which is why this passed locally and failed in the full gate.
+           */
+          const label = page
+            .getByTestId(`${p.id}-filters`)
+            .locator('label:visible, span:visible')
+            .filter({ hasText: /\S/ })
+            .first()
           await expect(label, `${where} has no filter label`).toBeVisible()
 
           const contrast = await label.evaluate((el) => {
