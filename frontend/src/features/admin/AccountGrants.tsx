@@ -74,10 +74,10 @@ export function AccountGrantsPanel({ tenantId, ar }: { tenantId: string; ar: boo
 
   return (
     <section data-testid="account-grants" className="mt-5">
-      <h3 className="text-[12.5px] font-semibold uppercase tracking-wide text-text-muted">
+      <h3 className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">
         {ar ? 'منح واستثناءات' : 'Grants and exceptions'}
       </h3>
-      <p className="mt-1 text-[12.5px] text-text-muted">
+      <p className="mt-1 text-[12px] text-text-muted">
         {ar
           ? 'تُضاف المنحة فوق ما تتيحه الباقة ولا تنقص منه أبدًا، وتسري داخل بوابات هذا الحساب فقط. كل منحة وإلغاء يُسجَّل بالمنفّذ والسبب والتاريخ.'
           : 'A grant is added on top of what the plan already allows and never subtracts from it, and applies only inside this account’s own portals. Every grant and revocation is recorded with the actor, the reason and the date.'}
@@ -90,7 +90,7 @@ export function AccountGrantsPanel({ tenantId, ar }: { tenantId: string; ar: boo
       )}
 
       <div className="mt-3 grid gap-2 rounded-xl border border-border bg-surface-secondary p-3 sm:grid-cols-[auto_1fr]">
-        <label className="text-[11.5px] font-semibold text-text-muted">
+        <label className="text-[11px] font-semibold text-text-muted">
           <span className="mb-1 block">{ar ? 'النوع' : 'Kind'}</span>
           <select
             data-testid="grant-kind" className={`${control} sm:w-40`}
@@ -103,7 +103,7 @@ export function AccountGrantsPanel({ tenantId, ar }: { tenantId: string; ar: boo
           </select>
         </label>
 
-        <label className="text-[11.5px] font-semibold text-text-muted">
+        <label className="text-[11px] font-semibold text-text-muted">
           <span className="mb-1 block">{ar ? 'ماذا' : 'What'}</span>
           {kind === 'full_access' ? (
             <p className="flex h-9 items-center text-[13px] font-normal text-text-secondary">
@@ -119,7 +119,7 @@ export function AccountGrantsPanel({ tenantId, ar }: { tenantId: string; ar: boo
           )}
         </label>
 
-        <label className="text-[11.5px] font-semibold text-text-muted sm:col-span-2">
+        <label className="text-[11px] font-semibold text-text-muted sm:col-span-2">
           <span className="mb-1 block">{ar ? 'السبب (مطلوب)' : 'Reason (required)'}</span>
           <textarea
             data-testid="grant-reason" rows={2}
@@ -192,9 +192,9 @@ function GrantRow({ grant, ar, busy, onRevoke }: {
         )}
       </div>
 
-      <p className="mt-1 text-[12.5px] text-text-muted">{grant.reason}</p>
+      <p className="mt-1 text-[12px] text-text-muted">{grant.reason}</p>
       {grant.revoked_reason && (
-        <p className="mt-0.5 flex items-center gap-1.5 text-[12.5px] text-text-muted">
+        <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-text-muted">
           <ShieldCheck size={12} aria-hidden /> {grant.revoked_reason}
         </p>
       )}

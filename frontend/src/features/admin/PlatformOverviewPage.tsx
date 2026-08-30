@@ -135,7 +135,7 @@ export function PlatformOverviewPage() {
 
       {/* The one honesty note that has to sit beside the figure it qualifies, not in a tooltip. */}
       {d.subscriptions.collection_status === 'not_implemented' && (
-        <p data-testid="collection-note" className="mb-4 flex items-start gap-2 rounded-xl border border-border bg-surface-secondary px-4 py-2.5 text-[12.5px] leading-relaxed text-text-secondary">
+        <p data-testid="collection-note" className="mb-4 flex items-start gap-2 rounded-xl border border-border bg-surface-secondary px-4 py-2.5 text-[12px] leading-relaxed text-text-secondary">
           <Info size={15} className="mt-0.5 shrink-0 text-text-muted" aria-hidden />
           {ar
             ? 'القيمة أعلاه هي ما التزم به المشتركون شهريًا، وليست مبالغ محصّلة: تحصيل اشتراكات المنصة غير مفعّل بعد. الفواتير في النظام هي فوترة الوكالة لعملائها وتخص الوكالة وحدها.'
@@ -278,7 +278,7 @@ export function PlatformOverviewPage() {
       </div>
 
       {d.workload.unpaid_invoices > 0 && (
-        <p className="mt-4 flex items-center gap-2 text-[12.5px] text-text-muted">
+        <p className="mt-4 flex items-center gap-2 text-[12px] text-text-muted">
           <Receipt size={14} aria-hidden />
           {ar
             ? `${num(d.workload.unpaid_invoices)} فاتورة غير مسددة عبر المنصة — وهي فوترة الوكالات لعملائها، لا فواتير المنصة.`
