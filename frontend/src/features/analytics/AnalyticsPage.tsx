@@ -35,6 +35,7 @@ import {
 } from './hooks'
 import { findingsFor, windowConfidence, type QualityFinding, type WindowConfidence } from './dataQualityFindings'
 import { efficiencyFor, returnFor } from './pathEfficiency'
+import { distributionFor } from './familyDistribution'
 import type { FreshnessRow, PlatformObjectives } from './api'
 import { scopeNote, type FilterScope } from './filterScope'
 import { CAMPAIGN_RELEVANCE_ORDER, orderByRelevanceWith, relevanceOf } from '@/features/campaigns/campaignRelevance'
@@ -2395,11 +2396,26 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                   })}
                 </dl>
 
-                <ul className="mt-2 space-y-0.5 text-xs text-text-secondary">
-                  {f.campaigns.slice(0, 5).map((r) => (
-                    <li key={r.campaign_id} className="truncate">{r.campaign_name ?? r.campaign_id}</li>
-                  ))}
-                </ul>
+                {/*
+                  OBJECTIVE-ANALYTICS-DEPTH-001 — where this family's money actually went.
+
+                  The card above says what the family spent; a list of names says which campaigns
+                  exist. Neither answers «where is the budget concentrated», which is the question an
+                  operator opens this tab with — eight sales campaigns with ninety per cent of the
+                  money in one of them is a fact about a decision, and it is invisible in a total.
+
+                  The share is of THIS FAMILY, never of the account: «40% of sales» is a decision
+                  somebody made, «40% of everything» is the mix, and reading the second as
+                  concentration makes a small family look concentrated and a large one look spread.
+                */}
+                <FamilySpend
+                  family={f.key}
+                  campaigns={f.campaigns.map((r) => ({
+                    name: (r.campaign_name ?? r.campaign_id) as string,
+                    spend: typeof r.spend === 'number' ? r.spend : 0,
+                  }))}
+                  ar={ar}
+                />
               </div>
             )
           })}
@@ -2414,6 +2430,60 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
         loading={leaders.isLoading}
         error={leaders.isError}
       />
+    </div>
+  )
+}
+
+/**
+ * A family's spend, and where inside it the money sits.
+ *
+ * Drawn as bars rather than a pie: three shares read against a common baseline are comparable at a
+ * glance, and a pie of eight campaigns is a legend with a decoration attached. A family with fewer
+ * than two spending campaigns is told it is not a distribution rather than shown a single bar at
+ * a hundred per cent, which is the shape of an answer to a question nobody asked.
+ */
+function FamilySpend({
+  family, campaigns, ar,
+}: {
+  family: string
+  campaigns: { name: string; spend: number }[]
+  ar: boolean
+}) {
+  const d = distributionFor(campaigns)
+
+  if (!d.meaningful) {
+    return (
+      <ul className="mt-2 space-y-0.5 text-xs text-text-secondary">
+        {campaigns.slice(0, 5).map((c) => <li key={c.name} className="truncate">{c.name}</li>)}
+      </ul>
+    )
+  }
+
+  const slices = [...d.slices, ...(d.rest === null ? [] : [d.rest])]
+
+  return (
+    <div className="mt-2 flex flex-col gap-1.5" data-testid={`family-distribution-${family}`}>
+      <div className="flex h-2 overflow-hidden rounded-full bg-surface-secondary">
+        {slices.map((slice, i) => (
+          <span
+            key={slice.name}
+            className={i === 0 ? 'bg-brand-500' : i === 1 ? 'bg-brand-400' : i === 2 ? 'bg-brand-300' : 'bg-border-strong'}
+            style={{ width: `${Math.max(1, slice.share * 100)}%` }}
+            aria-hidden
+          />
+        ))}
+      </div>
+
+      <ul className="space-y-0.5 text-xs text-text-secondary">
+        {slices.map((slice) => (
+          <li key={slice.name} className="flex items-center justify-between gap-2">
+            <span className="truncate">
+              {slice.name === 'rest' ? (ar ? 'بقية الحملات' : 'The rest') : slice.name}
+            </span>
+            <span className="tnum shrink-0 text-text-muted" dir="ltr">{percent(slice.share, 0)}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
