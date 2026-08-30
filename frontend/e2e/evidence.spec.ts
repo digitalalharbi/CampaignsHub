@@ -30,6 +30,8 @@ const SURFACES: [string, string, string][] = [
   ['spend-limits', 'advertiser@campaignshub.io', '/app/spend-limits'],
   ['reports', 'advertiser@campaignshub.io', '/app/reports'],
   ['agency', 'agency@campaignshub.io', '/agency'],
+  ['finance', 'agency@campaignshub.io', '/agency/finance'],
+  ['invoices', 'agency@campaignshub.io', '/agency/billing/invoices'],
   ['integrations', 'agency@campaignshub.io', '/agency/integrations'],
 ]
 
