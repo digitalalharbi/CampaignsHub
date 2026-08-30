@@ -257,7 +257,7 @@ describe('CreativeGroupsPage', () => {
     fireEvent.click(within(panel).getByRole('button', { name: 'Split from group: The film · TikTok' }))
 
     await waitFor(() => expect(vi.mocked(ungroupCreative)).toHaveBeenCalledWith('cr-2'))
-    expect(await screen.findByText('The creative was split from its group.')).toBeInTheDocument()
+    expect(await screen.findByText('The ad was split from its group.')).toBeInTheDocument()
   })
 
   /** A dissolved group has nothing left to show, so the panel closes rather than 404-ing. */
@@ -285,7 +285,7 @@ describe('CreativeGroupsPage', () => {
 
     expect(await screen.findByText('There are no groups in this workspace yet.')).toBeInTheDocument()
     expect(
-      screen.getByText('Select two or more creatives in the library and merge them as one asset.'),
+      screen.getByText('Select two or more ads in the library and merge them as one asset.'),
     ).toBeInTheDocument()
   })
 })

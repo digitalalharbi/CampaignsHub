@@ -98,7 +98,7 @@ describe('ReportScopePicker', () => {
     expect(screen.getByText('Campaigns')).toBeInTheDocument()
     expect(screen.getByText('Marketing paths')).toBeInTheDocument()
     expect(screen.getByText('Ad sets')).toBeInTheDocument()
-    expect(screen.getByText('Creatives')).toBeInTheDocument()
+    expect(screen.getByText('Ads')).toBeInTheDocument()
   })
 
   /**
@@ -107,11 +107,11 @@ describe('ReportScopePicker', () => {
    * Ad sets and ads have no metrics at their grain in this system, and a picker that offered them
    * silently would have a reader believe a campaign's spend was one ad set's.
    */
-  it('warns that ad sets and creatives do not narrow the figures the way they look like they do', async () => {
+  it('warns that ad sets and ads do not narrow the figures the way they look like they do', async () => {
     renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} />, { locale: 'en' })
 
     expect(await screen.findByText(/No metrics are stored at this level/)).toBeInTheDocument()
-    expect(screen.getByText(/Narrows the creative section only/)).toBeInTheDocument()
+    expect(screen.getByText(/Narrows the ad section only/)).toBeInTheDocument()
   })
 
   it('adds a chosen member to its axis', async () => {

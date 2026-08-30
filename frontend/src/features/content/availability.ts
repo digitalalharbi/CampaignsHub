@@ -53,8 +53,8 @@ const COPY = {
     en: 'Did not run in this period',
   },
   unsupported: {
-    ar: 'هذه المنصة لا توفّر بيانات أداء لكل محتوى',
-    en: 'This platform does not report per-creative performance',
+    ar: 'هذه المنصة لا توفّر بيانات أداء لكل إعلان',
+    en: 'This platform does not report per-ad performance',
   },
   failed: {
     ar: 'تعذّر جلب بيانات الأداء',
@@ -69,8 +69,8 @@ const COPY = {
     en: 'No displayable performance metrics for this period',
   },
   creative_grain_missing: {
-    ar: 'المنصة لم تُرجع مؤشرات على مستوى هذا المحتوى لهذه الفترة',
-    en: 'The platform did not return creative-level metrics for this period',
+    ar: 'المنصة لم تُرجع مؤشرات على مستوى هذا الإعلان لهذه الفترة',
+    en: 'The platform did not return ad-level metrics for this period',
   },
 } as const
 

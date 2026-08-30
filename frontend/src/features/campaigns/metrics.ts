@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { CreativePreview } from '@/features/content/api'
 import { getData, postData, api, ensureCsrfCookie } from '@/lib/api/client'
 import type { BudgetRow, FunnelStage, PlatformRow, Range, Summary, TimePoint } from '@/features/analytics/api'
 
@@ -148,9 +149,14 @@ export interface CampaignCreative {
   provider: string
   format: string
   status: string
-  thumbnail_url: string | null
-  preview_url: string | null
-  has_preview: boolean
+  /**
+   * AD-PREVIEW-001 — the canonical preview block, which replaced this row's own `has_preview`.
+   *
+   * That boolean was `thumbnail_url !== null || preview_url !== null`, computed by the endpoint
+   * rather than by the presenter that owns the rules. It said yes for a link the presenter withholds
+   * and no for an asset that was sitting in the row.
+   */
+  preview: CreativePreview
   is_demo: boolean
   metrics: { spend: number; impressions: number; clicks: number; conversions: number; revenue: number; roas: number | null; cpa: number | null; ctr: number | null; cpm: number | null; view_rate: number | null; completion_rate: number | null }
   rank_metric: string

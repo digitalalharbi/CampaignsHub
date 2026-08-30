@@ -294,7 +294,7 @@ describe('CreativePulseSection', () => {
     expect(within(video).getByText(/Provisional/)).toBeInTheDocument()
 
     const image = screen.getByText('Best image').closest('article') as HTMLElement
-    expect(within(image).getByText('Chosen from 2 creatives')).toBeInTheDocument()
+    expect(within(image).getByText('Chosen from 2 ads')).toBeInTheDocument()
     expect(within(image).queryByText(/Provisional/)).not.toBeInTheDocument()
   })
 
@@ -307,7 +307,7 @@ describe('CreativePulseSection', () => {
    * different set of creatives than the card they clicked, which is how a drill-down stops being
    * trusted.
    */
-  it('links to the creative page carrying the filters it was computed under', async () => {
+  it('links to the ad page carrying the filters it was computed under', async () => {
     render()
 
     // The same creative is both the objective winner and the best image, so it legitimately appears
@@ -322,7 +322,7 @@ describe('CreativePulseSection', () => {
   })
 
   /** The drill-down chain is Platform › Campaign › Ad set › Ad › Creative, each one narrower. */
-  it('offers the full drill-down from platform down to the creative', async () => {
+  it('offers the full drill-down from platform down to the ad', async () => {
     render()
 
     const nav = (await screen.findAllByRole('navigation', { name: 'Drill down' }))[0]
@@ -344,6 +344,9 @@ describe('CreativePulseSection', () => {
      * all of it.
      */
     const ad = within(nav).getByRole('link', { name: 'Ad (2)' })
+    // The last rung is «Ad asset», not a second «Ad»: one creative can be carried by several ads, so
+    // two adjacent links under one word would point at different places and read as a repetition.
+    within(nav).getByRole('link', { name: 'Ad asset' })
     expect(ad.getAttribute('href')).toContain('ad_ids%5B%5D=ad-1')
     expect(ad.getAttribute('href')).toContain('ad_ids%5B%5D=ad-2')
   })
@@ -386,7 +389,7 @@ describe('CreativePulseSection', () => {
   })
 
   /** A dashboard is the worst page to mount players on — it is the one most often left open. */
-  it('mounts no video element, whatever the creative is', async () => {
+  it('mounts no video element, whatever the ad is', async () => {
     const { container } = render()
 
     await screen.findByText('Best video')
@@ -500,7 +503,7 @@ describe('CreativePulseSection', () => {
       { locale: 'en' },
     )
 
-    expect(await screen.findByText('No creatives match this selection.')).toBeInTheDocument()
+    expect(await screen.findByText('No ads match this selection.')).toBeInTheDocument()
     expect(screen.getByText(/Filtered by: Platform: Meta · Objective: Awareness/)).toBeInTheDocument()
   })
 
@@ -573,8 +576,8 @@ describe('CreativePulseSection', () => {
     expect(screen.getByText(/Previous period: 2026-06-08/)).toBeInTheDocument()
     // A truncated list says so, rather than reading as «this is everything».
     expect(screen.getByText('1/3')).toBeInTheDocument()
-    // And the finding links into the creative it names, carrying the dashboard's own window.
-    expect(screen.getByRole('link', { name: /Open creative: Brand film/ })).toHaveAttribute(
+    // And the finding links into the ad it names, carrying the dashboard's own window.
+    expect(screen.getByRole('link', { name: /Open ad: Brand film/ })).toHaveAttribute(
       'href',
       expect.stringContaining('/app/content/cr-1'),
     )
@@ -667,7 +670,7 @@ describe('CreativePulseSection', () => {
 
     renderWithProviders(<CreativePulseSection libraryPath="/app/content" filters={{}} />, { locale: 'en' })
 
-    await screen.findByText('Spend by creative type')
+    await screen.findByText('Spend by ad type')
 
     // Exact, in the currency it was actually spent in — not rounded into a figure it never was.
     expect(screen.getByText(/4,128\.93 USD/)).toBeInTheDocument()
@@ -692,7 +695,7 @@ describe('CreativePulseSection', () => {
     renderWithProviders(<CreativePulseSection libraryPath="/app/content" filters={{}} />, { locale: 'en' })
 
     // Scoped to the strip itself: other cards on this section carry their own, convertible money.
-    const strip = (await screen.findByText('Spend by creative type')).parentElement!
+    const strip = (await screen.findByText('Spend by ad type')).parentElement!
 
     expect(strip).not.toHaveTextContent('900')
     expect(strip).not.toHaveTextContent('USD')
@@ -712,7 +715,7 @@ describe('CreativePulseSection', () => {
 
     renderWithProviders(<CreativePulseSection libraryPath="/app/content" filters={{}} />, { locale: 'en' })
 
-    await screen.findByText('Spend by creative type')
+    await screen.findByText('Spend by ad type')
 
     expect(screen.getByText(/1,800 AED/)).toBeInTheDocument()
     expect(screen.queryByText(/SAR/)).not.toBeInTheDocument()

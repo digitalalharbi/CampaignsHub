@@ -50,7 +50,7 @@ function route(creatives: unknown[]) {
 
 async function openCreative() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Creative' }))
+  fireEvent.click(await screen.findByRole('tab', { name: 'Ad' }))
 }
 
 /**
@@ -63,7 +63,7 @@ async function openCreative() {
  * Asserted on the REQUEST rather than on the rows: what matters is that the choice reaches the
  * server, and a fixture that returns the same rows either way would pass a row assertion.
  */
-describe('the creative analysis tab', () => {
+describe('the ad analysis tab', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useProject.setState({ currentProjectId: 'p1' })
@@ -71,7 +71,7 @@ describe('the creative analysis tab', () => {
   })
   afterEach(() => signOut())
 
-  it('shows a creative with its campaign, objective and figures', async () => {
+  it('shows a ad with its campaign, objective and figures', async () => {
     route([CREATIVE])
 
     await openCreative()
@@ -84,7 +84,7 @@ describe('the creative analysis tab', () => {
   })
 
   /** Withheld spend keeps its own currency here too — one money contract across every surface. */
-  it('states withheld creative spend in its original currency', async () => {
+  it('states withheld ad spend in its original currency', async () => {
     route([CREATIVE])
 
     await openCreative()
@@ -93,7 +93,7 @@ describe('the creative analysis tab', () => {
   })
 
   /** A creative the platform does not break out shows «—», never a share of the campaign. */
-  it('prints a dash rather than inventing a creative-level figure', async () => {
+  it('prints a dash rather than inventing a ad-level figure', async () => {
     route([{ ...CREATIVE, metrics: { ...CREATIVE.metrics, impressions: null, clicks: null, ctr: null } }])
 
     await openCreative()
@@ -105,11 +105,11 @@ describe('the creative analysis tab', () => {
   })
 })
 
-describe('the creative tab and the filter bar', () => {
+describe('the ad tab and the filter bar', () => {
   it('sends the chosen platform to the server instead of ignoring it', async () => {
     route([])
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-    fireEvent.click(await screen.findByRole('tab', { name: 'Creative' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Ad' }))
 
     await waitFor(() => expect(requested.some((u) => u.includes('/creatives'))).toBe(true))
 

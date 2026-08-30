@@ -14,6 +14,7 @@ import {
   useCreateAnnotation,
   useUpdateAnnotation,
 } from './metrics'
+import type { CampaignCreative } from './metrics'
 import type { MetricTotals, PlatformRow, Range, TimePoint } from '@/features/analytics/api'
 import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, PlatformDonutChart, ProgressRing, SpendRevenueAreaChart } from '@/features/analytics/charts'
 /*
@@ -37,6 +38,7 @@ import { rankableMoney, readRoas, resolveMoneySeries, spendComparableAmount, typ
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
 import { providerLabel } from './labels'
+import { AdPoster } from '@/features/content/AdPoster'
 import type { Locale } from '@/stores/ui'
 
 type Sparkable = keyof MetricTotals
@@ -765,27 +767,48 @@ const CREATIVE_CLASS: Record<string, { label: string; tone: string }> = {
 export function CampaignCreativesTab({ campaign, projectId, range, locale }: { campaign: UnifiedCampaign; projectId: string; range: Range; locale: Locale }) {
   const creatives = useCampaignCreatives(projectId, campaign.id, range)
   const [view, setView] = useState<'grid' | 'table'>('grid')
+  /*
+   * AD-PREVIEW-001 — the ad opens HERE.
+   *
+   * The name was plain text in the table and unclickable in the grid, so «which ad is this?» — the
+   * first question anybody asks of a ranked list of ads — could only be answered by leaving the
+   * campaign, finding the library and filtering back down to it. A panel keeps the ranking on
+   * screen behind it, which is the comparison the reader was in the middle of.
+   */
+  const [open, setOpen] = useState<CampaignCreative | null>(null)
   const cur = campaign.budget_currency || 'SAR'
   const rows = creatives.data ?? []
+  /*
+   * This tab was written in Arabic only — the toggle, the header, both empty states and every table
+   * heading — while the portal around it switches language. An English reader met eight Arabic
+   * labels on one tab and nothing else on the page behaved that way.
+   */
+  const ar = locale === 'ar'
 
   if (creatives.isLoading) return <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-56" />)}</div>
-  if (creatives.isError) return <ErrorState error={creatives.error} title="تعذّر تحميل المحتويات" onRetry={() => creatives.refetch()} />
-  if (rows.length === 0) return <EmptyState title="لا محتويات" description="لا توجد محتويات مزامنة لهذه الحملة بعد. تظهر تلقائيًا بعد مزامنة الإعلانات من المنصة." />
+  if (creatives.isError) return <ErrorState error={creatives.error} title={ar ? 'تعذّر تحميل الإعلانات' : 'The ads could not be loaded'} onRetry={() => creatives.refetch()} />
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        title={ar ? 'لا إعلانات' : 'No ads'}
+        description={ar
+          ? 'لا توجد إعلانات مزامنة لهذه الحملة بعد. تظهر تلقائيًا بعد مزامنة الإعلانات من المنصة.'
+          : 'No ads have synced for this campaign yet. They appear here once the platform’s ads are pulled.'}
+      />
+    )
+  }
 
   const cls = (k: string) => CREATIVE_CLASS[k] ?? CREATIVE_CLASS.insufficient_data
-  const Preview = ({ c }: { c: import('./metrics').CampaignCreative }) => (
-    c.has_preview && c.thumbnail_url
-      ? <img src={c.thumbnail_url} alt="" className="h-32 w-full rounded-lg object-cover" loading="lazy" />
-      : <div className="flex h-32 w-full items-center justify-center rounded-lg bg-surface-secondary text-center text-[11px] text-text-muted">معاينة المحتوى غير متاحة من مصدر المنصة</div>
-  )
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs text-text-muted">مرتّبة حسب هدف الحملة ({campaign.objective})</span>
+        <span className="text-xs text-text-muted">
+          {ar ? 'مرتّبة حسب هدف الحملة' : 'Ranked by the campaign’s objective'} ({campaign.objective})
+        </span>
         <div className="flex gap-1">
           {(['grid', 'table'] as const).map((v) => (
-            <button key={v} onClick={() => setView(v)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${view === v ? 'bg-brand-600 text-white' : 'border border-border text-text-secondary'}`}>{v === 'grid' ? 'شبكة' : 'جدول'}</button>
+            <button key={v} onClick={() => setView(v)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${view === v ? 'bg-brand-600 text-white' : 'border border-border text-text-secondary'}`}>{v === 'grid' ? (ar ? 'شبكة' : 'grid') : (ar ? 'جدول' : 'table')}</button>
           ))}
         </div>
       </div>
@@ -794,9 +817,15 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {rows.map((c) => (
             <div key={c.id} className="space-y-2 rounded-2xl border border-border bg-surface p-3">
-              <Preview c={c} />
+              <AdPoster preview={c.preview} name={c.client_display_name || c.name} testid={`ad-poster-${c.id}`} />
               <div className="flex items-start justify-between gap-2">
-                <span className="truncate text-sm font-bold text-text-primary">{c.client_display_name || c.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setOpen(c)}
+                  className="truncate text-start text-sm font-bold text-text-primary underline-offset-2 hover:underline"
+                >
+                  {c.client_display_name || c.name}
+                </button>
                 <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${cls(c.classification).tone}`}>{cls(c.classification).label}</span>
               </div>
               <div className="flex items-center gap-2 text-[11px] text-text-muted">{providerLabel(c.provider, locale)} · {c.format}{c.is_demo && <span className="rounded bg-warning/15 px-1 text-warning">Demo</span>}</div>
@@ -815,11 +844,17 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border">
           <table className="w-full text-sm">
-            <thead className="bg-surface-secondary text-xs text-text-muted"><tr>{['المحتوى', 'المنصة', 'الإنفاق', 'النتائج', 'CPA', 'ROAS', 'CTR', 'التصنيف'].map((h) => <th key={h} className="p-2 text-start font-semibold">{h}</th>)}</tr></thead>
+            <thead className="bg-surface-secondary text-xs text-text-muted"><tr>{(ar
+                ? ['الإعلان', 'المنصة', 'الإنفاق', 'النتائج', 'CPA', 'ROAS', 'CTR', 'التصنيف']
+                : ['Ad', 'Platform', 'Spend', 'Results', 'CPA', 'ROAS', 'CTR', 'Classification']).map((h) => <th key={h} className="p-2 text-start font-semibold">{h}</th>)}</tr></thead>
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id} className="border-t border-border">
-                  <td className="p-2 font-semibold">{c.client_display_name || c.name}</td>
+                  <td className="p-2 font-semibold">
+                    <button type="button" onClick={() => setOpen(c)} className="text-start underline-offset-2 hover:underline">
+                      {c.client_display_name || c.name}
+                    </button>
+                  </td>
                   <td className="p-2 text-text-muted">{providerLabel(c.provider, locale)}</td>
                   <td className="tnum p-2">{money(c.metrics.spend, cur)}</td>
                   <td className="tnum p-2">{num(c.metrics.conversions)}</td>
@@ -833,6 +868,86 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
           </table>
         </div>
       )}
+
+      {open && <AdPreviewPanel creative={open} currency={cur} locale={locale} onClose={() => setOpen(null)} />}
+    </div>
+  )
+}
+
+/**
+ * One ad, in place — AD-PREVIEW-001.
+ *
+ * A panel rather than a route, because the reader is in the middle of comparing a ranked list and
+ * navigating away costs them the comparison. It carries what answers «which ad is this?» — platform,
+ * format, status, the metric it was ranked on and the figures — beside the still.
+ *
+ * The still is `AdPoster`, the same reader every other surface uses, so an ad that shows here shows
+ * everywhere, and an ad that cannot gives the same reason everywhere.
+ */
+function AdPreviewPanel({
+  creative,
+  currency,
+  locale,
+  onClose,
+}: {
+  creative: CampaignCreative
+  currency: string
+  locale: 'ar' | 'en'
+  onClose: () => void
+}) {
+  const ar = locale === 'ar'
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={creative.client_display_name || creative.name}
+      data-testid="ad-preview-panel"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center sm:p-6"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-border bg-surface p-4 sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <h3 className="text-sm font-bold text-text-primary">{creative.client_display_name || creative.name}</h3>
+          <button type="button" onClick={onClose} className="text-xs font-semibold text-text-muted hover:text-text-primary">
+            {ar ? 'إغلاق' : 'Close'}
+          </button>
+        </div>
+
+        <AdPoster
+          preview={creative.preview}
+          name={creative.client_display_name || creative.name}
+          className="h-64 w-full"
+          testid="ad-preview-panel-poster"
+        />
+
+        <dl className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+          <AdFact label={ar ? 'المنصة' : 'Platform'} value={providerLabel(creative.provider, locale)} />
+          <AdFact label={ar ? 'النوع' : 'Format'} value={creative.format} />
+          <AdFact label={ar ? 'الحالة' : 'Status'} value={creative.status} />
+          <AdFact label={ar ? 'مقياس الترتيب' : 'Ranked on'} value={creative.rank_metric} />
+        </dl>
+
+        <div className="mt-3 grid grid-cols-3 gap-1.5 text-center">
+          <MiniStat label={ar ? 'الإنفاق' : 'Spend'} value={money(creative.metrics.spend, currency)} />
+          <MiniStat label={ar ? 'النتائج' : 'Results'} value={num(creative.metrics.conversions)} />
+          <MiniStat label="CPA" value={money(creative.metrics.cpa, currency)} />
+        </div>
+
+        <p className="mt-3 text-[11px] text-text-muted">{creative.ranking_reason}</p>
+      </div>
+    </div>
+  )
+}
+
+function AdFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-surface-secondary px-2 py-1.5">
+      <dt className="text-text-muted">{label}</dt>
+      <dd className="font-semibold text-text-primary">{value}</dd>
     </div>
   )
 }

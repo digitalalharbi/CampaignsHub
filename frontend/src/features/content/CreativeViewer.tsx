@@ -44,7 +44,7 @@ const COPY = {
     campaign: 'الحملة',
     noPreview: 'لا تتوفر معاينة',
     of: 'من',
-    viewer: 'معاينة المحتوى',
+    viewer: 'معاينة الإعلان',
     notProvided: 'غير مُرسَل',
   },
   en: {
@@ -62,7 +62,7 @@ const COPY = {
     campaign: 'Campaign',
     noPreview: 'No preview available',
     of: 'of',
-    viewer: 'Creative preview',
+    viewer: 'Ad preview',
     notProvided: 'Not provided',
   },
 }

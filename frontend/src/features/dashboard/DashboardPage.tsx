@@ -65,7 +65,7 @@ const axis = { stroke: 'var(--text-muted)', fontSize: 12 }
 const COPY = {
   ar: {
     title: 'لوحة التحكم',
-    purpose: 'كل حملاتك الإعلانية المدفوعة عبر المنصات في مكان واحد — الإنفاق والنتائج والمحتوى، من مصدر بيانات واحد.',
+    purpose: 'كل حملاتك الإعلانية المدفوعة عبر المنصات في مكان واحد — الإنفاق والنتائج والإعلان، من مصدر بيانات واحد.',
     period: 'الفترة',
     client: 'العميل',
     project: 'المشروع',
@@ -99,7 +99,7 @@ const COPY = {
   },
   en: {
     title: 'Dashboard',
-    purpose: 'Every paid campaign you run, across every platform, in one place — spend, results and creative from a single source.',
+    purpose: 'Every paid campaign you run, across every platform, in one place — spend, results and ads from a single source.',
     period: 'Period',
     client: 'Client',
     project: 'Project',
@@ -771,10 +771,10 @@ export function DashboardPage() {
       */}
       <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3">
         <div className="min-w-0">
-          <h2 className="text-sm font-bold text-text-primary">{ar ? 'أداء المحتوى' : 'Creative performance'}</h2>
+          <h2 className="text-sm font-bold text-text-primary">{ar ? 'أداء الإعلانات' : 'Ad performance'}</h2>
           <p className="mt-0.5 text-xs text-text-secondary">
             {ar
-              ? 'أفضل الصور والفيديوهات، الإجهاد، والاتجاهات — في مكتبة المحتوى.'
+              ? 'أفضل الصور والفيديوهات، الإجهاد، والاتجاهات — في مكتبة الإعلان.'
               : 'Best images and videos, fatigue and trends — in the content library.'}
           </p>
         </div>
@@ -782,7 +782,7 @@ export function DashboardPage() {
           to="/app/content"
           className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-brand-300 hover:text-text-primary"
         >
-          {ar ? 'افتح المحتوى' : 'Open content'} <ArrowUpRight size={13} aria-hidden />
+          {ar ? 'افتح الإعلانات' : 'Open ads'} <ArrowUpRight size={13} aria-hidden />
         </Link>
       </div>
 
