@@ -39,7 +39,7 @@ import { CANONICAL_CURRENCY } from '@/lib/money/contract'
 const COPY = {
   ar: {
     loading: 'جارٍ التحميل…',
-    failed: 'تعذّر تحميل تفاصيل هذا المحتوى.',
+    failed: 'تعذّر تحميل تفاصيل هذا الإعلان.',
     identity: 'التعريف',
     platform: 'المنصة',
     campaign: 'الحملة',
@@ -65,7 +65,7 @@ const COPY = {
   },
   en: {
     loading: 'Loading…',
-    failed: 'Could not load this creative’s details.',
+    failed: 'Could not load this ad’s details.',
     identity: 'Identity',
     platform: 'Platform',
     campaign: 'Campaign',
