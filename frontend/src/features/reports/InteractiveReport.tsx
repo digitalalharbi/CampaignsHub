@@ -22,9 +22,25 @@ import type { ResolvedDisclaimer } from '@/features/disclaimers/api'
 import type { MetricReading } from '@/components/ui/MetricStrip'
 import { SPECS } from '@/features/analytics/metricCatalog'
 import { type ReportMetric, creativeReadings, previousReading, reportMetrics, trendSeries } from './reportMetrics'
+import { useUi } from '@/stores/ui'
+import { ReportOutline } from './ReportOutline'
 
 export interface Slide { id: string; type: string; platform?: string; order: number; visible: boolean }
 type Row = Record<string, number | string | null>
+export interface ReportSection {
+  key: string
+  title_ar: string
+  title_en: string
+  present: boolean
+  /** The figures this section presents — absent when the section is. */
+  figures?: string[]
+  /** Why this section shows a figure an earlier one already showed. */
+  repeat_reason?: string
+  absent_reason?: string
+  absent_reason_ar?: string
+  absent_reason_en?: string
+}
+
 export interface ReportData {
   period: { from: string; to: string }
   currency: string
@@ -94,6 +110,23 @@ export interface ReportData {
     failing?: Array<{ name?: string | null; provider?: string | null }>
   }
   summary?: string[]
+  /**
+   * REPORT-ANALYTICAL-DEPTH-001 — what this report contains, and why anything is missing.
+   *
+   * Derived server-side from the assembled snapshot AFTER every figure is in place, so the contents
+   * cannot promise a section the report does not have. A section that is not supported by the
+   * evidence is absent rather than present-and-empty, and carries the reason: «Findings» over an
+   * empty state tells a client the analysis failed, which is a different statement from «nothing in
+   * this period was worth reporting».
+   *
+   * Called `outline` and not `sections` because a SHARE already has `sections` — the toggles an
+   * operator sets on a link. Two different things under one word on the same screen is how a reader
+   * ends up believing the share settings decide the analysis.
+   *
+   * Optional because a snapshot written before this existed has no outline; a reader that finds none
+   * simply renders what it always did.
+   */
+  outline?: ReportSection[]
   findings?: NoteCardData[]
   recommendations?: NoteCardData[]
   next_steps?: NextStep[]
@@ -222,6 +255,12 @@ const OBJECTIVE_LABEL: Record<string, string> = {
 }
 
 export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta }) {
+  /*
+   * The rest of this file is Arabic-only by design — it is the deck a Saudi agency sends a client.
+   * The outline is new copy, and new copy follows the reader: a client who has set the product to
+   * English should not meet an Arabic contents page above an Arabic deck they can at least skim.
+   */
+  const ar = useUi((s) => s.locale) === 'ar'
   const [mode, setMode] = useState<'deck' | 'scroll'>('deck')
   const [i, setI] = useState(0)
   const slides = useMemo(() => {
@@ -245,6 +284,12 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
 
   return (
     <div>
+      {/*
+        The contents, including what is not here — REPORT-ANALYTICAL-DEPTH-001. Above the mode
+        switcher because it describes the document rather than the way it is being displayed.
+      */}
+      <ReportOutline outline={data.outline} ar={ar} />
+
       <div className="mb-3 flex items-center justify-between">
         <div className="inline-flex rounded-xl border border-border bg-surface-secondary p-0.5">
           <button onClick={() => setMode('deck')} className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-semibold ${mode === 'deck' ? 'bg-surface shadow-[var(--shadow-small)]' : 'text-text-secondary'}`}><LayoutGrid size={15} /> شرائح</button>
