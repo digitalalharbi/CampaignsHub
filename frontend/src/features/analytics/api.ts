@@ -462,6 +462,27 @@ export interface Attribution {
     duplicates_collapsed?: number
     shops_connected_more_than_once?: DuplicatedShop[]
   }
+  /**
+   * CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — how much of what the platforms claim is the same sale.
+   *
+   * A FLOOR, never a count. `at_least_duplicated` is claimed − confirmed: a claim with no confirmed
+   * sale behind it may be one order two platforms both claimed, a sale that never happened, or a
+   * real sale the shop cannot see, and nothing in the data tells them apart.
+   */
+  overlap: {
+    available: boolean
+    reason: string | null
+    note_ar: string
+    note_en: string
+    platforms_claim?: number
+    store_confirms?: number
+    at_least_duplicated?: number
+    claims_per_confirmed_sale?: number | null
+    attributed_orders?: number
+    /** Share of the ledger that could be attributed at all — the bound on everything above. */
+    coverage?: number | null
+    platforms_compared?: number
+  }
   dedup: {
     platform_reported: { status: string; reason_ar: string; reason_en: string; may_be_summed: boolean }
     store_confirmed: {
