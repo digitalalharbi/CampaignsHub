@@ -1083,7 +1083,21 @@ function CreativeGridCard({
              * reserved box.
              */
             note && (
-              <span className="block px-3 py-1.5 text-start text-[11px] text-text-secondary">{note}</span>
+              /*
+                The line has to clear the two controls floating over this corner.
+
+                The compare checkbox is pinned to the START corner and the «فيديو» badge to the END
+                one, and both are absolutely positioned over this strip: with plain padding the note
+                rendered UNDER the checkbox, so an Arabic reader's card opened «…ج هذه المنصة أصل
+                المحتوى» — a sentence with its first three words hidden, which reads as a rendering
+                fault rather than as the reason it is.
+              */
+              <span
+                data-testid="creative-absence-note"
+                className="block py-2 pe-14 ps-12 text-start text-[11px] leading-snug text-text-secondary"
+              >
+                {note}
+              </span>
             )
           )}
         </button>
