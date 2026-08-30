@@ -2,7 +2,8 @@ import { useId, useState } from 'react'
 import { Area, AreaChart, ResponsiveContainer } from 'recharts'
 import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Info, Minus } from 'lucide-react'
 import { QueryFailure } from './QueryFailure'
-import { TOUCH_TARGET } from './touch'
+import { TOUCH_CONTROL, TOUCH_TARGET } from './touch'
+import { CARD_GAP, CARD_PAD_DENSE, METRIC_HINT, METRIC_LABEL, METRIC_VALUE, METRIC_VALUE_DENSE } from '@/styles/scale'
 
 /**
  * The metrics that matter first, and the honest absence of the rest — UX-METRICS-001.
@@ -196,12 +197,14 @@ export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
     <div
       data-testid={`metric-${item.key}`}
       data-state={item.reading.kind}
-      className={`flex flex-col gap-1.5 rounded-2xl border bg-surface p-3 ${
-        item.lead ? 'border-brand-500/50 shadow-[var(--shadow-small)]' : 'border-border'
+      className={`flex flex-col gap-1.5 rounded-2xl border bg-surface ${CARD_PAD_DENSE} ${
+        item.lead
+          ? 'border-brand-500/50 ring-1 ring-brand-500/20 shadow-[var(--shadow-small)]'
+          : 'border-border'
       }`}
     >
       <div className="flex items-start justify-between gap-1">
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-text-secondary">
+        <span className={`inline-flex items-center gap-1 text-text-secondary ${METRIC_LABEL}`}>
           {item.label}
           {item.hint && <InfoHint text={item.hint} label={`${t('definition', ar)}: ${item.label}`} />}
         </span>
@@ -220,7 +223,13 @@ export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
           // `title` rather than a custom tooltip: it is the one hover that also works for a keyboard
           // user's screen reader and survives being inside a chart card, a table cell or a PDF print.
           title={item.reading.exact}
-          className="tnum text-2xl font-extrabold leading-none tracking-tight text-text-primary"
+          /*
+           * `dir="ltr"` and `text-start` are two different settings and the card needs both. The
+           * first keeps «56.3K SAR» in digit order inside an Arabic page; without the second the
+           * span inherits its own LTR alignment, so the figure drifts to the left edge while its
+           * label stays at the right — the pair stops reading as one thing.
+           */
+          className={`block text-start text-text-primary ${item.lead ? METRIC_VALUE : METRIC_VALUE_DENSE}`}
         >
           {item.reading.text}
         </span>
@@ -233,10 +242,10 @@ export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
           order inside an RTL page, exactly as a converted figure is kept.
         */
         <span className="flex flex-col gap-0.5">
-          <span dir="ltr" className="tnum text-2xl font-extrabold leading-none tracking-tight text-text-primary">
+          <span dir="ltr" className={`block text-start text-text-primary ${item.lead ? METRIC_VALUE : METRIC_VALUE_DENSE}`}>
             {item.reading.original}
           </span>
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium leading-tight text-text-muted">
+          <span className={`inline-flex items-center gap-1 font-medium text-text-muted ${METRIC_HINT}`}>
             {t('withheldNote', ar)}
             <InfoHint text={t('withheldHint', ar)} label={t('withheldNote', ar)} />
           </span>
@@ -349,10 +358,10 @@ export function MetricStrip({
           data-testid={`${id}-metrics-loading`}
           aria-busy="true"
           aria-label={t('loading', ar)}
-          className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4"
+          className={`grid grid-cols-2 ${CARD_GAP} lg:grid-cols-3 xl:grid-cols-4`}
         >
           {primary.map((item) => (
-            <div key={item.key} className="h-[86px] animate-pulse rounded-2xl border border-border bg-surface-secondary/40" />
+            <div key={item.key} className="h-[96px] animate-pulse rounded-2xl border border-border bg-surface-secondary/40" />
           ))}
         </div>
       </section>
@@ -397,7 +406,7 @@ export function MetricStrip({
   }
 
   return (
-    <section data-testid={`${id}-metrics`} className="space-y-2">
+    <section data-testid={`${id}-metrics`} className="space-y-3">
       {(comparisonLabel || note) && (
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-text-secondary">
           {comparisonLabel && (
@@ -409,7 +418,7 @@ export function MetricStrip({
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className={`grid grid-cols-2 ${CARD_GAP} lg:grid-cols-3 xl:grid-cols-4`}>
         {primary.map((item) => (
           <MetricCard key={item.key} item={item} ar={ar} />
         ))}
@@ -422,7 +431,7 @@ export function MetricStrip({
             data-testid={`${id}-metrics-toggle`}
             aria-expanded={expanded}
             onClick={() => setExpanded((e) => !e)}
-            className="inline-flex items-center gap-1 rounded-lg px-1 py-1 text-xs font-semibold text-text-secondary underline underline-offset-2 hover:text-text-primary"
+            className={`inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-secondary/60 px-3 text-xs font-semibold text-text-secondary hover:bg-surface-hover hover:text-text-primary ${TOUCH_CONTROL}`}
           >
             {expanded ? <ChevronUp size={13} aria-hidden /> : <ChevronDown size={13} aria-hidden />}
             {expanded ? t('less', ar) : `${t('more', ar)} (${secondary.length})`}
@@ -431,7 +440,7 @@ export function MetricStrip({
           {expanded && (
             <div
               data-testid={`${id}-metrics-secondary`}
-              className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+              className={`grid grid-cols-2 ${CARD_GAP} lg:grid-cols-3 xl:grid-cols-4`}
             >
               {secondary.map((item) => (
                 <MetricCard key={item.key} item={item} ar={ar} />

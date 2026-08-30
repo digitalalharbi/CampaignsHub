@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Check, ChevronDown, Search, SlidersHorizontal, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Search, SlidersHorizontal, X } from 'lucide-react'
 import { Modal } from './Modal'
 import { TOUCH_CONTROL, TOUCH_TARGET } from './touch'
 
@@ -32,6 +32,8 @@ import { TOUCH_CONTROL, TOUCH_TARGET } from './touch'
 
 const T = {
   more: { ar: 'المزيد من الفلاتر', en: 'More filters' },
+  show: { ar: 'إظهار الفلاتر', en: 'Show filters' },
+  hide: { ar: 'إخفاء الفلاتر', en: 'Hide filters' },
   reset: { ar: 'إعادة ضبط', en: 'Reset' },
   applied: { ar: 'الفلاتر المطبَّقة', en: 'Applied filters' },
   filters: { ar: 'الفلاتر', en: 'Filters' },
@@ -88,6 +90,16 @@ export function FilterBar({
   trailing?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
+  /*
+   * MOBILE-FILTERS-001 — on a phone the bar was the whole first screen.
+   *
+   * Six controls at 44px each, stacked, put every figure below the fold: a reader opening the
+   * dashboard on a phone saw filters, scrolled, and only then met the numbers they came for. The
+   * controls are the same controls; they start folded behind a summary that says how many are
+   * narrowing the page, and the fold exists only below `sm` — a desktop bar never collapses,
+   * because there the row costs one line and hiding it would cost a click.
+   */
+  const [showOnPhone, setShowOnPhone] = useState(false)
 
   return (
     <section
@@ -95,7 +107,39 @@ export function FilterBar({
       aria-label={t('filters', ar)}
       className="rounded-2xl border border-border bg-surface p-3"
     >
-      <div className="flex flex-wrap items-end gap-2">
+      <button
+        type="button"
+        data-testid={`${id}-filters-toggle`}
+        aria-expanded={showOnPhone}
+        aria-controls={`${id}-filters-controls`}
+        onClick={() => setShowOnPhone((v) => !v)}
+        className={`${CONTROL} w-full justify-between sm:hidden`}
+      >
+        <span className="inline-flex items-center gap-1.5">
+          <SlidersHorizontal size={15} aria-hidden />
+          {showOnPhone ? t('hide', ar) : t('filters', ar)}
+          {applied.length > 0 && (
+            <span
+              data-testid={`${id}-filters-count`}
+              /*
+                `text-text-primary`, not the brand colour: a mid-green on a translucent green tint is
+                about 1.5:1 in dark mode — below the floor for text at any size, and the count is the
+                one part of this control carrying information rather than decoration.
+              */
+              className="tnum inline-flex min-w-5 items-center justify-center rounded-full bg-brand-500/20 px-1.5 text-xs font-bold text-text-primary"
+            >
+              {applied.length}
+            </span>
+          )}
+        </span>
+        {showOnPhone ? <ChevronUp size={16} aria-hidden /> : <ChevronDown size={16} aria-hidden />}
+      </button>
+
+      <div
+        id={`${id}-filters-controls`}
+        data-testid={`${id}-filters-controls`}
+        className={`${showOnPhone ? 'mt-3 flex' : 'hidden'} flex-wrap items-end gap-2 sm:mt-0 sm:flex`}
+      >
         {children}
 
         {advanced && (

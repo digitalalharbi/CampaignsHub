@@ -30,3 +30,6 @@ backend/bootstrap/cache/*.php
 *.output
 deliverables/**/browser-downloads/*.pdf
 frontend/.claude/
+
+# The evidence camera writes screenshots here; they are re-shot on demand, never committed.
+frontend/evidence/
