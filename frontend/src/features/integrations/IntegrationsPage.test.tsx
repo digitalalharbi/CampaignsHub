@@ -490,6 +490,54 @@ describe('disconnecting a platform', () => {
    * a different question — and it is the one somebody opens this page to ask. A green chip over a
    * connection with an account in trouble is why nobody went and looked.
    */
+  /**
+   * INTEGRATION-DATASOURCE-WIZARD-001 §9 — reconnecting is not how you add an account.
+   *
+   * Three verbs on a connected card all sound like «bring this up to date», and exactly one of them
+   * sends the reader to a provider consent screen — which the reader may not even be able to
+   * complete, if they are not the person who authorised it. So the verb states the distinction
+   * before it acts on it.
+   */
+  it('says what reconnecting does before it does it', async () => {
+    rows.data = [connector({ key: 'snapchat', label: 'Snapchat', state: 'connected', accounts: 3 })]
+
+    renderWithProviders(<IntegrationsPage />, { locale: 'en' })
+
+    const reconnect = await screen.findByTestId('connector-reconnect-snapchat')
+    expect(reconnect).toHaveTextContent(/^Reconnect$/)
+
+    fireEvent.click(reconnect)
+
+    expect(reconnect).toHaveTextContent(/renews the authorisation only/i)
+    expect(reconnect).toHaveTextContent(/selected accounts stay/i)
+  })
+
+  /**
+   * §9 — when the authorisation has actually lapsed, it is the only action, and it goes at once.
+   *
+   * «Manage accounts» reads the catalogue with the stored token and «Sync now» calls the platform
+   * with it. Against a token the platform has stopped accepting, both fail; offering all three gives
+   * the reader two buttons that cannot work and nothing saying which is which.
+   */
+  it('offers reconnecting alone while the authorisation is lapsed', async () => {
+    rows.data = [connector({ key: 'linkedin', label: 'LinkedIn', state: 'connected', accounts: 2 })]
+    wizardStates.connections = [{
+      state: 'active', user_state: 'REAUTH_REQUIRED', discovered: 2, assigned: 2, synced: 2,
+      has_parent: false, resumable: false, next_step: 'reconnect',
+      health: { connected: 2, healthy: 0, needs_attention: 2, pending_first_sync: 0, states: { access_lost: 2 } },
+      connection: { id: 'conn-li', provider: 'linkedin', label: 'LinkedIn', label_ar: 'لينكدإن', client_workspace_id: null },
+    }]
+
+    renderWithProviders(<IntegrationsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('connector-state-linkedin')).toHaveTextContent('Needs reconnecting')
+    expect(screen.queryByTestId('connector-manage-linkedin')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('connector-sync-linkedin')).not.toBeInTheDocument()
+
+    // No arming step: there is nothing to disambiguate when only one action can succeed.
+    expect(screen.getByTestId('connector-reconnect-linkedin')).toHaveTextContent(/^Reconnect$/)
+  })
+
   it('shows the connection state over the platform state', async () => {
     rows.data = [connector({ key: 'linkedin', label: 'LinkedIn Ads', state: 'connected' })]
     wizardStates.connections = []

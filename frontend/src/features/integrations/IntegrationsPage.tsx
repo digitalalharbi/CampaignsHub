@@ -504,6 +504,9 @@ function ConnectorCard({
   const userMeta = wizard?.user_state ? USER_STATE_META[wizard.user_state] : undefined
   const meta = userMeta ?? (state ? STATE_META[state] : LEGACY_META[c.status])
 
+  /* The one runtime state in which re-authorising is the only thing that can succeed. */
+  const needsReauth = wizard?.user_state === 'REAUTH_REQUIRED'
+
   return (
     /*
      * Named so a test can ask for PLATFORM CARDS rather than for every box on the page — see
@@ -599,11 +602,15 @@ function ConnectorCard({
         ) : state === 'connected' ? (
           <>
             {/*
-              First, because it is the action a connected source is actually used for: adding the
-              account that was created last week, or removing the one that closed. It costs no
-              authorisation — see `ApplyAccountSelection`.
+              INTEGRATION-DATASOURCE-WIZARD-001 §9 — an authorisation that has lapsed admits ONE
+              action, and it is not this page's other three.
+
+              «Manage accounts» reads the catalogue with the stored token, «Sync now» calls the
+              platform with it. Offering either against a token the platform has stopped accepting
+              gives the reader two buttons that fail and one that works, and nothing saying which is
+              which. So while the connection needs re-authorising, reconnecting is the whole menu.
             */}
-            {onManageAccounts && wizard && (
+            {!needsReauth && onManageAccounts && wizard && (
               <Button
                 variant="secondary"
                 onClick={() => onManageAccounts(wizard.connection.id)}
@@ -612,12 +619,18 @@ function ConnectorCard({
                 <Plug size={14} /> {ar ? 'إدارة الحسابات' : 'Manage accounts'}
               </Button>
             )}
-            <Button variant="secondary" loading={syncing} onClick={onSync} data-testid={`connector-sync-${c.key}`}>
-              <RefreshCw size={14} /> {t('sync')}
-            </Button>
-            <Button variant="ghost" loading={authorizing} onClick={onAuthorize}>
-              {ar ? 'إعادة الربط' : 'Reconnect'}
-            </Button>
+            {!needsReauth && (
+              <Button variant="secondary" loading={syncing} onClick={onSync} data-testid={`connector-sync-${c.key}`}>
+                <RefreshCw size={14} /> {t('sync')}
+              </Button>
+            )}
+            <ReconnectButton
+              ar={ar}
+              busy={authorizing}
+              urgent={needsReauth}
+              onConfirm={onAuthorize}
+              testId={`connector-reconnect-${c.key}`}
+            />
             <DisconnectButton
               connectionId={wizard?.connection.id ?? null}
               accounts={wizard?.health?.connected ?? c.accounts ?? 0}
@@ -721,6 +734,67 @@ export function IntegrationsPage() {
  * Two presses, no modal: the second press is the confirmation, it is labelled with the consequence,
  * and it reverts on blur so a stray click cannot leave the page armed.
  */
+/**
+ * INTEGRATION-DATASOURCE-WIZARD-001 §9 — reconnecting is a DIFFERENT question from choosing accounts.
+ *
+ * ## What readers were doing instead
+ *
+ * The three verbs on a connected card — manage, sync, reconnect — all sound like «bring this up to
+ * date», and only one of them sends somebody to a provider consent screen. Support transcripts for
+ * this product are full of one move: an account was created on the platform last week, it is not in
+ * CampaignsHub, so the customer presses the button that says «reconnect», authorises again, and waits
+ * for a discovery that would have taken one tick in the account picker.
+ *
+ * It costs them a round trip through the provider, and it costs the ones who are not the original
+ * authoriser rather more — they cannot complete it at all, and now believe the product is broken.
+ *
+ * ## So the button says what it is for before it does it
+ *
+ * One press states the distinction — this refreshes the AUTHORISATION, the selected accounts are
+ * untouched — and the second press goes. It is not a destructive-action confirm; nothing here is
+ * lost either way. It is the sentence that belongs next to the verb, shown at the moment somebody is
+ * about to act on the verb rather than in help text nobody opens.
+ *
+ * When the authorisation has actually lapsed there is nothing to disambiguate: it is the only action
+ * the card offers, it is styled as the action to take, and it goes on the first press.
+ */
+function ReconnectButton({
+  ar, busy, urgent, onConfirm, testId,
+}: {
+  ar: boolean
+  busy: boolean
+  /** The authorisation has lapsed: this is the only thing that can succeed, so no arming step. */
+  urgent: boolean
+  onConfirm: () => void
+  testId: string
+}) {
+  const [armed, setArmed] = useState(false)
+
+  if (urgent) {
+    return (
+      <Button variant="secondary" loading={busy} onClick={onConfirm} data-testid={testId}>
+        <Plug size={14} /> {ar ? 'إعادة المصادقة' : 'Reconnect'}
+      </Button>
+    )
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      loading={busy}
+      onBlur={() => setArmed(false)}
+      onClick={() => (armed ? onConfirm() : setArmed(true))}
+      data-testid={testId}
+    >
+      {armed
+        ? (ar
+            ? 'تأكيد — تجديد المصادقة فقط، ولن تتغيّر الحسابات المختارة'
+            : 'Confirm — renews the authorisation only, your selected accounts stay')
+        : (ar ? 'إعادة الربط' : 'Reconnect')}
+    </Button>
+  )
+}
+
 function DisconnectButton({
   connectionId, accounts, ar, busy, onConfirm, testId,
 }: {
