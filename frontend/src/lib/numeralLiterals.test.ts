@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
 
 /**
  * NUMBER-PRESENTATION-001 — a numeral typed into a string is a numeral nothing can reformat.
@@ -21,12 +19,16 @@ import { join } from 'node:path'
  */
 
 /*
- * `import.meta.url` under Vite is a `/@fs/...` dev-server URL, not a filesystem path, so resolving
- * the tree from it reads a directory that does not exist. `process.cwd()` is the frontend package
- * root when vitest runs, from the terminal or from CI.
+ * Read through Vite rather than `node:fs`: this suite's tsconfig carries no Node types (adding them
+ * to type one `readdirSync` would widen the app's type surface to buy nothing), and `import.meta.url`
+ * under Vite is a `/@fs/...` dev-server URL rather than a path. `import.meta.glob` is eager and
+ * resolved at build time, so the keys are repository paths — `/src/lib/phone.ts` — in every runner.
  */
-const ROOT = process.cwd()
-const SRC = join(ROOT, 'src')
+const SOURCES: Record<string, string> = import.meta.glob('/src/**/*.{ts,tsx}', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+})
 
 /** Arabic-Indic (٠-٩) and Extended Arabic-Indic (۰-۹). */
 const ARABIC_INDIC = /[٠-٩۰-۹]/
@@ -47,19 +49,17 @@ function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
 }
 
-function sourceFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((entry) => {
-    const path = join(dir, entry)
-    if (statSync(path).isDirectory()) return sourceFiles(path)
-    if (!/\.tsx?$/.test(entry) || /\.test\.tsx?$/.test(entry)) return []
-    return [path]
-  })
+/** Every source file, test files excluded — a test may name the digit it is guarding against. */
+function sourceFiles(): [string, string][] {
+  return Object.entries(SOURCES)
+    .filter(([path]) => !/\.test\.tsx?$/.test(path))
+    .map(([path, source]) => [path.replace(/^\/+/, ''), source])
 }
 
 describe('NUMBER-PRESENTATION-001 — no numeral is typed into a user-facing string', () => {
   it('finds no Arabic-Indic digits outside the two files that need them', () => {
-    const offenders = sourceFiles(SRC)
-      .map((path) => [path.slice(ROOT.length).replace(/^\/+/, ''), stripComments(readFileSync(path, 'utf8'))] as const)
+    const offenders = sourceFiles()
+      .map(([relative, source]) => [relative, stripComments(source)] as const)
       .filter(([relative]) => !(relative in ALLOWED))
       .flatMap(([relative, source]) =>
         source
@@ -74,7 +74,7 @@ describe('NUMBER-PRESENTATION-001 — no numeral is typed into a user-facing str
 
   /** The scanner is reading something, and it is reading enough. */
   it('reads the whole source tree', () => {
-    expect(sourceFiles(SRC).length).toBeGreaterThan(300)
+    expect(sourceFiles().length).toBeGreaterThan(300)
   })
 
   /** And it can still see a digit that a comment does not hide. */
