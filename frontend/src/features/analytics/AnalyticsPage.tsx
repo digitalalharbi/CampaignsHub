@@ -661,7 +661,19 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis dataKey="provider" tick={axis} />
               <YAxis yAxisId="l" tick={axis} tickFormatter={(v) => compact(Number(v))} width={44} />
-              <YAxis yAxisId="r" orientation="right" tick={axis} width={32} />
+              {/*
+                The secondary axis follows the READER, like the one above it: an RTL page puts its
+                primary axis on the right, so a second axis pinned to «right» lands on top of it and
+                the chart reads as two scales for one side. And ROAS is a ratio — «3.6x» says what
+                the bare 3.6 beside a spend axis does not.
+              */}
+              <YAxis
+                yAxisId="r"
+                orientation={ar ? 'left' : 'right'}
+                tick={axis}
+                tickFormatter={(v) => ratio(Number(v))}
+                width={44}
+              />
               <Tooltip {...tooltipProps} />
               <Legend wrapperStyle={{ fontSize: 13 }} />
               <Bar yAxisId="l" name={ar ? 'الإنفاق' : 'Spend'} dataKey="spend" radius={[6, 6, 0, 0]}>

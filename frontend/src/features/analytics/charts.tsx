@@ -19,6 +19,7 @@ import {
 import { platformColor, tooltipProps } from './components'
 import { compact, money, num, percent, ratio } from './format'
 import { funnelStageLabel } from './metricLabels'
+import { useUi } from '@/stores/ui'
 
 /**
  * Shared chart design system for dashboard + analytics + reports. One tooltip/legend/color/typography
@@ -68,6 +69,12 @@ export function MetricLineChart({
    */
   rightAxisFor?: string
 }) {
+  /*
+   * The second axis follows the READER's direction, not the chart library's default. An RTL page
+   * puts the primary axis on the right, so a second axis pinned to «right» lands on top of it and
+   * the chart shows two scales down one side with nothing down the other.
+   */
+  const ar = useUi((s) => s.locale) === 'ar'
   const split = rightAxisFor !== undefined && series.some((s) => s.key === rightAxisFor)
   const axisOf = (key: string) => (split && key === rightAxisFor ? 'right' : 'left')
 
@@ -77,7 +84,15 @@ export function MetricLineChart({
         {GRID}
         <XAxis dataKey="date" tick={AXIS} tickFormatter={(d) => String(d).slice(5)} minTickGap={24} />
         <YAxis yAxisId="left" tick={AXIS} tickFormatter={(v) => compact(Number(v))} width={44} />
-        {split && <YAxis yAxisId="right" orientation="right" tick={AXIS} tickFormatter={(v) => compact(Number(v))} width={44} />}
+        {split && (
+          <YAxis
+            yAxisId="right"
+            orientation={ar ? 'left' : 'right'}
+            tick={AXIS}
+            tickFormatter={(v) => compact(Number(v))}
+            width={44}
+          />
+        )}
         <Tooltip {...tooltipProps} formatter={(v: number, name, item) => fmt((item?.payload && series.find((s) => s.name === name)?.kind) || 'num', currency)(v)} />
         <Legend wrapperStyle={{ fontSize: 13 }} />
         {series.map((s, i) => (
