@@ -182,10 +182,17 @@ jobs:
       # Pure download, no application code. It takes ~2 minutes when GitHub's mirror is healthy; the
       # bound is here so a stall on their side fails in fifteen minutes and says which step did it,
       # instead of holding a runner until the job timeout and reporting nothing at all.
+      # The matrix browser AND chromium.
+      #
+      # Every project in `playwright.config.ts` declares `dependencies: ['setup']`, and the `setup`
+      # project carries no `use` — so it runs under Playwright's default, chromium. The firefox job
+      # therefore launches chromium before it launches firefox, and installing only firefox failed
+      # six tests with «Executable doesn't exist at …/chromium_headless_shell». Playwright dedupes
+      # the repeat when the matrix browser IS chromium.
       - name: Browsers
         working-directory: frontend
         timeout-minutes: 15
-        run: npx playwright install --with-deps ${{ matrix.browser }}
+        run: npx playwright install --with-deps chromium ${{ matrix.browser }}
       # The report exporter's Arabic text-layer pass (CAMPAIGNSHUB-PDF-TEXTLAYER) shells out to
       # python3 + pikepdf. It is best-effort and never blocks an export, but leaving it absent here
       # would mean the gate exercises a different code path than a developer's machine does.
