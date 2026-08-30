@@ -17,7 +17,9 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/Card'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useT, type TranslationKey } from '@/lib/i18n'
-import { sortByPlatform } from '@/lib/platforms'
+import { accounts as accountsCounted, adAccounts, connectedAccounts } from '@/lib/counted'
+import { canonicalPlatform, sortByPlatform } from '@/lib/platforms'
+import { platformColor } from '@/features/analytics/components'
 import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
 
@@ -210,18 +212,25 @@ export function AdPlatformsPanel() {
   const connectors = sortByPlatform(query.data ?? [], (c) => c.key)
 
   /*
-   * INTEG-STORES-001 — the two kinds are rendered apart, for the reason the API returns them apart.
+   * INTEG-STORES-001 · INTEGRATION-DATASOURCE-WIZARD-001 §1 — the two kinds are rendered apart, for
+   * the reason the API returns them apart.
    *
    * A store carries no `ad_account_id` and none of the five ad-platform states. Rendered as an
    * ad-platform card those fields come out empty, and an empty ad-platform card reads as a platform
    * that tried to connect and failed — a worse statement than the stores being missing from this page,
-   * which is the defect this requirement exists to fix.
+   * which is the defect INTEG-STORES-001 exists to fix.
+   *
+   * The stores' own section is `StoresPanel`, below. It used to be BOTH: a read-only catalogue card
+   * here that could only show a chip, and the panel underneath that could actually connect the same
+   * store — so this page printed «المتاجر · Salla» twice, once as something a customer could act on
+   * and once as something they could not, and the first one they reached was the one that did
+   * nothing. That is the same duplication §1 removed from the ad platforms, and it is removed here
+   * the same way: one card per source, and it is the card that can act.
    *
    * A row with no `kind` is treated as advertising: that is every row this endpoint returned before
    * stores were added, and defaulting the other way would empty the page against an older backend.
    */
   const advertising = connectors.filter((c) => (c.kind ?? 'advertising') === 'advertising')
-  const stores = connectors.filter((c) => c.kind === 'commerce')
 
   /*
    * ORCH-100 §39 §41 — where each authorisation has actually got to.
@@ -319,8 +328,8 @@ export function AdPlatformsPanel() {
         >
           <span>
             {ar
-              ? `لديك ربط غير مكتمل: ${unfinished[0].discovered} حسابًا متاحًا ولم يُربط أي حساب بمشروع بعد.`
-              : `You have an unfinished connection: ${unfinished[0].discovered} accounts available, none connected to a project yet.`}
+              ? `لديك ربط غير مكتمل: ${accountsCounted(unfinished[0].discovered, 'ar')} متاح ولم يُربط أي حساب بمشروع بعد.`
+              : `You have an unfinished connection: ${accountsCounted(unfinished[0].discovered, 'en')} available, none connected to a project yet.`}
           </span>
           <Button size="sm" onClick={() => setWizardConnectionId(unfinished[0].connection.id)} data-testid="resume-connection">
             {ar ? 'أكمل اختيار الحسابات' : 'Finish selecting accounts'}
@@ -406,50 +415,6 @@ export function AdPlatformsPanel() {
         </div>
       )}
 
-        {/*
-          * INTEG-STORES-001 — the other two things this product integrates with.
-          *
-          * Salla and Zid are declared in the same `ProviderCatalogue` as the ad platforms, carry the
-          * same credential fields and the same webhook configuration, and appeared nowhere here: a
-          * customer looking at «integrations» saw six of the eight and had no way to learn the other
-          * two existed.
-          *
-          * Their own section, with only the facts a store HAS — its state, when data last arrived and
-          * the error if there is one. No ad-account count and no account wizard: borrowing the
-          * ad-platform card would print those as blanks, and a blank on a connection card reads as a
-          * failure rather than as a field that does not apply.
-          */}
-        {!query.isLoading && !query.isError && !wizardConnectionId && stores.length > 0 && (
-          <div className="mt-8">
-            <h3 className="mb-3 text-sm font-semibold text-text-secondary" data-testid="stores-heading">
-              {ar ? 'المتاجر' : 'Stores'}
-            </h3>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {stores.map((c) => (
-                <Card key={c.key} data-testid="store-card" data-platform={c.key}>
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle>{c.label}</CardTitle>
-                    <Badge tone={LEGACY_META[c.status].tone} data-testid={`store-state-${c.key}`}>
-                      {ar ? LEGACY_META[c.status].ar : LEGACY_META[c.status].en}
-                    </Badge>
-                  </div>
-                  <CardDescription>
-                    {c.last_sync_error
-                      ? <span className="text-danger" data-testid={`store-error-${c.key}`}>{c.last_sync_error}</span>
-                      : c.last_synced_at
-                        ? <span data-testid={`store-synced-${c.key}`}>{c.last_synced_at.slice(0, 10)}</span>
-                        : (
-                          /* Never «0 orders» — nothing has arrived, and a zero would be a measurement. */
-                          <span data-testid={`store-never-synced-${c.key}`}>
-                            {ar ? 'لم تصل بيانات بعد' : 'No data has arrived yet'}
-                          </span>
-                        )}
-                  </CardDescription>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
 
     </section>
   )
@@ -513,14 +478,38 @@ function ConnectorCard({
      * `integrations.spec.ts`, which asserts the order of the six ad platforms and would otherwise
      * be reading the store panel and the account rows as well.
      */
-    <Card data-testid="platform-card" data-platform={c.key}>
-      <div className="flex items-start justify-between gap-2">
-        <CardTitle>{c.label}</CardTitle>
-        <Badge tone={meta.tone} data-testid={`connector-state-${c.key}`}>
-          {ar ? meta.ar : meta.en}
-        </Badge>
+    <Card data-testid="platform-card" data-platform={c.key} className="flex h-full flex-col">
+      {/*
+        INTEGRATION-DATASOURCE-WIZARD-001 §7 · TYPOGRAPHY-PRODUCT-POLISH-001 — the head of the card
+        is «which source, and what is it doing», and both have to survive a long name on a phone.
+
+        The name is allowed to wrap to two lines and no further; the chip never wraps and never
+        shrinks, because a state chip that has been squeezed into two lines by «Snapchat Marketing
+        API» stops reading as a chip. The coloured rail is the same identifier the project panel
+        uses for the same platform — the card is recognised before it is read.
+      */}
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className="mt-0.5 h-9 w-1.5 shrink-0 rounded-full"
+          style={{ background: platformColor(canonicalPlatform(c.key)) }}
+        />
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+          <div className="min-w-0">
+            <CardTitle>{c.label}</CardTitle>
+          </div>
+          {/*
+            `whitespace-nowrap` because a state chip broken over two lines stops reading as a chip,
+            and `self-start` so that on a phone — where it sits under the name — it hugs its own text
+            instead of stretching the width of the card.
+          */}
+          <Badge tone={meta.tone} data-testid={`connector-state-${c.key}`} className="shrink-0 self-start whitespace-nowrap">
+            {ar ? meta.ar : meta.en}
+          </Badge>
+        </div>
       </div>
 
+      <div className="mb-3 flex-1">
       <CardDescription>
         {state && NEEDS_OPERATOR.includes(state) ? (
           /*
@@ -540,14 +529,14 @@ function ConnectorCard({
            * different numbers and are shown as different numbers. */
           <span className="tnum" data-testid={`connector-needs-selection-${c.key}`}>
             {ar
-              ? `تمت المصادقة · ${wizard.discovered} حسابًا متاحًا · لم يُربط أي حساب بمشروع بعد`
-              : `Authorised · ${wizard.discovered} accounts available · none connected to a project yet`}
+              ? `تمت المصادقة · ${accountsCounted(wizard.discovered, 'ar')} متاح · لم يُربط أي حساب بمشروع بعد`
+              : `Authorised · ${accountsCounted(wizard.discovered, 'en')} available · none connected to a project yet`}
           </span>
         ) : wizard?.state === 'first_sync_pending' ? (
           <span className="tnum" data-testid={`connector-first-sync-${c.key}`}>
             {ar
-              ? `${wizard.assigned} حسابًا مربوطًا · بانتظار أول مزامنة`
-              : `${wizard.assigned} connected · first sync pending`}
+              ? `${connectedAccounts(wizard.assigned, 'ar')} · بانتظار أول مزامنة`
+              : `${connectedAccounts(wizard.assigned, 'en')} · first sync pending`}
           </span>
         ) : wizard?.health && wizard.health.connected > 0 ? (
           /*
@@ -560,8 +549,8 @@ function ConnectorCard({
            */
           <span className="tnum" data-testid={`connector-health-${c.key}`}>
             {ar
-              ? `${wizard.health.connected} مربوطًا · ${wizard.health.healthy} تعمل`
-              : `${wizard.health.connected} connected · ${wizard.health.healthy} healthy`}
+              ? `${connectedAccounts(wizard.health.connected, 'ar')} · ${wizard.health.healthy} تعمل`
+              : `${connectedAccounts(wizard.health.connected, 'en')} · ${wizard.health.healthy} healthy`}
             {wizard.health.needs_attention > 0 && (
               <span className="text-warning">
                 {ar
@@ -574,7 +563,7 @@ function ConnectorCard({
           </span>
         ) : state === 'connected' || state === 'syncing' ? (
           <span className="tnum" data-testid={`connector-synced-${c.key}`}>
-            {ar ? `${c.accounts ?? 0} حساب إعلاني` : `${c.accounts ?? 0} ad account(s)`}
+            {adAccounts(c.accounts ?? 0, ar ? 'ar' : 'en')}
             {' · '}
             {whenSynced(c.data_last_synced_at, ar)}
           </span>
@@ -582,8 +571,14 @@ function ConnectorCard({
           <span>{ar ? 'جاهز للربط — لم يربط أحد حسابه بعد.' : 'Ready to connect — nobody has authorised it yet.'}</span>
         )}
       </CardDescription>
+      </div>
 
-      <div className="mt-3 flex flex-wrap gap-2">
+      {/*
+        Actions sit on their own band, below a rule and pushed to the bottom of the card, so a row of
+        six cards has ONE line of buttons across it however many lines of state each card carries.
+        Before this the buttons floated wherever the description ended and the row read as ragged.
+      */}
+      <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-border pt-3">
         {state && NEEDS_OPERATOR.includes(state) ? (
           /* Nothing to press: no button here can produce a connection, so none is offered. */
           <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
@@ -631,6 +626,7 @@ function ConnectorCard({
               onConfirm={onAuthorize}
               testId={`connector-reconnect-${c.key}`}
             />
+            <span className="ms-auto" />
             <DisconnectButton
               connectionId={wizard?.connection.id ?? null}
               accounts={wizard?.health?.connected ?? c.accounts ?? 0}

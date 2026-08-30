@@ -132,7 +132,7 @@ describe('IntegrationsPage — the four states', () => {
 
     expect(await screen.findByTestId('connector-state-snapchat')).toHaveTextContent('Connected')
     const line = screen.getByTestId('connector-synced-snapchat')
-    expect(line).toHaveTextContent('3 ad account(s)')
+    expect(line).toHaveTextContent('3 ad accounts')
     expect(line).toHaveTextContent(/Last sync/)
     expect(screen.getByTestId('connector-sync-snapchat')).toBeInTheDocument()
   })
@@ -211,7 +211,7 @@ describe('IntegrationsPage — the four states', () => {
 
     expect(await screen.findByTestId('connector-state-snapchat')).toHaveTextContent('متصل')
     const line = screen.getByTestId('connector-synced-snapchat')
-    expect(line).toHaveTextContent('3 حساب إعلاني')
+    expect(line).toHaveTextContent('3 حسابات إعلانية')
     expect(line.textContent ?? '').not.toMatch(/[٠-٩]/)
   })
 })
