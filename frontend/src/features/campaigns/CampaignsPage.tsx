@@ -32,6 +32,7 @@ import { useBudget, useCampaigns, usePlatforms, useSummary, useTimeseries } from
 import { useLastNDaysRange } from '@/features/analytics/hooks'
 import { ProvenanceBadge, RangeTabs, TrendPill } from '@/features/analytics/components'
 import { compact, money, num, rowCostPer, rowRoas } from '@/features/analytics/format'
+import { campaigns as countedCampaigns } from '@/lib/counted'
 import { rankableMoney, resolveMoneySeries, type MoneyTotals } from '@/lib/money/contract'
 import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
@@ -361,7 +362,8 @@ export function CampaignsPage() {
             <ProvenanceBadge provenance={summary.data?.provenance} />
           </div>
           <p className="mt-1 text-sm text-text-secondary">
-            <span className="tnum font-semibold text-text-primary">{counts.total}</span>{ar ? ' حملة في المشروع الحالي — كل مشروع معزول عن غيره.' : ' campaigns in the current project — each project is isolated from the others.'}
+            <span className="tnum font-semibold text-text-primary">{countedCampaigns(counts.total, ar ? 'ar' : 'en')}</span>
+            {ar ? ' في المشروع الحالي — كل مشروع معزول عن غيره.' : ' in the current project — each project is isolated from the others.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -605,8 +607,8 @@ export function CampaignsPage() {
               title={ar ? 'لا توجد حملات نشطة في هذه الفترة' : 'Nothing is running in this period'}
               description={
                 ar
-                  ? `${lifecycleShown.counts.inactive} حملة متوقفة أو منتهية — اعرض «غير النشطة» للاطلاع عليها.`
-                  : `${lifecycleShown.counts.inactive} campaigns have stopped or finished — open «Inactive» to see them.`
+                  ? `${countedCampaigns(lifecycleShown.counts.inactive, 'ar')} متوقفة أو منتهية — اعرض «غير النشطة» للاطلاع عليها.`
+                  : `${countedCampaigns(lifecycleShown.counts.inactive, 'en')} have stopped or finished — open «Inactive» to see them.`
               }
             />
           ) : view === 'cards' ? (

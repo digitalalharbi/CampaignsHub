@@ -76,3 +76,29 @@ export function connectedAccounts(n: number, locale: Locale): string {
     ? `${accounts(n, locale)} ${n === 1 ? 'مربوط' : n === 2 ? 'مربوطان' : 'مربوطة'}`
     : `${countedEn(n, 'account', 'accounts')} connected`
 }
+
+/** «3 حملات» · «1 campaign» */
+export function campaigns(n: number, locale: Locale): string {
+  return locale === 'ar'
+    ? countedAr(n, { one: 'حملة', two: 'حملتان', few: 'حملات', many: 'حملة' })
+    : countedEn(n, 'campaign', 'campaigns')
+}
+
+/** «3 عملاء» · «1 client» */
+export function clients(n: number, locale: Locale): string {
+  return locale === 'ar'
+    ? countedAr(n, { one: 'عميل', two: 'عميلان', few: 'عملاء', many: 'عميلًا' })
+    : countedEn(n, 'client', 'clients')
+}
+
+/**
+ * «3 أيام» · «1 day»
+ *
+ * The window labels are the reason this one exists: «آخر 7 أيام» and «آخر 30 يومًا» are both right
+ * and were both written by hand at every call site, so half the product said «آخر 30 أيام».
+ */
+export function days(n: number, locale: Locale): string {
+  return locale === 'ar'
+    ? countedAr(n, { one: 'يوم', two: 'يومان', few: 'أيام', many: 'يومًا' })
+    : countedEn(n, 'day', 'days')
+}

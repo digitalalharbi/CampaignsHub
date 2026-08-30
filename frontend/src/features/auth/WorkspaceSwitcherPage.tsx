@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { AccessRecovery } from './AccessRecovery'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { clients as countedClients } from '@/lib/counted'
 import { features } from '@/lib/features'
 
 /**
@@ -154,7 +155,7 @@ export function WorkspaceSwitcherPage() {
                             mistaken for access to the whole workspace. */}
                         {m.client_scope_ids.length > 0 && (
                           <> · {ar
-                            ? `${m.client_scope_ids.length} عميل محدّد`
+                            ? `${countedClients(m.client_scope_ids.length, 'ar')} محدّد`
                             : `${m.client_scope_ids.length} selected client${m.client_scope_ids.length === 1 ? '' : 's'}`}</>
                         )}
                       </span>

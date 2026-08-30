@@ -5,6 +5,7 @@ import { fetchAgencyDashboard, type AgencyDashboard } from './api'
 import { Skeleton } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
+import { clients as countedClients } from '@/lib/counted'
 import { CreativePulseSection } from '@/features/content/CreativePulseSection'
 import type { LibraryQuery } from '@/features/content/api'
 
@@ -176,11 +177,11 @@ export function AgencyDashboardPage() {
         <span>
           {d.scope.is_restricted
             ? ar
-              ? `عضويتك محدّدة بعملاء بعينهم. الأرقام أدناه تغطي ${num(d.scope.client_count)} عميلًا فقط.`
-              : `Your membership names specific clients. The figures below cover ${num(d.scope.client_count)} of them only.`
+              ? `عضويتك محدّدة بعملاء بعينهم. الأرقام أدناه تغطي ${countedClients(d.scope.client_count, 'ar')} فقط.`
+              : `Your membership names specific clients. The figures below cover ${countedClients(d.scope.client_count, 'en')} only.`
             : ar
               ? `الأرقام أدناه تغطي كامل عملاء الوكالة (${num(d.scope.client_count)}).`
-              : `The figures below cover the whole agency (${num(d.scope.client_count)} clients).`}
+              : `The figures below cover the whole agency (${countedClients(d.scope.client_count, 'en')}).`}
         </span>
       </div>
 
