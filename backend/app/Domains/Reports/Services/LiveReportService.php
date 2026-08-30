@@ -50,7 +50,32 @@ final class LiveReportService
         private readonly MetricsAggregator $metrics,
         private readonly TenantContext $tenants,
         private readonly ProjectContext $projects,
+        private readonly ReportAds $ads,
     ) {}
+
+    /**
+     * The ads section for a live link — the deck's own builder, narrowed to this link's scope.
+     *
+     * @param  array<string, mixed>  $applied
+     * @param  array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}  $scope
+     * @return array{ads: list<array<string,mixed>>, ads_level: string, ads_absent_reason: string|null}
+     */
+    private function adsFor(ReportShare $share, array $applied, array $scope, Carbon $from, Carbon $to): array
+    {
+        $objective = (string) ($share->report->campaign_objective ?? 'custom');
+
+        $built = $this->ads->for($objective, $from, $to, [
+            'project_ids' => $scope['project_id'] === '' ? [] : [$scope['project_id']],
+            'providers' => $applied['providers'] !== [] ? $applied['providers'] : $scope['providers'],
+            'campaign_ids' => $applied['campaigns'] !== [] ? $applied['campaigns'] : $scope['campaign_ids'],
+        ]);
+
+        return [
+            'ads' => $built['ads'],
+            'ads_level' => $built['level'],
+            'ads_absent_reason' => $built['reason'],
+        ];
+    }
 
     /**
      * Build the payload for a live share, with the caller's filters intersected against its ceiling.
@@ -149,6 +174,19 @@ final class LiveReportService
              * Null when the project has no store, rather than a funnel of nulls the page would render
              * as a section that failed to load.
              */
+            /*
+             * REPORT-AD-PREVIEW-001 — the ads, in the client's own link.
+             *
+             * Built by the SAME service the generated deck calls, on the same objective and with the
+             * same ranker, and narrowed to this link's scope. A second implementation here is how
+             * «the best ad» comes to mean two different things in two documents about one campaign —
+             * and the client is the person holding both.
+             *
+             * The objective comes from the report the link belongs to, because that is the lens the
+             * whole document was written under; a link that ranked ads by a different objective than
+             * the deck it accompanies would put a different ad first for no reason a reader could see.
+             */
+            ...$this->adsFor($share, $applied, $scope, $from, $to),
             'store_funnel' => $this->storeFunnel($share, $scope['project_id'], $from, $to),
             'freshness' => $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers']),
             /*

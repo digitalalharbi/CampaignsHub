@@ -11,6 +11,30 @@ import type { ReportData } from './InteractiveReport'
 
 type Row = Record<string, number | string | null | undefined>
 
+/** One ad as the generator emits it — the fields this document prints, and its preview block. */
+type AdRow = {
+  name?: string | null
+  provider?: string | null
+  campaign_name?: string | null
+  spend?: number | null
+  conversions?: number | null
+  preview?: unknown
+}
+
+/** Why a picture is not here, in the words the library uses for the same state. */
+const PRINT_ABSENCE: Record<string, string> = {
+  withheld: 'Preview link carries a credential',
+  expired: 'Platform link expired',
+  unavailable: 'Platform does not expose the file',
+  no_media: 'Platform sent no file',
+}
+
+const PRINT_ADS_ABSENT: Record<string, string> = {
+  no_creatives_in_window: 'No ad-level rows were recorded in this window — the figures above are at campaign level.',
+  no_rankable_metric_for_this_objective: 'The platforms reported no metric this objective can be ranked on, so no ranked ads are shown.',
+  no_ads_to_show: 'There are no ads to show for this window.',
+}
+
 const nfmt = (n: number | null | undefined, opts?: Intl.NumberFormatOptions) =>
   n == null ? '—' : new Intl.NumberFormat('en-US', opts).format(n)
 
@@ -90,6 +114,27 @@ export function PrintDocument({
     `${nfmt(Number(p.roas ?? 0), { maximumFractionDigits: 2 })}×`,
   ])
 
+  /*
+    The same rows the interactive deck shows, read the same way: `available` is the only state that
+    carries a picture, and the other three carry their own sentence rather than an empty frame.
+  */
+  const adRows = ((data.ads ?? []) as AdRow[]).slice(0, 12).map((ad) => {
+    const preview = (ad.preview ?? null) as { state?: string; thumbnail_url?: string | null; image_url?: string | null; note_en?: string | null } | null
+    const usable = preview?.state === 'available' ? (preview.thumbnail_url ?? preview.image_url ?? null) : null
+
+    return {
+      thumb: usable,
+      absence: preview?.note_en ?? PRINT_ABSENCE[preview?.state ?? 'unavailable'] ?? PRINT_ABSENCE.unavailable,
+      name: String(ad.name ?? '—'),
+      provider: String(ad.provider ?? '—'),
+      campaign: String(ad.campaign_name ?? '—'),
+      spend: ad.spend === null || ad.spend === undefined ? '—' : money(Number(ad.spend), currency),
+      results: ad.conversions === null || ad.conversions === undefined ? '—' : nfmt(Number(ad.conversions)),
+    }
+  })
+
+  const adsAbsence = PRINT_ADS_ABSENT[String(data.ads_absent_reason ?? 'no_ads_to_show')] ?? PRINT_ADS_ABSENT.no_ads_to_show
+
   const campaignRows = (data.campaigns ?? []).map((c: Row) => [
     String(c.name ?? c.client_display_name ?? '—'),
     String(c.platform ?? '—'),
@@ -154,10 +199,52 @@ export function PrintDocument({
         </section>
       )}
 
+      {/*
+        REPORT-AD-PREVIEW-001 — the ads, in the document that gets forwarded.
+
+        A printed page cannot use the interactive section: `AdPoster` renders states, hover and a
+        dialog, and the PDF is produced by Chromium from static markup. What it CAN do — and what
+        parity means here — is print the same ads, in the same order, with the same figures and the
+        same sentence when a picture cannot be shown. The thumbnail is an `<img>` only when the
+        preview says `available`; every other state prints its reason, because a grey box in a
+        client's PDF reads as a broken export.
+      */}
+      {adRows.length > 0 ? (
+        <section className="doc-section">
+          <h2>5. Ads</h2>
+          <table className="doc-table doc-ads">
+            <thead>
+              <tr><th>Preview</th><th>Ad</th><th>Platform</th><th>Campaign</th><th>Spend</th><th>Results</th></tr>
+            </thead>
+            <tbody>
+              {adRows.map((ad, i) => (
+                <tr key={i}>
+                  <td className="doc-ad-thumb">
+                    {ad.thumb
+                      ? <img src={ad.thumb} alt="" />
+                      : <span className="doc-ad-absent">{ad.absence}</span>}
+                  </td>
+                  <td>{ad.name}</td>
+                  <td>{ad.provider}</td>
+                  <td>{ad.campaign}</td>
+                  <td>{ad.spend}</td>
+                  <td>{ad.results}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : (
+        <section className="doc-section">
+          <h2>5. Ads</h2>
+          <p>{adsAbsence}</p>
+        </section>
+      )}
+
       {/* Recommendations */}
       {recs.length > 0 && (
         <section className="doc-section">
-          <h2>5. Recommendations</h2>
+          <h2>6. Recommendations</h2>
           <ol className="doc-recs">
             {recs.map((r, i) => {
               const body = (r as { detail?: string; body?: string }).detail ?? (r as { body?: string }).body
@@ -210,7 +297,10 @@ const DOC_CSS = `
 .doc-section h3 { font-size: 11pt; font-weight: 700; margin: 10pt 0 4pt; break-after: avoid; }
 .doc-section p { margin: 0 0 6pt; }
 .doc-table { width: 100%; border-collapse: collapse; margin: 6pt 0 4pt; font-size: 9.5pt; }
-.doc-table thead { display: table-header-group; }  /* repeat header on every page */
+.doc-table thead { display: table-header-group; }
+.doc-ads td.doc-ad-thumb { width: 84pt; }
+.doc-ads td.doc-ad-thumb img { width: 78pt; height: 44pt; object-fit: cover; border-radius: 3pt; }
+.doc-ad-absent { display: inline-block; max-width: 78pt; font-size: 7.5pt; line-height: 1.25; color: #6b7280; }  /* repeat header on every page */
 .doc-table tr { break-inside: avoid; }             /* never split a row across pages */
 .doc-table th { text-align: left; background: #f1f5f9; color: #334155; font-weight: 700; padding: 5pt 7pt; border-bottom: 1.5px solid #cbd5e1; }
 .doc-table td { padding: 4.5pt 7pt; border-bottom: 1px solid #eef2f6; }
