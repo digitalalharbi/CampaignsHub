@@ -93,7 +93,12 @@ for (const p of PAGES) {
            * A theme that leaves one the same colour as the surface behind it hides the control the
            * whole unit exists to expose, and a DOM assertion alone would never notice.
            */
-          const label = page.getByTestId(`${p.id}-filters`).locator('label, span').first()
+          /*
+           * The first VISIBLE one. The bar now opens with a phone-only fold toggle whose own span is
+           * first in the DOM and hidden from `sm` up, so an unqualified `.first()` asks a desktop
+           * layout to prove that a control it deliberately hides is readable.
+           */
+          const label = page.getByTestId(`${p.id}-filters`).locator('label:visible, span:visible').first()
           await expect(label, `${where} has no filter label`).toBeVisible()
 
           const contrast = await label.evaluate((el) => {
