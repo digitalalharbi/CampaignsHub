@@ -51,8 +51,8 @@ describe('the cards line up', () => {
       { locale: 'en' },
     )
 
-    expect(screen.getByTestId('a-value').className).toContain('min-h-8')
-    expect(screen.getByTestId('b-value').className).toContain('min-h-8')
+    expect(screen.getByTestId('a-value').className).toContain('min-h-9')
+    expect(screen.getByTestId('b-value').className).toContain('min-h-9')
   })
 
   /**

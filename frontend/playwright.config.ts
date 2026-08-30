@@ -13,6 +13,16 @@ import { E2E_API_TARGET, E2E_BACKEND_ENV, E2E_BACKEND_PORT, E2E_FRONTEND_PORT, E
  * Visual-regression specs (tagged @visual) run on CHROMIUM ONLY — cross-browser pixel diffs are noisy — so
  * they are excluded from firefox/webkit via grepInvert (never scheduled there, so never counted as skipped).
  */
+/**
+ * `evidence.spec.ts` is a camera, not a gate — it photographs the product and asserts nothing.
+ *
+ * It is excluded from every ordinary run, including CI, because 28 screenshots would add minutes to
+ * a gate that exists to answer a different question. Run it deliberately:
+ *
+ *   EVIDENCE=1 npx playwright test evidence.spec.ts --project=chromium
+ */
+const EVIDENCE_OUT = process.env.EVIDENCE === '1' ? /$^/ : /@evidence/
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
@@ -47,10 +57,10 @@ export default defineConfig({
   },
   projects: [
     { name: 'setup', testMatch: /auth\.setup\.ts/ },
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, dependencies: ['setup'] },
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, dependencies: ['setup'], grepInvert: EVIDENCE_OUT },
     // Cross-browser acceptance. Visual-baseline specs are chromium-only, so exclude @visual here.
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] }, dependencies: ['setup'], grepInvert: /@visual/ },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] }, dependencies: ['setup'], grepInvert: /@visual/ },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] }, dependencies: ['setup'], grepInvert: new RegExp(`@visual|${EVIDENCE_OUT.source}`) },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] }, dependencies: ['setup'], grepInvert: new RegExp(`@visual|${EVIDENCE_OUT.source}`) },
   ],
   webServer: [
     {

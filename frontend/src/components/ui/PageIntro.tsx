@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { PAGE_TITLE } from '@/styles/scale'
 import { RefreshCw } from 'lucide-react'
 
 /**
@@ -37,11 +38,11 @@ export function PageIntro({
     <header data-testid={testid} className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">{title}</h1>
+          <h1 className={`text-text-primary ${PAGE_TITLE}`}>{title}</h1>
           {badges}
         </div>
-        <p className="mt-1 max-w-2xl text-sm text-text-secondary">{purpose}</p>
-        {meta && <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-text-muted">{meta}</div>}
+        <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-text-secondary">{purpose}</p>
+        {meta && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-text-muted">{meta}</div>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </header>
