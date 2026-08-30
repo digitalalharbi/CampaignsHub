@@ -300,7 +300,7 @@ describe('SharedCreativeSection', () => {
   it('gives the summary the answers and the detailed report the library as well', async () => {
     render('executive_summary')
 
-    await screen.findByText('Best creative per objective')
+    await screen.findByText('Best ad per objective')
     expect(screen.queryByTestId('shared-creative-library')).toBeNull()
     // The library endpoint is not even called for a summary link.
     expect(mockLibrary).not.toHaveBeenCalled()
@@ -313,7 +313,7 @@ describe('SharedCreativeSection', () => {
   it('states the metric and the marketing path behind each winner', async () => {
     render('detailed')
 
-    await screen.findByText('Best creative per objective')
+    await screen.findByText('Best ad per objective')
 
     const labels = screen.getAllByText('Metric used:')
     expect(labels.length).toBeGreaterThanOrEqual(3)
@@ -377,13 +377,13 @@ describe('SharedCreativeSection', () => {
   })
 
   /** With the section forbidden entirely, nothing renders at all. */
-  it('renders nothing when the link shows no creatives', async () => {
+  it('renders nothing when the link shows no ads', async () => {
     mockSummary.mockResolvedValue(summary({ permissions: permissions({ creatives: false }) }))
 
     const { container } = render('detailed')
 
     await waitFor(() => expect(mockSummary).toHaveBeenCalled())
-    expect(container.querySelector('[data-testid="shared-creative-section"]')).toBeNull()
+    expect(container.querySelector('[data-testid="shared-ad-section"]')).toBeNull()
   })
 
   /** No video is mounted before the reader opens one. */
@@ -436,8 +436,8 @@ describe('SharedCreativeSection', () => {
   it('renders in Arabic', async () => {
     render('detailed', 'ar')
 
-    expect(await screen.findByText('تحليل المحتوى')).toBeTruthy()
-    expect(screen.getByText('أفضل محتوى لكل هدف')).toBeTruthy()
+    expect(await screen.findByText('تحليل الإعلان')).toBeTruthy()
+    expect(screen.getByText('أفضل إعلان لكل هدف')).toBeTruthy()
   })
 
   // ---- §15.6, the client's own creative page ---------------------------------------------------
@@ -448,11 +448,11 @@ describe('SharedCreativeSection', () => {
    * A query parameter rather than a nested route: this tree holds the accepted password, and a route
    * change that remounted the gate would ask the client for it again on every creative they opened.
    */
-  it('opens a creative into its own view and keeps it in the address', async () => {
+  it('opens a ad into its own view and keeps it in the address', async () => {
     mockDetail.mockResolvedValue(sharedDetail())
 
     render('detailed')
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Creative details' }))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Ad details' }))[0])
 
     expect(await screen.findByTestId('shared-creative-detail')).toBeTruthy()
     expect(mockDetail).toHaveBeenCalledWith('tok', 'cr-1', {}, undefined)
@@ -464,7 +464,7 @@ describe('SharedCreativeSection', () => {
    * Asserted by MOUNTING at that address rather than by reading `window.location`: the point is not
    * that a string was written somewhere, it is that arriving at it produces the creative.
    */
-  it('opens the creative named by the address on arrival', async () => {
+  it('opens the ad named by the address on arrival', async () => {
     mockDetail.mockResolvedValue(sharedDetail())
 
     render('detailed', 'en', '/reports/share/tok?creative=cr-1')
@@ -478,7 +478,7 @@ describe('SharedCreativeSection', () => {
     mockDetail.mockResolvedValue(sharedDetail())
 
     render('detailed')
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Creative details' }))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Ad details' }))[0])
     await screen.findByTestId('shared-creative-detail')
 
     expect(screen.getAllByText('Clicks').length).toBeGreaterThan(0)
@@ -505,20 +505,20 @@ describe('SharedCreativeSection', () => {
     )
 
     render('detailed')
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Creative details' }))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Ad details' }))[0])
     await screen.findByTestId('shared-creative-detail')
 
     expect(screen.getAllByText('Not shown on this link').length).toBeGreaterThan(0)
   })
 
   /** A creative the link excludes is refused here too — the detail view is not a side door. */
-  it('refuses a creative the link does not carry', async () => {
+  it('refuses a ad the link does not carry', async () => {
     mockDetail.mockRejectedValue(new Error('not found'))
 
     render('detailed')
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Creative details' }))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Ad details' }))[0])
 
-    expect(await screen.findByText('This creative is not available on this link.')).toBeTruthy()
+    expect(await screen.findByText('This ad is not available on this link.')).toBeTruthy()
   })
 
   /** Zoom is an affordance the link may withhold, and then it is not drawn at all. */
@@ -528,7 +528,7 @@ describe('SharedCreativeSection', () => {
     mockLibrary.mockResolvedValue(page({ permissions: permissions({ image_zoom: false }) }))
 
     render('detailed')
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Creative details' }))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Ad details' }))[0])
     await screen.findByTestId('shared-creative-detail')
 
     expect(screen.queryByRole('button', { name: '100%' })).toBeNull()
@@ -539,12 +539,12 @@ describe('SharedCreativeSection', () => {
     mockDetail.mockResolvedValue(sharedDetail())
 
     render('detailed')
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Creative details' }))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Ad details' }))[0])
     await screen.findByTestId('shared-creative-detail')
 
-    fireEvent.click(screen.getByRole('button', { name: /Back to the creative library/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Back to the ad library/ }))
 
     await waitFor(() => expect(screen.queryByTestId('shared-creative-detail')).toBeNull())
-    expect(screen.getByText('Creative library')).toBeTruthy()
+    expect(screen.getByText('Ad library')).toBeTruthy()
   })
 })
