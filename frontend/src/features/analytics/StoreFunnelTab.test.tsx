@@ -266,3 +266,51 @@ describe('StoreFunnelTab', () => {
     expect(screen.getByText(/الإنفاق ÷ الطلبات/)).toBeInTheDocument()
   })
 })
+
+/**
+ * COMMERCE — the subtraction this page already performs, made visible.
+ *
+ * Every money figure on the store funnel is NET: the ROAS card's own hint says «on net revenue,
+ * after refunds». So the page tells a merchant a subtraction happened and never says how big it was
+ * — 500 refunded and 50,000 refunded produce an identical screen, and they are not the same month.
+ * `gross_revenue`, `refunded` and `cancelled_orders` have been in the payload since the funnel
+ * shipped, typed on the client, and rendered nowhere.
+ */
+describe('what did not stick', () => {
+  it('shows gross, refunded and cancelled beside the net figures', async () => {
+    vi.mocked(getData).mockResolvedValue(payload())
+    renderWithProviders(<StoreFunnelTab projectId="p1" range={RANGE} />, { locale: 'en' })
+
+    const block = await screen.findByTestId('funnel-refunds')
+
+    /* The page's own money formatting, abbreviated exactly as every other figure on it. */
+    expect(block).toHaveTextContent('5.2K SAR')
+    expect(block).toHaveTextContent('200 SAR')
+    expect(block).toHaveTextContent('Cancelled orders')
+  })
+
+  /* Zero refunds is the ordinary answer, and dressing it as a warning trains the reader to ignore it. */
+  it('does not flag a month with nothing refunded', async () => {
+    vi.mocked(getData).mockResolvedValue(payload({
+      totals: {
+        reporting_currency: 'SAR',
+        spend: 1000, revenue: 5000, gross_revenue: 5000, refunded: 0, cancelled_orders: 0,
+        orders: 25, new_customers: 10, attributed_orders: 15, attributed_revenue: 3000,
+        unattributed_orders: 10,
+      },
+    }))
+    renderWithProviders(<StoreFunnelTab projectId="p1" range={RANGE} />, { locale: 'en' })
+
+    const block = await screen.findByTestId('funnel-refunds')
+
+    expect(block.querySelectorAll('.text-warning')).toHaveLength(0)
+  })
+
+  /* A cancelled order was never counted as revenue, so calling it a refund would double-count it. */
+  it('says a cancelled order is not a refund', async () => {
+    vi.mocked(getData).mockResolvedValue(payload())
+    renderWithProviders(<StoreFunnelTab projectId="p1" range={RANGE} />, { locale: 'en' })
+
+    expect(await screen.findByText(/not a refund|ليس استردادًا/)).toBeInTheDocument()
+  })
+})
