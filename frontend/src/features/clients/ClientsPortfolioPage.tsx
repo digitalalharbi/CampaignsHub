@@ -10,6 +10,7 @@ import { useT } from '@/lib/i18n'
 import { FilterBar, FilterSearch, type AppliedFilter } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
 import { usePortalPath } from '@/app/portalPath'
+import { StatCard, StatGrid } from '@/components/ui/StatCard'
 
 function statusTone(s: string | null): string {
   switch (s) {
@@ -107,11 +108,13 @@ export function ClientsPortfolioPage() {
       </header>
 
       {/* Summary — the portfolio at a glance (total is the server count; the rest reflect the loaded set). */}
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-4">
+        <StatGrid>
         <ClientSummaryCard label={ar ? 'إجمالي العملاء' : 'Total clients'} value={summary.total} tone="brand" />
         <ClientSummaryCard label={ar ? 'نشطون' : 'Active'} value={summary.active} tone="success" />
         <ClientSummaryCard label={ar ? 'يحتاجون متابعة' : 'Needs attention'} value={summary.attention} tone="warning" />
         <ClientSummaryCard label={ar ? 'طلبات مفتوحة' : 'Open requests'} value={summary.openRequests} tone="info" />
+        </StatGrid>
       </div>
 
       {/*
@@ -217,17 +220,15 @@ export function ClientsPortfolioPage() {
   )
 }
 
+/**
+ * UX-KPI-PRESENTATION-001 — the shared card. The tone dot is this surface's; the design is not.
+ *
+ * This drew its own copy of `StatCard`: the same idea, `p-4`, a 2px dot, a `text-2xl` figure. They
+ * agreed by coincidence, and a row of portfolio cards beside a row of task cards lined up only for
+ * as long as nobody touched either file.
+ */
 function ClientSummaryCard({ label, value, tone }: { label: string; value: number; tone: 'brand' | 'success' | 'warning' | 'info' }) {
-  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', success: 'bg-success', warning: 'bg-warning', info: 'bg-info' }
-  return (
-    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
-      <div className="flex items-center gap-1.5">
-        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
-        <span className="text-xs font-semibold text-text-secondary">{label}</span>
-      </div>
-      <span className="tnum text-2xl font-extrabold text-text-primary" dir="ltr">{value}</span>
-    </div>
-  )
+  return <StatCard label={label} value={value} tone={tone} dot />
 }
 
 function ClientCardView({ c, t, lang }: { c: ClientCard; t: ReturnType<typeof useT>; lang: 'ar' | 'en' }) {
