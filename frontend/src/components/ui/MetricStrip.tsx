@@ -30,8 +30,14 @@ import { TOUCH_TARGET } from './touch'
  */
 
 export type MetricReading =
-  /** A real, measured figure — already formatted, including a real zero. */
-  | { kind: 'value'; text: string }
+  /**
+   * A real, measured figure — already formatted, including a real zero.
+   *
+   * `exact` is the same figure written out in full, present only when `text` abbreviated it —
+   * NUMBER-PRESENTATION-001. A card has room for «4.85M SAR» and a reader comparing two of them
+   * eventually needs the rest of the digits; the compact form is the display, never the record.
+   */
+  | { kind: 'value'; text: string; exact?: string }
   /** The platform does not report this metric. */
   | { kind: 'not_provided' }
   /** Reported, but nothing for this window — or a ratio whose denominator is missing. */
@@ -209,7 +215,13 @@ export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
       </div>
 
       {item.reading.kind === 'value' ? (
-        <span dir="ltr" className="tnum text-2xl font-extrabold leading-none tracking-tight text-text-primary">
+        <span
+          dir="ltr"
+          // `title` rather than a custom tooltip: it is the one hover that also works for a keyboard
+          // user's screen reader and survives being inside a chart card, a table cell or a PDF print.
+          title={item.reading.exact}
+          className="tnum text-2xl font-extrabold leading-none tracking-tight text-text-primary"
+        >
           {item.reading.text}
         </span>
       ) : item.reading.kind === 'withheld' ? (

@@ -40,9 +40,9 @@ import { useUi } from '@/stores/ui'
 
 /** Period choices, in days. Presets rather than a date picker: a client wants «this month», not a range. */
 const RANGES = [
-  { days: 7, ar: '٧ أيام', en: '7 days' },
-  { days: 30, ar: '٣٠ يومًا', en: '30 days' },
-  { days: 90, ar: '٩٠ يومًا', en: '90 days' },
+  { days: 7, ar: '7 أيام', en: '7 days' },
+  { days: 30, ar: '30 يومًا', en: '30 days' },
+  { days: 90, ar: '90 يومًا', en: '90 days' },
 ] as const
 
 const isoDaysAgo = (days: number) => {

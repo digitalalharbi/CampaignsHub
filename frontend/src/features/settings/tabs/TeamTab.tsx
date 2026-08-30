@@ -66,7 +66,7 @@ export function TeamTab() {
         </div>
         <p className="mt-2 max-w-2xl text-xs leading-6 text-text-muted">
           {ar
-            ? 'تُرسل دعوة برابط ينتهي خلال ٧٢ ساعة. لا يُنشأ الحساب ولا تُمنح أي صلاحية قبل أن يفتح الشخص الرابط ويختار كلمة مروره — لذلك لا يترك البريد الخاطئ حسابًا معلّقًا.'
+            ? 'تُرسل دعوة برابط ينتهي خلال 72 ساعة. لا يُنشأ الحساب ولا تُمنح أي صلاحية قبل أن يفتح الشخص الرابط ويختار كلمة مروره — لذلك لا يترك البريد الخاطئ حسابًا معلّقًا.'
             : 'An invitation link is sent and expires in 72 hours. No account exists and nothing is granted until the person opens it and chooses a password — so a mistyped address leaves nothing behind.'}
         </p>
       </form>

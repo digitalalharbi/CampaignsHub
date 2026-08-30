@@ -1,7 +1,7 @@
 import { formatMoneyReading, readCostPer, readMoney, readRoas } from '@/lib/money/contract'
 import type { MetricItem, MetricReading } from '@/components/ui/MetricStrip'
 import type { MetricTotals, Summary } from '@/features/analytics/api'
-import { money, num, percent, ratio } from '@/features/analytics/format'
+import { money, moneyExact, num, percent, ratio } from '@/features/analytics/format'
 
 /**
  * Which metrics lead, for the money this campaign is — UX-DASH-001, and §14.6's rule applied.
@@ -34,6 +34,24 @@ import { money, num, percent, ratio } from '@/features/analytics/format'
  */
 
 type Fmt = (n: number) => string
+
+/**
+ * The exact counterpart of a formatter that abbreviates — NUMBER-PRESENTATION-001.
+ *
+ * Keyed by the formatter FUNCTION rather than by metric key, so it cannot fall out of step with the
+ * specs: a metric formatted by `money` compacts, therefore it has an exact form, and a metric
+ * formatted by `num` or `percent` already prints every digit and has nothing to reveal. Adding a
+ * metric never means remembering to add it here too.
+ */
+const EXACT_OF = new Map<Fmt, Fmt>([[money, moneyExact]])
+
+/** A measured figure, plus the full version of it when the display abbreviated it. */
+function valueReading(spec: Spec, n: number): { kind: 'value'; text: string; exact?: string } {
+  const text = spec.format(n)
+  const exact = EXACT_OF.get(spec.format)?.(n)
+
+  return exact !== undefined && exact !== text ? { kind: 'value', text, exact } : { kind: 'value', text }
+}
 
 const pct2 = (n: number) => percent(n, 2)
 const times = (n: number) => ratio(n, '×')
@@ -491,7 +509,7 @@ export function readMetric(
   if (key === 'roas') {
     const r = readRoas(totals as Record<string, unknown> | undefined, true)
 
-    if (r.kind === 'withheld' && r.value !== null) return { kind: 'value', text: spec.format(r.value) }
+    if (r.kind === 'withheld' && r.value !== null) return valueReading(spec, r.value)
     if (r.kind === 'unavailable') return { kind: 'no_data' }
   }
 
@@ -508,7 +526,7 @@ export function readMetric(
 
   if (value === null || value === undefined) return { kind: 'no_data' }
 
-  return { kind: 'value', text: spec.format(value) }
+  return valueReading(spec, value)
 }
 
 /**

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { StatCard } from '@/components/ui/StatCard'
 import { AlertTriangle, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import { getClientAnalytics, type ClientAnalytics } from './api'
 import { useT } from '@/lib/i18n'
@@ -15,13 +16,9 @@ function DeltaBadge({ v }: { v: number | null | undefined }) {
   return <span className={`ms-1 text-[11px] font-semibold ${up ? 'text-success' : 'text-danger'}`}>{up ? '▲' : '▼'} {pct(Math.abs(v))}</span>
 }
 
-function Kpi({ label, value, delta, muted }: { label: string; value: string; delta?: number | null; muted?: boolean }) {
-  return (
-    <div className={`rounded-xl border border-border p-4 ${muted ? 'bg-surface' : 'bg-surface-secondary'}`}>
-      <div className="text-xs text-text-muted">{label}</div>
-      <div className="mt-1 flex items-baseline"><span className="tnum text-xl font-extrabold text-text-primary">{value}</span><DeltaBadge v={delta} /></div>
-    </div>
-  )
+/** UX-KPI-PRESENTATION-001 — the shared card; `muted` is gone with the second background it named. */
+function Kpi({ label, value, delta }: { label: string; value: string; delta?: number | null; muted?: boolean }) {
+  return <StatCard label={label} value={value} trailing={<DeltaBadge v={delta} />} />
 }
 
 function FreshnessBanner({ a, t }: { a: ClientAnalytics; t: ReturnType<typeof useT> }) {

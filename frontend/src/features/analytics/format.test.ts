@@ -31,11 +31,19 @@ describe('compact never rounds a real figure away to nothing', () => {
     expect(percent(null)).toBe('—')
   })
 
-  it('abbreviates the large end unchanged', () => {
+  /*
+   * The large end, under NUMBER-PRESENTATION-001's rule.
+   *
+   * Three of these expectations moved, and the movement is the point: 26,918 read «27K» and
+   * 1,282,024 read «1.3M» because the old rule chose decimals by magnitude and threw away the digits
+   * that tell two rows apart. They now read «26.9K» and «1.28M». The unchanged ones — 950, 1.5K,
+   * 12M — are the cases where three significant digits and the old rule agree.
+   */
+  it('abbreviates the large end to three significant digits', () => {
     expect(compact(950)).toBe('950')
     expect(compact(1_500)).toBe('1.5K')
-    expect(compact(26_918)).toBe('27K')
-    expect(compact(1_282_024)).toBe('1.3M')
+    expect(compact(26_918)).toBe('26.9K')
+    expect(compact(1_282_024)).toBe('1.28M')
     expect(compact(12_000_000)).toBe('12M')
   })
 
@@ -73,5 +81,57 @@ describe('moneyExact', () => {
   it('still says nothing rather than zero for an absent figure', () => {
     expect(moneyExact(null)).toBe('—')
     expect(moneyExact(undefined)).toBe('—')
+  })
+})
+
+/**
+ * NUMBER-PRESENTATION-001 — the compact rule, at every boundary that used to lose information.
+ *
+ * The old rule chose decimals by magnitude: one below ten thousand, none above. So 32,400 printed
+ * «32K» and 4,850,000 printed «4.9M» — accurate roundings that are useless for comparison, because
+ * two rows reading «32K» can be a thousand results apart with nothing on screen to say so.
+ */
+describe('compact — three significant digits, trailing zeros dropped', () => {
+  const cases: [number, string][] = [
+    [0, '0'],
+    [7, '7'],
+    [30, '30'],
+    [90, '90'],
+    [999, '999'],
+    [1_000, '1K'],
+    [1_049, '1.05K'],
+    [1_300, '1.3K'],
+    [9_990, '9.99K'],
+    [32_400, '32.4K'],
+    [32_999, '33K'],
+    [999_499, '999K'],
+    [1_000_000, '1M'],
+    [1_990_000, '1.99M'],
+    [4_850_000, '4.85M'],
+    [12_300_000, '12.3M'],
+    [1_000_000_000, '1B'],
+    [2_470_000_000, '2.47B'],
+    [-32_400, '-32.4K'],
+  ]
+
+  it.each(cases)('formats %d as %s', (input, expected) => {
+    expect(compact(input)).toBe(expected)
+  })
+
+  /* The examples the requirement itself names, asserted as a set so none can be quietly dropped. */
+  it('formats the requirement’s own examples', () => {
+    expect([1_000, 1_300, 32_400, 1_990_000, 4_850_000].map(compact))
+      .toEqual(['1K', '1.3K', '32.4K', '1.99M', '4.85M'])
+  })
+
+  /* A compact figure is never the whole story, so the exact one has to stay available. */
+  it('keeps the exact figure reachable through num()', () => {
+    expect(compact(4_850_321)).toBe('4.85M')
+    expect(num(4_850_321)).toBe('4,850,321')
+  })
+
+  /* Currency is appended, never folded into the abbreviation. */
+  it('states the currency beside the compact value', () => {
+    expect(money(4_850_000, 'SAR')).toBe('4.85M SAR')
   })
 })

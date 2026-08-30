@@ -146,11 +146,12 @@ describe('the spend charts over withheld money', () => {
     route({ budget: [budgetRow({ campaign_id: 'c1', spent: 1000 })] })
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
     // The budget caption proves the page settled before the view is switched.
-    expect(await screen.findByText(/1\.0K SAR spent/)).toBeInTheDocument()
+    // «1K», not «1.0K»: NUMBER-PRESENTATION-001 drops a decimal that carries no information.
+    expect(await screen.findByText(/1K SAR spent/)).toBeInTheDocument()
     await openOverview()
 
     // The ring states the real ratio; the refusal is for the withheld case alone.
-    expect(await screen.findByText('1.0K / 5.0K')).toBeInTheDocument()
+    expect(await screen.findByText('1K / 5K')).toBeInTheDocument()
     expect(screen.queryByText(/Budget consumption unavailable/i)).not.toBeInTheDocument()
   })
 

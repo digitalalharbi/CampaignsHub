@@ -12,6 +12,7 @@ import {
   Plug,
   Settings,
   TrendingUp,
+  Wallet,
 } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
@@ -65,6 +66,7 @@ export const appNavGroups: readonly NavGroup[] = [
       { to: '/app/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, ent: 'reports' },
       { to: '/app/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb, ent: 'analytics' },
       { to: '/app/alerts', ar: 'التنبيهات', en: 'Alerts', icon: BellRing, ent: 'alerts' },
+      { to: '/app/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet, ent: 'analytics' },
     ],
   },
   {

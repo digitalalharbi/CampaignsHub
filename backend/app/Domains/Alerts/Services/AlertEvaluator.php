@@ -9,7 +9,10 @@ use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Metrics\Models\SpendLimit;
+use App\Domains\Metrics\Models\SpendLimitEvent;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -80,6 +83,7 @@ final class AlertEvaluator
         private readonly NotificationDispatcher $notifications,
         private readonly MetricsAggregator $metrics,
         private readonly TenantContext $tenants,
+        private readonly SpendLimitGovernor $limits,
     ) {}
 
     /** Evaluate every active rule across all tenants. Returns the number of newly raised alerts. */
@@ -324,7 +328,100 @@ final class AlertEvaluator
                 }
             });
 
+        return array_merge($out, $this->internalSpendLimits($rule, $now));
+    }
+
+    /**
+     * BUDGET-GOVERNANCE-001 — the workspace's OWN limits, evaluated by the same rule that watches the
+     * platforms'.
+     *
+     * One detector, deliberately. A second engine watching a second kind of budget would eventually
+     * disagree with this one about the same campaign's spend, and the customer would meet both.
+     *
+     * The message says «internal limit» in as many words, because the two objects behave completely
+     * differently: a platform budget stops delivery when it is exhausted; nothing stops an internal
+     * one. An operator who reads a generic «budget at risk» and assumes the first will not go and
+     * pause anything.
+     *
+     * The crossing is also written to `spend_limit_events`, whose unique (limit, threshold) index is
+     * the audit trail AND the dedup: 80% is recorded once, with the figures as they stood, rather
+     * than recomputed on every sweep for the rest of the period.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function internalSpendLimits(AlertRule $rule, Carbon $now): array
+    {
+        $out = [];
+
+        SpendLimit::query()
+            ->where('active', true)
+            ->whereDate('starts_on', '<=', $now->toDateString())
+            ->whereDate('ends_on', '>=', $now->toDateString())
+            ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
+            ->get()
+            ->each(function (SpendLimit $limit) use ($now, &$out): void {
+                $reading = $this->limits->read($limit, $now->copy()->startOfDay());
+
+                // No comparable figure is not a breach. It is the state where nothing can be said.
+                if ($reading['utilisation'] === null) {
+                    return;
+                }
+
+                $crossed = $this->highestCrossedThreshold($limit, (float) $reading['utilisation']);
+
+                if ($crossed === null) {
+                    return;
+                }
+
+                $recorded = SpendLimitEvent::query()->firstOrCreate(
+                    ['spend_limit_id' => $limit->getKey(), 'threshold' => $crossed],
+                    [
+                        'tenant_id' => $limit->tenant_id,
+                        'consumed' => $reading['consumed'],
+                        'limit_amount' => $reading['amount'],
+                        'currency' => $limit->currency,
+                        'crossed_at' => $now,
+                    ],
+                );
+
+                // Already announced. The ledger is the dedup; re-raising would be a second alert for
+                // one event, which is the shape MAIL-006's cooldown exists to prevent.
+                if (! $recorded->wasRecentlyCreated) {
+                    return;
+                }
+
+                $out[] = [
+                    'entity_type' => SpendLimit::class,
+                    'entity_id' => (string) $limit->getKey(),
+                    'project_id' => (string) $limit->project_id,
+                    'title' => 'Internal spend limit at '.$crossed.'%',
+                    'message' => 'This workspace’s own '.$limit->scope->value.' limit of '
+                        .round((float) $reading['amount'], 2).' '.$limit->currency.' is '.$crossed
+                        .'% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.',
+                    'context' => [
+                        'enforcement' => SpendLimit::ENFORCEMENT,
+                        'scope' => $limit->scope->value,
+                        'threshold' => $crossed,
+                        'consumed' => $reading['consumed'],
+                        'limit' => $reading['amount'],
+                        'currency' => $limit->currency,
+                        'projected_exhaustion' => $reading['projected_exhaustion'],
+                    ],
+                ];
+            });
+
         return $out;
+    }
+
+    /** The highest configured threshold this utilisation has passed, or null for none. */
+    private function highestCrossedThreshold(SpendLimit $limit, float $utilisation): ?int
+    {
+        $crossed = array_filter(
+            $limit->thresholdPercents(),
+            static fn (int $t): bool => $utilisation * 100 >= $t,
+        );
+
+        return $crossed === [] ? null : max($crossed);
     }
 
     /** @return list<array<string,mixed>> */

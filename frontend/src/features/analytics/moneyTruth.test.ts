@@ -172,7 +172,9 @@ describe('breakdown rows', () => {
   it('a converted row is untouched', () => {
     const converted = { spend: 15480.5, spend_withheld_rows: 0, roas: 2.97, conversions: 102, cpa: 151.77 }
 
-    expect(rowMoney(converted, 'spend')).toContain('15K')
+    // 15,480.5 reads «15.5K» under NUMBER-PRESENTATION-001's three significant digits; what this
+    // line is really asserting is that the figure is PRESENT and not withheld.
+    expect(rowMoney(converted, 'spend')).toContain('15.5K')
     expect(rowRoas(converted)).toBe('2.97x')
   })
 
