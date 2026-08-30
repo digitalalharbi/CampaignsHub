@@ -77,11 +77,16 @@ vi.mock('./api', async (importOriginal) => {
   }
 })
 
-/** Walk from the organisation step to the project step, choosing both accounts. */
+/**
+ * Walk to the project step, choosing both accounts.
+ *
+ * The organisation step is only walked when there is more than one organisation to walk it for —
+ * a single one is chosen without asking (§4), and the wizard opens on the accounts.
+ */
 async function reachProjectStep() {
   renderWithProviders(<ConnectionWizard connectionId="conn-1" onClose={() => {}} />)
 
-  fireEvent.click(await screen.findByText('Acme Media'))
+  if (state.parents.length > 1) fireEvent.click(await screen.findByText('Acme Media'))
   const boxes = await screen.findAllByRole('checkbox')
   boxes.forEach((b) => fireEvent.click(b))
   fireEvent.click(screen.getByRole('button', { name: /متابعة|Continue/ }))
@@ -210,5 +215,65 @@ describe('ConnectionWizard — an organisation with no name', () => {
     fireEvent.click(await screen.findByTestId('wizard-refresh-accounts'))
 
     await waitFor(() => expect(calls.refreshed).toEqual(['conn-1']))
+  })
+})
+
+describe('ConnectionWizard — the organisation step is a question, not a formality', () => {
+  afterEach(() => {
+    state.parents = [{ external_id: 'org-1', name: 'Acme Media', account_count: 2 }]
+  })
+
+  /**
+   * INTEGRATION-DATASOURCE-WIZARD-001 §4 — one organisation is not a choice.
+   *
+   * `has_parent` is a fact about the PROVIDER — LinkedIn has organisations, Meta has business
+   * managers — and not about this authorisation. The ordinary customer has one, and met a step that
+   * listed a single option and required a press to accept it.
+   */
+  it('opens on the accounts when the authorisation has only one organisation', async () => {
+    state.parents = [{ external_id: 'org-1', name: 'Acme Media', account_count: 2 }]
+
+    renderWithProviders(<ConnectionWizard connectionId="conn-1" onClose={() => {}} />)
+
+    expect(await screen.findByTestId('wizard-step-accounts')).toBeInTheDocument()
+    expect(screen.queryByTestId('wizard-step-parent')).not.toBeInTheDocument()
+  })
+
+  /** Not asked is not the same as not told: the one organisation is named on the step it fed. */
+  it('names the organisation it chose without asking', async () => {
+    state.parents = [{ external_id: 'org-1', name: 'Acme Media', account_count: 2 }]
+
+    renderWithProviders(<ConnectionWizard connectionId="conn-1" onClose={() => {}} />)
+
+    expect(await screen.findByTestId('wizard-sole-parent')).toHaveTextContent('Acme Media')
+  })
+
+  /**
+   * A single organisation with NO NAME is the one case where the step earns its keep.
+   *
+   * That is the live Snapchat shape — 309 accounts catalogued before the organisation's name was —
+   * and the step is where «refresh the catalogue» lives. Skipping it would take the fix away with
+   * the question.
+   */
+  it('still stops at the step when the one organisation has no name to show', async () => {
+    state.parents = [{ external_id: 'org-1', name: null, account_count: 2 }]
+
+    renderWithProviders(<ConnectionWizard connectionId="conn-1" onClose={() => {}} />)
+
+    expect(await screen.findByTestId('wizard-step-parent')).toBeInTheDocument()
+    expect(screen.getByTestId('wizard-refresh-accounts')).toBeInTheDocument()
+  })
+
+  /** Two of them is a real question, and it is still asked. */
+  it('still asks when there is more than one organisation', async () => {
+    state.parents = [
+      { external_id: 'org-1', name: 'Acme Media', account_count: 2 },
+      { external_id: 'org-2', name: 'Beta Media', account_count: 4 },
+    ]
+
+    renderWithProviders(<ConnectionWizard connectionId="conn-1" onClose={() => {}} />)
+
+    expect(await screen.findByTestId('wizard-step-parent')).toBeInTheDocument()
+    expect(screen.getByText('Beta Media')).toBeInTheDocument()
   })
 })
