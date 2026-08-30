@@ -110,7 +110,23 @@ export function num(n: number | null | undefined): string {
   return formatNumber(Math.round(n))
 }
 
-export function ratio(n: number | null | undefined, suffix = 'x'): string {
+/**
+ * A multiplier — ROAS, pacing, «times as much».
+ *
+ * ## One glyph, and it is «×»
+ *
+ * The suffix defaulted to the LETTER x and four surfaces passed «×» instead, so the same ROAS read
+ * «15.36x» on the campaigns page and «15.36×» on the client's analytics tab, and a report printed a
+ * third spelling of it. Nobody chose that: each call site chose in isolation and every choice was
+ * reasonable on its own.
+ *
+ * «×» is the multiplication sign, it is what a multiplier is, and it does not read as the start of a
+ * word in either direction — which the letter does in an Arabic sentence set left-to-right.
+ *
+ * The parameter stays for the rare caller that genuinely means something else, but nothing in this
+ * product should pass it, and `formatGlyphs.test.ts` fails when a surface writes its own.
+ */
+export function ratio(n: number | null | undefined, suffix = '×'): string {
   if (n === null || n === undefined) return '—'
   return `${formatFixed(n, 2)}${suffix}`
 }

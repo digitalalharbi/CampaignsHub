@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, HelpCircle, Store, TrendingDown } from 'lucide-react'
 import { Panel } from './components'
-import { money, num } from './format'
+import { money, num, ratio } from './format'
 import { getData } from '@/lib/api/client'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState, Skeleton } from '@/components/ui/States'
@@ -223,8 +223,8 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
       </Panel>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Metric label={ar ? 'العائد على الإنفاق' : 'ROAS'} value={derived.roas === null ? null : `${derived.roas}x`} hint={ar ? 'على الإيراد الصافي بعد الاسترداد' : 'On net revenue, after refunds'} />
-        <Metric label={ar ? 'ROAS المُسند' : 'Attributed ROAS'} value={derived.attributed_roas === null ? null : `${derived.attributed_roas}x`} hint={ar ? 'الطلبات التي أمكن ربطها بحملة فقط' : 'Only orders traceable to a campaign'} />
+        <Metric label={ar ? 'العائد على الإنفاق' : 'ROAS'} value={derived.roas === null ? null : ratio(derived.roas)} hint={ar ? 'على الإيراد الصافي بعد الاسترداد' : 'On net revenue, after refunds'} />
+        <Metric label={ar ? 'ROAS المُسند' : 'Attributed ROAS'} value={derived.attributed_roas === null ? null : ratio(derived.attributed_roas)} hint={ar ? 'الطلبات التي أمكن ربطها بحملة فقط' : 'Only orders traceable to a campaign'} />
         <Metric label={ar ? 'متوسط قيمة الطلب' : 'AOV'} value={derived.aov === null ? null : money(derived.aov, cur)} />
         <Metric label={ar ? 'تكلفة الطلب' : 'CPA'} value={derived.cpa === null ? null : money(derived.cpa, cur)} hint={ar ? 'الإنفاق ÷ الطلبات' : 'Spend ÷ orders'} />
         <Metric
@@ -282,7 +282,7 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
         <Panel title={ar ? 'المقارنة بين المنصات' : 'Across platforms'}>
           <Table
             head={[ar ? 'المنصة' : 'Platform', ar ? 'الإنفاق' : 'Spend', ar ? 'الطلبات' : 'Orders', ar ? 'الإيراد' : 'Revenue', 'ROAS']}
-            rows={comparisons.platforms.map((p) => [p.platform, money(p.spend, cur), num(p.orders), money(p.revenue, cur), p.roas === null ? '—' : `${p.roas}x`])}
+            rows={comparisons.platforms.map((p) => [p.platform, money(p.spend, cur), num(p.orders), money(p.revenue, cur), ratio(p.roas)])}
           />
         </Panel>
       )}

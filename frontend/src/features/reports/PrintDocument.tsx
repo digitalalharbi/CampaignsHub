@@ -77,7 +77,7 @@ export function PrintDocument({
     .map(([k, v]) => [
       KPI_LABELS[k] ?? k,
       k === 'spend' || k === 'revenue' || k === 'cpa' ? money(v as number, currency)
-        : k === 'roas' ? `${nfmt(v as number, { maximumFractionDigits: 2 })}x`
+        : k === 'roas' ? `${nfmt(v as number, { maximumFractionDigits: 2 })}×`
         : k === 'ctr' ? `${nfmt(v as number, { maximumFractionDigits: 2 })}%`
         : nfmt(v as number),
     ] as [string, string])
@@ -87,7 +87,7 @@ export function PrintDocument({
     money(Number(p.spend ?? 0), currency),
     money(Number(p.revenue ?? 0), currency),
     nfmt(Number(p.results ?? 0)),
-    `${nfmt(Number(p.roas ?? 0), { maximumFractionDigits: 2 })}x`,
+    `${nfmt(Number(p.roas ?? 0), { maximumFractionDigits: 2 })}×`,
   ])
 
   const campaignRows = (data.campaigns ?? []).map((c: Row) => [
