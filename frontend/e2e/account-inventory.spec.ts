@@ -48,13 +48,24 @@ async function connectSandbox(request: import('@playwright/test').APIRequestCont
  */
 async function inventoryResolved(page: import('@playwright/test').Page): Promise<void> {
   const toggle = page.getByTestId('toggle-account-inventory')
-  await expect(toggle).toBeVisible({ timeout: 15000 })
-  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
+  await expect(toggle).toBeVisible({ timeout: 20000 })
+
+  /*
+   * Opened by its own state, not by one click.
+   *
+   * A click dispatched while the page is still hydrating lands on a button whose handler is not
+   * attached yet — the button is visible and does nothing, and the failure that follows reads as
+   * «the inventory never loaded». `toPass` retries the press until the control reports itself open.
+   */
+  await expect(async () => {
+    if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
+    expect(await toggle.getAttribute('aria-expanded')).toBe('true')
+  }).toPass({ timeout: 20000 })
 
   await expect(
     page.locator('[data-testid="inventory-row"], [data-testid="inventory-empty"]').first(),
     'the account inventory never finished loading',
-  ).toBeVisible({ timeout: 15000 })
+  ).toBeVisible({ timeout: 30000 })
 }
 
 test('the inventory lists discovered accounts by name, never by identifier', async ({ page }) => {
