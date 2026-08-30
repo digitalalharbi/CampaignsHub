@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, seededProject, selectProject } from './helpers'
+import { AUTH, openFilters, seededProject, selectProject } from './helpers'
 
 /**
  * VERIFY-100 — the acceptance tests the `IMPLEMENTED_NOT_VERIFIED` rows never had.
@@ -407,6 +407,9 @@ test.describe('UX-DASH-001 — the advertiser dashboard', () => {
       'the filter bar pushes the page sideways on a phone',
     ).toBe(false)
 
+    // The bar folds on a phone (MOBILE-FILTERS-001); «More filters» is behind the fold, so a reader
+    // opens it first and so does this.
+    await openFilters(page, 'dashboard')
     await page.getByTestId('dashboard-more-filters').click()
     await expect(page.getByRole('dialog')).toBeVisible()
 
