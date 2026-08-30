@@ -937,7 +937,9 @@ final class AdPlatformConnectorTest extends TestCase
                 'costInLocalCurrency' => '1840.00',
                 'impressions' => 74000,
                 'clicks' => 610,
-                'approximateUniqueImpressions' => 51000,
+                // LINKEDIN-REACH-001 — the current metric name. `approximateUniqueImpressions` is the
+                // legacy one LinkedIn's metrics table no longer carries a row for.
+                'approximateMemberReach' => 51000,
                 'externalWebsiteConversions' => 38,
                 // The trap: 76,000 of «value» the advertiser assigned to 38 leads.
                 'conversionValueInLocalCurrency' => '76000.00',

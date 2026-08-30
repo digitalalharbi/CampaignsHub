@@ -38,6 +38,14 @@ final class LinkedInConnector extends ApiAdvertisingConnector
     /** A bound on the walk, so a server that never shortens a page cannot cost us a worker. */
     private const MAX_PAGES = 50;
 
+    /**
+     * The widest window `approximateMemberReach` is defined for.
+     *
+     * LinkedIn: «This metric is only available when the number of days in the date range is less
+     * than or equal to 92 days». Beyond it the field is not requested at all — see `fetchInsights`.
+     */
+    private const REACH_MAX_DAYS = 92;
+
     protected function platform(): string
     {
         return 'linkedin';
@@ -55,17 +63,17 @@ final class LinkedInConnector extends ApiAdvertisingConnector
      * @param  array<string,mixed>  $query
      * @return list<array<string,mixed>>
      */
-    private function readAll(OAuthTokens $tokens, string $path, string $what, array $query): array
+    private function readAll(OAuthTokens $tokens, string $path, string $what, array $query, array $restli = []): array
     {
         $items = [];
 
         for ($page = 0; $page < self::MAX_PAGES; $page++) {
             $body = $this->read(
-                $this->api($tokens)->get($this->url($path), [
+                $this->api($tokens)->get($this->url($path).'?'.$this->queryString([
                     ...$query,
                     'start' => $page * self::PAGE,
                     'count' => self::PAGE,
-                ]),
+                ], $restli)),
                 $what,
             );
 
@@ -81,6 +89,39 @@ final class LinkedInConnector extends ApiAdvertisingConnector
         }
 
         return $items;
+    }
+
+    /**
+     * LINKEDIN-PROJECTION-001 — the query is built here, because Rest.li structure is not a value.
+     *
+     * `PendingRequest::get($url, $query)` builds the query with `http_build_query`, which
+     * percent-encodes every comma. A Rest.li field projection is a comma-separated LIST whose commas
+     * are syntax, so LinkedIn received one field named
+     * «pivotValues%2CdateRange%2CcostInLocalCurrency%2C…» and answered, correctly, that no such field
+     * exists in `AdAnalyticsV9`. Every daily analytics call failed on a live account whose OAuth,
+     * ad account and campaigns had all been discovered successfully.
+     *
+     * It is not «encode nothing»: LinkedIn's own sample URL sends `fields=a,b,c` with literal commas
+     * and `accounts=List(urn%3Ali%3AsponsoredAccount%3A502840441)` with an ENCODED urn in the same
+     * line. So the split is explicit rather than clever — `$restli` names the parameters whose value
+     * is already exactly what must appear on the wire, and everything else is encoded as a value.
+     *
+     * @param  array<string,mixed>  $query  ordinary values, encoded
+     * @param  array<string,string>  $restli  Rest.li structure, sent verbatim
+     */
+    private function queryString(array $query, array $restli = []): string
+    {
+        $pairs = [];
+
+        foreach ($query as $key => $value) {
+            $pairs[] = rawurlencode((string) $key).'='.rawurlencode((string) $value);
+        }
+
+        foreach ($restli as $key => $value) {
+            $pairs[] = rawurlencode((string) $key).'='.$value;
+        }
+
+        return implode('&', $pairs);
     }
 
     protected function fetchAdAccounts(OAuthTokens $tokens): array
@@ -203,15 +244,40 @@ final class LinkedInConnector extends ApiAdvertisingConnector
          * immediately. Reading the first page alone reported a fraction of the spend as though it
          * were the whole of it.
          */
+        /*
+         * LINKEDIN-REACH-001 — `approximateUniqueImpressions` is not a field any version this pin can
+         * reach still defines.
+         *
+         * LinkedIn's Metrics Available table has no row for it. It has `approximateMemberReach`,
+         * described as «an updated and more accurate version of legacy metric
+         * approximateUniqueImpressions … fully launched in Jan 2024», and it states two conditions:
+         * non-demographic pivots only — CAMPAIGN qualifies — and a date range of at most 92 days.
+         *
+         * So a backfill wider than 92 days does not ask for it. Asking for a field outside the
+         * conditions its own schema states is the class of request that failed in production, and a
+         * long window still returns spend, impressions, clicks and conversions.
+         */
+        $days = Carbon::parse($from)->diffInDays(Carbon::parse($to)) + 1;
+
+        $fields = array_merge(
+            ['pivotValues', 'dateRange', 'costInLocalCurrency', 'impressions', 'clicks', 'externalWebsiteConversions'],
+            $days <= self::REACH_MAX_DAYS ? ['approximateMemberReach'] : [],
+            ['videoViews', 'videoCompletions', 'totalEngagements', 'landingPageClicks'],
+        );
+
         $reported = $this->readAll($tokens, 'adAnalytics', 'daily analytics', [
             'q' => 'analytics',
             'pivot' => 'CAMPAIGN',
             'timeGranularity' => 'DAILY',
+        ], [
+            /*
+             * Rest.li structure, sent verbatim — see `queryString()`. The account URN is encoded
+             * INSIDE the `List(…)` exactly as LinkedIn's own reference sends it; the parentheses,
+             * the commas and the date tuple's colons are syntax and stay literal.
+             */
             'dateRange' => $this->dateRange($from, $to),
-            'accounts' => "List(urn:li:sponsoredAccount:{$adAccountId})",
-            'fields' => 'pivotValues,dateRange,costInLocalCurrency,impressions,clicks,'
-                .'externalWebsiteConversions,approximateUniqueImpressions,'
-                .'videoViews,videoCompletions,totalEngagements,landingPageClicks',
+            'accounts' => 'List('.rawurlencode("urn:li:sponsoredAccount:{$adAccountId}").')',
+            'fields' => implode(',', $fields),
         ]);
 
         $this->countRawInsightRows(count($reported));
@@ -254,8 +320,8 @@ final class LinkedInConnector extends ApiAdvertisingConnector
                 'impressions' => isset($row['impressions']) ? (float) $row['impressions'] : null,
                 'clicks' => isset($row['clicks']) ? (float) $row['clicks'] : null,
                 // The closest thing LinkedIn publishes to reach: unique members shown the ad.
-                'reach' => isset($row['approximateUniqueImpressions'])
-                    ? (float) $row['approximateUniqueImpressions']
+                'reach' => isset($row['approximateMemberReach'])
+                    ? (float) $row['approximateMemberReach']
                     : null,
                 'conversions' => isset($row['externalWebsiteConversions'])
                     ? (float) $row['externalWebsiteConversions']
