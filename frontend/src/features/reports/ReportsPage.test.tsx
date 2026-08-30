@@ -190,7 +190,12 @@ describe('ReportsPage — provenance', () => {
 
     renderWithProviders(<ReportsPage />, { locale: 'en' })
 
-    await screen.findByText('Report r1')
+    /*
+      The list renders twice by design — cards for a phone, the table above `sm` — and jsdom applies
+      no CSS, so both are in the document here. The provenance chip is what these tests are about;
+      the name is only how they wait for the load.
+    */
+    await screen.findAllByText('Report r1')
     expect(screen.queryByText(/Demo|تجريبية/)).not.toBeInTheDocument()
   })
 
@@ -199,7 +204,12 @@ describe('ReportsPage — provenance', () => {
 
     renderWithProviders(<ReportsPage />, { locale: 'en' })
 
-    await screen.findByText('Report r1')
+    /*
+      The list renders twice by design — cards for a phone, the table above `sm` — and jsdom applies
+      no CSS, so both are in the document here. The provenance chip is what these tests are about;
+      the name is only how they wait for the load.
+    */
+    await screen.findAllByText('Report r1')
     expect(screen.getByText(/Demo|تجريبية/)).toBeInTheDocument()
   })
 
@@ -210,7 +220,12 @@ describe('ReportsPage — provenance', () => {
 
     renderWithProviders(<ReportsPage />, { locale: 'en' })
 
-    await screen.findByText('Report r1')
+    /*
+      The list renders twice by design — cards for a phone, the table above `sm` — and jsdom applies
+      no CSS, so both are in the document here. The provenance chip is what these tests are about;
+      the name is only how they wait for the load.
+    */
+    await screen.findAllByText('Report r1')
     expect(screen.getByText(/Mixed|مختلطة/)).toBeInTheDocument()
   })
 })
