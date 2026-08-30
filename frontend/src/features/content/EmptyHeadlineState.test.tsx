@@ -68,7 +68,7 @@ const PAGE: LibraryPage = {
   },
 } as unknown as LibraryPage
 
-describe('a creative that ran but has no displayable metric', () => {
+describe('a ad that ran but has no displayable metric', () => {
   beforeEach(() => {
     useAuth.setState({
       user: { id: '1', name: 'Op', permissions: ['campaigns.view'], is_platform_admin: false } as unknown as AuthUser,
@@ -137,7 +137,7 @@ describe('a creative that ran but has no displayable metric', () => {
  * SUCCEEDED, so the availability path returns «لم يعمل خلال هذه الفترة» — a false statement about a
  * creative that was live, and false in the direction that costs money.
  */
-describe('a creative whose ad ran but which the platform never named', () => {
+describe('a ad whose ad ran but which the platform never named', () => {
   beforeEach(() => {
     useAuth.setState({
       user: { id: '1', name: 'Op', permissions: ['campaigns.view'], is_platform_admin: false } as unknown as AuthUser,
@@ -145,16 +145,16 @@ describe('a creative whose ad ran but which the platform never named', () => {
     })
     vi.mocked(listCreatives).mockResolvedValue({
       ...PAGE,
-      creatives: [{ ...CARD, id: 'cr-ad-ran', name: 'Ad ran, creative unnamed', metrics: null, ad_delivered: true }],
+      creatives: [{ ...CARD, id: 'cr-ad-ran', name: 'Ad ran, ad unnamed', metrics: null, ad_delivered: true }],
     } as unknown as LibraryPage)
   })
 
-  it('says the platform did not return creative-level metrics, not that it did not run', async () => {
+  it('says the platform did not return ad-level metrics, not that it did not run', async () => {
     renderWithProviders(<CreativesPage />, { locale: 'ar' })
-    await waitFor(() => expect(screen.getByText('Ad ran, creative unnamed')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Ad ran, ad unnamed')).toBeInTheDocument())
 
     expect(screen.getByTestId('creative-empty-creative_grain_missing'))
-      .toHaveTextContent('المنصة لم تُرجع مؤشرات على مستوى هذا المحتوى لهذه الفترة')
+      .toHaveTextContent('المنصة لم تُرجع مؤشرات على مستوى هذا الإعلان لهذه الفترة')
 
     expect(screen.queryByTestId('creative-empty-did_not_run')).not.toBeInTheDocument()
     expect(document.body.textContent).not.toContain('لم يعمل خلال هذه الفترة')
@@ -162,10 +162,10 @@ describe('a creative whose ad ran but which the platform never named', () => {
 
   it('and says it in English too', async () => {
     renderWithProviders(<CreativesPage />, { locale: 'en' })
-    await waitFor(() => expect(screen.getByText('Ad ran, creative unnamed')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Ad ran, ad unnamed')).toBeInTheDocument())
 
     expect(screen.getByTestId('creative-empty-creative_grain_missing'))
-      .toHaveTextContent('The platform did not return creative-level metrics for this period')
+      .toHaveTextContent('The platform did not return ad-level metrics for this period')
   })
 })
 
@@ -173,7 +173,7 @@ describe('a creative whose ad ran but which the platform never named', () => {
  * The other half of the pair, so the two states cannot quietly collapse back into one: a creative
  * with NO metrics object at all still gets the availability sentence, which is correct for it.
  */
-describe('a creative with no metrics at all', () => {
+describe('a ad with no metrics at all', () => {
   beforeEach(() => {
     useAuth.setState({
       user: { id: '1', name: 'Op', permissions: ['campaigns.view'], is_platform_admin: false } as unknown as AuthUser,
