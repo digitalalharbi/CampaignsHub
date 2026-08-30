@@ -1,3 +1,5 @@
+import type { ReportAd } from './ReportAdsSection'
+
 import { getData, postData, putData } from '@/lib/api/client'
 import type { SharedBranding } from './sharedBranding'
 import { api } from '@/lib/api/client'
@@ -215,6 +217,16 @@ export interface LivePayload {
    * hide-revenue and hide-spend flags, because a funnel is a second place a hidden number could reach
    * a reader.
    */
+  /**
+   * REPORT-AD-PREVIEW-001 — the ads, built by the same service the generated deck calls.
+   *
+   * `ads_absent_reason` travels WITH the empty list: «no ad-level rows in this window» and «no
+   * metric this objective can be ranked on» are different facts, and a heading over an empty grid is
+   * a claim about the client's advertising made by a gap in ours.
+   */
+  ads?: ReportAd[]
+  ads_level?: string | null
+  ads_absent_reason?: string | null
   store_funnel: StoreFunnelPayload | null
   freshness: Array<{
     provider: string

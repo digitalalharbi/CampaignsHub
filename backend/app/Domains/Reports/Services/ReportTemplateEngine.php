@@ -116,6 +116,19 @@ final class ReportTemplateEngine
         }
         $slides[] = ['id' => 'budget', 'type' => 'budget', 'order' => $order++, 'visible' => true];
         /*
+         * REPORT-AD-PREVIEW-001 — the ads themselves, near the end and before the interpretation.
+         *
+         * The deck carried ad-level rows and their media in `ads` and rendered none of them: the part
+         * a client actually recognises — the picture that ran — was a rank number on a coloured
+         * square. It sits after the money and before the observations, because it is EVIDENCE for
+         * what the observations are about to claim, and a reader who meets the conclusions first has
+         * already decided.
+         *
+         * A report whose generator found no ad-level rows still gets the section: it says why, which
+         * is a smaller and truer statement than a deck that quietly has no ads in it.
+         */
+        $slides[] = ['id' => 'ads', 'type' => 'ads', 'order' => $order++, 'visible' => true];
+        /*
          * The closing sequence §14.10 asks for, in its order: trends and comparisons → notes and
          * alerts → recommendations → data quality and freshness.
          *
