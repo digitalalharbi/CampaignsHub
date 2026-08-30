@@ -40,6 +40,7 @@ import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
 import { providerLabel } from './labels'
 import { AdPoster } from '@/features/content/AdPoster'
 import type { Locale } from '@/stores/ui'
+import { StatCard } from '@/components/ui/StatCard'
 
 type Sparkable = keyof MetricTotals
 
@@ -73,6 +74,14 @@ function deltaTone(key: Sparkable, delta: number | null | undefined): 'up' | 'do
   return invert ? (t === 'up' ? 'down' : 'up') : t
 }
 
+/**
+ * UX-KPI-PRESENTATION-001 — the shared card, with this surface's delta and spark passed in.
+ *
+ * The campaign centre drew its own: an 11px uppercase label, a `text-lg` figure, `p-3`. Beside the
+ * dashboard's cards — 13px label, 24px figure, `p-4` — the same programme's numbers looked like two
+ * products, and the only thing this card actually needed that the shared one lacked was somewhere to
+ * put a sparkline. That is now a slot on `StatCard`, so the copy is gone rather than reconciled.
+ */
 function KpiCard({
   label, value, sub, delta, deltaKey, spark,
 }: {
@@ -80,21 +89,22 @@ function KpiCard({
 }) {
   const tone = deltaKey ? deltaTone(deltaKey, delta) : trend(delta)
   const toneClass = tone === 'up' ? 'text-success' : tone === 'down' ? 'text-danger' : 'text-text-muted'
+
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-border bg-surface p-3">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-text-muted">{label}</span>
-      <span className="tnum text-lg font-extrabold text-text-primary">{value}</span>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] text-text-muted">{sub ?? ''}</span>
-        {delta != null && (
-          <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold ${toneClass}`}>
+    <StatCard
+      label={label}
+      value={value}
+      hint={sub}
+      trailing={
+        delta != null ? (
+          <span dir="ltr" className={`inline-flex items-center gap-0.5 text-[11px] font-semibold ${toneClass}`}>
             {tone === 'up' ? <TrendingUp size={11} /> : tone === 'down' ? <TrendingDown size={11} /> : null}
             {percent(Math.abs(delta), 0)}
           </span>
-        )}
-      </div>
-      {spark && spark.length > 1 && <KpiSparkline points={spark} height={26} />}
-    </div>
+        ) : undefined
+      }
+      spark={spark && spark.length > 1 ? <KpiSparkline points={spark} height={26} /> : undefined}
+    />
   )
 }
 
@@ -580,11 +590,19 @@ export function CampaignPlatformsTab({
   )
 }
 
+/**
+ * A figure inside a row of its own, deliberately smaller than a KPI card.
+ *
+ * Kept as its own element rather than folded into `StatCard`: these sit INSIDE a card, four to a
+ * line, as the detail under a headline figure. A KPI card nested in a KPI card is not a smaller
+ * card, it is a second reading of the same importance — which is the confusion the shared card
+ * exists to remove. It takes the shared label size so it reads as part of the same system.
+ */
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-surface-secondary p-2">
-      <div className="text-[10px] uppercase text-text-muted">{label}</div>
-      <div className="tnum text-sm font-bold text-text-primary">{value}</div>
+      <div className="text-[11px] font-semibold leading-tight text-text-muted">{label}</div>
+      <div className="tnum text-sm font-bold text-text-primary" dir="ltr">{value}</div>
     </div>
   )
 }
