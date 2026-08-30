@@ -431,7 +431,7 @@ export function PaidMediaIntake() {
                               </span>
                               <span className="text-[13px] font-bold text-text-primary">{ar ? b.titleAr : b.titleEn}</span>
                             </span>
-                            <span className="mt-1 text-[11.5px] leading-snug text-text-secondary">{ar ? b.forAr : b.forEn}</span>
+                            <span className="mt-1 text-[11px] leading-snug text-text-secondary">{ar ? b.forAr : b.forEn}</span>
                             <span className="mt-1.5 text-[11px] text-text-muted">
                               {ar ? 'يشمل' : 'Includes'} <span className="tnum font-semibold">{b.services.length}</span> {ar ? 'خدمات' : 'services'}
                             </span>
@@ -445,7 +445,7 @@ export function PaidMediaIntake() {
                       type="button"
                       data-testid="toggle-full-catalog"
                       onClick={() => setShowCatalog((v) => !v)}
-                      className="mt-3 text-[12.5px] font-semibold text-brand-600 hover:underline"
+                      className="mt-3 text-[12px] font-semibold text-brand-600 hover:underline"
                     >
                       {showCatalog
                         ? (ar ? 'إخفاء القائمة الكاملة' : 'Hide the full list')
