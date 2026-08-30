@@ -195,6 +195,18 @@ final class ObjectivePerformance
      */
     public function byPlatform(Carbon $from, Carbon $to): array
     {
+        /**
+         * The shape is declared because the accumulation below reaches it through a REFERENCE, and a
+         * reference is where static analysis loses the type: from `'platforms' => []` alone the
+         * platform map is an empty array forever, and every read of it afterwards is «offset does
+         * not exist on array{}». Writing the shape down is also the only place a reader can see what
+         * a platform row contains without executing the loop.
+         *
+         * @var array<string, array{
+         *     path: string, label_ar: string, label_en: string, headline_metrics: list<string>,
+         *     platforms: array<string, array<string, float|int|string|null>>
+         * }> $paths
+         */
         $paths = [];
 
         foreach (MarketingPath::cases() as $path) {
@@ -254,7 +266,6 @@ final class ObjectivePerformance
                 count($spending) === 1 => 'only_one_platform_spent',
                 default => 'nothing_spent_on_this_path',
             };
-            unset($path['platforms']['__none__']);
             $out[] = $path;
         }
 
@@ -288,6 +299,7 @@ final class ObjectivePerformance
      */
     public function leadersByPath(Carbon $from, Carbon $to): array
     {
+        /** @var array<string, array<string, array<string, float|int|string|null>>> $byPath */
         $byPath = [];
 
         foreach ($this->rows($from, $to) as $row) {
