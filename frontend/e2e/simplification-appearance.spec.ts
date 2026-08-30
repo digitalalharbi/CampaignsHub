@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH } from './helpers'
+import { AUTH, openFilters } from './helpers'
 
 /**
  * The simplified pages, in light and dark, in Arabic and English, on a phone and on a desktop.
@@ -136,6 +136,9 @@ for (const p of PAGES) {
          */
         const more = page.getByTestId(`${p.id}-more-filters`)
         if (vp.name === 'phone' && (await more.count()) > 0) {
+          // The bar folds on a phone (MOBILE-FILTERS-001), and «More filters» is one of the controls
+          // behind the fold — a reader opens it the same way.
+          await openFilters(page, p.id)
           await more.click()
           await expect(page.getByRole('dialog')).toBeVisible()
           expect(
