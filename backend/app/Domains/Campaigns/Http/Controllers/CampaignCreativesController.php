@@ -6,6 +6,7 @@ namespace App\Domains\Campaigns\Http\Controllers;
 
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -21,6 +22,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class CampaignCreativesController extends Controller
 {
+    public function __construct(private readonly CreativePresenter $presenter) {}
+
     /** Objective → the metric that ranks a creative (higher is better unless it's a cost). */
     private const RANK = [
         'sales' => ['roas', true], 'conversions' => ['roas', true],
@@ -63,8 +66,29 @@ final class CampaignCreativesController extends Controller
             return [
                 'id' => $c->id, 'name' => $c->name, 'client_display_name' => $c->client_display_name,
                 'provider' => $c->provider, 'format' => $c->format, 'status' => $c->status,
-                'thumbnail_url' => $c->thumbnail_url, 'preview_url' => $c->preview_url,
-                'has_preview' => $c->thumbnail_url !== null || $c->preview_url !== null,
+                /*
+                 * AD-PREVIEW-001 — the canonical preview, not a second opinion about one.
+                 *
+                 * This endpoint decided for itself what «has a preview» meant:
+                 * `thumbnail_url !== null || preview_url !== null`. That is wrong in both directions
+                 * at once.
+                 *
+                 * Too generous: `preview_url` is the platform's shareable link, and
+                 * `CreativePresenter` WITHHOLDS it when it carries a credential. So a creative whose
+                 * only link is withheld reported `has_preview: true`, the card asked for a picture,
+                 * and nothing arrived.
+                 *
+                 * Too mean: a creative with a real `asset_url` and no listing thumbnail — which is
+                 * every Meta image ad since AD-MEDIA-RECOVERY-001 started reading `image_url` —
+                 * reported `has_preview: false` and rendered «no preview» over an asset that was
+                 * sitting in the row.
+                 *
+                 * `preview()` is the one place those rules live, and it answers with a STATE
+                 * («available», «withheld», «expired», «unavailable») plus the reason, so the card
+                 * can say which of the three silences it is looking at instead of showing the same
+                 * grey box for all of them.
+                 */
+                'preview' => $this->presenter->preview($c),
                 'is_demo' => $c->is_demo,
                 'metrics' => [
                     'spend' => $spend, 'impressions' => $impr, 'clicks' => $clicks, 'conversions' => $conv, 'revenue' => $rev,

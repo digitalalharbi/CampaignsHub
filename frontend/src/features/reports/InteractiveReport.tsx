@@ -701,7 +701,7 @@ function CreativesSlide({ data, platform }: { data: ReportData; platform: string
   const medal = ['from-amber-400 to-amber-600', 'from-slate-300 to-slate-500', 'from-orange-400 to-orange-600']
   return (
     <div>
-      <Title platform={platform} sub="مُرتّبة حسب هدف الحملة مع سبب التصنيف">أفضل المحتويات — {platform}</Title>
+      <Title platform={platform} sub="مُرتّبة حسب هدف الحملة مع سبب التصنيف">أفضل الإعلانات — {platform}</Title>
       {items.length === 0 ? <p className="text-sm text-text-muted">لا محتويات مصنّفة لهذه المنصة.</p> : (
         <div className="grid gap-3 sm:grid-cols-3">
           {items.map((c, idx) => (
@@ -726,7 +726,7 @@ function CreativesSlide({ data, platform }: { data: ReportData; platform: string
 
       {weak.length > 0 && (
         <div className="mt-5">
-          <Title platform={platform} sub="بنفس مقياس هدف الحملة — ومقصورة على ما قاسته المنصة فعلًا">أضعف المحتويات — {platform}</Title>
+          <Title platform={platform} sub="بنفس مقياس هدف الحملة — ومقصورة على ما قاسته المنصة فعلًا">أضعف الإعلانات — {platform}</Title>
           <div className="grid gap-3 sm:grid-cols-3">
             {weak.map((c, idx) => (
               <div key={idx} className="flex flex-col overflow-hidden rounded-2xl border border-danger/30 bg-surface-secondary">
