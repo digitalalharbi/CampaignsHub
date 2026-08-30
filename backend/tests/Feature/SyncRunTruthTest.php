@@ -245,6 +245,48 @@ final class SyncRunTruthTest extends TestCase
         $this->assertArrayHasKey('mapped_rows', $row);
     }
 
+    /**
+     * A run that took a measurable amount of time still reports an int.
+     *
+     * `diffInSeconds()` returns a float in Carbon 3 — `11.0`, not `11` — and `max(0, 11.0)` hands
+     * that float back against a declared `?int`, so `durationSeconds()` raised a `TypeError` for
+     * every run that took longer than nothing.
+     *
+     * The test above already called this method and could not catch it, because of how `max()`
+     * breaks a tie: `max(0, 0.0)` returns the FIRST argument, the int `0`. Its fake sync finishes
+     * inside the same second on an unloaded machine, so the bug appeared only when CI was busy — the
+     * same commit passing 2,710 tests on one run and failing one assertion on the next. Eleven
+     * seconds, stated explicitly, is what makes it deterministic.
+     */
+    public function test_a_run_that_took_time_reports_a_whole_number_of_seconds(): void
+    {
+        $run = new MetricSyncRun;
+        $run->started_at = Carbon::parse('2026-08-01 10:00:00');
+        $run->finished_at = Carbon::parse('2026-08-01 10:00:11');
+
+        $this->assertIsInt($run->durationSeconds(), 'a float here is a TypeError on the sync log');
+        $this->assertSame(11, $run->durationSeconds());
+    }
+
+    /** And the tie that hid it: a run inside one second is a real zero, still an int. */
+    public function test_a_run_inside_one_second_reports_zero(): void
+    {
+        $run = new MetricSyncRun;
+        $run->started_at = Carbon::parse('2026-08-01 10:00:00');
+        $run->finished_at = Carbon::parse('2026-08-01 10:00:00');
+
+        $this->assertSame(0, $run->durationSeconds());
+    }
+
+    /** A run that has not finished has no duration to state, and says so with null rather than 0. */
+    public function test_an_unfinished_run_states_no_duration(): void
+    {
+        $run = new MetricSyncRun;
+        $run->started_at = Carbon::parse('2026-08-01 10:00:00');
+
+        $this->assertNull($run->durationSeconds());
+    }
+
     /** The three causes are told apart, because the customer's first question is which one it was. */
     public function test_the_trigger_is_read_from_what_asked_for_the_run(): void
     {
