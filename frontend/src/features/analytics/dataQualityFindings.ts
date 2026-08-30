@@ -200,3 +200,85 @@ function daysSince(date: string | null, today: Date): number | null {
 
   return Math.max(0, Math.floor((today.getTime() - then.getTime()) / 86_400_000))
 }
+
+/**
+ * DATA-QUALITY-OPERATOR-UX-001 — how much of this window is actually measured, said as a level with
+ * the numbers that produced it.
+ *
+ * ## Why a level and not a percentage on its own
+ *
+ * «Confidence: 84%» is a figure nobody can act on and nobody can check. It also claims a precision
+ * this data does not have: the denominator is days, the numerator is days a platform reported, and
+ * neither knows whether a missing day was a broken sync or a campaign nobody was running. So the
+ * level is the headline — high, moderate, low — and the inputs that produced it are printed beside
+ * it: how many days of how many, across how many sources, and which source is the reason.
+ *
+ * ## Stores are excluded from the count, not hidden
+ *
+ * A store's coverage is not measured in days with ad data — there is no daily row to be missing —
+ * so counting it would make the fraction a different thing per tenant. It is stated separately.
+ *
+ * ## The level is the worst honest reading
+ *
+ * A window with 99% coverage and one source whose authorisation has failed is not «high»: the missing
+ * source is missing entirely, and the days it never reported are not in the denominator at all. A
+ * critical or attention finding therefore caps the level, whatever the arithmetic says.
+ */
+export type ConfidenceLevel = 'high' | 'moderate' | 'low'
+
+export interface WindowConfidence {
+  level: ConfidenceLevel
+  /** Days reported over days expected, across the countable sources — or null when none are. */
+  coverage: number | null
+  daysWithData: number
+  daysExpected: number
+  /** Countable ad sources, and the ones excluded because days are not their unit. */
+  sourcesCounted: number
+  sourcesNotCountable: number
+  /** The single source most responsible, when there is one. */
+  worst: { provider: string; name: string | null } | null
+}
+
+export function windowConfidence(rows: FreshnessRow[], windowDays: number, findings: QualityFinding[]): WindowConfidence {
+  const countable = rows.filter((r) => r.kind !== 'store' && r.days_with_data !== null)
+  const notCountable = rows.length - countable.length
+
+  const daysExpected = countable.length * Math.max(0, windowDays)
+  const daysWithData = countable.reduce((n, r) => n + Math.min(r.days_with_data ?? 0, windowDays), 0)
+  const coverage = daysExpected === 0 ? null : daysWithData / daysExpected
+
+  const blocking = findings.filter((f) => f.severity === 'critical' || f.severity === 'attention')
+
+  const arithmetic: ConfidenceLevel =
+    coverage === null ? 'low' : coverage >= 0.95 ? 'high' : coverage >= 0.8 ? 'moderate' : 'low'
+
+  const level: ConfidenceLevel =
+    blocking.some((f) => f.severity === 'critical') ? 'low'
+      : blocking.length > 0 ? (arithmetic === 'high' ? 'moderate' : arithmetic)
+        : arithmetic
+
+  /*
+   * «Which source is the reason» — the finding that outranks the rest, or failing that the countable
+   * source with the fewest days. Named so the reader has somewhere to go rather than a global number.
+   */
+  const worstFinding = blocking[0] ?? findings[0] ?? null
+  const thinnest = countable.length === 0
+    ? null
+    : countable.reduce((a, b) => ((a.days_with_data ?? 0) <= (b.days_with_data ?? 0) ? a : b))
+
+  const worst = worstFinding !== null
+    ? { provider: worstFinding.provider, name: worstFinding.name }
+    : thinnest !== null && (thinnest.days_with_data ?? 0) < windowDays
+      ? { provider: thinnest.provider, name: thinnest.name }
+      : null
+
+  return {
+    level,
+    coverage,
+    daysWithData,
+    daysExpected,
+    sourcesCounted: countable.length,
+    sourcesNotCountable: notCountable,
+    worst,
+  }
+}

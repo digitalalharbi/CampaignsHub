@@ -33,7 +33,7 @@ import {
   type EntityRow,
   type MetricFilters,
 } from './hooks'
-import { findingsFor, type QualityFinding } from './dataQualityFindings'
+import { findingsFor, windowConfidence, type QualityFinding, type WindowConfidence } from './dataQualityFindings'
 import type { PlatformObjectives } from './api'
 import { scopeNote, type FilterScope } from './filterScope'
 import { CAMPAIGN_RELEVANCE_ORDER, orderByRelevanceWith, relevanceOf } from '@/features/campaigns/campaignRelevance'
@@ -74,6 +74,7 @@ import { providerLabel } from '@/features/campaigns/labels'
 const ANALYTICS_PLATFORMS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
 
 /** The objectives with a layout elsewhere in the product — the same six the dashboard offers. */
+import { countedAr, countedEn } from '@/lib/counted'
 import { useUi } from '@/stores/ui'
 import { accounts as countedAccounts } from '@/lib/counted'
 import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
@@ -1205,8 +1206,27 @@ export function QualityTab({ projectId, range, filters }: TabProps) {
    */
   const findings = useMemo(() => findingsFor(rows, new Date()), [rows])
 
+  /*
+   * How much of the window is actually measured — a LEVEL, with the numbers that produced it.
+   *
+   * The window's length comes from the range the reader chose rather than from the rows: a source
+   * that reported nothing at all still has days missing, and counting only the days somebody
+   * reported would rate a half-silent window as complete.
+   */
+  const windowDays = useMemo(() => {
+    const from = Date.parse(range.from)
+    const to = Date.parse(range.to)
+    return Number.isFinite(from) && Number.isFinite(to) ? Math.round((to - from) / 86_400_000) + 1 : 0
+  }, [range.from, range.to])
+
+  const confidence = useMemo(
+    () => windowConfidence(rows, windowDays, findings),
+    [rows, windowDays, findings],
+  )
+
   return (
     <div>
+      {!f.isLoading && rows.length > 0 && <WindowConfidenceLine c={confidence} windowDays={windowDays} ar={ar} />}
       <QualityFindings findings={findings} ar={ar} loading={f.isLoading} />
       <Panel title={ar ? 'جودة البيانات والإسناد' : 'Data quality & attribution'} description={ar ? 'آخر مزامنة، حداثة البيانات، والأيام الناقصة لكل منصة' : 'Last sync, how fresh the data is, and the missing days per platform'} loading={f.isLoading} error={f.isError} empty={!f.isLoading && rows.length === 0}>
       <MetricTable
@@ -1260,6 +1280,64 @@ export function QualityTab({ projectId, range, filters }: TabProps) {
  * that does not say which of those it is sends its reader to the wrong place, and a reader sent to
  * the wrong place twice stops opening the tab.
  */
+/**
+ * DATA-QUALITY-OPERATOR-UX-001 — «how much of this can I trust», answered with its own arithmetic.
+ *
+ * A bare «84%» is a figure nobody can check and nobody can act on, and it claims a precision this
+ * data does not have — a missing day is not distinguishable from a day nobody was running. So the
+ * level leads, the days that produced it follow, and the source most responsible is named, because a
+ * reader with a name has somewhere to go and a reader with a percentage has an argument.
+ */
+/** The counted forms of «source», which this line says twice. */
+const SOURCE_AR = { one: 'مصدر', two: 'مصدران', few: 'مصادر', many: 'مصدرًا' }
+
+function WindowConfidenceLine({ c, windowDays, ar }: { c: WindowConfidence; windowDays: number; ar: boolean }) {
+  const LEVEL: Record<WindowConfidence['level'], { ar: string; en: string; tone: string }> = {
+    high: { ar: 'عالية', en: 'High', tone: 'border-success/30 bg-success/5 text-success' },
+    moderate: { ar: 'متوسطة', en: 'Moderate', tone: 'border-warning/40 bg-warning/5 text-warning' },
+    low: { ar: 'منخفضة', en: 'Low', tone: 'border-danger/40 bg-danger/5 text-danger' },
+  }
+
+  const level = LEVEL[c.level]
+  const worst = c.worst === null ? null : (c.worst.name ?? providerLabel(c.worst.provider, ar ? 'ar' : 'en'))
+
+  return (
+    <div
+      data-testid="quality-confidence"
+      data-level={c.level}
+      className={`mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border p-3.5 text-sm ${level.tone}`}
+    >
+      <span className="font-bold">
+        {ar ? 'الثقة في أرقام هذه الفترة: ' : 'Confidence in this window: '}{ar ? level.ar : level.en}
+      </span>
+
+      <span className="text-text-secondary">
+        {c.coverage === null
+          ? (ar
+              ? 'لا مصدر تُقاس تغطيته بالأيام في هذه الفترة.'
+              : 'No source in this window is measured in days.')
+          : (ar
+              ? `${c.daysWithData} من ${c.daysExpected} يوم عبر ${countedAr(c.sourcesCounted, SOURCE_AR)} (${windowDays} يومًا لكل مصدر).`
+              : `${c.daysWithData} of ${c.daysExpected} days across ${countedEn(c.sourcesCounted, 'source', 'sources')} (${windowDays} days each).`)}
+      </span>
+
+      {worst !== null && (
+        <span className="text-text-secondary">
+          {ar ? `الأثر الأكبر: ${worst}.` : `Most of the gap: ${worst}.`}
+        </span>
+      )}
+
+      {c.sourcesNotCountable > 0 && (
+        <span className="text-text-muted">
+          {ar
+            ? `${countedAr(c.sourcesNotCountable, SOURCE_AR)} لا تُقاس تغطيته بالأيام (المتاجر) وخارج هذه النسبة.`
+            : `${countedEn(c.sourcesNotCountable, 'source', 'sources')} are not measured in days (stores) and are outside this figure.`}
+        </span>
+      )}
+    </div>
+  )
+}
+
 function QualityFindings({ findings, ar, loading }: { findings: QualityFinding[]; ar: boolean; loading: boolean }) {
   if (loading) {
     return null
