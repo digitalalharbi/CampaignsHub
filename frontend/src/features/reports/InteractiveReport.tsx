@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { attributionWindow } from './attributionWindow'
+import { ReportAdsSection, type ReportAd } from './ReportAdsSection'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDateTime } from '@/lib/datetime'
@@ -70,6 +71,16 @@ export interface ReportData {
   platforms: Row[]
   campaigns: Row[]
   top_creatives?: Row[]
+  /**
+   * REPORT-AD-PREVIEW-001 — the ADS, with the media that ran with them.
+   *
+   * `top_creatives` above ranks CAMPAIGNS and has said so since it was written. These are ad-level
+   * rows carrying the canonical preview block, so an ad whose file the platform withheld says the
+   * same sentence here as in the library.
+   */
+  ads?: ReportAd[]
+  ads_level?: string | null
+  ads_absent_reason?: string | null
   /** REPORT-WORST-CREATIVES-001 — measured underperformers, never merely unmeasured ones. */
   worst_creatives?: Row[]
   platform_notes?: Record<string, { strengths: string[]; weaknesses: string[] }>
@@ -237,6 +248,7 @@ export function SlideBody({ slide, data, meta }: { slide: Slide; data: ReportDat
     case 'platform_performance': return <PlatformSlide data={data} platform={slide.platform!} />
     case 'platform_screenshot': return <ScreenshotSlide platform={slide.platform!} />
     case 'top_creatives': return <CreativesSlide data={data} platform={slide.platform!} />
+    case 'ads': return <AdsSlide data={data} />
     case 'platform_notes': return <NotesSlide data={data} platform={slide.platform!} />
     case 'platform_comparison': return <ComparisonSlide data={data} />
     case 'objective_performance': return <ObjectiveSplitSlide data={data} />
@@ -722,6 +734,28 @@ function ScreenshotSlide({ platform }: { platform: string }) {
         <p className="text-sm">لم تُرفع لقطات بعد — تُضاف يدويًا من محرّر التقرير.</p>
         <p className="text-xs">اللقطة مرجعية بصرية؛ أرقام الأداء مصدرها API.</p>
       </div>
+    </div>
+  )
+}
+
+/**
+ * REPORT-AD-PREVIEW-001 — the ads that ran, in the copy the client keeps.
+ *
+ * The section itself is shared with the live link and the printed document, so the three cannot
+ * drift into showing different ads — or the same ad with different figures — for one scope.
+ */
+function AdsSlide({ data }: { data: ReportData }) {
+  const ar = useUi((s) => s.locale) === 'ar'
+
+  return (
+    <div>
+      <ReportAdsSection
+        ads={data.ads}
+        absentReason={data.ads_absent_reason}
+        level={data.ads_level}
+        locale={ar ? 'ar' : 'en'}
+        title={ar ? 'الإعلانات التي عملت' : 'The ads that ran'}
+      />
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
+import { ReportAdsSection } from './ReportAdsSection'
 import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDateTime } from '@/lib/datetime'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
@@ -398,6 +399,19 @@ export function LiveSharedReport({
           * Each row carries the system that produced it, exactly as the operator's own analytics tab
           * does. A client asking «من أين جاء هذا الرقم؟» gets the same answer their agency would.
           */}
+        {/*
+          REPORT-AD-PREVIEW-001 — the same section as the deck and the PDF, from the same payload key.
+        */}
+        <div className="mt-6">
+          <ReportAdsSection
+            ads={payload.ads}
+            absentReason={payload.ads_absent_reason}
+            level={payload.ads_level}
+            locale={ar ? 'ar' : 'en'}
+            title={ar ? 'الإعلانات التي عملت' : 'The ads that ran'}
+          />
+        </div>
+
         {payload.store_funnel && (
           <div data-testid="shared-store-funnel" className="rounded-2xl border border-border bg-surface p-4">
             <h3 className="font-bold text-text-primary">{ar ? 'الفانل والمتجر' : 'Funnel & store'}</h3>
