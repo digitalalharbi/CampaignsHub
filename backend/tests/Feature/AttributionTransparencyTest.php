@@ -106,6 +106,126 @@ final class AttributionTransparencyTest extends TestCase
     }
 
     /**
+     * CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — how much of what the platforms claim is the same sale.
+     *
+     * Every platform counts a purchase it believes it caused, on its own window, knowing nothing of
+     * the others. Add them up and one order bought after a TikTok video and a Meta retargeting ad is
+     * two orders. It is the commonest way an advertising report overstates itself, and it is
+     * invisible per platform: each number is honest on its own terms.
+     *
+     * The shop's ledger has one row per sale, so the arithmetic that IS available is a floor.
+     */
+    public function test_the_platforms_claim_more_sales_than_the_shop_recorded(): void
+    {
+        $this->conversions('meta', 40, revenue: 20_000);
+        $this->conversions('snapchat', 30, revenue: 15_000);
+
+        $store = $this->storeAccount();
+        foreach (range(1, 50) as $i) {
+            $this->order((string) (2000 + $i), 400.0, $store, $this->campaign('meta'));
+        }
+
+        $overlap = $this->build()['overlap'];
+
+        $this->assertTrue($overlap['available']);
+        $this->assertEqualsWithDelta(70.0, $overlap['platforms_claim'], 0.01);
+        $this->assertSame(50, $overlap['store_confirms']);
+        $this->assertSame(20, $overlap['at_least_duplicated']);
+        $this->assertEqualsWithDelta(1.4, $overlap['claims_per_confirmed_sale'], 0.001);
+
+        /*
+         * «At least», and the note says why.
+         *
+         * A claim with no confirmed sale behind it is one of three things and nothing here can tell
+         * them apart: two platforms claiming one order, a sale that never happened, or a real sale
+         * the shop cannot see. Calling it «duplicate conversions» would assert the interesting one
+         * without evidence.
+         */
+        $this->assertStringContainsString('floor, not a count', $overlap['note_en']);
+        $this->assertStringContainsString('two platforms both claimed', $overlap['note_en']);
+    }
+
+    /**
+     * Platforms claiming FEWER sales than the shop recorded is not negative overlap.
+     *
+     * Organic orders, a platform that under-reports, a window that does not line up — all ordinary,
+     * and none of them evidence of double counting. The floor is zero.
+     */
+    public function test_claims_below_the_ledger_are_no_evidence_of_overlap(): void
+    {
+        $this->conversions('meta', 10);
+
+        $store = $this->storeAccount();
+        foreach (range(1, 30) as $i) {
+            $this->order((string) (3000 + $i), 200.0, $store, $this->campaign('meta'));
+        }
+
+        $overlap = $this->build()['overlap'];
+
+        $this->assertSame(0, $overlap['at_least_duplicated']);
+        $this->assertSame(30, $overlap['store_confirms']);
+    }
+
+    /**
+     * Coverage bounds everything above it.
+     *
+     * Only orders the shop could attribute to a campaign are comparable at all. Measured against
+     * half a ledger, the gap is a claim about half a shop — and a reader who is not told that will
+     * read it as a claim about the whole one.
+     */
+    public function test_coverage_states_how_much_of_the_ledger_could_be_attributed(): void
+    {
+        $this->conversions('meta', 20);
+
+        $store = $this->storeAccount();
+        foreach (range(1, 6) as $i) {
+            $this->order((string) (4000 + $i), 100.0, $store, $this->campaign('meta'));
+        }
+        foreach (range(1, 4) as $i) {
+            // No campaign: a phone order, a direct visit, a link nobody tagged.
+            $this->order((string) (4100 + $i), 100.0, $store);
+        }
+
+        $overlap = $this->build()['overlap'];
+
+        $this->assertSame(10, $overlap['store_confirms']);
+        $this->assertSame(6, $overlap['attributed_orders']);
+        $this->assertEqualsWithDelta(0.6, $overlap['coverage'], 0.001);
+    }
+
+    /** With no ledger there is nothing to compare against, and the block says so rather than guessing. */
+    public function test_overlap_is_unavailable_without_a_store(): void
+    {
+        $this->conversions('meta', 40);
+
+        $overlap = $this->build()['overlap'];
+
+        $this->assertFalse($overlap['available']);
+        $this->assertSame('no_store_connected', $overlap['reason']);
+        $this->assertArrayNotHasKey('at_least_duplicated', $overlap);
+    }
+
+    /**
+     * And the sum still appears nowhere in `platform_reported`.
+     *
+     * The overlap block exists to show that summing the platforms is wrong; it must not become the
+     * place where the sum is finally published as an order count. It is labelled a CLAIM, it sits
+     * beside the ledger it is compared against, and the block that states platform figures still
+     * refuses to total them.
+     */
+    public function test_the_overlap_block_does_not_smuggle_a_platform_total_into_the_platform_section(): void
+    {
+        $this->conversions('meta', 40, revenue: 20_000);
+        $this->conversions('snapchat', 30, revenue: 15_000);
+
+        $out = $this->build();
+
+        $this->assertNotContains(70.0, $this->scalarsIn($out['platform_reported']));
+        $this->assertNull($out['platform_reported']['total_orders']);
+        $this->assertArrayNotHasKey('orders', $out['overlap']);
+    }
+
+    /**
      * Every numeric leaf of a nested payload, as floats.
      *
      * @return list<float>
