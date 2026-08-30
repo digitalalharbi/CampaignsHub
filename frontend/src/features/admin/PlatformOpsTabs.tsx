@@ -3,6 +3,7 @@ import { Info, Lock } from 'lucide-react'
 import { fetchIntegrations, fetchPermissions, fetchScheduledWork, fetchStatus, type ScheduledWorkRow } from './api'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
+import { days as countedDays } from '@/lib/counted'
 
 /**
  * The three read surfaces of ADMIN-003, mounted as tabs on `/admin/settings` rather than given rail
@@ -223,7 +224,7 @@ export function ScheduledWorkTab() {
     if (mins < 60) return ar ? `قبل ${mins} دقيقة` : `${mins}m ago`
     const hours = Math.round(mins / 60)
     if (hours < 48) return ar ? `قبل ${hours} ساعة` : `${hours}h ago`
-    return ar ? `قبل ${Math.round(hours / 24)} يومًا` : `${Math.round(hours / 24)}d ago`
+    return ar ? `قبل ${countedDays(Math.round(hours / 24), 'ar')}` : `${Math.round(hours / 24)}d ago`
   }
 
   return (

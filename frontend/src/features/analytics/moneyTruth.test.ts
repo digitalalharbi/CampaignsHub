@@ -175,7 +175,7 @@ describe('breakdown rows', () => {
     // 15,480.5 reads «15.5K» under NUMBER-PRESENTATION-001's three significant digits; what this
     // line is really asserting is that the figure is PRESENT and not withheld.
     expect(rowMoney(converted, 'spend')).toContain('15.5K')
-    expect(rowRoas(converted)).toBe('2.97x')
+    expect(rowRoas(converted)).toBe('2.97×')
   })
 
   /** A row that genuinely spent nothing must still say zero — this is a measurement. */

@@ -11,7 +11,8 @@ import {
   RankingBarChart,
 } from '@/features/analytics/charts'
 import { KpiCard, platformColor } from '@/features/analytics/components'
-import { moneyFromTotals } from '@/features/analytics/format'
+import { moneyFromTotals, ratio } from '@/features/analytics/format'
+import { campaigns as countedCampaigns } from '@/lib/counted'
 import { formatMoneyReading, moneyState, rankableMoney, readCostPer, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import { fetchLiveShared, type LivePayload } from './api'
 import { useUi } from '@/stores/ui'
@@ -148,7 +149,7 @@ export function LiveSharedReport({
     add_to_cart: { ar: 'الإضافات للسلة', en: 'Add to cart', format: (_t, p, _m, count) => count(p.funnel.find((f) => f.stage === 'add_to_cart')?.count) },
     purchases: { ar: 'المشتريات', en: 'Purchases', format: (t, _p, _m, count) => count(t.purchases) },
     revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, p) => moneyFromTotals(t as MoneyTotals, 'revenue', ar, p.currency).text },
-    roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => { const r = readRoas(t as MoneyTotals, ar); return r.value === null ? '—' : `${r.value.toFixed(2)}×` } },
+    roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => { const r = readRoas(t as MoneyTotals, ar); return ratio(r.value) } },
     cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (t, p, money) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cpa', 'conversions', p.currency, ar), (v) => money(v)) },
   }
 
@@ -366,7 +367,7 @@ export function LiveSharedReport({
                 {campaignSpendRank.dropped > 0 && (
                   <p className="mt-1 text-center text-[11px] text-text-muted">
                     {ar
-                      ? `${campaignSpendRank.dropped} حملة غير مُدرجة: مبالغ بانتظار سعر صرف أو بعملات متعددة`
+                      ? `${countedCampaigns(campaignSpendRank.dropped, 'ar')} غير مُدرجة: مبالغ بانتظار سعر صرف أو بعملات متعددة`
                       : `${campaignSpendRank.dropped} campaign(s) not included: amounts await a rate or span currencies`}
                   </p>
                 )}
