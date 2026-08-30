@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH } from './helpers'
+import { AUTH, openFilters } from './helpers'
 
 /**
  * `/agency` after SIMPLIFY-002 — the rail is grouped by job, and filters fold.
@@ -119,7 +119,8 @@ test.describe('agency filters are on the page, and name what they narrow', () =>
       path: '/agency/clients',
       narrow: async (bar: Bar) => {
         const page = bar.page()
-        await page.getByTestId('clients-more-filters').click()
+        await openFilters(page, 'clients')
+      await page.getByTestId('clients-more-filters').click()
         const dialog = page.getByTestId('clients-more-filters-body')
         await expect(dialog).toBeVisible()
         await dialog.getByRole('checkbox').first().check()
@@ -210,6 +211,7 @@ test.describe('agency filters are on the page, and name what they narrow', () =>
         'the loaded page scrolls sideways before the dialog is even opened',
       ).toBe(false)
 
+      await openFilters(page, 'clients')
       await page.getByTestId('clients-more-filters').click()
       await expect(page.getByRole('dialog')).toBeVisible()
 

@@ -48,6 +48,21 @@ export async function csrfHeaders(request: APIRequestContext): Promise<Record<st
   return { ...API_HEADERS, 'X-XSRF-TOKEN': decodeURIComponent(xsrf) }
 }
 
+/**
+ * Open a filter bar that is folded on a phone (MOBILE-FILTERS-001).
+ *
+ * Below `sm` the controls start behind a summary toggle, so the numbers are above the fold. A spec
+ * that operates a filter at a phone width has to open it first, exactly as a reader does. Above
+ * `sm` there is no toggle and this does nothing, so a spec can call it unconditionally.
+ */
+export async function openFilters(page: Page, id: string) {
+  const toggle = page.getByTestId(`${id}-filters-toggle`)
+  if (await toggle.isVisible().catch(() => false)) {
+    const controls = page.getByTestId(`${id}-filters-controls`)
+    if (!(await controls.isVisible().catch(() => false))) await toggle.click()
+  }
+}
+
 /** Flip the app to English for stable selectors (default locale is Arabic). */
 export async function switchToEnglish(page: Page) {
   const toggle = page.getByRole('button', { name: /Toggle language|EN|اللغة/ }).first()
