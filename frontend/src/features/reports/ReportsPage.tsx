@@ -329,21 +329,25 @@ export function ReportsPage() {
             </p>
           </div>
         ) : view === 'cards' ? (
-          <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
-            {rows.map((r) => (
-              <button key={r.id} onClick={() => setPreviewId(r.id)}
-                className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4 text-start transition-colors hover:border-brand-400">
-                <div className="flex items-start justify-between gap-2">
-                  <span className="line-clamp-1 font-bold text-text-primary">{r.name}</span>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[r.status] ?? ''}`}>{statusLabel(r.status, ar)}</span>
-                </div>
-                <span className="text-[11px] text-text-muted">{typeLabel(r.type)}</span>
-                <span className="tnum text-[11px] text-text-tertiary" dir="ltr">{r.period.from ?? '…'} → {r.period.to ?? '…'}</span>
-              </button>
-            ))}
-          </div>
+          <ReportCards rows={rows} ar={ar} typeLabel={typeLabel} onOpen={setPreviewId} />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            {/*
+              TYPOGRAPHY-PRODUCT-POLISH-001 — a five-column table does not fit a phone, whichever
+              view somebody chose on a desktop.
+
+              The table is 720px wide at its narrowest, so on a 390px screen it becomes a sideways
+              scroll through «Monthly — Executive Summary» broken over three lines and a date range
+              broken around its arrow. The choice between table and cards is a choice about a
+              DESKTOP; on a phone the card list is the only one of the two that can be read, so it
+              is what a phone gets. Nothing is hidden — the same rows, the same order, the same
+              names — and the toggle still does what it says the moment there is width for it.
+            */}
+            <div className="sm:hidden" data-testid="reports-phone-cards">
+              <ReportCards rows={rows} ar={ar} typeLabel={typeLabel} onOpen={setPreviewId} />
+            </div>
+
+          <div className="hidden overflow-x-auto sm:block">
             <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-border text-text-muted">
@@ -375,6 +379,7 @@ export function ReportsPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 
@@ -1165,5 +1170,44 @@ function ShareAccessHistory({
         </div>
       )}
     </Modal>
+  )
+}
+
+/**
+ * The report list as cards — the phone's only readable form, and the desktop's «cards» view.
+ *
+ * One component rather than two copies: the pair drifted the moment one of them gained a field, and
+ * a reader switching orientation would find a different list of facts about the same report.
+ */
+function ReportCards({
+  rows, ar, typeLabel, onOpen,
+}: {
+  rows: ReportRow[]
+  ar: boolean
+  typeLabel: (type: string) => string
+  onOpen: (id: string) => void
+}) {
+  return (
+    <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
+      {rows.map((r) => (
+        <button
+          key={r.id}
+          onClick={() => onOpen(r.id)}
+          data-testid="report-card"
+          className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4 text-start transition-colors hover:border-brand-400"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <span className="line-clamp-2 font-bold text-text-primary">{r.name}</span>
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[r.status] ?? ''}`}>
+              {statusLabel(r.status, ar)}
+            </span>
+          </div>
+          <span className="text-[11px] text-text-muted">{typeLabel(r.type)}</span>
+          <span className="tnum text-[11px] text-text-tertiary" dir="ltr">
+            {r.period.from ?? '…'} → {r.period.to ?? '…'}
+          </span>
+        </button>
+      ))}
+    </div>
   )
 }
