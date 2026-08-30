@@ -35,10 +35,8 @@ const EXEMPT = {
  * draws its own card is not on it, and fails.
  */
 const NOT_YET_MIGRATED = [
-  'src/features/admin/BillingPage.tsx',
   'src/features/agency/AgencyDashboardPage.tsx',
   'src/features/projects/PlatformIntegrationsPanel.tsx',
-  'src/features/requests/portal/ClientDashboardPage.tsx',
 ]
 
 describe('no surface draws its own KPI card', () => {

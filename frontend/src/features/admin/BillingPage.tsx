@@ -5,6 +5,7 @@ import {
   fetchPlans, fetchRevenue, fetchRevenueStreams, fetchSubscriptions, updatePlan,
   type PlatformPlan, type PlatformSubscription, type RevenueStream,
 } from './api'
+import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { Switch } from '@/components/ui/Switch'
 import { toApiError } from '@/lib/api/client'
@@ -490,21 +491,17 @@ function RevenueTab({ ar }: { ar: boolean }) {
           {ar ? 'لا اشتراكات نشطة، فلا قيمة ملتزَم بها.' : 'No active subscriptions, so nothing is committed.'}
         </p>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <StatGrid>
           {d.committed_monthly.map((row) => (
-            <li key={row.currency} data-testid={`committed-${row.currency}`} className="rounded-2xl border border-border bg-surface p-5">
-              <span className="tnum block font-heading text-2xl font-extrabold text-text-primary" dir="ltr">
-                {money(row.monthly, row.currency)}
-              </span>
-              <span className="mt-1 block text-sm font-semibold text-text-secondary">
-                {ar ? 'شهريًا (ملتزَم به)' : 'per month (committed)'}
-              </span>
-              <span className="tnum mt-1 block text-xs text-text-muted" dir="ltr">
-                {row.subscriptions} {ar ? 'اشتراك نشط' : 'active subscriptions'}
-              </span>
-            </li>
+            <StatCard
+              key={row.currency}
+              testid={`committed-${row.currency}`}
+              label={ar ? 'شهريًا (ملتزَم به)' : 'per month (committed)'}
+              value={money(row.monthly, row.currency)}
+              hint={ar ? `${row.subscriptions} اشتراك نشط` : `${row.subscriptions} active subscriptions`}
+            />
           ))}
-        </ul>
+        </StatGrid>
       )}
     </>
   )
