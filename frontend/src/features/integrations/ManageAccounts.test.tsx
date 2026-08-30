@@ -67,6 +67,15 @@ describe('managing the accounts of a connected source', () => {
       accounts: [account('a1', 'SFMA'), account('a2', 'Riyadh Store')],
       meta: { total: 2, per_page: 25, current_page: 1, last_page: 1 },
     } as never)
+    // Bound HERE: the picker must let it be unticked, which is the whole point of the screen.
+    vi.mocked(fetchDiscoveredAccounts).mockResolvedValue({
+      accounts: [
+        { ...account('a1', 'SFMA'), assigned: true, assigned_project_id: 'p1' },
+        account('a2', 'Riyadh Store'),
+        { ...account('a3', 'Someone else’s'), assigned: true, assigned_project_id: 'p2' },
+      ],
+      meta: { total: 3, per_page: 25, current_page: 1, last_page: 1 },
+    } as never)
     vi.mocked(listProjectBindings).mockResolvedValue([
       { id: 'b1', provider: 'linkedin', is_active: true, account: { id: 'a1', external_id: 'ext-a1', name: 'SFMA' } },
     ] as never)
@@ -115,5 +124,42 @@ describe('managing the accounts of a connected source', () => {
 
     expect(screen.queryByTestId('wizard-save-selection')).not.toBeInTheDocument()
     expect(screen.getByText('Continue')).toBeInTheDocument()
+  })
+
+  /**
+   * The rows this project already holds are the ones a reader came to change.
+   *
+   * The picker disabled every ASSIGNED account, and in manage mode every bound account is assigned
+   * by definition — so the only rows that could not be unticked were the ones the screen exists to
+   * untick. An account feeding ANOTHER project stays locked, because the server refuses it with a
+   * 409 and a control that cannot succeed should not invite the click.
+   */
+  it('lets this project’s own accounts be unticked, and locks another project’s', async () => {
+    renderWithProviders(<ConnectionWizard connectionId="c1" manageProjectId="p1" onClose={() => {}} />, { locale: 'en' })
+
+    const mine = (await screen.findByText('SFMA')).closest('li')!.querySelector('input[type="checkbox"]')!
+    expect(mine).toBeEnabled()
+    expect(mine).toBeChecked()
+
+    const theirs = screen.getByText('Someone else’s').closest('li')!.querySelector('input[type="checkbox"]')!
+    expect(theirs).toBeDisabled()
+
+    fireEvent.click(mine)
+    fireEvent.click(screen.getByTestId('wizard-save-selection'))
+
+    await waitFor(() => expect(vi.mocked(applyAccountSelection)).toHaveBeenCalled())
+    expect(vi.mocked(applyAccountSelection).mock.calls.at(-1)?.[0].externalAccountIds).not.toContain('a1')
+  })
+
+  /** «Select this page» is the page, and it skips what another project holds. */
+  it('selects the page without touching a row another project owns', async () => {
+    renderWithProviders(<ConnectionWizard connectionId="c1" manageProjectId="p1" onClose={() => {}} />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('wizard-select-page'))
+    fireEvent.click(screen.getByTestId('wizard-save-selection'))
+
+    await waitFor(() => expect(vi.mocked(applyAccountSelection)).toHaveBeenCalled())
+    const sent = vi.mocked(applyAccountSelection).mock.calls.at(-1)?.[0].externalAccountIds ?? []
+    expect([...sent].sort()).toEqual(['a1', 'a2'])
   })
 })
