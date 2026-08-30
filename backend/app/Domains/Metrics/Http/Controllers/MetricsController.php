@@ -14,6 +14,7 @@ use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Models\MetricDefinition;
 use App\Domains\Metrics\Services\AttributionTransparency;
+use App\Domains\Metrics\Services\BudgetExplanation;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\EntityMetricsAggregator;
 use App\Domains\Metrics\Services\MetricsAggregator;
@@ -593,6 +594,30 @@ final class MetricsController extends Controller
         return ApiResponse::success(
             $this->scoped($request)->budgetPacing($from, $to, Carbon::today()),
             'Budget pacing.',
+            meta: $this->meta($from, $to),
+        );
+    }
+
+    /**
+     * FUNNEL-ANALYTICAL-PATTERN-001 — the pacing table, read back in the funnel's own shape.
+     *
+     * The table is the SIGNAL and nothing else: a column of percentages the reader has to interpret
+     * every time — what 1.6 is measured against, why it happened, which figures say so, and what to
+     * do about it. This returns the other four steps beside it, over the same rows, so the two
+     * cannot disagree about which campaign is spending fastest.
+     */
+    public function budgetExplanation(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        return ApiResponse::success(
+            (new BudgetExplanation)->explain(
+                $this->scoped($request)->budgetPacing($from, $to, Carbon::today()),
+                $from,
+                $to,
+            ),
+            'Budget explanation.',
             meta: $this->meta($from, $to),
         );
     }

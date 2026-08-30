@@ -107,6 +107,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('metrics/objective-leaders', [MetricsController::class, 'objectiveLeaders'])->name('metrics.objective-leaders');
     Route::get('metrics/objective-explanations', [MetricsController::class, 'objectiveExplanations'])->name('metrics.objective-explanations');
     Route::get('metrics/budget', [MetricsController::class, 'budget'])->name('metrics.budget');
+    Route::get('metrics/budget-explanation', [MetricsController::class, 'budgetExplanation'])->name('metrics.budget-explanation');
     /*
      * BUDGET-GOVERNANCE-001 — the workspace's OWN limits, which the two routes above are not.
      *
