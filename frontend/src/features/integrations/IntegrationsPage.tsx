@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { KeyRound, Loader2, Plug, RefreshCw } from 'lucide-react'
@@ -19,6 +19,7 @@ import { toApiError } from '@/lib/api/client'
 import { useT, type TranslationKey } from '@/lib/i18n'
 import { sortByPlatform } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
+import { useProject } from '@/stores/project'
 
 /**
  * INTEG-UI-001 — the integrations page says which of four things is true, and what to do about it.
@@ -187,6 +188,7 @@ export function AdPlatformsPanel() {
     ? outcomeMessage(outcome, params.get('reason'), params.get('accounts'), ar)
     : null
 
+
   /** The six come first and in the products order; everything else keeps its place behind them. */
   const connectors = sortByPlatform(query.data ?? [], (c) => c.key)
 
@@ -216,7 +218,42 @@ export function AdPlatformsPanel() {
     (wizardStates.data?.connections ?? []).map((w) => [w.connection.provider, w]),
   )
   const unfinished = wizardStates.data?.resumable ?? []
+
+  /*
+   * INTEGRATION-DATASOURCE-WIZARD-001 §2 — coming back from OAuth resumes the SAME wizard.
+   *
+   * The callback lands here with `?provider=…&outcome=connected`, and until now that produced a
+   * green banner, a nudge, and a «Resume» button: three pieces of interface telling somebody who
+   * had just authorised a provider that there was one more thing to do, without doing it. The
+   * consent screen is the middle of a journey, not the end of one.
+   *
+   * Opened once per return — the ref, not the params — so dismissing the wizard does not reopen it
+   * on the next render while the query string is still in the address bar.
+   */
+  const resumedFromCallback = useRef(false)
+
+  useEffect(() => {
+    if (resumedFromCallback.current) return
+    if (outcome !== 'connected') return
+
+    const provider = params.get('provider')
+    const match = unfinished.find((u) => u.connection.provider === provider)
+    if (!match) return
+
+    resumedFromCallback.current = true
+    setManagingProjectId(null)
+    setWizardConnectionId(match.connection.id)
+  }, [outcome, params, unfinished])
   const [wizardConnectionId, setWizardConnectionId] = useState<string | null>(null)
+  /*
+   * INTEGRATION-DATASOURCE-WIZARD-001 §8 — the wizard opens in one of two modes.
+   *
+   * Null is «connect»: choose accounts, choose a project, confirm. A project id is «manage»: the
+   * same picker, opened on what this project already holds, saving a desired set the server diffs.
+   * The mode is a property of how it was opened, not a step the reader chooses.
+   */
+  const [managingProjectId, setManagingProjectId] = useState<string | null>(null)
+  const currentProjectId = useProject((s) => s.currentProjectId)
 
   return (
     <section className="space-y-4" data-testid="ad-platforms-panel">
@@ -317,7 +354,13 @@ export function AdPlatformsPanel() {
       ) : wizardConnectionId ? (
         <ConnectionWizard
           connectionId={wizardConnectionId}
-          onClose={() => { setWizardConnectionId(null); void wizardStates.refetch(); void query.refetch() }}
+          manageProjectId={managingProjectId}
+          onClose={() => {
+            setWizardConnectionId(null)
+            setManagingProjectId(null)
+            void wizardStates.refetch()
+            void query.refetch()
+          }}
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -326,7 +369,11 @@ export function AdPlatformsPanel() {
               key={c.key}
               connector={c}
               wizard={wizardByProvider.get(c.key) ?? null}
-              onOpenWizard={setWizardConnectionId}
+              onOpenWizard={(id) => { setManagingProjectId(null); setWizardConnectionId(id) }}
+              onManageAccounts={currentProjectId === null ? undefined : (id) => {
+                setManagingProjectId(currentProjectId)
+                setWizardConnectionId(id)
+              }}
               ar={ar}
               t={t}
               onAuthorize={() => authorizeMutation.mutate(c.key)}
@@ -392,7 +439,7 @@ export function AdPlatformsPanel() {
 }
 
 function ConnectorCard({
-  connector: c, wizard, onOpenWizard, ar, t, onAuthorize, onConnect, onSync, authorizing, connecting, syncing,
+  connector: c, wizard, onOpenWizard, onManageAccounts, ar, t, onAuthorize, onConnect, onSync, authorizing, connecting, syncing,
   onDisconnect, disconnecting,
 }: {
   connector: Connector
@@ -405,6 +452,13 @@ function ConnectorCard({
    */
   wizard: ResumableConnection | null
   onOpenWizard: (connectionId: string) => void
+  /**
+   * Reopen the picker on what THIS project holds — absent when no project is chosen.
+   *
+   * A binding belongs to a project, so «manage accounts» is meaningless from a tenant-wide view with
+   * no project in hand; the button is not drawn rather than drawn and refusing.
+   */
+  onManageAccounts?: (connectionId: string) => void
   ar: boolean
   t: (key: TranslationKey) => string
   onAuthorize: () => void
@@ -519,6 +573,20 @@ function ConnectorCard({
           </Button>
         ) : state === 'connected' ? (
           <>
+            {/*
+              First, because it is the action a connected source is actually used for: adding the
+              account that was created last week, or removing the one that closed. It costs no
+              authorisation — see `ApplyAccountSelection`.
+            */}
+            {onManageAccounts && wizard && (
+              <Button
+                variant="secondary"
+                onClick={() => onManageAccounts(wizard.connection.id)}
+                data-testid={`connector-manage-${c.key}`}
+              >
+                <Plug size={14} /> {ar ? 'إدارة الحسابات' : 'Manage accounts'}
+              </Button>
+            )}
             <Button variant="secondary" loading={syncing} onClick={onSync} data-testid={`connector-sync-${c.key}`}>
               <RefreshCw size={14} /> {t('sync')}
             </Button>
@@ -575,11 +643,40 @@ function ConnectorCard({
  * a binding, so this page is reachable before any project is chosen.
  */
 export function IntegrationsPage() {
+  const ar = useUi((s) => s.locale) === 'ar'
+  /*
+   * INTEGRATION-DATASOURCE-WIZARD-001 §11 — the inventory is not the page.
+   *
+   * Every account every connection reaches was rendered underneath the source cards, permanently.
+   * On the live Snapchat estate that is three hundred rows below the six cards somebody came for,
+   * and the page's own question — «what is connected, and does anything need me?» — was answered
+   * somewhere above a list nobody had asked for.
+   *
+   * It is still one click away, and it is the same panel: what changes is that a reader now asks
+   * for it. Closed by default, and the control says how to get back to it.
+   */
+  const [inventoryOpen, setInventoryOpen] = useState(false)
+
   return (
     <div className="flex flex-col gap-4">
       <AdPlatformsPanel />
       <StoresPanel />
-      <AccountsPanel />
+
+      <section className="flex flex-col gap-3">
+        <button
+          type="button"
+          data-testid="toggle-account-inventory"
+          aria-expanded={inventoryOpen}
+          onClick={() => setInventoryOpen((open) => !open)}
+          className="inline-flex w-fit items-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+        >
+          {inventoryOpen
+            ? (ar ? 'إخفاء جميع الحسابات' : 'Hide all accounts')
+            : (ar ? 'عرض جميع الحسابات المكتشفة' : 'Show every discovered account')}
+        </button>
+
+        {inventoryOpen && <AccountsPanel />}
+      </section>
     </div>
   )
 }

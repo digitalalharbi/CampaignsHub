@@ -445,4 +445,40 @@ describe('disconnecting a platform', () => {
     await screen.findByTestId('connector-sync-snapchat')
     expect(screen.queryByTestId('connector-disconnect-snapchat')).not.toBeInTheDocument()
   })
+
+  /**
+   * INTEGRATION-DATASOURCE-WIZARD-001 §2 — the consent screen is the middle of a journey.
+   *
+   * Coming back from OAuth produced a green banner, a nudge and a «Resume» button: three pieces of
+   * interface telling somebody who had just authorised a provider that there was one more thing to
+   * do, without doing it. The wizard opens itself on the connection the callback names.
+   */
+  it('resumes the wizard on the provider the callback names', async () => {
+    rows.data = [connector({ key: 'snapchat', label: 'Snapchat Ads', state: 'connected' })]
+    wizardStates.resumable = [{
+      state: 'needs_selection', discovered: 309, assigned: 0, synced: 0, has_parent: true, resumable: true, next_step: 'parent',
+      connection: { id: 'conn-1', provider: 'snapchat', label: 'Snapchat', label_ar: 'سناب شات', client_workspace_id: null },
+    }]
+
+    renderWithProviders(<IntegrationsPage />, {
+      locale: 'en',
+      route: '/app/integrations?provider=snapchat&outcome=connected&accounts=309',
+    })
+
+    expect(await screen.findByTestId('connection-wizard')).toBeInTheDocument()
+  })
+
+  /** A return that authorised nothing resumable leaves the page alone. */
+  it('does not open the wizard when the callback names a provider with nothing to finish', async () => {
+    rows.data = [connector({ key: 'meta', label: 'Meta Marketing API', state: 'connected' })]
+    wizardStates.resumable = []
+
+    renderWithProviders(<IntegrationsPage />, {
+      locale: 'en',
+      route: '/app/integrations?provider=meta&outcome=connected&accounts=2',
+    })
+
+    expect(await screen.findByTestId('integration-outcome')).toBeInTheDocument()
+    expect(screen.queryByTestId('connection-wizard')).not.toBeInTheDocument()
+  })
 })

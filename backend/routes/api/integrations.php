@@ -118,6 +118,13 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
         // RUNTIME-100 §10 — a whole selection confirmed as one decision. Declared before `{binding}`
         // would matter if that route were a POST; it is not, but the order documents the intent.
         Route::post('bindings/batch', [ProjectIntegrationController::class, 'bindBatch'])->name('bind-batch');
+        /*
+         * INTEGRATION-DATASOURCE-WIZARD-001 §8 — «Manage accounts» saves the DESIRED SET and the
+         * server derives the diff. A PUT because it is idempotent: the same set twice is the same
+         * decision. It asks for no new authorisation — the token that discovered these accounts is
+         * the token that binds them.
+         */
+        Route::put('selection', [ProjectIntegrationController::class, 'applySelection'])->name('selection');
         Route::post('bindings/{binding}/sync', [ProjectIntegrationController::class, 'sync'])->name('sync');
         Route::delete('bindings/{binding}', [ProjectIntegrationController::class, 'detach'])->name('detach');
     });

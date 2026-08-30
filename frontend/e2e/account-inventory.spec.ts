@@ -39,8 +39,18 @@ async function connectSandbox(request: import('@playwright/test').APIRequestCont
   })
 }
 
-/** The panel has resolved — a row OR the empty state. Both are real answers; a spinner is not. */
+/**
+ * Open the inventory, then wait for it to resolve.
+ *
+ * INTEGRATION-DATASOURCE-WIZARD-001 §11 — every discovered account is no longer rendered under the
+ * source cards by default: on the live Snapchat estate that is three hundred rows below the six
+ * cards somebody came for. It is one click away, and a reader asks for it — so this does too.
+ */
 async function inventoryResolved(page: import('@playwright/test').Page): Promise<void> {
+  const toggle = page.getByTestId('toggle-account-inventory')
+  await expect(toggle).toBeVisible({ timeout: 15000 })
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
+
   await expect(
     page.locator('[data-testid="inventory-row"], [data-testid="inventory-empty"]').first(),
     'the account inventory never finished loading',
