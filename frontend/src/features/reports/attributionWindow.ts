@@ -16,6 +16,14 @@ export type AttributionWindowReading = {
   known: boolean
 }
 
+/*
+ * Deliberately NOT `lib/counted`, and this is the one place in the product that is true.
+ *
+ * That module counts a figure and its noun — «1 يوم», «2 يومان» — which is what a KPI and a summary
+ * line want. This is PROSE: «نقرة خلال يوم واحد» and «نقرة خلال يومين», where the numeral is not
+ * read as a figure at all and «خلال 1 يوم» is what a machine writes. The shared rule and this one
+ * agree from three upwards, which is where the counting actually starts.
+ */
 const DAYS_AR = (n: number): string => (n === 1 ? 'يوم واحد' : n === 2 ? 'يومين' : n <= 10 ? `${n} أيام` : `${n} يومًا`)
 
 export function attributionWindow(raw: string | null | undefined, ar: boolean): AttributionWindowReading {

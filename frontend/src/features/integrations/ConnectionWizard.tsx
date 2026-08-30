@@ -12,6 +12,7 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { Refusal } from '@/lib/api/errors'
 import { useUi } from '@/stores/ui'
+import { accounts as countedAccounts } from '@/lib/counted'
 
 /**
  * ORCH-100 §3 §5 §6 — choosing what to connect, after the provider has said what exists.
@@ -282,7 +283,7 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
         {/* Available and connected are different numbers and are shown as different numbers. */}
         <p className="text-sm text-text-muted" data-testid="wizard-inventory">
           {ar
-            ? `${h.discovered_count} حسابًا متاحًا · ${h.assigned_count} مربوطًا`
+            ? `${countedAccounts(h.discovered_count, 'ar')} متاح · ${h.assigned_count} مربوط`
             : `${h.discovered_count} available · ${h.assigned_count} connected`}
         </p>
       </header>
@@ -348,7 +349,7 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
                     <span className="truncate text-xs text-text-muted" dir="ltr">{p.external_id}</span>
                   </span>
                   <span className="shrink-0 text-sm text-text-muted">
-                    {ar ? `${p.account_count} حساب` : `${p.account_count} accounts`}
+                    {countedAccounts(p.account_count, ar ? 'ar' : 'en')}
                   </span>
                 </button>
               </li>
@@ -630,7 +631,7 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
             <p className="flex items-start gap-2 rounded-lg bg-warning-soft p-3 text-sm text-warning" data-testid="wizard-over-limit">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               {ar
-                ? `اخترت ${selected.size} حسابًا، والمتاح في خطتك ${Math.max(0, (adAccounts?.limit ?? 0) - (adAccounts?.used ?? 0))}. عدّل الاختيار أو ارقِ الخطة.`
+                ? `اخترت ${countedAccounts(selected.size, 'ar')}، والمتاح في خطتك ${Math.max(0, (adAccounts?.limit ?? 0) - (adAccounts?.used ?? 0))}. عدّل الاختيار أو ارقِ الخطة.`
                 : `You selected ${selected.size}; your plan has ${Math.max(0, (adAccounts?.limit ?? 0) - (adAccounts?.used ?? 0))} remaining. Adjust the selection or upgrade.`}
             </p>
           )}

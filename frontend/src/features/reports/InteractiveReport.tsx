@@ -23,6 +23,7 @@ import type { MetricReading } from '@/components/ui/MetricStrip'
 import { SPECS } from '@/features/analytics/metricCatalog'
 import { type ReportMetric, creativeReadings, previousReading, reportMetrics, trendSeries } from './reportMetrics'
 import { useUi } from '@/stores/ui'
+import { campaigns as countedCampaigns } from '@/lib/counted'
 import { ReportOutline } from './ReportOutline'
 
 export interface Slide { id: string; type: string; platform?: string; order: number; visible: boolean }
@@ -961,7 +962,7 @@ function ObjectiveSplitSlide({ data }: { data: ReportData }) {
               {p.result_metrics_apply
                 ? <div>CPA {money(p.cpa, c)} · ROAS {ratio(p.roas)}</div>
                 : <div>لا تنطبق تكلفة الطلب على هذا المسار</div>}
-              <div>{p.campaigns.length} حملة</div>
+              <div>{countedCampaigns(p.campaigns.length, 'ar')}</div>
             </div>
           </div>
         ))}

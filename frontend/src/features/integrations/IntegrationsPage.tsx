@@ -110,7 +110,7 @@ function outcomeMessage(outcome: string, reason: string | null, accounts: string
       return {
         tone: 'ok',
         text: ar
-          ? `تم الربط بنجاح. تم اكتشاف ${accounts ?? '0'} حساب إعلاني.`
+          ? `تم الربط بنجاح. تم اكتشاف ${adAccounts(Number(accounts ?? 0), 'ar')}.`
           : `Connected. ${accounts ?? '0'} ad account(s) discovered.`,
       }
     case 'denied':
@@ -819,7 +819,7 @@ function DisconnectButton({
     >
       {armed
         ? (ar
-            ? `تأكيد — سيتوقف ${accounts} حسابًا عن المزامنة`
+            ? `تأكيد — سيتوقف ${accountsCounted(accounts, 'ar')} عن المزامنة`
             : `Confirm — ${accounts} account(s) stop syncing`)
         : (ar ? 'قطع الاتصال' : 'Disconnect')}
     </Button>

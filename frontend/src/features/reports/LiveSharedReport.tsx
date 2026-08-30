@@ -12,6 +12,7 @@ import {
 } from '@/features/analytics/charts'
 import { KpiCard, platformColor } from '@/features/analytics/components'
 import { moneyFromTotals, ratio } from '@/features/analytics/format'
+import { campaigns as countedCampaigns } from '@/lib/counted'
 import { formatMoneyReading, moneyState, rankableMoney, readCostPer, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import { fetchLiveShared, type LivePayload } from './api'
 import { useUi } from '@/stores/ui'
@@ -366,7 +367,7 @@ export function LiveSharedReport({
                 {campaignSpendRank.dropped > 0 && (
                   <p className="mt-1 text-center text-[11px] text-text-muted">
                     {ar
-                      ? `${campaignSpendRank.dropped} حملة غير مُدرجة: مبالغ بانتظار سعر صرف أو بعملات متعددة`
+                      ? `${countedCampaigns(campaignSpendRank.dropped, 'ar')} غير مُدرجة: مبالغ بانتظار سعر صرف أو بعملات متعددة`
                       : `${campaignSpendRank.dropped} campaign(s) not included: amounts await a rate or span currencies`}
                   </p>
                 )}

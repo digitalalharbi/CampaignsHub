@@ -3,6 +3,8 @@ import { money, num, percent } from './format'
 import type { Attribution, PlatformClaim } from './api'
 import { providerLabel } from '@/features/campaigns/labels'
 import type { Locale } from '@/stores/ui'
+import { campaigns as countedCampaigns } from '@/lib/counted'
+import { days as countedDays } from '@/lib/counted'
 
 /**
  * REPORT-OBJECTIVE-005 — the two systems that answer «كم بعنا؟», kept apart on screen.
@@ -214,7 +216,7 @@ export function AttributionPanel({
                     <span className="font-semibold text-warning">{ar ? 'غير محدَّد' : 'Not set'}</span>
                   )}
                   <span className="ms-2 text-text-muted">
-                    {ar ? `${num(m.campaigns)} حملة` : `${num(m.campaigns)} campaigns`}
+                    {countedCampaigns(m.campaigns, ar ? 'ar' : 'en')}
                   </span>
                 </li>
               ))}
@@ -282,7 +284,7 @@ function ClaimRow({ claim, ar, locale }: { claim: PlatformClaim; ar: boolean; lo
           <>
             <span>
               {ar
-                ? `نقرة ${a.click_through_days} يوم`
+                ? `نقرة ${countedDays(a.click_through_days ?? 0, 'ar')}`
                 : `${a.click_through_days}d click`}
             </span>
             <span className="ms-2">
@@ -291,7 +293,7 @@ function ClaimRow({ claim, ar, locale }: { claim: PlatformClaim; ar: boolean; lo
                   ? '· بلا مشاهدة'
                   : '· no view-through'
                 : ar
-                  ? `· مشاهدة ${a.view_through_days} يوم`
+                  ? `· مشاهدة ${countedDays(a.view_through_days as number, 'ar')}`
                   : `· ${a.view_through_days}d view`}
             </span>
             {a.mixed_windows && (

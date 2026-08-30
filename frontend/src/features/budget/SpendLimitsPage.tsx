@@ -1,5 +1,6 @@
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
+import { days as countedDays } from '@/lib/counted'
 import { Panel } from '@/features/analytics/components'
 import { EmptyState } from '@/components/ui/States'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
@@ -208,7 +209,9 @@ function LimitCard({
           label={ar ? 'الإيقاع' : 'Pace'}
           /* >1 is ahead of plan, against the elapsed share of the limit — not against all of it. */
           value={limit.pace === null ? '—' : `${num(limit.pace * 100)}%`}
-          hint={ar ? `مضى ${limit.elapsed_days} من ${limit.period.days} يومًا` : `${limit.elapsed_days} of ${limit.period.days} days elapsed`}
+          hint={ar
+            ? `مضى ${limit.elapsed_days} من ${countedDays(limit.period.days, 'ar')}`
+            : `${limit.elapsed_days} of ${countedDays(limit.period.days, 'en')} elapsed`}
         />
       </StatGrid>
 

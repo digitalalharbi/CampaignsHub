@@ -38,6 +38,7 @@ import { MetricStrip } from '@/components/ui/MetricStrip'
 import { ConciseFindingLine } from './ConciseFindingLine'
 import { DataFreshness, PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
+import { days as countedDays } from '@/lib/counted'
 import { sortPlatforms } from '@/lib/platforms'
 import { useUrlList, useUrlNumber, useUrlState } from '@/features/analytics/filterUrlState'
 import { useProject } from '@/stores/project'
@@ -79,7 +80,7 @@ const COPY = {
     days7: '7 أيام',
     days30: '30 يوم',
     days90: '90 يوم',
-    previous: (n: number) => `الـ${n} يومًا السابقة`,
+    previous: (n: number) => `الـ${countedDays(n, 'ar')} السابقة`,
     mixedNote: 'أهداف مختلطة — تُعرض المؤشرات التشغيلية المشتركة فقط، بلا تكلفة نتيجة أو عائد مُجمَّع.',
     campaigns: 'الحملات',
     analytics: 'التحليلات',
@@ -113,7 +114,7 @@ const COPY = {
     days7: '7 days',
     days30: '30 days',
     days90: '90 days',
-    previous: (n: number) => `the previous ${n} days`,
+    previous: (n: number) => `the previous ${countedDays(n, 'en')}`,
     mixedNote: 'Mixed objectives — shared operational figures only, with no blended cost per result or return.',
     campaigns: 'Campaigns',
     analytics: 'Analytics',

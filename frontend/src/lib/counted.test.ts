@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { accounts, adAccounts, connectedAccounts, countedAr } from './counted'
+import { accounts, adAccounts, campaigns, clients, connectedAccounts, countedAr, days } from './counted'
 
 /**
  * The four Arabic forms, and the boundaries nobody remembers at a call site.
@@ -45,5 +45,17 @@ describe('counting a noun', () => {
     expect(connectedAccounts(2, 'ar')).toBe('2 حسابان مربوطان')
     expect(connectedAccounts(6, 'ar')).toBe('6 حسابات مربوطة')
     expect(connectedAccounts(1, 'en')).toBe('1 account connected')
+  })
+
+  /** The nouns this product counts on nearly every screen, each on its own boundaries. */
+  it('counts campaigns, clients and days the same way', () => {
+    expect(campaigns(1, 'en')).toBe('1 campaign')
+    expect(campaigns(1, 'ar')).toBe('1 حملة')
+    expect(campaigns(4, 'ar')).toBe('4 حملات')
+    expect(clients(2, 'ar')).toBe('2 عميلان')
+    expect(clients(12, 'ar')).toBe('12 عميلًا')
+    expect(days(7, 'ar')).toBe('7 أيام')
+    expect(days(30, 'ar')).toBe('30 يومًا')
+    expect(days(1, 'en')).toBe('1 day')
   })
 })

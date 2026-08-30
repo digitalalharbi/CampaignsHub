@@ -1,3 +1,4 @@
+import { days as countedDays } from '@/lib/counted'
 import type { FreshnessRow } from './api'
 import type { SyncStatus } from '@/lib/syncStatus'
 
@@ -130,8 +131,8 @@ function findingFor(row: FreshnessRow, today: Date): QualityFinding[] | null {
       severity: 'attention',
       owner: 'system',
       what: {
-        ar: `لم تصل بيانات من هذه المنصة منذ ${silent ?? STALE_DAYS} يوم.`,
-        en: `No data has arrived from this platform for ${silent ?? STALE_DAYS} days.`,
+        ar: `لم تصل بيانات من هذه المنصة منذ ${countedDays(silent ?? STALE_DAYS, 'ar')}.`,
+        en: `No data has arrived from this platform for ${countedDays(silent ?? STALE_DAYS, 'en')}.`,
       },
       affects: {
         ar: 'الأيام الأخيرة في هذه الفترة ناقصة، فالإجماليات أقل مما ستكون عليه بعد اللحاق.',
@@ -155,8 +156,8 @@ function findingFor(row: FreshnessRow, today: Date): QualityFinding[] | null {
       severity: 'watch',
       owner: 'system',
       what: {
-        ar: `${row.missing_days} يوم داخل الفترة بلا بيانات من هذه المنصة.`,
-        en: `${row.missing_days} days inside this window have no data from this platform.`,
+        ar: `${countedDays(row.missing_days ?? 0, 'ar')} داخل الفترة بلا بيانات من هذه المنصة.`,
+        en: `${countedDays(row.missing_days ?? 0, 'en')} inside this window have no data from this platform.`,
       },
       affects: {
         ar: 'المنحنى يهبط في تلك الأيام، والمتوسطات محسوبة على أيام أقل مما تظن.',

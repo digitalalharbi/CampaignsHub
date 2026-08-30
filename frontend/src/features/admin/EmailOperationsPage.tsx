@@ -9,6 +9,7 @@ import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { useUi } from '@/stores/ui'
+import { days as countedDays } from '@/lib/counted'
 
 const STATE_WORDS: Record<string, { ar: string; en: string; tone: string }> = {
   sent: { ar: 'أُرسلت', en: 'Sent', tone: 'text-success' },
@@ -124,11 +125,11 @@ export function EmailOperationsPage() {
             <Field label={ar ? 'الفترة' : 'Period'} htmlFor="f-days">
               <Select
                 id="f-days" value={String(days)} onChange={(e) => { setDays(Number(e.target.value)); setPage(1) }}
-                // Arabic counts 3–10 with the plural: «آخر 7 أيام», «آخر 30 يومًا». Two mistakes in
-                // three characters, which MAIL-007 recorded the first time.
+                // The counted-noun rule lives in one module now (`lib/counted`), so «آخر 7 أيام»
+                // and «آخر 30 يومًا» are derived rather than remembered here.
                 options={[7, 30, 90].map((d) => ({
                   value: String(d),
-                  label: ar ? `آخر ${d} ${d <= 10 ? 'أيام' : 'يومًا'}` : `Last ${d} days`,
+                  label: ar ? `آخر ${countedDays(d, 'ar')}` : `Last ${countedDays(d, 'en')}`,
                 }))}
               />
             </Field>
