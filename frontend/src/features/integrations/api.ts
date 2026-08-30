@@ -1,4 +1,4 @@
-import { ensureCsrfCookie, getData, postData } from '@/lib/api/client'
+import { ensureCsrfCookie, getData, postData, putData } from '@/lib/api/client'
 
 /**
  * The states one of the six ad platforms can honestly be in, as a TENANT sees them (INTEG-UI-001).
@@ -261,6 +261,52 @@ export async function confirmAccountSelection(input: {
     external_account_ids: input.externalAccountIds,
     purpose: 'advertising',
     primary_external_account_id: input.primaryExternalAccountId ?? null,
+  })
+}
+
+export interface ProjectBinding {
+  id: string
+  provider: string
+  is_active: boolean
+  account: { id: string; external_id: string; name: string } | null
+}
+
+/**
+ * What this project holds right now — the starting point «Manage accounts» opens on.
+ *
+ * The picker needs it before the first page of the catalogue loads: a bound account on page four
+ * must open ticked, and a selection seeded from whatever page happens to be on screen would silently
+ * unbind everything the reader has not scrolled to.
+ */
+export function listProjectBindings(projectId: string): Promise<ProjectBinding[]> {
+  return getData<ProjectBinding[]>(`/projects/${projectId}/integrations`)
+}
+
+/**
+ * INTEGRATION-DATASOURCE-WIZARD-001 §8 — «Manage accounts» sends the DESIRED SET.
+ *
+ * Not «add these and remove those»: that describes a state the browser read some seconds ago, and
+ * two operators managing the same project would each undo the other's change. The server compares
+ * the desired set with what is bound now and returns the diff it applied, so sending the same set
+ * twice is the same decision and changes nothing the second time.
+ *
+ * An EMPTY list is a legitimate answer here — «this project keeps none of them» — and is refused by
+ * `confirmAccountSelection`, which answers a different question: which accounts shall this project
+ * START with.
+ *
+ * It asks for no new authorisation: the token that discovered these accounts is the token that
+ * binds them.
+ */
+export async function applyAccountSelection(input: {
+  projectId: string
+  connectionId: string
+  externalAccountIds: string[]
+}): Promise<{ added: string[]; unchanged: string[]; removed: string[] }> {
+  await ensureCsrfCookie()
+  return putData(`/projects/${input.projectId}/integrations/selection`, {
+    connection_id: input.connectionId,
+    external_account_ids: input.externalAccountIds,
+    purpose: 'advertising',
   })
 }
 
