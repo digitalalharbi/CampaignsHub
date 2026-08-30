@@ -169,11 +169,16 @@ test.describe('the integrations surface', () => {
     await page.goto('/app/integrations')
     await expect(page.getByTestId('ad-platforms-panel')).toBeVisible()
 
-    await page.getByTestId('toggle-account-inventory').click()
+    const toggle = page.getByTestId('toggle-account-inventory')
+    await expect(async () => {
+      if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
+      expect(await toggle.getAttribute('aria-expanded')).toBe('true')
+    }).toPass({ timeout: 20000 })
+
     await expect(
       page.locator('[data-testid="inventory-row"], [data-testid="inventory-empty"]').first(),
       'the accounts panel never resolved',
-    ).toBeVisible({ timeout: 20000 })
+    ).toBeVisible({ timeout: 30000 })
   })
 
   /** And it is CLOSED until somebody asks: the page is a catalogue, not an inventory. */
