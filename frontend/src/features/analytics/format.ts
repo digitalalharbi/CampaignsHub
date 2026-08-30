@@ -14,11 +14,48 @@ import { formatFixed, formatNumber } from '@/lib/numerals'
  * codes never come through here and are unaffected.
  */
 
+/**
+ * NUMBER-PRESENTATION-001 — one compact rule for the whole product: 1K · 1.3K · 32.4K · 1.99M · 4.85M.
+ *
+ * ## Why it is significant digits and not a decimal count
+ *
+ * This used to pick decimals by magnitude — one below ten thousand, none above — so 32,400 printed
+ * «32K» and 4,850,000 printed «4.9M». Both are lies of the accurate kind: they are what the number
+ * rounds to, and they are not what the reader needs to compare two rows. «32K» and «32K» beside each
+ * other can be 32,000 and 32,999, a difference of a thousand results, and nothing on screen hints at
+ * it. Three significant digits keeps the precision that distinguishes rows at every magnitude, and
+ * Intl drops the trailing zeros for free, which is why 1,000 reads «1K» rather than «1.0K».
+ *
+ * ## What it must never do
+ *
+ * Change the meaning. `compact` is for a card, a chart tick and a dense table cell; the exact figure
+ * stays one hover or one detail view away ({@link num} formats it), and a surface whose whole job is
+ * the precise number — an invoice line, a cost-per in a report strip — calls that instead.
+ *
+ * Currency is never folded into the abbreviation: {@link money} appends the code, so «4.85M SAR» is
+ * unambiguous where «4.85M» alone would not be.
+ *
+ * The suffixes stay Latin — K, M, B — in both languages, for the same reason the digits do: an
+ * Arabic screenshot has to stay comparable with the English one.
+ */
+const COMPACT_UNITS: readonly (readonly [number, string])[] = [
+  [1_000_000_000, 'B'],
+  [1_000_000, 'M'],
+  [1_000, 'K'],
+]
+
 export function compact(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—'
   const abs = Math.abs(n)
-  if (abs >= 1_000_000) return formatFixed(n / 1_000_000, abs >= 10_000_000 ? 0 : 1) + 'M'
-  if (abs >= 1_000) return formatFixed(n / 1_000, abs >= 10_000 ? 0 : 1) + 'K'
+
+  for (const [size, suffix] of COMPACT_UNITS) {
+    if (abs >= size) {
+      // `maximumSignificantDigits` and NOT `maximumFractionDigits`: the point is to keep three
+      // digits of information whatever the magnitude, and to stop showing digits that carry none.
+      return formatNumber(n / size, { maximumSignificantDigits: 3, useGrouping: false }) + suffix
+    }
+  }
+
   /*
    * COMPACT-ZERO-001 — a real figure below one must not be rounded away to «0».
    *

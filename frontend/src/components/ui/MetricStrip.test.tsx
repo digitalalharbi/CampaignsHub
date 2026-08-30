@@ -162,3 +162,33 @@ describe('reading', () => {
   })
 
 })
+
+/**
+ * NUMBER-PRESENTATION-001 — the card shows the compact figure and holds the exact one.
+ *
+ * A `title` and not a custom tooltip: it is the one hover that also reaches a screen reader, and it
+ * survives being inside a chart card, a table cell or a printed page.
+ */
+describe('the compact value keeps the exact one within reach', () => {
+  it('hangs the full figure on the value it abbreviated', () => {
+    render(
+      <MetricStrip
+        primary={[{ key: 'spend', label: 'Spend', reading: { kind: 'value', text: '4.85M SAR', exact: '4,850,321 SAR' } }]}
+        secondary={[]}
+      />,
+    )
+
+    expect(screen.getByText('4.85M SAR')).toHaveAttribute('title', '4,850,321 SAR')
+  })
+
+  it('attaches no title when nothing was abbreviated', () => {
+    render(
+      <MetricStrip
+        primary={[{ key: 'spend', label: 'Spend', reading: { kind: 'value', text: '940 SAR' } }]}
+        secondary={[]}
+      />,
+    )
+
+    expect(screen.getByText('940 SAR')).not.toHaveAttribute('title')
+  })
+})

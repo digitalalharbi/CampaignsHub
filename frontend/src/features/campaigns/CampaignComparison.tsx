@@ -353,7 +353,7 @@ function PlatformSplit({ rows }: { rows: CompareCampaign[] }) {
 /** Top creatives per campaign. Thumbnails are shown only when the platform actually returned one. */
 function CreativeSplit({ rows }: { rows: CompareCampaign[] }) {
   return (
-    <ChartCard title="أبرز المحتويات" subtitle="أعلى ٣ إنفاقًا في كل حملة">
+    <ChartCard title="أبرز المحتويات" subtitle="أعلى 3 إنفاقًا في كل حملة">
       <div className="space-y-3">
         {rows.map((r) => (
           <div key={r.campaign_id}>
