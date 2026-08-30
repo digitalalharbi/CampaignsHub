@@ -481,4 +481,28 @@ describe('disconnecting a platform', () => {
     expect(await screen.findByTestId('integration-outcome')).toBeInTheDocument()
     expect(screen.queryByTestId('connection-wizard')).not.toBeInTheDocument()
   })
+
+  /**
+   * INTEGRATION-DATASOURCE-WIZARD-001 §1 §14 — the card says what the CONNECTION is doing.
+   *
+   * «متصل» describes the platform: an app is registered and somebody authorised it. Whether the
+   * accounts behind that authorisation are syncing, one has lost access, or none has been chosen is
+   * a different question — and it is the one somebody opens this page to ask. A green chip over a
+   * connection with an account in trouble is why nobody went and looked.
+   */
+  it('shows the connection state over the platform state', async () => {
+    rows.data = [connector({ key: 'linkedin', label: 'LinkedIn Ads', state: 'connected' })]
+    wizardStates.connections = []
+    wizardStates.resumable = []
+    wizardStates.connections = [{
+      state: 'active', user_state: 'ATTENTION_REQUIRED', discovered: 6, assigned: 6, synced: 5,
+      has_parent: false, resumable: false, next_step: null,
+      health: { connected: 6, healthy: 5, needs_attention: 1, pending_first_sync: 0, states: {} },
+      connection: { id: 'conn-li', provider: 'linkedin', label: 'LinkedIn', label_ar: 'لينكدإن', client_workspace_id: null },
+    }]
+
+    renderWithProviders(<IntegrationsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('connector-state-linkedin')).toHaveTextContent('Needs attention')
+  })
 })
