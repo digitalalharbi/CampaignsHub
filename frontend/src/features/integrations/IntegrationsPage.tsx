@@ -52,6 +52,23 @@ import { useProject } from '@/stores/project'
  */
 
 /** Only these carry a state; the sandbox and analytics connectors keep the simpler status shape. */
+/**
+ * INTEGRATION-DATASOURCE-WIZARD-001 §1 §14 — the connection's own word for what it is doing.
+ *
+ * `PlatformState` describes the PLATFORM — is there an app registered, is it out of service — and a
+ * card needs both: «متصل» for a provider whose one account lost access is the sentence that stopped
+ * anybody looking. Where the server has said what the connection is doing, that wins.
+ */
+const USER_STATE_META: Record<string, { tone: 'success' | 'warning' | 'danger' | 'neutral' | 'info'; ar: string; en: string }> = {
+  ACCOUNT_SELECTION_REQUIRED: { tone: 'warning', ar: 'يحتاج اختيار حسابات', en: 'Needs account selection' },
+  SYNCING: { tone: 'info', ar: 'جارٍ أول مزامنة', en: 'First sync running' },
+  HEALTHY: { tone: 'success', ar: 'يعمل', en: 'Healthy' },
+  ATTENTION_REQUIRED: { tone: 'warning', ar: 'يحتاج انتباه', en: 'Needs attention' },
+  REAUTH_REQUIRED: { tone: 'danger', ar: 'يحتاج إعادة مصادقة', en: 'Needs reconnecting' },
+  AUTH_REQUIRED: { tone: 'warning', ar: 'يحتاج مصادقة', en: 'Needs authentication' },
+  NOT_CONNECTED: { tone: 'neutral', ar: 'غير مربوط', en: 'Not connected' },
+}
+
 const STATE_META: Record<PlatformState, { tone: 'success' | 'warning' | 'danger' | 'neutral' | 'info'; ar: string; en: string }> = {
   connected: { tone: 'success', ar: 'متصل', en: 'Connected' },
   syncing: { tone: 'info', ar: 'جارٍ المزامنة', en: 'Syncing' },
@@ -477,7 +494,15 @@ function ConnectorCard({
   disconnecting: boolean
 }) {
   const state = c.state
-  const meta = state ? STATE_META[state] : LEGACY_META[c.status]
+  /*
+   * The connection's state outranks the platform's, where there is one.
+   *
+   * A platform that is «connected» tells a reader the app is registered and somebody authorised it.
+   * Whether the accounts behind that authorisation are syncing, one of them has lost access, or none
+   * has been chosen yet is a different question, and it is the one somebody opens this page to ask.
+   */
+  const userMeta = wizard?.user_state ? USER_STATE_META[wizard.user_state] : undefined
+  const meta = userMeta ?? (state ? STATE_META[state] : LEGACY_META[c.status])
 
   return (
     /*

@@ -117,6 +117,14 @@ export interface ConnectionWizard {
   has_parent: boolean
   resumable: boolean
   next_step: 'parent' | 'accounts' | 'sync' | 'reconnect' | null
+  /**
+   * INTEGRATION-DATASOURCE-WIZARD-001 §14 — what a READER is told, decided by the server.
+   *
+   * `state` is a fact about the record; this is the word for it, and it is mapped in one place so
+   * three surfaces cannot invent three vocabularies for one connection. Optional so a payload
+   * written before it existed still renders.
+   */
+  user_state?: 'NOT_CONNECTED' | 'AUTH_REQUIRED' | 'ACCOUNT_SELECTION_REQUIRED' | 'SYNCING' | 'HEALTHY' | 'ATTENTION_REQUIRED' | 'REAUTH_REQUIRED'
   /** What this connection's accounts add up to, so the card can stop claiming one state for all of them. */
   health?: ConnectionHealthSummary
 }
