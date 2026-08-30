@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, Loader2, Search } from 'lucide-react'
 import {
-  confirmAccountSelection, fetchConnectionHierarchy, fetchDiscoveredAccounts, fetchPlanUsage,
-  refreshDiscoveredAccounts, type DiscoveredAccount,
+  applyAccountSelection, confirmAccountSelection, fetchConnectionHierarchy, fetchDiscoveredAccounts,
+  fetchPlanUsage, listProjectBindings, refreshDiscoveredAccounts,
+  type DiscoveredAccount, type ProjectBinding,
 } from './api'
 import { createProject, listClientWorkspaces, listProjects } from '@/features/projects/api'
 import { Button } from '@/components/ui/Button'
@@ -73,9 +74,20 @@ function accountHealthTone(health: DiscoveredAccount['health']): string {
 interface Props {
   connectionId: string
   onClose: () => void
+  /**
+   * INTEGRATION-DATASOURCE-WIZARD-001 §8 — «Manage accounts» opens the SAME wizard.
+   *
+   * With a project id the wizard is managing an existing connection rather than making one: it skips
+   * the project step, opens with the currently bound accounts ticked, and saves the DESIRED SET so
+   * the server can derive the diff. It asks for no new authorisation — the token that discovered
+   * these accounts is the token that binds them, and re-consenting to an authorisation that is still
+   * valid is exactly the cost this removes.
+   */
+  manageProjectId?: string | null
 }
 
-export function ConnectionWizard({ connectionId, onClose }: Props) {
+export function ConnectionWizard({ connectionId, onClose, manageProjectId = null }: Props) {
+  const managing = manageProjectId !== null
   const ar = useUi((s) => s.locale) === 'ar'
   const queryClient = useQueryClient()
 
@@ -96,6 +108,33 @@ export function ConnectionWizard({ connectionId, onClose }: Props) {
   // The opening step is the connection's own state, so a wizard reopened days later resumes where it
   // stopped instead of starting again (ORCH-100 §39).
   const current: Step = step ?? (hasParent ? 'parent' : 'accounts')
+
+  /*
+   * What this project holds right now — read ONCE, before the catalogue's first page.
+   *
+   * A selection seeded from whatever page happens to be on screen would silently unbind every
+   * account the reader never scrolled to, because the save sends the desired SET.
+   */
+  const bindings = useQuery({
+    queryKey: ['project-bindings', manageProjectId],
+    queryFn: () => listProjectBindings(manageProjectId!),
+    enabled: managing,
+  })
+
+  const boundIds = useMemo(
+    () => (bindings.data ?? [])
+      .filter((b: ProjectBinding) => b.is_active && b.account !== null)
+      .map((b: ProjectBinding) => b.account!.id),
+    [bindings.data],
+  )
+
+  const [seeded, setSeeded] = useState(false)
+
+  useEffect(() => {
+    if (!managing || seeded || bindings.data === undefined) return
+    setSelected(new Set(boundIds))
+    setSeeded(true)
+  }, [managing, seeded, bindings.data, boundIds])
 
   const accounts = useQuery({
     queryKey: ['discovered-accounts', connectionId, parent, search, page],
@@ -131,6 +170,23 @@ export function ConnectionWizard({ connectionId, onClose }: Props) {
    * customer's — an agency choosing between clients — the server answers 422 naming the field and
    * this asks, which is why `needsWorkspace` is driven by that response rather than guessed at here.
    */
+  const [diff, setDiff] = useState<{ added: string[]; unchanged: string[]; removed: string[] } | null>(null)
+
+  const save = useMutation({
+    mutationFn: () => applyAccountSelection({
+      projectId: manageProjectId!,
+      connectionId,
+      externalAccountIds: [...selected],
+    }),
+    onSuccess: (diff) => {
+      setDiff(diff)
+      queryClient.invalidateQueries({ queryKey: ['project-bindings', manageProjectId] })
+      queryClient.invalidateQueries({ queryKey: ['discovered-accounts', connectionId] })
+      queryClient.invalidateQueries({ queryKey: ['resumable-connections'] })
+      queryClient.invalidateQueries({ queryKey: ['connectors'] })
+    },
+  })
+
   const [projectName, setProjectName] = useState('')
   const [workspaceId, setWorkspaceId] = useState<string | null>(null)
   const [needsWorkspace, setNeedsWorkspace] = useState(false)
@@ -539,6 +595,25 @@ export function ConnectionWizard({ connectionId, onClose }: Props) {
         </section>
       )}
 
+      {/*
+        What the save actually did — the three groups, named.
+        «Saved» alone leaves a reader to work out whether the account they unticked is gone; the diff
+        says it in the same breath, and says «nothing changed» when nothing did.
+      */}
+      {diff !== null && (
+        <section data-testid="wizard-selection-diff" className="rounded-lg border border-success bg-success-soft p-3 text-sm">
+          {diff.added.length === 0 && diff.removed.length === 0 ? (
+            <span>{ar ? 'لا تغيير — الحسابات المربوطة كما هي.' : 'No change — the bound accounts are as they were.'}</span>
+          ) : (
+            <span className="tnum">
+              {ar
+                ? `أُضيف ${diff.added.length} · أُزيل ${diff.removed.length} · بقي ${diff.unchanged.length}`
+                : `${diff.added.length} added · ${diff.removed.length} removed · ${diff.unchanged.length} unchanged`}
+            </span>
+          )}
+        </section>
+      )}
+
       {current === 'done' && (
         <section className="flex flex-col gap-2 rounded-lg border border-success bg-success-soft p-4" data-testid="wizard-step-done">
           <p className="font-medium text-success">
@@ -568,9 +643,24 @@ export function ConnectionWizard({ connectionId, onClose }: Props) {
             </Button>
           )}
 
-          {current === 'accounts' && (
+          {current === 'accounts' && !managing && (
             <Button disabled={selected.size === 0} onClick={() => setStep('project')}>
               {ar ? 'متابعة' : 'Continue'}
+            </Button>
+          )}
+
+          {/*
+            Managing saves from here: there is no project to choose and no plan review to pass, and
+            an empty selection is a legitimate answer — «this project keeps none of them».
+          */}
+          {current === 'accounts' && managing && (
+            <Button
+              onClick={() => save.mutate()}
+              disabled={save.isPending || !bindings.isSuccess}
+              data-testid="wizard-save-selection"
+            >
+              {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {ar ? 'حفظ الحسابات' : 'Save accounts'}
             </Button>
           )}
 
