@@ -5,7 +5,8 @@ import { EmptyState } from '@/components/ui/States'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { money, num, percent } from '@/features/analytics/format'
 import { providerLabel } from '@/features/campaigns/labels'
-import { useSpendLimits, type SpendLimitReading } from './spendLimitsApi'
+import { useRemoveSpendLimit, useSpendLimits, type SpendLimitReading } from './spendLimitsApi'
+import { NewSpendLimitDialog } from './NewSpendLimitDialog'
 
 /**
  * BUDGET-GOVERNANCE-001 — the workspace's own spend limits, and the sentence that keeps them honest.
@@ -83,6 +84,12 @@ export function SpendLimitsPage() {
   const ar = locale === 'ar'
   const q = useSpendLimits(projectId)
   const limits = q.data?.limits ?? []
+  /*
+   * The currency to suggest for a new limit: whatever the existing ones are in, because a project
+   * that already watches SAR is not about to set a USD cap, and a limit in a currency the project
+   * does not report reads «unknown» by design.
+   */
+  const suggestedCurrency = limits[0]?.currency ?? 'SAR'
 
   return (
     <div className="flex flex-col gap-4">
@@ -93,6 +100,7 @@ export function SpendLimitsPage() {
           : 'Limits this workspace sets for itself across platforms — for watching and warning.'}
         loading={q.isLoading}
         error={q.isError}
+        action={<NewSpendLimitDialog projectId={projectId} locale={locale} currency={suggestedCurrency} />}
       >
         {/*
           The sentence, first and unmissable, from the API rather than from here.
@@ -114,7 +122,7 @@ export function SpendLimitsPage() {
         ) : (
           <ul className="flex flex-col gap-3">
             {limits.map((limit) => (
-              <LimitCard key={limit.id} limit={limit} ar={ar} locale={locale} />
+              <LimitCard key={limit.id} limit={limit} ar={ar} locale={locale} projectId={projectId} />
             ))}
           </ul>
         )}
@@ -123,7 +131,18 @@ export function SpendLimitsPage() {
   )
 }
 
-function LimitCard({ limit, ar, locale }: { limit: SpendLimitReading; ar: boolean; locale: 'ar' | 'en' }) {
+function LimitCard({
+  limit,
+  ar,
+  locale,
+  projectId,
+}: {
+  limit: SpendLimitReading
+  ar: boolean
+  locale: 'ar' | 'en'
+  projectId: string | null
+}) {
+  const remove = useRemoveSpendLimit(projectId)
   const scope = SCOPE_LABEL[limit.scope] ?? SCOPE_LABEL.project!
   const name = limit.scope === 'platform' && limit.scope_id
     ? providerLabel(limit.scope_id, locale)
@@ -147,6 +166,20 @@ function LimitCard({ limit, ar, locale }: { limit: SpendLimitReading; ar: boolea
         <span className="text-[11px] text-text-muted" dir="ltr">
           {limit.period.from} → {limit.period.to}
         </span>
+
+        {/*
+          «Remove» deactivates: the events written against this limit are its audit trail, and the
+          endpoint keeps the row so last quarter's limit still sits beside what was spent against it.
+        */}
+        <button
+          type="button"
+          data-testid={`spend-limit-${limit.id}-remove`}
+          disabled={remove.isPending}
+          onClick={() => remove.mutate(limit.id)}
+          className="ms-auto rounded-lg px-2 py-1 text-xs font-semibold text-text-muted transition-colors hover:bg-danger/10 hover:text-danger disabled:opacity-60"
+        >
+          {ar ? 'إزالة' : 'Remove'}
+        </button>
       </div>
 
       <StatGrid min="9rem">
