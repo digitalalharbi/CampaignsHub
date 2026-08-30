@@ -21,6 +21,7 @@ final class ReportStructureTest extends TestCase
     private function snapshot(array $over = []): array
     {
         return array_merge([
+            'summary' => ['Spend rose 12% while cost per order fell'],
             'kpis' => ['spend' => 42_000, 'results' => 380],
             'platforms' => [
                 ['provider' => 'meta', 'spend' => 26_000],
@@ -49,12 +50,12 @@ final class ReportStructureTest extends TestCase
         return $out;
     }
 
-    public function test_it_lists_the_seven_sections_in_the_order_a_report_is_read(): void
+    public function test_it_lists_the_eight_sections_in_the_order_a_report_is_read(): void
     {
         $sections = (new ReportStructure)->sections($this->snapshot());
 
         $this->assertSame(
-            ['executive_summary', 'overall_performance', 'platforms', 'objectives', 'entities', 'ads', 'findings'],
+            ['executive_summary', 'performance', 'platforms', 'objectives', 'campaigns', 'ads', 'findings', 'recommendations'],
             array_column($sections, 'key'),
         );
     }
@@ -73,34 +74,51 @@ final class ReportStructureTest extends TestCase
         ])));
 
         $this->assertFalse($sections['findings']['present']);
-        $this->assertSame('nothing_supported_by_evidence', $sections['findings']['absent_reason']);
+        $this->assertSame('no_finding_the_figures_support', $sections['findings']['absent_reason']);
         $this->assertArrayNotHasKey('figures', $sections['findings']);
         $this->assertStringContainsString('لا نتيجة تدعمها الأرقام', $sections['findings']['absent_reason_ar']);
     }
 
-    /** A breakdown of one is not a breakdown, and the reason says which of one it is. */
-    public function test_one_objective_gets_no_objective_breakdown(): void
+    /**
+     * No objective split, no objective section.
+     *
+     * The section exists to compare what the money was bought FOR. With no paths at all there is
+     * nothing to compare, and a heading over one row reads as a comparison of four.
+     */
+    public function test_no_objective_split_gets_no_objective_section(): void
     {
         $sections = $this->keyed((new ReportStructure)->sections($this->snapshot([
-            'objective_performance' => ['paths' => [
-                ['path' => 'conversion', 'spend' => 30_000],
-                // A path with no spend is not a second objective — it is a row of zeros.
-                ['path' => 'awareness', 'spend' => 0],
-            ]],
+            'objective_performance' => ['paths' => []],
         ])));
 
         $this->assertFalse($sections['objectives']['present']);
-        $this->assertSame('one_objective_only', $sections['objectives']['absent_reason']);
+        $this->assertSame('no_objective_split_available', $sections['objectives']['absent_reason']);
     }
 
-    public function test_one_platform_gets_no_platform_breakdown(): void
+    public function test_no_platform_reported_gets_no_platform_breakdown(): void
     {
-        $sections = $this->keyed((new ReportStructure)->sections($this->snapshot([
-            'platforms' => [['provider' => 'meta', 'spend' => 42_000]],
-        ])));
+        $sections = $this->keyed((new ReportStructure)->sections($this->snapshot(['platforms' => []])));
 
         $this->assertFalse($sections['platforms']['present']);
-        $this->assertSame('one_platform_only', $sections['platforms']['absent_reason']);
+        $this->assertSame('no_platform_reported_in_this_window', $sections['platforms']['absent_reason']);
+    }
+
+    /**
+     * The ads section states its OWN reason.
+     *
+     * «No creative in the window» and «no metric ranks ads honestly for this objective» are
+     * different facts, and only the code that built the list knows which one applies. A generic
+     * «there are no ads» in their place would be true and useless.
+     */
+    public function test_the_ads_section_carries_the_reason_the_report_gave_it(): void
+    {
+        $sections = $this->keyed((new ReportStructure)->sections($this->snapshot([
+            'ads' => [],
+            'ads_absent_reason' => 'no_rankable_metric_for_this_objective',
+        ])));
+
+        $this->assertFalse($sections['ads']['present']);
+        $this->assertSame('no_rankable_metric_for_this_objective', $sections['ads']['absent_reason']);
     }
 
     public function test_a_report_with_no_ads_says_so_rather_than_printing_an_empty_gallery(): void
@@ -108,7 +126,7 @@ final class ReportStructureTest extends TestCase
         $sections = $this->keyed((new ReportStructure)->sections($this->snapshot(['ads' => []])));
 
         $this->assertFalse($sections['ads']['present']);
-        $this->assertSame('no_ads_in_scope', $sections['ads']['absent_reason']);
+        $this->assertSame('no_ads_to_show', $sections['ads']['absent_reason']);
     }
 
     /**
@@ -152,7 +170,7 @@ final class ReportStructureTest extends TestCase
             'findings' => [],
             'recommendations' => [],
             'objective_performance' => ['paths' => []],
-            'kpis' => ['spend' => 0],
+            'kpis' => [],
         ]));
 
         foreach ($sections as $section) {
@@ -165,8 +183,9 @@ final class ReportStructureTest extends TestCase
         }
 
         $this->assertSame(
-            ['executive_summary', 'overall_performance'],
-            array_column(array_filter($sections, static fn (array $s): bool => $s['present']), 'key'),
+            ['executive_summary'],
+            array_values(array_column(array_filter($sections, static fn (array $s): bool => $s['present']), 'key')),
+            'with no spend at all only the summary survives',
         );
     }
 }
