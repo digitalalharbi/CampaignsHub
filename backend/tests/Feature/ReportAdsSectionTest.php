@@ -131,6 +131,77 @@ final class ReportAdsSectionTest extends TestCase
         $this->assertNotSame('', (string) $data['ads'][0]['preview']['note_en']);
     }
 
+    // ── REPORT-ANALYTICAL-DEPTH-001 — the argument the document makes ────────────────────────────
+
+    /**
+     * The sections, in the order they argue, declared once by the snapshot.
+     *
+     * The snapshot carried every section and no statement about their ORDER or their presence, so
+     * each renderer decided both for itself — the interactive report, the PDF and the shared link
+     * each held their own list, and a section added for one arrived in the others weeks later or not
+     * at all.
+     *
+     * The order is not decoration. Summary → performance → platform → objective → entity → ads →
+     * findings is an argument, and a reader who meets the findings before the figures is being asked
+     * to trust a conclusion whose evidence has not been shown.
+     */
+    public function test_the_report_declares_its_sections_in_the_order_they_argue(): void
+    {
+        $campaign = $this->campaign('Eid sales', CampaignObjective::Sales, spend: 5_000, orders: 100, revenue: 40_000);
+        $this->creative($campaign, 'Eid film', spend: 3_000, conversions: 70, revenue: 30_000, thumbnail: 'https://cdn/eid.jpg');
+
+        $outline = $this->generate()['outline'];
+
+        $this->assertSame(
+            ['executive_summary', 'performance', 'platforms', 'objectives', 'campaigns', 'ads', 'findings', 'recommendations'],
+            array_column($outline, 'key'),
+        );
+
+        $sections = array_column($outline, null, 'key');
+        $this->assertTrue($sections['performance']['present']);
+        $this->assertTrue($sections['ads']['present']);
+        $this->assertNull($sections['ads']['absent_reason'], 'a present section has nothing to explain');
+    }
+
+    /**
+     * An absent section says why, and does not become an empty heading.
+     *
+     * «Ads» over an empty box reads as «your ads performed so badly there is nothing to show».
+     * «Findings» over one reads as «we looked and found nothing wrong» — a claim, not an absence.
+     */
+    public function test_a_section_with_nothing_to_show_is_absent_with_a_reason(): void
+    {
+        $this->campaign('Eid sales', CampaignObjective::Sales, spend: 5_000, orders: 100, revenue: 40_000);
+
+        $sections = array_column($this->generate()['outline'], null, 'key');
+
+        $this->assertFalse($sections['ads']['present']);
+        $this->assertSame('no_creatives_in_window', $sections['ads']['absent_reason'], 'the reason is the one the section itself gave');
+    }
+
+    /** The outline is DERIVED from the data, so a section cannot claim to be present while empty. */
+    public function test_the_outline_cannot_disagree_with_the_data_it_describes(): void
+    {
+        $campaign = $this->campaign('Eid sales', CampaignObjective::Sales, spend: 5_000, orders: 100, revenue: 40_000);
+        $this->creative($campaign, 'Eid film', spend: 3_000, conversions: 70, revenue: 30_000, thumbnail: 'https://cdn/eid.jpg');
+
+        $data = $this->generate();
+
+        foreach ($data['outline'] as $section) {
+            $key = $section['key'] === 'objectives' ? null : $section['key'];
+
+            if ($key === null || ! array_key_exists($key, $data) || ! is_array($data[$key])) {
+                continue;
+            }
+
+            $this->assertSame(
+                $data[$key] !== [],
+                $section['present'],
+                "the outline says {$key} is ".($section['present'] ? 'present' : 'absent').' and the data says otherwise',
+            );
+        }
+    }
+
     /** @return array<string,mixed> */
     private function generate(): array
     {

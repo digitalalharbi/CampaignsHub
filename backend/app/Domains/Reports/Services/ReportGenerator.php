@@ -239,6 +239,22 @@ final class ReportGenerator
             ),
         ];
 
+        /*
+         * REPORT-ANALYTICAL-DEPTH-001 — the argument the document makes, declared once.
+         *
+         * The snapshot carried every section and no statement about their ORDER or their presence,
+         * so each renderer decided both for itself: the interactive report, the PDF and the shared
+         * link each held their own list, and a section added for one arrived in the others weeks
+         * later or not at all. The order is not decoration — summary → performance → platform →
+         * objective → entity → ads → findings is an argument, and a reader who meets the findings
+         * before the figures is being asked to trust a conclusion whose evidence has not been shown.
+         *
+         * `present: false` with a reason, rather than an empty section: a heading over nothing reads
+         * as a failure, and «Findings» over an empty box reads as «we looked and found nothing wrong»
+         * — which is a claim, not an absence.
+         */
+        $data['outline'] = $this->outline($data);
+
         // Canonical-snapshot metadata: every export format renders from this exact data, and the
         // checksum lets the print pipeline verify it rendered the snapshot it was given.
         // Now that every figure is in place, read them back and say what happened (§14.7).
@@ -288,6 +304,51 @@ final class ReportGenerator
      *
      * @return array<string,mixed>
      */
+    /**
+     * The document's sections, in the order they argue, each saying whether it has anything to show.
+     *
+     * Derived from the snapshot rather than declared beside it, so a section cannot claim to be
+     * present while its data is empty — the two would drift on the first change to either.
+     *
+     * @param  array<string,mixed>  $data
+     * @return list<array<string,mixed>>
+     */
+    private function outline(array $data): array
+    {
+        $has = static fn (string $key): bool => is_array($data[$key] ?? null) && $data[$key] !== [];
+
+        $sections = [
+            ['key' => 'executive_summary', 'present' => ($data['executive_summary'] ?? null) !== null, 'reason' => 'no_summary_could_be_composed'],
+            // The KPI block is present whenever the window has figures at all; an empty scope is the
+            // one state where a report has nothing to say and says so at the top instead of below.
+            ['key' => 'performance', 'present' => ($data['kpis']['spend'] ?? null) !== null, 'reason' => 'no_figures_in_this_window'],
+            ['key' => 'platforms', 'present' => $has('platforms'), 'reason' => 'no_platform_reported_in_this_window'],
+            // `objective_performance` is the block; its `paths` list is what makes it worth showing.
+            ['key' => 'objectives', 'present' => ($data['objective_performance']['paths'] ?? []) !== [], 'reason' => 'no_objective_split_available'],
+            ['key' => 'campaigns', 'present' => $has('campaigns'), 'reason' => 'no_campaign_spent_in_this_window'],
+            ['key' => 'ads', 'present' => $has('ads'), 'reason' => $data['ads_absent_reason'] ?? 'no_ads_to_show'],
+            /*
+             * Findings and recommendations are LAST and are absent when nothing is supported.
+             *
+             * They are the only sections that make a claim rather than report a figure, and a claim
+             * shown before its evidence — or shown as an empty box — is the part of a report a client
+             * remembers wrongly.
+             */
+            ['key' => 'findings', 'present' => $has('findings'), 'reason' => 'no_finding_the_figures_support'],
+            ['key' => 'recommendations', 'present' => $has('recommendations'), 'reason' => 'no_recommendation_the_figures_support'],
+        ];
+
+        return array_map(
+            static fn (array $section): array => [
+                'key' => $section['key'],
+                'present' => $section['present'],
+                // The reason travels only when it is needed; a present section has nothing to explain.
+                'absent_reason' => $section['present'] ? null : $section['reason'],
+            ],
+            $sections,
+        );
+    }
+
     /**
      * The ads that ran, ranked by the objective's own metric, each with the media that ran with it.
      *
