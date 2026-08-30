@@ -363,6 +363,16 @@ export interface ScopeOptions {
   paths: Array<{ key: string; labels: { ar: string; en: string }; headline_metrics: string[] }>
   metrics: Array<{ key: string; ar: string; en: string }>
   grain: { figures: string[]; resolved_to_campaign: string[]; creatives_only: string[] }
+  /*
+   * REPORT-SCOPE-SELECTION-001 — which axes did not fit.
+   *
+   * An operator who cannot find their ad set has two possible explanations — it was never synced, or
+   * the list stopped — and they lead to opposite actions. Optional because a server that has not
+   * shipped this yet reports nothing, and a client that assumed `false` would be stating something
+   * it was never told.
+   */
+  truncated?: { campaigns: boolean; ad_sets: boolean; ads: boolean; creatives: boolean }
+  limit?: number
 }
 
 export interface ScopeTemplate {
