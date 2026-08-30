@@ -205,6 +205,30 @@ final class ManageAccountSelectionTest extends TestCase
         ]);
     }
 
+    /**
+     * INTEGRATION-DATASOURCE-WIZARD-001 §11 — the picker opens on what is in use.
+     *
+     * Alphabetical order is deterministic and answers the wrong question. On the live Snapchat
+     * estate the accounts this workspace actually uses are a handful among three hundred, and by
+     * name they are scattered through thirteen pages — so «manage accounts» opened on a page with
+     * nothing ticked and the reader had to hunt for their own bindings.
+     */
+    public function test_the_picker_lists_bound_accounts_before_the_rest(): void
+    {
+        // Alphabetically last, and the only one bound — so name ordering alone would bury it.
+        $bound = $this->discovered('zzz-bound');
+        $this->discovered('aaa-free');
+        $this->bind($bound);
+
+        $ids = $this->actingAs($this->operator, 'sanctum')
+            ->withHeader('X-Project-Id', $this->project->id)
+            ->getJson("/api/v1/connections/{$this->connection->id}/accounts?per_page=25")
+            ->assertOk()
+            ->json('data.accounts.*.external_id');
+
+        $this->assertSame(['zzz-bound', 'aaa-free'], $ids, 'the account in use must come first');
+    }
+
     /** @param  list<string>  $accountIds */
     private function apply(array $accountIds): TestResponse
     {

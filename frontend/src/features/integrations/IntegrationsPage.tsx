@@ -616,11 +616,40 @@ function ConnectorCard({
  * a binding, so this page is reachable before any project is chosen.
  */
 export function IntegrationsPage() {
+  const ar = useUi((s) => s.locale) === 'ar'
+  /*
+   * INTEGRATION-DATASOURCE-WIZARD-001 §11 — the inventory is not the page.
+   *
+   * Every account every connection reaches was rendered underneath the source cards, permanently.
+   * On the live Snapchat estate that is three hundred rows below the six cards somebody came for,
+   * and the page's own question — «what is connected, and does anything need me?» — was answered
+   * somewhere above a list nobody had asked for.
+   *
+   * It is still one click away, and it is the same panel: what changes is that a reader now asks
+   * for it. Closed by default, and the control says how to get back to it.
+   */
+  const [inventoryOpen, setInventoryOpen] = useState(false)
+
   return (
     <div className="flex flex-col gap-4">
       <AdPlatformsPanel />
       <StoresPanel />
-      <AccountsPanel />
+
+      <section className="flex flex-col gap-3">
+        <button
+          type="button"
+          data-testid="toggle-account-inventory"
+          aria-expanded={inventoryOpen}
+          onClick={() => setInventoryOpen((open) => !open)}
+          className="inline-flex w-fit items-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+        >
+          {inventoryOpen
+            ? (ar ? 'إخفاء جميع الحسابات' : 'Hide all accounts')
+            : (ar ? 'عرض جميع الحسابات المكتشفة' : 'Show every discovered account')}
+        </button>
+
+        {inventoryOpen && <AccountsPanel />}
+      </section>
     </div>
   )
 }

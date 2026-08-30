@@ -158,14 +158,31 @@ test.describe('the integrations surface', () => {
     }
   })
 
-  /** The stores and the accounts live on the same page — one place manages every source (§3). */
+  /**
+   * The stores and the accounts live on the same page — one place manages every source (§3).
+   *
+   * The inventory is behind its own control now (INTEGRATION-DATASOURCE-WIZARD-001 §11): the page
+   * answers «what is connected, and does anything need me?» first, and every discovered account is
+   * one deliberate click away rather than three hundred rows under the cards.
+   */
   test('stores and the discovered accounts are on the same page as the platforms', async ({ page }) => {
     await page.goto('/app/integrations')
     await expect(page.getByTestId('ad-platforms-panel')).toBeVisible()
+
+    await page.getByTestId('toggle-account-inventory').click()
     await expect(
       page.locator('[data-testid="inventory-row"], [data-testid="inventory-empty"]').first(),
       'the accounts panel never resolved',
     ).toBeVisible({ timeout: 20000 })
+  })
+
+  /** And it is CLOSED until somebody asks: the page is a catalogue, not an inventory. */
+  test('the account inventory is not rendered until it is asked for', async ({ page }) => {
+    await page.goto('/app/integrations')
+    await expect(page.getByTestId('ad-platforms-panel')).toBeVisible()
+
+    await expect(page.getByTestId('toggle-account-inventory')).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.locator('[data-testid="inventory-row"]')).toHaveCount(0)
   })
 })
 
