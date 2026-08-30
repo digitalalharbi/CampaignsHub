@@ -173,6 +173,8 @@ describe('the compact value keeps the exact one within reach', () => {
   it('hangs the full figure on the value it abbreviated', () => {
     render(
       <MetricStrip
+        id="compact-exact"
+        ar={false}
         primary={[{ key: 'spend', label: 'Spend', reading: { kind: 'value', text: '4.85M SAR', exact: '4,850,321 SAR' } }]}
         secondary={[]}
       />,
@@ -184,6 +186,8 @@ describe('the compact value keeps the exact one within reach', () => {
   it('attaches no title when nothing was abbreviated', () => {
     render(
       <MetricStrip
+        id="compact-none"
+        ar={false}
         primary={[{ key: 'spend', label: 'Spend', reading: { kind: 'value', text: '940 SAR' } }]}
         secondary={[]}
       />,
