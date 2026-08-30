@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { StatCard } from '@/components/ui/StatCard'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, LayoutGrid, ListChecks, Plus, Rows3, X } from 'lucide-react'
 import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
@@ -263,19 +264,9 @@ function StateBox({ children, tone }: { children: React.ReactNode; tone?: 'dange
  * boundary into an empty state — the exact substitution the product forbids. Nobody refused the
  * list knows how many tasks there are, so the honest figure is "not available", not zero.
  */
+/** UX-KPI-PRESENTATION-001 — the shared card. The tone and the em dash are this surface's, not a second design. */
 function SummaryCard({ label, value, tone, unknown }: { label: string; value: number; tone: 'brand' | 'info' | 'danger' | 'success'; unknown?: boolean }) {
-  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', info: 'bg-info', danger: 'bg-danger', success: 'bg-success' }
-  return (
-    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
-      <div className="flex items-center gap-1.5">
-        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
-        <span className="text-xs font-semibold text-text-secondary">{label}</span>
-      </div>
-      <span className={`text-2xl font-extrabold tnum ${unknown ? 'text-text-muted' : 'text-text-primary'}`} dir="ltr">
-        {unknown ? '—' : value}
-      </span>
-    </div>
-  )
+  return <StatCard label={label} value={unknown ? '—' : value} tone={tone} dot />
 }
 
 function StatusBadge({ status, ar }: { status: string; ar: boolean }) {
