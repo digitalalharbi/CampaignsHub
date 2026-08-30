@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Http\Controllers;
 
+use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
 use App\Domains\Reports\Services\ReportExporter;
+use App\Domains\Reports\Support\ReportFileName;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -34,7 +36,17 @@ final class ReportDownloadController extends Controller
 
         abort_unless(Storage::disk($export->disk)->exists($export->path), 404, 'File missing.');
 
-        $filename = basename($export->path);
+        /*
+         * REPORT-TITLE-METADATA-001 — the name a client sees, not the key a bucket stores.
+         *
+         * This served `basename($export->path)`, and that path is built from `Str::slug($report->name)`,
+         * which TRANSLITERATES: «تقرير أداء أغسطس» arrives as `tkryr-adaaa-aghsts-20260830-044500.pdf`.
+         * Nothing about the file is wrong except the only thing a filename is for.
+         */
+        $report = Report::withoutGlobalScopes()->find($export->report_id);
+        $filename = $report === null
+            ? basename($export->path)
+            : ReportFileName::for($report, $export->format);
 
         return Storage::disk($export->disk)->download($export->path, $filename, [
             'Content-Type' => self::MIME[$export->format] ?? 'application/octet-stream',
