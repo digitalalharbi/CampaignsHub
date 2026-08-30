@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Campaigns\Actions\ImportExternalCampaigns;
+use App\Domains\Integrations\Actions\ApplyAccountSelection;
 use App\Domains\Integrations\Actions\ConfirmAccountSelection;
 use App\Domains\Integrations\Actions\EstablishSandboxConnection;
 use App\Domains\Integrations\Exceptions\AccountAssignedElsewhere;
@@ -265,6 +266,54 @@ final class ProjectIntegrationController extends Controller
                 $bindings,
             ),
         ], 'Selection confirmed.', status: 201);
+    }
+
+    /**
+     * PUT /projects/{project}/integrations/selection — INTEGRATION-DATASOURCE-WIZARD-001 §8.
+     *
+     * «Manage accounts» sends the DESIRED SET for one connection and this returns the diff it
+     * applied. Idempotent: the same set twice is the same decision and changes nothing the second
+     * time. An EMPTY set is allowed here and means «this project keeps none of them» — which
+     * `bindBatch` rightly refuses, because that endpoint is answering a different question: which
+     * accounts shall this project START with.
+     *
+     * It never asks for a new authorisation. The token that discovered these accounts is the token
+     * that binds them, and re-consenting to an authorisation that is still valid is the cost this
+     * endpoint exists to remove.
+     */
+    public function applySelection(Request $request, ApplyAccountSelection $apply): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.connect'), 403);
+
+        $validated = $request->validate([
+            'connection_id' => ['required', 'uuid', Rule::exists('provider_connections', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
+            // Present and possibly empty: «none» is an answer, and it is not the same as «unset».
+            'external_account_ids' => ['present', 'array', 'max:200'],
+            'external_account_ids.*' => ['required', 'uuid'],
+            'purpose' => ['sometimes', Rule::in(['advertising', 'analytics', 'tag_management', 'ecommerce', 'tracking', 'conversion_api', 'reporting'])],
+        ]);
+
+        $connection = ProviderConnection::withoutGlobalScopes()
+            ->where('id', $validated['connection_id'])
+            ->where('tenant_id', app(TenantContext::class)->tenantId())
+            ->firstOrFail();
+
+        $project = Project::findOrFail($this->project->projectId());
+
+        try {
+            $diff = $apply->execute(
+                connection: $connection,
+                project: $project,
+                desiredAccountIds: array_values($validated['external_account_ids']),
+                purpose: $validated['purpose'] ?? 'advertising',
+            );
+        } catch (AccountAssignedElsewhere $e) {
+            return ApiResponse::error($e->getMessage(), meta: $e->meta(), status: 409);
+        } catch (PlanLimitReached $e) {
+            return ApiResponse::error($e->getMessage(), meta: $e->meta(), status: 422);
+        }
+
+        return ApiResponse::success($diff, 'Selection updated.');
     }
 
     /**
