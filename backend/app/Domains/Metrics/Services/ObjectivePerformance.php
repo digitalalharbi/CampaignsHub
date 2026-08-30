@@ -351,6 +351,85 @@ final class ObjectivePerformance
     }
 
     /**
+     * FUNNEL-ANALYTICAL-PATTERN-001 — the funnel's shape, applied to the objective paths.
+     *
+     * The funnel does not draw a chart and leave the reader to interpret it. It says: here is the
+     * SIGNAL, here is the CONTEXT it is measured against, here is the EXPLANATION of where it sits,
+     * here is the EVIDENCE that supports it, and here is the ACTION — if the evidence supports one.
+     * That sequence is the product's most-praised surface and it exists nowhere else.
+     *
+     * ## Every step can say nothing, and often does
+     *
+     * A path nobody ran has no signal. A path one campaign ran has no comparison, so it has no
+     * signal either — a range needs two ends. Where there is no signal there is no action, and the
+     * reason travels in its place. An action offered without evidence is worse than silence: it is
+     * the product spending somebody's afternoon on its own guess.
+     *
+     * ## Nothing here is a benchmark
+     *
+     * The signal is the RANGE the path's own campaigns produced — «the cheapest order cost 10 and
+     * the dearest 50» — which is arithmetic over this account's rows. No industry figure, no «good»
+     * threshold, no multiple that triggers an alarm: those are numbers nobody here is entitled to
+     * invent, and a reader who is told 50 is «bad» has been told something we do not know.
+     *
+     * The action names both ends and leaves the decision where it belongs.
+     *
+     * @return array<string,mixed>
+     */
+    public function explainByPath(Carbon $from, Carbon $to): array
+    {
+        $out = [];
+
+        foreach ($this->leadersByPath($from, $to)['paths'] as $path) {
+            $strongest = $path['strongest'];
+            $weakest = $path['weakest'];
+            $comparable = $path['comparable'] && $strongest !== null && $weakest !== null;
+
+            $out[] = [
+                'path' => $path['path'],
+                'label_ar' => $path['label_ar'],
+                'label_en' => $path['label_en'],
+                /*
+                 * The signal is a RANGE, not a verdict. Two campaigns bought for the same thing, and
+                 * what each one cost — the reader can see the distance without being told what to
+                 * think about it.
+                 */
+                'signal' => $comparable ? [
+                    'metric' => $strongest['metric'],
+                    'best' => ['campaign' => $strongest['name'], 'value' => $strongest['value']],
+                    'worst' => ['campaign' => $weakest['name'], 'value' => $weakest['value']],
+                ] : null,
+                // What it is measured against: this path, in this window, and nothing outside it.
+                'context' => $comparable ? [
+                    'scope' => $path['path'],
+                    'campaigns' => $path['campaigns'],
+                    'from' => $from->toDateString(),
+                    'to' => $to->toDateString(),
+                ] : null,
+                'explanation' => $comparable ? [
+                    'ar' => 'الحملتان اشتُريتا لنفس الغرض على هذا المسار، فالفارق بينهما فارق في التنفيذ لا في الهدف.',
+                    'en' => 'Both campaigns were bought for the same thing on this path, so the distance between them is a difference in execution rather than in intent.',
+                ] : null,
+                // The keys the reading rests on, named — so «why does it say that» has an answer.
+                'evidence' => $comparable ? ['spend', $strongest['metric']] : [],
+                /*
+                 * An action ONLY where two comparable campaigns exist. It names both ends and stops:
+                 * moving budget is a decision with a client's money in it, and the product's part is
+                 * to put the two figures in front of the person who makes it.
+                 */
+                'action' => $comparable ? [
+                    'ar' => "قارن «{$weakest['name']}» بـ«{$strongest['name']}» قبل أن يأخذ الأضعف مزيدًا من ميزانية هذا المسار.",
+                    'en' => "Compare «{$weakest['name']}» against «{$strongest['name']}» before the weaker one takes more of this path's budget.",
+                ] : null,
+                // Why there is nothing to say, when there is nothing to say.
+                'silent_reason' => $comparable ? null : $path['comparable_reason'],
+            ];
+        }
+
+        return ['paths' => $out];
+    }
+
+    /**
      * The best or worst campaign on a path, by the path's own metric.
      *
      * Cost metrics invert: the lowest cost per order is the strongest, and reading them the same way

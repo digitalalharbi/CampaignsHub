@@ -508,6 +508,31 @@ final class MetricsController extends Controller
         );
     }
 
+    /**
+     * FUNNEL-ANALYTICAL-PATTERN-001 — signal → context → explanation → evidence → action, per path.
+     *
+     * The funnel is the product's most-praised surface because it does not draw a chart and leave
+     * the reader to interpret it. This gives the objective paths the same shape, and every step of
+     * it can say nothing: a path nobody ran has no signal, a path one campaign ran has no
+     * comparison, and where there is no signal there is no action — the reason travels instead.
+     */
+    public function objectiveExplanations(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        $campaigns = array_values(array_filter((array) $request->input('campaign_ids', [])));
+
+        return ApiResponse::success(
+            (new ObjectivePerformance(
+                campaignIds: $campaigns === [] ? null : $campaigns,
+                providers: $this->providerFilter($request) === [] ? null : $this->providerFilter($request),
+            ))->explainByPath($from, $to),
+            'Objective path explanations.',
+            meta: $this->meta($from, $to),
+        );
+    }
+
     public function budget(Request $request): JsonResponse
     {
         $this->authorizeView($request);

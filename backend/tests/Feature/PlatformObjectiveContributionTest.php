@@ -233,6 +233,88 @@ final class PlatformObjectiveContributionTest extends TestCase
         $this->assertFalse($paths['conversion']['comparable']);
     }
 
+    // ── FUNNEL-ANALYTICAL-PATTERN-001 — signal → context → explanation → evidence → action ──────
+
+    /**
+     * The funnel's shape, on a path that has something to say.
+     *
+     * The funnel is the product's most-praised surface because it does not draw a chart and leave
+     * the reader to interpret it. Every other analytical surface draws the chart.
+     */
+    public function test_a_comparable_path_gives_all_five_steps(): void
+    {
+        $this->spendWith('meta', 'sales', spend: 1_000, orders: 100);   // cpa 10
+        $this->spendWith('meta', 'sales', spend: 1_000, orders: 20);    // cpa 50
+
+        $conversion = $this->explanation('conversion');
+
+        $this->assertSame('cpa', $conversion['signal']['metric']);
+        $this->assertEqualsWithDelta(10.0, $conversion['signal']['best']['value'], 0.01);
+        $this->assertEqualsWithDelta(50.0, $conversion['signal']['worst']['value'], 0.01);
+        $this->assertSame('conversion', $conversion['context']['scope']);
+        $this->assertSame(2, $conversion['context']['campaigns']);
+        $this->assertStringContainsString('difference in execution', $conversion['explanation']['en']);
+        $this->assertSame(['spend', 'cpa'], $conversion['evidence']);
+        $this->assertStringContainsString('before the weaker one takes more', $conversion['action']['en']);
+        $this->assertNull($conversion['silent_reason']);
+    }
+
+    /**
+     * A path with one campaign has no range, so it has no signal — and therefore no action.
+     *
+     * An action offered without evidence is worse than silence: it is the product spending
+     * somebody's afternoon on its own guess.
+     */
+    public function test_a_path_with_nothing_to_compare_says_nothing_and_says_why(): void
+    {
+        $this->spendWith('meta', 'sales', spend: 1_000, orders: 100);
+
+        $conversion = $this->explanation('conversion');
+
+        $this->assertNull($conversion['signal']);
+        $this->assertNull($conversion['context']);
+        $this->assertNull($conversion['explanation']);
+        $this->assertSame([], $conversion['evidence']);
+        $this->assertNull($conversion['action'], 'no comparison, no recommendation');
+        $this->assertSame('only_one_campaign_spent', $conversion['silent_reason']);
+    }
+
+    /** And a path nobody ran is silent for its own reason, not for the previous one. */
+    public function test_an_unrun_path_is_silent_for_its_own_reason(): void
+    {
+        $this->spendWith('meta', 'sales', spend: 1_000, orders: 100);
+
+        $this->assertSame('nothing_spent_on_this_path', $this->explanation('awareness')['silent_reason']);
+    }
+
+    /**
+     * The signal is a RANGE, never a verdict.
+     *
+     * No industry figure, no «good» threshold, no multiple that trips an alarm — those are numbers
+     * nobody here is entitled to invent, and a reader told that 50 is «bad» has been told something
+     * we do not know. The payload carries the two ends and no judgement about either.
+     */
+    public function test_the_signal_carries_no_benchmark_and_no_verdict(): void
+    {
+        $this->spendWith('meta', 'sales', spend: 1_000, orders: 100);
+        $this->spendWith('meta', 'sales', spend: 1_000, orders: 20);
+
+        $signal = $this->explanation('conversion')['signal'];
+
+        foreach (['benchmark', 'target', 'good', 'bad', 'verdict', 'grade', 'score'] as $forbidden) {
+            $this->assertArrayNotHasKey($forbidden, $signal);
+        }
+        $this->assertSame(['metric', 'best', 'worst'], array_keys($signal));
+    }
+
+    /** @return array<string,mixed> */
+    private function explanation(string $path): array
+    {
+        $out = (new ObjectivePerformance)->explainByPath(Carbon::parse(self::FROM), Carbon::parse(self::TO));
+
+        return array_column($out['paths'], null, 'path')[$path];
+    }
+
     /** @return array<string,mixed> */
     private function leaders(string $path): array
     {
