@@ -44,7 +44,7 @@ export function AttributionPanel({
   className?: string
 }) {
   const ar = locale === 'ar'
-  const platforms = data?.platform_reported.platforms ?? []
+  const platforms = data?.platform_reported?.platforms ?? []
   const store = data?.store_confirmed
   const dedup = data?.dedup
 
@@ -74,10 +74,10 @@ export function AttributionPanel({
         {/* ── Platform-Reported ─────────────────────────────────────────────────────────── */}
         <section className="min-w-0">
           <h4 className="text-xs font-bold uppercase tracking-wide text-text-muted">
-            {ar ? data?.platform_reported.label_ar : data?.platform_reported.label_en}
+            {ar ? data?.platform_reported?.label_ar : data?.platform_reported?.label_en}
           </h4>
           <p className="mt-1 text-text-secondary">
-            {ar ? data?.platform_reported.basis_ar : data?.platform_reported.basis_en}
+            {ar ? data?.platform_reported?.basis_ar : data?.platform_reported?.basis_en}
           </p>
 
           {platforms.length > 0 && (
@@ -112,7 +112,7 @@ export function AttributionPanel({
             <span className="font-semibold text-text-primary">
               {ar ? 'لا يوجد إجمالي موحّد للمنصات.' : 'There is no unified platform total.'}
             </span>{' '}
-            {ar ? data?.platform_reported.total_withheld_ar : data?.platform_reported.total_withheld_en}
+            {ar ? data?.platform_reported?.total_withheld_ar : data?.platform_reported?.total_withheld_en}
           </p>
         </section>
 
@@ -180,7 +180,7 @@ export function AttributionPanel({
         </section>
 
         {/* ── Unattributed ──────────────────────────────────────────────────────────────── */}
-        {data?.unattributed.available && (data.unattributed.orders ?? 0) > 0 && (
+        {data?.unattributed?.available && (data.unattributed.orders ?? 0) > 0 && (
           <section className="min-w-0 border-t border-border pt-4">
             <h4 className="text-xs font-bold uppercase tracking-wide text-text-muted">
               {ar ? 'طلبات بلا إسناد' : 'Unattributed orders'}
@@ -199,13 +199,13 @@ export function AttributionPanel({
         )}
 
         {/* ── The model, which is governance rather than measurement ────────────────────── */}
-        {(data?.models.length ?? 0) > 0 && (
+        {(data?.models?.length ?? 0) > 0 && (
           <section className="min-w-0 border-t border-border pt-4">
             <h4 className="text-xs font-bold uppercase tracking-wide text-text-muted">
               {ar ? 'نموذج الإسناد المُعرَّف على الحملات' : 'Attribution model set on the campaigns'}
             </h4>
             <ul className="mt-2 grid gap-1 text-text-secondary">
-              {data?.models.map((m) => (
+              {data?.models?.map((m) => (
                 <li key={m.model}>
                   {m.is_set ? (
                     <code className="rounded bg-surface-secondary px-1.5 py-0.5 text-[12px]">{m.model}</code>

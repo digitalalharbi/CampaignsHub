@@ -43,18 +43,26 @@ import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/ca
  * total cannot drift from the cards it is made of (§15.17). Nothing on this page computes a figure.
  */
 
+/*
+ * ADS-TERMINOLOGY-001 — «الإعلانات المرتبطة» / «Linked ads», deliberately NOT «Ad groups».
+ *
+ * The user-facing name for an advertising entity is «الإعلانات» / «Ads», and this page is about the
+ * same ad running on more than one platform, read as one unit. «Ad group» is already taken: it is
+ * Google's name for the level between a campaign and an ad, the one the drill-down calls an ad set.
+ * Renaming this page onto that phrase would trade one confusion for a worse one.
+ */
 const COPY = {
   ar: {
-    title: 'مجموعات المحتوى',
-    subtitle: 'المحتوى نفسه على أكثر من منصة، مقروءًا كوحدة واحدة.',
+    title: 'الإعلانات المرتبطة',
+    subtitle: 'الإعلان نفسه على أكثر من منصة، مقروءًا كوحدة واحدة.',
     back: 'رجوع إلى المجموعات',
     backToLibrary: 'المكتبة',
     from: 'من',
     to: 'إلى',
     empty: 'لا توجد مجموعات في هذه المساحة بعد.',
-    emptyHint: 'اختر محتويين أو أكثر في المكتبة ثم ادمجهما كأصل واحد.',
+    emptyHint: 'اختر إعلانين أو أكثر في المكتبة ثم ادمجهما كأصل واحد.',
     platforms: 'المنصات',
-    members: 'المحتويات',
+    members: 'الإعلانات',
     method: 'طريقة التجميع',
     methods: {
       file_hash: 'بصمة الملف',
@@ -69,11 +77,11 @@ const COPY = {
     perPlatformNote: 'سطور المنصات تجمع إلى إجمالي المجموعة؛ الجمع واحد على المستويين.',
     mixed: 'أهداف مختلفة داخل المجموعة',
     open: 'فتح المجموعة',
-    openCreative: 'تفاصيل المحتوى',
+    openCreative: 'تفاصيل الإعلان',
     split: 'فصل من المجموعة',
     splitting: 'جارٍ الفصل…',
-    splitDone: 'تم فصل المحتوى من المجموعة.',
-    dissolved: 'لم يتبقَّ في المجموعة سوى محتوى واحد، فحُلَّت المجموعة.',
+    splitDone: 'تم فصل الإعلان من المجموعة.',
+    dissolved: 'لم يتبقَّ في المجموعة سوى إعلان واحد، فحُلَّت المجموعة.',
     audit: 'سجل القرارات',
     auditEmpty: 'لا توجد قرارات مسجَّلة على هذه المجموعة.',
     actions: {
@@ -83,23 +91,23 @@ const COPY = {
     by: 'بواسطة',
     objective: 'الهدف',
     path: 'المسار التسويقي',
-    creative: 'المحتوى',
+    creative: 'الإعلان',
     platform: 'المنصة',
     noPermission: 'لا تملك صلاحية تعديل المجموعات.',
     loadError: 'تعذّر تحميل المجموعات.',
     groupError: 'تعذّر تحميل هذه المجموعة.',
   },
   en: {
-    title: 'Creative groups',
+    title: 'Linked ads',
     subtitle: 'The same content on more than one platform, read as one unit.',
     back: 'Back to groups',
     backToLibrary: 'Library',
     from: 'From',
     to: 'To',
     empty: 'There are no groups in this workspace yet.',
-    emptyHint: 'Select two or more creatives in the library and merge them as one asset.',
+    emptyHint: 'Select two or more ads in the library and merge them as one asset.',
     platforms: 'Platforms',
-    members: 'Creatives',
+    members: 'Ads',
     method: 'Grouped by',
     methods: {
       file_hash: 'File hash',
@@ -114,11 +122,11 @@ const COPY = {
     perPlatformNote: 'The platform lines add back to the group total — it is one summation at two levels.',
     mixed: 'Mixed objectives in this group',
     open: 'Open group',
-    openCreative: 'Creative details',
+    openCreative: 'Ad details',
     split: 'Split from group',
     splitting: 'Splitting…',
-    splitDone: 'The creative was split from its group.',
-    dissolved: 'Only one creative was left, so the group was dissolved.',
+    splitDone: 'The ad was split from its group.',
+    dissolved: 'Only one ad was left, so the group was dissolved.',
     audit: 'Decision log',
     auditEmpty: 'No decisions are recorded on this group.',
     actions: {
@@ -128,7 +136,7 @@ const COPY = {
     by: 'by',
     objective: 'Objective',
     path: 'Marketing path',
-    creative: 'Creative',
+    creative: 'Ad',
     platform: 'Platform',
     noPermission: 'You do not have permission to change groups.',
     loadError: 'The groups could not be loaded.',

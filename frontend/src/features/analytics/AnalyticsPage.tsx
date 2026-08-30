@@ -24,12 +24,15 @@ import {
   useLastNDaysRange,
   useAttribution,
   useNormalization,
+  usePlatformObjectives,
   usePlatforms,
   useSummary,
   useTimeseries,
   type EntityRow,
   type MetricFilters,
 } from './hooks'
+import { findingsFor, type QualityFinding } from './dataQualityFindings'
+import type { PlatformObjectives } from './api'
 import { scopeNote, type FilterScope } from './filterScope'
 import { CAMPAIGN_RELEVANCE_ORDER, orderByRelevanceWith, relevanceOf } from '@/features/campaigns/campaignRelevance'
 import { useCampaignOptionSource } from './useCampaignOptionSource'
@@ -115,7 +118,7 @@ const TAB_GROUPS = [
       { id: 'campaigns', ar: 'الحملات', en: 'Campaigns' },
       { id: 'ad_sets', ar: 'المجموعات', en: 'Ad sets' },
       { id: 'ads', ar: 'الإعلانات', en: 'Ads' },
-      { id: 'creative', ar: 'المحتوى', en: 'Creative' },
+      { id: 'creative', ar: 'الإعلان', en: 'Ad' },
     ],
   },
   {
@@ -648,12 +651,112 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
   )
 }
 
+
+/**
+ * Each platform inside each marketing path — PLATFORM-DECISION-ANALYTICS-001.
+ *
+ * The shape is the argument. There is no list here that contains platforms from two paths, because a
+ * «best platform» card can only be written against one, and a platform buying awareness is not worse
+ * than one buying sales — what differs is the work each was given.
+ *
+ * A path where one platform spent shows its figures and NO comparison: «Meta is the best platform
+ * for awareness», said of the only platform that ran awareness, is a sentence with no evidence
+ * behind it, and it is exactly what a reader writes for themselves when handed a sorted list of one.
+ */
+function PlatformPaths({
+  data,
+  loading,
+  error,
+  ar,
+}: {
+  data: PlatformObjectives | undefined
+  loading: boolean
+  error: boolean
+  ar: boolean
+}) {
+  const REASON: Record<string, { ar: string; en: string }> = {
+    only_one_platform_spent: {
+      ar: 'منصة واحدة فقط أنفقت على هذا المسار — رقم، وليس مقارنة.',
+      en: 'Only one platform spent on this path — a figure, not a comparison.',
+    },
+    nothing_spent_on_this_path: {
+      ar: 'لم يُنفق شيء على هذا المسار في هذه الفترة.',
+      en: 'Nothing was spent on this path in this period.',
+    },
+  }
+
+  const paths = (data?.paths ?? []).filter((p) => p.platforms.length > 0)
+
+  return (
+    <Panel
+      title={ar ? 'مساهمة المنصات حسب الهدف' : 'Platform contribution by objective'}
+      description={ar
+        ? 'داخل كل مسار، لا عبره — المقارنة الوحيدة التي تصحّ'
+        : 'Inside each path, never across them — the only comparison that holds'}
+      loading={loading}
+      error={error}
+      empty={!loading && paths.length === 0}
+    >
+      <div data-testid="platform-paths" className="flex flex-col gap-4">
+        {paths.map((path) => (
+          <div key={path.path} data-testid={`platform-path-${path.path}`} className="rounded-xl border border-border p-3.5">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-bold text-text-primary">{ar ? path.label_ar : path.label_en}</span>
+              <span className="text-[11px] text-text-muted" dir="ltr">{money(path.spend)}</span>
+              {!path.comparable && (
+                <span
+                  data-testid={`platform-path-${path.path}-not-comparable`}
+                  className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] text-text-secondary"
+                >
+                  {ar ? REASON[path.comparable_reason]?.ar : REASON[path.comparable_reason]?.en}
+                </span>
+              )}
+            </div>
+
+            <ul className="flex flex-col gap-1">
+              {path.platforms.map((row) => (
+                <li key={row.provider} className="flex items-center justify-between gap-3 text-sm">
+                  <PlatformCell provider={row.provider} />
+                  <span className="flex items-center gap-3">
+                    <span className="tnum text-text-secondary" dir="ltr">{money(row.spend)}</span>
+                    {/* Share of the PATH. «40% of awareness» is a decision somebody made; «40% of
+                        everything» is the mix, and reading the second as performance is the defect. */}
+                    <span className="tnum text-text-muted" dir="ltr">
+                      {row.spend_share === null ? '—' : percent(row.spend_share, 0)}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+
+        {/*
+          Said on the page, not only in the payload. It is the sentence a «best platform» card would
+          have to contradict in order to exist.
+        */}
+        <p data-testid="platform-paths-cross" className="text-[11px] text-text-tertiary">
+          {ar ? data?.cross_path_reason_ar : data?.cross_path_reason_en}
+        </p>
+      </div>
+    </Panel>
+  )
+}
+
 function PlatformsTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const p = usePlatforms(projectId, range, filters)
+  const byPath = usePlatformObjectives(projectId, range, filters)
   const rows = p.data ?? []
   return (
     <div className="space-y-4">
+      {/*
+        PLATFORM-DECISION-ANALYTICS-001 — «which platform is contributing most to THIS objective».
+        Above the comparison chart, because that chart answers a different question: how each
+        platform is doing over every objective at once. Read as a ranking it compares a platform
+        buying awareness against one buying sales, which is a verdict about the work each was given.
+      */}
+      <PlatformPaths data={byPath.data} loading={byPath.isLoading} error={byPath.isError} ar={ar} />
       <Panel title={ar ? 'مقارنة المنصات' : 'Platform comparison'} description={ar ? 'الإنفاق مقابل ROAS لكل منصة' : 'Spend against ROAS, per platform'} loading={p.isLoading} error={p.isError} empty={!p.isLoading && rows.length === 0}>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
@@ -1048,12 +1151,28 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
   )
 }
 
-function QualityTab({ projectId, range, filters }: TabProps) {
+export function QualityTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const f = useFreshness(projectId, range, filters)
   const rows = f.data ?? []
+  /*
+   * DATA-QUALITY-OPERATOR-UX-001 — the findings, above the table that implies them.
+   *
+   * The table below is true and administrator-shaped: platform · latest date · last sync · days with
+   * data · missing days · status. The person who opens this tab is an account manager whose client
+   * has just asked why last week looks thin, and they need what is wrong, what it affects, how much
+   * it matters, what they can check and who can end it — derived, every time, from six columns whose
+   * relationship they have to already know.
+   *
+   * Nothing is hidden: the table stays underneath, and the findings are read from the same rows. A
+   * second source for «is this platform healthy» is how two surfaces come to disagree about one
+   * account.
+   */
+  const findings = useMemo(() => findingsFor(rows, new Date()), [rows])
+
   return (
     <div>
+      <QualityFindings findings={findings} ar={ar} loading={f.isLoading} />
       <Panel title={ar ? 'جودة البيانات والإسناد' : 'Data quality & attribution'} description={ar ? 'آخر مزامنة، حداثة البيانات، والأيام الناقصة لكل منصة' : 'Last sync, how fresh the data is, and the missing days per platform'} loading={f.isLoading} error={f.isError} empty={!f.isLoading && rows.length === 0}>
       <MetricTable
         head={ar ? ['المنصة', 'آخر تاريخ', 'آخر مزامنة', 'أيام ببيانات', 'أيام ناقصة', 'الحالة'] : ['Platform', 'Latest date', 'Last sync', 'Days with data', 'Missing days', 'Status']}
@@ -1095,6 +1214,70 @@ function QualityTab({ projectId, range, filters }: TabProps) {
        */}
       <AttributionSection projectId={projectId} range={range} filters={filters} />
     </div>
+  )
+}
+
+/**
+ * What is wrong, what it affects, what you can check — and who can end it.
+ *
+ * The owner is the answer an operator needs first, and it is the one the old table could not give at
+ * all: «the platform», «you», «somebody with the credentials», «the system, on its own». A finding
+ * that does not say which of those it is sends its reader to the wrong place, and a reader sent to
+ * the wrong place twice stops opening the tab.
+ */
+function QualityFindings({ findings, ar, loading }: { findings: QualityFinding[]; ar: boolean; loading: boolean }) {
+  if (loading) {
+    return null
+  }
+
+  const OWNER: Record<QualityFinding['owner'], { ar: string; en: string }> = {
+    system: { ar: 'النظام — تلقائيًا', en: 'The system, on its own' },
+    operator: { ar: 'أنت — خطوة واحدة', en: 'You — one step' },
+    credentials: { ar: 'يحتاج بيانات اعتماد', en: 'Needs credentials' },
+    provider: { ar: 'يحتاج فحصًا على المنصة', en: 'Needs a look on the platform' },
+  }
+
+  const TONE: Record<QualityFinding['severity'], string> = {
+    critical: 'border-danger/40 bg-danger/5',
+    attention: 'border-warning/40 bg-warning/5',
+    watch: 'border-border bg-surface-secondary',
+  }
+
+  if (findings.length === 0) {
+    return (
+      <p data-testid="quality-findings-clear" className="mb-4 rounded-xl border border-success/30 bg-success/5 p-3.5 text-sm text-text-secondary">
+        {/*
+          «لا يوجد شيء» would read as a page that failed to load. Every source being current IS the
+          answer, and saying which sources were checked is what makes it believable.
+        */}
+        {ar
+          ? 'كل مصدر في هذه الفترة محدَّث ومكتمل — لا شيء يحتاج انتباهك هنا.'
+          : 'Every source in this window is current and complete — nothing here needs your attention.'}
+      </p>
+    )
+  }
+
+  return (
+    <ul data-testid="quality-findings" className="mb-4 flex flex-col gap-2">
+      {findings.map((finding) => (
+        <li key={finding.key} data-testid={`quality-finding-${finding.provider}`} className={`rounded-xl border p-3.5 ${TONE[finding.severity]}`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-bold text-text-primary">{finding.name ?? finding.provider}</span>
+            <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+              {ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en}
+            </span>
+            {finding.coverage !== null && (
+              <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] text-text-muted" dir="ltr">
+                {ar ? 'التغطية' : 'Coverage'} {Math.round(finding.coverage * 100)}%
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-sm text-text-primary">{ar ? finding.what.ar : finding.what.en}</p>
+          <p className="mt-0.5 text-xs text-text-secondary">{ar ? finding.affects.ar : finding.affects.en}</p>
+          <p className="mt-0.5 text-xs text-text-muted">{ar ? finding.check.ar : finding.check.en}</p>
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -1202,11 +1385,18 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
                 : `${num(withheld)} rows (${withheldFrom.join(' · ')}) have no trustworthy rate for their date and are in none of the amounts above. The figures shown are short by that much.`}
             </span>
           )}
-          {(d?.project_currencies.length ?? 0) > 1 && (
+          {/*
+            `d?.project_currencies?.length`, not `d?.project_currencies.length`.
+            The optional chain stopped at `d`, so a payload that HAS data and lacks this one array
+            threw `Cannot read properties of undefined` from inside the render — and took the whole
+            Data quality tab down with it, findings, table and all. The `?? 0` beside it reads as a
+            guard and guards nothing: it only ever catches `d` being absent.
+          */}
+          {(d?.project_currencies?.length ?? 0) > 1 && (
             <span className="mt-1 block font-semibold text-warning">
               {ar
-                ? `هذه الفترة تحتوي أكثر من عملة عرض (${d?.project_currencies.join(' · ')}) — لا تُجمع المبالغ كرقم واحد.`
-                : `This period holds more than one display currency (${d?.project_currencies.join(' · ')}) — the amounts are not one total.`}
+                ? `هذه الفترة تحتوي أكثر من عملة عرض (${d?.project_currencies?.join(' · ')}) — لا تُجمع المبالغ كرقم واحد.`
+                : `This period holds more than one display currency (${d?.project_currencies?.join(' · ')}) — the amounts are not one total.`}
             </span>
           )}
         </Basis>
@@ -1291,15 +1481,15 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
 
         {/* Stored but read by nothing. An empty answer is stated, never left as an empty space. */}
         <Basis label={ar ? 'مقاييس غير محسوبة' : 'Metrics nothing reads'}>
-          {(d?.unread_metric_keys.length ?? 0) === 0
+          {(d?.unread_metric_keys?.length ?? 0) === 0
             ? (ar ? 'كل مقياس في بياناتك يدخل في مؤشر واحد على الأقل.' : 'Every metric key in your data feeds at least one KPI.')
             : (ar
-                ? `مخزّنة ولا يقرؤها أي مؤشر: ${d?.unread_metric_keys.join('، ')}.`
-                : `Stored but read by no KPI: ${d?.unread_metric_keys.join(', ')}.`)}
+                ? `مخزّنة ولا يقرؤها أي مؤشر: ${d?.unread_metric_keys?.join('، ')}.`
+                : `Stored but read by no KPI: ${d?.unread_metric_keys?.join(', ')}.`)}
         </Basis>
 
         {/* The catalogue: what a metric means and whether it may be summed at all. */}
-        {d?.catalogue.available && (
+        {d?.catalogue?.available && (
           <details className="rounded-xl border border-border bg-surface-secondary px-4 py-3">
             <summary className="cursor-pointer text-sm font-semibold text-text-primary">
               {ar ? `تعريفات المقاييس (${num(d.catalogue.metrics.length)})` : `Metric definitions (${num(d.catalogue.metrics.length)})`}
@@ -1536,7 +1726,7 @@ function DrillCrumbs({ path, level, ar, onUpTo }: { path: DrillStep[]; level: Dr
     campaign: { ar: 'حملة', en: 'Campaign' },
     ad_set: { ar: 'مجموعة', en: 'Ad set' },
     ad: { ar: 'إعلان', en: 'Ad' },
-    creative: { ar: 'محتوى', en: 'Creative' },
+    creative: { ar: 'إعلان', en: 'Ad' },
   }
 
   return (
@@ -2006,8 +2196,8 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
         tab: { value: TAB_FOR[lvl], fallback: 'performance' },
       })} />
       <Panel
-        title={ar ? 'أداء المحتوى' : 'Creative performance'}
-        description={ar ? 'من بيانات المحتوى نفسه — لا تُنسب أرقام الحملة إلى محتوى' : 'From creative-level data — campaign figures are never attributed to a creative'}
+        title={ar ? 'أداء الإعلانات' : 'Ad performance'}
+        description={ar ? 'من بيانات الإعلان نفسه — لا تُنسب أرقام الحملة إلى إعلان' : 'From ad-level data — campaign figures are never attributed to a ad'}
         loading={q.isLoading}
         error={q.isError}
         /* Narrowed and empty is «nothing under this ad», never «no creatives at all». */
@@ -2016,8 +2206,8 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
         {!q.isLoading && !q.isError && rows.length === 0 && narrowed && (
           <p className="rounded-xl border border-border p-3 text-sm text-text-muted" data-testid="creative-empty-under-parent">
             {ar
-              ? 'لا يوجد محتوى مسجَّل تحت هذا المستوى في هذه الفترة. هذا ليس «لا يوجد محتوى» للمشروع.'
-              : 'No creative was reported under this level in this period. That is not «no creatives» for the project.'}
+              ? 'لا يوجد إعلان مسجَّل تحت هذا المستوى في هذه الفترة. هذا ليس «لا يوجد إعلان» للمشروع.'
+              : 'No ad was reported under this level in this period. That is not «no ads» for the project.'}
           </p>
         )}
         {/*
@@ -2029,7 +2219,7 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
         <div data-testid="creative-analysis-table">
           <MetricTable
             head={[
-              ar ? 'المحتوى' : 'Creative',
+              ar ? 'الإعلان' : 'Ad',
               ar ? 'الحملة' : 'Campaign',
               ar ? 'الهدف' : 'Objective',
               ar ? 'الإنفاق' : 'Spend',

@@ -198,7 +198,7 @@ export function PublicReport() {
                       ? 'ملخص تنفيذي — أبرز النتائج والقرارات. التفاصيل الكاملة في التقرير التفصيلي.'
                       : 'Executive summary — the headline results and decisions. Full detail lives in the detailed report.')
                   : (locale === 'ar'
-                      ? 'تقرير تفصيلي — كل المنصات والحملات والمحتويات.'
+                      ? 'تقرير تفصيلي — كل المنصات والحملات والإعلانات.'
                       : 'Detailed report — every platform, campaign and creative.')}
               </p>
 

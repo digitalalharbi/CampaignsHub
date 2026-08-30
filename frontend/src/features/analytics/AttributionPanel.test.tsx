@@ -275,6 +275,22 @@ describe('AttributionPanel', () => {
     expect(await screen.findByText('Not set')).toBeInTheDocument()
   })
 
+  /**
+   * A block the envelope does not carry must not take the whole panel down with it.
+   *
+   * `data?.unattributed.available` reads as guarded and is not: the `?.` only covers `data`, so a
+   * payload that HAS data but no `unattributed` — an older cached envelope, a workspace whose shop
+   * is not connected, a partial response — threw inside render and the reader lost the entire
+   * attribution panel, not the one block that was missing. Every nested read here is optional now.
+   */
+  it('renders when the envelope is missing whole blocks', async () => {
+    const { unattributed: _u, models: _m, platform_reported: _p, ...partial } = payload()
+
+    render(partial as Attribution)
+
+    expect(await screen.findByTestId('attribution')).toBeInTheDocument()
+  })
+
   it('renders in Arabic without falling back to the English copy', async () => {
     render(payload(), 'ar')
 

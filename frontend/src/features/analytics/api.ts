@@ -734,6 +734,49 @@ export const useFunnel = (p: string | null, r: Range, f?: MetricFilters) => useM
 export const useBudget = (p: string | null, r: Range, f?: MetricFilters) => useMetric<BudgetRow[]>('budget', p, r, 'budget', f)
 export const useAccountBudgets = (p: string | null, r: Range, f?: MetricFilters) =>
   useMetric<AccountBudgetRow[]>('budget-accounts', p, r, 'budget-accounts', f)
+/**
+ * PLATFORM-DECISION-ANALYTICS-001 — each platform's contribution to each marketing path.
+ *
+ * Separate from `usePlatforms`, which answers «how is each platform doing» with one row per platform
+ * over every objective at once. That row cannot answer «which platform is contributing most to THIS
+ * objective», and the comparison it invites — one number per platform across a mixed programme — is
+ * the one that must never be made.
+ */
+export interface PlatformPathRow {
+  provider: string
+  spend: number
+  impressions: number
+  clicks: number
+  landing_page_views: number
+  orders: number
+  revenue: number
+  campaigns: number
+  /** Share of THIS PATH's spend, never of the account's. Null when the path spent nothing. */
+  spend_share: number | null
+}
+
+export interface PlatformPath {
+  path: string
+  label_ar: string
+  label_en: string
+  headline_metrics: string[]
+  platforms: PlatformPathRow[]
+  spend: number
+  /** True only where two or more platforms actually SPENT on this path. */
+  comparable: boolean
+  comparable_reason: 'two_or_more_platforms_spent' | 'only_one_platform_spent' | 'nothing_spent_on_this_path'
+}
+
+export interface PlatformObjectives {
+  paths: PlatformPath[]
+  cross_path_comparison: false
+  cross_path_reason_ar: string
+  cross_path_reason_en: string
+}
+
+export const usePlatformObjectives = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<PlatformObjectives>('platform-objectives', p, r, 'platform-objectives', f)
+
 export const useFreshness = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FreshnessRow[]>('freshness', p, r, 'freshness', f)
 export const useNormalization = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Normalization>('normalization', p, r, 'normalization', f)
 export const useAttribution = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Attribution>('attribution', p, r, 'attribution', f)
