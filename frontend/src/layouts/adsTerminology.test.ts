@@ -126,3 +126,32 @@ describe('the files this guard names still exist', () => {
     expect(present).toEqual(expect.arrayContaining(['appNav.ts', 'agencyNav.ts']))
   })
 })
+
+/**
+ * The vocabulary has to hold where the customer reads the RESULT, not only in the rail.
+ *
+ * Navigation was the loudest instance and not the only one: the interactive report titled its
+ * slides «أفضل المحتويات», the shared report described itself as covering «المحتويات», the campaign
+ * overview said «أفضل المحتويات الإعلانية», and the shared label table answered `content` and
+ * `tab_creatives` with «المحتويات» — so a customer met the sidebar's word, then three others on the
+ * pages that word led to.
+ *
+ * Named strings rather than a blanket scan, because the influencer and UGC surfaces say «المحتوى»
+ * about creator content on purpose and a scan that failed them would be deleted within a week.
+ */
+describe('the surfaces the rail leads to say it too', () => {
+  const SAYS_ADS: [string, string[]][] = [
+    ['src/lib/i18n.ts', ["content: 'الإعلانات'", "tab_creatives: 'الإعلانات'", "content: 'Ads'", "tab_creatives: 'Ads'"]],
+    ['src/features/reports/InteractiveReport.tsx', ['أفضل الإعلانات', 'أضعف الإعلانات']],
+    ['src/features/reports/PublicReport.tsx', ['كل المنصات والحملات والإعلانات']],
+    ['src/features/campaigns/overview/UnifiedCampaignOverview.tsx', ["topCreatives: 'أفضل الإعلانات'", "topCreatives: 'Best ads'"]],
+  ]
+
+  for (const [path, expected] of SAYS_ADS) {
+    it(`${path} names the advertising entity «الإعلانات»`, () => {
+      const source = read(path)
+
+      for (const phrase of expected) expect(source).toContain(phrase)
+    })
+  }
+})

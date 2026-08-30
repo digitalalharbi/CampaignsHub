@@ -181,7 +181,7 @@ const OVERVIEW_COPY = {
     nothingNeedsAttention: 'لا شيء يحتاج تدخلًا الآن.',
     topAlerts: 'أهم التنبيهات',
     noCriticalAlerts: 'لا تنبيهات حرجة.',
-    topCreatives: 'أفضل المحتويات الإعلانية',
+    topCreatives: 'أفضل الإعلانات',
     resultUnit: 'نتيجة',
   },
   en: {
@@ -201,7 +201,7 @@ const OVERVIEW_COPY = {
     nothingNeedsAttention: 'Nothing needs attention right now.',
     topAlerts: 'Top alerts',
     noCriticalAlerts: 'No critical alerts.',
-    topCreatives: 'Best creatives',
+    topCreatives: 'Best ads',
     resultUnit: 'results',
   },
 } as const
