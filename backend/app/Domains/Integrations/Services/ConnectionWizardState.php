@@ -131,8 +131,26 @@ final class ConnectionWizardState
          * no row yet is SYNCING rather than healthy — «connected» over an empty dashboard is the
          * sentence customers read as «your data is gone».
          */
+        /*
+         * INTEGRATION-DATASOURCE-WIZARD-001 §9 — an authorisation can lapse without the connection
+         * row ever hearing about it.
+         *
+         * `connections.status` is written when a token refresh fails. A customer who removes this
+         * app's access at the PLATFORM, or whose ad-account permission is withdrawn one account at a
+         * time, produces no refresh failure at all: the row still reads «connected», and every
+         * account under it reads `revoked` or `access_lost` one by one.
+         *
+         * When that is true of ALL of them the authorisation is gone, whatever the row says, and
+         * every action on the card except reconnecting is going to fail. One account in that state
+         * out of ten is a different fact and stays «needs attention» — it is one account's
+         * permission, and re-authorising the whole connection is not the answer to it.
+         */
+        $lostAccess = ($health['states'][AccountHealth::REVOKED] ?? 0)
+            + ($health['states'][AccountHealth::ACCESS_LOST] ?? 0);
+        $authorisationLost = ($health['connected'] ?? 0) > 0 && $lostAccess === $health['connected'];
+
         $userState = match (true) {
-            $state === self::ACCESS_REVOKED => self::USER_REAUTH_REQUIRED,
+            $state === self::ACCESS_REVOKED, $authorisationLost => self::USER_REAUTH_REQUIRED,
             $state === self::NO_ACCOUNTS => self::USER_AUTH_REQUIRED,
             $state === self::NEEDS_SELECTION => self::USER_ACCOUNT_SELECTION_REQUIRED,
             ($health['needs_attention'] ?? 0) > 0 => self::USER_ATTENTION_REQUIRED,

@@ -304,6 +304,55 @@ final class ConnectionWizardResumeTest extends TestCase
             ->assertStatus(404);
     }
 
+    /**
+     * INTEGRATION-DATASOURCE-WIZARD-001 §9 — every account has lost access, so the authorisation has.
+     *
+     * The connection row still says «connected», and it is telling the truth about the only thing it
+     * knows: no token refresh has failed. Nobody refreshed anything, because the customer withdrew
+     * this app's access at the platform — which produces no error here at all until the next sync
+     * of each account, one at a time.
+     *
+     * Read as «needs attention» this card offers manage-accounts, sync-now and reconnect, and the
+     * first two cannot succeed. It is one question — authorise again — and the card has to ask it.
+     */
+    public function test_a_connection_whose_every_account_lost_access_needs_reauthorising(): void
+    {
+        $connection = $this->connection('linkedin');
+        $this->discover($connection, 2);
+
+        foreach (ExternalAccount::withoutGlobalScopes()->where('provider_connection_id', $connection->id)->get() as $account) {
+            $this->assign($account);
+            $account->forceFill(['access_lost_at' => now()])->save();
+        }
+
+        $state = app(ConnectionWizardState::class)->for($connection);
+
+        $this->assertSame(ConnectionWizardState::USER_REAUTH_REQUIRED, $state['user_state']);
+    }
+
+    /**
+     * One account out of two is one account's permission, and re-authorising is not the answer.
+     *
+     * The distinction is the whole point of the rule above: a connection that asks for consent
+     * whenever any single ad account is withdrawn would send customers through OAuth for something
+     * OAuth does not fix, and the nine accounts that were working would be re-consented for nothing.
+     */
+    public function test_one_account_losing_access_is_attention_rather_than_reauthorising(): void
+    {
+        $connection = $this->connection('linkedin');
+        $this->discover($connection, 2);
+
+        $accounts = ExternalAccount::withoutGlobalScopes()->where('provider_connection_id', $connection->id)->get();
+        foreach ($accounts as $account) {
+            $this->assign($account);
+        }
+        $accounts->first()->forceFill(['access_lost_at' => now()])->save();
+
+        $state = app(ConnectionWizardState::class)->for($connection);
+
+        $this->assertSame(ConnectionWizardState::USER_ATTENTION_REQUIRED, $state['user_state']);
+    }
+
     private function connection(string $provider, ?Tenant $tenant = null): ProviderConnection
     {
         $credential = new IntegrationCredential([
