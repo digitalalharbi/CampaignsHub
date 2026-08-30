@@ -19,6 +19,7 @@ import { toApiError } from '@/lib/api/client'
 import { useT, type TranslationKey } from '@/lib/i18n'
 import { sortByPlatform } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
+import { useProject } from '@/stores/project'
 
 /**
  * INTEG-UI-001 — the integrations page says which of four things is true, and what to do about it.
@@ -217,6 +218,15 @@ export function AdPlatformsPanel() {
   )
   const unfinished = wizardStates.data?.resumable ?? []
   const [wizardConnectionId, setWizardConnectionId] = useState<string | null>(null)
+  /*
+   * INTEGRATION-DATASOURCE-WIZARD-001 §8 — the wizard opens in one of two modes.
+   *
+   * Null is «connect»: choose accounts, choose a project, confirm. A project id is «manage»: the
+   * same picker, opened on what this project already holds, saving a desired set the server diffs.
+   * The mode is a property of how it was opened, not a step the reader chooses.
+   */
+  const [managingProjectId, setManagingProjectId] = useState<string | null>(null)
+  const currentProjectId = useProject((s) => s.currentProjectId)
 
   return (
     <section className="space-y-4" data-testid="ad-platforms-panel">
@@ -317,7 +327,13 @@ export function AdPlatformsPanel() {
       ) : wizardConnectionId ? (
         <ConnectionWizard
           connectionId={wizardConnectionId}
-          onClose={() => { setWizardConnectionId(null); void wizardStates.refetch(); void query.refetch() }}
+          manageProjectId={managingProjectId}
+          onClose={() => {
+            setWizardConnectionId(null)
+            setManagingProjectId(null)
+            void wizardStates.refetch()
+            void query.refetch()
+          }}
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -326,7 +342,11 @@ export function AdPlatformsPanel() {
               key={c.key}
               connector={c}
               wizard={wizardByProvider.get(c.key) ?? null}
-              onOpenWizard={setWizardConnectionId}
+              onOpenWizard={(id) => { setManagingProjectId(null); setWizardConnectionId(id) }}
+              onManageAccounts={currentProjectId === null ? undefined : (id) => {
+                setManagingProjectId(currentProjectId)
+                setWizardConnectionId(id)
+              }}
               ar={ar}
               t={t}
               onAuthorize={() => authorizeMutation.mutate(c.key)}
@@ -392,7 +412,7 @@ export function AdPlatformsPanel() {
 }
 
 function ConnectorCard({
-  connector: c, wizard, onOpenWizard, ar, t, onAuthorize, onConnect, onSync, authorizing, connecting, syncing,
+  connector: c, wizard, onOpenWizard, onManageAccounts, ar, t, onAuthorize, onConnect, onSync, authorizing, connecting, syncing,
   onDisconnect, disconnecting,
 }: {
   connector: Connector
@@ -405,6 +425,13 @@ function ConnectorCard({
    */
   wizard: ResumableConnection | null
   onOpenWizard: (connectionId: string) => void
+  /**
+   * Reopen the picker on what THIS project holds — absent when no project is chosen.
+   *
+   * A binding belongs to a project, so «manage accounts» is meaningless from a tenant-wide view with
+   * no project in hand; the button is not drawn rather than drawn and refusing.
+   */
+  onManageAccounts?: (connectionId: string) => void
   ar: boolean
   t: (key: TranslationKey) => string
   onAuthorize: () => void
@@ -519,6 +546,20 @@ function ConnectorCard({
           </Button>
         ) : state === 'connected' ? (
           <>
+            {/*
+              First, because it is the action a connected source is actually used for: adding the
+              account that was created last week, or removing the one that closed. It costs no
+              authorisation — see `ApplyAccountSelection`.
+            */}
+            {onManageAccounts && wizard && (
+              <Button
+                variant="secondary"
+                onClick={() => onManageAccounts(wizard.connection.id)}
+                data-testid={`connector-manage-${c.key}`}
+              >
+                <Plug size={14} /> {ar ? 'إدارة الحسابات' : 'Manage accounts'}
+              </Button>
+            )}
             <Button variant="secondary" loading={syncing} onClick={onSync} data-testid={`connector-sync-${c.key}`}>
               <RefreshCw size={14} /> {t('sync')}
             </Button>
