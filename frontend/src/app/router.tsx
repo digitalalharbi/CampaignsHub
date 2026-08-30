@@ -58,6 +58,7 @@ import { RequestDetailPage } from '@/features/requests/RequestDetailPage'
 import { ClientsPortfolioPage } from '@/features/clients/ClientsPortfolioPage'
 import { ClientCommandCenterPage } from '@/features/clients/ClientCommandCenterPage'
 import { AlertsPage } from '@/features/alerts/AlertsPage'
+import { SpendLimitsPage } from '@/features/budget/SpendLimitsPage'
 import { DevStatusPage } from '@/features/dev/DevStatusPage'
 import { billingRoutes } from '@/features/billing/billingRoutes'
 import { messagingRoutes } from '@/features/messaging/messagingRoutes'
@@ -337,6 +338,14 @@ export const router = createBrowserRouter(withErrorBoundary([
           // advertiser portal, and inside this tree the guard above would turn them away first.
           // Alerts management (the alerts engine's operator surface).
           { path: 'alerts', element: <AlertsPage /> },
+          /*
+           * BUDGET-GOVERNANCE-001 — the workspace's own limits, which are not the platforms'.
+           *
+           * Its own destination rather than a tab on a metrics page: it is configuration an operator
+           * enters deliberately, and it must not be read as another view of the provider budgets the
+           * dashboard already paces against.
+           */
+          { path: 'spend-limits', element: <SpendLimitsPage /> },
           // Expansion internal surfaces. Integrations is CANONICAL at /app/integrations and absorbs the
           // Connection Center + the Google Drive connector; Branding lives under Settings. Legacy/duplicate
           // routes redirect (see docs/ROUTE_REDIRECT_MAP.md) — no dead links, one engine per function.

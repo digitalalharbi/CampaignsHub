@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SPECS, dashboardMetrics, layoutFor } from './metricCatalog'
+import { SPECS, dashboardMetrics, layoutFor, readMetric } from './metricCatalog'
 
 /**
  * METRIC-NAMES-001 — the metrics on screen belong to the campaign's objective, and are named in
@@ -151,5 +151,35 @@ describe('the headline follows what is in scope, not what the filter says', () =
 
   it('ignores the scope entirely once the reader has chosen an objective', () => {
     expect(layoutFor('awareness', ['sales']).primary).toEqual(layoutFor('awareness').primary)
+  })
+})
+
+/**
+ * NUMBER-PRESENTATION-001 — the compact figure is the display; the exact one stays reachable.
+ *
+ * A card shows «4.85M SAR» because a card has room for six characters and not for eleven. That is a
+ * presentation decision, and a presentation decision must not destroy the figure: two campaigns
+ * reading «4.85M» can be forty thousand riyals apart, and the reader comparing them has nowhere to
+ * look. The reading now carries the full number, and the strip hangs it on the value as a title.
+ *
+ * It is attached where the READING is built rather than at each card, because there are a dozen
+ * surfaces rendering these and only one place where a value meets its formatter.
+ */
+describe('the exact figure travels with the compact one', () => {
+  const read = (key: string, value: number) =>
+    readMetric(key, SPECS[key]!, { [key]: value }, undefined, 'SAR')
+
+  it('carries the full number when the display abbreviated it', () => {
+    expect(read('spend', 4_850_321)).toEqual({ kind: 'value', text: '4.85M SAR', exact: '4,850,321 SAR' })
+  })
+
+  it('says nothing extra when the display already showed every digit', () => {
+    /* Under a thousand there is nothing to reveal, so no title is attached at all. */
+    expect(read('spend', 940)).toEqual({ kind: 'value', text: '940 SAR' })
+  })
+
+  it('attaches nothing to a formatter that does not abbreviate', () => {
+    /* `impressions` prints «1,282,024» in full — a tooltip repeating it would be noise. */
+    expect(read('impressions', 1_282_024)).toEqual({ kind: 'value', text: '1,282,024' })
   })
 })

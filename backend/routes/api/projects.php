@@ -7,6 +7,7 @@ use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Metrics\Http\Controllers\MetricsController;
 use App\Domains\Metrics\Http\Controllers\SavedDashboardViewController;
+use App\Domains\Metrics\Http\Controllers\SpendLimitController;
 use App\Domains\Metrics\Http\Controllers\SyncRunController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
 use App\Domains\Projects\Http\Controllers\ProjectController;
@@ -95,6 +96,17 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // REPORT-OBJECTIVE-001: spend and results split by marketing path, Direct and Blended apart.
     Route::get('metrics/objective-performance', [MetricsController::class, 'objectivePerformance'])->name('metrics.objective');
     Route::get('metrics/budget', [MetricsController::class, 'budget'])->name('metrics.budget');
+    /*
+     * BUDGET-GOVERNANCE-001 — the workspace's OWN limits, which the two routes above are not.
+     *
+     * `metrics/budget` paces against `unified_campaigns.total_budget`: the plan set inside the ad
+     * platform, which the platform itself enforces. These are internal monitoring limits over scopes
+     * no single platform can see, and nothing enforces them — every payload says so.
+     */
+    Route::get('spend-limits', [SpendLimitController::class, 'index'])->name('spend-limits.index');
+    Route::post('spend-limits', [SpendLimitController::class, 'store'])->name('spend-limits.store');
+    Route::match(['put', 'patch'], 'spend-limits/{spendLimit}', [SpendLimitController::class, 'update'])->name('spend-limits.update');
+    Route::delete('spend-limits/{spendLimit}', [SpendLimitController::class, 'destroy'])->name('spend-limits.destroy');
     Route::get('metrics/budget-accounts', [MetricsController::class, 'budgetAccounts'])->name('metrics.budget-accounts');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');
     // NORM-001: what was done to the numbers before they were shown — currency, timezone, attribution,
