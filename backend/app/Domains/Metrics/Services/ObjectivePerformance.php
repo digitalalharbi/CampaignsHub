@@ -270,6 +270,117 @@ final class ObjectivePerformance
         ];
     }
 
+    /**
+     * OBJECTIVE-ANALYTICS-DEPTH-001 — the strongest and weakest campaign INSIDE each path.
+     *
+     * The same rule as `byPlatform()`, one level down. A leads campaign and an awareness campaign
+     * are not better or worse than each other, so a single «top campaigns» list across a mixed
+     * programme ranks them by whichever metric happens to be shared — which is how a brand campaign
+     * comes to sit at the bottom of a table for not producing revenue it never sought.
+     *
+     * Within a path the comparison is real, and the metric is the path's own.
+     *
+     * `comparable` is false where fewer than two campaigns spent on the path: a strongest of one is
+     * a figure wearing a superlative, and «your best sales campaign» said of the only sales campaign
+     * tells a client nothing they did not already know while implying a choice was made.
+     *
+     * @return array<string,mixed>
+     */
+    public function leadersByPath(Carbon $from, Carbon $to): array
+    {
+        $byPath = [];
+
+        foreach ($this->rows($from, $to) as $row) {
+            $objective = CampaignObjective::tryFrom((string) $row->objective) ?? CampaignObjective::Other;
+            $id = (string) $row->unified_campaign_id;
+            $bucket = &$byPath[$objective->path()->value][$id];
+
+            $bucket ??= [
+                'id' => $id,
+                'name' => (string) $row->name,
+                'objective' => $objective->value,
+                'spend' => 0.0, 'impressions' => 0.0, 'clicks' => 0.0,
+                'landing_page_views' => 0.0, 'orders' => 0.0, 'revenue' => 0.0,
+            ];
+
+            foreach (['spend', 'impressions', 'clicks', 'landing_page_views', 'orders', 'revenue'] as $key) {
+                $bucket[$key] += (float) $row->{$key};
+            }
+        }
+
+        $out = [];
+
+        foreach (MarketingPath::cases() as $path) {
+            $campaigns = array_values($byPath[$path->value] ?? []);
+            $spending = array_values(array_filter($campaigns, static fn (array $c): bool => $c['spend'] > 0));
+
+            foreach ($spending as $i => $campaign) {
+                // The derived figures the ranker reads. Computed here from this path's own sums, so a
+                // campaign's CPA is its own and never the programme's blended one.
+                $spending[$i]['cpa'] = $campaign['orders'] > 0 ? round($campaign['spend'] / $campaign['orders'], 2) : null;
+                $spending[$i]['roas'] = $campaign['spend'] > 0 ? round($campaign['revenue'] / $campaign['spend'], 3) : null;
+                $spending[$i]['ctr'] = $campaign['impressions'] > 0 ? round($campaign['clicks'] / $campaign['impressions'], 4) : null;
+                $spending[$i]['cpm'] = $campaign['impressions'] > 0 ? round($campaign['spend'] / $campaign['impressions'] * 1000, 2) : null;
+            }
+
+            $comparable = count($spending) > 1;
+
+            $out[] = [
+                'path' => $path->value,
+                'label_ar' => $path->labels()['ar'],
+                'label_en' => $path->labels()['en'],
+                'metric' => $path->headlineMetrics()[1] ?? 'spend',
+                'comparable' => $comparable,
+                'comparable_reason' => match (true) {
+                    $comparable => 'two_or_more_campaigns_spent',
+                    count($spending) === 1 => 'only_one_campaign_spent',
+                    default => 'nothing_spent_on_this_path',
+                },
+                /*
+                 * Both ends, or neither. A list of winners with no counterpart is where a report
+                 * stops saying what to STOP — and the weakest campaign is the one an operator can
+                 * act on this week.
+                 */
+                'strongest' => $comparable ? $this->extreme($spending, $path, best: true) : null,
+                'weakest' => $comparable ? $this->extreme($spending, $path, best: false) : null,
+                'campaigns' => count($spending),
+            ];
+        }
+
+        return ['paths' => $out, 'cross_path_comparison' => false];
+    }
+
+    /**
+     * The best or worst campaign on a path, by the path's own metric.
+     *
+     * Cost metrics invert: the lowest cost per order is the strongest, and reading them the same way
+     * round as a volume metric is how «best» came to name the most expensive campaign.
+     *
+     * @param  list<array<string,mixed>>  $campaigns
+     * @return array<string,mixed>|null
+     */
+    private function extreme(array $campaigns, MarketingPath $path, bool $best): ?array
+    {
+        $metric = match ($path) {
+            MarketingPath::Awareness => 'cpm',
+            MarketingPath::Traffic => 'ctr',
+            MarketingPath::Conversion => 'cpa',
+        };
+        $lowerIsBetter = in_array($metric, ['cpm', 'cpa'], true);
+
+        $withMetric = array_values(array_filter($campaigns, static fn (array $c): bool => $c[$metric] !== null));
+
+        if ($withMetric === []) {
+            return null;
+        }
+
+        usort($withMetric, static fn (array $a, array $b): int => $a[$metric] <=> $b[$metric]);
+
+        $row = $best === $lowerIsBetter ? $withMetric[0] : $withMetric[count($withMetric) - 1];
+
+        return ['id' => $row['id'], 'name' => $row['name'], 'metric' => $metric, 'value' => $row[$metric]];
+    }
+
     private function rows(Carbon $from, Carbon $to): Collection
     {
         $query = DailyMetric::query()

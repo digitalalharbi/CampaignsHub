@@ -103,6 +103,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * which platforms may be compared at all.
      */
     Route::get('metrics/platform-objectives', [MetricsController::class, 'platformObjectives'])->name('metrics.platform-objectives');
+    Route::get('metrics/objective-leaders', [MetricsController::class, 'objectiveLeaders'])->name('metrics.objective-leaders');
     Route::get('metrics/budget', [MetricsController::class, 'budget'])->name('metrics.budget');
     Route::get('metrics/budget-accounts', [MetricsController::class, 'budgetAccounts'])->name('metrics.budget-accounts');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');

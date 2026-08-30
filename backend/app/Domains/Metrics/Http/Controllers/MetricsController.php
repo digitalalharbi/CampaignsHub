@@ -484,6 +484,30 @@ final class MetricsController extends Controller
         );
     }
 
+    /**
+     * OBJECTIVE-ANALYTICS-DEPTH-001 — the strongest and weakest campaign inside each path.
+     *
+     * The same refusal as `platformObjectives`, one level down: a leads campaign and an awareness
+     * campaign are not better or worse than each other, and a single «top campaigns» list across a
+     * mixed programme ranks them by whichever metric they happen to share.
+     */
+    public function objectiveLeaders(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        $campaigns = array_values(array_filter((array) $request->input('campaign_ids', [])));
+
+        return ApiResponse::success(
+            (new ObjectivePerformance(
+                campaignIds: $campaigns === [] ? null : $campaigns,
+                providers: $this->providerFilter($request) === [] ? null : $this->providerFilter($request),
+            ))->leadersByPath($from, $to),
+            'Strongest and weakest campaign per objective path.',
+            meta: $this->meta($from, $to),
+        );
+    }
+
     public function budget(Request $request): JsonResponse
     {
         $this->authorizeView($request);

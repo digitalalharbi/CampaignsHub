@@ -166,6 +166,124 @@ final class PlatformObjectiveContributionTest extends TestCase
         $this->assertEqualsWithDelta(8_000.0, $paths['awareness']['spend'], 0.01);
     }
 
+    // ── OBJECTIVE-ANALYTICS-DEPTH-001 — strongest and weakest INSIDE a path ──────────────────────
+
+    /**
+     * Both ends of one path, by that path's own metric — and cost metrics read the other way round.
+     *
+     * The lowest cost per order is the strongest sales campaign. Ranking a cost the same way round
+     * as a volume metric is how «best» comes to name the most expensive campaign in the account.
+     */
+    public function test_the_strongest_and_weakest_are_read_by_the_paths_own_metric(): void
+    {
+        $this->spendWith('meta', 'sales', spend: 1_000, orders: 100);   // cpa 10
+        $this->spendWith('meta', 'sales', spend: 1_000, orders: 20);    // cpa 50
+
+        $conversion = $this->leaders('conversion');
+
+        $this->assertTrue($conversion['comparable']);
+        $this->assertSame('cpa', $conversion['strongest']['metric']);
+        $this->assertEqualsWithDelta(10.0, $conversion['strongest']['value'], 0.01, 'the cheapest order is the strongest, not the dearest');
+        $this->assertEqualsWithDelta(50.0, $conversion['weakest']['value'], 0.01);
+    }
+
+    /**
+     * A strongest of one is a figure wearing a superlative.
+     *
+     * «Your best sales campaign», said of the only sales campaign, tells a client nothing they did
+     * not know and implies a choice was made between alternatives that did not exist.
+     */
+    public function test_one_campaign_on_a_path_has_no_strongest(): void
+    {
+        $this->spendWith('meta', 'sales', spend: 1_000, orders: 100);
+
+        $conversion = $this->leaders('conversion');
+
+        $this->assertFalse($conversion['comparable']);
+        $this->assertSame('only_one_campaign_spent', $conversion['comparable_reason']);
+        $this->assertNull($conversion['strongest']);
+        $this->assertNull($conversion['weakest']);
+    }
+
+    /** Both ends, or neither: a list of winners with no counterpart never says what to stop. */
+    public function test_the_weakest_is_named_whenever_the_strongest_is(): void
+    {
+        $this->spendWith('meta', 'awareness', spend: 1_000, impressions: 1_000_000);
+        $this->spendWith('tiktok', 'awareness', spend: 1_000, impressions: 200_000);
+
+        $awareness = $this->leaders('awareness');
+
+        $this->assertNotNull($awareness['strongest']);
+        $this->assertNotNull($awareness['weakest']);
+        $this->assertNotSame($awareness['strongest']['id'], $awareness['weakest']['id']);
+    }
+
+    /** And no campaign is ranked against a campaign from another path. */
+    public function test_campaigns_are_never_ranked_across_paths(): void
+    {
+        $this->spendWith('meta', 'awareness', spend: 9_000, impressions: 1_000_000);
+        $this->spendWith('meta', 'sales', spend: 1_000, orders: 100);
+
+        $out = (new ObjectivePerformance)->leadersByPath(Carbon::parse(self::FROM), Carbon::parse(self::TO));
+
+        $this->assertFalse($out['cross_path_comparison']);
+
+        $paths = array_column($out['paths'], null, 'path');
+        $this->assertFalse($paths['awareness']['comparable'], 'one awareness campaign is not a ranking');
+        $this->assertFalse($paths['conversion']['comparable']);
+    }
+
+    /** @return array<string,mixed> */
+    private function leaders(string $path): array
+    {
+        $out = (new ObjectivePerformance)->leadersByPath(Carbon::parse(self::FROM), Carbon::parse(self::TO));
+
+        return array_column($out['paths'], null, 'path')[$path];
+    }
+
+    private function spendWith(
+        string $provider,
+        string $objective,
+        float $spend,
+        float $orders = 0,
+        float $impressions = 0,
+    ): void {
+        $campaign = UnifiedCampaign::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'name' => "{$provider} {$objective} ".uniqid(), 'status' => 'active', 'objective' => $objective,
+        ]);
+
+        $account = $this->account($provider);
+        $external = ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'external_account_id' => $account->getKey(), 'unified_campaign_id' => $campaign->id,
+            'provider' => $provider, 'external_id' => 'x-'.uniqid(), 'name' => $campaign->name, 'status' => 'active',
+        ]);
+
+        foreach (['spend' => $spend, 'conversions' => $orders, 'impressions' => $impressions] as $key => $value) {
+            if ($value <= 0) {
+                continue;
+            }
+
+            DailyMetric::withoutGlobalScopes()->create([
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $this->tenant->id,
+                'project_id' => $this->project->id,
+                'external_account_id' => $account->getKey(),
+                'external_campaign_id' => $external->getKey(),
+                'unified_campaign_id' => $campaign->id,
+                'provider' => $provider,
+                'metric_key' => $key,
+                'metric_date' => '2026-08-10',
+                'value' => $value,
+                'original_amount' => $key === 'spend' ? $value : null,
+                'original_currency' => $key === 'spend' ? 'SAR' : null,
+                'project_currency' => 'SAR',
+                'exchange_rate' => 1,
+            ]);
+        }
+    }
+
     /** @return array<string,mixed> */
     private function build(): array
     {
