@@ -45,8 +45,23 @@ export function ProjectSwitcher() {
       <span className="pointer-events-none absolute start-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md bg-brand-100 text-xs font-bold text-brand-700">
         {(selectedProject?.name ?? '?').charAt(0)}
       </span>
+      {/*
+        A project name longer than the rail was CLIPPED, not shortened.
+
+        The control is a native select inside an RTL shell, and «Growth — Acquisition» is Latin text:
+        the overflow fell at the start edge, so the Arabic product showed «rowth — Acquisition» on
+        every page, with the first letter cut and nothing saying so.
+
+        Two settings, both needed. The ellipsis says «there is more of this name», where a cut letter
+        says the project is called something it is not. And `dir="auto"` lays the name out in its OWN
+        direction, so a Latin name truncates at its end — «Growth — Acquisi…», which still names the
+        project — rather than at its beginning. An Arabic name is unaffected: it was already reading
+        in the shell's direction.
+      */}
       <select
-        className="w-full cursor-pointer appearance-none rounded-xl border border-border bg-surface-secondary py-2.5 pe-9 ps-11 text-sm font-semibold text-text-primary transition-colors hover:border-border-strong focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/25"
+        dir="auto"
+        title={selectedProject?.name}
+        className="w-full cursor-pointer appearance-none overflow-hidden text-ellipsis whitespace-nowrap rounded-xl border border-border bg-surface-secondary py-2.5 pe-9 ps-11 text-sm font-semibold text-text-primary transition-colors hover:border-border-strong focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/25"
         value={selectedProject?.id || ''}
         onChange={(e) => setCurrentProjectId(e.target.value)}
       >
