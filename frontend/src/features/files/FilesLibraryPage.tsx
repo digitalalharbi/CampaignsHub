@@ -7,6 +7,7 @@ import { useUi } from '@/stores/ui'
 import { fmtDateTime } from '@/lib/datetime'
 import { getFilesLibrary } from './api'
 import { usePortalPath } from '@/app/portalPath'
+import { StatCard } from '@/components/ui/StatCard'
 
 const COPY = {
   ar: {
@@ -235,17 +236,16 @@ export function FilesLibraryPage() {
 }
 
 
+/**
+ * UX-KPI-PRESENTATION-001 — the shared card. The tone dot is this surface's; the design is not.
+ *
+ * This drew its own copy: the same `p-4`, the same 2px dot, the same `text-2xl` figure. Four files
+ * agreed by coincidence, and a row of cards here beside a row on the dashboard lined up only until
+ * somebody touched one of them.
+ */
 function FileSummaryCard({ label, value, tone }: { label: string; value: number; tone: 'brand' | 'info' | 'success' | 'muted' }) {
-  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', info: 'bg-info', success: 'bg-success', muted: 'bg-text-muted' }
-  return (
-    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
-      <div className="flex items-center gap-1.5">
-        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
-        <span className="text-xs font-semibold text-text-secondary">{label}</span>
-      </div>
-      <span className="tnum text-2xl font-extrabold text-text-primary" dir="ltr">{value}</span>
-    </div>
-  )
+  // `muted` is this surface's word for «nothing special»; the shared card calls it neutral.
+  return <StatCard label={label} value={value} tone={tone === 'muted' ? 'neutral' : tone} dot />
 }
 
 /** An honest type icon derived from the file's extension/mime — never a fabricated preview image. */
