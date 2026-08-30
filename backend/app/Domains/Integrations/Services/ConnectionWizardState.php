@@ -51,6 +51,32 @@ final class ConnectionWizardState
     /** The provider has stopped honouring the authorisation. */
     public const ACCESS_REVOKED = 'access_revoked';
 
+    /**
+     * INTEGRATION-DATASOURCE-WIZARD-001 §14 — the states a READER is shown, in one place.
+     *
+     * The five above are facts about the record; these are what a person is told, and every surface
+     * was inventing its own vocabulary for them. The integrations card said «متصل», the wizard said
+     * «needs selection», the project page said «قيد المزامنة», and none of the three agreed about a
+     * connection whose accounts were bound but had never produced a row.
+     *
+     * The mapping is one-way and lives here: the record decides, this names it, and no surface adds
+     * a tenth. They are RUNTIME states — what to show and what to offer — and are unrelated to the
+     * Matrix's status vocabulary, which describes requirements rather than connections.
+     */
+    public const USER_NOT_CONNECTED = 'NOT_CONNECTED';
+
+    public const USER_AUTH_REQUIRED = 'AUTH_REQUIRED';
+
+    public const USER_ACCOUNT_SELECTION_REQUIRED = 'ACCOUNT_SELECTION_REQUIRED';
+
+    public const USER_SYNCING = 'SYNCING';
+
+    public const USER_HEALTHY = 'HEALTHY';
+
+    public const USER_ATTENTION_REQUIRED = 'ATTENTION_REQUIRED';
+
+    public const USER_REAUTH_REQUIRED = 'REAUTH_REQUIRED';
+
     public function __construct(private readonly AccountHealth $health) {}
 
     /**
@@ -64,6 +90,7 @@ final class ConnectionWizardState
      *     has_parent: bool,
      *     resumable: bool,
      *     next_step: ?string,
+     *     user_state: string,
      *     health: array{connected:int, healthy:int, needs_attention:int, pending_first_sync:int, states:array<string,int>},
      * }
      */
@@ -93,8 +120,29 @@ final class ConnectionWizardState
             default => self::ACTIVE,
         };
 
+        $health = $this->health->summarise((string) $connection->getKey());
+
+        /*
+         * INTEGRATION-DATASOURCE-WIZARD-001 §14 — what the reader is told, derived once.
+         *
+         * `ATTENTION_REQUIRED` outranks `HEALTHY` deliberately: ten accounts behind one
+         * authorisation with one whose access was withdrawn is not a healthy connection, and the
+         * card that called it one is why nobody went and looked. And a connection with bindings but
+         * no row yet is SYNCING rather than healthy — «connected» over an empty dashboard is the
+         * sentence customers read as «your data is gone».
+         */
+        $userState = match (true) {
+            $state === self::ACCESS_REVOKED => self::USER_REAUTH_REQUIRED,
+            $state === self::NO_ACCOUNTS => self::USER_AUTH_REQUIRED,
+            $state === self::NEEDS_SELECTION => self::USER_ACCOUNT_SELECTION_REQUIRED,
+            ($health['needs_attention'] ?? 0) > 0 => self::USER_ATTENTION_REQUIRED,
+            $state === self::FIRST_SYNC_PENDING => self::USER_SYNCING,
+            default => self::USER_HEALTHY,
+        };
+
         return [
             'state' => $state,
+            'user_state' => $userState,
             'discovered' => $discovered,
             'assigned' => $assigned,
             'synced' => $synced,
@@ -112,7 +160,7 @@ final class ConnectionWizardState
              * used to render as a single green «متصل» — and that one account is the only fact on the
              * card anybody needed. «10 مربوطة · 9 سليمة · 1 يحتاج انتباه» is the sentence that says it.
              */
-            'health' => $this->health->summarise((string) $connection->getKey()),
+            'health' => $health,
             'next_step' => match ($state) {
                 self::NEEDS_SELECTION => ProviderHierarchy::hasParent($connection->provider) ? 'parent' : 'accounts',
                 self::FIRST_SYNC_PENDING => 'sync',
