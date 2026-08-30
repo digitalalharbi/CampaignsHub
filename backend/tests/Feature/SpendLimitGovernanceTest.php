@@ -311,6 +311,39 @@ final class SpendLimitGovernanceTest extends TestCase
         $this->assertSame(0, SpendLimit::withoutGlobalScopes()->count());
     }
 
+    /**
+     * The row records WHO set the limit, and the column can hold what a user's key is.
+     *
+     * `created_by` was declared `uuid`. This product's users carry a bigint key beside a separate
+     * `uuid` column, and every other `created_by` in the schema is a bigint — so the single
+     * statement that writes this one could never succeed: Postgres refused the insert outright and
+     * the limit was never created. Nothing caught it because no test posted a limit that was
+     * expected to SUCCEED, and no operator could: the page had no form.
+     *
+     * The assertion is on the stored identifier rather than on the 201, because a column that
+     * silently dropped the actor would still answer 201.
+     */
+    public function test_a_created_limit_records_the_operator_who_set_it(): void
+    {
+        [$owner] = $this->owner();
+
+        $this->actingAs($owner, 'sanctum')
+            ->postJson("/api/v1/projects/{$this->project->id}/spend-limits", [
+                'scope' => 'project',
+                'amount' => 25_000,
+                'currency' => 'SAR',
+                'starts_on' => '2026-08-01',
+                'ends_on' => '2026-08-31',
+                'thresholds' => [75, 90],
+            ])
+            ->assertStatus(201);
+
+        $limit = SpendLimit::withoutGlobalScopes()->sole();
+
+        $this->assertSame((int) $owner->getKey(), (int) $limit->created_by);
+        $this->assertEqualsCanonicalizing([75, 90, 100], $limit->thresholdPercents());
+    }
+
     /** Deactivated rather than deleted — an audit trail whose subject can vanish is not one. */
     public function test_removing_a_limit_keeps_it_for_the_record(): void
     {

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getEnvelope, postData } from '@/lib/api/client'
+import { deleteData, getEnvelope, postData } from '@/lib/api/client'
 
 /**
  * BUDGET-GOVERNANCE-001 — the workspace's OWN limits, read from the endpoint that computes them.
@@ -84,6 +84,22 @@ export function useCreateSpendLimit(projectId: string | null) {
 
   return useMutation({
     mutationFn: (body: NewSpendLimit) => postData<SpendLimitReading>(`/projects/${projectId}/spend-limits`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['spend-limits', projectId] }),
+  })
+}
+
+/**
+ * Removing a limit DEACTIVATES it — the endpoint keeps the row.
+ *
+ * The events written against a limit are its audit trail, and a trail whose subject can vanish is
+ * not one. What the operator sees is the limit leaving their list, which is what they asked for;
+ * what the record keeps is last quarter's limit beside what was actually spent against it.
+ */
+export function useRemoveSpendLimit(projectId: string | null) {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) => deleteData<null>(`/projects/${projectId}/spend-limits/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['spend-limits', projectId] }),
   })
 }
