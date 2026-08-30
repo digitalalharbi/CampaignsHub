@@ -146,6 +146,7 @@ final class AttributionTransparency
             'period' => ['from' => $window['from_date'], 'to' => $window['to_date'], 'timezone' => $window['timezone']],
             'platform_reported' => $this->platformReported($platforms),
             'store_confirmed' => $this->storeConfirmed($hasStore, $loaded),
+            'overlap' => $this->overlap($hasStore, $platforms, $loaded),
             'dedup' => $this->dedup($hasStore, $platforms, $loaded),
             'models' => $this->models($projectId, $window['from_date'], $window['to_date']),
             'unattributed' => $this->unattributed($hasStore, $loaded['orders']),
@@ -223,6 +224,85 @@ final class AttributionTransparency
             'attributed_orders' => $live->whereNotNull('external_campaign_id')->count(),
             'duplicates_collapsed' => $loaded['duplicates_collapsed'],
             'shops_connected_more_than_once' => $loaded['duplicated_shops'],
+        ];
+    }
+
+    /**
+     * CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — how much of what the platforms claim is the same sale.
+     *
+     * ## The question this answers, and the one it refuses
+     *
+     * Every platform counts a purchase it believes it caused, on its own window, with no knowledge of
+     * the others. Add them up and one order bought after a TikTok video and a Meta retargeting ad is
+     * two orders. That is the single most common way an advertising report overstates itself, and it
+     * is invisible per platform: each number is honest on its own terms.
+     *
+     * The shop's ledger has one row per sale. So the arithmetic that IS available is a floor:
+     *
+     *     claimed − confirmed = at least this many claims are not distinct sales
+     *
+     * «At least», never «exactly». A claim that is not a distinct confirmed sale is one of three
+     * things, and nothing here can tell them apart: two platforms claiming the same order, a platform
+     * claiming a sale that never happened, or a real sale the shop cannot see (a phone order, a
+     * different shop, an order outside the window). Naming it «duplicate conversions» would be a
+     * claim about which — and the interesting one, overlap, is the one it would be asserting without
+     * evidence.
+     *
+     * ## What it is not
+     *
+     * It is not identity-level attribution. There is no join between a click and a buyer here and
+     * there cannot be: conversions carry no order id, and none of the six platforms exposes a
+     * click-to-order lookup — the same reason `dedup.platform_reported.status` is `not_possible`.
+     *
+     * ## Coverage is stated beside it, because it bounds how much the number means
+     *
+     * Only orders the shop could attribute to a campaign are comparable at all. If half the ledger
+     * carries no attribution, the gap below is measured against half a shop, and a reader who is not
+     * told that will read it as a claim about the whole one.
+     *
+     * @param  list<array<string,mixed>>  $platforms
+     * @param  array{orders:Collection<int,CommerceOrder>,duplicates_collapsed:int,duplicated_shops:list<array<string,mixed>>}  $loaded
+     * @return array<string,mixed>
+     */
+    private function overlap(bool $hasStore, array $platforms, array $loaded): array
+    {
+        if (! $hasStore) {
+            return [
+                'available' => false,
+                'reason' => 'no_store_connected',
+                'note_ar' => 'بلا متجر مربوط لا يوجد دفتر واحد تُقارَن به مزاعم المنصات، فلا يمكن قياس التداخل.',
+                'note_en' => 'With no store connected there is no single ledger to compare the platforms’ claims against, so overlap cannot be measured.',
+            ];
+        }
+
+        /** @var Collection<int,CommerceOrder> $live */
+        $live = $loaded['orders']->filter(fn (CommerceOrder $o) => $o->cancelled_at === null);
+
+        $claimed = array_sum(array_map(
+            static fn (array $p): float => (float) $p['platform_reported_orders'],
+            $platforms,
+        ));
+        $confirmed = $live->count();
+        $attributed = $live->whereNotNull('external_campaign_id')->count();
+
+        return [
+            'available' => true,
+            'reason' => null,
+            'platforms_claim' => round($claimed, 2),
+            'store_confirms' => $confirmed,
+            /*
+             * Floored at zero on purpose. Platforms claiming FEWER sales than the shop recorded is an
+             * ordinary state — organic orders, a platform that under-reports, a window mismatch — and
+             * it is not negative overlap. It is simply no evidence of double counting.
+             */
+            'at_least_duplicated' => max(0, (int) round($claimed - $confirmed)),
+            'claims_per_confirmed_sale' => $confirmed > 0 ? round($claimed / $confirmed, 3) : null,
+            // What share of the ledger could be attributed at all — the bound on everything above.
+            'attributed_orders' => $attributed,
+            'coverage' => $confirmed > 0 ? round($attributed / $confirmed, 3) : null,
+            'platforms_compared' => count($platforms),
+            'note_ar' => 'الفرق حدٌّ أدنى وليس عددًا مؤكدًا: المطالبة التي لا تقابلها بيعة مؤكدة قد تكون طلبًا نسبته منصتان لنفسيهما، أو مبيعة لم تحدث، أو بيعة حقيقية لا يراها المتجر.',
+            'note_en' => 'The difference is a floor, not a count: a claim with no confirmed sale behind it may be one order two platforms both claimed, a sale that never happened, or a real sale the shop cannot see.',
         ];
     }
 
