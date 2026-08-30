@@ -30,15 +30,32 @@ const SURFACES: [string, string, string][] = [
   ['spend-limits', 'advertiser@campaignshub.io', '/app/spend-limits'],
   ['reports', 'advertiser@campaignshub.io', '/app/reports'],
   ['agency', 'agency@campaignshub.io', '/agency'],
+  ['finance', 'agency@campaignshub.io', '/agency/finance'],
+  ['invoices', 'agency@campaignshub.io', '/agency/billing/invoices'],
+  ['platform-console', 'admin@campaignshub.io', '/admin'],
   ['integrations', 'agency@campaignshub.io', '/agency/integrations'],
 ]
+
+/**
+ * Both themes, on the surfaces whose requirement asks for both.
+ *
+ * Dark is this product's reference theme and every other shot is taken in it. UX-KPI-PRESENTATION-001
+ * asks for evidence in light as well — a card whose border or hint colour was only ever checked
+ * against the dark ground is exactly the kind of thing that reads as broken on the other one — so the
+ * KPI-heavy surfaces are photographed twice and the rest stay single-theme rather than doubling a
+ * run nobody reads.
+ */
+const BOTH_THEMES = new Set(['dashboard', 'analytics', 'campaigns'])
 
 for (const [name, account, path] of SURFACES) {
   for (const [size, viewport] of [['desktop', DESKTOP], ['phone', PHONE]] as const) {
     for (const locale of ['ar', 'en'] as const) {
-      test(`@evidence ${name} ${size} ${locale}`, async ({ page }) => {
+      for (const theme of (BOTH_THEMES.has(name) ? ['dark', 'light'] : ['dark']) as const) {
+      const suffix = theme === 'dark' ? '' : `-${theme}`
+      test(`@evidence ${name} ${size} ${locale} ${theme}`, async ({ page }) => {
         await page.setViewportSize(viewport)
         await page.addInitScript((value) => localStorage.setItem('campaign-hub-locale', value), locale)
+        await page.addInitScript((value) => localStorage.setItem('campaign-hub-theme', value), theme)
         await signIn(page, account, 'password')
         // signIn only clicks submit; going straight on races the POST and lands back at /login.
         await page.waitForURL((url) => !/\/login/.test(url.pathname), { timeout: 30_000 })
@@ -46,10 +63,11 @@ for (const [name, account, path] of SURFACES) {
         await page.waitForLoadState('networkidle').catch(() => undefined)
         await page.waitForTimeout(1500)
         await page.screenshot({
-          path: new URL(`../evidence/${name}-${size}-${locale}.png`, import.meta.url).pathname,
+          path: new URL(`../evidence/${name}-${size}-${locale}${suffix}.png`, import.meta.url).pathname,
           fullPage: false,
         })
       })
+      }
     }
   }
 }
