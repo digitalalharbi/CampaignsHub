@@ -44,6 +44,9 @@ import { spawnSync } from 'node:child_process'
  * own process, so nothing is shared and they were separable all along — and each job names the one
  * it owns. The loop below is unchanged: one isolated run per project, whether that is three of them
  * or one.
+ *
+ * A job running one browser still installs chromium alongside it: every project depends on `setup`,
+ * and the `setup` project declares no `use`, so it runs under Playwright's default.
  */
 const PROJECTS = (process.env.GATE_BROWSERS ?? 'chromium,firefox,webkit')
   .split(',')
