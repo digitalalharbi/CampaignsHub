@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { StatCard, StatGrid } from './StatCard'
 import { renderWithProviders } from '@/test/utils'
 
@@ -94,5 +94,82 @@ describe('the exact figure', () => {
     renderWithProviders(<StatCard label="Spend" value="940 SAR" testid="spend" />, { locale: 'en' })
 
     expect(screen.getByTestId('spend-value')).not.toHaveAttribute('title')
+  })
+})
+
+/**
+ * UX-KPI-PRESENTATION-001 acceptance — the SAME KPI set, read in both languages.
+ *
+ * The separate direction tests above each hold one rule. What the requirement asks for is the
+ * comparison: the same five figures, rendered twice, differing in the ONE property that is supposed
+ * to differ. A card that quietly picks a different size, weight or alignment in Arabic is the defect
+ * the whole consolidation exists to remove, and it is invisible to a test that only ever renders one
+ * language.
+ */
+describe('one KPI set, both directions', () => {
+  const SET = [
+    { label: 'Spend', ar: 'الإنفاق', value: '32.4K SAR' },
+    { label: 'Results', ar: 'النتائج', value: '1,204' },
+    { label: 'CPA', ar: 'تكلفة النتيجة', value: '21 SAR' },
+    { label: 'ROAS', ar: 'العائد', value: '15.36×' },
+    { label: 'CTR', ar: 'نسبة النقر', value: '2.4%' },
+  ]
+
+  const renderSet = (locale: 'ar' | 'en') =>
+    renderWithProviders(
+      <StatGrid>
+        {SET.map((k, i) => (
+          <StatCard key={k.label} label={locale === 'ar' ? k.ar : k.label} value={k.value} testid={`k${i}`} />
+        ))}
+      </StatGrid>,
+      { locale },
+    )
+
+  it('gives every figure the same size, weight and alignment in Arabic as in English', () => {
+    const en = renderSet('en')
+    const enClasses = SET.map((_, i) => within(en.container).getByTestId(`k${i}-value`).className)
+    en.unmount()
+
+    const ar = renderSet('ar')
+    const arClasses = SET.map((_, i) => within(ar.container).getByTestId(`k${i}-value`).className)
+
+    expect(arClasses).toEqual(enClasses)
+    // And every one of them is still marked as a number, in both.
+    for (let i = 0; i < SET.length; i += 1) {
+      expect(within(ar.container).getByTestId(`k${i}-value`)).toHaveAttribute('dir', 'ltr')
+    }
+  })
+
+  it('turns the grid, and only the grid, around', () => {
+    const en = renderSet('en')
+    expect(en.container.querySelector('[style*="grid-template-columns"]')).toHaveAttribute('dir', 'ltr')
+    en.unmount()
+
+    const ar = renderSet('ar')
+    expect(ar.container.querySelector('[style*="grid-template-columns"]')).toHaveAttribute('dir', 'rtl')
+  })
+
+  /**
+   * A surface that adds a sixth KPI cannot produce a ragged final row.
+   *
+   * With a fixed column count it can: five cards in a four-column grid leave one alone, and the
+   * «additional KPIs» a page grows over time are exactly how that happens. This asserts the grid
+   * carries NO fixed column class at any breakpoint — the property that makes the tail impossible
+   * rather than merely absent today.
+   */
+  it('cannot be given a ragged tail by adding one more figure', () => {
+    for (const count of [5, 6, 7, 8]) {
+      const view = renderWithProviders(
+        <StatGrid>
+          {Array.from({ length: count }, (_, i) => <StatCard key={i} label={`K${i}`} value="1" />)}
+        </StatGrid>,
+        { locale: 'en' },
+      )
+
+      const grid = view.container.querySelector('[style*="grid-template-columns"]') as HTMLElement
+      expect(grid.className, `${count} cards`).not.toMatch(/grid-cols-\d/)
+      expect(grid.style.gridTemplateColumns).toContain('auto-fit')
+      view.unmount()
+    }
   })
 })
