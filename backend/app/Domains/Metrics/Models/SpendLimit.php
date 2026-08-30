@@ -9,12 +9,18 @@ use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 /**
  * An internal spend limit — the workspace's own, never the platform's (BUDGET-GOVERNANCE-001).
  *
  * Nothing in this product can stop an ad platform from spending. A row here is a number to measure
  * against and to warn about, and every payload built from it says so.
+ *
+ * The `date` casts hand back the framework's Carbon, not the base one.
+ *
+ * @property Carbon $starts_on
+ * @property Carbon $ends_on
  */
 final class SpendLimit extends Model
 {

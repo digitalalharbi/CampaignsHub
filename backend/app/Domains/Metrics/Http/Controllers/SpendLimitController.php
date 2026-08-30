@@ -13,6 +13,7 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 
 /**
@@ -82,7 +83,7 @@ final class SpendLimitController extends Controller
             'ends_on' => $data['ends_on'],
             'thresholds' => $data['thresholds'] ?? null,
             'active' => true,
-            'created_by' => $request->user()?->id,
+            'created_by' => Auth::id(),
         ]);
 
         return ApiResponse::success(
