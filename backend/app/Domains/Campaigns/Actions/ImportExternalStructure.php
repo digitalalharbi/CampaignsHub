@@ -188,6 +188,20 @@ final class ImportExternalStructure
                  */
                 'asset_url' => $creative['asset_url'] ?? null,
                 'video_url' => $creative['video_url'] ?? null,
+                /*
+                 * AD-MEDIA-RECOVERY-001 — a carousel's cards, when the connector read them.
+                 *
+                 * `cards` has been a column, a cast and a documented three-state contract since
+                 * `CreativePresenter` was written; the presenter reads it, the shared report reads
+                 * it, and NOTHING HAS EVER WRITTEN IT. So every carousel on every platform arrived
+                 * as `cards_reported: false` — «the provider sent no breakdown» — which was a claim
+                 * about the provider and really a gap here, and every five-card creative rendered as
+                 * one picture.
+                 *
+                 * The three states survive the write: absent ⇒ null (no breakdown), `[]` ⇒ the
+                 * provider sent an empty one, a list ⇒ the cards it sent.
+                 */
+                'cards' => $creative['cards'] ?? null,
                 'asset_expires_at' => $this->time($creative['asset_expires_at'] ?? null),
                 'destination_url' => $creative['destination_url'] ?? null,
                 'source_type' => 'api',
