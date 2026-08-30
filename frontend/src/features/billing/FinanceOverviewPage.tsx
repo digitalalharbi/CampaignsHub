@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { AlertTriangle, ArrowLeftRight, CircleDollarSign, FileText, ReceiptText, Wallet } from 'lucide-react'
 import { BillingTabs } from './BillingTabs'
 import { getFinanceOverview, listReceivables, type FinanceOverview } from './api'
+import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { compact, money } from '@/features/analytics/format'
@@ -79,7 +80,7 @@ export function FinanceOverviewPage() {
       ) : (
         <>
           {/* Headline KPIs */}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatGrid>
             <Kpi
               icon={FileText} label={ar ? 'عروض معتمدة' : 'Approved quotes'} value={money(d.quotes.approved_total, cur)}
               sub={ar ? `${d.quotes.count} عرضًا بإجمالي ${compact(d.quotes.total)}` : `${d.quotes.count} quotes totalling ${compact(d.quotes.total)}`} to="/app/billing/quotes"
@@ -101,13 +102,23 @@ export function FinanceOverviewPage() {
                 ? (ar ? `${d.invoices.overdue_count} فاتورة متأخرة` : `${d.invoices.overdue_count} overdue`)
                 : (ar ? 'لا فواتير متأخرة' : 'Nothing overdue')}
             />
-          </div>
+          </StatGrid>
 
           {/* Aging — where the outstanding money actually sits. */}
           <section className="rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-small)]">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-bold text-text-primary">{ar ? 'أعمار الديون' : 'Debt ageing'}</h2>
-              <span className="tnum text-sm text-text-secondary">{ar ? 'الإجمالي' : 'Total'} {money(agingTotal, cur)}</span>
+              {/*
+                NUMBER-PRESENTATION-001 — the figure is marked, not the sentence.
+
+                «الإجمالي 47.5K SAR» rendered as «47.5الإجمالي K SAR»: an unmarked amount with a
+                currency after it is reordered by the bidi algorithm, and it splits around the Arabic
+                word beside it. Marking the WHOLE line `ltr` would put the label on the wrong side
+                instead, so only the amount carries the direction.
+              */}
+              <span className="text-sm text-text-secondary">
+                {ar ? 'الإجمالي' : 'Total'} <span dir="ltr" className="tnum">{money(agingTotal, cur)}</span>
+              </span>
             </div>
             {agingTotal === 0 ? (
               <p className="mt-3 text-sm text-text-muted">{ar ? 'لا توجد مبالغ مستحقة حاليًا.' : 'Nothing is outstanding right now.'}</p>
@@ -204,18 +215,28 @@ export function FinanceOverviewPage() {
   )
 }
 
+/**
+ * UX-KPI-PRESENTATION-001 — the finance headline is the product's card now, not this page's.
+ *
+ * What is left here is what actually belongs to finance: which icon names the figure, which tone it
+ * carries, and where pressing it goes. The size of the number, the size of the label, the padding
+ * and the height are the shared card's — this page's copy had a 14px label against the product's
+ * 13px and its own padding, so a finance row and a dashboard row did not line up.
+ */
 function Kpi({ icon: Icon, label, value, sub, tone, to }: {
   icon: typeof Wallet; label: string; value: string; sub?: string
   tone?: 'success' | 'warning'; to?: string
 }) {
-  const body = (
-    <div className="h-full rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-small)]">
-      <span className="flex items-center gap-2 text-sm text-text-secondary"><Icon size={15} /> {label}</span>
-      <div className={`tnum mt-1.5 text-2xl font-extrabold ${tone === 'success' ? 'text-success' : tone === 'warning' ? 'text-warning' : 'text-text-primary'}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-xs text-text-muted">{sub}</div>}
-    </div>
+  const card = (
+    <StatCard
+      label={<><Icon size={15} className="shrink-0" /> {label}</>}
+      value={value}
+      hint={sub}
+      tone={tone ?? 'neutral'}
+    />
   )
-  return to ? <Link to={to} className="block transition-colors hover:opacity-90">{body}</Link> : body
+
+  return to ? <Link to={to} className="block h-full transition-colors hover:opacity-90">{card}</Link> : card
 }
 
 function StatusList({ title, buckets, labels, currency }: {

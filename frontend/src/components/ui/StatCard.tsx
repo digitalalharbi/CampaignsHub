@@ -61,7 +61,14 @@ export function StatCard({
   spark,
   testid,
 }: {
-  label: string
+  /**
+   * The name of the figure.
+   *
+   * A node rather than a string: the finance and invoice surfaces put a small icon in front of the
+   * name, and that was one of the reasons each kept its own card. The card still owns the SIZE and
+   * the colour of the label — what a surface may bring is a mark, not a type decision.
+   */
+  label: ReactNode
   /** Already formatted — this component never decides how a number reads. */
   value: ReactNode
   /**
