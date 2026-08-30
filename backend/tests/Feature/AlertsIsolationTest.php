@@ -77,6 +77,122 @@ final class AlertsIsolationTest extends TestCase
         $this->assertSame(105, $res->json('meta.total'), 'the response must say how many there really are');
     }
 
+    /**
+     * The firing ledger is ordered the way somebody triaging it works down, and totally.
+     *
+     * `latest('last_triggered_at')` was neither. The evaluator writes a whole sweep in one pass, so
+     * events routinely share a timestamp to the second and the rows behind them came back in whatever
+     * order Postgres found convenient — an operator who resolves three, refreshes, and sees the list
+     * rearrange cannot tell whether something fired or nothing did.
+     *
+     * The fixture makes both halves visible at once: every event shares ONE `last_triggered_at`, so
+     * recency decides nothing and only the ranks can produce a stable answer.
+     */
+    public function test_the_event_ledger_is_ordered_for_triage_and_the_order_is_total(): void
+    {
+        [$tenant, $owner] = $this->tenantWithOwner('triage');
+        $rule = AlertRule::create(['tenant_id' => $tenant->id, 'type' => 'sync_failure', 'name' => 'R', 'active' => true]);
+
+        $moment = Carbon::parse('2026-08-20 09:00:00');
+        $ids = [];
+        foreach ([
+            ['resolved', 'critical'], ['open', 'info'], ['snoozed', 'critical'],
+            ['open', 'critical'], ['resolved', 'info'], ['open', 'warning'], ['snoozed', 'info'],
+        ] as [$status, $severity]) {
+            $ids["{$status}/{$severity}"] = AlertEvent::create([
+                'tenant_id' => $tenant->id, 'rule_id' => $rule->id, 'type' => 'sync_failure',
+                'dedup_key' => hash('sha256', (string) Str::uuid()),
+                'status' => $status, 'severity' => $severity, 'last_triggered_at' => $moment,
+            ])->id;
+        }
+
+        $order = array_column((array) $this->actingAs($owner, 'sanctum')
+            ->getJson('/api/v1/alerts/events')->assertOk()->json('data'), 'id');
+
+        $this->assertSame(
+            [
+                $ids['open/critical'], $ids['open/warning'], $ids['open/info'],
+                $ids['snoozed/critical'], $ids['snoozed/info'],
+                $ids['resolved/critical'], $ids['resolved/info'],
+            ],
+            $order,
+            'the queue must read open → snoozed → resolved, and critical → warning → info inside each',
+        );
+    }
+
+    /** Same rank, same second: the id is what makes the answer repeatable rather than convenient. */
+    public function test_two_identical_events_come_back_in_the_same_order_every_time(): void
+    {
+        [$tenant, $owner] = $this->tenantWithOwner('tiebreak');
+        $rule = AlertRule::create(['tenant_id' => $tenant->id, 'type' => 'sync_failure', 'name' => 'R', 'active' => true]);
+
+        $moment = Carbon::parse('2026-08-20 09:00:00');
+        foreach (range(1, 12) as $i) {
+            AlertEvent::create([
+                'tenant_id' => $tenant->id, 'rule_id' => $rule->id, 'type' => 'sync_failure',
+                'dedup_key' => hash('sha256', (string) Str::uuid()),
+                'status' => 'open', 'severity' => 'warning', 'last_triggered_at' => $moment,
+            ]);
+        }
+
+        $read = fn (): array => array_column((array) $this->actingAs($owner, 'sanctum')
+            ->getJson('/api/v1/alerts/events')->assertOk()->json('data'), 'id');
+
+        $first = $read();
+        $sorted = $first;
+        sort($sorted);
+
+        $this->assertSame($sorted, $first, 'twelve indistinguishable events must fall in id order, not the storage engine\'s');
+        $this->assertSame($first, $read(), 'the same request twice must answer the same way');
+    }
+
+    /**
+     * The tab badges are counted over the WHOLE ledger, not over the page that fits.
+     *
+     * `AlertsPage` reads this endpoint once with no status and derives open / critical / snoozed /
+     * resolved by filtering the array it got back. With a silent cap those badges were counts of the
+     * first 200 rows presented as counts of everything — wrong on any tenant past the cap, with
+     * nothing on screen admitting it.
+     *
+     * 210 resolved events sit UNDER 40 open ones in the triage order, so the cap falls inside the
+     * resolved block: the page cannot see them, and the badge must still say how many there are.
+     */
+    public function test_the_counts_describe_the_whole_ledger_even_when_the_page_is_capped(): void
+    {
+        [$tenant, $owner] = $this->tenantWithOwner('capped');
+        $rule = AlertRule::create(['tenant_id' => $tenant->id, 'type' => 'sync_failure', 'name' => 'R', 'active' => true]);
+
+        $make = function (string $status, string $severity, int $n, string $at) use ($tenant, $rule): void {
+            foreach (range(1, $n) as $i) {
+                AlertEvent::create([
+                    'tenant_id' => $tenant->id, 'rule_id' => $rule->id, 'type' => 'sync_failure',
+                    'dedup_key' => hash('sha256', (string) Str::uuid()),
+                    'status' => $status, 'severity' => $severity, 'last_triggered_at' => Carbon::parse($at),
+                ]);
+            }
+        };
+        /*
+         * The resolved events are the NEWEST. Under the recency ordering this replaced, all 210 of
+         * them would sort above every open alert and fill the page on their own — so the last
+         * assertion below is a real test of what the cap drops, not an accident of insertion order.
+         */
+        $make('open', 'critical', 5, '2026-08-20 09:00:00');
+        $make('open', 'warning', 35, '2026-08-20 09:00:00');
+        $make('resolved', 'info', 210, '2026-08-20 10:00:00');
+
+        $res = $this->actingAs($owner, 'sanctum')->getJson('/api/v1/alerts/events')->assertOk();
+
+        $this->assertCount(200, (array) $res->json('data'), 'the list must be bounded');
+        $this->assertSame(250, $res->json('meta.total'));
+        $this->assertSame(40, $res->json('meta.counts.open'), 'the open badge must count every open event, not the ones that fit');
+        $this->assertSame(5, $res->json('meta.counts.open_critical'));
+        $this->assertSame(210, $res->json('meta.counts.resolved'), 'the resolved badge must survive the cap that hides them');
+
+        $returned = array_column((array) $res->json('data'), 'status');
+        $this->assertSame(40, count(array_filter($returned, fn ($s) => $s === 'open')),
+            'a cap must drop the oldest resolved rows, never an open one');
+    }
+
     public function test_a_tenant_cannot_see_or_resolve_another_tenants_alerts(): void
     {
         // Tenant A: a rule + an open event.
