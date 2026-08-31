@@ -61,6 +61,20 @@ const ABSENT: Record<string, { ar: string; en: string }> = {
   },
 }
 
+/**
+ * FUNNEL-ANALYTICAL-PATTERN-001 — the range the grid implies, said once above it.
+ *
+ * The ranked grid is the signal. This is what it is measured on, why the distance exists, and the
+ * one action the evidence supports — comparing the two ends. Absent where the server could not read
+ * a range: one ad is not two ends, and two ends measured on different metrics are not a comparison.
+ */
+export type AdsReading = {
+  signal: { metric: string; best: { ad: string | null; value: number | null }; worst: { ad: string | null; value: number | null } } | null
+  explanation: { ar: string; en: string } | null
+  action: { ar: string; en: string } | null
+  silent_reason: string | null
+}
+
 export function ReportAdsSection({
   ads,
   absentReason,
@@ -68,6 +82,7 @@ export function ReportAdsSection({
   locale,
   title,
   limit = 6,
+  reading,
 }: {
   ads: ReportAd[] | undefined
   absentReason?: string | null
@@ -76,6 +91,8 @@ export function ReportAdsSection({
   locale: Locale
   title?: string
   limit?: number
+  /** The five-step reading of the grid, where the server could produce one. */
+  reading?: AdsReading
 }) {
   const ar = locale === 'ar'
   const rows = (ads ?? []).slice(0, limit)
@@ -95,6 +112,28 @@ export function ReportAdsSection({
   return (
     <section data-testid="report-ads" data-state="present" data-level={level ?? 'ad'} className="flex flex-col gap-3">
       <h3 className="text-base font-bold text-text-primary">{heading}</h3>
+
+      {reading?.signal && (
+        <div data-testid="report-ads-reading" className="rounded-xl border border-border bg-surface-secondary/40 p-3">
+          <p className="text-sm text-text-primary">
+            {ar ? 'الأفضل ' : 'Best '}
+            <span className="font-bold">{reading.signal.best.ad ?? '—'}</span>
+            {' · '}
+            {ar ? 'الأضعف ' : 'weakest '}
+            <span className="font-bold">{reading.signal.worst.ad ?? '—'}</span>
+          </p>
+          {reading.explanation && (
+            <p className="mt-0.5 text-xs leading-relaxed text-text-secondary">
+              {ar ? reading.explanation.ar : reading.explanation.en}
+            </p>
+          )}
+          {reading.action && (
+            <p data-testid="report-ads-action" className="mt-1 text-sm font-medium text-text-primary">
+              {ar ? reading.action.ar : reading.action.en}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {rows.map((ad, i) => (

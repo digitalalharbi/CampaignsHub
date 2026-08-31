@@ -45,7 +45,7 @@ final class ReportAds
 
     /**
      * @param  array<string, mixed>  $filters  `project_ids`, `providers`, `campaign_ids` — the scope
-     * @return array{ads: list<array<string,mixed>>, level: string, reason: string|null}
+     * @return array{ads: list<array<string,mixed>>, worst: list<array<string,mixed>>, level: string, reason: string|null}
      */
     public function for(string $objective, Carbon $from, Carbon $to, array $filters = []): array
     {
@@ -63,7 +63,7 @@ final class ReportAds
         );
 
         if ($rows === []) {
-            return ['ads' => [], 'level' => 'campaign', 'reason' => 'no_creatives_in_window'];
+            return ['ads' => [], 'worst' => [], 'level' => 'campaign', 'reason' => 'no_creatives_in_window'];
         }
 
         // The same ranker the campaign leaders use, on the same objective — one definition of «best».
@@ -88,8 +88,17 @@ final class ReportAds
 
         $ranked = $this->ranking->rank($objective, $rankable);
 
+        /*
+         * REPORT-WORST-CREATIVES-001 at ad level — what to stop, beside what to keep.
+         *
+         * Judged on the SAME metric as the leaders and excluding anything the platform did not
+         * measure on it: «no return reported» is not «returned nothing», and a report a client keeps
+         * is the last place to blur the two.
+         */
+        $weakest = $this->ranking->worst($objective, $rankable);
+
         return $ranked === []
-            ? ['ads' => [], 'level' => 'ad', 'reason' => 'no_rankable_metric_for_this_objective']
-            : ['ads' => $ranked, 'level' => 'ad', 'reason' => null];
+            ? ['ads' => [], 'worst' => [], 'level' => 'ad', 'reason' => 'no_rankable_metric_for_this_objective']
+            : ['ads' => $ranked, 'worst' => $weakest, 'level' => 'ad', 'reason' => null];
     }
 }

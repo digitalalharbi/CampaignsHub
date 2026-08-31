@@ -74,6 +74,8 @@ final class LiveReportService
             'ads' => $built['ads'],
             'ads_level' => $built['level'],
             'ads_absent_reason' => $built['reason'],
+            // The same reading the generated deck carries, from the same two ranked lists.
+            'ads_reading' => (new AdsExplanation)->explain($built['ads'], $built['worst'], $objective),
         ];
     }
 
