@@ -3,6 +3,7 @@ import { Panel, SERIES, tooltipProps } from './components'
 import { compact } from './format'
 import { METRIC_LABEL } from '@/styles/scale'
 import type { PathTrend } from './api'
+import { days as countedDays } from '@/lib/counted'
 import type { Locale } from '@/stores/ui'
 
 /**
@@ -65,8 +66,8 @@ export function PathTrends({
                 */}
                 <span className={`tnum text-text-muted ${METRIC_LABEL}`} dir="ltr">
                   {ar
-                    ? `${path.days_reported} من ${path.days_in_window} يومًا فيها بيانات`
-                    : `${path.days_reported} of ${path.days_in_window} days reported`}
+                    ? `${path.days_reported} من ${countedDays(path.days_in_window, 'ar')} فيها بيانات`
+                    : `${path.days_reported} of ${countedDays(path.days_in_window, 'en')} reported`}
                 </span>
               </div>
 
