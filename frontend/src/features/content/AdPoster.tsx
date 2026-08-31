@@ -28,6 +28,8 @@ export function AdPoster({
     return (
       <span
         data-testid={testid ? `${testid}-absent` : undefined}
+        /* Which of the reasons this is, so a surface can tell «there is a film here» from «there is nothing». */
+        data-absence={reading.kind === 'none' ? reading.reason : 'video-no-cover'}
         className={`flex items-center justify-center rounded-lg bg-surface-secondary p-2 text-center text-[11px] leading-tight text-text-muted ${className}`}
       >
         {absenceLabel(reading, ar)}

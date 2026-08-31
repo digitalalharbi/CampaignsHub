@@ -90,3 +90,36 @@ describe('the four silences, told apart', () => {
     expect(readPreview(undefined, false)).toMatchObject({ kind: 'none', reason: 'unavailable' })
   })
 })
+
+/**
+ * CONTENT-PREVIEW-SHAPES-001 — the grey box with nothing written in it.
+ *
+ * `absenceLabel` answers one question: «`posterSource` gave me nothing; what do I say?» For a video
+ * whose platform never sent a cover frame it answered the empty string, because a video reading is
+ * not `none` — and every surface then drew an empty grey square. That is the single outcome this
+ * module exists to prevent, reachable from the most ordinary state a Snapchat or TikTok video ad
+ * can be in: the file resolved, the thumbnail never arrived.
+ */
+describe('a video the platform sent no cover for', () => {
+  const film = readPreview(preview({ kind: 'video', video_url: 'https://cdn/ad.mp4' }), false)
+
+  it('is still a video, and has nothing to draw', () => {
+    expect(film).toEqual({ kind: 'video', src: 'https://cdn/ad.mp4', poster: null, note: null })
+    expect(posterSource(film)).toBeNull()
+  })
+
+  it('says there is a film here, rather than saying nothing at all', () => {
+    expect(absenceLabel(film, false)).toContain('no cover frame')
+    // And it says something is playable — the reader's next move is to open it, not to give up.
+    expect(absenceLabel(film, false)).toMatch(/play/i)
+    expect(absenceLabel(film, true)).toContain('غلاف')
+  })
+
+  /** A video WITH a cover is not an absence at all, and must stay silent. */
+  it('stays silent when the cover arrived', () => {
+    const covered = readPreview(preview({ kind: 'video', video_url: 'https://cdn/ad.mp4', thumbnail_url: 'https://cdn/cover.jpg' }), false)
+
+    expect(posterSource(covered)).toBe('https://cdn/cover.jpg')
+    expect(absenceLabel(covered, false)).toBe('')
+  })
+})
