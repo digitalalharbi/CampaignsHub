@@ -193,6 +193,34 @@ final class LiveReportShareTest extends TestCase
         $this->assertSame('no_creatives_in_window', $res->json('data.ads_absent_reason'));
     }
 
+    /**
+     * REPORT-ANALYTICAL-DEPTH-001 — the client's link says what it contains, from one derivation.
+     *
+     * A live link that listed its own sections would be a second answer to «what is in this report»,
+     * and the first time it disagreed with the generated document the client would be holding both.
+     * The outline is computed over the assembled payload, so a section it calls present is one the
+     * payload actually has — and an absent one carries the reason rather than a heading over nothing.
+     */
+    public function test_a_live_link_says_what_it_contains_and_why_anything_is_missing(): void
+    {
+        $token = $this->liveLink();
+
+        $outline = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk()->json('data.outline');
+
+        $this->assertNotEmpty($outline, 'the link carries no outline');
+
+        $byKey = array_column($outline, null, 'key');
+        $this->assertArrayHasKey('platforms', $byKey);
+        // Every section states its absence key, present or not — a renderer that must ask whether the
+        // key exists is one that eventually prints «undefined» to a client.
+        foreach ($outline as $section) {
+            $this->assertArrayHasKey('absent_reason', $section);
+            if ($section['present'] === false) {
+                $this->assertNotNull($section['absent_reason'], "{$section['key']} is absent with no reason");
+            }
+        }
+    }
+
     public function test_no_public_report_route_sits_behind_an_authentication_middleware(): void
     {
         $guarded = [];
