@@ -221,6 +221,27 @@ final class LiveReportShareTest extends TestCase
         }
     }
 
+    /**
+     * REPORT-OBJECTIVE-003/004 — the split the client link needs most, and did not have.
+     *
+     * `totals` rolls the whole scope together, so its cost per order divides EVERY campaign's spend
+     * by the orders the sales campaigns produced. That is the right answer to «what did this
+     * programme cost» and the wrong one to «what does an order cost» — and the link is the surface
+     * where the second question is asked, by the person paying for it.
+     */
+    public function test_a_live_link_splits_by_objective_rather_than_blending(): void
+    {
+        $token = $this->liveLink();
+
+        $split = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk()->json('data.objective_performance');
+
+        $this->assertIsArray($split);
+        $this->assertArrayHasKey('paths', $split);
+        // Every path the product recognises is present, so a client cannot read an absent path as
+        // «this platform did nothing» when it simply was not asked to.
+        $this->assertNotEmpty($split['paths']);
+    }
+
     public function test_no_public_report_route_sits_behind_an_authentication_middleware(): void
     {
         $guarded = [];
