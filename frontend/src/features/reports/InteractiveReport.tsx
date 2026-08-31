@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { attributionWindow } from './attributionWindow'
-import { ReportAdsSection, type ReportAd } from './ReportAdsSection'
+import { ReportAdsSection, type AdsReading, type ReportAd } from './ReportAdsSection'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDateTime } from '@/lib/datetime'
@@ -81,6 +81,8 @@ export interface ReportData {
   ads?: ReportAd[]
   ads_level?: string | null
   ads_absent_reason?: string | null
+  /** The five-step reading of the ranked grid — absent where no range could be read. */
+  ads_reading?: AdsReading
   /** REPORT-WORST-CREATIVES-001 — measured underperformers, never merely unmeasured ones. */
   worst_creatives?: Row[]
   platform_notes?: Record<string, { strengths: string[]; weaknesses: string[] }>
@@ -753,6 +755,7 @@ function AdsSlide({ data }: { data: ReportData }) {
         ads={data.ads}
         absentReason={data.ads_absent_reason}
         level={data.ads_level}
+        reading={data.ads_reading}
         locale={ar ? 'ar' : 'en'}
         title={ar ? 'الإعلانات التي عملت' : 'The ads that ran'}
       />

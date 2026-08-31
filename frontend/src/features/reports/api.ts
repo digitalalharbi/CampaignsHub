@@ -1,4 +1,4 @@
-import type { ReportAd } from './ReportAdsSection'
+import type { AdsReading, ReportAd } from './ReportAdsSection'
 
 import { getData, postData, putData } from '@/lib/api/client'
 import type { SharedBranding } from './sharedBranding'
@@ -227,6 +227,7 @@ export interface LivePayload {
   ads?: ReportAd[]
   ads_level?: string | null
   ads_absent_reason?: string | null
+  ads_reading?: AdsReading
   store_funnel: StoreFunnelPayload | null
   freshness: Array<{
     provider: string

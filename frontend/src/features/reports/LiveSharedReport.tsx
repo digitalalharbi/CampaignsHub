@@ -407,6 +407,7 @@ export function LiveSharedReport({
             ads={payload.ads}
             absentReason={payload.ads_absent_reason}
             level={payload.ads_level}
+            reading={payload.ads_reading}
             locale={ar ? 'ar' : 'en'}
             title={ar ? 'الإعلانات التي عملت' : 'The ads that ran'}
           />

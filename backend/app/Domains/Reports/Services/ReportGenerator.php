@@ -163,6 +163,15 @@ final class ReportGenerator
             'ads' => $ads['ads'],
             'ads_level' => $ads['level'],
             'ads_absent_reason' => $ads['reason'],
+            /*
+             * FUNNEL-ANALYTICAL-PATTERN-001 — the ads section, read back in the funnel's own shape.
+             *
+             * The ranked grid is the SIGNAL and nothing else; this is the range it implies, what it
+             * is measured on, why the distance exists, the figures it rests on, and the one action
+             * the evidence supports — comparing the two ends. Derived from the SAME ranked lists, so
+             * the reading and the grid cannot disagree about which ad is ahead.
+             */
+            'ads_reading' => (new AdsExplanation)->explain($ads['ads'], $ads['worst'], $objective),
             'worst_creatives' => $worstCreatives,
             'creative_level' => 'campaign', // ad-level arrives once connectors provide it
             'platform_notes' => $this->platformNotes($lens, $platforms, $report->currency),

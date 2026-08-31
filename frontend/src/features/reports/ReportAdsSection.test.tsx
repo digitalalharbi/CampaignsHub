@@ -101,3 +101,43 @@ describe('the ads section of a report', () => {
     expect(screen.getByTestId('report-ads-absent')).toHaveTextContent('لا إعلانات لعرضها في هذه الفترة.')
   })
 })
+
+/**
+ * FUNNEL-ANALYTICAL-PATTERN-001 — the reading above the grid, and the silence where there is no range.
+ */
+describe('the reading of the ads grid', () => {
+  it('names both ends and the action the evidence supports', () => {
+    renderWithProviders(
+      <ReportAdsSection
+        ads={[ad()]}
+        locale="en"
+        reading={{
+          signal: { metric: 'roas', best: { ad: 'Eid film', value: 6.2 }, worst: { ad: 'Old banner', value: 0.8 } },
+          explanation: { ar: '…', en: 'Both ads were bought for the same objective' },
+          action: { ar: '…', en: 'Compare «Old banner» against «Eid film»' },
+          silent_reason: null,
+        }}
+      />,
+      { locale: 'en' },
+    )
+
+    expect(screen.getByTestId('report-ads-reading')).toHaveTextContent('Eid film')
+    expect(screen.getByTestId('report-ads-reading')).toHaveTextContent('Old banner')
+    expect(screen.getByTestId('report-ads-action')).toHaveTextContent(/Compare/)
+  })
+
+  /** One ad is not two ends, and the section shows the grid without inventing a range over it. */
+  it('shows the grid and no reading when the server could not read a range', () => {
+    renderWithProviders(
+      <ReportAdsSection
+        ads={[ad()]}
+        locale="en"
+        reading={{ signal: null, explanation: null, action: null, silent_reason: 'only_one_ad_is_comparable' }}
+      />,
+      { locale: 'en' },
+    )
+
+    expect(screen.getByTestId('report-ads')).toHaveAttribute('data-state', 'present')
+    expect(screen.queryByTestId('report-ads-reading')).not.toBeInTheDocument()
+  })
+})
