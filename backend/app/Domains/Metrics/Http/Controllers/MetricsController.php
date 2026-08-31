@@ -586,6 +586,30 @@ final class MetricsController extends Controller
         );
     }
 
+    /**
+     * OBJECTIVE-ANALYTICS-DEPTH-001 — each path's own trend, in the metric it was buying.
+     *
+     * Separate from `metrics/timeseries`, which is one line over a mixed programme: awareness rising
+     * while sales falls is a flat line, and a reader watching it concludes the account is doing
+     * nothing. Split by path, the same two weeks say «brand up, sales down».
+     */
+    public function objectiveTrend(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        $campaigns = array_values(array_filter((array) $request->input('campaign_ids', [])));
+
+        return ApiResponse::success(
+            (new ObjectivePerformance(
+                campaignIds: $campaigns === [] ? null : $campaigns,
+                providers: $this->providerFilter($request) === [] ? null : $this->providerFilter($request),
+            ))->trendByPath($from, $to),
+            'Objective path trend.',
+            meta: $this->meta($from, $to),
+        );
+    }
+
     public function budget(Request $request): JsonResponse
     {
         $this->authorizeView($request);
