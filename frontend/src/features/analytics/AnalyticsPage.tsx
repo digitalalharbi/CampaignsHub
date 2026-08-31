@@ -27,6 +27,7 @@ import {
   useNormalization,
   useObjectiveExplanations,
   useObjectiveLeaders,
+  useObjectiveTrend,
   usePlatformObjectives,
   usePlatforms,
   useSummary,
@@ -44,6 +45,7 @@ import { useCampaignOptionSource } from './useCampaignOptionSource'
 import { Panel, ProvenanceBadge, RateTrend, SERIES, platformColor, tooltipProps } from './components'
 import { BudgetReading } from './BudgetReading'
 import { PathAnalysis } from './PathAnalysis'
+import { PathTrends } from './PathTrends'
 import { listCreatives, type CreativeCard } from '@/features/content/api'
 import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
@@ -2281,6 +2283,7 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
    */
   const leaders = useObjectiveLeaders(projectId, range, filters)
   const explanations = useObjectiveExplanations(projectId, range, filters)
+  const trend = useObjectiveTrend(projectId, range, filters)
 
   /*
    * READY-3 — the catalogue owns which KPIs an objective is judged by, and this kept its own copy.
@@ -2432,6 +2435,19 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
           })}
         </div>
       </Panel>
+
+      {/*
+        OBJECTIVE-ANALYTICS-DEPTH-001 — each path over time, before the reading of it.
+
+        The blocks below say which campaign inside a path is carrying it; this says whether the path
+        itself is going anywhere, which is the question that comes first.
+      */}
+      <PathTrends
+        paths={trend.data?.paths ?? []}
+        locale={ar ? 'ar' : 'en'}
+        loading={trend.isLoading}
+        error={trend.isError}
+      />
 
       <PathAnalysis
         locale={ar ? 'ar' : 'en'}
