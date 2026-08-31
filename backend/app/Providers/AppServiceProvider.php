@@ -6,6 +6,7 @@ namespace App\Providers;
 
 use App\Domains\Accounts\Services\AccountGrants;
 use App\Domains\Audit\Listeners\RecordAuthAudit;
+use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Company;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Models\Opportunity;
@@ -14,6 +15,7 @@ use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
 use App\Domains\Ops\Listeners\RecordScheduledRun;
+use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
@@ -47,6 +49,16 @@ class AppServiceProvider extends ServiceProvider
          * A singleton would outlive the request that populated it, so the next request handled by
          * the same process could inherit a tenant nobody granted it.
          */
+        /*
+         * TEAM-PROJECT-RBAC-001 — `scoped`, for the same reason and with the same danger.
+         *
+         * The memo inside it is keyed by (reader, project) and must not outlive the request that
+         * filled it: a singleton would answer the next request from the previous reader's
+         * permissions. Scoped gives one instance per request, which is what turns a per-row lookup
+         * into a per-request one and nothing more.
+         */
+        $this->app->scoped(ProjectAbilities::class);
+        $this->app->scoped(LeadVisibility::class);
         $this->app->scoped(TenantContext::class);
         $this->app->scoped(MembershipContext::class);
 
