@@ -2,20 +2,34 @@
 
 Single control plane. One line per unit. History lives in PR descriptions and commits, not here.
 
-**Updated:** 2026-08-26 · **Deployed main:** `4837e56` (#112) · **Production:** `assets/index-BpMnPrsG.js`
+**Updated:** 2026-08-31 · **Deployed main:** `535155eb` (#237) · **Production:** 200, deploy green
+
+> The repo requires branches to be UP TO DATE before merging (`strict_required_status_checks_policy`),
+> so every open PR costs a full CI cycle: main moves, the rest go stale, each needs a rebase and a
+> fresh run. Nine open PRs is nine cycles, not nine parallel ones. When the queue grows, consolidate
+> — cherry-pick the units onto one branch and close the originals — and otherwise keep at most two
+> open. This is the single biggest throughput lever in this repository.
 
 ## Active
 ```
-#113 Budget accounts            CI_RUNNING   (run 32939951846)
-#117 Money timeseries           CI_RUNNING   (run 32940444315)
-#121 Numeral preference ph.1    CI_RUNNING   (run 32941518146)
-#122 Gap audit (docs)           CI_RUNNING   (run 32941987701)
+(queue empty — #237 merged and deployed)
 ```
-Merge and deploy stay sequential; parallel CI is fine because these share no files.
 
-## Queue — merge order
+## Shipped 2026-08-30 → 31 — every one merged on a current head with all five checks green
 ```
-#113 → #114 → #115 → #116 → #117 → #118 → #119 → #120 → #121 → #122
+#209 KPI cards: 4 more surfaces        #226 KPI cards: the last six + the row's own acceptance
+#210 One vocabulary for a connection   #227 Presentation polish (multiplier · counted nouns ·
+#211 The manage picker's locked rows         phone report list · absence-line placement)
+#212 The card says what it is doing    #228 Wizard §4 · project page §11 §12 · confidence ·
+#213 A press before hydration                report ads on all three surfaces
+#214 Reconnect is a distinct action    #229 Path efficiency · family distribution
+#215 Provider errors, four actors      #231 Budget: the other four steps
+#216 One card per source               #232 The printed document consumes the outline
+                                       #233 Per-path trend, with the unreported days
+                                       #234 Attribution findings: which disagreement it is
+                                       #235 Store funnel reads itself
+                                       #236 The ads grid says what its ranking means
+                                       #237 How far apart a path's platforms are
 ```
 
 ## Shipped
@@ -44,7 +58,10 @@ stash@{0}                   share-link fix shipped in #109                      
 
 ## Blocked
 ```
-Authenticated production UI   BLOCKED_OPERATIONAL_EVIDENCE  no operator session
+Authenticated production UI   BLOCKED_OPERATIONAL_EVIDENCE  no operator session; the strongest
+                              evidence available without one is: deploy green, production 200, and
+                              `integrations:diagnose` read-only output (LinkedIn, 2026-08-30 20:26 UTC:
+                              10 accounts, 1 bound, three consecutive sweeps storing 23 measured rows)
 Meta/TikTok/Google/Zid/Salla  BLOCKED_EXTERNAL_CREDENTIALS  code complete, secrets absent
 sla_warning withdrawal        needs the alert.type taxonomy migration (ALERT-SLA-UNRAISED-001)
 ```
@@ -58,13 +75,12 @@ GAP-3  Alerts missing: CTR/results decline · campaign stopped · sync STALE · 
 GAP-4  READY-3: ObjectiveTab duplicates metricCatalog's OBJECTIVE_LAYOUTS, weaker
 GAP-5  NUMERAL-PREFERENCE-002: 52 remaining Intl.NumberFormat('en-US')/toFixed sites → lib/numerals
 GAP-6  Email settings: recipients · weekly day · monthly day · thresholds · last/next send · log
-GAP-7  Reports — audited 2026-08-26, INVESTIGATION_REQUIRED resolved into concrete work:
-       InteractiveReport  1258 ln  platform·campaign·creative·funnel·objective·attribution·best/worst  OK
-       LiveSharedReport    521 ln  platform·campaign·funnel·store — MISSING creative, objective,
-                                   attribution, best/worst. This is the CLIENT-facing shareable one.
-       PublicReport        236 ln  broad coverage                                                  OK
-       PrintDocument       224 ln  MISSING creative, store, best/worst
-       No ad / ad-set detail in ANY report surface.
+GAP-7  Reports — PARTLY CLOSED 2026-08-31. The ads section now renders in the deck, the client's
+       live link and the PDF, all from one builder (`ReportAds`), with the reading of its ranking
+       (#228, #236). The printed document takes its sections, order and absent reasons from the
+       report's own outline, and the live link carries an outline too (#232).
+       STILL MISSING on the client-facing live link: objective split, attribution, best/worst
+       campaign. Ad-SET detail is still absent from every report surface.
 GAP-8  Dark-mode sweep after #116: InteractiveReport, CreativeViewer, modals, tables, charts, forms
 ```
 
