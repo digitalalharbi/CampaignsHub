@@ -31,7 +31,18 @@ try {
   // Fail on real JS errors, but ignore benign resource failures (e.g. the app's /auth/me bootstrap
   // returns 401 on this public print route with no session — that is expected, not a report error).
   const fatalErrors = []
-  const benign = /status of (401|403)|net::ERR_ABORTED|favicon/i
+  /*
+   * A RESOURCE that fails is not a report error; a script that throws is.
+   *
+   * The document carries ad thumbnails from provider CDNs, and a signed URL expires, a host refuses,
+   * a network cannot resolve it. Chromium reports each of those as a console error, and treating them
+   * as fatal fails the whole export over a picture the document already knows how to do without —
+   * it prints the platform's own sentence in the thumbnail's place.
+   *
+   * Real failures still fail: `pageerror` catches thrown exceptions, and the readiness and layout
+   * gates below refuse a page that did not render.
+   */
+  const benign = /status of (401|403|404)|net::ERR_[A-Z_]+|Failed to load resource|favicon/i
   page.on('console', (m) => { if (m.type() === 'error' && !benign.test(m.text())) fatalErrors.push(m.text()) })
   page.on('pageerror', (e) => fatalErrors.push(String(e)))
 
