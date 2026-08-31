@@ -1,3 +1,4 @@
+import type { BudgetExplanationPayload } from './BudgetReading'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { getData } from '@/lib/api/client'
 import type { FilterScope } from './filterScope'
@@ -732,6 +733,14 @@ export const useCampaignOptions = (projectId: string | null, term: string) =>
 
 export const useFunnel = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FunnelStage[]>('funnel', p, r, 'funnel', f)
 export const useBudget = (p: string | null, r: Range, f?: MetricFilters) => useMetric<BudgetRow[]>('budget', p, r, 'budget', f)
+/**
+ * FUNNEL-ANALYTICAL-PATTERN-001 — the pacing table's other four steps, over the same rows.
+ *
+ * A second query rather than a second computation: the server reads one set of pacing rows for both,
+ * so the table and the reading cannot disagree about which line is spending fastest.
+ */
+export const useBudgetExplanation = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<BudgetExplanationPayload>('budget-explanation', p, r, 'budget-explanation', f)
 export const useAccountBudgets = (p: string | null, r: Range, f?: MetricFilters) =>
   useMetric<AccountBudgetRow[]>('budget-accounts', p, r, 'budget-accounts', f)
 /**
