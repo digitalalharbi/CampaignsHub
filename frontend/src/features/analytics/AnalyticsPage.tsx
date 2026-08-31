@@ -37,6 +37,7 @@ import {
 } from './hooks'
 import { findingsFor, windowConfidence, type QualityFinding, type WindowConfidence } from './dataQualityFindings'
 import { efficiencyFor, returnFor } from './pathEfficiency'
+import { attributionFindings, type AttributionFinding } from './attributionFindings'
 import { distributionFor } from './familyDistribution'
 import type { FreshnessRow, PlatformObjectives } from './api'
 import { scopeNote, type FilterScope } from './filterScope'
@@ -1285,6 +1286,16 @@ export function QualityTab({ projectId, range, filters }: TabProps) {
   const f = useFreshness(projectId, range, filters)
   const rows = f.data ?? []
   /*
+   * DATA-QUALITY-OPERATOR-UX-001 · CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — the OTHER half of this tab.
+   *
+   * Freshness answers «did the data arrive». Attribution answers «was it counted the same way», and
+   * that half was a table of claims: platform, orders claimed, orders confirmed, the difference. The
+   * account manager reading it has a client asking why the numbers disagree, and the table implies
+   * the answer without ever stating it.
+   */
+  const attribution = useAttribution(projectId, range, filters)
+  const attributionNotes = useMemo(() => attributionFindings(attribution.data), [attribution.data])
+  /*
    * DATA-QUALITY-OPERATOR-UX-001 — the findings, above the table that implies them.
    *
    * The table below is true and administrator-shaped: platform · latest date · last sync · days with
@@ -1321,6 +1332,7 @@ export function QualityTab({ projectId, range, filters }: TabProps) {
     <div>
       {!f.isLoading && rows.length > 0 && <WindowConfidenceLine c={confidence} windowDays={windowDays} ar={ar} />}
       <QualityFindings findings={findings} ar={ar} loading={f.isLoading} />
+      <AttributionFindings findings={attributionNotes} ar={ar} loading={attribution.isLoading} />
       <Panel title={ar ? 'جودة البيانات والإسناد' : 'Data quality & attribution'} description={ar ? 'آخر مزامنة، حداثة البيانات، والأيام الناقصة لكل منصة' : 'Last sync, how fresh the data is, and the missing days per platform'} loading={f.isLoading} error={f.isError} empty={!f.isLoading && rows.length === 0}>
       <MetricTable
         head={ar ? ['المنصة', 'آخر تاريخ', 'آخر مزامنة', 'أيام ببيانات', 'أيام ناقصة', 'الحالة'] : ['Platform', 'Latest date', 'Last sync', 'Days with data', 'Missing days', 'Status']}
@@ -1428,6 +1440,63 @@ function WindowConfidenceLine({ c, windowDays, ar }: { c: WindowConfidence; wind
         </span>
       )}
     </div>
+  )
+}
+
+/**
+ * The attribution half's findings, in the same shape as the freshness half's.
+ *
+ * Same card, same owner vocabulary, same ordering — because they are the same KIND of statement
+ * about the same window, and a reader who has learnt to read one should not have to learn the other.
+ * What differs is the question they answer: «did the data arrive» against «was it counted the same
+ * way», and the second is the one a client asks when two platforms disagree.
+ */
+function AttributionFindings({
+  findings, ar, loading,
+}: {
+  findings: AttributionFinding[]
+  ar: boolean
+  loading: boolean
+}) {
+  if (loading || findings.length === 0) return null
+
+  const OWNER: Record<AttributionFinding['owner'], { ar: string; en: string }> = {
+    system: { ar: 'النظام — تلقائيًا', en: 'The system, on its own' },
+    operator: { ar: 'أنت — خطوة واحدة', en: 'You — one step' },
+    provider: { ar: 'يحتاج فحصًا على المنصة', en: 'Needs a look on the platform' },
+    nobody: { ar: 'طبيعي — للمتابعة فقط', en: 'Ordinary — for watching only' },
+  }
+
+  const TONE: Record<AttributionFinding['severity'], string> = {
+    critical: 'border-danger/40 bg-danger/5',
+    attention: 'border-warning/40 bg-warning/5',
+    watch: 'border-border bg-surface-secondary',
+  }
+
+  return (
+    <ul data-testid="attribution-findings" className="mb-4 flex flex-col gap-2">
+      {findings.map((finding) => (
+        <li
+          key={finding.key}
+          data-testid={`attribution-finding-${finding.key}`}
+          className={`rounded-xl border p-3.5 ${TONE[finding.severity]}`}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-bold text-text-primary">
+              {finding.provider === null
+                ? (ar ? 'عبر المنصات' : 'Across platforms')
+                : providerLabel(finding.provider, ar ? 'ar' : 'en')}
+            </span>
+            <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+              {ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en}
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-text-primary">{ar ? finding.what.ar : finding.what.en}</p>
+          <p className="mt-0.5 text-xs text-text-secondary">{ar ? finding.affects.ar : finding.affects.en}</p>
+          <p className="mt-0.5 text-xs text-text-muted">{ar ? finding.check.ar : finding.check.en}</p>
+        </li>
+      ))}
+    </ul>
   )
 }
 
