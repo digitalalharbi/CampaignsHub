@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findingsFor } from './dataQualityFindings'
+import { findingsFor, windowConfidence } from './dataQualityFindings'
 import type { FreshnessRow } from './api'
 
 /**
@@ -111,5 +111,79 @@ describe('the list is ordered by what to open first', () => {
   it('states coverage as a share of the window, and nothing for a store', () => {
     expect(findingsFor([row({ missing_days: 3, days_with_data: 9 })], TODAY)[0]?.coverage).toBe(0.75)
     expect(findingsFor([row({ kind: 'store', last_sync_status: 'failed', days_with_data: null, missing_days: null })], TODAY)[0]?.coverage).toBeNull()
+  })
+})
+
+/**
+ * DATA-QUALITY-OPERATOR-UX-001 — «how much of this can I trust», with the arithmetic in the open.
+ *
+ * Two rules matter more than the number. A window with excellent coverage and one source whose
+ * authorisation has FAILED is not «high»: the days that source never reported are not in the
+ * denominator at all, so the arithmetic flatters exactly the case an operator most needs to see. And
+ * a store is not counted: there is no daily ad row for it to be missing, so counting it would make
+ * the fraction mean something different for every tenant.
+ */
+describe('confidence in a window', () => {
+  const adRow = (provider: string, days: number | null, over: Record<string, unknown> = {}): FreshnessRow => ({
+    kind: 'ad_platform',
+    provider,
+    account_id: `acct-${provider}`,
+    name: provider,
+    latest_metric_date: '2026-08-30',
+    data_freshness_at: '2026-08-30T00:00:00Z',
+    days_with_data: days,
+    missing_days: days === null ? null : Math.max(0, 30 - days),
+    last_sync_status: 'fresh',
+    last_sync_at: '2026-08-30T00:00:00Z',
+    last_sync_error: null,
+    ...over,
+  } as FreshnessRow)
+
+  it('reads a complete window as high, and says what it counted', () => {
+    const rows = [adRow('meta', 30), adRow('snapchat', 30)]
+    const c = windowConfidence(rows, 30, [])
+
+    expect(c.level).toBe('high')
+    expect(c.daysWithData).toBe(60)
+    expect(c.daysExpected).toBe(60)
+    expect(c.sourcesCounted).toBe(2)
+  })
+
+  it('is capped by a finding, however good the arithmetic looks', () => {
+    const rows = [adRow('meta', 30), adRow('snapchat', 29)]
+    const findings = findingsFor([adRow('snapchat', 29, { last_sync_status: 'failed', last_sync_error: 'boom' })], new Date('2026-08-30'))
+
+    expect(findings.length).toBeGreaterThan(0)
+    const c = windowConfidence(rows, 30, findings)
+
+    // 59/60 is 98% — «high» by arithmetic, and wrong: one source stopped answering.
+    expect(c.level).not.toBe('high')
+    expect(c.worst?.provider).toBe('snapchat')
+  })
+
+  it('leaves stores out of the fraction and says how many it left out', () => {
+    const store = { ...adRow('salla', null), kind: 'store' } as FreshnessRow
+    const c = windowConfidence([adRow('meta', 15), store], 30, [])
+
+    expect(c.sourcesCounted).toBe(1)
+    expect(c.sourcesNotCountable).toBe(1)
+    expect(c.daysExpected).toBe(30)
+    expect(c.coverage).toBeCloseTo(0.5)
+    expect(c.level).toBe('low')
+  })
+
+  it('says so rather than dividing by nothing when no source is countable', () => {
+    const store = { ...adRow('salla', null), kind: 'store' } as FreshnessRow
+    const c = windowConfidence([store], 30, [])
+
+    expect(c.coverage).toBeNull()
+    expect(c.daysExpected).toBe(0)
+  })
+
+  /** The name is the point: a reader with a source has somewhere to go, a percentage is an argument. */
+  it('names the thinnest source even when nothing is wrong enough to be a finding', () => {
+    const c = windowConfidence([adRow('meta', 30), adRow('x', 22)], 30, [])
+
+    expect(c.worst?.provider).toBe('x')
   })
 })

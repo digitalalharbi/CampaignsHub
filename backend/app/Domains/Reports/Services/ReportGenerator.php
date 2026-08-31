@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
-use App\Domains\Campaigns\Models\ExternalCreative;
-use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Disclaimers\Services\DisclaimerResolver;
 use App\Domains\Integrations\Catalogue\ProviderDisplayName;
 use App\Domains\Metrics\Services\DataFreshnessService;
@@ -41,7 +39,7 @@ final class ReportGenerator
         private readonly ReportObservations $observations,
         private readonly DataFreshnessService $freshness,
         private readonly ReportStructure $structure,
-        private readonly CreativeRows $creatives,
+        private readonly ReportAds $reportAds,
     ) {}
 
     public function generate(Report $report): array
@@ -110,7 +108,7 @@ final class ReportGenerator
         }
 
         $topCreatives = $this->ranking->rank($objective, $campaigns);
-        $ads = $this->ads($objective, $from, $to);
+        $ads = $this->reportAds->for($objective, $from, $to);
 
         /*
          * REPORT-WORST-CREATIVES-001 — a report that only lists winners never says what to stop.
@@ -230,7 +228,24 @@ final class ReportGenerator
              */
             'freshness' => $this->freshnessFor($report, $from, $to),
             'audience' => $report->audience ?? 'client',
-            'slides' => $config['slides'] ?? [],
+            /*
+             * REPORT-AD-PREVIEW-001 — a deck does not carry a page whose only content is «no ads».
+             *
+             * The ads slide is in every template because the section belongs in the closing sequence,
+             * and the REASON a report has no ad-level rows belongs in the outline, which carries it.
+             * A printed page holding a heading and one sentence is a different thing: the PDF's layout
+             * gate calls it empty and refuses the whole export — correctly, because a client's document
+             * should not have a blank page in it either.
+             *
+             * So the slide travels when there is something to show, and the absence keeps its home in
+             * `ads_absent_reason` and the outline.
+             */
+            'slides' => $ads['ads'] === []
+                ? array_values(array_filter(
+                    $config['slides'] ?? [],
+                    static fn (array $slide): bool => ($slide['type'] ?? null) !== 'ads',
+                ))
+                : ($config['slides'] ?? []),
             // Effective disclaimer/methodology copy, snapshotted so a shared report is self-contained
             // and reproducible even if the org later edits its notes.
             'disclaimer' => $this->disclaimers->resolve(
@@ -314,78 +329,6 @@ final class ReportGenerator
      *
      * @return array<string,mixed>
      */
-
-    /**
-     * The ads that ran, ranked by the objective's own metric, each with the media that ran with it.
-     *
-     * ## Why this is not `top_creatives`
-     *
-     * That key ranks CAMPAIGNS and says so: `creative_level` has read `campaign` since the snapshot
-     * was written, because ad-level rows did not exist. They do now, and a report that ends with the
-     * work itself is a different document from one that ends with a table of campaign names.
-     *
-     * ## An absent section, not an empty one
-     *
-     * A project whose connectors have never returned a creative gets NO ads section and a reason for
-     * it. An empty gallery under a heading reads as «your ads performed so badly there is nothing to
-     * show», which is a claim about the client's advertising made by a gap in ours.
-     *
-     * ## The preview is the canonical one
-     *
-     * `CreativeRows::present()` builds each card through `CreativePresenter`, so an ad whose media
-     * was withheld, expired or never sent carries the same state and the same sentence here as it
-     * does in the library — and nothing invents a picture for a report a client keeps.
-     *
-     * @return array{ads: list<array<string,mixed>>, level: string, reason: string|null}
-     */
-    private function ads(string $objective, Carbon $from, Carbon $to): array
-    {
-        $query = ExternalCreative::query();
-        $this->creatives->applyFilters($query, ['from' => $from->toDateString(), 'to' => $to->toDateString()]);
-
-        /*
-         * Bounded before it is ranked. A report is generated on a schedule and a project with four
-         * thousand creatives must not turn that into four thousand presenter calls; the ranking then
-         * chooses among the ones that actually spent.
-         */
-        $rows = $this->creatives->present(
-            $this->creatives->applySort($query, 'spend', $from, $to)->limit(60)->get(),
-            $from,
-            $to,
-            withFatigue: false,
-        );
-
-        if ($rows === []) {
-            return ['ads' => [], 'level' => 'campaign', 'reason' => 'no_creatives_in_window'];
-        }
-
-        // The same ranker the campaign leaders use, on the same objective — one definition of «best».
-        $rankable = array_map(static fn (array $row): array => [
-            'id' => $row['id'],
-            'name' => $row['name'],
-            'provider' => $row['provider'],
-            'campaign_id' => $row['campaign_id'] ?? null,
-            'campaign_name' => $row['campaign_name'] ?? null,
-            'objective' => $row['objective'] ?? null,
-            'preview' => $row['preview'],
-            'format' => $row['format'] ?? null,
-            'spend' => (float) ($row['metrics']['spend'] ?? 0),
-            'impressions' => (float) ($row['metrics']['impressions'] ?? 0),
-            'clicks' => (float) ($row['metrics']['clicks'] ?? 0),
-            'conversions' => (float) ($row['metrics']['conversions'] ?? 0),
-            'revenue' => (float) ($row['metrics']['revenue'] ?? 0),
-            'ctr' => $row['metrics']['ctr'] ?? null,
-            'cpa' => $row['metrics']['cpa'] ?? null,
-            'roas' => $row['metrics']['roas'] ?? null,
-        ], $rows);
-
-        $ranked = $this->ranking->rank($objective, $rankable);
-
-        return $ranked === []
-            ? ['ads' => [], 'level' => 'ad', 'reason' => 'no_rankable_metric_for_this_objective']
-            : ['ads' => $ranked, 'level' => 'ad', 'reason' => null];
-    }
-
     private function freshnessFor(Report $report, Carbon $from, Carbon $to): array
     {
         $state = $this->freshness->state(

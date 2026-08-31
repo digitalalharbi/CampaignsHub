@@ -1,16 +1,12 @@
-import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plug, RefreshCw, Unplug } from 'lucide-react'
 import {
-  bindAccount,
-  connectSandbox,
   detachBinding,
   listProjectBindings,
   listProjects,
   listProjectTasks,
   syncBinding,
-  type ExternalAccount,
 } from './api'
 import { PlatformIntegrationsPanel } from './PlatformIntegrationsPanel'
 import { Alert } from '@/components/ui/Alert'
@@ -30,7 +26,15 @@ export function ProjectIntegrationsPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { projectId = '' } = useParams()
-  const [discovered, setDiscovered] = useState<ExternalAccount[] | null>(null)
+
+  /*
+   * This page is mounted in both portals, so the source wizard it sends people to is the one in the
+   * portal they are already standing in — an agency reader sent to `/app/integrations` would land
+   * on a surface their session does not own.
+   */
+  const integrationsPath = window.location.pathname.startsWith('/agency')
+    ? '/agency/integrations'
+    : '/app/integrations'
 
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
 
@@ -57,18 +61,6 @@ export function ProjectIntegrationsPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'integrations'] })
 
-  const connectMutation = useMutation({
-    mutationFn: () => connectSandbox(projectId),
-    onSuccess: (res) => setDiscovered(res.accounts),
-  })
-  const bindMutation = useMutation({
-    mutationFn: (accountId: string) =>
-      bindAccount(projectId, { external_account_id: accountId, purpose: 'advertising', confirm: true }),
-    onSuccess: () => {
-      setDiscovered(null)
-      invalidate()
-    },
-  })
   const syncMutation = useMutation({
     mutationFn: (bindingId: string) => syncBinding(projectId, bindingId),
     onSuccess: invalidate,
@@ -78,7 +70,7 @@ export function ProjectIntegrationsPage() {
     onSuccess: invalidate,
   })
 
-  const bindError = bindMutation.isError ? toApiError(bindMutation.error) : null
+  const bindError = detachMutation.isError ? toApiError(detachMutation.error) : null
 
   const rows = bindings.data ?? []
   const providers = [...new Set((campaigns.data ?? []).map((c) => c.provider).filter(Boolean))]
@@ -131,37 +123,27 @@ export function ProjectIntegrationsPage() {
         ))}
       </div>
 
-      <div className="flex gap-2">
-        <Button loading={connectMutation.isPending} onClick={() => connectMutation.mutate()}>
-          <Plug size={15} /> {t('connect_sandbox')}
+      {/*
+        INTEGRATION-DATASOURCE-WIZARD-001 §1 §11 — connecting a source happens in ONE place, and this
+        is not it.
+
+        What stood here was a «Connect Sandbox» button and, after it, every account the authorisation
+        had discovered, each with its own «Bind» — a raw inventory on a page about one project. On the
+        live Snapchat estate that is 309 rows a project user has no reason to read, and the sandbox
+        button offered a demo connection on a customer's own project page.
+
+        The action that belongs here is the one that takes them to the wizard, with this project in
+        hand, where the same accounts are searched, paginated and chosen against the plan quota.
+      */}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="secondary"
+          data-testid="project-manage-sources"
+          onClick={() => navigate(integrationsPath)}
+        >
+          <Plug size={15} /> {lang === 'ar' ? 'إدارة مصادر البيانات' : 'Manage data sources'}
         </Button>
       </div>
-
-      {/* Wizard step: discovered accounts to bind */}
-      {discovered && (
-        <Card>
-          <CardTitle>{t('discovered_accounts')}</CardTitle>
-          <div className="mt-3 space-y-2">
-            {discovered.map((a) => (
-              <div key={a.id} className="flex items-center justify-between rounded-[9px] border border-border p-2.5">
-                <div>
-                  <span className="text-sm font-semibold">{a.name}</span>
-                  <span className="ms-2 text-xs text-text-muted">
-                    {a.account_type} · <span className="tnum">{a.external_id}</span>
-                  </span>
-                </div>
-                <Button
-                  variant="secondary"
-                  loading={bindMutation.isPending && bindMutation.variables === a.id}
-                  onClick={() => bindMutation.mutate(a.id)}
-                >
-                  {t('bind')}
-                </Button>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
 
       {/* Bound accounts for THIS project */}
       <Card>
@@ -173,7 +155,12 @@ export function ProjectIntegrationsPage() {
           </div>
         ) : (bindings.data?.length ?? 0) === 0 ? (
           <div className="mt-3">
-            <EmptyState title={t('no_bound_accounts')} description={t('no_bound_accounts_hint')} />
+            <EmptyState
+              title={t('no_bound_accounts')}
+              description={lang === 'ar'
+                ? 'اختر الحسابات من «إدارة مصادر البيانات» أعلاه — تُربط بهذا المشروع وتبدأ المزامنة.'
+                : 'Choose accounts from «Manage data sources» above — they bind to this project and start syncing.'}
+            />
           </div>
         ) : (
           <div className="mt-3 space-y-2">
