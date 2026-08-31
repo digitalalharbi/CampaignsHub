@@ -1,5 +1,6 @@
 import type { AdsReading, ReportAd } from './ReportAdsSection'
 import type { ObjectivePerformance } from './InteractiveReport'
+import type { PathLeaders } from '@/features/analytics/api'
 
 import { getData, postData, putData } from '@/lib/api/client'
 import type { SharedBranding } from './sharedBranding'
@@ -237,6 +238,10 @@ export interface LivePayload {
    * an order costs, and that is not the same question.
    */
   objective_performance?: ObjectivePerformance
+  /** The strongest and weakest campaign inside each path — never one list across paths. */
+  objective_leaders?: { paths: PathLeaders[] }
+  /** ATTRIB-VIS-001 — which optional sections this link is allowed to open. */
+  sections?: { attribution: boolean }
   store_funnel: StoreFunnelPayload | null
   freshness: Array<{
     provider: string

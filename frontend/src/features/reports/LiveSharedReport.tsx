@@ -400,6 +400,37 @@ export function LiveSharedReport({
           * does. A client asking «من أين جاء هذا الرقم؟» gets the same answer their agency would.
           */}
         {/*
+          OBJECTIVE-ANALYTICS-DEPTH-001 — which campaign inside each path carried it, and which did not.
+
+          The campaign list above is ordered by spend, which answers «where did the money go» and
+          never «which of these worked». One ranked list across a mixed programme answers it wrongly:
+          a brand campaign sits at the bottom of a return table for not producing revenue it was
+          never asked to produce.
+        */}
+        {(payload.objective_leaders?.paths ?? []).some((p) => p.comparable) && (
+          <div data-testid="live-objective-leaders" className="mt-6 rounded-2xl border border-border bg-surface p-4">
+            <h3 className="text-base font-bold text-text-primary">
+              {ar ? 'الأقوى والأضعف داخل كل مسار' : 'Strongest and weakest, inside each path'}
+            </h3>
+
+            <div className="mt-2 flex flex-col gap-2">
+              {(payload.objective_leaders?.paths ?? []).filter((p) => p.comparable && p.strongest && p.weakest).map((path) => (
+                <div key={path.path} data-testid={`live-leaders-${path.path}`} className="rounded-xl border border-border p-3 text-sm">
+                  <div className="font-semibold text-text-primary">{ar ? path.label_ar : path.label_en}</div>
+                  <div className="mt-0.5 text-text-secondary">
+                    {ar ? 'الأقوى ' : 'Strongest '}
+                    <span className="font-bold text-text-primary">{path.strongest?.name}</span>
+                    {' · '}
+                    {ar ? 'الأضعف ' : 'weakest '}
+                    <span className="font-bold text-text-primary">{path.weakest?.name}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/*
           REPORT-OBJECTIVE-003/004 — Direct beside Blended, before the ads and after the platforms.
 
           The headline above this rolls the whole scope together: its cost per order divides every
