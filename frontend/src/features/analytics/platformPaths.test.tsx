@@ -123,7 +123,12 @@ describe('platform contribution, inside each path', () => {
     // 6,000 over 900,000 impressions — 6.67 per thousand.
     expect(awareness).toHaveTextContent(/6\.6[0-9]/)
     // Never a return on a path nobody was buying returns on.
-    expect(screen.getByTestId('platform-path-awareness')).not.toHaveTextContent(/[0-9]\.[0-9]{2}[x×]/)
+    /*
+      The awareness row carries revenue (90,000 over 6,000 spent), so a return would read «15.00×».
+      Asserting on that FIGURE rather than on any multiplier keeps the check about the refusal — the
+      block also states how many times dearer one platform is, which is a cost ratio, not a return.
+    */
+    expect(screen.getByTestId('platform-path-awareness')).not.toHaveTextContent('15.00')
 
     const conversion = await screen.findByTestId('path-efficiency-conversion-snapchat')
     expect(conversion).toHaveTextContent(/Cost per result/)
