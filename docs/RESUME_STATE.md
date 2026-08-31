@@ -16,9 +16,9 @@ obligation and is not closed.
 ## 1. Where the tree is
 
 ```
-origin/main = 4845f99e7942c80caaa42bf014d3a9483d47b20c
+origin/main = 288e2a54bf3bf3a719063bdf324c723e93351c2a
 production  = https://campaignshub.io/   (200 after every deploy; the VPS resets hard to origin/main on push)
-open PRs    = #242 top performing ads + the openable card  ·  #241 money currency truth
+open PRs    = #248 live report form  ·  #249 lead identity as a permission  ·  the ledger catch-up
 ```
 
 Reference share used for browser acceptance: the live client report the owner opened. **Do not
@@ -26,11 +26,13 @@ hard-code its token into product logic or fixtures** — read it in a browser, t
 
 ## 2. The active unit
 
-`feat/top-performing-ads` → **PR #242**, the first slice of the production reality correction.
-Backend groups the report's ads by objective family and ranks each group on that family's own metric;
-the section prints «الإعلانات الأعلى أداءً» with the basis stated per group; the card is a button
-where a surface can open one; `ReportAdDetail` is the read-only modal, bounded by the share scope,
-reusing the product's one media reader. Guards proven by injection.
+`feat/lead-pii` → **PR #249**. A lead's identity is a permission answered by the lead's own project:
+the media buyer keeps the count and loses the person, the search box stops being an oracle for the
+number it hides, and a lead agent sees the leads they were given. Alongside it, **PR #248** makes a
+live share honour its FORM — Live dashboard against Live detailed report — instead of labelling one
+as the other.
+
+Seven units merged and deployed before these: #241 #242 #243 #244 #245 #246 #247.
 
 ## 3. What binds, and where it is written down
 
