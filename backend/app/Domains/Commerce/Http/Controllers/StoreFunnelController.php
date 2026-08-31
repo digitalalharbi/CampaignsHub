@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Commerce\Http\Controllers;
 
+use App\Domains\Commerce\Services\StoreFunnelExplanation;
 use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -46,9 +47,18 @@ final class StoreFunnelController extends Controller
             $from = $to->copy()->subDays(366)->startOfDay();
         }
 
-        return ApiResponse::success(
-            $this->funnel->build((string) $this->tenant->tenantId(), (string) $this->project->projectId(), $from, $to),
-            'Store funnel.',
-        );
+        $funnel = $this->funnel->build((string) $this->tenant->tenantId(), (string) $this->project->projectId(), $from, $to);
+
+        /*
+         * FUNNEL-ANALYTICAL-PATTERN-001 — the reading travels with the stages it reads.
+         *
+         * Computed here rather than on the client because the drop between two stages is a claim
+         * about the data, and a claim computed twice is a claim that will eventually be made twice
+         * differently. It is derived from the stages in this same response, so the two cannot
+         * disagree about which fall is the largest.
+         */
+        $funnel['reading'] = (new StoreFunnelExplanation)->explain($funnel['stages'] ?? []);
+
+        return ApiResponse::success($funnel, 'Store funnel.');
     }
 }

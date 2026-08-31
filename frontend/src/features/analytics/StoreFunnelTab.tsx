@@ -43,9 +43,32 @@ interface Step {
   spans_unmeasured_stages: boolean
 }
 
+/**
+ * FUNNEL-ANALYTICAL-PATTERN-001 — the funnel's own reading, computed beside the stages it reads.
+ *
+ * A claim about where the path loses most is a claim about the data, and a claim computed twice will
+ * eventually be made twice differently. The server derives it from the same stages in this payload.
+ */
+interface FunnelReading {
+  signal: {
+    from: { key: string; label_ar: string; label_en: string; value: number }
+    to: { key: string; label_ar: string; label_en: string; value: number }
+    lost: number
+    share: number
+    same_source: boolean
+  } | null
+  context: { stages_measured: number; stages_total: number } | null
+  explanation: { ar: string; en: string } | null
+  evidence: string[]
+  action: { ar: string; en: string } | null
+  silent_reason: string | null
+  unmeasured_stages: number
+}
+
 interface FunnelPayload {
   window: { from: string; to: string }
   stages: Stage[]
+  reading?: FunnelReading
   steps: Step[]
   totals: {
     /**
@@ -158,6 +181,15 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
             : 'No store is connected to this project, so the order and revenue stages have no source. Connect Salla or Zid from the integrations page.'}
         </p>
       )}
+
+      {/*
+        The reading before the stages, not after them.
+
+        The drop between two stages is the only thing anybody opens this section for, and it was left
+        for the reader to compute — every time, from figures whose sources differ: the click is the
+        platform's claim, the order is the merchant's ledger.
+      */}
+      {q.data.reading && <FunnelReadingBlock reading={q.data.reading} ar={ar} />}
 
       <Panel title={ar ? 'الفانل: من الظهور إلى الإيراد' : 'Funnel: impression to revenue'}>
         <ol data-testid="funnel-stages" className="space-y-2">
@@ -399,6 +431,71 @@ function Table({ head, rows }: { head: string[]; rows: Array<Array<string | null
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+/**
+ * The five steps, over the funnel's own stages.
+ *
+ * Absent steps stay absent: there is no signal without two measured stages, and no action without a
+ * signal. The silence says WHICH silence — a store that has not synced its orders and a project with
+ * no store at all are different situations, and an operator acts on them differently.
+ */
+function FunnelReadingBlock({ reading, ar }: { reading: FunnelReading; ar: boolean }) {
+  const SILENT: Record<string, { ar: string; en: string }> = {
+    only_one_stage_is_measured: {
+      ar: 'مرحلة واحدة فقط مقيسة في هذه الفترة — لا يمكن قراءة انخفاض بين طرف واحد.',
+      en: 'Only one stage is measured in this window — a fall needs two ends.',
+    },
+    no_stage_could_be_measured: {
+      ar: 'لا مرحلة مقيسة في هذه الفترة: لا متجر مربوط أو لم تصل بيانات بعد.',
+      en: 'No stage is measured in this window: no store is connected, or nothing has arrived yet.',
+    },
+    no_stage_fell: {
+      ar: 'لم تنخفض أي مرحلة عن سابقتها في هذه الفترة.',
+      en: 'No stage fell below the one before it in this window.',
+    },
+  }
+
+  return (
+    <div data-testid="funnel-reading" className="rounded-xl border border-border bg-surface-secondary/40 p-3.5">
+      {reading.signal === null ? (
+        <p data-testid="funnel-reading-silent" className="text-sm text-text-secondary">
+          {ar
+            ? SILENT[reading.silent_reason ?? 'no_stage_could_be_measured']?.ar
+            : SILENT[reading.silent_reason ?? 'no_stage_could_be_measured']?.en}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-sm text-text-primary">
+            {ar ? 'أكبر انخفاض: ' : 'Largest fall: '}
+            <span className="font-bold">{ar ? reading.signal.from.label_ar : reading.signal.from.label_en}</span>
+            {' → '}
+            <span className="font-bold">{ar ? reading.signal.to.label_ar : reading.signal.to.label_en}</span>
+            {' · '}
+            <span dir="ltr" className="tnum">{Math.round(reading.signal.share * 100)}%</span>
+          </p>
+
+          {reading.explanation && (
+            <p className="text-xs leading-relaxed text-text-secondary">{ar ? reading.explanation.ar : reading.explanation.en}</p>
+          )}
+
+          {reading.action && (
+            <p data-testid="funnel-reading-action" className="text-sm font-medium text-text-primary">
+              {ar ? reading.action.ar : reading.action.en}
+            </p>
+          )}
+        </div>
+      )}
+
+      {reading.unmeasured_stages > 0 && (
+        <p data-testid="funnel-reading-unmeasured" className="mt-2 text-[11px] text-text-muted">
+          {ar
+            ? `${reading.unmeasured_stages} مرحلة بلا قياس في هذه الفترة، وليست طرفًا في أي انخفاض أعلاه.`
+            : `${reading.unmeasured_stages} stage(s) are unmeasured in this window and are not an end of any fall above.`}
+        </p>
+      )}
     </div>
   )
 }
