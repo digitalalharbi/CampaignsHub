@@ -20,6 +20,7 @@ import { CreativeViewer } from '@/features/content/CreativeViewer'
 import { CreativeVideoPlayer } from '@/features/content/CreativeVideoPlayer'
 import { CreativeCarousel } from '@/features/content/CreativeCarousel'
 import { imageLoading } from '@/features/content/format'
+import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { formatMetric, metricLabel, metricState } from '@/features/content/metrics'
 import { formatMoneyReading, readMoney } from '@/lib/money/contract'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
@@ -397,7 +398,7 @@ export function SharedCreativeSection({
                 </p>
               )}
               <div className="overflow-x-auto">
-                <MetricTable creatives={comparison.data.creatives} currency={currency} locale={locale} />
+                <CreativeComparisonTable creatives={comparison.data.creatives} currency={currency} locale={locale} />
               </div>
             </div>
           )}
@@ -440,7 +441,7 @@ export function SharedCreativeSection({
             </ul>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-border">
-              <MetricTable creatives={rows} currency={currency} locale={locale} onOpen={(i) => setViewerIndex(i)} />
+              <CreativeComparisonTable creatives={rows} currency={currency} locale={locale} onOpen={(i) => setViewerIndex(i)} />
             </div>
           )}
 
@@ -926,7 +927,7 @@ function SharedCreativeDetail({
       )}
 
       <div className="overflow-x-auto rounded-xl border border-border">
-        <MetricTable creatives={[creative as unknown as CreativeCard]} currency={currency} locale={locale} />
+        <CreativeComparisonTable creatives={[creative as unknown as CreativeCard]} currency={currency} locale={locale} />
       </div>
 
       <div className="grid gap-2 rounded-xl border border-border bg-surface p-3">
@@ -978,7 +979,7 @@ function SharedCreativeDetail({
           <p className="text-xs text-text-secondary">{t.onePlatform}</p>
         ) : (
           <div className="overflow-x-auto">
-            <MetricTable
+            <CreativeComparisonTable
               creatives={data.by_platform.map((row, i) => ({
                 ...(creative as unknown as CreativeCard),
                 id: `${row.creative_id}-${i}`,
@@ -1076,7 +1077,20 @@ function CreativeTile({
  * Two renderers would have been two opinions about which columns matter, and the reader would meet a
  * metric in one that is missing from the other for no reason they can see.
  */
-function MetricTable({
+/**
+ * TABLE-PRESENTATION-CONTRACT-001 — the client's comparison table, on the product's own table.
+ *
+ * This was a second table implementation living in the one document a client actually keeps. It
+ * left-aligned every figure, offered no sort, and had its own idea of what a header looks like — so
+ * the most scrutinised surface in the product was the one furthest from its own conventions.
+ *
+ * It is `MetricTable` now. Two things follow for free and both were missing: a client can order the
+ * comparison by any column, and an unreported figure sorts LAST rather than winning an ascending
+ * sort — «this platform does not send CPM» is not the cheapest CPM.
+ *
+ * The name column keeps its own cell, because it carries two lines and a button rather than a value.
+ */
+function CreativeComparisonTable({
   creatives,
   currency,
   locale,
@@ -1094,40 +1108,39 @@ function MetricTable({
     [creatives],
   )
 
-  return (
-    <table className="w-full min-w-[640px] text-xs">
-      <thead className="bg-surface-secondary text-text-muted">
-        <tr>
-          <th className="p-2 text-start font-semibold">—</th>
-          {columns.map((key) => (
-            <th key={key} className="p-2 text-start font-semibold">{metricLabel(key, locale)}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {creatives.map((creative, index) => (
-          <tr key={creative.id} className="border-t border-border">
-            <td className="max-w-[220px] p-2">
-              {onOpen ? (
-                <button type="button" onClick={() => onOpen(index)} className="truncate text-start font-semibold hover:underline">
-                  {creative.name}
-                </button>
-              ) : (
-                <span className="truncate font-semibold">{creative.name}</span>
-              )}
-              <span className="block truncate text-[11px] text-text-secondary">
-                {providerLabel(creative.provider, locale)}
-                {creative.objective ? ` · ${creative.objective}` : ''}
-              </span>
-            </td>
-            {columns.map((key) => (
-              <td key={key} className="tnum p-2" dir="ltr">
-                {formatMetric(metricState(creative.metrics, key), key, locale, currency)}
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
+  const head = [locale === 'ar' ? 'المحتوى' : 'Content', ...columns.map((key) => metricLabel(key, locale))]
+
+  const rows = creatives.map((creative, index) => [
+    <div key="name" className="max-w-[220px]">
+      {onOpen ? (
+        <button type="button" onClick={() => onOpen(index)} className="truncate text-start font-semibold hover:underline">
+          {creative.name}
+        </button>
+      ) : (
+        <span className="truncate font-semibold">{creative.name}</span>
+      )}
+      <span className="block truncate text-[11px] text-text-secondary">
+        {providerLabel(creative.provider, locale)}
+        {creative.objective ? ` · ${creative.objective}` : ''}
+      </span>
+    </div>,
+    ...columns.map((key) => (
+      <span key={key} dir="ltr">{formatMetric(metricState(creative.metrics, key), key, locale, currency)}</span>
+    )),
+  ])
+
+  /*
+   * The raw figures the cells were rendered from, positionally matched — a formatted cell cannot be
+   * compared, and «Not provided» must sort as an absence rather than as the string it prints.
+   */
+  const values: SortValues[] = creatives.map((creative) => [
+    creative.name,
+    ...columns.map((key) => {
+      const state = metricState(creative.metrics, key)
+
+      return state.kind === 'value' ? state.value : null
+    }),
+  ])
+
+  return <MetricTable head={head} rows={rows} values={values} />
 }
