@@ -207,6 +207,28 @@ final class LiveReportService
                 campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : ($scope['campaign_ids'] ?: null),
                 providers: $applied['providers'] !== [] ? $applied['providers'] : ($scope['providers'] ?: null),
             ))->build($from, $to),
+            /*
+             * OBJECTIVE-ANALYTICS-DEPTH-001 — the strongest and weakest campaign INSIDE each path.
+             *
+             * The link listed campaigns by spend, which answers «where did the money go» and never
+             * «which of these worked». A single ranked list across a mixed programme would answer it
+             * wrongly: a brand campaign sits at the bottom of a ROAS table for not producing revenue
+             * it was never asked to produce. Inside a path, both ends are read on that path's own
+             * metric — and where fewer than two campaigns spent there, the reason travels instead.
+             */
+            'objective_leaders' => (new ObjectivePerformance(
+                projectIds: $scope['project_id'] === '' ? null : [$scope['project_id']],
+                campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : ($scope['campaign_ids'] ?: null),
+                providers: $applied['providers'] !== [] ? $applied['providers'] : ($scope['providers'] ?: null),
+            ))->leadersByPath($from, $to),
+            /*
+             * ATTRIB-VIS-001 — the link says which optional sections it is allowed to open.
+             *
+             * Attribution is a PERMISSION on the share, served by its own endpoint. The live surface
+             * could not offer it because it never carried the flags; it does now, and the section
+             * itself is still fetched through the gated route rather than inlined here.
+             */
+            'sections' => $share->sectionVisibility()->toArray(),
             'store_funnel' => $this->storeFunnel($share, $scope['project_id'], $from, $to),
             'freshness' => $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers']),
             /*

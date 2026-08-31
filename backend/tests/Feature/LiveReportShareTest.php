@@ -242,6 +242,48 @@ final class LiveReportShareTest extends TestCase
         $this->assertNotEmpty($split['paths']);
     }
 
+    /**
+     * OBJECTIVE-ANALYTICS-DEPTH-001 — strongest and weakest INSIDE each path, never one list across.
+     *
+     * A single ranked list over a mixed programme answers «which of these worked» wrongly: a brand
+     * campaign sits at the bottom of a return table for not producing revenue it was never asked to
+     * produce, and the client reading the link is the person least able to spot that.
+     */
+    public function test_a_live_link_ranks_inside_a_path_and_never_across_paths(): void
+    {
+        $token = $this->liveLink();
+
+        $leaders = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk()->json('data.objective_leaders');
+
+        $this->assertArrayHasKey('paths', $leaders);
+        foreach ($leaders['paths'] as $path) {
+            $this->assertArrayHasKey('comparable', $path);
+            if ($path['comparable'] === false) {
+                // The reason travels with the refusal rather than an empty pair of names.
+                $this->assertArrayHasKey('comparable_reason', $path);
+            }
+        }
+    }
+
+    /**
+     * ATTRIB-VIS-001 — the live link states which optional sections it may open.
+     *
+     * Attribution is a permission on the share and is served by its own endpoint; the live surface
+     * could not offer it because it never carried the flags. It carries them now, and the section is
+     * still fetched through the gated route rather than inlined into this payload.
+     */
+    public function test_a_live_link_carries_its_section_permissions_without_inlining_them(): void
+    {
+        $token = $this->liveLink();
+
+        $body = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk()->json('data');
+
+        $this->assertArrayHasKey('sections', $body);
+        $this->assertArrayHasKey('attribution', $body['sections']);
+        // The flag, not the data: a link that inlined attribution would bypass its own permission.
+        $this->assertArrayNotHasKey('attribution', $body);
+    }
+
     public function test_no_public_report_route_sits_behind_an_authentication_middleware(): void
     {
         $guarded = [];
