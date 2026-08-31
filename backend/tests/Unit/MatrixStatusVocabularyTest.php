@@ -46,6 +46,39 @@ final class MatrixStatusVocabularyTest extends TestCase
         'BLOCKED_OPERATIONAL_EVIDENCE',
     ];
 
+    /**
+     * The requirement ids registered from the owner's three packages of 2026-08-30/31.
+     *
+     * @var list<string>
+     */
+    private const REGISTERED = [
+        'TABLE-PRESENTATION-CONTRACT-001',
+        'ADSET-METRICS-TRUTH-001',
+        'CONTENT-TERMINOLOGY-001',
+        'CONTENT-PREVIEW-SHAPES-001',
+        'CONTENT-DETAIL-MODAL-001',
+        'INSUFFICIENT-DATA-EXPLAINED-001',
+        'STORE-TABLE-PRESENTATION-001',
+        'ANALYTICS-DIFFERENTIATION-001',
+        'BUDGET-ALERT-EMAIL-001',
+        'MONEY-SCOPE-TRUTH-001',
+        'REPORT-PRODUCT-MODEL-001',
+        'REPORT-DETAIL-PARITY-001',
+        'REPORT-CREATION-UX-001',
+        'REPORT-INTERACTION-PARITY-001',
+        'BRANDING-RENDER-EVIDENCE-001',
+        'PRODUCTION-TRUTH-AUDIT-001',
+        'LEAD-OPERATIONS-001',
+        'TEAM-PROJECT-RBAC-001',
+        'EXECUTIVE-DAILY-DIGEST-001',
+        'LEAD-SOURCE-ATTRIBUTION-001',
+        'CAMPAIGN-OUTCOME-DIMENSION-001',
+        'LEAD-SLA-NOTIFICATION-001',
+        'EXECUTIVE-OPS-DASHBOARD-001',
+        'WHATSAPP-CONVERSATION-SOURCE-001',
+        'GOVERNANCE-ANTILOSS-001',
+    ];
+
     public function test_every_row_states_a_canonical_status(): void
     {
         $offenders = [];
@@ -193,7 +226,14 @@ final class MatrixStatusVocabularyTest extends TestCase
                 continue;
             }
 
-            $cells = explode('|', $line);
+            /*
+             * Unescaped pipes only. A cell may legitimately contain `\|` — the filter contract row
+             * writes «الفترة \| المشروع \| المنصة» — and a reader that splits on it counts sixteen
+             * cells in a nine-column row, fails the width check, and skips the row in silence. Which
+             * is how a committed merge conflict, two duplicated rows and thirteen malformed rows
+             * lived in this file with the suite green.
+             */
+            $cells = preg_split('/(?<!\\\\)\|/', $line);
             $trimmed = array_map(trim(...), $cells);
 
             if (in_array('Status', $trimmed, true)) {
@@ -235,6 +275,252 @@ final class MatrixStatusVocabularyTest extends TestCase
         }
 
         return $out;
+    }
+
+    /**
+     * GOVERNANCE-ANTILOSS-001 — a row whose width does not match its own header.
+     *
+     * This is the hole every other check in this file was falling through. The reader locates the
+     * status by COLUMN, so it can only read a row that has the header's number of columns; a row
+     * with one column too many was not reported as malformed, it was skipped — and a skipped row is
+     * a requirement nobody is checking. Thirteen rows in the main table had accumulated an extra
+     * column each, because an author updating a Remaining gap appended a new cell instead of
+     * replacing the old one, and Markdown renders that as a fourteenth column nobody notices in a
+     * table this wide.
+     */
+    public function test_every_row_is_as_wide_as_its_own_header(): void
+    {
+        $offenders = [];
+
+        foreach (self::tables(file($this->matrixPath())) as $table) {
+            foreach ($table['rows'] as [$line, $cells]) {
+                if (count($cells) !== $table['width']) {
+                    $id = trim($cells[1] ?? '?');
+                    $offenders[] = "{$id} → ".count($cells).' columns, header has '.$table['width'];
+                }
+            }
+        }
+
+        $this->assertSame([], $offenders, "A row that does not match its header is skipped by every reader here.\n  ".implode("\n  ", $offenders));
+    }
+
+    /**
+     * One id, one row, inside one table.
+     *
+     * Not across the DOCUMENT: the dated sections below the main table are progress records, and a
+     * requirement legitimately appears again in the section that closed it. Twice in the SAME table
+     * is the failure — two rows with the same id and different statuses, which is what a merge
+     * conflict resolved by keeping both sides produces, and which leaves the reader no way to know
+     * which one is true.
+     */
+    public function test_no_table_carries_the_same_requirement_twice(): void
+    {
+        $offenders = [];
+
+        foreach (self::tables(file($this->matrixPath())) as $table) {
+            $seen = [];
+
+            foreach ($table['rows'] as [$line, $cells]) {
+                $id = trim($cells[1] ?? '');
+
+                if (preg_match('/^[A-Z][A-Za-z0-9._-]*$/', $id) !== 1) {
+                    continue;
+                }
+
+                if (isset($seen[$id])) {
+                    $offenders[] = $id;
+                }
+
+                $seen[$id] = true;
+            }
+        }
+
+        $this->assertSame([], $offenders, 'the same requirement is stated twice in one table: '.implode(', ', $offenders));
+    }
+
+    /**
+     * A row that is not finished says what is left.
+     *
+     * An empty Remaining gap on an unfinished row is how a requirement quietly stops being work:
+     * it keeps its status, nobody can act on it, and the next reader assumes somebody else knows.
+     * VERIFIED and the two blocked statuses are exempt — there is nothing remaining, or what remains
+     * is stated as the blocker.
+     */
+    public function test_an_unfinished_row_says_what_is_remaining(): void
+    {
+        $done = ['VERIFIED', 'BLOCKED_EXTERNAL_CREDENTIALS', 'BLOCKED_OPERATIONAL_EVIDENCE'];
+        $offenders = [];
+
+        foreach (self::tables(file($this->matrixPath())) as $table) {
+            if ($table['status'] === null || $table['gap'] === null) {
+                continue;
+            }
+
+            foreach ($table['rows'] as [$line, $cells]) {
+                $id = trim($cells[1] ?? '');
+                $status = trim(str_replace('*', '', $cells[$table['status']] ?? ''));
+
+                if (preg_match('/^[A-Z][A-Za-z0-9._-]*$/', $id) !== 1 || in_array($status, $done, true)) {
+                    continue;
+                }
+
+                if (in_array(trim($cells[$table['gap']] ?? ''), ['', '—', '-'], true)) {
+                    $offenders[] = "{$id} ({$status})";
+                }
+            }
+        }
+
+        $this->assertSame([], $offenders, "these rows are unfinished and say nothing about what is left:\n  ".implode("\n  ", $offenders));
+    }
+
+    /** A merge resolved by committing both sides, which happened, and cost two rows. */
+    public function test_the_ledger_carries_no_unresolved_conflict(): void
+    {
+        foreach ([$this->matrixPath(), $this->docPath('RESUME_STATE.md'), $this->docPath('ACTIVE_EXECUTION_STATE.md')] as $path) {
+            foreach (file($path) as $n => $line) {
+                $this->assertDoesNotMatchRegularExpression(
+                    '/^(<{7}|={7}$|>{7})/',
+                    rtrim($line),
+                    basename($path).' line '.($n + 1).' is an unresolved merge conflict',
+                );
+            }
+        }
+    }
+
+    /**
+     * The requirement families the owner registered in §56 are still here.
+     *
+     * Named one by one rather than counted, because a count survives a rename and a substitution.
+     * These arrived as three packages in a single session and existed nowhere but a chat window
+     * until they were written down; a row removed by a bad rebase would be undetectable otherwise.
+     * Removing one is allowed — by superseding it in writing, which means the id still appears.
+     */
+    public function test_the_registered_requirement_families_are_still_recorded(): void
+    {
+        $matrix = file_get_contents($this->matrixPath());
+
+        foreach (self::REGISTERED as $id) {
+            $this->assertStringContainsString(
+                "| {$id} |",
+                $matrix,
+                "{$id} was registered by the owner and no longer has a row. If it was superseded, the supersession must name it.",
+            );
+        }
+    }
+
+    /**
+     * The resume document names the packages, so a session that starts cold knows they bind.
+     *
+     * RESUME_STATE is not a second matrix and is not asserted row by row. What it must not do is
+     * lose the fact that these families exist — a fresh session reads it first, and what it does not
+     * mention is work nobody will pick up.
+     */
+    public function test_the_resume_state_names_the_binding_packages(): void
+    {
+        $resume = file_get_contents($this->docPath('RESUME_STATE.md'));
+
+        foreach (['LEAD-OPERATIONS-001', 'TEAM-PROJECT-RBAC-001', 'EXECUTIVE-DAILY-DIGEST-001', 'LEAD-SOURCE-ATTRIBUTION-001', 'PRODUCTION-TRUTH-AUDIT-001', 'REPORT-PRODUCT-MODEL-001'] as $id) {
+            $this->assertStringContainsString($id, $resume, "RESUME_STATE must name {$id} or a cold session will not know it is binding");
+        }
+    }
+
+    /**
+     * And the execution state cannot report an empty queue while the ledger still has work.
+     *
+     * The failure this prevents is a control plane that reads «all clear» because its own list is
+     * short — the queue is a view of the matrix, not an alternative to it.
+     */
+    public function test_the_execution_state_cannot_claim_an_empty_queue(): void
+    {
+        $executable = 0;
+
+        foreach (self::statusCells(file($this->matrixPath())) as [$id, $status]) {
+            if (in_array($status, ['NOT_STARTED', 'IN_PROGRESS', 'PARTIAL', 'IMPLEMENTED_NOT_VERIFIED'], true)) {
+                $executable++;
+            }
+        }
+
+        if ($executable === 0) {
+            $this->markTestSkipped('nothing executable remains; the claim would be true');
+        }
+
+        $state = file_get_contents($this->docPath('ACTIVE_EXECUTION_STATE.md'));
+
+        $this->assertDoesNotMatchRegularExpression(
+            '/\b(queue (is )?(complete|empty|drained)|nothing (remains|left) to (do|ship)|all requirements (are )?(complete|shipped))\b/i',
+            $state,
+            "ACTIVE_EXECUTION_STATE claims the work is done while {$executable} matrix rows are still executable",
+        );
+    }
+
+    /**
+     * Tables, each with its own header width and the columns it declares.
+     *
+     * @param  list<string>  $lines
+     * @return list<array{width: int, status: int|null, gap: int|null, rows: list<array{0: string, 1: list<string>}>}>
+     */
+    private static function tables(array $lines): array
+    {
+        $tables = [];
+        $current = null;
+
+        foreach ($lines as $line) {
+            $line = rtrim($line);
+
+            if (! str_starts_with($line, '| ')) {
+                if (! str_starts_with(trim($line), '|') && $current !== null) {
+                    $tables[] = $current;
+                    $current = null;
+                }
+
+                continue;
+            }
+
+            $cells = preg_split('/(?<!\\\\)\|/', $line);
+            $trimmed = array_map(trim(...), $cells);
+
+            /*
+             * A header, and therefore a new table. Recognised by declaring an id column — every
+             * table here opens with `ID` or `Req ID` — so a data row cannot be mistaken for one.
+             */
+            if (in_array($trimmed[1] ?? '', ['ID', 'Req ID'], true)) {
+                if ($current !== null) {
+                    $tables[] = $current;
+                }
+
+                $gap = array_search('Remaining gap', $trimmed, true);
+                $status = array_search('Status', $trimmed, true);
+
+                $current = [
+                    'width' => count($cells),
+                    'status' => $status === false ? null : $status,
+                    'gap' => $gap === false ? null : $gap,
+                    'rows' => [],
+                ];
+
+                continue;
+            }
+
+            if ($current === null || preg_match('/^\|[\s:|-]+\|$/', $line) === 1) {
+                continue;
+            }
+
+            $current['rows'][] = [$line, $cells];
+        }
+
+        if ($current !== null) {
+            $tables[] = $current;
+        }
+
+        return $tables;
+    }
+
+    private function docPath(string $name): string
+    {
+        $path = dirname(__DIR__, 3).'/docs/'.$name;
+        $this->assertFileExists($path);
+
+        return $path;
     }
 
     private function matrixPath(): string
