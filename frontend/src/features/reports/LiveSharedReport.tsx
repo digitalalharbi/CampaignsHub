@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
+import { LiveDetailTables } from './LiveDetailTables'
 import { ReportAdDetail } from './ReportAdDetail'
 import { ReportAdsSection, type ReportAd } from './ReportAdsSection'
 import { canonicalPlatform } from '@/lib/platforms'
@@ -58,10 +59,21 @@ export function LiveSharedReport({
   token,
   password,
   currency,
+  form = 'detailed',
 }: {
   token: string
   password?: string
   currency: string
+  /**
+   * REPORT-PRODUCT-MODEL-001 — which of the two LIVE products this is.
+   *
+   * `executive_summary` is the Live Dashboard: the figures, filterable, recomputed on open.
+   * `detailed` is the Live Detailed Report: the same dashboard, and then every campaign and every
+   * platform in the window as tables. Before this the page rendered the dashboard either way, under
+   * a label that promised «every platform, campaign and creative» — the composition and the sentence
+   * above it disagreed, and the client was reading the sentence.
+   */
+  form?: 'executive_summary' | 'detailed'
 }) {
   const { locale } = useUi()
   const ar = locale === 'ar'
@@ -507,6 +519,16 @@ export function LiveSharedReport({
             onOpen={setOpenAd}
           />
         </div>
+
+        {/*
+          REPORT-PRODUCT-MODEL-001 §D — the difference between the two live products, on screen.
+
+          The dashboard stops at the charts. The detailed report keeps going: every campaign and
+          every platform in the window, sortable, with the money contract deciding what a cell may
+          claim. A label promising «every campaign» over a top-eight bar chart is the defect this
+          block closes, and `liveReportForm.test.tsx` is what stops the two drifting apart again.
+        */}
+        {form === 'detailed' && <LiveDetailTables payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />}
 
         {payload.store_funnel && (
           <div data-testid="shared-store-funnel" className="rounded-2xl border border-border bg-surface p-4">
