@@ -35,6 +35,18 @@ use App\Models\User;
 final class ProjectAbilities
 {
     /**
+     * One answer per (reader, project) for the life of the request.
+     *
+     * Without this, a paginated list asks the same question once per row: `LeadResource` consults
+     * this for every lead, and sixteen leads became forty-nine queries — caught by the N+1 guard the
+     * dedup work left behind, which is exactly what that guard is for. The set cannot change during
+     * a request, so the second answer is the first.
+     *
+     * @var array<string, list<string>>
+     */
+    private array $memo = [];
+
+    /**
      * What a TENANT permission means inside a project, for somebody who is not a member of one.
      *
      * Agency staff are not members of their clients' projects — they work across all of them, and
@@ -80,6 +92,14 @@ final class ProjectAbilities
      * @return list<string>
      */
     public function for(User $user, string $projectId): array
+    {
+        $key = $user->getKey().':'.$projectId;
+
+        return $this->memo[$key] ??= $this->resolve($user, $projectId);
+    }
+
+    /** @return list<string> */
+    private function resolve(User $user, string $projectId): array
     {
         if ($user->is_platform_admin) {
             return ProjectCapability::ALL;

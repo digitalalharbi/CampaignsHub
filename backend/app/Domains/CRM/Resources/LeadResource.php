@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\CRM\Resources;
 
+use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Lead;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -14,16 +15,31 @@ final class LeadResource extends JsonResource
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
+        /*
+         * LEAD-OPERATIONS-001 — who this person IS, only for a reader entitled to it.
+         *
+         * These four fields went to anybody holding the tenant's `leads.view`, which is everybody
+         * who can open the screen — the media buyer whose job is the cost per lead, the analyst
+         * building a dashboard. Reading the COUNT and reading the PEOPLE were one permission.
+         *
+         * `identity_withheld` travels beside them so the UI can say «you are not permitted to see
+         * this» rather than drawing a row that looks like a lead who gave no details. A blank name
+         * is a false statement about the client's lead, and somebody would go looking for the bug.
+         */
+        $identity = app(LeadVisibility::class)->maySeeIdentity($request->user(), $this->resource);
+
         return [
             'id' => $this->id,
-            'name' => $this->name,
-            'email' => $this->email,
-            'phone' => $this->phone,
+            'identity_withheld' => ! $identity,
+            'name' => $identity ? $this->name : null,
+            'email' => $identity ? $this->email : null,
+            'phone' => $identity ? $this->phone : null,
             'source' => $this->source,
             'status' => $this->status,
             'estimated_value' => (float) $this->estimated_value,
             'currency' => $this->currency,
-            'notes' => $this->notes,
+            // A note is what an agent wrote about the conversation, so it is identity too.
+            'notes' => $identity ? $this->notes : null,
             'tags' => $this->tags ?? [],
             'company_id' => $this->company_id,
             'contact_id' => $this->contact_id,
