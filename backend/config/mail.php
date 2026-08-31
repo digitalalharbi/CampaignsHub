@@ -115,4 +115,20 @@ return [
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Global "Reply-To" Address
+    |--------------------------------------------------------------------------
+    |
+    | Production mail is sent from the system sender while replies return to the
+    | human-operated mailbox. Leave MAIL_REPLY_TO unset in local/test installs
+    | that do not need a reply-to header.
+    |
+    */
+
+    'reply_to' => [
+        'address' => env('MAIL_REPLY_TO'),
+        'name' => env('MAIL_REPLY_TO_NAME', env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel'))),
+    ],
+
 ];
