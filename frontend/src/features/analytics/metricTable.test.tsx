@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 
-import { MetricTable } from './AnalyticsPage'
+import { MetricTable } from '@/components/ui/MetricTable'
 
 /**
  * TABLE-SORT-ALIGN-001 — asserted on fixed rows rather than on whatever the database holds.
