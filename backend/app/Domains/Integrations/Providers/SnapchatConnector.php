@@ -20,7 +20,7 @@ use App\Domains\Integrations\ValueObjects\SyncResult;
  *
  * Awaiting credentials on this install — no round trip has been made against a real organisation.
  */
-final class SnapchatConnector extends ApiAdvertisingConnector implements ReportsCreativeInsights
+final class SnapchatConnector extends ApiAdvertisingConnector implements ReportsCreativeInsights, ReportsEntityGrains
 {
     /** Snapchat states money in millionths. */
     private const MICRO = 1_000_000;
@@ -731,6 +731,33 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         } catch (\Throwable $e) {
             return SyncResult::failed($e->getMessage());
         }
+    }
+
+    /**
+     * ADSET-METRICS-TRUTH-001 — the interface method, over the sweep that was already here.
+     *
+     * The shape is forced by the API and is why the parent list is used: `breakdown=adsquad` and
+     * `breakdown=ad` both live on the CAMPAIGN stats endpoint, so both rungs are swept from the
+     * campaigns rather than each from its own parent — 89 calls for the live account instead of
+     * 89 + 187, and the ad-squad endpoint documents no breakdown at all.
+     *
+     * @param  list<string>  $campaignExternalIds
+     */
+    public function entityInsights(
+        string $adAccountId,
+        string $grain,
+        array $campaignExternalIds,
+        string $from,
+        string $to,
+    ): SyncResult {
+        return $this->syncEntityInsights(
+            $adAccountId,
+            'campaigns',
+            $grain === ReportsEntityGrains::AD_SET ? 'adsquad' : 'ad',
+            $campaignExternalIds,
+            $from,
+            $to,
+        );
     }
 
     /** The first refusal seen while sweeping a grain, kept so the caller can record WHY it is empty. */
