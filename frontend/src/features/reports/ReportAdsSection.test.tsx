@@ -140,4 +140,26 @@ describe('the reading of the ads grid', () => {
     expect(screen.getByTestId('report-ads')).toHaveAttribute('data-state', 'present')
     expect(screen.queryByTestId('report-ads-reading')).not.toBeInTheDocument()
   })
+
+  /**
+   * CONTENT-PREVIEW-SHAPES-001 — the card that was an empty grey square in a client's report.
+   *
+   * A Snapchat or TikTok video ad whose file resolved but whose thumbnail never arrived produced a
+   * reading that is not an absence — so the absence sentence was empty, and the card drew a blank
+   * box with nothing written in it. In a document a client keeps, that reads as a broken report.
+   */
+  it('says a video has no cover frame instead of drawing an empty box', () => {
+    const film = ad({
+      preview: preview({ kind: 'video', video_url: 'https://cdn/ad.mp4', image_url: null, thumbnail_url: null }),
+    })
+
+    renderWithProviders(<ReportAdsSection ads={[film]} locale="en" onOpen={() => {}} />, { locale: 'en' })
+
+    const absent = screen.getByTestId('report-ad-poster-0-absent')
+    expect(absent).toHaveTextContent(/no cover frame/i)
+    expect(absent).toHaveAttribute('data-absence', 'video-no-cover')
+    // And the card still opens, because the film itself is there to be played.
+    expect(screen.getByTestId('report-ad-card')).toHaveAttribute('data-openable', 'true')
+  })
+
 })
