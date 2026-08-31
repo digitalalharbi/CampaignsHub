@@ -10,7 +10,9 @@ use App\Domains\Integrations\Catalogue\ProviderDefinition;
 use App\Domains\Integrations\Catalogue\ProviderKind;
 use App\Domains\Integrations\Catalogue\WebhookSupport;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationWebhookEvent;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\Webhooks\WebhookIngest;
 use App\Domains\Integrations\Webhooks\WebhookSignature;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
@@ -53,6 +55,7 @@ final class IntegrationWebhookController extends Controller
         private readonly WebhookSignature $signatures,
         private readonly WebhookIngest $ingest,
         private readonly ProviderConfigurationService $settings,
+        private readonly AccountAssignment $assignment,
     ) {}
 
     /**
@@ -139,6 +142,30 @@ final class IntegrationWebhookController extends Controller
         }
 
         $accountId = (string) $event->external_account_id;
+
+        /*
+         * RUNTIME-100 §11 — a delivery for an account nobody assigned queues nothing.
+         *
+         * The jobs re-prove their own scope, so nothing would have been WRITTEN either way. What this
+         * adds is that nothing is queued: a provider pushing events for an authorisation whose
+         * accounts were never attached to a project would otherwise fill the queue with work that
+         * exists only to refuse itself, and — worse — every one of those refusals looks like activity
+         * on a connection that is doing nothing.
+         *
+         * The verification, the idempotency ledger and the 401 for an unsigned delivery are untouched:
+         * this is about what happens AFTER a delivery has been accepted as genuine.
+         */
+        $account = ExternalAccount::withoutGlobalScopes()->find($accountId);
+
+        if ($account === null || ! $this->assignment->isActivelyAssigned($account)) {
+            $event->forceFill([
+                'status' => 'ignored',
+                'processed_at' => Carbon::now(),
+                'error' => 'No active project assignment for this account — nothing was fetched.',
+            ])->save();
+
+            return;
+        }
 
         match ($kind) {
             ProviderKind::Advertising => SyncAccountMetricsJob::dispatch(

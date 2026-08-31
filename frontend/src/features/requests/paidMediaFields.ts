@@ -139,7 +139,7 @@ export const PAID_FIELD_DEFS: PaidFieldDef[] = [
 
   // ---- Content, files & notes ----
   { token: 'topic', labelAr: 'الموضوع', labelEn: 'Topic', control: 'text', group: 'content' },
-  { token: 'creatives', labelAr: 'المحتويات / الإبداعات', labelEn: 'Creatives', control: 'textarea', group: 'content', hintAr: 'صف المحتوى المتاح أو المطلوب', hintEn: 'Describe available or needed creative' },
+  { token: 'creatives', labelAr: 'الإعلانات', labelEn: 'Ads', control: 'textarea', group: 'content', hintAr: 'صف الإعلانات المتاحة أو المطلوبة', hintEn: 'Describe the ads you have or need' },
   { token: 'assets', labelAr: 'الأصول المتاحة', labelEn: 'Available assets', control: 'textarea', group: 'content' },
   { token: 'funnel', labelAr: 'القمع التسويقي', labelEn: 'Marketing funnel', control: 'textarea', group: 'content' },
   { token: 'current_performance', labelAr: 'الأداء الحالي', labelEn: 'Current performance', control: 'textarea', group: 'content', hintAr: 'مثل CPA / CPL / ROAS الحالية', hintEn: 'e.g. current CPA / CPL / ROAS' },

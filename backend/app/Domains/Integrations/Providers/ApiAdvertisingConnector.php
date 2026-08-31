@@ -62,6 +62,38 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
      */
     protected array $rawResponses = [];
 
+    /**
+     * One entry per call: what was asked, and what the wire said back.
+     *
+     * INTEG-RUNTIME §7 — «the provider returned 0 rows» is a claim about a REQUEST as much as about
+     * an account, and the request is the half that was never written down. An empty body and a 200
+     * look identical in the retained payload; the URL, the status and the platform's own request id
+     * are what turn «they had nothing» into «they had nothing, for THIS question, and here is the
+     * receipt they can look up».
+     *
+     * The URL carries no secret — every platform here authenticates in a header — so it is recorded
+     * whole rather than sanitised into uselessness.
+     *
+     * @var list<array{url:string,status:int,request_id:?string,keys:list<string>}>
+     */
+    protected array $callLog = [];
+
+    /**
+     * How many data records the platform actually handed this connector in the current sync.
+     *
+     * INTEG-RUNTIME §7 — the first of the four numbers a run has to be able to state. Without it,
+     * «zero metrics» is unreadable: it is equally true of a provider that sent nothing and of a
+     * parser that dropped everything, and those have different owners. Each connector increments this
+     * where it iterates the provider's OWN records, before any of our guards can drop one — so the
+     * count is what arrived, not what survived.
+     *
+     * The unit is whatever the platform returns a record IN, and that differs by design: a Snapchat
+     * timeseries point, a Meta insight row, an X entity. The number is not comparable across
+     * platforms and is not meant to be. It answers one question — «did they send us anything?» — and
+     * `parsed_rows` beside it answers «and what did we make of it?».
+     */
+    protected int $rawInsightRows = 0;
+
     /** The platform key in `config/ad_platforms.php` — usually the same as `key()`. */
     abstract protected function platform(): string;
 
@@ -92,7 +124,7 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
      * is passed through or left null — never constructed, because a fabricated preview is indist-
      * inguishable from a real one at a glance and wrong in a way nobody checks.
      *
-     * @return list<array{external_id:string,ad_set_external_id:?string,campaign_external_id:?string,name:string,status:string,review_status?:?string,destination_url?:?string,creative?:array{external_id:string,name?:?string,format?:?string,thumbnail_url?:?string,preview_url?:?string},raw:array<string,mixed>}>
+     * @return list<array{external_id:string,ad_set_external_id:?string,campaign_external_id:?string,name:string,status:string,review_status?:?string,destination_url?:?string,creative?:array{external_id:string,name?:?string,format?:?string,thumbnail_url?:?string,preview_url?:?string,asset_url?:?string,video_url?:?string,asset_expires_at?:?string,media_id?:?string,source_updated_at?:?string},raw:array<string,mixed>}>
      */
     abstract protected function fetchAds(OAuthTokens $tokens, string $adAccountId): array;
 
@@ -214,6 +246,22 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
         return $this->fetchAdAccounts($this->tokens());
     }
 
+    /**
+     * What THIS token can reach — the operation an OAuth callback performs before anything is saved.
+     *
+     * Separate from `listAdAccounts()` because the two ask different questions. That one reads a
+     * stored connection and answers «what does this workspace already have»; this one takes a token
+     * that has just come back from the provider and answers «what did this person actually authorise
+     * us to see», which is the only honest basis for the account-selection step.
+     *
+     * It is also the seam the tenancy tests drive: two tokens, two answers, proven rather than
+     * assumed (SNAP-ORG-001).
+     */
+    public function discoverAdAccounts(OAuthTokens $tokens): array
+    {
+        return $this->fetchAdAccounts($tokens);
+    }
+
     public function syncCampaigns(string $adAccountId): SyncResult
     {
         $refusal = $this->refusal();
@@ -302,11 +350,17 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
             // TikTok authenticates with its own header and no scheme.
             'tiktok' => $request->withHeaders(['Access-Token' => $tokens->accessToken]),
 
-            // Google Ads needs the developer token on every call, and the manager account when the
-            // authorised identity reaches its customers through one.
+            /*
+             * Google Ads needs the developer token on every call — that one IS ours, it identifies
+             * this application to Google and is approved separately from the OAuth client.
+             *
+             * `login-customer-id` is not (GADS-MCC-001). It names the manager account through which
+             * the caller reaches the client account being queried, so it varies per customer and is
+             * asked of the connector rather than read from platform configuration.
+             */
             'google' => $request->withToken($tokens->accessToken)->withHeaders(array_filter([
                 'developer-token' => $creds->get('developer_token'),
-                'login-customer-id' => $creds->get('login_customer_id'),
+                'login-customer-id' => $this->loginCustomerId(),
             ], static fn ($v) => $v !== null)),
 
             // LinkedIn rejects an unpinned REST call outright.
@@ -317,6 +371,17 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
 
             default => $request->withToken($tokens->accessToken),
         };
+    }
+
+    /**
+     * The manager account the CURRENT call is being made through, when the provider needs one.
+     *
+     * Null everywhere except Google Ads, which overrides it. It is a method rather than a credential
+     * because the answer depends on which customer is being queried — see GADS-MCC-001.
+     */
+    protected function loginCustomerId(): ?string
+    {
+        return null;
     }
 
     /** `{api_base}/{path}` without caring who wrote the slash. */
@@ -355,16 +420,69 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
      */
     protected function read(Response $response, string $what): array
     {
+        /** @var array<string,mixed> $body */
+        $body = $response->json() ?? [];
+
+        /*
+         * Recorded BEFORE the success check, deliberately.
+         *
+         * A refusal is the case a diagnosis most needs the receipt for, and the old order threw the
+         * exception first — so the one call anybody wanted to see was the one call that left no trace
+         * of its status or its request id.
+         */
+        $this->callLog[] = [
+            'url' => (string) $response->effectiveUri(),
+            'status' => $response->status(),
+            // Snapchat and TikTok both return one; the others do not, and null says so.
+            'request_id' => isset($body['request_id']) && is_scalar($body['request_id'])
+                ? (string) $body['request_id']
+                : null,
+            'keys' => array_map(strval(...), array_keys($body)),
+        ];
+
         if (! PlatformHttp::succeeded($response)) {
             throw new RuntimeException($this->label()." could not return {$what}: ".PlatformHttp::reason($response));
         }
 
-        /** @var array<string,mixed> $body */
-        $body = $response->json() ?? [];
-
         $this->rawResponses[] = $body;
 
         return $body;
+    }
+
+    /**
+     * Take the call log for this sync, and forget it.
+     *
+     * Drained like the bodies and the row count, and for the same reason: one connector instance is
+     * bound per sync, and a call carried into the next window would be attributed to it.
+     *
+     * @return list<array{url:string,status:int,request_id:?string,keys:list<string>}>
+     */
+    public function takeCallLog(): array
+    {
+        $log = $this->callLog;
+        $this->callLog = [];
+
+        return $log;
+    }
+
+    /** Record that the platform returned `$count` of its own data records. */
+    protected function countRawInsightRows(int $count): void
+    {
+        $this->rawInsightRows += max(0, $count);
+    }
+
+    /**
+     * Take the raw record count for this sync, and reset it.
+     *
+     * Drained for the same reason the bodies are: one connector instance is bound per sync, and a
+     * count carried into the next window would attribute January's rows to February's run.
+     */
+    public function takeRawInsightRows(): int
+    {
+        $count = $this->rawInsightRows;
+        $this->rawInsightRows = 0;
+
+        return $count;
     }
 
     /**

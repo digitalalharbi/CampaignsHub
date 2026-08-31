@@ -1,0 +1,82 @@
+name: Production Structure Acceptance
+
+# SNAP-STRUCTURE-RETRY-001 — queue ONE structure sweep and watch it to a terminal state.
+#
+# The first version of this slept for a fixed five minutes and printed whatever it found. That is not
+# acceptance: the job's legitimate ceiling is nine hundred seconds, so a five-minute wait reports
+# «still running» for a healthy sweep — and, far worse, prints something reassuring for the exact
+# defect it exists to catch, because a job re-queued every ninety seconds always leaves a
+# recent-looking run.
+#
+# `integrations:accept-structure` polls the run rows created BY THIS INVOCATION until every one
+# reaches a terminal state, inside a window that outlasts the job, and exits non-zero if the sweep
+# was re-delivered, stalled, empty, or reported no_data over a payload that carried rows. The
+# workflow fails when it does.
+#
+# It queues the same job the six-hourly scheduler queues. Nothing new runs; it is only asked for now,
+# and then actually watched.
+#
+# Manual only — no push trigger, no schedule. The command is fixed here; inputs are passed as VALUES.
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'Provider key to sweep (snapchat, meta, tiktok, google_ads, x, linkedin)'
+        required: false
+        default: 'snapchat'
+      observe_seconds:
+        description: 'Observation window. Must outlast the 900s job ceiling — the command refuses less.'
+        required: false
+        default: '1500'
+      interval_seconds:
+        description: 'Seconds between polls'
+        required: false
+        default: '15'
+
+concurrency:
+  group: production-structure-sync
+  cancel-in-progress: false
+
+jobs:
+  accept:
+    runs-on: ubuntu-latest
+    # Sized above the observation window with room for the SSH round trip and the contract check.
+    timeout-minutes: 45
+
+    steps:
+      - name: Queue one sweep and watch it to a terminal state
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          PROVIDER: ${{ inputs.provider }}
+          OBSERVE: ${{ inputs.observe_seconds }}
+          INTERVAL: ${{ inputs.interval_seconds }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          # Must outlast --observe, or the connection dies before the verdict is printed.
+          command_timeout: 40m
+          envs: PROVIDER,OBSERVE,INTERVAL
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+
+            COMPOSE="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
+
+            # The contract first, in the container that enforces it. If this exits non-zero the sweep
+            # would be re-delivered mid-flight again, and queueing it would produce another
+            # MaxAttemptsExceeded rather than evidence.
+            echo "── queue contract (queue container) ────────────────────────────────────────────"
+            $COMPOSE exec -T queue php artisan queue:contract
+
+            echo "── one sweep, watched ──────────────────────────────────────────────────────────"
+            $COMPOSE exec -T backend php artisan integrations:accept-structure \
+              --provider="${PROVIDER}" \
+              --observe="${OBSERVE}" \
+              --interval="${INTERVAL}"
+
+            echo "── the runs, and what the project now holds ────────────────────────────────────"
+            $COMPOSE exec -T backend php artisan integrations:diagnose \
+              --provider="${PROVIDER}" --runs=6 --linked --hierarchy --downstream

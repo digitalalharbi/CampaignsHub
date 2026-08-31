@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
@@ -118,7 +119,10 @@ final class AdPlatformSyncSweepTest extends TestCase
             $account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-02'),
         );
 
-        $this->assertSame('partial', $run->status);
+        // Meta answered with one row and it named a campaign we have never discovered.
+        $this->assertSame('partial_mapping', $run->status);
+        $this->assertSame(1, (int) $run->provider_raw_rows);
+        $this->assertSame(0, (int) $run->mapped_campaign_rows);
 
         $raw = IntegrationRawPayload::withoutGlobalScopes()->firstOrFail();
         $this->assertSame(0, $raw->normalised_rows);
@@ -134,13 +138,13 @@ final class AdPlatformSyncSweepTest extends TestCase
             $account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-02'),
         );
 
-        $this->assertSame('awaiting_credentials', $run->status);
+        $this->assertSame('failed', $run->status);
         $this->assertSame(0, IntegrationRawPayload::withoutGlobalScopes()->count());
     }
 
     // ── The sweep ─────────────────────────────────────────────────────────────────────────────
 
-    public function test_the_sweep_queues_a_job_for_every_connected_account(): void
+    public function test_the_sweep_queues_a_job_for_every_assigned_account(): void
     {
         Queue::fake();
 
@@ -290,7 +294,7 @@ final class AdPlatformSyncSweepTest extends TestCase
     {
         $connection = $this->connection($provider);
 
-        return ExternalAccount::withoutGlobalScopes()->create([
+        $account = ExternalAccount::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id,
             'provider_connection_id' => $connection->getKey(),
             'provider' => $provider,
@@ -298,7 +302,30 @@ final class AdPlatformSyncSweepTest extends TestCase
             'external_id' => "act_{$provider}",
             'name' => ucfirst($provider),
             'status' => 'active',
+            'discovered_at' => Carbon::now(),
         ]);
+
+        /*
+         * ORCH-100 — an account this sweep is expected to pick up is an ASSIGNED account.
+         *
+         * The sweep used to queue every discovered row, so this fixture never needed the assignment.
+         * It does now, and that is the point: discovery alone catalogued 309 Snapchat accounts, and a
+         * sweep that treats a catalogue as a work list pulls all 309. The discrimination itself is
+         * asserted in `ProjectIntegrationAssignmentTest`; here the accounts are assigned so these
+         * tests keep testing what they are about — windows, uniqueness and connection health.
+         */
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $this->project->client_workspace_id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $account->id,
+            'provider' => $provider,
+            'purpose' => 'advertising',
+            'is_active' => true,
+            'campaign_management_enabled' => true,
+        ]);
+
+        return $account;
     }
 
     /** A campaign the pipeline already knows about, so its insights can be mapped. */

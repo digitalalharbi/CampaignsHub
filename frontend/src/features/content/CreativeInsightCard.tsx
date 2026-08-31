@@ -39,14 +39,14 @@ const COPY = {
     confidence: 'الثقة',
     previousPeriod: 'الفترة السابقة',
     aiReview: 'مولَّد آليًا — يحتاج مراجعة بشرية',
-    openCreative: 'فتح المحتوى',
+    openCreative: 'فتح الإعلان',
   },
   en: {
     action: 'Suggested action',
     confidence: 'Confidence',
     previousPeriod: 'Previous period',
     aiReview: 'Generated — needs human review',
-    openCreative: 'Open creative',
+    openCreative: 'Open ad',
   },
 } as const
 

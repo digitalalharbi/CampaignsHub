@@ -109,7 +109,15 @@ export interface CreativeCard {
   campaign_name: string | null
   /** The two rungs between the campaign and the creative — the dashboard's drill-down needs both. */
   ad_set_id: string | null
-  ad_id: string | null
+  /**
+   * CREATIVE-FRONTEND-ADS-001 — every ad running this creative.
+   *
+   * The singular `ad_id` that used to sit here is gone. It read a column the importer rewrites on
+   * every upsert, so it named whichever ad was imported last: on the live Snapchat account four ads
+   * share each creative, and a card built from it pointed at one of four while looking definite.
+   * `external_ads.creative_id` is the canonical relation, and it is the only one now.
+   */
+  ads: CreativeAd[]
   preview: CreativePreview
   aspect_ratio: string | null
   duration_seconds: number | null
@@ -131,6 +139,14 @@ export interface CreativeCard {
   /** The metrics this creative is judged on, chosen by its objective — never a fixed KPI set. */
   headline_metrics: string[]
   metrics: CreativeMetrics | null
+  /**
+   * Whether this creative's AD delivered in the window — a fact about the AD, never a figure.
+   *
+   * It decides which sentence an empty card gets: a creative whose ad ran while the platform named
+   * no creative-level figures did not «fail to run», and saying so is false in the direction that
+   * costs money. No ad metric is copied onto the creative anywhere (CONTENT-AD-DELIVERED-001).
+   */
+  ad_delivered: boolean
   fatigue: CreativeFatigue
 }
 
@@ -141,12 +157,23 @@ export interface LibraryFilterOptions {
   kinds: string[]
   campaigns: Array<{ id: string; name: string; objective: string | null }>
   ad_sets: string[]
-  ads: string[]
+  /** Labelled, because a select of provider ids is not a control somebody can use. */
+  ads: Array<{ value: string; label: string }>
   objectives: string[]
   paths: string[]
   projects: Array<{ id: string; name: string; client_id: string | null }>
   clients: Array<{ id: string; name: string }>
   health: FatigueStatus[]
+}
+
+/** One ad placing a creative. The id is the address; the name is what a person recognises. */
+export interface CreativeAd {
+  id: string
+  external_id: string
+  name: string | null
+  status: string | null
+  external_ad_set_id: string | null
+  external_campaign_id: string | null
 }
 
 export interface LibraryPage {
@@ -155,6 +182,20 @@ export interface LibraryPage {
   per_page: number
   total: number
   period: { from: string; to: string }
+  /**
+   * CREATIVE-MONEY-TRUTH-001 — what the money on these cards is in.
+   *
+   * Null when the reach spans projects reporting in different currencies, or when the pipeline has
+   * recorded nothing to convert into yet. The card then refuses the figure rather than labelling it.
+   */
+  currency: string | null
+  /**
+   * CONTENT-STATE-SEMANTICS-001 — why an empty card is empty, keyed by provider.
+   *
+   * Written by the sync at the moment it knew, because an absent metrics object looks identical
+   * whether the platform was never asked, the request failed, or the creative did not run.
+   */
+  metrics_availability: Record<string, import('./availability').MetricsAvailability>
   filters: LibraryFilterOptions
 }
 
@@ -284,7 +325,7 @@ export interface CreativeDetail {
     copy: { body: string | null; headline: string | null; description: string | null; cta: string | null }
     dimensions: { width: number | null; height: number | null; aspect_ratio: string | null; file_size: number | null }
     destination_url: string | null
-    external_ids: { creative: string; ad: string | null; ad_set: string | null; campaign: string | null }
+    external_ids: { creative: string; ad_set: string | null; campaign: string | null }
   }
   period: { from: string; to: string; days: number }
   previous_period: { from: string; to: string }
@@ -375,6 +416,8 @@ export interface CreativeGroupDetail extends CreativeGroupSummary {
     metrics: CreativeMetrics | null
   }>
   period: { from: string; to: string }
+  /** What this group's money is in — null when its members report in different currencies. */
+  currency: string | null
   audit: CreativeGroupAuditEntry[]
 }
 
@@ -384,6 +427,8 @@ export interface CreativeGroupsPage {
   per_page: number
   total: number
   period: { from: string; to: string }
+  /** A group's money is no more self-describing than a creative's — see `LibraryPage`. */
+  currency: string | null
 }
 
 export const listCreativeGroups = (query: LibraryQuery) =>
@@ -412,6 +457,11 @@ export interface CreativeComparison {
   creatives: CreativeCard[]
   /** Per-metric winners only. There is deliberately no overall winner in this shape. */
   winners: Record<string, string | null>
+  /**
+   * Null when the compared creatives report in different currencies — the caller supplies the ids
+   * here, so that is reachable. Money is then refused rather than presented as a contest.
+   */
+  currency: string | null
   comparable: boolean
   reason_ar: string | null
   reason_en: string | null

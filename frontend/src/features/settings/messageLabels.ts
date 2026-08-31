@@ -19,7 +19,9 @@ export interface Words { ar: string; en: string }
 export const CATEGORY_LABELS: Record<string, Words> = {
   performance: { ar: 'الأداء', en: 'Performance' },
   budget: { ar: 'الميزانية', en: 'Budget' },
-  content: { ar: 'المحتوى', en: 'Content' },
+  // The KEY stays `content` — it is stored on rows and read by the backend. Only the words change:
+  // ADS-TERMINOLOGY-001 gives the advertising entity ONE user-facing name.
+  content: { ar: 'الإعلانات', en: 'Ads' },
   integrations: { ar: 'التكاملات', en: 'Integrations' },
   reports: { ar: 'التقارير', en: 'Reports' },
   operations: { ar: 'التشغيل', en: 'Operations' },

@@ -6,16 +6,17 @@ namespace App\Domains\Integrations\Sync;
 
 use App\Domains\Campaigns\Actions\ImportExternalCampaigns;
 use App\Domains\Campaigns\Actions\ImportExternalStructure;
-use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
+use App\Domains\Integrations\Providers\SnapchatConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\ValueObjects\SyncResult;
-use App\Domains\Projects\Models\Project;
+use App\Domains\Metrics\Enums\SyncRunStatus;
 use Illuminate\Support\Carbon;
 use Throwable;
 
@@ -47,6 +48,7 @@ final class AccountStructureSyncer
         private readonly AdvertisingConnectorRegistry $registry,
         private readonly ImportExternalCampaigns $importCampaigns,
         private readonly ImportExternalStructure $importStructure,
+        private readonly AccountAssignment $assignment,
     ) {}
 
     /** @param array<string,mixed> $meta */
@@ -60,21 +62,21 @@ final class AccountStructureSyncer
             'project_id' => $projectId,
             'provider_connection_id' => $account->provider_connection_id,
             'type' => 'structure',
-            'status' => 'running',
+            'status' => SyncRunStatus::Running->value,
             'started_at' => Carbon::now(),
         ])->save();
 
         $connector = $this->registry->get($account->provider);
 
         if ($connector === null) {
-            return $this->finish($run, 'failed', 0, "No connector is registered for provider '{$account->provider}'.");
+            return $this->finish($run, SyncRunStatus::Failed->value, 0, "No connector is registered for provider '{$account->provider}'.");
         }
 
         if ($connector instanceof ApiAdvertisingConnector) {
             $connection = ProviderConnection::withoutGlobalScopes()->find($account->provider_connection_id);
 
             if ($connection === null) {
-                return $this->finish($run, 'failed', 0, 'The ad account has no provider connection to sync through.');
+                return $this->finish($run, SyncRunStatus::Failed->value, 0, 'The ad account has no provider connection to sync through.');
             }
 
             // A clone per account — the registry hands out one instance per platform for the whole
@@ -85,14 +87,28 @@ final class AccountStructureSyncer
         if ($connector->status() === ConnectorStatus::AwaitingCredentials) {
             return $this->finish(
                 $run,
-                'awaiting_credentials',
+                SyncRunStatus::Failed->value,
                 0,
                 'No credentials for '.$connector->label().' — nothing was fetched.',
             );
         }
 
+        /*
+         * PROJECT-INTEGRATION-ASSIGNMENT-001 — an unassigned account is not a failure, and it is
+         * certainly not a licence to pick a project.
+         *
+         * `awaiting_assignment` is its own status because the operator's next move is different from
+         * every other outcome here: nothing is broken, nothing needs retrying, somebody needs to say
+         * which project this account feeds. Reporting it as `failed` sent them looking for a fault
+         * that does not exist.
+         */
         if ($projectId === null) {
-            return $this->finish($run, 'failed', 0, 'This workspace has no project to file the discovered structure under.');
+            return $this->finish(
+                $run,
+                SyncRunStatus::AwaitingAssignment->value,
+                0,
+                'This account is not assigned to a project yet. Assign it to a project, then sync.',
+            );
         }
 
         $problems = [];
@@ -126,10 +142,27 @@ final class AccountStructureSyncer
 
         $status = match (true) {
             // Nothing landed and every call complained: this is a failure, not a quiet account.
-            $records === 0 && $problems !== [] => 'failed',
-            $problems !== [] => 'partial',
-            default => 'success',
+            $records === 0 && $problems !== [] => SyncRunStatus::Failed->value,
+            $problems !== [] => SyncRunStatus::PartialMapping->value,
+            // An account with no campaigns yet is not a failed read of it — INTEG-RUNTIME §8.
+            $records === 0 => SyncRunStatus::NoData->value,
+            default => SyncRunStatus::Success->value,
         };
+
+        /*
+         * SNAP-MEDIA-OBSERVABILITY-001 — what the media enrichment actually did.
+         *
+         * Counts and a reason, never a URL: a signed media link in a log is precisely the leak this
+         * product refuses. «asked» is how many creatives named a media id, «resolved» how many came
+         * back with a usable file. Those two being far apart is the signature of media that is being
+         * fetched and then rejected; both being zero means it was never asked for.
+         */
+        if ($connector instanceof SnapchatConnector) {
+            $run->forceFill(['meta' => [
+                ...(array) ($run->meta ?? []),
+                'media' => $connector->lastMediaOutcome(),
+            ]])->save();
+        }
 
         return $this->finish($run, $status, $records, $problems === [] ? null : implode(' ', $problems));
     }
@@ -198,26 +231,37 @@ final class AccountStructureSyncer
     }
 
     /**
-     * Where an account's structure is filed.
+     * Where an account's structure is filed — the project somebody ASSIGNED it to.
      *
-     * The project its campaigns already live in, so a re-sync never re-files anything. Only a first
-     * discovery falls back to the workspace's own project, and an account with nowhere to file is
-     * refused rather than filed somewhere arbitrary.
+     * PROJECT-INTEGRATION-ASSIGNMENT-001. This used to read:
+     *
+     * ```php
+     * Project::withoutGlobalScopes()->where('tenant_id', …)->orderBy('created_at')->value('id')
+     * ```
+     *
+     * — the tenant's OLDEST project, picked because it was created first. A discovered account's
+     * campaigns were therefore filed into a project nobody had chosen, and because the next sync
+     * found a campaign already there, the arbitrary choice became permanent. With the live Snapchat
+     * connection's 309 discovered accounts, one sweep would have put all 309 into one project.
+     *
+     * The binding table has recorded the deliberate act all along; nothing in this path read it.
+     * Now `AccountAssignment` is the single answer, so the sweep, this syncer and the bind endpoint
+     * cannot disagree about what «assigned» means.
+     *
+     * ## And there is no second answer
+     *
+     * This kept an «existing campaign wins» fallback, on the reasoning that a detached account should
+     * not orphan campaigns already on somebody's surfaces. That reasoning was about DISPLAY and it was
+     * being applied to WRITES: a detached account is one the customer has told us to stop reading, and
+     * the worker refuses it before this method is ever reached. So the fallback could only fire in a
+     * path that no longer exists — while leaving a second route by which data could enter a project
+     * nobody had assigned it to.
+     *
+     * One rule, one source. Campaigns already filed are not moved or deleted; they simply stop
+     * receiving new writes, which is exactly what detaching means.
      */
     private function projectIdFor(ExternalAccount $account): ?string
     {
-        $existing = ExternalCampaign::withoutGlobalScopes()
-            ->where('external_account_id', $account->getKey())
-            ->value('project_id');
-
-        if ($existing !== null) {
-            return $existing;
-        }
-
-        return Project::withoutGlobalScopes()
-            ->where('tenant_id', $account->tenant_id)
-            ->when($account->client_workspace_id, fn ($q, $ws) => $q->orderByRaw('CASE WHEN client_workspace_id = ? THEN 0 ELSE 1 END', [$ws]))
-            ->orderBy('created_at')
-            ->value('id');
+        return $this->assignment->projectIdFor($account);
     }
 }

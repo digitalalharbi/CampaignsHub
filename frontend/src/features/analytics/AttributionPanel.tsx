@@ -3,6 +3,8 @@ import { money, num, percent } from './format'
 import type { Attribution, PlatformClaim } from './api'
 import { providerLabel } from '@/features/campaigns/labels'
 import type { Locale } from '@/stores/ui'
+import { campaigns as countedCampaigns } from '@/lib/counted'
+import { days as countedDays } from '@/lib/counted'
 
 /**
  * REPORT-OBJECTIVE-005 — the two systems that answer «كم بعنا؟», kept apart on screen.
@@ -44,7 +46,7 @@ export function AttributionPanel({
   className?: string
 }) {
   const ar = locale === 'ar'
-  const platforms = data?.platform_reported.platforms ?? []
+  const platforms = data?.platform_reported?.platforms ?? []
   const store = data?.store_confirmed
   const dedup = data?.dedup
 
@@ -74,10 +76,10 @@ export function AttributionPanel({
         {/* ── Platform-Reported ─────────────────────────────────────────────────────────── */}
         <section className="min-w-0">
           <h4 className="text-xs font-bold uppercase tracking-wide text-text-muted">
-            {ar ? data?.platform_reported.label_ar : data?.platform_reported.label_en}
+            {ar ? data?.platform_reported?.label_ar : data?.platform_reported?.label_en}
           </h4>
           <p className="mt-1 text-text-secondary">
-            {ar ? data?.platform_reported.basis_ar : data?.platform_reported.basis_en}
+            {ar ? data?.platform_reported?.basis_ar : data?.platform_reported?.basis_en}
           </p>
 
           {platforms.length > 0 && (
@@ -112,9 +114,18 @@ export function AttributionPanel({
             <span className="font-semibold text-text-primary">
               {ar ? 'لا يوجد إجمالي موحّد للمنصات.' : 'There is no unified platform total.'}
             </span>{' '}
-            {ar ? data?.platform_reported.total_withheld_ar : data?.platform_reported.total_withheld_en}
+            {ar ? data?.platform_reported?.total_withheld_ar : data?.platform_reported?.total_withheld_en}
           </p>
         </section>
+
+        {/*
+         * CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — how much of what the platforms claim is the same sale.
+         *
+         * Between the two measurements, because it is about the distance between them. One order
+         * bought after a TikTok video AND a Meta retargeting ad is counted by both, and that is
+         * invisible per platform: each figure is honest on its own terms.
+         */}
+        <Overlap overlap={data?.overlap} ar={ar} />
 
         {/* ── Store-Confirmed ───────────────────────────────────────────────────────────── */}
         <section className="min-w-0 border-t border-border pt-4">
@@ -171,7 +182,7 @@ export function AttributionPanel({
         </section>
 
         {/* ── Unattributed ──────────────────────────────────────────────────────────────── */}
-        {data?.unattributed.available && (data.unattributed.orders ?? 0) > 0 && (
+        {data?.unattributed?.available && (data.unattributed.orders ?? 0) > 0 && (
           <section className="min-w-0 border-t border-border pt-4">
             <h4 className="text-xs font-bold uppercase tracking-wide text-text-muted">
               {ar ? 'طلبات بلا إسناد' : 'Unattributed orders'}
@@ -190,13 +201,13 @@ export function AttributionPanel({
         )}
 
         {/* ── The model, which is governance rather than measurement ────────────────────── */}
-        {(data?.models.length ?? 0) > 0 && (
+        {(data?.models?.length ?? 0) > 0 && (
           <section className="min-w-0 border-t border-border pt-4">
             <h4 className="text-xs font-bold uppercase tracking-wide text-text-muted">
               {ar ? 'نموذج الإسناد المُعرَّف على الحملات' : 'Attribution model set on the campaigns'}
             </h4>
             <ul className="mt-2 grid gap-1 text-text-secondary">
-              {data?.models.map((m) => (
+              {data?.models?.map((m) => (
                 <li key={m.model}>
                   {m.is_set ? (
                     <code className="rounded bg-surface-secondary px-1.5 py-0.5 text-[12px]">{m.model}</code>
@@ -205,7 +216,7 @@ export function AttributionPanel({
                     <span className="font-semibold text-warning">{ar ? 'غير محدَّد' : 'Not set'}</span>
                   )}
                   <span className="ms-2 text-text-muted">
-                    {ar ? `${num(m.campaigns)} حملة` : `${num(m.campaigns)} campaigns`}
+                    {countedCampaigns(m.campaigns, ar ? 'ar' : 'en')}
                   </span>
                 </li>
               ))}
@@ -273,7 +284,7 @@ function ClaimRow({ claim, ar, locale }: { claim: PlatformClaim; ar: boolean; lo
           <>
             <span>
               {ar
-                ? `نقرة ${a.click_through_days} يوم`
+                ? `نقرة ${countedDays(a.click_through_days ?? 0, 'ar')}`
                 : `${a.click_through_days}d click`}
             </span>
             <span className="ms-2">
@@ -282,7 +293,7 @@ function ClaimRow({ claim, ar, locale }: { claim: PlatformClaim; ar: boolean; lo
                   ? '· بلا مشاهدة'
                   : '· no view-through'
                 : ar
-                  ? `· مشاهدة ${a.view_through_days} يوم`
+                  ? `· مشاهدة ${countedDays(a.view_through_days as number, 'ar')}`
                   : `· ${a.view_through_days}d view`}
             </span>
             {a.mixed_windows && (
@@ -330,5 +341,66 @@ function Figure({ label, value }: { label: string; value: string }) {
       <div className="text-xs font-bold uppercase tracking-wide text-text-muted">{label}</div>
       <div className="text-lg font-semibold text-text-primary">{value}</div>
     </div>
+  )
+}
+
+/**
+ * The overlap between what the platforms claim and what the shop recorded — as a FLOOR.
+ *
+ * `claimed − confirmed` is «at least this many claims are not distinct sales». Never «exactly»: a
+ * claim with no confirmed sale behind it may be one order two platforms both claimed, a sale that
+ * never happened, or a real sale the shop cannot see. The product cannot tell them apart, so it does
+ * not name one — the note says all three, and the number is labelled a claim rather than an order.
+ *
+ * Coverage sits beside it because it bounds it. Measured against half a ledger, the gap is a claim
+ * about half a shop, and a reader who is not told that reads it as a claim about the whole one.
+ */
+function Overlap({ overlap, ar }: { overlap: Attribution['overlap'] | undefined; ar: boolean }) {
+  if (overlap === undefined) {
+    return null
+  }
+
+  if (! overlap.available) {
+    return (
+      <section data-testid="attribution-overlap-unavailable" className="min-w-0 border-t border-border pt-4">
+        <h4 className="text-xs font-bold uppercase tracking-wide text-text-muted">
+          {ar ? 'التداخل بين المنصات' : 'Overlap between platforms'}
+        </h4>
+        <p className="mt-1 text-text-secondary">{ar ? overlap.note_ar : overlap.note_en}</p>
+      </section>
+    )
+  }
+
+  return (
+    <section data-testid="attribution-overlap" className="min-w-0 border-t border-border pt-4">
+      <h4 className="text-xs font-bold uppercase tracking-wide text-text-muted">
+        {ar ? 'التداخل بين المنصات' : 'Overlap between platforms'}
+      </h4>
+
+      <p className="mt-1 text-text-secondary">
+        {ar
+          ? `تدّعي المنصات ${num(overlap.platforms_claim ?? 0)} بيعة، وسجّل المتجر ${num(overlap.store_confirms ?? 0)}.`
+          : `The platforms claim ${num(overlap.platforms_claim ?? 0)} sales; the shop recorded ${num(overlap.store_confirms ?? 0)}.`}
+      </p>
+
+      <p data-testid="attribution-overlap-floor" className="mt-2 text-sm font-semibold text-text-primary">
+        {ar
+          ? `${num(overlap.at_least_duplicated ?? 0)} مطالبة على الأقل ليست بيعة مستقلة.`
+          : `At least ${num(overlap.at_least_duplicated ?? 0)} claims are not distinct sales.`}
+      </p>
+
+      {/* The caveat is not a footnote here: it is what makes the number above honest. */}
+      <p data-testid="attribution-overlap-note" className="mt-1 text-xs text-text-secondary">
+        {ar ? overlap.note_ar : overlap.note_en}
+      </p>
+
+      {overlap.coverage !== null && overlap.coverage !== undefined && (
+        <p data-testid="attribution-overlap-coverage" className="mt-2 text-xs text-text-muted">
+          {ar
+            ? `المقارنة مبنية على ${percent(overlap.coverage, 0)} من طلبات المتجر — الباقي بلا إسناد.`
+            : `Measured against ${percent(overlap.coverage, 0)} of the shop's orders — the rest carry no attribution.`}
+        </p>
+      )}
+    </section>
   )
 }

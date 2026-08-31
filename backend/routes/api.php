@@ -93,6 +93,16 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     // password gate, same access log; a snapshot link answers this with 409 rather than empty data.
     Route::get('/reports/shared/{token}/live', [PublicReportController::class, 'live'])->name('reports.shared.live');
     Route::get('/reports/shared/{token}/download/{format}', [PublicReportController::class, 'download'])->name('reports.shared.download');
+    /*
+     * BRANDING-HIERARCHY-001 — the identity this link carries, addressed by the TOKEN alone.
+     *
+     * No asset id, tenant id or scope is accepted: an endpoint that takes one is an endpoint
+     * somebody will enumerate, and a shared report link is exactly where a stranger has a URL and
+     * time. The token that proves the reader may see the report is the only thing that selects the
+     * logo.
+     */
+    Route::get('/reports/shared/{token}/branding', [PublicReportController::class, 'sharedBranding'])->name('reports.shared.branding');
+    Route::get('/reports/shared/{token}/branding/logo', [PublicReportController::class, 'sharedBrandingLogo'])->name('reports.shared.branding.logo');
 
     /*
      * §15.12 — the creative sections of a client's report.
@@ -110,6 +120,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
 
     // Print pipeline: token-gated snapshot for the headless-Chromium print route (no session).
     Route::get('/reports/print/{token}', [ReportPrintController::class, 'data'])->name('reports.print.data');
+    // The mark that document carries, behind the same short-lived token — no asset id in the path.
+    Route::get('/reports/print/{token}/logo', [ReportPrintController::class, 'logo'])->name('reports.print.logo');
 
     // Public brand/domain identity, consumed by the SPA and marketing site.
     Route::get('/brand', fn () => ApiResponse::success([
@@ -131,7 +143,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     // Serves ONLY platform-scope, active, is_public `request.paid_service` options (no tenant data, fail-closed).
     // Rate-limited; ETag + Cache-Control set inside the controller.
     Route::get('/public/catalog/paid-media-services', [PublicPaidServiceController::class, 'index'])
-        ->name('public.catalog.paid-media-services')->middleware('throttle:60,1');
+        ->name('public.catalog.paid-media-services')->middleware('throttle:public-catalogue');
 
     // Domain route files are included here as the platform grows.
     require __DIR__.'/api/identity.php';
@@ -150,7 +162,6 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     require __DIR__.'/api/billing.php';
     require __DIR__.'/api/messaging.php';
     require __DIR__.'/api/branding.php';
-    require __DIR__.'/api/connections.php';
     require __DIR__.'/api/drive.php';
     require __DIR__.'/api/subscriptions.php';
     require __DIR__.'/api/taxonomy.php';

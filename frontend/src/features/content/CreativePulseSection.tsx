@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ArrowDownRight, ArrowUpRight, ChevronLeft, ChevronRight, ImageIcon, PlayCircle, TriangleAlert } from 'lucide-react'
 import { CreativeInsightCard } from './CreativeInsightCard'
+import { posterSource, readPreview } from './adPreview'
 import { getCreativePulse, type CreativeMove, type CreativeWinner, type PathComparison, type SpendByKind } from './pulse'
 import { formatMetric, metricLabel, metricState } from './metrics'
+import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
 import { imageLoading } from './format'
 import {
   libraryQueryString,
@@ -15,6 +17,7 @@ import {
 } from './api'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
+import { days as countedDays } from '@/lib/counted'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 
 /**
@@ -42,30 +45,30 @@ import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/ca
 
 const COPY = {
   ar: {
-    title: 'تحليل المحتوى الإعلاني',
+    title: 'تحليل الإعلان',
     subtitle: 'من الأرقام نفسها التي تقرأها المكتبة والتقارير — لا مصدر ثانٍ.',
     openLibrary: 'فتح المكتبة',
-    empty: 'لا توجد محتويات ضمن هذا التحديد.',
-    error: 'تعذّر تحميل تحليل المحتوى.',
+    empty: 'لا توجد إعلانات ضمن هذا التحديد.',
+    error: 'تعذّر تحميل تحليل الإعلان.',
     bestByObjective: 'الأفضل حسب هدف الحملة',
     bestImage: 'أفضل صورة',
     bestVideo: 'أفضل فيديو',
     growing: 'الأسرع نموًا',
-    declining: 'المحتويات المتراجعة',
-    fatigue: 'حالة إجهاد المحتوى',
+    declining: 'الإعلانات المتراجعة',
+    fatigue: 'حالة إجهاد الإعلان',
     alerts: 'تنبيهات الإجهاد',
-    spendAtRisk: 'إنفاق مستمر على محتوى مُجهَد',
-    spendByKind: 'توزيع الإنفاق حسب نوع المحتوى',
+    spendAtRisk: 'إنفاق مستمر على إعلان مُجهَد',
+    spendByKind: 'توزيع الإنفاق حسب نوع الإعلان',
     imageVsVideo: 'الصور مقابل الفيديو',
-    bestPlatform: 'أفضل منصة لكل محتوى',
+    bestPlatform: 'أفضل منصة لكل إعلان',
     lastSync: 'آخر مزامنة',
     never: 'لم تتم بعد',
-    creatives: 'محتوى',
+    creatives: 'إعلان',
     of: 'من',
     showing: 'المعروض',
-    noWinner: 'لا توجد بيانات كافية لترشيح محتوى.',
-    lowEvidence: 'ترشيح مبدئي — لم يبلغ أي محتوى الحد الأدنى من الظهور.',
-    evidenceNote: (n: string) => `مرشَّح من ${n} محتوى`,
+    noWinner: 'لا توجد بيانات كافية لترشيح إعلان.',
+    lowEvidence: 'ترشيح مبدئي — لم يبلغ أي إعلان الحد الأدنى من الظهور.',
+    evidenceNote: (n: string) => `مرشَّح من ${n} إعلان`,
     minImpressions: (n: string) => `الحد الأدنى للترشيح: ${n} ظهور`,
     path: 'المسار',
     metric: 'المؤشر',
@@ -84,14 +87,23 @@ const COPY = {
     campaign: 'الحملة',
     adSet: 'المجموعة الإعلانية',
     ad: 'الإعلان',
-    creative: 'المحتوى',
+    /*
+     * ADS-TERMINOLOGY-001 draws a line here.
+     *
+     * The user-facing name for an advertising entity is «الإعلان», and that is what the level ABOVE
+     * is called. The rung below it is a different object — one creative can be carried by several
+     * ads — and naming both «الإعلان» produced a breadcrumb reading «… › الإعلان › الإعلان», where
+     * two adjacent links go to different places under one word. «المادة الإعلانية» keeps the rung in
+     * the same vocabulary without competing with it.
+     */
+    creative: 'المادة الإعلانية',
     all: 'الكل',
     period: 'الفترة',
     client: 'العميل',
     project: 'المشروع',
     objective: 'الهدف',
-    kind: 'نوع المحتوى',
-    lastDays: (n: string) => `آخر ${n} يومًا`,
+    kind: 'نوع الإعلان',
+    lastDays: (n: string) => `آخر ${countedDays(Number(n), 'ar')}`,
     provisional: 'مبدئي',
     applied: 'مطبَّق',
     noPreview: 'لا تتوفر معاينة',
@@ -105,30 +117,30 @@ const COPY = {
     } as Record<string, string>,
   },
   en: {
-    title: 'Creative analysis',
+    title: 'Ad analysis',
     subtitle: 'From the same figures the library and the reports read — never a second source.',
     openLibrary: 'Open the library',
-    empty: 'No creatives match this selection.',
-    error: 'The creative analysis could not be loaded.',
+    empty: 'No ads match this selection.',
+    error: 'The ad analysis could not be loaded.',
     bestByObjective: 'Best by campaign objective',
     bestImage: 'Best image',
     bestVideo: 'Best video',
     growing: 'Fastest growing',
     declining: 'Declining',
-    fatigue: 'Creative fatigue',
+    fatigue: 'Ad fatigue',
     alerts: 'Fatigue alerts',
-    spendAtRisk: 'Still spending on fatigued creatives',
-    spendByKind: 'Spend by creative type',
+    spendAtRisk: 'Still spending on fatigued ads',
+    spendByKind: 'Spend by ad type',
     imageVsVideo: 'Images vs videos',
-    bestPlatform: 'Best platform per creative',
+    bestPlatform: 'Best platform per ad',
     lastSync: 'Last sync',
     never: 'Not yet',
     creatives: 'creatives',
     of: 'of',
     showing: 'Showing',
-    noWinner: 'Not enough data to name a creative.',
-    lowEvidence: 'Provisional — no creative reached the minimum impressions.',
-    evidenceNote: (n: string) => `Chosen from ${n} creatives`,
+    noWinner: 'Not enough data to name an ad.',
+    lowEvidence: 'Provisional — no ad reached the minimum impressions.',
+    evidenceNote: (n: string) => `Chosen from ${n} ads`,
     minImpressions: (n: string) => `Minimum to qualify: ${n} impressions`,
     path: 'Path',
     metric: 'Metric',
@@ -147,14 +159,14 @@ const COPY = {
     campaign: 'Campaign',
     adSet: 'Ad set',
     ad: 'Ad',
-    creative: 'Creative',
+    creative: 'Ad asset',
     all: 'All',
     period: 'Period',
     client: 'Client',
     project: 'Project',
     objective: 'Objective',
-    kind: 'Creative type',
-    lastDays: (n: string) => `Last ${n} days`,
+    kind: 'Ad type',
+    lastDays: (n: string) => `Last ${countedDays(Number(n), 'en')}`,
     provisional: 'provisional',
     applied: 'Filtered by',
     noPreview: 'No preview available',
@@ -176,13 +188,34 @@ const KIND_LABEL = (kind: string, t: (typeof COPY)['ar']) =>
 const num = (n: number | null | undefined) =>
   typeof n === 'number' ? n.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—'
 
-const money = (n: number | null | undefined, ar: boolean) =>
-  typeof n === 'number' ? `${n.toLocaleString('en-US', { maximumFractionDigits: 0 })} ${ar ? 'ر.س' : 'SAR'}` : '—'
+/**
+ * CREATIVE-MONEY-TRUTH-001 — money is read through the one contract, never formatted here.
+ *
+ * This file used to hold its own formatter that appended a hard-coded «SAR» / «ر.س» to whatever
+ * number it was given. `creative_daily_metrics` had no currency column, so on production it was
+ * appending a Saudi label to USD figures: 4,128.93 USD rendered as «4,129 SAR», understating spend
+ * by roughly 3.75× and reading as measured fact. A wrong number is worse than a withheld one,
+ * because nothing about it looks wrong.
+ *
+ * `readMoney` decides what can honestly be said — converted, withheld in its own currency, a
+ * measured zero, never reported, or unstatable — and `formatMoneyReading` renders that decision.
+ */
+const money = (fields: MoneyTotals, currency: string | null, ar: boolean) =>
+  formatMoneyReading(readMoney(fields, 'spend', currency, ar), (n, c) =>
+    // Latin digits in both languages, per the product's standing rule, and the currency comes from
+    // the reading — never from this file.
+    typeof n === 'number' ? `${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}${c ? ` ${c}` : ''}` : '—')
 
 const percent = (n: number) => `${(n * 100).toFixed(0)}%`
 
-function value(metrics: CreativeMetrics | null, key: string, locale: 'ar' | 'en'): string {
-  return formatMetric(metricState(metrics, key), key, locale)
+/**
+ * CREATIVE-MONEY-TRUTH-001 — `currency` is threaded, never defaulted.
+ *
+ * `formatMetric` used to fall back to «SAR» when the argument was omitted, which is how a section
+ * reading a USD account came to print Saudi riyals. Every caller here states what it actually holds.
+ */
+function value(metrics: CreativeMetrics | null, key: string, locale: 'ar' | 'en', currency: string | null): string {
+  return formatMetric(metricState(metrics, key), key, locale, currency)
 }
 
 /** The axes this section may render controls for. The host owns the rest. */
@@ -423,6 +456,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
                 path={best.path}
                 t={t}
                 locale={ar ? 'ar' : 'en'}
+                currency={data.currency}
                 drill={drill}
               />
             ))}
@@ -435,6 +469,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
                 path={best.path}
                 t={t}
                 locale={ar ? 'ar' : 'en'}
+                currency={data.currency}
                 drill={drill}
               />
             ))}
@@ -447,6 +482,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
                 path={best.path}
                 t={t}
                 locale={ar ? 'ar' : 'en'}
+                currency={data.currency}
                 drill={drill}
               />
             ))}
@@ -474,7 +510,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
                           least spend behind them. */}
                       {best.low_evidence && ` · ${t.provisional}`}
                     </span>
-                    <span className="block font-semibold text-text">{value(best.creative.metrics, best.metric, ar ? 'ar' : 'en')}</span>
+                    <span className="block font-semibold text-text">{value(best.creative.metrics, best.metric, ar ? 'ar' : 'en', data.currency)}</span>
                   </span>
                 </Link>
               ))}
@@ -489,7 +525,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
                   {t.alerts}
                 </h3>
                 <p className="text-sm text-text-muted">
-                  {t.spendAtRisk}: <span className="font-semibold text-text">{money(data.fatigue.spend_at_risk, ar)}</span>
+                  {t.spendAtRisk}: <span className="font-semibold text-text">{money(data.fatigue.spend_at_risk, data.currency, ar)}</span>
                 </p>
               </div>
               <ul className="mt-3 flex flex-col gap-2">
@@ -503,7 +539,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
                         <span className="block truncate font-medium text-text">{alert.creative.name}</span>
                         <span className="block text-xs text-text-muted">{ar ? alert.note_ar : alert.note_en}</span>
                       </span>
-                      <span className="shrink-0 font-semibold text-text">{money(alert.spend, ar)}</span>
+                      <span className="shrink-0 font-semibold text-text">{money(alert, data.currency, ar)}</span>
                     </Link>
                   </li>
                 ))}
@@ -552,9 +588,10 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               list={data.fastest_growing}
               t={t}
               locale={ar ? 'ar' : 'en'}
+              currency={data.currency}
               drill={drill}
             />
-            <MoveList title={t.declining} tone="danger" list={data.declining} t={t} locale={ar ? 'ar' : 'en'} drill={drill} />
+            <MoveList title={t.declining} tone="danger" list={data.declining} t={t} locale={ar ? 'ar' : 'en'} currency={data.currency} drill={drill} />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -574,7 +611,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               </div>
             </div>
 
-            <SpendSplit rows={data.spend_by_kind} t={t} ar={ar} drill={drill} />
+            <SpendSplit rows={data.spend_by_kind} currency={data.currency} t={t} ar={ar} drill={drill} />
           </div>
 
           {data.image_vs_video.length > 0 && (
@@ -582,7 +619,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               <h3 className="text-sm font-semibold text-text">{t.imageVsVideo}</h3>
               <div className="mt-3 flex flex-col gap-5">
                 {data.image_vs_video.map((row) => (
-                  <PathTable key={row.path} row={row} t={t} locale={ar ? 'ar' : 'en'} />
+                  <PathTable key={row.path} row={row} t={t} locale={ar ? 'ar' : 'en'} currency={data.currency} />
                 ))}
               </div>
             </div>
@@ -613,7 +650,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
                           }`}
                         >
                           {providerLabel(p.provider, locale)}{' '}
-                          {p.value === null ? '—' : formatMetric({ kind: 'value', value: p.value }, group.metric, ar ? 'ar' : 'en')}
+                          {p.value === null ? '—' : formatMetric({ kind: 'value', value: p.value }, group.metric, ar ? 'ar' : 'en', data.currency)}
                         </Link>
                       ))}
                     </div>
@@ -636,9 +673,17 @@ type Drill = (extra: LibraryQuery & { creative?: string }) => string
 
 /** The poster — never a `<video>`, and never a fabricated image when the platform withheld one. */
 function Poster({ creative, label }: { creative: CreativeCard; label: string }) {
-  const src = creative.preview.thumbnail_url ?? creative.preview.image_url
+  /*
+   * AD-PREVIEW-001 — through the canonical reader, which this used to reimplement.
+   *
+   * The two rules here were `thumbnail ?? image` and «state must be available», which agreed with
+   * the shared reader by coincidence rather than by construction: they had no opinion about a video
+   * whose poster is the only thing that arrived, and none about a creative the presenter calls
+   * available while every URL on it is null.
+   */
+  const src = posterSource(readPreview(creative.preview, false))
 
-  if (creative.preview.state !== 'available' || !src) {
+  if (!src) {
     return (
       <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-center text-[10px] leading-tight text-text-muted">
         {label}
@@ -681,14 +726,34 @@ function DrillPath({ creative, drill, t, locale }: { creative: CreativeCard; dri
       to: drill({ providers: [creative.provider], campaign_ids: creative.campaign_id ? [creative.campaign_id] : undefined, ad_set_ids: [creative.ad_set_id] }),
     })
   }
-  if (creative.ad_id) {
+  /*
+   * CREATIVE-FRONTEND-ADS-001 — the ad step narrows to EVERY ad running this creative.
+   *
+   * This read `creative.ad_id`, which is one ad chosen from many by row order: the column behind it
+   * is rewritten on every import, so it names whichever ad was imported last. On the live Snapchat
+   * account four ads share each creative, so «Ad ›» in a breadcrumb pointed at one of four and said
+   * nothing about the other three — and a reader who followed it to decide whether to pause the
+   * creative was shown a quarter of the evidence.
+   *
+   * `creative.ads` is the canonical relation (`external_ads.creative_id`). The step carries all of
+   * them, and says how many when there is more than one, because a link labelled «Ad» that filters
+   * to four is only honest if it admits to four.
+   */
+  /*
+   * `?? []` is not defensive noise. A deployed frontend meets whatever backend is live, and a
+   * response from before this field existed carries no `ads` — which must produce no ad step, the
+   * same as a creative with no ads, rather than throwing and taking the whole pulse section down.
+   */
+  const adIds = (creative.ads ?? []).map((ad) => ad.external_id).filter(Boolean)
+
+  if (adIds.length > 0) {
     steps.push({
-      label: t.ad,
+      label: adIds.length > 1 ? `${t.ad} (${adIds.length})` : t.ad,
       to: drill({
         providers: [creative.provider],
         campaign_ids: creative.campaign_id ? [creative.campaign_id] : undefined,
         ad_set_ids: creative.ad_set_id ? [creative.ad_set_id] : undefined,
-        ad_ids: [creative.ad_id],
+        ad_ids: adIds,
       }),
     })
   }
@@ -715,6 +780,7 @@ function WinnerCard({
   path,
   t,
   locale,
+  currency,
   drill,
 }: {
   heading: string
@@ -723,6 +789,8 @@ function WinnerCard({
   path: string
   t: Copy
   locale: 'ar' | 'en'
+  /** CREATIVE-MONEY-TRUTH-001 — stated by the payload; this card never assumes one. */
+  currency: string | null
   drill: Drill
 }) {
   return (
@@ -743,7 +811,7 @@ function WinnerCard({
           </Link>
           <p className="text-xs text-text-muted">{marketingPathLabel(path, locale)}</p>
           <p className="mt-1 text-lg font-semibold text-text">
-            {value(winner.creative.metrics, winner.metric, locale)}
+            {value(winner.creative.metrics, winner.metric, locale, currency)}
           </p>
           {/* The metric is named beside the number: a winner with no stated axis is a verdict nobody
               can check, and the axis differs by path. */}
@@ -766,6 +834,7 @@ function MoveList({
   list,
   t,
   locale,
+  currency,
   drill,
 }: {
   title: string
@@ -773,6 +842,8 @@ function MoveList({
   list: { items: CreativeMove[]; total: number; shown: number }
   t: Copy
   locale: 'ar' | 'en'
+  /** CREATIVE-MONEY-TRUTH-001 — stated by the payload; this component never assumes one. */
+  currency: string | null
   drill: Drill
 }) {
   const Icon = tone === 'success' ? ArrowUpRight : ArrowDownRight
@@ -794,9 +865,9 @@ function MoveList({
                 <span className="min-w-0">
                   <span className="block truncate font-medium text-text">{move.creative.name}</span>
                   <span className="block text-xs text-text-muted">
-                    {metricLabel(move.metric, locale)} · {formatMetric({ kind: 'value', value: move.previous }, move.metric, locale)}
+                    {metricLabel(move.metric, locale)} · {formatMetric({ kind: 'value', value: move.previous }, move.metric, locale, currency)}
                     {' → '}
-                    {formatMetric({ kind: 'value', value: move.current }, move.metric, locale)}
+                    {formatMetric({ kind: 'value', value: move.current }, move.metric, locale, currency)}
                   </span>
                 </span>
                 <span className={`flex shrink-0 items-center gap-1 font-semibold ${tone === 'success' ? 'text-success' : 'text-danger'}`}>
@@ -815,7 +886,7 @@ function MoveList({
   )
 }
 
-function SpendSplit({ rows, t, ar, drill }: { rows: SpendByKind[]; t: Copy; ar: boolean; drill: Drill }) {
+function SpendSplit({ rows, currency, t, ar, drill }: { rows: SpendByKind[]; currency: string | null; t: Copy; ar: boolean; drill: Drill }) {
   return (
     <div className="rounded-2xl border border-border bg-surface p-5">
       <h3 className="text-sm font-semibold text-text">{t.spendByKind}</h3>
@@ -826,7 +897,7 @@ function SpendSplit({ rows, t, ar, drill }: { rows: SpendByKind[]; t: Copy; ar: 
               <div className="flex items-center justify-between gap-2 text-sm">
                 <span className="text-text">{KIND_LABEL(row.kind, t)}</span>
                 <span className="text-text-muted">
-                  {money(row.spend, ar)} · {row.share === null ? '—' : percent(row.share)}
+                  {money(row, currency, ar)} · {row.share === null ? '—' : percent(row.share)}
                 </span>
               </div>
               <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-surface-muted">
@@ -855,7 +926,7 @@ function SpendSplit({ rows, t, ar, drill }: { rows: SpendByKind[]; t: Copy; ar: 
  * follows, for the same reason: «videos are better» is not a sentence the data supports, while
  * «videos cost less per thousand impressions here» is.
  */
-function PathTable({ row, t, locale }: { row: PathComparison; t: Copy; locale: 'ar' | 'en' }) {
+function PathTable({ row, t, locale, currency }: { row: PathComparison; t: Copy; locale: 'ar' | 'en'; currency: string | null }) {
   const lowerWins = new Set(['cpm', 'cpc', 'cpa', 'cost_per_view', 'cost_per_lpv'])
 
   return (
@@ -867,9 +938,13 @@ function PathTable({ row, t, locale }: { row: PathComparison; t: Copy; locale: '
         <table className="w-full min-w-[22rem] text-sm">
           <thead>
             <tr className="text-start text-xs text-text-muted">
+              {/* ANALYTICS-TABLES-001 — the metric NAME stays start-aligned because it is prose; the two
+                  value columns are centred, heading and figure together, so they line up under RTL as well as
+                  LTR. Transposed table (metric per row, creative type per column), so the rule is applied here
+                  rather than by using `MetricTable`. */}
               <th scope="col" className="py-1 text-start font-medium">{t.metric}</th>
-              <th scope="col" className="py-1 text-start font-medium">{t.image}</th>
-              <th scope="col" className="py-1 text-start font-medium">{t.video}</th>
+              <th scope="col" className="py-1 text-center font-medium">{t.image}</th>
+              <th scope="col" className="py-1 text-center font-medium">{t.video}</th>
             </tr>
           </thead>
           <tbody>
@@ -887,11 +962,11 @@ function PathTable({ row, t, locale }: { row: PathComparison; t: Copy; locale: '
                   <th scope="row" className="py-1.5 text-start font-normal text-text-muted">
                     {metricLabel(metric, locale)}
                   </th>
-                  <td className={`py-1.5 ${imageWins ? 'font-semibold text-success' : 'text-text'}`}>
-                    {formatMetric(image, metric, locale)}
+                  <td className={`tnum py-1.5 text-center ${imageWins ? 'font-semibold text-success' : 'text-text'}`}>
+                    {formatMetric(image, metric, locale, currency)}
                   </td>
-                  <td className={`py-1.5 ${videoWins ? 'font-semibold text-success' : 'text-text'}`}>
-                    {formatMetric(video, metric, locale)}
+                  <td className={`tnum py-1.5 text-center ${videoWins ? 'font-semibold text-success' : 'text-text'}`}>
+                    {formatMetric(video, metric, locale, currency)}
                   </td>
                 </tr>
               )

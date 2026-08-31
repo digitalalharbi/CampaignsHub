@@ -232,7 +232,7 @@ function ScheduleForm({ projectId, onDone, onCancel }: { projectId: string; onDo
           </label>
         )}
         <label className="space-y-1">
-          <span className="text-xs font-semibold text-text-secondary">الوقت (٢٤ ساعة)</span>
+          <span className="text-xs font-semibold text-text-secondary">الوقت (24 ساعة)</span>
           <input value={time} onChange={(e) => setTime(e.target.value)} dir="ltr" placeholder="08:00"
             className="tnum h-10 w-full rounded-xl border border-border bg-surface px-3 text-left text-sm outline-none focus:border-brand-500" />
         </label>

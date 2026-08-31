@@ -65,6 +65,19 @@ const payload = (over: Partial<Attribution> = {}): Attribution => ({
     duplicates_collapsed: 0,
     shops_connected_more_than_once: [],
   },
+  overlap: {
+    available: true,
+    reason: null,
+    platforms_claim: 80,
+    store_confirms: 35,
+    at_least_duplicated: 45,
+    claims_per_confirmed_sale: 2.286,
+    attributed_orders: 28,
+    coverage: 0.8,
+    platforms_compared: 2,
+    note_ar: 'الفرق حدٌّ أدنى وليس عددًا مؤكدًا.',
+    note_en: 'The difference is a floor, not a count: a claim with no confirmed sale behind it may be one order two platforms both claimed, a sale that never happened, or a real sale the shop cannot see.',
+  },
   dedup: {
     platform_reported: {
       status: 'not_possible',
@@ -262,11 +275,79 @@ describe('AttributionPanel', () => {
     expect(await screen.findByText('Not set')).toBeInTheDocument()
   })
 
+  /**
+   * A block the envelope does not carry must not take the whole panel down with it.
+   *
+   * `data?.unattributed.available` reads as guarded and is not: the `?.` only covers `data`, so a
+   * payload that HAS data but no `unattributed` — an older cached envelope, a workspace whose shop
+   * is not connected, a partial response — threw inside render and the reader lost the entire
+   * attribution panel, not the one block that was missing. Every nested read here is optional now.
+   */
+  it('renders when the envelope is missing whole blocks', async () => {
+    const { unattributed: _u, models: _m, platform_reported: _p, ...partial } = payload()
+
+    render(partial as Attribution)
+
+    expect(await screen.findByTestId('attribution')).toBeInTheDocument()
+  })
+
   it('renders in Arabic without falling back to the English copy', async () => {
     render(payload(), 'ar')
 
     const panel = await screen.findByTestId('attribution')
     expect(within(panel).getByText('لا يوجد إجمالي موحّد للمنصات.')).toBeInTheDocument()
     expect(within(panel).queryByText('There is no unified platform total.')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — the distance between what the platforms claim and what the
+ * shop recorded.
+ *
+ * One order bought after a TikTok video AND a Meta retargeting ad is counted by both, and that is
+ * invisible per platform: each figure is honest on its own terms. The shop's ledger has one row per
+ * sale, so the arithmetic available is a floor.
+ */
+describe('the overlap between platforms', () => {
+  it('states the floor, and calls it a floor', async () => {
+    renderWithProviders(<AttributionPanel data={payload()} locale="en" />, { locale: 'en' })
+
+    expect(screen.getByTestId('attribution-overlap-floor')).toHaveTextContent('At least 45 claims are not distinct sales')
+    // The caveat is not a footnote: it is what makes the number above honest.
+    expect(screen.getByTestId('attribution-overlap-note')).toHaveTextContent('floor, not a count')
+    expect(screen.getByTestId('attribution-overlap-note')).toHaveTextContent('two platforms both claimed')
+  })
+
+  /** Coverage bounds it: measured against half a ledger, the gap is a claim about half a shop. */
+  it('says how much of the ledger the comparison covers', () => {
+    renderWithProviders(<AttributionPanel data={payload()} locale="en" />, { locale: 'en' })
+
+    expect(screen.getByTestId('attribution-overlap-coverage')).toHaveTextContent("80% of the shop's orders")
+  })
+
+  /** With no ledger there is nothing to compare against, and the panel says so rather than guessing. */
+  it('explains itself when there is no store to compare against', () => {
+    const data = payload()
+    data.overlap = {
+      available: false,
+      reason: 'no_store_connected',
+      note_ar: 'بلا متجر مربوط لا يوجد دفتر واحد.',
+      note_en: 'With no store connected there is no single ledger to compare the platforms’ claims against, so overlap cannot be measured.',
+    }
+
+    renderWithProviders(<AttributionPanel data={data} locale="en" />, { locale: 'en' })
+
+    expect(screen.getByTestId('attribution-overlap-unavailable')).toHaveTextContent('overlap cannot be measured')
+    expect(screen.queryByTestId('attribution-overlap-floor')).toBeNull()
+  })
+
+  /** And the platforms' sum still appears nowhere as an ORDER count. */
+  it('labels the sum a claim, never an order total', () => {
+    renderWithProviders(<AttributionPanel data={payload()} locale="en" />, { locale: 'en' })
+
+    const section = screen.getByTestId('attribution-overlap')
+
+    expect(section).toHaveTextContent('The platforms claim 80 sales')
+    expect(screen.getByTestId('attribution-total-withheld')).toHaveTextContent('no unified platform total')
   })
 })

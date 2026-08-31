@@ -111,31 +111,33 @@ final class ProviderCatalogue
                 ProviderField::secret('client_secret', 'Client Secret', 'السر السرّي للتطبيق',
                     'Shown once when the OAuth app is created; it cannot be read again',
                     'يُعرض مرة واحدة عند إنشاء التطبيق ولا يمكن قراءته لاحقًا'),
-                ProviderField::plain('organization_id', 'Organization ID', 'معرّف المؤسسة',
-                    'Business Manager → Business Details. Ad accounts hang off the organisation, '
-                        .'so a valid token with no organisation id lists nothing at all',
-                    'مدير الأعمال ← تفاصيل النشاط. الحسابات الإعلانية تتبع المؤسسة، ورمز صحيح بلا معرّف مؤسسة لا يعرض أي حساب'),
             ],
             scopes: ['snapchat-marketing-api'],
             usesPkce: false,
             supportsRefresh: true,
-            tokenNote: 'Access tokens are short-lived (around 30 minutes) and are refreshed with the refresh token.',
-            tokenNoteAr: 'رمز الوصول قصير العمر (نحو 30 دقيقة) ويُجدَّد عبر رمز التجديد.',
+            // 3600 seconds, read from the current authentication documentation rather than from
+            // memory — the previous «around 30 minutes» was half the real figure, and an operator
+            // plans refresh windows, alerting and support answers around it (SNAP-TOKEN-001).
+            tokenNote: 'Access tokens expire after 3600 seconds (60 minutes) and are renewed with the refresh token.',
+            tokenNoteAr: 'ينتهي رمز الوصول بعد 3600 ثانية (60 دقيقة) ويُجدَّد تلقائيًا عبر رمز التجديد.',
             webhooks: WebhookSupport::PollingOnly,
             webhookSignatureHeader: null,
             prerequisites: [
                 'A Snapchat Business Manager organisation that owns the ad accounts.',
                 'An OAuth app created under that organisation, with the redirect URI below registered on it exactly.',
                 'The member who authorises must already have access to the ad accounts — OAuth grants our app their access, never more.',
+                'Nothing about a customer belongs here. Their organisation and ad accounts are discovered from their own token after they connect.',
             ],
             prerequisitesAr: [
                 'مؤسسة في مدير أعمال سناب شات تملك الحسابات الإعلانية.',
                 'تطبيق OAuth مُنشأ داخل هذه المؤسسة، مع تسجيل رابط العودة أدناه عليه حرفيًا.',
                 'العضو الذي يمنح الموافقة يجب أن يملك صلاحية على الحسابات الإعلانية مسبقًا — الموافقة تمنحنا صلاحيته فقط ولا تزيد عليها.',
+                'لا تُدخل هنا أي بيانات تخص عميلًا. تُكتشف مؤسسته وحساباته الإعلانية من رمزه هو بعد أن يربط حسابه.',
             ],
             docsUrl: 'https://developers.snap.com/api/marketing-api/Ads-API/introduction',
             rateLimitNote: 'Throttled with HTTP 429 and a Retry-After header; the shared retry policy honours it.',
-            paginationNote: 'Cursor pagination through `paging.next_link`.',
+            paginationNote: 'Cursor pagination through `paging.next_link`. Organisations and their ad accounts '
+                .'come from `GET /me/organizations?with_ad_accounts=true`, scoped to the authorising member.',
             // Snapchat publishes no change-notification webhook for the objects we read, and this
             // install holds no keys to discover one behind a partner programme. The 30-minute poll is
             // the honest answer; an endpoint we would refuse every call to is worse than none.
@@ -254,9 +256,19 @@ final class ProviderCatalogue
                     'Google Ads manager account → Tools → API Center. Approved SEPARATELY from the OAuth '
                         .'client; without it every API call is refused even though sign-in succeeds',
                     'حساب مدير جوجل أدز ← الأدوات ← مركز الـ API. يُعتمد بشكل منفصل عن عميل OAuth؛ وبدونه تُرفض كل استدعاءات الـ API رغم نجاح تسجيل الدخول'),
-                ProviderField::plain('login_customer_id', 'Login customer ID', 'معرّف الحساب المدير',
-                    'The manager (MCC) account id, digits only, used when calling on behalf of a child account',
-                    'معرّف الحساب المدير (MCC) بالأرقام فقط، ويُستخدم عند الاستدعاء نيابة عن حساب تابع', required: false),
+                /*
+                 * GADS-MCC-001 — there was a fourth field here: «معرّف الحساب المدير»
+                 * (`login_customer_id`). It is gone, because it was never ours to hold.
+                 *
+                 * Google documents `login-customer-id` as the manager account through which the caller
+                 * reaches THAT client account, so it belongs to each customer's own hierarchy. It is
+                 * now discovered from `customer_client` and carried per account.
+                 *
+                 * Removing the field matters as much as removing the header. A field on this form is
+                 * an instruction: leaving it after the value stopped being used would invite an
+                 * operator to paste one customer's manager id into a platform-wide setting and believe
+                 * they had configured something for everybody.
+                 */
             ],
             scopes: ['https://www.googleapis.com/auth/adwords'],
             usesPkce: false,
@@ -429,9 +441,19 @@ final class ProviderCatalogue
                 ProviderField::secret('client_secret', 'Client Secret', 'سر العميل',
                     'Same page',
                     'الصفحة نفسها'),
-                ProviderField::secret('webhook_secret', 'Webhook secret', 'سر الـ Webhook',
-                    'The shared secret used to sign event deliveries to the URL below',
-                    'السر المشترك المستخدم لتوقيع الأحداث المُرسلة إلى الرابط أدناه', required: false),
+                /*
+                 * ZID-WEBHOOK-001 — a «Webhook secret … used to sign event deliveries» stood here,
+                 * and Zid signs nothing. It sends `Authorization: Basic base64(username:password)`,
+                 * using the pair given when the webhook subscription is created. Asking for a signing
+                 * secret Zid never issues invites an operator to invent one and believe they have
+                 * secured the endpoint.
+                 */
+                ProviderField::plain('webhook_username', 'Webhook username', 'اسم مستخدم الـ Webhook',
+                    'The username given when the webhook subscription was created; Zid sends it back as HTTP Basic authentication on every delivery',
+                    'اسم المستخدم المُعطى عند إنشاء اشتراك الـ Webhook؛ ترسله زد في كل حدث ضمن مصادقة Basic', required: false),
+                ProviderField::secret('webhook_password', 'Webhook password', 'كلمة مرور الـ Webhook',
+                    'The matching password. Zid publishes no signature scheme — this pair is the only way it identifies itself',
+                    'كلمة المرور المقابلة. لا تنشر زد أي آلية توقيع؛ هذا الزوج هو الطريقة الوحيدة التي تُعرّف بها نفسها', required: false),
             ],
             scopes: [],
             usesPkce: false,
@@ -442,16 +464,17 @@ final class ProviderCatalogue
             tokenNoteAr: 'تُعيد زد قيمتين من تبادل الرمز: `access_token` لترويسة `Authorization: Bearer` '
                 .'ورمز مدير `authorization` لترويسة `X-Manager-Token`. الاستدعاء بالأولى وحدها يُرفض، لذا تُخزَّن القيمتان.',
             webhooks: WebhookSupport::RequiresConfirmation,
-            webhookSignatureHeader: 'x-zid-signature',
+            // Zid identifies itself with HTTP Basic, not a signature (ZID-WEBHOOK-001).
+            webhookSignatureHeader: 'Authorization',
             prerequisites: [
                 'A Zid partners account and an app with the redirect URI below registered.',
                 'The app approved for the order, product and customer scopes it reads.',
-                'The webhook subscription created against the URL below, and its signature header confirmed in the partner dashboard before the events are relied upon.',
+                'The webhook subscription created against the URL below WITH a username and password — Zid sends those back as HTTP Basic authentication, and publishes no signature scheme. Deliveries are refused until the same pair is entered above.',
             ],
             prerequisitesAr: [
                 'حساب في شركاء زد وتطبيق مسجَّل عليه رابط العودة أدناه.',
                 'اعتماد التطبيق للصلاحيات التي يقرأها: الطلبات والمنتجات والعملاء.',
-                'إنشاء اشتراك الـ Webhook على الرابط أدناه، وتأكيد ترويسة توقيعه في لوحة الشركاء قبل الاعتماد على أحداثه.',
+                'إنشاء اشتراك الـ Webhook على الرابط أدناه مع اسم مستخدم وكلمة مرور — تعيدهما زد في كل حدث ضمن مصادقة Basic، ولا تنشر أي آلية توقيع. تُرفض الأحداث حتى يُدخل الزوج نفسه أعلاه.',
             ],
             docsUrl: 'https://docs.zid.sa/',
             rateLimitNote: 'Per-app throttling refused with HTTP 429.',

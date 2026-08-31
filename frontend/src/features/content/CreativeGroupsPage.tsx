@@ -43,18 +43,26 @@ import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/ca
  * total cannot drift from the cards it is made of (§15.17). Nothing on this page computes a figure.
  */
 
+/*
+ * ADS-TERMINOLOGY-001 — «الإعلانات المرتبطة» / «Linked ads», deliberately NOT «Ad groups».
+ *
+ * The user-facing name for an advertising entity is «الإعلانات» / «Ads», and this page is about the
+ * same ad running on more than one platform, read as one unit. «Ad group» is already taken: it is
+ * Google's name for the level between a campaign and an ad, the one the drill-down calls an ad set.
+ * Renaming this page onto that phrase would trade one confusion for a worse one.
+ */
 const COPY = {
   ar: {
-    title: 'مجموعات المحتوى',
-    subtitle: 'المحتوى نفسه على أكثر من منصة، مقروءًا كوحدة واحدة.',
+    title: 'الإعلانات المرتبطة',
+    subtitle: 'الإعلان نفسه على أكثر من منصة، مقروءًا كوحدة واحدة.',
     back: 'رجوع إلى المجموعات',
     backToLibrary: 'المكتبة',
     from: 'من',
     to: 'إلى',
     empty: 'لا توجد مجموعات في هذه المساحة بعد.',
-    emptyHint: 'اختر محتويين أو أكثر في المكتبة ثم ادمجهما كأصل واحد.',
+    emptyHint: 'اختر إعلانين أو أكثر في المكتبة ثم ادمجهما كأصل واحد.',
     platforms: 'المنصات',
-    members: 'المحتويات',
+    members: 'الإعلانات',
     method: 'طريقة التجميع',
     methods: {
       file_hash: 'بصمة الملف',
@@ -69,11 +77,11 @@ const COPY = {
     perPlatformNote: 'سطور المنصات تجمع إلى إجمالي المجموعة؛ الجمع واحد على المستويين.',
     mixed: 'أهداف مختلفة داخل المجموعة',
     open: 'فتح المجموعة',
-    openCreative: 'تفاصيل المحتوى',
+    openCreative: 'تفاصيل الإعلان',
     split: 'فصل من المجموعة',
     splitting: 'جارٍ الفصل…',
-    splitDone: 'تم فصل المحتوى من المجموعة.',
-    dissolved: 'لم يتبقَّ في المجموعة سوى محتوى واحد، فحُلَّت المجموعة.',
+    splitDone: 'تم فصل الإعلان من المجموعة.',
+    dissolved: 'لم يتبقَّ في المجموعة سوى إعلان واحد، فحُلَّت المجموعة.',
     audit: 'سجل القرارات',
     auditEmpty: 'لا توجد قرارات مسجَّلة على هذه المجموعة.',
     actions: {
@@ -83,23 +91,23 @@ const COPY = {
     by: 'بواسطة',
     objective: 'الهدف',
     path: 'المسار التسويقي',
-    creative: 'المحتوى',
+    creative: 'الإعلان',
     platform: 'المنصة',
     noPermission: 'لا تملك صلاحية تعديل المجموعات.',
     loadError: 'تعذّر تحميل المجموعات.',
     groupError: 'تعذّر تحميل هذه المجموعة.',
   },
   en: {
-    title: 'Creative groups',
+    title: 'Linked ads',
     subtitle: 'The same content on more than one platform, read as one unit.',
     back: 'Back to groups',
     backToLibrary: 'Library',
     from: 'From',
     to: 'To',
     empty: 'There are no groups in this workspace yet.',
-    emptyHint: 'Select two or more creatives in the library and merge them as one asset.',
+    emptyHint: 'Select two or more ads in the library and merge them as one asset.',
     platforms: 'Platforms',
-    members: 'Creatives',
+    members: 'Ads',
     method: 'Grouped by',
     methods: {
       file_hash: 'File hash',
@@ -114,11 +122,11 @@ const COPY = {
     perPlatformNote: 'The platform lines add back to the group total — it is one summation at two levels.',
     mixed: 'Mixed objectives in this group',
     open: 'Open group',
-    openCreative: 'Creative details',
+    openCreative: 'Ad details',
     split: 'Split from group',
     splitting: 'Splitting…',
-    splitDone: 'The creative was split from its group.',
-    dissolved: 'Only one creative was left, so the group was dissolved.',
+    splitDone: 'The ad was split from its group.',
+    dissolved: 'Only one ad was left, so the group was dissolved.',
     audit: 'Decision log',
     auditEmpty: 'No decisions are recorded on this group.',
     actions: {
@@ -128,7 +136,7 @@ const COPY = {
     by: 'by',
     objective: 'Objective',
     path: 'Marketing path',
-    creative: 'Creative',
+    creative: 'Ad',
     platform: 'Platform',
     noPermission: 'You do not have permission to change groups.',
     loadError: 'The groups could not be loaded.',
@@ -218,7 +226,7 @@ export function CreativeGroupsPage({ portal }: { portal: 'app' | 'agency' }) {
         <ul className="grid gap-3 md:grid-cols-2">
           {listQuery.data?.groups.map((group) => (
             <li key={group.id}>
-              <GroupCard group={group} t={t} ar={ar} locale={locale} onOpen={() => setParam('group', group.id)} />
+              <GroupCard group={group} t={t} ar={ar} locale={locale} currency={listQuery.data?.currency ?? null} onOpen={() => setParam('group', group.id)} />
             </li>
           ))}
         </ul>
@@ -232,12 +240,15 @@ function GroupCard({
   t,
   ar,
   locale,
+  currency,
   onOpen,
 }: {
   group: CreativeGroupSummary
   t: (typeof COPY)['ar'] | (typeof COPY)['en']
   ar: boolean
   locale: 'ar' | 'en'
+  /** CREATIVE-MONEY-TRUTH-001 — from the payload; a card never names a currency of its own. */
+  currency: string | null
   onOpen: () => void
 }) {
   return (
@@ -262,7 +273,7 @@ function GroupCard({
 
       {group.mixed_objectives && <MixedNotice group={group} t={t} ar={ar} />}
 
-      <GroupFigures group={group} locale={locale} />
+      <GroupFigures group={group} locale={locale} currency={currency} />
 
       <Button variant="secondary" className="mt-auto self-start" onClick={onOpen}>
         {t.open}
@@ -304,7 +315,7 @@ function MixedNotice({
  * `headline_metrics` is empty exactly when the members disagree about the objective, and in that
  * case the additive figures are still shown — what is withheld is the JUDGEMENT, not the arithmetic.
  */
-function GroupFigures({ group, locale }: { group: CreativeGroupSummary; locale: 'ar' | 'en' }) {
+function GroupFigures({ group, locale, currency }: { group: CreativeGroupSummary; locale: 'ar' | 'en'; currency: string | null }) {
   const keys = group.headline_metrics.length > 0 ? group.headline_metrics : ['spend', 'impressions', 'clicks']
 
   return (
@@ -313,7 +324,7 @@ function GroupFigures({ group, locale }: { group: CreativeGroupSummary; locale: 
         <div key={key} className="rounded-md border border-border p-2">
           <dt className="text-[11px] text-text-secondary">{metricLabel(key, locale)}</dt>
           <dd className="mt-0.5 text-sm font-medium text-text-primary" dir="ltr">
-            {formatMetric(metricState(group.metrics, key), key, locale)}
+            {formatMetric(metricState(group.metrics, key), key, locale, currency)}
           </dd>
         </div>
       ))}
@@ -408,7 +419,7 @@ function GroupDetail({
         {group.mixed_objectives && <MixedNotice group={group} t={t} ar={ar} />}
 
         <h3 className="text-sm font-medium text-text-primary">{t.total}</h3>
-        <GroupFigures group={group} locale={locale} />
+        <GroupFigures group={group} locale={locale} currency={group.currency} />
       </section>
 
       {notice && (
@@ -521,14 +532,17 @@ function PlatformTable({
       <table className="w-full min-w-[32rem] text-start text-sm">
         <thead>
           <tr className="border-b border-border text-xs text-text-secondary">
+            {/* ANALYTICS-TABLES-001 — platform is prose and stays start-aligned; every count and metric
+                column is centred, heading and figure together, so a figure sits under its own heading in
+                both writing directions. */}
             <th scope="col" className="p-2 text-start font-medium">
               {t.platform}
             </th>
-            <th scope="col" className="p-2 text-start font-medium">
+            <th scope="col" className="p-2 text-center font-medium">
               {t.members}
             </th>
             {keys.map((key) => (
-              <th key={key} scope="col" className="p-2 text-start font-medium">
+              <th key={key} scope="col" className="p-2 text-center font-medium">
                 {metricLabel(key, locale)}
               </th>
             ))}
@@ -540,12 +554,12 @@ function PlatformTable({
               <th scope="row" className="p-2 text-start font-medium text-text-primary">
                 {providerLabel(line.provider, locale)}
               </th>
-              <td className="p-2 text-text-secondary" dir="ltr">
+              <td className="tnum p-2 text-center text-text-secondary" dir="ltr">
                 {line.creative_count}
               </td>
               {keys.map((key) => (
-                <td key={key} className="p-2 text-text-primary" dir="ltr">
-                  {formatMetric(metricState(line.metrics as CreativeMetrics | null, key), key, locale)}
+                <td key={key} className="tnum p-2 text-center text-text-primary" dir="ltr">
+                  {formatMetric(metricState(line.metrics as CreativeMetrics | null, key), key, locale, group.currency)}
                 </td>
               ))}
             </tr>

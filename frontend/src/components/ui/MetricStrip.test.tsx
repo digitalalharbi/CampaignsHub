@@ -133,4 +133,91 @@ describe('reading', () => {
     expect(reading(0, format)).toEqual({ kind: 'value', text: '0' })
     expect(calls).toEqual([0])
   })
+
+  it('shows a withheld figure at full weight with the reason, never as zero or as absent', () => {
+    // FX-WITHHELD-UI-001. The platform reported 3,465.33 USD and no rate exists to convert it.
+    // Before this variant the withheld null fell through to «no data» and the screen read 0.
+    render(
+      <MetricStrip
+        id="t"
+        ar
+        primary={[item({ key: 'spend', label: 'الإنفاق', reading: { kind: 'withheld', original: '3,465.33 USD' } })]}
+      />,
+    )
+
+    const card = screen.getByTestId('metric-spend')
+
+    // The real figure is present — the whole point of the variant.
+    expect(card).toHaveTextContent('3,465.33 USD')
+
+    // And the reader is told why it is not in their currency.
+    expect(card).toHaveTextContent(/التحويل إلى عملة المشروع غير متاح/)
+
+    // It must NOT be described as something the platform failed to send.
+    expect(card).not.toHaveTextContent('لم ترسله المنصة')
+    expect(card).not.toHaveTextContent('لا توجد بيانات')
+
+    // The card is a real reading, not a muted absence.
+    expect(card).toHaveAttribute('data-state', 'withheld')
+  })
+
+})
+
+/**
+ * NUMBER-PRESENTATION-001 — the card shows the compact figure and holds the exact one.
+ *
+ * A `title` and not a custom tooltip: it is the one hover that also reaches a screen reader, and it
+ * survives being inside a chart card, a table cell or a printed page.
+ */
+describe('the compact value keeps the exact one within reach', () => {
+  it('hangs the full figure on the value it abbreviated', () => {
+    render(
+      <MetricStrip
+        id="compact-exact"
+        ar={false}
+        primary={[{ key: 'spend', label: 'Spend', reading: { kind: 'value', text: '4.85M SAR', exact: '4,850,321 SAR' } }]}
+        secondary={[]}
+      />,
+    )
+
+    expect(screen.getByText('4.85M SAR')).toHaveAttribute('title', '4,850,321 SAR')
+  })
+
+  it('attaches no title when nothing was abbreviated', () => {
+    render(
+      <MetricStrip
+        id="compact-none"
+        ar={false}
+        primary={[{ key: 'spend', label: 'Spend', reading: { kind: 'value', text: '940 SAR' } }]}
+        secondary={[]}
+      />,
+    )
+
+    expect(screen.getByText('940 SAR')).not.toHaveAttribute('title')
+  })
+})
+
+/**
+ * UX-KPI-PRESENTATION-001 — the figure sits under its own label, in every language.
+ *
+ * `dir="ltr"` and `text-start` are two different settings. The first keeps «56.3K SAR» in digit
+ * order inside an Arabic page and is not optional; on its own it also makes the span align its
+ * contents to the LEFT, so on a phone — where a card is the full width of the screen — the figure
+ * drifted to the far edge while its Arabic label stayed at the near one, and the pair stopped
+ * reading as one thing.
+ */
+describe('the value is placed by the reader’s direction, not by its own', () => {
+  it('keeps digit order and starts where the label starts', () => {
+    render(
+      <MetricStrip
+        id="t"
+        ar
+        primary={[item({ key: 'spend', label: 'الإنفاق', reading: { kind: 'value', text: '56.3K SAR' } })]}
+      />,
+    )
+
+    const value = screen.getByText('56.3K SAR')
+    expect(value).toHaveAttribute('dir', 'ltr')
+    expect(value.className).toContain('text-start')
+  })
 })

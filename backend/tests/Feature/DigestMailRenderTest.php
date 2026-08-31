@@ -240,6 +240,72 @@ final class DigestMailRenderTest extends TestCase
     }
 
     /**
+     * EMAIL-SETTINGS-DEPTH-001 — the section appears only when there is something in it.
+     *
+     * The digest carries `recommendations: []` both when the reader switched them off and when there
+     * are none, and the mail must render nothing either way. An empty heading would read as «nobody
+     * has any advice for you», which is a claim the product has not made — and a heading rendered for
+     * somebody who opted out would be the switch not working.
+     */
+    public function test_approved_recommendations_are_rendered_only_when_there_are_some(): void
+    {
+        $with = $this->rich();
+        $with['projects'][0]['recommendations'] = [
+            ['id' => 'r1', 'title' => 'ارفع ميزانية المجموعة الأعلى', 'body' => 'هي الوحيدة تحت التكلفة المستهدفة.', 'priority' => 'high', 'campaign_id' => 'c1', 'due_date' => null],
+        ];
+
+        $html = $this->renderOf($with);
+        $this->assertStringContainsString('التوصيات المعتمدة', $html);
+        $this->assertStringContainsString('ارفع ميزانية المجموعة الأعلى', $html);
+
+        $without = $this->rich();
+        $without['projects'][0]['recommendations'] = [];
+
+        $this->assertStringNotContainsString('التوصيات المعتمدة', $this->renderOf($without));
+    }
+
+    /**
+     * BRANDING-HIERARCHY-001 — the digest goes out under the AGENCY's name, not the product's.
+     *
+     * An agency's operator opening their morning summary should see their own firm on it. The subject
+     * line and the body both carried `config('brand.name')` unconditionally, so every installation's
+     * mail said CampaignsHub — the one surface where the white-label the operator configured was
+     * silently ignored.
+     *
+     * The agency layer is the right one for a digest specifically: it can span several of that
+     * agency's clients, and naming one client on a summary about all of them would be wrong in a way
+     * the reader could not detect.
+     */
+    public function test_the_digest_carries_the_agencys_name_rather_than_the_products(): void
+    {
+        $html = (new DailyDigestMail($this->digest(), 'en', 'Mohammed', 'daily', 'Nakheel Media'))->render();
+
+        $this->assertStringContainsString('Nakheel Media', $html);
+
+        $subject = (new DailyDigestMail($this->digest(), 'en', 'Mohammed', 'daily', 'Nakheel Media'))
+            ->envelope()->subject;
+
+        $this->assertStringStartsWith('Nakheel Media —', $subject, 'the subject still announced the product');
+    }
+
+    /**
+     * Safe fallback, the last link of the same chain.
+     *
+     * An installation with no agency identity — and the mail gallery, which has no tenant at all —
+     * gets the product's name. A blank sender is not an option: an email from nobody is worse than an
+     * email from the platform.
+     */
+    public function test_an_unbranded_installation_still_sends_under_the_products_name(): void
+    {
+        foreach ([null, '', '   '] as $absent) {
+            $subject = (new DailyDigestMail($this->digest(), 'en', 'Mohammed', 'daily', $absent))
+                ->envelope()->subject;
+
+            $this->assertStringStartsWith((string) config('brand.name').' —', $subject);
+        }
+    }
+
+    /**
      * A digest with the new sections, built by hand.
      *
      * @return array<string,mixed>

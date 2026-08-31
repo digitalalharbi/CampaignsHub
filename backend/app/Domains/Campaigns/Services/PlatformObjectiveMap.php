@@ -113,6 +113,23 @@ final class PlatformObjectiveMap
             'APP_INSTALLS' => CampaignObjective::AppInstalls,
             'APP_CONVERSIONS' => CampaignObjective::Conversions,
             'WEBSITE_CONVERSIONS' => CampaignObjective::Conversions,
+            /*
+             * OBJECTIVE-NORMALIZATION-004 — the two words the live account actually sends.
+             *
+             * `integrations:diagnose` was asked why 71 of 87 campaigns sat unclassified, and it
+             * answered with the words themselves: `WEB_CONVERSION` and `WEB_VIEW`. Neither is a
+             * guess at Snapchat's vocabulary — they are what this account's campaigns carry in
+             * `objective_platform_value`, read back out of production.
+             *
+             * The table already held `WEBSITE_CONVERSIONS`, which is the older, longer spelling and
+             * not what the API returns. One missing letter-for-letter match left every conversion
+             * campaign on the account judged by the Unknown family.
+             *
+             * `WEB_VIEW` is a traffic buy — a swipe to a page — and is mapped to Traffic rather than
+             * to Conversions, because a view is not an outcome somebody purchased.
+             */
+            'WEB_CONVERSION' => CampaignObjective::Conversions,
+            'WEB_VIEW' => CampaignObjective::Traffic,
             'CATALOG_SALES' => CampaignObjective::Sales,
         ],
 
@@ -163,7 +180,31 @@ final class PlatformObjectiveMap
         // `outcome_sales`, `OUTCOME_SALES` and `Outcome Sales` are all the same objective.
         $key = strtoupper(str_replace([' ', '-'], '_', trim($raw)));
 
-        return $table[$key] ?? null;
+        if (array_key_exists($key, $table)) {
+            return $table[$key];
+        }
+
+        /*
+         * OBJECTIVE-NORMALIZATION-002 — the platform used OUR OWN canonical name.
+         *
+         * Snapchat's current campaign objective enum includes `SALES`, `AWARENESS`, `TRAFFIC`,
+         * `ENGAGEMENT`, `VIDEO_VIEWS`, `LEADS` and `REACH`. The table above was written against the
+         * older names — `CATALOG_SALES`, `DRIVE_TRAFFIC_TO_WEBSITE` — so `SALES` resolved to nothing,
+         * the resolver declined to classify, and the RAW string was left standing in the canonical
+         * column. Every one of this account's campaigns is in that state, which is why objective-aware
+         * KPI selection has been off in production: `CampaignObjective::tryFrom('SALES')` fails, so
+         * every creative was headlined by the Unknown family regardless of what it was bought to do.
+         *
+         * Matching against the canonical vocabulary is not a guess and not a fallback heuristic. It
+         * fires only when the platform's own string, lowercased, IS one of this product's objective
+         * values — an exact match on a closed set. A platform word that means something else, like
+         * Google's `advertisingChannelType`, still resolves to nothing and still lands unclassified,
+         * which is the behaviour the audit trail depends on.
+         *
+         * The explicit table stays first and stays authoritative: it is where a platform word that
+         * does NOT coincide with ours is translated, and nothing here weakens it.
+         */
+        return CampaignObjective::tryFrom(strtolower($key));
     }
 
     /**

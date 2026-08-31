@@ -20,7 +20,7 @@ import { Card, CardTitle } from '@/components/ui/Card'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { listExternalCampaigns } from '@/features/campaigns/api'
-import { fmtDateTime } from '@/lib/datetime'
+import { fmtClock, fmtDateTime } from '@/lib/datetime'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 
@@ -192,7 +192,7 @@ export function ProjectIntegrationsPage() {
                       <>
                         {' '}
                         · {t('last_updated')}:{' '}
-                        <span className="tnum">{new Date(b.account.last_synced_at).toLocaleTimeString()}</span>
+                        <span className="tnum">{fmtClock(b.account.last_synced_at)}</span>
                       </>
                     )}
                   </span>

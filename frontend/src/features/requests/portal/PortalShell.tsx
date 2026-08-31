@@ -1,13 +1,14 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { LogOut, Megaphone, Moon, Sun } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 import { portalLogout } from '../clientPortalApi'
-import { PortalNav } from './portalNav'
+import { PORTAL_NAV, PortalNav } from './portalNav'
 import { useClientSpacePath } from './clientSpace'
 import { brandStyle, useClientBranding } from './useClientBranding'
 import { PortalFooter } from '@/features/legal/PolicyFooter'
+import { MOBILE_TAB_BAR_CLEARANCE, MobileTabBar } from '@/layouts/MobileTabBar'
 
 /**
  * Minimal, mobile-first, RTL/LTR + light/dark shell for the public client portal.
@@ -37,8 +38,42 @@ export function PortalShell({
   const qc = useQueryClient()
   const spaceTo = useClientSpacePath()
   const branding = useClientBranding()
+
+  /*
+   * The four a client opens the portal for, resolved against THEIR space (MOBILE-APP-001).
+   *
+   * `PORTAL_NAV` holds suffixes, not paths — `/invoices`, resolved to `/portal/clients/acme/invoices`
+   * or `/client/invoices` depending on where the visitor is. Building the bar from that same array
+   * keeps the phone and the desktop strip the same navigation, and `spaceTo` keeps a tap from
+   * dropping somebody out of their brand's space.
+   *
+   * Home, requests, campaigns and reports: what is happening and how it is going. Quotes, invoices,
+   * messages, files and profile are in More — the paperwork, which is looked up rather than watched.
+   */
+  const PRIMARY = ['', '/requests', '/campaigns', '/reports']
+  const tabs = PORTAL_NAV.filter((i) => PRIMARY.includes(i.to))
+    .map((i) => ({ to: spaceTo(i.to), ar: i.ar, en: i.en, icon: i.icon, end: i.end }))
+  const moreItems = PORTAL_NAV.filter((i) => !PRIMARY.includes(i.to))
+    .map((i) => ({ to: spaceTo(i.to), ar: i.ar, en: i.en, icon: i.icon, end: i.end }))
   // The primary mark if the agency uploaded one; otherwise the platform's own.
-  const logo = branding?.logos.find((l) => l.kind === 'primary_horizontal' || l.kind === 'client_logo')
+  const uploaded = branding?.logos.find((l) => l.kind === 'primary_horizontal' || l.kind === 'client_logo')
+
+  /*
+   * BRANDING-HIERARCHY-001 — «never a broken image or blank header».
+   *
+   * The fallback below is skipped precisely BECAUSE a logo exists, so a mark that fails to load left
+   * the header showing a browser's broken-image glyph and no name at all — the one outcome that
+   * requirement rules out, and the one this header was previously guaranteed to produce, since the
+   * URL it was handed answered 401 to every portal session.
+   *
+   * The URL is fixed on the server. This is the second half: a mark that cannot be drawn for any
+   * other reason — a deleted file, an offline CDN, a corrupt upload — falls back to the same mark and
+   * name a client with no logo sees, instead of to nothing. `onError` is the only signal a browser
+   * gives for that, and it is per-URL, so a new logo gets its own chance rather than inheriting the
+   * previous one's failure.
+   */
+  const [brokenLogo, setBrokenLogo] = useState<string | null>(null)
+  const logo = uploaded !== undefined && uploaded.url !== brokenLogo ? uploaded : undefined
 
   const signOut = async () => {
     try { await portalLogout() } catch { /* clearing the local session is enough to sign the user out */ }
@@ -53,7 +88,7 @@ export function PortalShell({
       // replacing the palette: an agency supplies a brand colour, not a theme, and letting one value
       // redefine every token is how a portal ends up unreadable in dark mode.
       style={brandStyle(branding)}
-      className="min-h-screen bg-background text-text-primary"
+      className="flex min-h-[100dvh] flex-col bg-background text-text-primary"
     >
       <header className="border-b border-border bg-surface">
         <div className="mx-auto flex h-16 max-w-4xl items-center justify-between gap-2.5 px-4 sm:px-6">
@@ -63,7 +98,13 @@ export function PortalShell({
             ) : (
               // alt is the space's name, so a screen reader hears whose portal this is rather than
               // "logo".
-              <img src={logo.url} alt={branding?.space?.name ?? 'CampaignsHub'} className="h-9 max-w-[140px] object-contain" />
+              <img
+                src={logo.url}
+                onError={() => setBrokenLogo(logo.url)}
+                alt={branding?.space?.name ?? 'CampaignsHub'}
+                data-testid="portal-logo"
+                className="h-9 max-w-[140px] object-contain"
+              />
             )}
             {logo === undefined && (
               <span className="font-heading text-base font-extrabold">
@@ -84,11 +125,34 @@ export function PortalShell({
           </div>
         </div>
       </header>
-      {nav && <PortalNav ar={ar} />}
-      <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
-        {children}
-        <PortalFooter />
+      {/*
+        * The horizontal section strip is a DESKTOP control now (MOBILE-APP-001).
+        *
+        * On a phone it was a scrollable row of nine tabs, most of them off-screen, with no indication
+        * that scrolling was even possible — the section you wanted was usually the one you could not
+        * see. Below `md` the bottom bar replaces it: four destinations always visible, the other five
+        * in the More sheet. Above `md` the strip is unchanged.
+        */}
+      {nav && <div className="hidden md:block"><PortalNav ar={ar} /></div>}
+
+      {/* SHELL-001 — the content box takes the slack so the footer sinks rather than stranding space. */}
+      <main className="flex min-w-0 flex-1 flex-col">
+        <div
+          className="mx-auto w-full min-w-0 max-w-4xl flex-1 px-4 py-6 sm:px-6 sm:py-8"
+        >
+          {children}
+        </div>
+        <div className={`px-4 sm:px-6 ${nav ? MOBILE_TAB_BAR_CLEARANCE : ''}`}>
+          <div className="mx-auto w-full max-w-4xl"><PortalFooter /></div>
+        </div>
       </main>
+
+      {nav && (
+        <MobileTabBar
+          tabs={tabs}
+          moreGroups={[{ key: 'portal', ar: 'كل الأقسام', en: 'All sections', items: moreItems }]}
+        />
+      )}
     </div>
   )
 }

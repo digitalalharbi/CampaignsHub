@@ -15,7 +15,8 @@ import { AccountMenu } from '@/features/account/UserMenu'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { fetchMemberships } from '@/features/auth/memberships'
 import { useUi } from '@/stores/ui'
-import { PortalFooter } from '@/features/legal/PolicyFooter'
+import { PortalFrame } from './PortalFrame'
+import type { MobileTab } from './MobileTabBar'
 
 /**
  * The influencers & UGC portal's shell (ADR 0002, INFL-001).
@@ -37,6 +38,14 @@ const influencerNav = [
   { to: '/influencers/nominations', ar: 'الترشيحات', en: 'Nominations', icon: ClipboardCheck },
   { to: '/influencers/deliverables', ar: 'المخرجات', en: 'Deliverables', icon: ListChecks },
 ] as const
+
+/**
+ * The influencer portal has exactly four sections, so the bar IS the navigation (MOBILE-APP-001) —
+ * there is no More sheet because there is nothing left over to put in one.
+ */
+const INFLUENCER_TABS: MobileTab[] = influencerNav.map((i) => ({
+  to: i.to, ar: i.ar, en: i.en, icon: i.icon, end: 'end' in i ? i.end : undefined,
+}))
 
 type NavEntry = (typeof influencerNav)[number]
 
@@ -98,7 +107,7 @@ function InfluencerIdentity({ collapsed }: { collapsed?: boolean }) {
           <span className="block truncate font-heading text-[15px] font-extrabold tracking-tight text-text-primary">
             {current?.tenant.name ?? 'CampaignsHub'}
           </span>
-          <span data-testid="influencer-scope-note" className="block truncate text-[11.5px] text-text-muted">
+          <span data-testid="influencer-scope-note" className="block truncate text-[11px] text-text-muted">
             {ar ? 'بوابة المؤثرين وUGC' : 'Influencers & UGC'}
             {scoped && ` · ${ar ? 'عملاء محدّدون' : 'Selected clients'}`}
           </span>
@@ -112,64 +121,64 @@ export function InfluencerShell() {
   const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } =
     useUi()
   const ar = locale === 'ar'
-  const railWidth = sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'
 
   return (
-    <div data-testid="influencer-shell" className="flex min-h-screen bg-background text-text-primary">
-      <aside
-        className={`sticky top-0 hidden h-screen shrink-0 flex-col gap-6 overflow-y-auto border-e border-border bg-surface p-3.5 transition-[width] duration-200 md:flex ${railWidth}`}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <InfluencerIdentity collapsed={sidebarCollapsed} />
-          {!sidebarCollapsed && (
+    <PortalFrame
+      testId="influencer-shell"
+      railWidth={sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'}
+      tabs={INFLUENCER_TABS}
+      moreHeader={<AccountMenu variant="sidebar" />}
+      drawerOpen={sidebarOpen}
+      onDrawerClose={() => setSidebarOpen(false)}
+      rail={
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <InfluencerIdentity collapsed={sidebarCollapsed} />
+            {!sidebarCollapsed && (
+              <button
+                onClick={toggleSidebarCollapsed}
+                aria-label={ar ? 'طي القائمة' : 'Collapse sidebar'}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+              >
+                <PanelLeft size={17} />
+              </button>
+            )}
+          </div>
+          {sidebarCollapsed && (
             <button
               onClick={toggleSidebarCollapsed}
-              aria-label={ar ? 'طي القائمة' : 'Collapse sidebar'}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+              aria-label={ar ? 'توسيع القائمة' : 'Expand sidebar'}
+              className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
             >
-              <PanelLeft size={17} />
+              <PanelLeft size={17} className="rotate-180" />
             </button>
           )}
-        </div>
-        {sidebarCollapsed && (
-          <button
-            onClick={toggleSidebarCollapsed}
-            aria-label={ar ? 'توسيع القائمة' : 'Expand sidebar'}
-            className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
-          >
-            <PanelLeft size={17} className="rotate-180" />
-          </button>
-        )}
-        <NavItems ar={ar} collapsed={sidebarCollapsed} />
-        <AccountMenu variant="sidebar" collapsed={sidebarCollapsed} />
-      </aside>
-
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={() => setSidebarOpen(false)} />
-          <aside className="absolute inset-y-0 start-0 flex h-full w-[280px] max-w-[82vw] flex-col gap-6 overflow-y-auto border-e border-border bg-surface p-3.5 shadow-[var(--shadow-large)]">
-            <div className="flex items-center justify-between gap-2">
-              <InfluencerIdentity />
-              <button
-                onClick={() => setSidebarOpen(false)}
-                aria-label={ar ? 'إغلاق' : 'Close'}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <NavItems ar={ar} onNavigate={() => setSidebarOpen(false)} />
-            <AccountMenu variant="sidebar" />
-          </aside>
-        </div>
-      )}
-
-      <div className="flex min-w-0 flex-1 flex-col">
+          <NavItems ar={ar} collapsed={sidebarCollapsed} />
+          <AccountMenu variant="sidebar" collapsed={sidebarCollapsed} />
+        </>
+      }
+      drawer={
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <InfluencerIdentity />
+            <button
+              onClick={() => setSidebarOpen(false)}
+              aria-label={ar ? 'إغلاق' : 'Close'}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <NavItems ar={ar} onNavigate={() => setSidebarOpen(false)} />
+          <AccountMenu variant="sidebar" />
+        </>
+      }
+      header={
         <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-border bg-surface/85 px-4 py-2.5 backdrop-blur-md sm:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
             aria-label={ar ? 'فتح القائمة' : 'Open menu'}
-            className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:h-9 sm:w-9 md:hidden"
+            className="hidden h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:flex sm:h-9 sm:w-9 md:hidden"
           >
             <Menu size={19} />
           </button>
@@ -193,12 +202,9 @@ export function InfluencerShell() {
             <div className="ms-1"><AccountMenu variant="topbar" /></div>
           </div>
         </header>
-
-        <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-12 pt-4 sm:px-5 lg:px-6">
-          <Outlet />
-          <PortalFooter />
-        </main>
-      </div>
-    </div>
+      }
+    >
+      <Outlet />
+    </PortalFrame>
   )
 }

@@ -1,4 +1,5 @@
 import { getData, postData, putData } from '@/lib/api/client'
+import type { SharedBranding } from './sharedBranding'
 import { api } from '@/lib/api/client'
 
 export type ReportStatus = 'draft' | 'processing' | 'completed' | 'failed'
@@ -104,12 +105,22 @@ export const revokeShare = (p: string, reportId: string, shareId: string) =>
 // ---- LIVEREP-002: build a live link from a choice, not from a document ---------------------------
 
 export interface LiveBuilderOptions {
-  campaigns: Array<{ id: string; name: string; status: string | null }>
+  /**
+   * REPORT-SCOPE-SELECTION-001 — `last_active_on` is answered for the REPORT'S WINDOW.
+   *
+   * The last day inside the requested period on which the campaign reported a positive figure, or
+   * null when it reported none. Null also means «no period was asked about», and the builder makes
+   * no claim in that case rather than sorting campaigns against a window nobody named.
+   */
+  campaigns: Array<{ id: string; name: string; status: string | null; last_active_on: string | null }>
   providers: string[]
   metrics: Array<{ key: string; ar: string; en: string }>
 }
 
-export const liveBuilderOptions = (p: string) => getData<LiveBuilderOptions>(`${base(p)}/live/options`)
+export const liveBuilderOptions = (p: string, period?: { from: string; to: string }) =>
+  getData<LiveBuilderOptions>(
+    `${base(p)}/live/options${period ? `?from=${encodeURIComponent(period.from)}&to=${encodeURIComponent(period.to)}` : ''}`,
+  )
 
 export const createLiveLink = (p: string, body: Record<string, unknown>) =>
   postData<{ report_id: string; share_id: string; url: string; token: string }>(`${base(p)}/live`, body)
@@ -122,6 +133,16 @@ export async function fetchSharedReport(token: string, password?: string) {
   const body = await res.json()
   return { status: res.status, envelope: body }
 }
+/**
+ * BRANDING-HIERARCHY-001 — the identity this link carries, addressed by the TOKEN alone.
+ *
+ * No asset id, tenant id or scope is sent, because none is accepted: an endpoint that takes one is
+ * an endpoint somebody will enumerate, and a shared report link is exactly where a stranger has a
+ * URL and time.
+ */
+export const sharedBranding = (token: string) =>
+  getData<SharedBranding>(`/reports/shared/${encodeURIComponent(token)}/branding`)
+
 export const sharedDownloadUrl = (token: string, format: ReportFormat) =>
   `/api/v1/reports/shared/${token}/download/${format}`
 
@@ -342,6 +363,16 @@ export interface ScopeOptions {
   paths: Array<{ key: string; labels: { ar: string; en: string }; headline_metrics: string[] }>
   metrics: Array<{ key: string; ar: string; en: string }>
   grain: { figures: string[]; resolved_to_campaign: string[]; creatives_only: string[] }
+  /*
+   * REPORT-SCOPE-SELECTION-001 — which axes did not fit.
+   *
+   * An operator who cannot find their ad set has two possible explanations — it was never synced, or
+   * the list stopped — and they lead to opposite actions. Optional because a server that has not
+   * shipped this yet reports nothing, and a client that assumed `false` would be stating something
+   * it was never told.
+   */
+  truncated?: { campaigns: boolean; ad_sets: boolean; ads: boolean; creatives: boolean }
+  limit?: number
 }
 
 export interface ScopeTemplate {

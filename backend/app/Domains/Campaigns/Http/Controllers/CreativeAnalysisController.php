@@ -14,6 +14,7 @@ use App\Domains\Campaigns\Services\CreativeFatigue;
 use App\Domains\Campaigns\Services\CreativeFunnel;
 use App\Domains\Campaigns\Services\CreativeInsights;
 use App\Domains\Campaigns\Services\CreativeMetrics;
+use App\Domains\Campaigns\Services\CreativeMetricsAvailability;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativePulse;
 use App\Domains\Campaigns\Services\CreativeRows;
@@ -113,6 +114,23 @@ final class CreativeAnalysisController extends Controller
             'per_page' => $perPage,
             'total' => $health === '' ? $total : count($rows),
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            /*
+             * CREATIVE-MONEY-TRUTH-001 — what the money on these cards is IN.
+             *
+             * `formatMetric` defaulted its currency to «SAR», and this page's spend cell omitted the
+             * argument, so every card printed a Saudi label over whatever the account actually spent.
+             * Stating it here is what lets the card render the truth instead of a default.
+             */
+            'currency' => $this->reachCurrency($creatives),
+            /*
+             * CONTENT-STATE-SEMANTICS-001 — why an empty card is empty, per provider.
+             *
+             * Without this the page can only say «لا توجد بيانات», which is simultaneously the
+             * message for a creative that did not run, a provider that has no creative-level
+             * reporting at all, and a fetch that failed. Read from the sync run rather than
+             * inferred from an absent value: an empty metrics object looks identical in all three.
+             */
+            'metrics_availability' => app(CreativeMetricsAvailability::class)->forCreatives($creatives),
             'filters' => $this->filterOptions($request, $project),
         ], 'Creative library.');
     }
@@ -145,10 +163,20 @@ final class CreativeAnalysisController extends Controller
         $this->applyReach($query, $request);
         $this->applyFilters($query, $request);
 
-        $rows = $this->present($query->get(), $from, $to, withFatigue: true, withPrevious: true);
+        $creatives = $query->get();
+        $rows = $this->present($creatives, $from, $to, withFatigue: true, withPrevious: true);
 
         return ApiResponse::success(
             $pulse->build($rows, $from, $to) + [
+                /*
+                 * CREATIVE-MONEY-TRUTH-001 — what these figures are IN, so nothing has to assume.
+                 *
+                 * This section hard-coded «SAR» in its formatter. On production, where the account
+                 * spends USD and no USD→SAR rate exists, that printed a USD number under a Saudi
+                 * label — a wrong figure wearing the right one's clothes, which is worse than the
+                 * withheld zero this product already fixed once.
+                 */
+                'currency' => $this->reachCurrency($creatives),
                 /*
                  * The same options the library's filter bar is built from.
                  *
@@ -265,7 +293,9 @@ final class CreativeAnalysisController extends Controller
             'previous_period' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()],
             'metrics' => $current,
             'previous' => $previous,
-            'headline_metrics' => $this->metrics->headline($objective),
+            // The detail page is looking at ONE creative's window, so `$current` is exactly the
+            // availability this creative has (CONTENT-KPI-AVAILABILITY-001).
+            'headline_metrics' => $this->metrics->headline($objective, $current),
             'path' => $this->metrics->pathFor($objective)->value,
             'fatigue' => $this->fatigue->assess($current ?? ['active_days' => 0], $previous),
             // The funnel is a reshaping of `metrics` above — same figures, no second query, and only
@@ -347,6 +377,15 @@ final class CreativeAnalysisController extends Controller
             'reason' => $verdict['reason'],
             'reason_ar' => $verdict['reason_ar'],
             'winners' => $this->winners($rows),
+            /*
+             * CREATIVE-MONEY-TRUTH-001 — and here it carries a second meaning.
+             *
+             * A comparison is the one place a caller supplies the ids, so two creatives from
+             * projects reporting in DIFFERENT currencies can end up side by side. `reachCurrency`
+             * returns null then, and the table refuses each money figure rather than presenting
+             * two incomparable amounts as though one had beaten the other.
+             */
+            'currency' => $this->reachCurrency($creatives),
         ], 'Creative comparison.');
     }
 
@@ -439,6 +478,8 @@ final class CreativeAnalysisController extends Controller
             'per_page' => $perPage,
             'total' => $total,
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            // The same statement the library makes — a group's money is no more self-describing.
+            'currency' => $this->reachCurrency($members),
         ], 'Creative groups.');
     }
 
@@ -471,6 +512,8 @@ final class CreativeAnalysisController extends Controller
                 'members' => $rows,
                 'by_platform' => $this->groupByPlatform($rows),
                 'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+                // A group spans platforms and can span projects — see `reachCurrency`.
+                'currency' => $this->reachCurrency($members),
                 'audit' => $this->groupAudit($model),
             ],
             'Creative group.',
@@ -749,6 +792,34 @@ final class CreativeAnalysisController extends Controller
      *
      * @return array<string, mixed>
      */
+    /**
+     * The one currency these creatives are reported in, or null when there is no single answer.
+     *
+     * Read from what the pipeline RECORDED converting to, never from a config default — a default
+     * would confidently print «SAR» for a project reporting in AED. The agency view spans projects,
+     * and two projects reporting in different currencies have no shared currency to name: null then,
+     * and the reader says «conversion unavailable» rather than picking one.
+     *
+     * @param  Collection<int, ExternalCreative>  $creatives
+     */
+    private function reachCurrency(mixed $creatives): ?string
+    {
+        $projectIds = $creatives->pluck('project_id')->filter()->unique()->values()->all();
+
+        if ($projectIds === []) {
+            return null;
+        }
+
+        $currencies = DB::table('daily_metrics')
+            ->whereIn('project_id', $projectIds)
+            ->whereNotNull('project_currency')
+            ->distinct()
+            ->pluck('project_currency')
+            ->all();
+
+        return count($currencies) === 1 ? (string) $currencies[0] : null;
+    }
+
     private function projectContext(ExternalCreative $model): array
     {
         $row = DB::table('daily_metrics')
@@ -1042,6 +1113,13 @@ final class CreativeAnalysisController extends Controller
             static fn (?string $o): bool => $o !== null && $o !== '',
         )));
         $paths = array_values(array_unique(array_map(static fn (array $r): string => (string) ($r['path'] ?? ''), $rows)));
+
+        // Aggregated once: the group's headline now depends on what the group can actually answer,
+        // and computing it twice would let the payload and the selection drift apart.
+        $groupFigures = $this->metrics->aggregate(array_map(
+            static fn (array $r): mixed => $r['metrics'] ?? null,
+            $rows,
+        ));
         $shared = count($objectives) === 1 ? $objectives[0] : null;
         $mixed = count($objectives) > 1 || count($paths) > 1;
 
@@ -1061,11 +1139,8 @@ final class CreativeAnalysisController extends Controller
             'paths' => $paths,
             'objective' => $shared,
             'mixed_objectives' => $mixed,
-            'headline_metrics' => $mixed ? [] : $this->metrics->headline($shared),
-            'metrics' => $this->metrics->aggregate(array_map(
-                static fn (array $r): mixed => $r['metrics'] ?? null,
-                $rows,
-            )),
+            'headline_metrics' => $mixed ? [] : $this->metrics->headline($shared, $groupFigures),
+            'metrics' => $groupFigures,
             'mixed_reason_ar' => $mixed
                 ? 'أعضاء هذه المجموعة لا يشتركون في هدف واحد، فلا يُعلن رقم موحّد للتكلفة أو العائد.'
                 : null,

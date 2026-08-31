@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { FooterContact } from './FooterContact'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { PublicHeader } from './PublicHeader'
 import { useUi } from '@/stores/ui'
@@ -50,8 +51,19 @@ export function PublicPageShell({
 
       <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">{children}</main>
 
+      {/*
+        * MKT-CONTACT-001 — the same two facts, from the same source.
+        *
+        * A visitor who reached a policy page from a search result, or the services page from an ad,
+        * is as entitled to a way of contacting somebody as one who read the homepage to the end.
+        * `variant="inline"` keeps this a line of small print rather than growing a second full
+        * footer beside the one that already exists.
+        */}
       <footer className="border-t border-border bg-surface py-6 text-center text-xs text-text-muted">
-        © {new Date().getFullYear()} CampaignsHub — {c.footer.rights}
+        <div className="flex flex-col items-center gap-2 px-4">
+          <FooterContact locale={locale as Locale} variant="inline" />
+          <span>© {new Date().getFullYear()} CampaignsHub — {c.footer.rights}</span>
+        </div>
       </footer>
     </div>
   )

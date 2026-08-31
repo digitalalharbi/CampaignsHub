@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Domains\Integrations\Http\Controllers\AccountInventoryController;
 use App\Domains\Integrations\Http\Controllers\AdPlatformOAuthController;
+use App\Domains\Integrations\Http\Controllers\ConnectionWizardController;
 use App\Domains\Integrations\Http\Controllers\IntegrationController;
 use App\Domains\Integrations\Http\Controllers\IntegrationWebhookController;
 use App\Domains\Integrations\Http\Controllers\PlatformOverviewController;
@@ -64,6 +66,41 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
 
     Route::get('connections', [ProviderConnectionController::class, 'index'])->name('connections.index');
     Route::post('connections/{connection}/revoke', [ProviderConnectionController::class, 'revoke'])->name('connections.revoke');
+
+    /*
+     * ORCH-100 — the connection wizard's reads: the hierarchy an authorisation discovered, a page of
+     * its accounts, and what the plan has left. All three are tenant-scoped and none of them changes
+     * anything: discovery is inventory until somebody confirms a selection.
+     */
+    Route::get('connections/resumable', [ConnectionWizardController::class, 'resumable'])->name('connections.resumable');
+    Route::get('connections/{connection}/hierarchy', [ConnectionWizardController::class, 'hierarchy'])->name('connections.hierarchy');
+    Route::get('connections/{connection}/accounts', [ConnectionWizardController::class, 'accounts'])->name('connections.accounts');
+    Route::get('plan-usage', [ConnectionWizardController::class, 'planUsage'])->name('plan-usage');
+    /*
+     * RUNTIME-100 §5 — re-read the catalogue with the token we already hold.
+     *
+     * A WRITE, so it sits with the wizard's reads only in the file. Throttled because it calls out
+     * to the provider: a button somebody can hold down should not become our rate-limit problem.
+     */
+    Route::post('connections/{connection}/refresh', [ConnectionWizardController::class, 'refresh'])
+        ->middleware('throttle:10,1')->name('connections.refresh');
+
+    /*
+     * COMMAND-CENTER §§7–20 — the inventory that outlives the wizard.
+     *
+     * Tenant-scoped, not project-scoped, and that is the whole point: sources belong to the tenant
+     * and are LENT to projects through a binding. A project-scoped route could not answer «what does
+     * CampaignsHub have access to», which is the question this page exists for.
+     *
+     * There is no «enable» or «exclude» endpoint here, deliberately. An account is either linked to
+     * a project or it is not, and that answer lives in `ProjectIntegrationBinding` — a second way to
+     * say who owns an account is the exact defect this programme spent three PRs removing.
+     */
+    Route::get('accounts', [AccountInventoryController::class, 'index'])->name('accounts.index');
+    Route::get('accounts/{account}/logs', [AccountInventoryController::class, 'logs'])->name('accounts.logs');
+    // Throttled: it calls the provider, and a window somebody drags is a lot of requests.
+    Route::post('accounts/{account}/backfill', [AccountInventoryController::class, 'backfill'])
+        ->middleware('throttle:20,1')->name('accounts.backfill');
 });
 
 // Per-project integrations (ResolveProject enforces project isolation).
@@ -78,6 +115,16 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
         Route::post('connect', [ProjectIntegrationController::class, 'connect'])->name('connect')
             ->middleware(EnsureWithinPlanLimit::class.':connections');
         Route::post('bindings', [ProjectIntegrationController::class, 'bind'])->name('bind');
+        // RUNTIME-100 §10 — a whole selection confirmed as one decision. Declared before `{binding}`
+        // would matter if that route were a POST; it is not, but the order documents the intent.
+        Route::post('bindings/batch', [ProjectIntegrationController::class, 'bindBatch'])->name('bind-batch');
+        /*
+         * INTEGRATION-DATASOURCE-WIZARD-001 §8 — «Manage accounts» saves the DESIRED SET and the
+         * server derives the diff. A PUT because it is idempotent: the same set twice is the same
+         * decision. It asks for no new authorisation — the token that discovered these accounts is
+         * the token that binds them.
+         */
+        Route::put('selection', [ProjectIntegrationController::class, 'applySelection'])->name('selection');
         Route::post('bindings/{binding}/sync', [ProjectIntegrationController::class, 'sync'])->name('sync');
         Route::delete('bindings/{binding}', [ProjectIntegrationController::class, 'detach'])->name('detach');
     });

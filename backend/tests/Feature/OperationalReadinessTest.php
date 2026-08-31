@@ -13,6 +13,7 @@ use App\Domains\Tenancy\DTOs\MembershipGrant;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
+use App\Support\Queue\QueueContract;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -222,9 +223,23 @@ final class OperationalReadinessTest extends TestCase
 
         $this->assertContains('reports', $queues);
         $this->assertContains('default', $queues);
-        // And it keeps the retry/timeout guarantees the runbook's `queue:work` line always gave.
+        // And it keeps the retry guarantee the runbook's `queue:work` line always gave.
         $this->assertSame(3, config('horizon.defaults.supervisor-1.tries'));
-        $this->assertSame(120, config('horizon.defaults.supervisor-1.timeout'));
+
+        /*
+         * The timeout is asserted as a RELATIONSHIP, not as a number — SNAP-STRUCTURE-RETRY-001.
+         *
+         * This line read `assertSame(120, …)` and passed for as long as the supervisor timeout sat
+         * below the longest job's own timeout, which is the condition that stopped every Snapchat
+         * structure sweep from finishing. A test that pins a number cannot tell a deliberate value
+         * from a broken one; `QueueContract` knows what the number has to be true ABOUT, and
+         * `QueueRetryContractTest` covers the rest of the ordering.
+         */
+        $this->assertGreaterThanOrEqual(
+            QueueContract::longestJobTimeout(),
+            config('horizon.defaults.supervisor-1.timeout'),
+            'A worker cannot be given less time than the longest job it is expected to run.',
+        );
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────────────────────

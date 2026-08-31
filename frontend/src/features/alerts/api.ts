@@ -69,9 +69,51 @@ export interface NewAlertRule {
 
 export const createAlertRule = (body: NewAlertRule) => postData<AlertRule>('/alerts/rules', body)
 
-export async function listAlertEvents(status?: 'open' | 'snoozed' | 'resolved'): Promise<AlertEvent[]> {
+/** Counts over the WHOLE ledger, which is not the same set as the page. */
+export interface AlertEventCounts {
+  open: number
+  snoozed: number
+  resolved: number
+  open_critical: number
+}
+
+export interface AlertEventPage {
+  events: AlertEvent[]
+  /** How many events exist in the queried scope, capped page or not. */
+  total: number
+  counts: AlertEventCounts
+}
+
+/**
+ * The firing ledger, and the truth about the part of it that did not fit.
+ *
+ * This used to return the bare array and throw the envelope away, which made the page's own summary
+ * badges lies on any tenant past the server's cap: they were counted by filtering the 200 rows that
+ * came back, and presented as counts of everything. The counts now come from the server, computed
+ * over the whole ledger, so they stay true wherever the cap falls — and `total` is what lets the list
+ * say it is showing 200 of 431 rather than presenting a truncated ledger as the whole one.
+ */
+export async function listAlertEvents(status?: 'open' | 'snoozed' | 'resolved'): Promise<AlertEventPage> {
   const res = await api.get<ApiEnvelope<AlertEvent[]>>('/alerts/events', { params: status ? { status } : {} })
-  return res.data.data ?? []
+  const events = res.data.data ?? []
+  const meta = res.data.meta as { total?: number; counts?: Partial<AlertEventCounts> } | undefined
+  const c = meta?.counts
+
+  return {
+    events,
+    total: Number(meta?.total ?? events.length),
+    /*
+     * Falling back to counting the rows we have is the honest failure mode for an older server that
+     * sends no counts: it is what the page did before, and it is only ever wrong in the direction of
+     * under-counting a capped ledger — never inventing alerts that do not exist.
+     */
+    counts: {
+      open: Number(c?.open ?? events.filter((e) => e.status === 'open').length),
+      snoozed: Number(c?.snoozed ?? events.filter((e) => e.status === 'snoozed').length),
+      resolved: Number(c?.resolved ?? events.filter((e) => e.status === 'resolved').length),
+      open_critical: Number(c?.open_critical ?? events.filter((e) => e.status === 'open' && e.severity === 'critical').length),
+    },
+  }
 }
 
 export const resolveAlert = (id: string) => postData<AlertEvent>(`/alerts/events/${id}/resolve`)

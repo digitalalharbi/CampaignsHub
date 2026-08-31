@@ -223,6 +223,41 @@ final class SubscriptionService
                 + DB::table('workspace_invitations')->where('tenant_id', $id)
                     ->whereNull('accepted_at')->where('expires_at', '>', now())->count(),
 
+            /*
+             * ORCH-100 — «Connected Ad Accounts» means ASSIGNED, and counts each account once.
+             *
+             * There was no count here at all, so the cap the plans are sold on was unenforceable.
+             * The temptation is to count `external_accounts`, and that would be wrong in the most
+             * expensive possible way: the first live Snapchat consent DISCOVERED 309 accounts, and
+             * consent to see an inventory is not a decision to connect it. Billing 309 for a
+             * catalogue the customer has not chosen from would be charging them for our own data
+             * model.
+             *
+             * Counted on DISTINCT `external_account_id` so one account deliberately serving two
+             * projects is one connected advertiser, not two — the customer connected one account.
+             *
+             * Detached (`is_active = false`) bindings are history and hold nothing.
+             */
+            /*
+             * AD accounts, and only ad accounts — COMMERCE-QUOTA-001.
+             *
+             * Counting every active binding was correct while bindings could only ever name an ad
+             * account. Commerce now uses the same table, so an unqualified count would charge a
+             * merchant an ADVERTISING slot for connecting their Salla store — a cap they are sold on
+             * the six ad platforms, silently consumed by a shop.
+             *
+             * The join is what makes «connected ad accounts» mean what the plan says. Stores are
+             * governed by the caps that actually exist — projects, client workspaces, subscription
+             * state — and no store quota is invented here that the product does not sell.
+             */
+            'ad_accounts' => DB::table('project_integration_bindings')
+                ->join('external_accounts', 'external_accounts.id', '=', 'project_integration_bindings.external_account_id')
+                ->where('project_integration_bindings.tenant_id', $id)
+                ->where('project_integration_bindings.is_active', true)
+                ->where('external_accounts.account_type', 'ad_account')
+                ->distinct()
+                ->count('project_integration_bindings.external_account_id'),
+
             // A revoked connection is a connection somebody deliberately gave up; it must not go on
             // costing them a slot.
             'connections' => DB::table('provider_connections')->where('tenant_id', $id)

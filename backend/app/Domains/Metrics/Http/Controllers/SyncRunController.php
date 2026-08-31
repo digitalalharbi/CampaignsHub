@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
-use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Metrics\Services\SyncRunLog;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -30,6 +31,7 @@ final class SyncRunController extends Controller
     public function __construct(
         private readonly AdvertisingConnectorRegistry $registry,
         private readonly AuditLogger $audit,
+        private readonly AccountAssignment $assignment,
     ) {}
 
     /** GET projects/{project}/sync-runs — the sync log for this project's accounts. */
@@ -56,22 +58,12 @@ final class SyncRunController extends Controller
             ->keyBy('id');
 
         return ApiResponse::success([
-            'runs' => $runs->map(fn (MetricSyncRun $r) => [
-                'id' => $r->id,
-                'provider' => $r->provider,
-                'status' => $r->status,
-                'account' => $accounts->get($r->external_account_id)?->name,
-                'account_external_id' => $accounts->get($r->external_account_id)?->external_id,
-                'window_start' => $r->window_start?->toDateString(),
-                'window_end' => $r->window_end?->toDateString(),
-                'metrics_upserted' => (int) $r->metrics_upserted,
-                'attempts' => (int) $r->attempts,
-                'started_at' => optional($r->started_at)->toIso8601String(),
-                'finished_at' => optional($r->finished_at)->toIso8601String(),
-                'error' => $r->error,
-                // Demo runs are labelled, never disguised as production traffic.
-                'is_demo' => (bool) $r->is_demo,
-            ])->all(),
+            // §8 — the same answer every thirty minutes is said once, with a count. Nothing is
+            // hidden: any change at all starts a new row, which is the moment worth noticing.
+            'runs' => SyncRunLog::collapse($runs->map(fn (MetricSyncRun $r) => $r->logRow(
+                $accounts->get($r->external_account_id)?->name,
+                $accounts->get($r->external_account_id)?->external_id,
+            ))->all()),
             'summary' => $runs->groupBy('status')->map->count(),
         ], 'Sync runs.');
     }
@@ -92,16 +84,27 @@ final class SyncRunController extends Controller
             'to' => ['nullable', 'date'],
         ]);
 
-        // Fail closed: the account must actually feed this project.
-        $feedsProject = ExternalCampaign::query()
-            ->where('external_account_id', $data['external_account_id'])
-            ->exists();
-        abort_unless($feedsProject, 404, 'That ad account does not feed this project.');
-
         $account = ExternalAccount::withoutGlobalScopes()
             ->where('id', $data['external_account_id'])
             ->where('tenant_id', app(TenantContext::class)->tenantId())
             ->firstOrFail();
+
+        /*
+         * OWNERSHIP-004 — the account must be ASSIGNED to a project, and that is the only test.
+         *
+         * This used to ask whether any `external_campaigns` row existed for the account, which is a
+         * different question with a worse answer. An account that had just been linked and whose
+         * structure sync had not landed yet — the exact state a first sync exists to resolve — was
+         * refused with «that ad account does not feed this project», so the one button that could
+         * have fixed an empty project was the one button it would not let you press. And a campaign
+         * row is not an ownership record: it is a consequence of one, which is precisely the kind of
+         * stand-in the ownership rule exists to forbid.
+         */
+        abort_if(
+            $this->assignment->projectIdFor($account) === null,
+            404,
+            'That ad account is not assigned to a project yet.',
+        );
 
         $to = isset($data['to']) ? Carbon::parse($data['to']) : Carbon::now();
         $from = isset($data['from']) ? Carbon::parse($data['from']) : $to->copy()->subDays(6);

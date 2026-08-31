@@ -29,7 +29,7 @@ async function openLibrary(page: Page, request: APIRequestContext): Promise<stri
   const projectId = await seededProject(request, STORE_PROJECT)
   await selectProject(page, projectId)
   await page.goto('/agency/content')
-  await expect(page.getByRole('heading', { name: /مكتبة المحتويات|Creative library/ })).toBeVisible({ timeout: 30000 })
+  await expect(page.getByRole('heading', { name: /مكتبة الإعلانات|Ads library/ })).toBeVisible({ timeout: 30000 })
 
   return projectId
 }
@@ -102,33 +102,27 @@ test.describe('the creative library', () => {
      * than how it is configured. What is asserted below is unchanged across all three and is the
      * part that matters: the filter narrows on the SERVER and the choice lands in the address.
      */
-    await page.getByTestId('content-providers').click()
     /*
-     * Scoped to THIS popover, and not for tidiness.
+     * One press on a visible chip — UX-FILTERS-001.
      *
-     * A native `<option>` also carries `role="option"`, and the agency shell's client picker is a
-     * `<select>` in the sidebar — so an unscoped `getByRole('option')` resolved to «اختر عميلًا»,
-     * which is inside a closed dropdown and can never be clicked. The test spent thirty seconds
-     * retrying an invisible element in all three browsers.
+     * This has been a `<select>` in a dialog, a chip in a dialog, and a popover multi-select. It is
+     * six visible chips now, because narrowing a library to one platform is how a library is USED
+     * rather than how it is configured. There is no popover to open and none to shut.
+     *
+     * What is asserted below is unchanged across all four shapes and is the part that matters: the
+     * filter narrows on the SERVER and the choice lands in the address.
      */
-    await page.getByTestId('content-providers-options').getByRole('option').first().click()
+    // The first PLATFORM chip — index 0 is «الكل», which clears rather than narrows. Picking by
+    // position rather than by name keeps this independent of which platforms the seed happens to
+    // hold, exactly as the old `.first()` option was.
+    await page.getByTestId('content-providers').getByRole('button').nth(1).click()
     await expect(page.getByTestId('content-applied')).toBeVisible({ timeout: 20000 })
-
-    /*
-     * Shut the popover before counting.
-     *
-     * `cards()` is `getByRole('article')`; anything that takes the page behind it out of the
-     * accessibility tree would return zero, and «0 ≤ all» would pass this test while proving
-     * nothing at all.
-     */
-    await page.keyboard.press('Escape')
-    await expect(page.getByRole('listbox')).toHaveCount(0)
 
     await expect.poll(() => cards(page).count(), { timeout: 20000 }).toBeLessThanOrEqual(all)
     await expect(page).toHaveURL(/providers/)
 
     await page.reload()
-    await expect(page.getByRole('heading', { name: /مكتبة المحتويات|Creative library/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /مكتبة الإعلانات|Ads library/ })).toBeVisible()
     await expect(page).toHaveURL(/providers/)
   })
 
@@ -140,7 +134,7 @@ test.describe('the creative library', () => {
 
     await expect.poll(() => cards(page).count(), { timeout: 20000 }).toBe(0)
     await expect(
-      page.getByText(/لا توجد محتويات تطابق هذا التحديد|No creatives match this selection/),
+      page.getByText(/لا توجد إعلانات تطابق هذا التحديد|No ads match this selection/),
     ).toBeVisible()
   })
 })

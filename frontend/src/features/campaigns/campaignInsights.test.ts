@@ -27,10 +27,45 @@ describe('objective-aware results', () => {
 })
 
 describe('needs-attention rules', () => {
-  it('reports a campaign with no linked platform campaign as unmeasurable', () => {
-    const flags = attentionFlags(campaign({ external_campaigns_count: 0 }), { spend: 100, conversions: 5 })
+  /**
+   * CAMP-UNLINKED-001 — the link and the data are two different facts.
+   *
+   * This test used to pass `spend: 100, conversions: 5` and assert «unmeasurable», which is what
+   * the rule said and the opposite of what those figures mean. It pinned the claim in place: a
+   * campaign showing 176 results and a 15.36× return was labelled unmeasurable in the same view
+   * that measured it.
+   */
+  it('reports a campaign with no link AND no figures as unmeasurable', () => {
+    const flags = attentionFlags(campaign({ external_campaigns_count: 0 }), { spend: 0, conversions: 0 })
+
     expect(flags.map((f) => f.code)).toContain('unlinked')
     expect(flags.find((f) => f.code === 'unlinked')?.severity).toBe('high')
+  })
+
+  it('does not call a campaign unmeasurable while its figures are on the screen', () => {
+    const flags = attentionFlags(campaign({ external_campaigns_count: 0 }), { spend: 100, conversions: 5 })
+    const codes = flags.map((f) => f.code)
+
+    expect(codes).not.toContain('unlinked')
+    expect(codes).toContain('unlinked_but_measured')
+
+    // A bookkeeping gap, not a data outage — so it must not shout like one.
+    expect(flags.find((f) => f.code === 'unlinked_but_measured')?.severity).toBe('medium')
+    expect(flags.find((f) => f.code === 'unlinked_but_measured')?.ar).not.toContain('لا يمكن قياس')
+  })
+
+  it('counts any reported metric as evidence the figures arrive, not spend alone', () => {
+    // An awareness campaign with impressions and no spend recorded is still being measured.
+    const codes = attentionFlags(campaign({ external_campaigns_count: 0 }), { impressions: 5000 }).map((f) => f.code)
+
+    expect(codes).toContain('unlinked_but_measured')
+  })
+
+  it('says nothing about linking when a campaign IS linked', () => {
+    const codes = attentionFlags(campaign({ external_campaigns_count: 2 }), { spend: 100, conversions: 5 }).map((f) => f.code)
+
+    expect(codes).not.toContain('unlinked')
+    expect(codes).not.toContain('unlinked_but_measured')
   })
 
   it('flags spend with zero results using the objective’s own result metric', () => {
@@ -47,8 +82,21 @@ describe('needs-attention rules', () => {
   })
 
   it('flags overspend against the planned budget and reports the percentage', () => {
-    const flag = attentionFlags(campaign({ total_budget: 1000 }), { spend: 1250, conversions: 9 }).find((f) => f.code === 'over_budget')
+    const flag = attentionFlags(campaign({ total_budget: 1000 }), { spend: 1250, conversions: 9 }, 'SAR').find((f) => f.code === 'over_budget')
     expect(flag?.ar).toContain('125%')
+  })
+
+  it('does NOT flag overspend when the reporting currency differs from the budget currency', () => {
+    // 5,000 USD reported (converted) against a 1,000 SAR budget — not a comparison anyone can make.
+    // Restored from #107: #110 inlined the state check without the currency check, so this fired.
+    const codes = attentionFlags(campaign({ total_budget: 1000, budget_currency: 'SAR' }), { spend: 5000, conversions: 9 }, 'USD').map((f) => f.code)
+    expect(codes).not.toContain('over_budget')
+  })
+
+  it('does NOT flag overspend when no reporting currency is known at all', () => {
+    // A converted figure whose unit nobody stated cannot be compared to a budget that named one.
+    const codes = attentionFlags(campaign({ total_budget: 1000, budget_currency: 'SAR' }), { spend: 5000, conversions: 9 }).map((f) => f.code)
+    expect(codes).not.toContain('over_budget')
   })
 
   it('says data is missing instead of pretending a campaign is healthy', () => {
@@ -59,9 +107,106 @@ describe('needs-attention rules', () => {
     expect(attentionFlags(campaign(), { spend: 400, conversions: 25 })).toEqual([])
   })
 
+  /**
+   * PARTIAL-WITHHELD-001 — a withheld spend is money spent, not «spent nothing» and not a budget check.
+   *
+   * The fixture is the shape that broke every rule at once: 1,000 converted in the reporting currency
+   * PLUS 500 USD the platform reported but no rate could convert. Read raw the aggregator coalesces the
+   * withheld half to 0 and the surface sees a spend of 1,000 (the subset) — or, on a fully-withheld
+   * scope, 0. The contract instead reads the withheld original, so `spend` is neither number.
+   */
+  const partialWithheld: Parameters<typeof attentionFlags>[1] = {
+    spend: 1000, conversions: 0,
+    spend_original: 500, spend_withheld_rows: 3,
+    money_original_currency: 'USD', money_original_currencies: 1,
+  }
+
+  it('does not call a campaign with withheld spend «active but spent nothing»', () => {
+    // Active + coalesced-0 used to fire active_no_spend over money the platform really spent.
+    const codes = attentionFlags(campaign({ status: 'active' }), {
+      spend: 0, conversions: 0,
+      spend_original: 500, spend_withheld_rows: 3,
+      money_original_currency: 'USD', money_original_currencies: 1,
+    }).map((f) => f.code)
+
+    expect(codes).not.toContain('active_no_spend')
+  })
+
+  it('still flags spend-with-no-results when the spend was withheld, not just when it converted', () => {
+    // The converted 1,000 is not what fires this — a fully-withheld spend with no results fires it too.
+    const codes = attentionFlags(campaign({ status: 'active' }), partialWithheld).map((f) => f.code)
+
+    expect(codes).toContain('spend_no_results')
+    expect(codes).not.toContain('active_no_spend')
+  })
+
+  it('flags a paused campaign whose only recorded spend is withheld', () => {
+    const codes = attentionFlags(campaign({ status: 'paused' }), {
+      conversions: 2,
+      spend_original: 500, spend_withheld_rows: 3,
+      money_original_currency: 'USD', money_original_currencies: 1,
+    }).map((f) => f.code)
+
+    expect(codes).toContain('paused_with_spend')
+  })
+
+  it('never draws over-budget from a withheld or partial spend', () => {
+    // budget 800, converted subset 1,000 would read as 125% over — but the spend is not a comparable
+    // figure, so the maths must not run against the plan at all.
+    const codes = attentionFlags(campaign({ total_budget: 800 }), partialWithheld).map((f) => f.code)
+
+    expect(codes).not.toContain('over_budget')
+  })
+
   it('ranks high-severity problems above a pile of minor ones', () => {
-    const high = attentionFlags(campaign({ external_campaigns_count: 0 }), { spend: 100, conversions: 4 })
+    /*
+      A campaign spending with nothing to show for it — high severity on its own merits.
+
+      This used to use an unlinked campaign carrying spend and conversions, which CAMP-UNLINKED-001
+      re-graded to medium: the figures arrive, only the mapping is missing. The ranking rule being
+      tested here is unchanged; the fixture just has to be a real high-severity case.
+    */
+    const high = attentionFlags(campaign({ external_campaigns_count: 3 }), { spend: 500, conversions: 0 })
     const minor = attentionFlags(campaign({ status: 'paused' }), { spend: 5, conversions: 1 })
     expect(attentionRank(high)).toBeGreaterThan(attentionRank(minor))
+  })
+})
+
+describe('PARTIAL-WITHHELD-001 — flags read money by provenance, not the coalesced 0', () => {
+  // Money the platform spent but no rate could convert: `spend` coalesces to 0, provenance says otherwise.
+  const withheld = { spend: 0, spend_withheld_rows: 4, spend_original: 500, money_original_currency: 'USD', money_original_currencies: 1, conversions: 0 }
+  // Some converted (1,000) beside some withheld (500 USD) — no single figure.
+  const partial = { spend: 1000, spend_withheld_rows: 4, spend_original: 500, money_original_currency: 'USD', money_original_currencies: 1, conversions: 5 }
+
+  it('a withheld spend is NOT «active but spent nothing»', () => {
+    const codes = attentionFlags(campaign({ status: 'active' }), withheld).map((f) => f.code)
+    expect(codes).not.toContain('active_no_spend')
+    // It DID spend and produced no results, so that flag (a presence question) still fires.
+    expect(codes).toContain('spend_no_results')
+  })
+
+  it('a genuine measured zero still flags «active but spent nothing»', () => {
+    const codes = attentionFlags(campaign({ status: 'active' }), { spend: 0, spend_withheld_rows: 0, conversions: 0 }).map((f) => f.code)
+    expect(codes).toContain('active_no_spend')
+  })
+
+  it('a withheld spend on a paused campaign flags «paused with spend»', () => {
+    const codes = attentionFlags(campaign({ status: 'paused' }), withheld).map((f) => f.code)
+    expect(codes).toContain('paused_with_spend')
+  })
+
+  it('over-budget never fires on a partial scope — the converted subset is not the spend', () => {
+    // 1,000 converted is below the 1,000 budget only by coincidence; the real spend is more, but it
+    // is not a single comparable figure, so no over-budget verdict may be issued.
+    const codes = attentionFlags(campaign({ total_budget: 900, budget_currency: 'SAR' }), partial).map((f) => f.code)
+    expect(codes).not.toContain('over_budget')
+  })
+
+  it('over-budget fires when a withheld spend in the budget currency exceeds it', () => {
+    const codes = attentionFlags(
+      campaign({ total_budget: 400, budget_currency: 'USD' }),
+      { spend: 0, spend_withheld_rows: 4, spend_original: 500, money_original_currency: 'USD', money_original_currencies: 1, conversions: 3 },
+    ).map((f) => f.code)
+    expect(codes).toContain('over_budget')
   })
 })

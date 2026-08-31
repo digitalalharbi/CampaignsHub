@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -22,7 +22,8 @@ import {
   useSummary,
   useTimeseries,
 } from '../analytics/hooks'
-import { DemoBadge, Panel, SERIES, tooltipProps } from '../analytics/components'
+import { useCampaignOptionSource } from '../analytics/useCampaignOptionSource'
+import { Panel, ProvenanceBadge, SERIES, tooltipProps } from '../analytics/components'
 import { compact, money, num, percent, ratio } from '../analytics/format'
 import { UnifiedCampaignOverview, providerName, type OverviewVM } from '@/features/campaigns/overview/UnifiedCampaignOverview'
 import { SavedViewsBar } from './SavedViewsBar'
@@ -30,15 +31,24 @@ import { useSavedViews, type SavedView } from './savedViews'
 import { dashboardMetrics } from '@/features/analytics/metricCatalog'
 import { dash, funnelStageLabel } from '@/features/analytics/metricLabels'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
+import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
+import { displaySpend, withheldCurrencyOf } from './platformMoney'
 import { MetricStrip } from '@/components/ui/MetricStrip'
+
+import { ConciseFindingLine } from './ConciseFindingLine'
 import { DataFreshness, PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
-import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
+import { days as countedDays } from '@/lib/counted'
+import { sortPlatforms } from '@/lib/platforms'
+import { useUrlList, useUrlNumber, useUrlState } from '@/features/analytics/filterUrlState'
 import { useProject } from '@/stores/project'
 import { listClientWorkspaces, listProjects } from '@/features/projects/api'
-import { MARKETING_PATH_KEYS, marketingPathLabel, objectiveLabel, objectivesForPath, pathOfObjective } from '@/features/campaigns/labels'
-import { CreativePulseSection } from '@/features/content/CreativePulseSection'
-import type { LibraryQuery } from '@/features/content/api'
+import {
+  CANONICAL_OBJECTIVE_KEYS,
+  canonicalObjectiveLabel,
+  rawObjectivesFor,
+  type CanonicalObjectiveKey,
+} from '@/features/campaigns/canonicalObjectives'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
 /**
@@ -50,37 +60,27 @@ import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
  */
 export const PLATFORM_KEYS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
 
-/**
- * The objectives this page has a layout for.
- *
- * Deliberately the six with a `OBJECTIVE_LAYOUTS` entry rather than all fourteen enum cases: an
- * objective with no layout falls through to the mixed operational set, which would put four generic
- * cards under a heading naming one specific objective — the reader would reasonably conclude those
- * four ARE that objective's metrics.
- */
-const OBJECTIVE_CHOICES = ['awareness', 'traffic', 'leads', 'sales', 'app_installs', 'engagement']
 
 const axis = { stroke: 'var(--text-muted)', fontSize: 12 }
 
 const COPY = {
   ar: {
     title: 'لوحة التحكم',
-    purpose: 'كل حملاتك الإعلانية المدفوعة عبر المنصات في مكان واحد — الإنفاق والنتائج والمحتوى، من مصدر بيانات واحد.',
+    purpose: 'كل حملاتك الإعلانية المدفوعة عبر المنصات في مكان واحد — الإنفاق والنتائج والإعلان، من مصدر بيانات واحد.',
     period: 'الفترة',
     client: 'العميل',
     project: 'المشروع',
     platform: 'المنصة',
     campaign: 'الحملة',
-    path: 'المسار التسويقي',
     objective: 'الهدف',
     allClients: 'كل العملاء',
-    allPaths: 'كل المسارات',
+    allPlatforms: 'الكل',
     allObjectives: 'كل الأهداف',
     noProject: 'لم يُختر مشروع',
     days7: '7 أيام',
     days30: '30 يوم',
     days90: '90 يوم',
-    previous: (n: number) => `الـ${n} يومًا السابقة`,
+    previous: (n: number) => `الـ${countedDays(n, 'ar')} السابقة`,
     mixedNote: 'أهداف مختلطة — تُعرض المؤشرات التشغيلية المشتركة فقط، بلا تكلفة نتيجة أو عائد مُجمَّع.',
     campaigns: 'الحملات',
     analytics: 'التحليلات',
@@ -100,22 +100,21 @@ const COPY = {
   },
   en: {
     title: 'Dashboard',
-    purpose: 'Every paid campaign you run, across every platform, in one place — spend, results and creative from a single source.',
+    purpose: 'Every paid campaign you run, across every platform, in one place — spend, results and ads from a single source.',
     period: 'Period',
     client: 'Client',
     project: 'Project',
     platform: 'Platform',
     campaign: 'Campaign',
-    path: 'Marketing path',
     objective: 'Objective',
     allClients: 'All clients',
-    allPaths: 'All paths',
+    allPlatforms: 'All',
     allObjectives: 'All objectives',
     noProject: 'No project selected',
     days7: '7 days',
     days30: '30 days',
     days90: '90 days',
-    previous: (n: number) => `the previous ${n} days`,
+    previous: (n: number) => `the previous ${countedDays(n, 'en')}`,
     mixedNote: 'Mixed objectives — shared operational figures only, with no blended cost per result or return.',
     campaigns: 'Campaigns',
     analytics: 'Analytics',
@@ -143,7 +142,7 @@ const COPY = {
  * This page opened with a `Customise` button: the objective, the platforms and the saved views all
  * lived in a dialog (SIMPLIFY-001). The reasoning was sound about the symptom — three bands of
  * chips above the fold is a settings screen — and wrong about the cure. Period, client, project,
- * platform, campaign, path and objective are not configuration; they are the questions this product
+ * platform, campaign and objective are not configuration; they are the questions this product
  * is FOR, and hiding them made the system look thinner than it is. They are inline now, in one
  * compact bar, with the applied ones as removable chips. Saved views stay behind `More filters`,
  * which is what that control is for: the rare thing, not the daily one.
@@ -170,13 +169,19 @@ export function DashboardPage() {
   const t = COPY[ar ? 'ar' : 'en']
   const { currentProjectId, setCurrentProjectId } = useProject()
 
-  const [days, setDays] = useState(30)
+  /*
+   * ANALYTICS-FILTER-TRUTH-001 — the filters live in the URL, so a refresh, Back and a shared link
+   * all show the same page. They were `useState` only: narrowing to one platform and one objective
+   * and then reloading gave the unfiltered page back, and the link a reader sent a colleague showed
+   * that colleague a different answer to the question they were discussing.
+   */
+  const [days, setDays] = useUrlNumber('days', 30)
   const range = useLastNDaysRange(days)
-  const [providers, setProviders] = useState<string[]>([])
-  const [campaignIds, setCampaignIds] = useState<string[]>([])
-  const [path, setPath] = useState('all')
-  const [objective, setObjective] = useState('all')
-  const [clientId, setClientId] = useState('all')
+  const [providers, setProviders] = useUrlList('provider')
+  const [campaignIds, setCampaignIds] = useUrlList('campaign')
+  const [objectiveRaw, setObjective] = useUrlState('objective', 'all')
+  const objective = objectiveRaw as CanonicalObjectiveKey | 'all'
+  const [clientId, setClientId] = useUrlState('client', 'all')
 
   // The workspace's own shelves — real records, so «Client» and «Project» are choices rather than
   // decoration. Failure is silent by design here: a filter that cannot load must not take the
@@ -200,43 +205,24 @@ export function DashboardPage() {
   }, [clientId, projects, currentProjectId, setCurrentProjectId])
 
   /**
-   * The objective filter actually sent.
+   * The objective filter actually sent — ANALYTICS-OBJECTIVE-SYSTEM-001.
    *
-   * A path is not a server axis — it is this path's objectives, on the objective filter the metrics
-   * API already supports (see `objectivesForPath`). So picking «التحويل والمبيعات» narrows every
-   * figure on the page exactly as picking its objectives one by one would.
+   * The canonical key is what the reader chose; the metrics API filters on RAW objectives, so it is
+   * expanded here. Sending the canonical key itself would leave every figure unscoped beneath a
+   * heading claiming otherwise — the frontend-only filtering ANALYTICS-FILTER-TRUTH-001 forbids.
    */
-  const objectiveFilter = useMemo(() => {
-    if (objective !== 'all') return [objective]
-
-    return path === 'all' ? [] : objectivesForPath(path)
-  }, [objective, path])
+  const objectiveFilter = useMemo(() => rawObjectivesFor(objective), [objective])
 
   const filters = useMemo(
     () => ({ provider: providers, objective: objectiveFilter, campaign: campaignIds }),
     [providers, objectiveFilter, campaignIds],
   )
 
-  /** The same selection in the creative library's vocabulary (§15.11) — canonical platform keys. */
-  const creativeFilters: LibraryQuery = useMemo(
-    () => ({
-      from: range.from,
-      to: range.to,
-      providers: providers.length > 0 ? providers.map(canonicalPlatform) : undefined,
-      objectives: objectiveFilter.length > 0 ? objectiveFilter : undefined,
-      campaign_ids: campaignIds.length > 0 ? campaignIds : undefined,
-      project_ids: currentProjectId ? [currentProjectId] : undefined,
-    }),
-    [range.from, range.to, providers, objectiveFilter, campaignIds, currentProjectId],
-  )
 
   // Saved views (DASH-010-E-FE): apply restores objective + platforms + date range.
   const savedViews = useSavedViews()
   const applyView = (v: SavedView) => {
-    if (v.filters?.objective) {
-      setObjective(v.filters.objective)
-      setPath(v.filters.objective === 'all' ? 'all' : pathOfObjective(v.filters.objective))
-    }
+    if (v.filters?.objective) setObjective(v.filters.objective as CanonicalObjectiveKey | 'all')
     if (v.filters?.provider) setProviders(v.filters.provider)
     if (v.date_range?.days) setDays(v.date_range.days)
   }
@@ -260,19 +246,18 @@ export function DashboardPage() {
   const freshness = useFreshness(currentProjectId, range, filters)
 
   /*
-   * The campaign OPTIONS come from an unnarrowed request.
+   * The campaign OPTIONS come from the server's option endpoint, unnarrowed.
    *
    * Reading them off `campaigns` would collapse the list to the one campaign already chosen, and a
-   * multi-select you cannot add a second value to is a single-select that lies about it.
+   * multi-select you cannot add a second value to is a single-select that lies about it. The
+   * endpoint is also unwindowed by the period, so a campaign that reported nothing this month is
+   * still selectable — which is the point, since its silence is what the reader is investigating.
    */
-  const campaignOptions = useCampaigns(currentProjectId, range, useMemo(
-    () => ({ provider: providers, objective: objectiveFilter }),
-    [providers, objectiveFilter],
-  ))
+  const campaignSource = useCampaignOptionSource(currentProjectId, campaignIds)
 
   const commerce = summary.data?.commerce ?? null
   const points = series.data ?? []
-  const metrics = useMemo(() => dashboardMetrics(objective, path, summary.data, ar), [objective, path, summary.data, ar])
+  const metrics = useMemo(() => dashboardMetrics(objective, summary.data, ar), [objective, summary.data, ar])
 
   const alerts = useMemo(() => {
     const out: { kind: 'sync' | 'budget' | 'performance'; text: string }[] = []
@@ -297,20 +282,63 @@ export function DashboardPage() {
    * `kpis` is empty on purpose: the objective-aware `MetricStrip` above owns the KPI row now, and
    * two rows of headline figures on one page is two answers to the same question.
    */
+  /*
+   * DASH-PLATFORM-MONEY-001 — three hardcoded values, all three visibly wrong on a live project.
+   *
+   * The summary card read «4,768.84 USD» and the platform comparison directly beneath it read
+   * «0 SAR», with an empty spend donut and a flat spend/revenue chart. One project, one window, two
+   * answers — and the reader has no way to know which to believe.
+   *
+   *   currency: 'SAR'   — this account reports in USD. The label was a guess, and it was wrong.
+   *   dataStatus: 'demo' — stamped «معاينة توضيحية ببيانات تجريبية» across a project holding 1,956
+   *                        live rows and zero demo rows. `ANALYTICS-PROVENANCE-001` made this badge
+   *                        derive from the data everywhere else; this call site never got the memo.
+   *   spend: p.spend    — the coalesced 0. `PlatformRow` extends `MoneyProvenance` and the backend
+   *                        has been sending `spend_original`, `spend_withheld_rows` and
+   *                        `money_original_currency` per provider all along. The view model dropped
+   *                        them on the floor.
+   *
+   * FX-001 withholds a converted figure when no rate exists rather than inventing one, so `spend` is
+   * legitimately 0 here. What was NOT legitimate was rendering that 0 under a currency this account
+   * does not report in, beside a card showing the true amount.
+   */
+  const platformRows = platforms.data ?? []
+
+  /*
+   * The currency the comparison is actually denominated in.
+   *
+   * When every row is withheld in one currency, that currency IS the figure's currency — and it is
+   * what the summary card above already prints. A mixture of originals has no single name, so the
+   * project's own currency stays and each withheld row falls back to «—» rather than being summed
+   * under a label that fits none of them.
+   */
+  const withheldCurrency = useMemo(() => withheldCurrencyOf(platformRows), [platformRows])
+
   const vm: OverviewVM = useMemo(
     () => ({
-      currency: 'SAR',
-      dataStatus: 'demo',
+      currency: withheldCurrency ?? summary.data?.currency ?? 'SAR',
+      /*
+       * Derived, like every other surface. `provenance.source` is `live` when the rows are the
+       * customer's own, and a live project carries no warning — which is the whole point of the
+       * badge existing.
+       */
+      /*
+       * `DataStatus` has three cases — demo, live, stale — and «mixed» is not one of them. A project
+       * holding demo rows BESIDE real ones must still carry the warning, because the totals add them
+       * together, so mixed maps to `demo` rather than being widened with a cast. A cast here would
+       * have put a value through the type that the badge has no branch for.
+       */
+      dataStatus: summary.data?.provenance?.source === 'live' ? 'live' : 'demo',
       lastSyncAt: lastSync ?? null,
       kpis: [],
-      platforms: (platforms.data ?? []).map((p) => ({
+      platforms: platformRows.map((p) => ({
         key: p.provider,
         name: p.provider,
-        spend: p.spend,
+        spend: displaySpend(p),
         results: 0,
         roas: p.roas ?? null,
       })),
-      spend: (platforms.data ?? []).map((p) => ({ name: p.provider, value: p.spend })),
+      spend: platformRows.map((p) => ({ name: p.provider, value: displaySpend(p) })),
       topCampaigns: (campaigns.data ?? []).slice(0, 6).map((c) => ({
         id: String(c.campaign_id),
         name: c.campaign_name ?? '—',
@@ -353,35 +381,28 @@ export function DashboardPage() {
       out.push({
         key: `campaign:${id}`,
         axis: t.campaign,
-        label: campaignOptions.data?.find((c) => String(c.campaign_id) === id)?.campaign_name ?? id,
+        label: campaignSource.labelOf(id),
         onRemove: () => setCampaignIds((prev) => prev.filter((x) => x !== id)),
       })
     })
-    if (path !== 'all') {
-      out.push({ key: `path:${path}`, axis: t.path, label: marketingPathLabel(path, ar ? 'ar' : 'en'), onRemove: () => setPath('all') })
-    }
     if (objective !== 'all') {
       out.push({
         key: `objective:${objective}`,
         axis: t.objective,
-        label: objectiveLabel(objective, ar ? 'ar' : 'en'),
+        label: canonicalObjectiveLabel(objective, ar ? 'ar' : 'en'),
         onRemove: () => setObjective('all'),
       })
     }
 
     return out
-  }, [clientId, clients, providers, campaignIds, campaignOptions.data, path, objective, t, ar])
+  }, [clientId, clients, providers, campaignIds, campaignSource, objective, t, ar])
 
   const resetFilters = () => {
     setClientId('all')
     setProviders([])
     setCampaignIds([])
-    setPath('all')
     setObjective('all')
   }
-
-  // The objectives that belong to the chosen path — so the two controls cannot contradict.
-  const objectiveChoices = OBJECTIVE_CHOICES.filter((key) => path === 'all' || pathOfObjective(key) === path)
 
   return (
     <div className="space-y-5">
@@ -389,7 +410,7 @@ export function DashboardPage() {
         testid="dashboard-intro"
         title={t.title}
         purpose={t.purpose}
-        badges={<DemoBadge />}
+        badges={<ProvenanceBadge provenance={summary.data?.provenance} />}
         meta={<DataFreshness lastSyncAt={lastSync} ar={ar} />}
         actions={
           <>
@@ -463,9 +484,14 @@ export function DashboardPage() {
           onChange={setCurrentProjectId}
         />
 
-        <FilterMulti
+        {/*
+          UX-FILTERS-001 — six platforms are not a long enough list to hide behind a click.
+          The chips carry the same colours the charts below use, so switching one off and watching
+          its arc leave the donut is one recognisable action rather than two unrelated ones.
+        */}
+        <FilterPlatforms
           label={t.platform}
-          ar={ar}
+          allLabel={t.allPlatforms}
           values={providers}
           testid="dashboard-platform"
           options={PLATFORM_KEYS.map((key) => ({ value: key, label: providerName(key) }))}
@@ -477,27 +503,9 @@ export function DashboardPage() {
           ar={ar}
           values={campaignIds}
           testid="dashboard-campaign"
-          options={(campaignOptions.data ?? []).map((c) => ({
-            value: String(c.campaign_id),
-            label: c.campaign_name ?? String(c.campaign_id),
-          }))}
+          options={campaignSource.options}
+          search={campaignSource.search}
           onChange={setCampaignIds}
-        />
-
-        <FilterSelect
-          label={t.path}
-          value={path}
-          testid="dashboard-path"
-          options={[
-            { value: 'all', label: t.allPaths },
-            ...MARKETING_PATH_KEYS.map((key) => ({ value: key, label: marketingPathLabel(key, ar ? 'ar' : 'en') })),
-          ]}
-          onChange={(v) => {
-            setPath(v)
-            // An objective outside the new path would make the two controls disagree, and the
-            // objective is the narrower of the two — so it yields.
-            if (v !== 'all' && objective !== 'all' && pathOfObjective(objective) !== v) setObjective('all')
-          }}
         />
 
         <FilterSelect
@@ -506,20 +514,74 @@ export function DashboardPage() {
           testid="dashboard-objective"
           options={[
             { value: 'all', label: t.allObjectives },
-            ...objectiveChoices.map((key) => ({ value: key, label: objectiveLabel(key, ar ? 'ar' : 'en') })),
+            ...CANONICAL_OBJECTIVE_KEYS.map((key) => ({ value: key, label: canonicalObjectiveLabel(key, ar ? 'ar' : 'en') })),
           ]}
-          onChange={setObjective}
+          onChange={(v) => setObjective(v as CanonicalObjectiveKey | 'all')}
         />
       </FilterBar>
 
+      {/*
+        ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — one line, from the SAME engine the panel reads.
+        A second, smaller rule set for the headline would eventually disagree with the panel one
+        click away, and the reader could not tell which was lying. This chooses; it does not reason.
+      */}
+      <ConciseFindingLine
+        objective={objective}
+        totals={summary.data?.current as Record<string, number | null | undefined> | undefined}
+        reported={summary.data?.reported}
+        rowsInScope={summary.data?.rows_in_scope}
+        pending={summary.isPending || summary.isError}
+        ar={ar}
+      />
       <MetricStrip
         id="dashboard"
         ar={ar}
         primary={metrics.primary}
         secondary={metrics.secondary}
         comparisonLabel={t.previous(days)}
-        note={objective === 'all' && path === 'all' ? t.mixedNote : undefined}
+        note={objective === 'all' ? t.mixedNote : undefined}
+        /*
+          METRICS-EMPTY-SCOPE-001 — a filter that matches nothing says so ONCE, about the filter.
+          Without this every card reads its absence from `reported`, which over an empty scope
+          answers every key false — so narrowing to an objective this project never bought made the
+          dashboard claim the platform sends no impressions.
+        */
+        hasRows={summary.data === undefined ? undefined : summary.data.rows_in_scope}
+        /*
+          METRICS-REQUEST-STATE-001 — and a request that failed or has not answered says so.
+
+          `data` is undefined for a failure and for a load alike, so without these the row rendered with
+          nothing to read and every card printed «لا توجد بيانات» — a confident statement about this
+          account's advertising, made by a request that never came back.
+        */
+        loading={summary.isPending}
+        error={summary.isError ? summary.error : undefined}
+        onRetry={() => void summary.refetch()}
       />
+
+      {/*
+        DASH-ORDER-001 — the answer first, the working underneath.
+        
+        The page used to open on a day-by-day trend chart and a funnel, and put «which platform, which
+        campaign, where the money went» below them. That is the order the data was BUILT in, not the
+        order it is read in: an operator opening this page is asking which campaign is winning and
+        where the spend went, and was made to scroll past two charts explaining a shape they had not
+        been given yet.
+        
+        The comparisons now sit directly under the KPI row — platform bars, the spend donut and the
+        campaign table in one band — and the trend and funnel follow as the working behind them.
+      */}
+      {/* The comparisons, the details and the alerts — shared with the marketing preview. */}
+      <UnifiedCampaignOverview
+        vm={vm}
+        lang={ar ? 'ar' : 'en'}
+        headerRight={
+          <Link to="/app/analytics" className="inline-flex items-center gap-1 font-semibold text-text-secondary hover:text-text-primary">
+            {t.analytics} <ArrowUpRight size={14} aria-hidden />
+          </Link>
+        }
+      />
+
 
       {/* The analysis: what happened day by day, and where people stopped. */}
       <div className="grid gap-4 lg:grid-cols-3">
@@ -592,7 +654,24 @@ export function DashboardPage() {
                       {t.unreported}
                     </div>
                   )}
-                  <span className="tnum w-12 text-end text-xs text-text-muted">{s.step_rate === null ? '' : percent(s.step_rate, 0)}</span>
+                  {/*
+                    FUNNEL-NOT-NESTED-001 — a step over 100% is flagged, not printed as a conversion.
+
+                    3,048 checkouts against 1,806 add-to-carts is 166%, and a funnel that widens is
+                    telling the reader these two events do not nest — not that 166% of people
+                    converted. The figure stays visible because it is real; the «▲» and the tooltip
+                    say why it is not a drop-off.
+                  */}
+                  <span
+                    className={`tnum w-12 text-end text-xs ${s.exceeds_previous ? 'text-warning' : 'text-text-muted'}`}
+                    title={s.exceeds_previous
+                      ? (ar
+                          ? 'هذه المرحلة أكبر من التي فوقها — الحدثان لا يتداخلان (شراء مباشر، أو نافذة إسناد مختلفة).'
+                          : 'This stage counted more than the one above it — the two events do not nest (buy-now flows, or a different attribution window).')
+                      : undefined}
+                  >
+                    {s.step_rate === null ? '' : `${s.exceeds_previous ? '▲ ' : ''}${percent(s.step_rate, 0)}`}
+                  </span>
                 </div>
                 )
               })
@@ -600,17 +679,6 @@ export function DashboardPage() {
           </div>
         </Panel>
       </div>
-
-      {/* The comparisons, the details and the alerts — shared with the marketing preview. */}
-      <UnifiedCampaignOverview
-        vm={vm}
-        lang={ar ? 'ar' : 'en'}
-        headerRight={
-          <Link to="/app/analytics" className="inline-flex items-center gap-1 font-semibold text-text-secondary hover:text-text-primary">
-            {t.analytics} <ArrowUpRight size={14} aria-hidden />
-          </Link>
-        }
-      />
 
       {/*
         UNIFIED-001 — the connected store, from the funnel's own service.
@@ -687,12 +755,37 @@ export function DashboardPage() {
         </div>
       )}
 
-      {/* §15.11 — the creative section, on this page's own filters, linking into the library. */}
-      <CreativePulseSection
-        libraryPath="/app/content"
-        axes={['clients', 'kinds']}
-        filters={creativeFilters}
-      />
+      {/*
+        DASH-CLUTTER-001 — an entire creative analysis lived here, and it was 62% of the page.
+        
+        «تحليل المحتوى الإعلاني» carried best image, best video, what the numbers say, fastest
+        growing, declining, fatigue, spend by content type and images-vs-video. The dashboard ran to
+        3,648px — three and a half screens — and everything below the first 1,375 of them was this
+        one section.
+        
+        All of it already exists twice over: the Content library IS that analysis, and Analytics has
+        a Creative tab reading the same rows. Three places answering one question is the clutter the
+        owner keeps asking to be rid of, and the cost fell on the surface that is supposed to answer
+        «how are we doing» at a glance.
+        
+        Nothing is lost — the link goes to the section that owns it, carrying nothing but the reader.
+      */}
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-bold text-text-primary">{ar ? 'أداء الإعلانات' : 'Ad performance'}</h2>
+          <p className="mt-0.5 text-xs text-text-secondary">
+            {ar
+              ? 'أفضل الصور والفيديوهات، الإجهاد، والاتجاهات — في مكتبة الإعلان.'
+              : 'Best images and videos, fatigue and trends — in the content library.'}
+          </p>
+        </div>
+        <Link
+          to="/app/content"
+          className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-brand-300 hover:text-text-primary"
+        >
+          {ar ? 'افتح الإعلانات' : 'Open ads'} <ArrowUpRight size={13} aria-hidden />
+        </Link>
+      </div>
 
       <LivePerformanceNotice variant="compact" />
     </div>

@@ -65,7 +65,13 @@ final class NotificationPreferenceController extends Controller
      * same question — «what may reach my inbox on its own?» — and a row written before it existed
      * has no `alerts` key, which reads as «never asked» exactly as it should.
      */
-    private const DIGESTS = ['daily', 'weekly', 'alerts'];
+    /*
+     * EMAIL-INTELLIGENCE-001 — `monthly` joins the rhythms a recipient can choose.
+     *
+     * Ordered by period so the settings list reads as a scale rather than an arbitrary set. `alerts`
+     * stays last because it is not a period at all — it is «mail me findings as they happen».
+     */
+    private const DIGESTS = ['daily', 'weekly', 'monthly', 'alerts'];
 
     public function __construct(
         private readonly NotificationChoices $choices,
@@ -88,7 +94,9 @@ final class NotificationPreferenceController extends Controller
             'frequency' => $row->frequency ?? 'realtime',
             'project_ids' => $row->project_ids,
             'available_categories' => self::LEGACY_CATEGORIES,
-            'digests' => ($row->digests ?? []) + ['daily' => false, 'weekly' => false, 'alerts' => false],
+            // `recommendations` defaults false beside the rest: a row stored before the setting
+            // existed has no key, and an absent preference is not consent.
+            'digests' => ($row->digests ?? []) + ['daily' => false, 'weekly' => false, 'alerts' => false, 'recommendations' => false],
             'available_digests' => self::DIGESTS,
             // The reader's own clock and language, which is what makes «daily» mean their morning.
             'timezone' => $row->timezone ?? 'Asia/Riyadh',
@@ -128,6 +136,14 @@ final class NotificationPreferenceController extends Controller
             'digests.daily' => ['boolean'],
             'digests.weekly' => ['boolean'],
             'digests.alerts' => ['boolean'],
+            /*
+             * EMAIL-SETTINGS-DEPTH-001 — whether this person's digest carries approved recommendations.
+             *
+             * Validated explicitly rather than riding along inside the `digests` array, so an unknown
+             * key cannot be stored by a client that guessed at the shape, and so this one is written
+             * only when it actually arrives.
+             */
+            'digests.recommendations' => ['boolean'],
             /*
              * The timezone is validated against PHP's OWN list rather than a regex.
              *

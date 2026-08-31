@@ -24,7 +24,17 @@ final class LeadController extends Controller
     {
         abort_unless($request->user()->hasPermission('leads.view'), 403);
 
-        $query = Lead::query()->latest();
+        /*
+         * LEAD-DEDUP-001 — «received» and «unique» are DIFFERENT figures, and both are reported.
+         *
+         * A duplicate is never deleted and never hidden by default: the same person arriving twice
+         * is a fact about the campaign that produced them, and a list that quietly showed one row
+         * would be answering a question nobody asked while losing the provenance of the other
+         * arrival. So the rows are all here, `unique=1` narrows to the canonicals, and the counts
+         * for BOTH are always in the response — a reader who sees 412 leads should be able to find
+         * out, without changing anything, that 389 of them are people.
+         */
+        $query = Lead::query()->latest()->withCount('duplicates');
 
         if ($status = $request->string('status')->toString()) {
             $query->where('status', $status);
@@ -40,6 +50,20 @@ final class LeadController extends Controller
             });
         }
 
+        /*
+         * The counts are taken BEFORE the unique filter narrows the query, and both from the same
+         * builder, so they describe one scope. Counting «received» over an unfiltered table would
+         * report a number that disagrees with the list beside it the moment a status or a search is
+         * applied — two figures on one screen that cannot both be about what the reader is looking
+         * at.
+         */
+        $received = (clone $query)->toBase()->getCountForPagination();
+        $unique = (clone $query)->whereNull('canonical_lead_id')->toBase()->getCountForPagination();
+
+        if ($request->boolean('unique')) {
+            $query->whereNull('canonical_lead_id');
+        }
+
         $perPage = min(max((int) $request->integer('per_page', 15), 1), 100);
         $leads = $query->paginate($perPage)->withQueryString();
 
@@ -53,6 +77,13 @@ final class LeadController extends Controller
                     'current_page' => $leads->currentPage(),
                     'last_page' => $leads->lastPage(),
                 ],
+                /*
+                 * Named for what they are. `received` is arrivals; `unique` is people. A single
+                 * «total» would have to be one of them, and whichever it was would be wrong for the
+                 * other question — under-reporting the campaign's volume or over-reporting its
+                 * audience, with nothing on screen to say which.
+                 */
+                'counts' => ['received' => $received, 'unique' => $unique],
             ],
         );
     }

@@ -5,6 +5,7 @@ import { listStoreProviders, startStoreOAuth, syncStore, type StoreProvider, typ
 import { listClientWorkspaces } from '@/features/projects/api'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { ProviderErrorNote } from '@/features/integrations/ProviderErrorNote'
 import { Card, CardDescription, CardTitle } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
@@ -88,7 +89,13 @@ function StoreCard({ store, provider, ar, onSync, syncing }: {
 
       <p className="mt-2 text-[11px] text-text-muted">
         {ar ? 'آخر مزامنة' : 'Last sync'}: <span className="tnum">{stamp(store.last_synced_at, ar)}</span>
-        {store.last_run?.status === 'partial' && store.last_run.error && (
+        {store.last_run?.status === 'no_data' && (
+          /* Not an error and not amber: the shop simply had nothing in the window we asked about. */
+          <span data-testid="store-no-data" className="block text-text-muted">
+            {ar ? 'لا توجد بيانات للفترة المطلوبة.' : 'No data for the requested period.'}
+          </span>
+        )}
+        {store.last_run?.status === 'partial_mapping' && store.last_run.error && (
           <span data-testid="store-partial" className="block text-warning">{store.last_run.error}</span>
         )}
         {store.last_run?.status === 'failed' && store.last_run.error && (
@@ -139,7 +146,7 @@ export function StoresPanel() {
   return (
     <section className="space-y-4" data-testid="stores-panel">
       <div>
-        <h2 className="font-[var(--font-heading)] text-lg font-extrabold">
+        <h2 className="font-[var(--font-heading)] text-lg font-extrabold" data-testid="stores-heading">
           {ar ? 'المتاجر' : 'Stores'}
         </h2>
         <p className="mt-1 text-sm text-text-secondary">
@@ -177,13 +184,24 @@ export function StoresPanel() {
           const needsOperator = NEEDS_OPERATOR.includes(provider.state)
 
           return (
-            <Card key={provider.key} className="space-y-3">
+            /*
+              `store-card` and `data-platform` name this as THE card for this store — the one the
+              integrations page used to draw twice. `integrations.spec.ts` counts them to hold
+              INTEG-STORES-001: the two stores complete the eight sources, in their own section.
+            */
+            <Card key={provider.key} className="space-y-3" data-testid="store-card" data-platform={provider.key}>
               <div data-testid={`store-provider-${provider.key}`} className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Store size={16} className="text-text-muted" />
+                <div className="flex min-w-0 items-center gap-2">
+                  <Store size={16} className="shrink-0 text-text-muted" />
                   <CardTitle>{ar ? (LABEL_AR[provider.key] ?? provider.label) : provider.label}</CardTitle>
                 </div>
-                <Badge tone={meta.tone}>{ar ? meta.ar : meta.en}</Badge>
+                <Badge
+                  tone={meta.tone}
+                  data-testid={`store-state-${provider.key}`}
+                  className="shrink-0 self-start whitespace-nowrap"
+                >
+                  {ar ? meta.ar : meta.en}
+                </Badge>
               </div>
 
               {needsOperator ? (
@@ -203,7 +221,13 @@ export function StoresPanel() {
               ) : (
                 <>
                   {provider.state === 'error' && provider.connection_error && (
-                    <p data-testid={`store-error-${provider.key}`} className="text-sm text-danger">{provider.connection_error}</p>
+                    <div className="text-sm">
+                      <ProviderErrorNote
+                        error={provider.connection_error}
+                        locale={ar ? 'ar' : 'en'}
+                        testId={`store-error-${provider.key}`}
+                      />
+                    </div>
                   )}
 
                   {provider.stores.length === 0 ? (

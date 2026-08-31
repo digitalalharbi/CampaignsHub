@@ -7,6 +7,7 @@ namespace App\Domains\Reports\Http\Controllers;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ShareService;
@@ -15,6 +16,7 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * LIVEREP-002 — build a live client link from a CHOICE, not from a document.
@@ -54,6 +56,26 @@ final class LiveReportBuilderController extends Controller
     {
         abort_unless($request->user()?->hasPermission('reports.share'), 403);
 
+        /*
+         * REPORT-SCOPE-SELECTION-001 — reportability is lifecycle AND PERIOD, never `status === active`.
+         *
+         * A builder that offered only today's active campaigns would silently drop, from a report
+         * about last July, every campaign that ran through the whole of last July and has since
+         * finished — and nothing in the output would say a campaign had been left out. The
+         * requirement says this in as many words, so the answer is a fact about the WINDOW rather
+         * than a status read today.
+         *
+         * `last_active_on` is the most recent day inside the requested window on which the campaign
+         * reported a POSITIVE figure — the same rule, and the same reason, as the campaign breakdown:
+         * a campaign dark all month still has a row for every day of it, and reading those as
+         * activity would present it as live.
+         *
+         * With no window asked for, no claim is made. `null` there means «not asked», exactly as it
+         * means «did not run» within a window — and in both cases the picker's honest move is to list
+         * the campaign rather than hide it.
+         */
+        $activity = $this->activityWithin($project, $request);
+
         $campaigns = UnifiedCampaign::query()
             ->where('project_id', $project)
             ->orderBy('name')
@@ -62,6 +84,7 @@ final class LiveReportBuilderController extends Controller
                 'id' => (string) $c->id,
                 'name' => (string) ($c->client_display_name ?: $c->name),
                 'status' => $c->status,
+                'last_active_on' => $activity[(string) $c->id] ?? null,
             ])->all();
 
         /*
@@ -84,6 +107,45 @@ final class LiveReportBuilderController extends Controller
             'providers' => $providers,
             'metrics' => self::METRICS,
         ], 'Builder options.');
+    }
+
+    /**
+     * The last day each campaign actually did something inside the requested window.
+     *
+     * One aggregate for the whole project rather than a query per campaign: a 200-campaign project
+     * is exactly the case this requirement is about, and a picker that issues 200 queries to decide
+     * how to group them has solved the wrong problem.
+     *
+     * @return array<string, string> campaign id → date
+     */
+    private function activityWithin(string $project, Request $request): array
+    {
+        $from = $request->query('from');
+        $to = $request->query('to');
+        if (! is_string($from) || ! is_string($to) || $from === '' || $to === '') {
+            return [];
+        }
+
+        /*
+         * The query builder rather than the model: this returns aggregate rows, not `DailyMetric`
+         * records, and typing them as the model is what PHPStan objected to — correctly, since
+         * `last_active_on` is not a column on it.
+         */
+        return DB::table('daily_metrics')
+            ->where('project_id', $project)
+            ->whereNotNull('unified_campaign_id')
+            ->whereBetween('metric_date', [
+                Carbon::parse($from)->toDateString(),
+                Carbon::parse($to)->toDateString(),
+            ])
+            ->where('value', '>', 0)
+            ->groupBy('unified_campaign_id')
+            ->selectRaw('unified_campaign_id, MAX(metric_date) AS last_active_on')
+            ->get()
+            ->mapWithKeys(fn ($r): array => [
+                (string) $r->unified_campaign_id => Carbon::parse((string) $r->last_active_on)->toDateString(),
+            ])
+            ->all();
     }
 
     /**
@@ -163,7 +225,7 @@ final class LiveReportBuilderController extends Controller
             'status' => 'completed',
             'period_start' => $data['from'],
             'period_end' => $data['to'],
-            'currency' => 'SAR',
+            'currency' => ReportingCurrency::DEFAULT,
             'created_by' => $request->user()->id,
             'generated_at' => Carbon::now(),
             /*

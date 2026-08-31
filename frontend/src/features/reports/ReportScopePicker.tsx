@@ -44,7 +44,7 @@ const COPY = {
     campaigns: 'الحملات',
     adSets: 'المجموعات الإعلانية',
     ads: 'الإعلانات',
-    creatives: 'المحتويات',
+    creatives: 'الإعلانات',
     objectives: 'الأهداف',
     paths: 'المسارات التسويقية',
     metrics: 'المؤشرات المعروضة',
@@ -53,7 +53,7 @@ const COPY = {
     none: 'لا توجد خيارات لهذا المشروع بعد.',
     loadError: 'تعذّر تحميل خيارات النطاق.',
     grainCampaign: 'لا تُخزَّن مؤشرات على هذا المستوى — الاختيار يضيّق الحملات التابعة له.',
-    grainCreatives: 'يضيّق قسم المحتويات وحده؛ إجماليات الحملات تبقى على مستوى الحملة.',
+    grainCreatives: 'يضيّق قسم الإعلانات وحده؛ إجماليات الحملات تبقى على مستوى الحملة.',
     templates: 'نطاقات محفوظة',
     saveTemplate: 'حفظ هذا النطاق',
     templateName: 'اسم النطاق',
@@ -72,7 +72,7 @@ const COPY = {
     campaigns: 'Campaigns',
     adSets: 'Ad sets',
     ads: 'Ads',
-    creatives: 'Creatives',
+    creatives: 'Ads',
     objectives: 'Objectives',
     paths: 'Marketing paths',
     metrics: 'Metrics shown',
@@ -81,7 +81,7 @@ const COPY = {
     none: 'No options for this project yet.',
     loadError: 'The scope options could not be loaded.',
     grainCampaign: 'No metrics are stored at this level — the choice narrows the campaigns behind it.',
-    grainCreatives: 'Narrows the creative section only; campaign totals stay at campaign grain.',
+    grainCreatives: 'Narrows the ad section only; campaign totals stay at campaign grain.',
     templates: 'Saved scopes',
     saveTemplate: 'Save this scope',
     templateName: 'Scope name',
@@ -176,6 +176,7 @@ export function ReportScopePicker({
         items={o.providers.map((p) => ({ id: p, label: p }))}
         selected={value.providers ?? []}
         onToggle={(id) => toggle('providers', id)}
+        ar={ar}
         t={t}
       />
 
@@ -184,14 +185,18 @@ export function ReportScopePicker({
         items={o.accounts.map((a) => ({ id: a.id, label: `${a.name} · ${a.provider}` }))}
         selected={value.account_ids ?? []}
         onToggle={(id) => toggle('account_ids', id)}
+        ar={ar}
         t={t}
       />
 
       <Chips
         label={t.campaigns}
+        truncated={o.truncated?.campaigns}
+        limit={o.limit}
         items={o.campaigns.map((c) => ({ id: c.id, label: c.name }))}
         selected={value.campaign_ids ?? []}
         onToggle={(id) => toggle('campaign_ids', id)}
+        ar={ar}
         t={t}
       />
 
@@ -200,6 +205,7 @@ export function ReportScopePicker({
         items={o.paths.map((p) => ({ id: p.key, label: ar ? p.labels.ar : p.labels.en }))}
         selected={value.paths ?? []}
         onToggle={(id) => toggle('paths', id)}
+        ar={ar}
         t={t}
       />
 
@@ -208,16 +214,20 @@ export function ReportScopePicker({
         items={o.objectives.map((x) => ({ id: x.key, label: ar ? x.labels.ar : x.labels.en }))}
         selected={value.objectives ?? []}
         onToggle={(id) => toggle('objectives', id)}
+        ar={ar}
         t={t}
       />
 
       {o.ad_sets.length > 0 && (
         <Chips
           label={t.adSets}
+        truncated={o.truncated?.ad_sets}
+        limit={o.limit}
           note={t.grainCampaign}
           items={o.ad_sets.map((s) => ({ id: s.id, label: s.name }))}
           selected={value.ad_set_ids ?? []}
           onToggle={(id) => toggle('ad_set_ids', id)}
+          ar={ar}
           t={t}
         />
       )}
@@ -225,10 +235,13 @@ export function ReportScopePicker({
       {o.ads.length > 0 && (
         <Chips
           label={t.ads}
+        truncated={o.truncated?.ads}
+        limit={o.limit}
           note={t.grainCampaign}
           items={o.ads.map((a) => ({ id: a.id, label: a.name }))}
           selected={value.ad_ids ?? []}
           onToggle={(id) => toggle('ad_ids', id)}
+          ar={ar}
           t={t}
         />
       )}
@@ -236,10 +249,13 @@ export function ReportScopePicker({
       {o.creatives.length > 0 && (
         <Chips
           label={t.creatives}
+        truncated={o.truncated?.creatives}
+        limit={o.limit}
           note={t.grainCreatives}
           items={o.creatives.map((c) => ({ id: c.id, label: c.name }))}
           selected={value.creative_ids ?? []}
           onToggle={(id) => toggle('creative_ids', id)}
+          ar={ar}
           t={t}
         />
       )}
@@ -249,6 +265,7 @@ export function ReportScopePicker({
         items={o.metrics.map((m) => ({ id: m.key, label: ar ? m.ar : m.en }))}
         selected={value.metrics ?? []}
         onToggle={(id) => toggle('metrics', id)}
+        ar={ar}
         t={t}
       />
 
@@ -309,6 +326,9 @@ function Chips({
   items,
   selected,
   onToggle,
+  truncated,
+  limit,
+  ar,
   t,
 }: {
   label: string
@@ -316,6 +336,16 @@ function Chips({
   items: Array<{ id: string; label: string }>
   selected: string[]
   onToggle: (id: string) => void
+  /**
+   * The server reached its cap on this axis and there are more.
+   *
+   * Said where the choice is made rather than at the top of the form, because that is where an
+   * operator concludes their campaign does not exist. Undefined means the server did not say — which
+   * is not the same as «nothing was truncated», and is rendered as nothing rather than as a promise.
+   */
+  truncated?: boolean
+  limit?: number
+  ar: boolean
   t: typeof COPY.ar
 }) {
   if (items.length === 0) return null
@@ -334,6 +364,18 @@ function Chips({
       {note && (
         <p className="mb-1.5 flex items-start gap-1 text-[10px] text-text-muted">
           <Info size={11} className="mt-px shrink-0" /> {note}
+        </p>
+      )}
+
+      {truncated === true && (
+        <p
+          data-testid={`scope-truncated-${label}`}
+          className="mb-1.5 flex items-start gap-1 text-[10px] font-semibold text-warning"
+        >
+          <Info size={11} className="mt-px shrink-0" />
+          {ar
+            ? `يُعرض ${limit ?? items.length} فقط — استخدم البحث أو ضيّق النطاق للوصول إلى البقية`
+            : `Showing ${limit ?? items.length} only — narrow the scope to reach the rest`}
         </p>
       )}
 

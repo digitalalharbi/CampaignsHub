@@ -88,7 +88,6 @@ const member = (over: Partial<CreativeCard> = {}): CreativeCard =>
     campaign_id: 'cmp-1',
     campaign_name: 'Sale',
     ad_set_id: null,
-    ad_id: null,
     preview: {
       state: 'available',
       kind: 'video',
@@ -118,6 +117,7 @@ const member = (over: Partial<CreativeCard> = {}): CreativeCard =>
 
 const detail = (over: Partial<CreativeGroupDetail> = {}): CreativeGroupDetail => ({
   ...summary(),
+  currency: 'SAR',
   members: [member(), member({ id: 'cr-2', name: 'The film · TikTok', provider: 'tiktok' })],
   by_platform: [
     { provider: 'meta', creative_count: 1, creative_ids: ['cr-1'], metrics: metrics({ spend: 400 }) },
@@ -152,7 +152,7 @@ describe('CreativeGroupsPage', () => {
       page: 1,
       per_page: 24,
       total: 1,
-      period: { from: '2026-07-08', to: '2026-08-06' },
+      period: { from: '2026-07-08', to: '2026-08-06' }, currency: 'SAR',
     })
     vi.mocked(getCreativeGroup).mockResolvedValue(detail())
   })
@@ -187,7 +187,7 @@ describe('CreativeGroupsPage', () => {
       page: 1,
       per_page: 24,
       total: 1,
-      period: { from: '2026-07-08', to: '2026-08-06' },
+      period: { from: '2026-07-08', to: '2026-08-06' }, currency: 'SAR',
     })
 
     renderWithProviders(<CreativeGroupsPage portal="app" />, { route: '/app/content/groups' })
@@ -257,7 +257,7 @@ describe('CreativeGroupsPage', () => {
     fireEvent.click(within(panel).getByRole('button', { name: 'Split from group: The film · TikTok' }))
 
     await waitFor(() => expect(vi.mocked(ungroupCreative)).toHaveBeenCalledWith('cr-2'))
-    expect(await screen.findByText('The creative was split from its group.')).toBeInTheDocument()
+    expect(await screen.findByText('The ad was split from its group.')).toBeInTheDocument()
   })
 
   /** A dissolved group has nothing left to show, so the panel closes rather than 404-ing. */
@@ -278,14 +278,14 @@ describe('CreativeGroupsPage', () => {
       page: 1,
       per_page: 24,
       total: 0,
-      period: { from: '2026-07-08', to: '2026-08-06' },
+      period: { from: '2026-07-08', to: '2026-08-06' }, currency: 'SAR',
     })
 
     renderWithProviders(<CreativeGroupsPage portal="app" />, { route: '/app/content/groups' })
 
     expect(await screen.findByText('There are no groups in this workspace yet.')).toBeInTheDocument()
     expect(
-      screen.getByText('Select two or more creatives in the library and merge them as one asset.'),
+      screen.getByText('Select two or more ads in the library and merge them as one asset.'),
     ).toBeInTheDocument()
   })
 })

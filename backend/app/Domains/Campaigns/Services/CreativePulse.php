@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Campaigns\Services;
 
+use App\Domains\Campaigns\Creative\CreativeRanking;
+use App\Domains\Campaigns\Creative\RankingDirection;
+use App\Domains\Campaigns\Creative\RankingMetric;
 use App\Domains\Campaigns\Enums\MarketingPath;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use Illuminate\Support\Carbon;
 
 /**
@@ -46,7 +50,10 @@ final class CreativePulse
     /** How many rows a list section carries. The full count travels beside it — never a silent cut. */
     private const LIST_LIMIT = 6;
 
-    public function __construct(private readonly CreativeMetrics $metrics) {}
+    public function __construct(
+        private readonly CreativeMetrics $metrics,
+        private readonly CreativeRanking $ranking,
+    ) {}
 
     /**
      * @param  list<array<string, mixed>>  $rows  presented creatives, with `previous` attached
@@ -187,13 +194,25 @@ final class CreativePulse
      */
     private function decisive(string $path, array $rows): array
     {
-        return match ($path) {
-            MarketingPath::Traffic->value => ['key' => 'ctr', 'higher_wins' => true],
-            MarketingPath::Conversion->value => $this->anyReported($rows, 'roas')
-                ? ['key' => 'roas', 'higher_wins' => true]
-                : ['key' => 'cpa', 'higher_wins' => false],
-            default => ['key' => 'cpm', 'higher_wins' => false],
-        };
+        /*
+         * CREATIVE-RANK-001 — the contract decides, and availability decides the fallback.
+         *
+         * This was a private three-way map over `MarketingPath`: traffic → CTR, conversion → ROAS or
+         * CPA, everything else → CPM. Coarser than the objective the creative was actually bought
+         * for, and a third different answer to «best creative» beside the report's and the digest's.
+         *
+         * The ROAS→CPA fallback it had was the good part and is not lost: `resolveMetric` now does it
+         * for every objective, because an account whose platform returns no revenue has no ROAS at
+         * all, and ranking every creative as «unmeasured» tells a reader nothing they can act on.
+         */
+        $family = $this->familyFor($path);
+        $key = $this->ranking->resolveMetric(
+            $rows,
+            $family,
+            static fn (array $row, string $metric) => $row['metrics'][$metric] ?? null,
+        ) ?? 'cpm';
+
+        return ['key' => $key, 'higher_wins' => RankingMetric::of($key)->direction === RankingDirection::HigherIsBetter];
     }
 
     /**
@@ -330,17 +349,67 @@ final class CreativePulse
             }
         }
 
-        $spend = static fn (array $r): float => is_numeric($r['metrics']['spend'] ?? null) ? (float) $r['metrics']['spend'] : 0.0;
+        /*
+         * CREATIVE-MONEY-TRUTH-001 — «is it still spending» must not be answered by the FX table.
+         *
+         * This closure used to coerce a withheld null to 0.0. On production every Snapchat figure is
+         * withheld for want of a USD→SAR rate, so `> 0.0` was false for every fatigued creative and
+         * the «still spending on fatigued content» alert — the one line here that names something to
+         * do — silently returned nothing. Not a wrong number: a missing warning.
+         *
+         * Magnitude for ordering and for the alert test is therefore the amount the PLATFORM
+         * reported: the converted figure when there is one, the original when there is not. Both are
+         * the same quantity of money; only the currency it can be stated in differs.
+         */
+        $magnitude = static function (array $r): float {
+            $converted = $r['metrics']['spend'] ?? null;
+            if (is_numeric($converted)) {
+                return (float) $converted;
+            }
+
+            return (int) ($r['metrics']['spend_withheld_rows'] ?? 0) > 0
+                ? (float) ($r['metrics']['spend_original'] ?? 0)
+                : 0.0;
+        };
 
         foreach ($buckets as $status => $members) {
-            usort($members, static fn (array $a, array $b): int => $spend($b) <=> $spend($a));
+            usort($members, static fn (array $a, array $b): int => $magnitude($b) <=> $magnitude($a));
             $buckets[$status] = $members;
         }
 
         $alerts = array_values(array_filter(
             $buckets[CreativeFatigue::FATIGUED],
-            static fn (array $r): bool => $spend($r) > 0.0,
+            static fn (array $r): bool => $magnitude($r) > 0.0,
         ));
+
+        /*
+         * The total, in the contract's own field names — never a bare number.
+         *
+         * A withheld riyal and a converted one cannot be added, so they are carried separately and
+         * the reader decides what can honestly be said. Summing them would produce a figure in no
+         * currency at all.
+         */
+        $atRisk = ['spend' => null, 'spend_withheld_rows' => 0, 'spend_original' => 0.0,
+            'money_original_currency' => null, 'money_original_currencies' => 0];
+
+        foreach ($alerts as $r) {
+            $converted = $r['metrics']['spend'] ?? null;
+
+            if (is_numeric($converted)) {
+                $atRisk['spend'] = ($atRisk['spend'] ?? 0.0) + (float) $converted;
+
+                continue;
+            }
+
+            $atRisk['spend_withheld_rows'] += (int) ($r['metrics']['spend_withheld_rows'] ?? 0);
+            $atRisk['spend_original'] += (float) ($r['metrics']['spend_original'] ?? 0);
+
+            $currency = $r['metrics']['money_original_currency'] ?? null;
+            if ($currency !== null && $atRisk['money_original_currency'] !== $currency) {
+                $atRisk['money_original_currencies'] = $atRisk['money_original_currency'] === null ? 1 : 2;
+                $atRisk['money_original_currency'] ??= (string) $currency;
+            }
+        }
 
         return [
             'counts' => $counts,
@@ -349,12 +418,17 @@ final class CreativePulse
             'insufficient_data' => $this->capped($buckets[CreativeFatigue::INSUFFICIENT]),
             'alerts' => $this->capped(array_map(static fn (array $r): array => [
                 'creative' => $r,
-                'spend' => $spend($r),
+                // The row's own money provenance, so each alert states its figure exactly.
+                'spend' => $r['metrics']['spend'] ?? null,
+                'spend_withheld_rows' => (int) ($r['metrics']['spend_withheld_rows'] ?? 0),
+                'spend_original' => $r['metrics']['spend_original'] ?? null,
+                'money_original_currency' => $r['metrics']['money_original_currency'] ?? null,
+                'money_original_currencies' => (int) ($r['metrics']['money_original_currencies'] ?? 0),
                 'signals' => $r['fatigue']['signals'] ?? [],
                 'note_ar' => $r['fatigue']['note_ar'] ?? null,
                 'note_en' => $r['fatigue']['note_en'] ?? null,
             ], $alerts)),
-            'spend_at_risk' => array_sum(array_map($spend, $alerts)),
+            'spend_at_risk' => $atRisk,
         ];
     }
 
@@ -376,12 +450,38 @@ final class CreativePulse
 
         foreach ($rows as $row) {
             $kind = (string) ($row['preview']['kind'] ?? 'other');
-            $kinds[$kind] ??= ['kind' => $kind, 'spend' => null, 'creatives' => 0, 'spend_not_reported' => 0];
+            $kinds[$kind] ??= [
+                'kind' => $kind, 'spend' => null, 'creatives' => 0, 'spend_not_reported' => 0,
+                // CREATIVE-MONEY-TRUTH-001 — the contract's own field names, so one reader renders
+                // this strip and a dashboard KPI identically.
+                'spend_withheld_rows' => 0, 'spend_original' => 0.0,
+                'money_original_currency' => null, 'money_original_currencies' => 0,
+            ];
             $kinds[$kind]['creatives']++;
 
             $spend = $row['metrics']['spend'] ?? null;
+            $withheld = (int) ($row['metrics']['spend_withheld_rows'] ?? 0);
+
             if (is_numeric($spend)) {
                 $kinds[$kind]['spend'] = ($kinds[$kind]['spend'] ?? 0.0) + (float) $spend;
+            } elseif ($withheld > 0) {
+                /*
+                 * WITHHELD is not «not reported».
+                 *
+                 * The platform reported this spend; we could not convert it. Counting it as missing
+                 * would tell the operator their creatives have no figures, when on production every
+                 * Snapchat riyal is in this state for want of a USD→SAR rate. The original amount and
+                 * its currency are carried instead, and the strip prints them exactly.
+                 */
+                $kinds[$kind]['spend_withheld_rows'] += $withheld;
+                $kinds[$kind]['spend_original'] += (float) ($row['metrics']['spend_original'] ?? 0);
+
+                $currency = $row['metrics']['money_original_currency'] ?? null;
+                if ($currency !== null && $kinds[$kind]['money_original_currency'] !== $currency) {
+                    // A second currency makes the sum unaddable, and the reader refuses to name one.
+                    $kinds[$kind]['money_original_currencies'] = $kinds[$kind]['money_original_currency'] === null ? 1 : 2;
+                    $kinds[$kind]['money_original_currency'] ??= (string) $currency;
+                }
             } else {
                 $kinds[$kind]['spend_not_reported']++;
             }
@@ -599,15 +699,20 @@ final class CreativePulse
     }
 
     /** @param list<array<string, mixed>> $rows */
-    private function anyReported(array $rows, string $key): bool
+    /**
+     * The objective family a marketing path stands for.
+     *
+     * A path is coarser than an objective — «conversion» covers both a sales campaign and a lead
+     * campaign, which are bought at different costs. Mapped explicitly so the widening is visible;
+     * where a row carries its own objective, the caller should prefer that.
+     */
+    private function familyFor(string $path): ObjectiveFamily
     {
-        foreach ($rows as $row) {
-            if (is_numeric($row['metrics'][$key] ?? null)) {
-                return true;
-            }
-        }
-
-        return false;
+        return match ($path) {
+            MarketingPath::Traffic->value => ObjectiveFamily::Traffic,
+            MarketingPath::Conversion->value => ObjectiveFamily::Sales,
+            default => ObjectiveFamily::Awareness,
+        };
     }
 
     /** @param list<array<string, mixed>> $rows */

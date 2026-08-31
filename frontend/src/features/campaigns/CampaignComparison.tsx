@@ -1,4 +1,6 @@
 import { useMemo } from 'react'
+import { formatMoneyReading, readMoney, resolveMoneySeries } from '@/lib/money/contract'
+import { displaySpend } from '@/features/dashboard/platformMoney'
 import { Link } from 'react-router-dom'
 import { ImageOff, Info, TriangleAlert, X } from 'lucide-react'
 import { useCampaignComparison, type CompareCampaign } from './compareApi'
@@ -120,7 +122,16 @@ function ComparisonTable({ rows, locale, mixed, projectId }: {
     return lowerIsBetter ? Math.min(...real) : Math.max(...real)
   }
 
-  const spend = rows.map((r) => Number(r.totals.spend ?? 0))
+  /*
+    MONEY-TRUTH-002 — the spend row, and the unit it is stated in.
+
+    `Number(r.totals.spend ?? 0)` is the coalesced zero, and it was then labelled with the campaign's
+    `budget_currency` — the unit of the PLAN, not of the spend. Two different mistakes on one cell:
+    a campaign spending 2,500 USD against a riyal budget read «0 SAR».
+
+    `totals` carries the withheld provenance, so the contract can answer both.
+  */
+  const spendReadings = rows.map((r) => readMoney(r.totals as Record<string, unknown>, 'spend', null, true))
   const results = rows.map((r) => {
     const m = resultModel(r.objective)
     return m ? Number(r.totals[m.metric] ?? 0) : null
@@ -159,7 +170,7 @@ function ComparisonTable({ rows, locale, mixed, projectId }: {
           <tbody>
             <tr className="border-b border-border">
               <td className="p-3 text-text-secondary">الإنفاق</td>
-              {rows.map((r, i) => <td key={r.campaign_id} className="tnum p-3 text-end text-text-primary">{money(spend[i], r.budget_currency ?? 'SAR')}</td>)}
+              {rows.map((r, i) => <td key={r.campaign_id} className="tnum p-3 text-end text-text-primary">{formatMoneyReading(spendReadings[i], money)}</td>)}
             </tr>
             <tr className="border-b border-border">
               <td className="p-3 text-text-secondary">النتائج <span className="text-xs text-text-muted">(حسب هدف كل حملة)</span></td>
@@ -223,24 +234,40 @@ function ComparisonTable({ rows, locale, mixed, projectId }: {
 
 /** Daily spend per campaign on one axis — the trend requirement of CAMPAIGN-020. */
 function TrendComparison({ rows }: { rows: CompareCampaign[] }) {
+  /*
+   * PARTIAL-WITHHELD-001 — each line is a campaign's daily spend, and the chart states one currency
+   * for all. So every campaign's series is resolved to effective money (withheld → original, never a
+   * coalesced 0), and they must all share one currency. If any is not resolvable, or they disagree on
+   * currency, the trend is unavailable rather than lines drawn from zeros or across units.
+   */
+  const resolved = useMemo(
+    () => rows.map((r) => ({ id: r.campaign_id, ms: resolveMoneySeries(r.series as Array<Record<string, unknown>>, ['spend'], null) })),
+    [rows],
+  )
+  const comparable = useMemo(() => {
+    if (resolved.some((x) => x.ms === null)) return false
+    const currencies = new Set(resolved.map((x) => x.ms!.currency).filter((c): c is string => c != null))
+    return currencies.size <= 1
+  }, [resolved])
   const merged = useMemo(() => {
+    if (!comparable) return []
+    const byCampaign = new Map(resolved.map((x) => [x.id, new Map(x.ms!.rows.map((row) => [String(row.date), Number(row.spend ?? 0)]))]))
     const dates = new Set<string>()
-    for (const r of rows) for (const p of r.series) dates.add(String(p.date))
+    for (const x of resolved) for (const row of x.ms!.rows) dates.add(String(row.date))
     return [...dates].sort().map((date) => {
       const point: Record<string, unknown> = { date }
-      for (const r of rows) {
-        const hit = r.series.find((p) => String(p.date) === date)
-        point[r.campaign_id] = Number(hit?.spend ?? 0)
-      }
+      for (const r of rows) point[r.campaign_id] = byCampaign.get(r.campaign_id)?.get(date) ?? 0
       return point
     })
-  }, [rows])
+  }, [resolved, comparable, rows])
 
   return (
     <ChartCard title="اتجاه الإنفاق اليومي" subtitle="كل حملة على حدة خلال نفس الفترة">
-      {merged.length === 0
-        ? <EmptyState title="لا توجد نقاط زمنية في هذه الفترة" />
-        : <MetricLineChart data={merged} series={rows.map((r) => ({ key: r.campaign_id, name: r.name, kind: 'money' as const }))} height={230} />}
+      {!comparable
+        ? <p className="flex h-[230px] items-center justify-center text-center text-sm text-text-muted">اتجاه الإنفاق غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة لا تُرسم تحت عملة واحدة</p>
+        : merged.length === 0
+          ? <EmptyState title="لا توجد نقاط زمنية في هذه الفترة" />
+          : <MetricLineChart data={merged} series={rows.map((r) => ({ key: r.campaign_id, name: r.name, kind: 'money' as const }))} height={230} />}
     </ChartCard>
   )
 }
@@ -251,7 +278,45 @@ function PlatformSplit({ rows }: { rows: CompareCampaign[] }) {
     <ChartCard title="توزيع الإنفاق حسب المنصة" subtitle="لكل حملة على حدة">
       <div className="space-y-3">
         {rows.map((r) => {
-          const total = r.platforms.reduce((a, p) => a + p.spend, 0)
+          /*
+            MONEY-TRUTH-002 — read the figure that is real, then divide by it.
+
+            `p.spend` is the coalesced 0 when no rate exists, so on such an account every campaign
+            here totalled 0, the «total > 0» guard hid the whole chart, and the shares that would
+            have been drawn divided by zero. `displaySpend` is the same reader the dashboard's
+            platform rows use.
+          */
+          const spendOf = (p: (typeof r.platforms)[number]) => displaySpend(p)
+          const total = r.platforms.reduce((a, p) => a + spendOf(p), 0)
+
+          /*
+           * MONEY-TRUTH-002 — proportion bars are a ranking, and a ranking needs one currency.
+           *
+           * When the server reports `platform_ranking: 'unavailable'` — a converted platform beside a
+           * withheld one, or two withheld currencies — summing `displaySpend` across them is a
+           * cross-currency total, and drawing shares from it invents the very ranking the backend
+           * refused to. The platforms are still listed with each one's real figure, but no bar and no
+           * share, because there is no single denominator they can honestly divide.
+           */
+          if (r.platform_ranking === 'unavailable') {
+            return (
+              <div key={r.campaign_id}>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-text-primary">{r.name}</span>
+                  <span className="text-[11px] text-text-muted">لا يمكن ترتيبها بعملة واحدة</span>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-text-muted">
+                  {r.platforms.map((p) => (
+                    <span key={p.provider} className="inline-flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full" style={{ background: platformColor(p.provider) }} />
+                      {p.provider} <span className="tnum">{compact(spendOf(p))}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )
+          }
+
           return (
             <div key={r.campaign_id}>
               <div className="flex items-center justify-between text-xs">
@@ -262,14 +327,14 @@ function PlatformSplit({ rows }: { rows: CompareCampaign[] }) {
                 <>
                   <div className="mt-1 flex h-2.5 overflow-hidden rounded-full bg-surface-secondary">
                     {r.platforms.map((p) => (
-                      <span key={p.provider} title={`${p.provider} — ${compact(p.spend)}`} style={{ width: `${(p.spend / total) * 100}%`, background: platformColor(p.provider) }} />
+                      <span key={p.provider} title={`${p.provider} — ${compact(spendOf(p))}`} style={{ width: `${(spendOf(p) / total) * 100}%`, background: platformColor(p.provider) }} />
                     ))}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-text-muted">
                     {r.platforms.map((p) => (
                       <span key={p.provider} className="inline-flex items-center gap-1">
                         <span className="h-2 w-2 rounded-full" style={{ background: platformColor(p.provider) }} />
-                        {p.provider} <span className="tnum">{Math.round((p.spend / total) * 100)}%</span>
+                        {p.provider} <span className="tnum">{Math.round((spendOf(p) / total) * 100)}%</span>
                       </span>
                     ))}
                   </div>
@@ -288,7 +353,7 @@ function PlatformSplit({ rows }: { rows: CompareCampaign[] }) {
 /** Top creatives per campaign. Thumbnails are shown only when the platform actually returned one. */
 function CreativeSplit({ rows }: { rows: CompareCampaign[] }) {
   return (
-    <ChartCard title="أبرز المحتويات" subtitle="أعلى ٣ إنفاقًا في كل حملة">
+    <ChartCard title="أبرز الإعلانات" subtitle="أعلى 3 إنفاقًا في كل حملة">
       <div className="space-y-3">
         {rows.map((r) => (
           <div key={r.campaign_id}>

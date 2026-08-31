@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, seededProject, selectProject } from './helpers'
+import { AUTH, openFilters, seededProject, selectProject } from './helpers'
 
 /**
  * VERIFY-100 — the acceptance tests the `IMPLEMENTED_NOT_VERIFIED` rows never had.
@@ -36,8 +36,22 @@ test.describe('CAMPAIGN-010 — five ways to read the same campaigns', () => {
     await page.goto('/app/campaigns')
     await expect(page.getByTestId('view-overview')).toBeVisible({ timeout: 20000 })
 
+    /*
+     * Wait for the view to have CHANGED, not merely for the page to have text.
+     *
+     * This polled `innerText().length > 200` after clicking, and the view it was leaving already
+     * satisfied that — so on a slow render it read the previous view's text and reported «the cards
+     * view is showing the overview» against a page that was working. The length check cannot tell the
+     * two views apart, which is the one thing the assertion afterwards depends on.
+     *
+     * `aria-pressed` is the button's own statement that the click landed, and it is already rendered.
+     * Waiting on it asserts the precondition instead of hoping for it: a click that genuinely fails
+     * still fails the test, and now says so as «the tab never became selected» rather than as a false
+     * accusation about the view.
+     */
     const read = async (mode: string) => {
       await page.getByTestId(`view-${mode}`).click()
+      await expect(page.getByTestId(`view-${mode}`)).toHaveAttribute('aria-pressed', 'true', { timeout: 20000 })
       await expect.poll(async () => (await page.locator('main').innerText()).length, { timeout: 20000 })
         .toBeGreaterThan(200)
       return page.locator('main').innerText()
@@ -55,6 +69,8 @@ test.describe('CAMPAIGN-010 — five ways to read the same campaigns', () => {
     await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
     await page.goto('/app/campaigns')
     await page.getByTestId('view-cards').click()
+    // The click landed, before anything is read from it — see `read()` above.
+    await expect(page.getByTestId('view-cards')).toHaveAttribute('aria-pressed', 'true', { timeout: 20000 })
     await expect.poll(async () => await page.getByTestId('campaign-card').count(), { timeout: 20000 })
       .toBeGreaterThan(0)
 
@@ -97,6 +113,8 @@ test.describe('CAMPDET-010 — the campaign in depth', () => {
     await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
     await page.goto('/app/campaigns')
     await page.getByTestId('view-cards').click()
+    // The click landed, before anything is read from it — see `read()` above.
+    await expect(page.getByTestId('view-cards')).toHaveAttribute('aria-pressed', 'true', { timeout: 20000 })
     await expect.poll(async () => await page.getByTestId('campaign-card').count(), { timeout: 20000 })
       .toBeGreaterThan(0)
     await page.getByTestId('campaign-card').filter({ hasNotText: 'E2E ' }).first().click()
@@ -148,6 +166,8 @@ test.describe('XREL-001 — where this campaign sits', () => {
     await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
     await page.goto('/app/campaigns')
     await page.getByTestId('view-cards').click()
+    // The click landed, before anything is read from it — see `read()` above.
+    await expect(page.getByTestId('view-cards')).toHaveAttribute('aria-pressed', 'true', { timeout: 20000 })
     await expect.poll(async () => await page.getByTestId('campaign-card').count(), { timeout: 20000 })
       .toBeGreaterThan(0)
     await page.getByTestId('campaign-card').filter({ hasNotText: 'E2E ' }).first().click()
@@ -228,10 +248,12 @@ test.describe('SYNC-001 — the sync pipeline, reported honestly', () => {
   test.use({ storageState: AUTH.advertiser })
 
   /**
-   * A sync with no credentials is not a failure, and is not a success either.
+   * A sync with no credentials is certainly not a SUCCESS.
    *
-   * The pipeline records `awaiting_credentials` for a provider it has no keys for. Reporting that as
-   * a failed sync would send somebody debugging; reporting it as a successful one would be a lie.
+   * The pipeline records such a run as `failed` with the error category `awaiting_credentials`
+   * (INTEG-RUNTIME §8), so an operator can still tell «add keys» from «the platform had a bad
+   * minute». What must never appear is a claim of a live connection over a platform with no keys —
+   * which is the one thing this asserts.
    */
   test('the project sync surface states its real state', async ({ page }) => {
     await selectProject(page, await seededProject(page.request, BOUND_PROJECT))
@@ -305,15 +327,42 @@ test.describe('DEVSTATUS-001 — the requirement board', () => {
 test.describe('UX-DASH-001 — the advertiser dashboard', () => {
   test.use({ storageState: AUTH.advertiser })
 
+  /*
+   * The project is CHOSEN here, like every other block in this file — and that omission was hiding a
+   * green that meant nothing.
+   *
+   * These tests said nothing about which project they were reading, so they read whichever one the
+   * switcher happened to have. `campaigns-linking.spec.ts` creates a project, and running it first
+   * left the dashboard on that project, which has no metrics at all. The KPI assertion still passed:
+   * with the summary yet to answer, the strip rendered its cards from no data, `metric-purchases`
+   * existed for a moment, and `toBeVisible` was satisfied by a card that was about to be replaced by
+   * «لا توجد بيانات ضمن هذه الفلاتر».
+   *
+   * METRICS-REQUEST-STATE-001 removed that moment — a request that has not answered no longer
+   * renders cards — and the test went red, correctly, on a dependency it never declared. Naming the
+   * project is the fix; loosening the assertion would have restored a green that proved nothing.
+   */
+  test.beforeEach(async ({ page }) => {
+    await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
+  })
+
   test('opens on the figures, with its filters on the page', async ({ page }) => {
     await page.goto('/app/dashboard')
 
     const bar = page.getByTestId('dashboard-filters')
     await expect(bar, 'the dashboard has no visible filter bar').toBeVisible({ timeout: 20000 })
 
-    for (const id of ['dashboard-period', 'dashboard-platform', 'dashboard-path', 'dashboard-objective']) {
+    for (const id of ['dashboard-period', 'dashboard-platform', 'dashboard-objective']) {
       await expect(page.getByTestId(id), `${id} is not on the page`).toBeVisible()
     }
+
+    /*
+     * ANALYTICS-OBJECTIVE-SYSTEM-001 — and «المسار التسويقي» is NOT one of them any more.
+     *
+     * A path and an objective were one decision offered twice, and the reader could set the two to
+     * disagree. This assertion is what keeps the removal from being quietly undone.
+     */
+    await expect(page.getByTestId('dashboard-path')).toHaveCount(0)
 
     // Nothing narrowed on arrival, and nothing had to be opened to reach the controls.
     await expect(page.getByTestId('dashboard-applied')).toHaveCount(0)
@@ -358,6 +407,9 @@ test.describe('UX-DASH-001 — the advertiser dashboard', () => {
       'the filter bar pushes the page sideways on a phone',
     ).toBe(false)
 
+    // The bar folds on a phone (MOBILE-FILTERS-001); «More filters» is behind the fold, so a reader
+    // opens it first and so does this.
+    await openFilters(page, 'dashboard')
     await page.getByTestId('dashboard-more-filters').click()
     await expect(page.getByRole('dialog')).toBeVisible()
 

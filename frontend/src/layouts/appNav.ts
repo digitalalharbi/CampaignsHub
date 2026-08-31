@@ -1,6 +1,18 @@
 import {
-  BarChart3, BellRing, CreditCard, FolderKanban, FolderOpen, Images,
-  LayoutDashboard, ListChecks, Megaphone, Plug, Settings, TrendingUp,
+  BarChart3,
+  BellRing,
+  CreditCard,
+  FolderKanban,
+  FolderOpen,
+  Images,
+  LayoutDashboard,
+  Lightbulb,
+  ListChecks,
+  Megaphone,
+  Plug,
+  Settings,
+  TrendingUp,
+  Wallet,
 } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
@@ -34,7 +46,16 @@ export const appNavGroups: readonly NavGroup[] = [
     leaves: [
       { to: '/app/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban, ent: 'projects' },
       { to: '/app/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone, ent: 'campaigns' },
-      { to: '/app/content', ar: 'المحتوى', en: 'Content', icon: Images, ent: 'content' },
+      { to: '/app/content', ar: 'الإعلانات', en: 'Ads', icon: Images, ent: 'content' },
+      /*
+       * UX-NAV-001 — tasks and files sit with the work they belong to.
+       *
+       * They were an «التشغيل» group of their own, which asked the reader to hold a distinction the
+       * product does not actually make: a task is about a campaign and a file is attached to one.
+       * A group whose label is a category rather than a destination costs a guess on every visit.
+       */
+      { to: '/app/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks, ent: 'tasks' },
+      { to: '/app/files', ar: 'الملفات', en: 'Files', icon: FolderOpen, ent: 'files' },
     ],
   },
   {
@@ -43,33 +64,30 @@ export const appNavGroups: readonly NavGroup[] = [
     leaves: [
       { to: '/app/analytics', ar: 'التحليلات', en: 'Analytics', icon: TrendingUp, ent: 'analytics' },
       { to: '/app/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, ent: 'reports' },
+      { to: '/app/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb, ent: 'analytics' },
       { to: '/app/alerts', ar: 'التنبيهات', en: 'Alerts', icon: BellRing, ent: 'alerts' },
-    ],
-  },
-  {
-    key: 'operations',
-    ar: 'التشغيل', en: 'Operations', icon: ListChecks,
-    leaves: [
-      { to: '/app/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks, ent: 'tasks' },
-      { to: '/app/files', ar: 'الملفات', en: 'Files', icon: FolderOpen, ent: 'files' },
-      { to: '/app/integrations', ar: 'التكاملات', en: 'Integrations', icon: Plug, ent: 'connections' },
-    ],
-  },
-  {
-    key: 'finance',
-    // The advertiser's money is what they pay CampaignsHub. Invoices raised to a client are the
-    // agency's Finance, and live in the agency portal.
-    ar: 'الاشتراك', en: 'Subscription', icon: CreditCard,
-    leaves: [
-      { to: '/app/subscriptions', ar: 'الاشتراك', en: 'Subscription', icon: CreditCard, ent: 'subscriptions' },
+      { to: '/app/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet, ent: 'analytics' },
     ],
   },
   {
     key: 'settings',
-    // WORKSPACE settings. Personal settings live in the account menu and nowhere else; system
-    // settings live in /admin. This entry is the workspace's own.
-    ar: 'إعدادات مساحة العمل', en: 'Workspace settings', icon: Settings,
-    leaves: [{ to: '/app/settings', ar: 'إعدادات مساحة العمل', en: 'Workspace settings', icon: Settings, ent: 'settings' }],
+    /*
+     * UX-NAV-001 — everything you SET UP once, in one place.
+     *
+     * Integrations were in «التشغيل» and the subscription was a group of one called «الاشتراك».
+     * Neither is something an operator visits while working: they are configuration, entered
+     * deliberately and left alone. Two rail entries and a disclosure triangle for that is more
+     * chrome than the sections are worth, and it pushed the daily destinations further down.
+     *
+     * Connecting a platform is the FIRST thing a new workspace does, so it leads the group rather
+     * than sitting under the workspace's own preferences.
+     */
+    ar: 'الإعدادات', en: 'Settings', icon: Settings,
+    leaves: [
+      { to: '/app/integrations', ar: 'التكاملات', en: 'Integrations', icon: Plug, ent: 'connections' },
+      { to: '/app/subscriptions', ar: 'الاشتراك', en: 'Subscription', icon: CreditCard, ent: 'subscriptions' },
+      { to: '/app/settings', ar: 'إعدادات مساحة العمل', en: 'Workspace settings', icon: Settings, ent: 'settings' },
+    ],
   },
 ]
 

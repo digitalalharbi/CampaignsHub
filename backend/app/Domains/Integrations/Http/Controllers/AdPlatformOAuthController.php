@@ -12,8 +12,7 @@ use App\Domains\Integrations\OAuth\AuthorizationState;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\PlatformOAuth;
 use App\Domains\Integrations\OAuth\TokenVault;
-use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
-use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Integrations\Services\AccountDiscovery;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\AdPlatforms;
@@ -22,7 +21,7 @@ use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 use Throwable;
 
 /**
@@ -52,7 +51,7 @@ final class AdPlatformOAuthController extends Controller
     public function __construct(
         private readonly PlatformOAuth $oauth,
         private readonly TokenVault $vault,
-        private readonly AdvertisingConnectorRegistry $registry,
+        private readonly AccountDiscovery $discovery,
         private readonly ProviderConfigurationService $settings,
     ) {}
 
@@ -99,20 +98,52 @@ final class AdPlatformOAuthController extends Controller
             );
         }
 
+        /*
+         * OAUTH-WS-001 — the workspace this connection will be filed under must be OURS.
+         *
+         * This was `['sometimes','nullable','uuid']`: a check on the shape of a string and nothing
+         * else. The value went straight into the state, and on the callback it was stamped onto the
+         * `ProviderConnection` and onto every discovered `ExternalAccount` — none of which ever asked
+         * whether the workspace belonged to this tenant, or existed at all. An operator of tenant A
+         * could post tenant B's client-workspace id and file a real, live platform credential under
+         * another company's client.
+         *
+         * `ClientWorkspace` is `BelongsToTenant`, but a global scope defends queries, and this code
+         * ran no query — it moved a string from a request body to a column. So the check goes where
+         * the string arrives, using the rule `TaskController`, `ProjectController` and
+         * `AICredentialController` already use for this same field. `deleted_at` is included because
+         * the table is soft-deleted, and a live credential filed against a client the agency has
+         * already removed is a connection no surface will ever show.
+         */
         $validated = $request->validate([
-            'client_workspace_id' => ['sometimes', 'nullable', 'uuid'],
+            'client_workspace_id' => ['sometimes', 'nullable', 'uuid', Rule::exists('client_workspaces', 'id')
+                ->where('tenant_id', $tenant->tenantId())
+                ->whereNull('deleted_at')],
         ]);
+
+        /*
+         * X-PKCE-001 — the code verifier, minted here and carried by the state.
+         *
+         * Deliberately NOT the session. This callback is a public route with nothing of the session
+         * left by the time the browser returns, which is the whole reason `AuthorizationState` exists;
+         * putting the verifier there gives it the same properties for free — single use, short lived,
+         * and bound to the tenant, user and provider that started the flow.
+         *
+         * Null for every provider that does not publish PKCE, so nothing changes for the other five.
+         */
+        $verifier = $this->oauth->codeVerifier($creds);
 
         $state = AuthorizationState::issue(
             tenantId: (string) $tenant->tenantId(),
             provider: $creds->platform,
             userId: $request->user()->getKey(),
             clientWorkspaceId: $validated['client_workspace_id'] ?? null,
+            extra: $verifier === null ? [] : ['code_verifier' => $verifier],
         );
 
         return ApiResponse::success([
             'provider' => $creds->platform,
-            'authorization_url' => $this->oauth->authorizationUrl($creds, $state),
+            'authorization_url' => $this->oauth->authorizationUrl($creds, $state, $verifier),
             'expires_in_minutes' => (int) config('ad_platforms.state_ttl_minutes', 15),
         ], 'Authorization URL issued.');
     }
@@ -139,7 +170,14 @@ final class AdPlatformOAuthController extends Controller
             return $this->back($creds->platform, 'invalid_state', 'This authorisation link has expired or was already used.');
         }
 
-        $code = (string) $request->query('code', '');
+        /*
+         * TIKTOK-AUTH-001 — which query parameter carries the exchangeable code is the provider's
+         * decision, not ours. TikTok's redirect carries `code` AND `auth_code` with different values
+         * and only the second can be exchanged; everyone else uses `code`. The knowledge lives beside
+         * the other TikTok bends in `PlatformOAuth` rather than as a branch in this controller.
+         */
+        $parameter = $this->oauth->callbackCodeParameter($creds);
+        $code = (string) $request->query($parameter, '');
 
         if ($code === '') {
             return $this->back($creds->platform, 'failed', 'The platform returned no authorisation code.');
@@ -149,7 +187,13 @@ final class AdPlatformOAuthController extends Controller
         $tenant->setTenantId($tenantId);
 
         try {
-            $tokens = $this->oauth->exchangeCode($creds, $code);
+            // The verifier comes out of the RECORD, never the query string — the same rule as the
+            // tenant and the workspace, and for the same reason: nothing in this request is trusted.
+            $tokens = $this->oauth->exchangeCode(
+                $creds,
+                $code,
+                isset($record['code_verifier']) ? (string) $record['code_verifier'] : null,
+            );
 
             $connection = $this->vault->open(
                 tenantId: $tenantId,
@@ -179,45 +223,18 @@ final class AdPlatformOAuthController extends Controller
     /**
      * Pull the authorised identity's ad accounts into `external_accounts`.
      *
-     * Upserted on `(connection, external_id, account_type)` — the table's own unique key — so
-     * re-authorising an existing connection updates the accounts it already knows about instead of
-     * creating a second copy of each one.
+     * RUNTIME-100 §5 — the body of this moved to {@see AccountDiscovery}, unchanged in behaviour and
+     * changed entirely in reach. It was private to this controller, so the only way to refresh a
+     * catalogue was to authorise again: when the live Snapchat connection turned out to be missing
+     * every organisation NAME — 309 accounts catalogued before `parent_name` was recorded at all —
+     * the product's only offer was a second consent screen for an authorisation that never lapsed.
+     *
+     * The same token can answer the same question. Nothing about that needed a new OAuth round trip;
+     * it needed the code not to be locked inside a callback.
      */
     private function discoverAccounts(ProviderConnection $connection): int
     {
-        $connector = $this->registry->get($connection->provider);
-
-        if (! $connector instanceof ApiAdvertisingConnector) {
-            return 0;
-        }
-
-        $accounts = $connector->withConnection($connection)->listAdAccounts();
-
-        foreach ($accounts as $account) {
-            ExternalAccount::withoutGlobalScopes()->updateOrCreate(
-                [
-                    'provider_connection_id' => $connection->getKey(),
-                    'external_id' => $account['external_id'],
-                    'account_type' => 'ad_account',
-                ],
-                [
-                    'tenant_id' => $connection->tenant_id,
-                    'client_workspace_id' => $connection->client_workspace_id,
-                    'provider' => $connection->provider,
-                    'name' => $account['name'],
-                    'currency' => $account['currency'],
-                    'timezone' => $account['timezone'],
-                    'status' => $account['status'],
-                    'parent_external_id' => $account['parent_external_id'],
-                    'metadata' => ['discovered_at' => Carbon::now()->toIso8601String()],
-                    'last_synced_at' => Carbon::now(),
-                ],
-            );
-        }
-
-        $connection->forceFill(['last_health_check_at' => Carbon::now()])->save();
-
-        return count($accounts);
+        return $this->discovery->refresh($connection)['discovered'];
     }
 
     private function credentialsOr404(string $provider): PlatformCredentials

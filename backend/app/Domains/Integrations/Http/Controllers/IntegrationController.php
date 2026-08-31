@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Commerce\Registry\CommerceConnectorRegistry;
+use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
@@ -24,10 +26,11 @@ final class IntegrationController extends Controller
 {
     public function __construct(
         private readonly AdvertisingConnectorRegistry $registry,
+        private readonly CommerceConnectorRegistry $stores,
         private readonly ProviderConfigurationService $settings,
     ) {}
 
-    /** List every advertising connector with its live status and this tenant's connection (if any). */
+    /** Every provider this product integrates with — advertising and stores — with its live status. */
     public function index(Request $request): JsonResponse
     {
         abort_unless($request->user()->hasPermission('integrations.view'), 403);
@@ -51,6 +54,20 @@ final class IntegrationController extends Controller
                 continue;
             }
 
+            /*
+             * INTEG-RUNTIME §2 — the eight, and only the eight, are offered to a customer.
+             *
+             * `AdvertisingConnectorRegistry` still carries the sandbox connector outside production,
+             * because the end-to-end suite and the demo seeder need a connection to exercise without a
+             * real platform credential. That is a development need; listing it here made it a NINTH
+             * provider on the customer's own page, with a green chip, above the platforms they came
+             * for. It is filtered at the surface rather than removed from the registry, so the two
+             * facts stay separate: what this product integrates with, and what a test can drive.
+             */
+            if (! ProviderCatalogue::has($connector->key())) {
+                continue;
+            }
+
             $listed[] = $connector->key();
 
             /** @var Integration|null $connection */
@@ -58,11 +75,44 @@ final class IntegrationController extends Controller
             $data[] = [
                 'key' => $key,
                 'label' => $connector->label(),
+                'kind' => 'advertising',
                 'status' => $connection !== null ? $connection->status : $connector->status()->value,
                 'ad_account_id' => $connection?->ad_account_id,
                 'last_synced_at' => $connection?->last_synced_at?->toIso8601String(),
                 'last_sync_error' => $connection?->last_sync_error,
                 ...$this->adPlatformState($key),
+            ];
+        }
+
+        /*
+         * INTEG-STORES-001 — the store providers belong on this page too.
+         *
+         * The comment above says «the eight, and only the eight», and this loop walked the ADVERTISING
+         * registry, which holds six. Salla and Zid are declared in the same `ProviderCatalogue`, carry
+         * the same credential fields and the same webhook configuration — and appeared nowhere on the
+         * Integration Center. They were reachable only through a separate Stores panel, so a customer
+         * looking at «integrations» saw six of the eight things this product integrates with and had
+         * no way to know the other two existed.
+         *
+         * They are appended rather than merged into the loop above because a store is not an ad
+         * account: it has no `ad_account_id` and none of the five ad-platform states. Giving it those
+         * keys as nulls would make it look like an ad platform that had failed to connect, which is a
+         * different and worse lie than being absent.
+         */
+        foreach ($this->stores->all() as $key => $connector) {
+            if (! ProviderCatalogue::has($key)) {
+                continue;
+            }
+
+            $connection = $connections->get($key);
+
+            $data[] = [
+                'key' => $key,
+                'label' => $connector->label(),
+                'kind' => 'commerce',
+                'status' => $connection !== null ? $connection->status : $connector->status()->value,
+                'last_synced_at' => $connection?->last_synced_at?->toIso8601String(),
+                'last_sync_error' => $connection?->last_sync_error,
             ];
         }
 

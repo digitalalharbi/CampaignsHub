@@ -1,0 +1,36 @@
+name: CampaignsHub Autopilot (DISABLED)
+
+# CANCELLED BY OWNER — 2026-08-20.
+#
+# The owner cancelled the paid autonomous development model. This workflow no longer invokes
+# Anthropic, and it can no longer consume API credit.
+#
+# What was removed, and why the file survives at all:
+#
+#   - the `schedule:` trigger — an hourly run is what would have spent money unattended;
+#   - the `develop` job — the only step that ever called `anthropics/claude-code-action`.
+#
+# The file is kept rather than deleted so the cancellation is visible in the tree instead of being a
+# silent absence somebody re-adds by accident. `AUTOPILOT-001` and `AUTOPILOT-CONTINUOUS-CHAIN-001`
+# are no longer product requirements.
+#
+# Development now runs directly from a Claude Code container. GitHub remains source control, CI and
+# deployment — not the development engine. `.github/workflows/claude.yml` is likewise not to be
+# triggered.
+#
+# `workflow_dispatch` is retained with no paid job: it is a no-op that states the position when run.
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  cancelled:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: State the cancellation
+        run: |
+          echo "::notice::Paid autonomous development is CANCELLED BY OWNER (2026-08-20)."
+          echo "::notice::No Anthropic invocation exists in this workflow. Development runs from the container."

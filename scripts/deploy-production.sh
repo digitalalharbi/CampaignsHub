@@ -33,4 +33,28 @@ docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php art
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan route:clear
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan config:cache
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan route:cache
+
+# SNAP-STRUCTURE-RETRY-001 — the queue's timeout contract, verified before the worker is restarted.
+#
+# `retry_after`, the Horizon supervisor timeout and each job's own `$timeout` are a single contract
+# spread across three files that no framework check binds together. Production held retry_after = 90
+# against a structure job declaring 900, so Redis handed the same still-running sweep to a worker
+# every ninety seconds until its attempts were spent — silently, with a green build behind it.
+#
+# `queue:contract` exits non-zero if the ordering is wrong, and it is run in BOTH containers on
+# purpose: `backend` dispatches, `queue` decides when a job may be given to somebody else, and the
+# defect was precisely those two disagreeing. A deploy that would reintroduce it stops here.
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan queue:contract
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T queue php artisan queue:contract
+
+# A worker holds the configuration it booted with. `config:cache` above rewrote the backend
+# container's cache and said nothing to Horizon; an environment-only deploy rebuilds no image and so
+# recreates no container, and the master would keep serving the PREVIOUS retry_after while the
+# repository, the config cache and this script all agreed on the new one.
+#
+# `horizon:terminate` is the documented answer — the master finishes the job in flight, exits, and
+# Docker's `restart: unless-stopped` brings it back on the current configuration. It is deliberately
+# LAST: everything above has already proved the configuration it will come back on.
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan horizon:terminate
+
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps

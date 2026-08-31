@@ -359,7 +359,10 @@ final class CreativePulseApiTest extends TestCase
 
         $this->assertSame(1, $fatigue['alerts']['total']);
         $this->assertSame('Tired', $fatigue['alerts']['items'][0]['creative']['name']);
-        $this->assertEqualsWithDelta(1400.0, $fatigue['spend_at_risk'], 0.01);
+        // CREATIVE-MONEY-TRUTH-001 — the total carries its provenance now; these rows are all
+        // convertible, so the converted figure is the whole of it and nothing is withheld.
+        $this->assertEqualsWithDelta(1400.0, $fatigue['spend_at_risk']['spend'], 0.01);
+        $this->assertSame(0, $fatigue['spend_at_risk']['spend_withheld_rows']);
         $this->assertNotEmpty($fatigue['alerts']['items'][0]['signals']);
     }
 
@@ -693,5 +696,51 @@ final class CreativePulseApiTest extends TestCase
 
         $this->assertSame(1, $data['totals']['creatives']);
         $this->assertArrayHasKey('best_by_objective', $data);
+    }
+
+    /**
+     * CREATIVE-MONEY-TRUTH-001 — the alert must survive an unconvertible currency.
+     *
+     * «Still spending on fatigued content» is the one line in this section that names something to
+     * DO. It was gated on `spend > 0.0`, with a withheld null coerced to zero — so on production,
+     * where every Snapchat figure is withheld for want of a USD→SAR rate, the gate was false for
+     * every fatigued creative and the warning silently disappeared. A missing warning is worse than
+     * a wrong number: nothing on the screen says it is missing.
+     *
+     * Delivery is the same quantity of money whichever currency it can be stated in, so the alert
+     * fires and the figure is carried as an original with its currency named.
+     */
+    public function test_a_fatigued_creative_still_alerts_when_its_spend_cannot_be_converted(): void
+    {
+        $tired = $this->creative(['name' => 'Tired but unconvertible']);
+
+        foreach (range(2, 8) as $offset) {
+            $this->day($tired, now()->subDays($offset)->toDateString(), [
+                // Withheld exactly as the pipeline writes it: no converted value, the original kept.
+                'spend' => null, 'spend_original' => 200, 'original_currency' => 'USD', 'project_currency' => 'SAR',
+                'impressions' => 20000, 'clicks' => 100, 'conversions' => 1, 'revenue' => null, 'frequency' => 6.0,
+            ]);
+            $this->day($tired, now()->subDays($offset + 30)->toDateString(), [
+                'spend' => null, 'spend_original' => 100, 'original_currency' => 'USD', 'project_currency' => 'SAR',
+                'impressions' => 20000, 'clicks' => 400, 'conversions' => 20, 'revenue' => null, 'frequency' => 2.0,
+            ]);
+        }
+
+        $fatigue = $this->pulse()['fatigue'];
+
+        $this->assertSame(1, $fatigue['counts']['fatigued']);
+        $this->assertSame(
+            1,
+            $fatigue['alerts']['total'],
+            'The warning vanished for every creative on an unquoted currency.',
+        );
+
+        $risk = $fatigue['spend_at_risk'];
+
+        $this->assertNull($risk['spend'], 'There is no figure in the project currency to state.');
+        $this->assertEqualsWithDelta(1400.0, (float) $risk['spend_original'], 0.01);
+        $this->assertSame('USD', $risk['money_original_currency']);
+        $this->assertSame(1, $risk['money_original_currencies'], 'One currency, so it can be named exactly.');
+        $this->assertSame(7, $risk['spend_withheld_rows']);
     }
 }

@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react'
-import { Area, AreaChart, ResponsiveContainer } from 'recharts'
+import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { compact, percent, trend } from './format'
 import type { Trend } from './format'
+
+const AXIS = { stroke: 'var(--text-muted)', fontSize: 12 }
 
 /** Brand-consistent series colors (CSS vars resolve in light + dark). */
 export const SERIES = {
@@ -14,13 +16,22 @@ export const SERIES = {
   clicks: 'var(--teal)',
   neutral: 'var(--text-muted)',
 }
+/*
+ * Platform identities, read from the token layer so each theme can state them.
+ *
+ * They were literals, and two of them — TikTok `#000000` and X `#111111` — were the brand's true
+ * black. On the dark ground that is a donut slice you cannot see, a legend dot that reads as a hole
+ * and a bar of zero apparent length, in every screen that draws a platform. The tokens keep the
+ * exact brand value in light and swap in each brand's own light-on-dark mark for dark.
+ */
 export const PLATFORM_COLORS: Record<string, string> = {
-  meta: '#1877f2',
-  google: '#ea4335',
-  tiktok: '#000000',
-  snapchat: '#f7b500',
-  x: '#111111',
-  linkedin: '#0a66c2',
+  meta: 'var(--platform-meta)',
+  google: 'var(--platform-google)',
+  google_ads: 'var(--platform-google)',
+  tiktok: 'var(--platform-tiktok)',
+  snapchat: 'var(--platform-snapchat)',
+  x: 'var(--platform-x)',
+  linkedin: 'var(--platform-linkedin)',
 }
 export const platformColor = (p: string) => PLATFORM_COLORS[p] ?? 'var(--brand-500)'
 
@@ -111,11 +122,17 @@ export function Panel({
   return (
     <section className={`flex flex-col rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] ${className}`}>
       <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
+        {/*
+          `min-w-0` on the text and `shrink-0` on the action, or the action loses.
+          A flex item's minimum width is its content, so a two-word title with nowhere to wrap
+          squeezed the button beside it until «حد جديد» broke across two lines on a phone — a control
+          that reads as two controls. The title wraps; the control does not.
+        */}
+        <div className="min-w-0">
           <h3 className="text-base font-bold tracking-tight text-text-primary">{title}</h3>
           {description && <p className="mt-0.5 text-sm text-text-secondary">{description}</p>}
         </div>
-        {action}
+        {action && <div className="shrink-0 whitespace-nowrap">{action}</div>}
       </div>
       {loading ? (
         <div className="space-y-2">
@@ -183,6 +200,42 @@ export function DemoBadge() {
   )
 }
 
+/** What the backend says the rows in scope actually are. */
+export type Provenance = { source: 'live' | 'demo' | 'mixed' | 'none'; live_rows?: number; demo_rows?: number }
+
+/**
+ * ANALYTICS-PROVENANCE-001 — the badge, derived rather than always-on.
+ *
+ * `DemoBadge` was rendered unconditionally on the dashboard, campaigns and analytics, so a project
+ * syncing real Snapchat spend was labelled «بيانات تجريبية · Demo» beside its own money. A badge that
+ * is always on carries no information, and this one carried something false: it is the product's
+ * promise that a figure is NOT a customer's real spend.
+ *
+ * `live` shows nothing — the absence of a warning is the correct signal for real data, and a
+ * «LIVE» chip on every screen would be the same noise in the other direction.
+ *
+ * `mixed` is named rather than resolved. A project holding both is a real state, and picking one
+ * label would hide demo rows inside a live total.
+ *
+ * `none` shows nothing either: with no rows there is nothing to characterise, and the surfaces
+ * already have their own empty states.
+ */
+export function ProvenanceBadge({ provenance }: { provenance?: Provenance | null }) {
+  const source = provenance?.source
+
+  if (source === 'demo') return <DemoBadge />
+
+  if (source === 'mixed') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--warning-background)] px-2 py-0.5 text-xs font-semibold text-warning">
+        {ar() ? 'بيانات مختلطة · حقيقية وتجريبية' : 'Mixed · live and demo'}
+      </span>
+    )
+  }
+
+  return null
+}
+
 export function ChartTooltipStyle() {
   return null
 }
@@ -201,3 +254,54 @@ export const tooltipProps = {
 }
 
 export { compact }
+
+/**
+ * ANALYTICS-TRUTH-002 — one rate, one axis, one scale.
+ *
+ * ROAS, CPA and CTR were drawn as three lines on a shared axis. «3.20x», «21.96 USD» and «0.72%»
+ * have no common unit, so two of the three were pressed flat against the floor and the chart could
+ * only ever be read for the largest of them. Worse, the values arrived derived from a coalesced
+ * zero, so what actually shipped was a single flat line at 0 under a title naming three metrics.
+ *
+ * A small panel each: the series keeps its own domain, the reader gets the shape, and the current
+ * value is printed rather than being estimated off an axis.
+ */
+export function RateTrend({
+  title,
+  data,
+  dataKey,
+  color,
+  loading,
+  error,
+  format,
+}: {
+  title: string
+  data: Array<Record<string, unknown>>
+  dataKey: string
+  color: string
+  loading?: boolean
+  error?: boolean
+  format: (v: number) => string
+}) {
+  const values = data.map((r) => r[dataKey]).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+  const latest = values.length > 0 ? values[values.length - 1] : null
+
+  return (
+    <Panel title={title} loading={loading} error={error} empty={!loading && values.length === 0}>
+      <div className="mb-1 tnum text-xl font-extrabold leading-none text-text-primary">
+        {latest === null ? '—' : format(latest)}
+      </div>
+      <div className="h-36">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+            <XAxis dataKey="date" tick={AXIS} tickFormatter={(v) => String(v).slice(5)} minTickGap={28} />
+            <YAxis tick={AXIS} width={44} domain={['auto', 'auto']} tickFormatter={(v) => format(Number(v))} />
+            <Tooltip {...tooltipProps} formatter={(v: number) => format(v)} />
+            <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </Panel>
+  )
+}

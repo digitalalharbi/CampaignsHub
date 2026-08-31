@@ -58,6 +58,7 @@ final class DailyDigest
         private readonly ReportObservations $observations,
         private readonly ReportTemplateEngine $template,
         private readonly DigestCreatives $creatives,
+        private readonly DigestRecommendations $recommendations,
     ) {}
 
     /**
@@ -88,15 +89,43 @@ final class DailyDigest
      */
     public function buildRange(User $user, string $tenantId, array $projectIds, Carbon $from, Carbon $to): array
     {
+        /*
+         * EMAIL-SETTINGS-DEPTH-001 — read once, here, from the recipient's own row.
+         *
+         * Read from `digests.recommendations`, which already holds this person's daily/weekly/alert
+         * opt-ins, so a new column was not needed and a stored map written before this setting existed
+         * is simply a map without the key. Absent means OFF: a preference nobody has expressed is not
+         * consent to put somebody's approved recommendations into a colleague's inbox.
+         */
+        $wantsRecommendations = $this->recommendations->enabledFor($user, $tenantId);
+
         // Nothing reachable → nothing to say. The caller must not send an email at all; an empty
         // digest that says «no data» is indistinguishable from a real day with no spend.
         if ($projectIds === []) {
             return ['sendable' => false, 'reason' => 'no_projects_in_scope', 'projects' => []];
         }
 
-        $days = max(1, $from->diffInDays($to) + 1);
+        /*
+         * DIGEST-PREV-WINDOW-001 — the comparison window must be the SAME LENGTH as the current one.
+         *
+         * Two faults compounded here, and both are invisible in the output because an oversized
+         * previous window just makes every trend read slightly worse.
+         *
+         * 1. `$to` is an `endOfDay()`, so `diffInDays` returned a FLOAT — 7.999999999988426 for a
+         *    seven-day window. `$days` was then fractional everywhere it was used.
+         * 2. `$prevFrom` counted back from `$prevTo` (the day BEFORE the window) instead of from
+         *    `$from`, which is one further day again.
+         *
+         * Together, a seven-day window compared itself against NINE days: 13–19 Aug against 4–12 Aug.
+         * Nine days of spend against seven is not a trend, it is a longer ruler — and it applied to
+         * every rhythm, daily, weekly and monthly alike.
+         *
+         * Counting from `startOfDay()` on both sides makes `$days` a whole number of calendar days,
+         * and `$prevFrom` is now `$from` minus exactly that many days.
+         */
+        $days = (int) max(1, $from->copy()->startOfDay()->diffInDays($to->copy()->startOfDay()) + 1);
         $prevTo = $from->copy()->subSecond();
-        $prevFrom = $prevTo->copy()->subDays($days)->startOfDay();
+        $prevFrom = $from->copy()->subDays($days)->startOfDay();
 
         $projects = Project::query()
             ->where('tenant_id', $tenantId)
@@ -105,7 +134,7 @@ final class DailyDigest
 
         $blocks = [];
         foreach ($projects as $project) {
-            $block = $this->forProject((string) $project->id, $from, $to, $prevFrom, $prevTo);
+            $block = $this->forProject($tenantId, (string) $project->id, $from, $to, $prevFrom, $prevTo, $wantsRecommendations);
             $block['project_id'] = (string) $project->id;
             $block['project_name'] = (string) $project->name;
             $blocks[] = $block;
@@ -137,7 +166,7 @@ final class DailyDigest
      *
      * @return array<string,mixed>
      */
-    private function forProject(string $projectId, Carbon $from, Carbon $to, Carbon $prevFrom, Carbon $prevTo): array
+    private function forProject(string $tenantId, string $projectId, Carbon $from, Carbon $to, Carbon $prevFrom, Carbon $prevTo, bool $withRecommendations): array
     {
         $scoped = $this->metrics->acrossProjects()->forProjects([$projectId]);
 
@@ -176,6 +205,17 @@ final class DailyDigest
             // no room for a second spend figure it would then have to reconcile.
             'funnel' => $funnel['stages'],
             'creatives' => $this->creatives->forProject($projectId, $from, $to),
+            /*
+             * EMAIL-SETTINGS-DEPTH-001 — carried only when this recipient asked for them.
+             *
+             * An empty list and «switched off» are deliberately the same shape here: the presenter
+             * renders nothing either way, and the digest never announces a section the reader turned
+             * off. What it must never do is the reverse — silently start mailing a colleague's
+             * approved recommendations to somebody who did not ask for them.
+             */
+            'recommendations' => $withRecommendations
+                ? $this->recommendations->forProject($tenantId, $projectId, $from, $to)
+                : [],
             'freshness' => $freshness,
         ];
 

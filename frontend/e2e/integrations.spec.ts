@@ -2,61 +2,107 @@ import { expect, test } from '@playwright/test'
 import { AUTH, E2E_ORIGIN, seededProject } from './helpers'
 
 /**
- * The integrations surfaces lead with the six real ad platforms (PROJINT-001, INTEG-UI-001).
+ * The integrations surface offers the EIGHT providers this product integrates with — INTEG-RUNTIME §2.
  *
- * The grid used to be ordered by whatever the API returned, which put `sandbox` — a local fake
- * provider that exists so the product can be demonstrated without credentials — at the head of the
- * list, above Meta and Google, wearing a green "connected" chip. Somebody opening this page to
- * connect their advertising met a connected generic connector first and the platforms they came for
- * eleventh.
+ * ## What this spec used to be asserting
  *
- * The other eleven connectors are real and stay reachable. What is asserted here is which ones the
- * page LEADS with, and that nothing claims a connection it does not have.
+ * It read `main li[data-testid="connector-card"]` from a grid of sixteen «connectors» built out of
+ * `config/connectors.php`, in which every real platform was a `NullConnector` that could not
+ * authorise, could not sync and existed only to be listed. Six of the sixteen were providers this
+ * product does not integrate with at all, and one was the sandbox — a local fake, at the head of the
+ * list, wearing a green «connected» chip, above the platforms a customer came for.
+ *
+ * That grid is gone with its runtime. The six ad platforms below are the real connectors, and each
+ * card is the one a customer actually acts on.
  */
-test.describe('the integrations centre', () => {
+test.describe('the integrations surface', () => {
   test.use({ storageState: AUTH.advertiser })
 
   /**
    * The product's order (PLATFORM-ORDER-001) — سناب شات، تيك توك، ميتا، جوجل أدز، إكس، لينكدإن.
    *
-   * This list used to lead with Meta, which is how the drift stayed invisible: the connection centre
-   * and the dashboard led with Meta, the report engine led with Snapchat, and each had a test that
-   * agreed with the file beside it. The order now lives in `@/lib/platforms`, and this asserts the
-   * rendered result against it.
+   * The order lives in `@/lib/platforms`; this asserts the rendered result against it. Registry keys,
+   * not labels: `google_ads` is one platform however it is spelled, and a label is translated.
    */
-  const AD_PLATFORMS = ['Snapchat Ads', 'TikTok Ads', 'Meta Ads', 'Google Ads', 'X Ads', 'LinkedIn Ads']
+  const AD_PLATFORMS = ['snapchat', 'tiktok', 'meta', 'google_ads', 'x', 'linkedin']
 
-  async function connectorNames(page: import('@playwright/test').Page): Promise<string[]> {
-    return page.locator('main li').evaluateAll((els) =>
-      els
-        .map((el) => ((el as HTMLElement).innerText || '').split('\n').filter(Boolean)[1] ?? '')
-        .filter(Boolean),
+  /** The two stores, which complete the eight this product integrates with. */
+  const STORES = ['salla', 'zid']
+
+  /** The STORE CARDS — a separate section, deliberately not `platform-card`. */
+  async function storeKeys(page: import('@playwright/test').Page): Promise<string[]> {
+    return page.locator('[data-testid="store-card"]').evaluateAll((els) =>
+      els.map((el) => (el as HTMLElement).dataset.platform ?? '').filter(Boolean),
     )
   }
 
-  test('the six ad platforms come first, in order', async ({ page }) => {
+  /** The PLATFORM CARDS, in the order the page offers them. */
+  async function platformKeys(page: import('@playwright/test').Page): Promise<string[]> {
+    return page.locator('[data-testid="platform-card"]').evaluateAll((els) =>
+      els.map((el) => (el as HTMLElement).dataset.platform ?? '').filter(Boolean),
+    )
+  }
+
+  test('the six ad platforms are offered, in the product order', async ({ page }) => {
     await page.goto('/app/integrations')
     await expect(page.locator('main')).toBeVisible()
-    await expect.poll(async () => (await connectorNames(page)).length, { timeout: 20000 }).toBeGreaterThan(6)
+    await expect.poll(async () => (await platformKeys(page)).length, { timeout: 20000 }).toBe(6)
 
-    const names = await connectorNames(page)
-    expect(names.slice(0, 6)).toEqual(AD_PLATFORMS)
-  })
-
-  /** Sandbox is not a customer's integration, so it is last — never the first thing offered. */
-  test('the fake provider is last, not first', async ({ page }) => {
-    await page.goto('/app/integrations')
-    await expect.poll(async () => (await connectorNames(page)).length, { timeout: 20000 }).toBeGreaterThan(6)
-
-    const names = await connectorNames(page)
-    expect(names[names.length - 1]).toMatch(/Sandbox/i)
+    expect(await platformKeys(page)).toEqual(AD_PLATFORMS)
   })
 
   /**
-   * Nothing claims to be connected without credentials.
+   * The other two of the eight — INTEG-STORES-001.
    *
-   * No provider has credentials in any environment, so the summary must read zero connected — and
-   * the page must say so rather than leaving the reader to infer it.
+   * Salla and Zid are declared in the same catalogue as the ad platforms and were reachable only
+   * through a separate Stores panel, so a customer on this page saw six of the eight things this
+   * product integrates with and had no way to learn the other two existed.
+   */
+  test('the two stores complete the eight, in their own section', async ({ page }) => {
+    await page.goto('/app/integrations')
+    await expect(page.locator('main')).toBeVisible()
+    await expect.poll(async () => (await storeKeys(page)).length, { timeout: 20000 }).toBe(2)
+
+    expect((await storeKeys(page)).sort()).toEqual([...STORES].sort())
+    await expect(page.getByTestId('stores-heading')).toBeVisible()
+  })
+
+  /**
+   * A store is not an ad platform that failed to connect.
+   *
+   * It has no ad account and none of the five ad-platform states. Rendered as an ad-platform card
+   * those fields come out blank, and a blank on a connection card reads as a failure rather than as a
+   * field that does not apply — which is why the store keys must NOT appear among the platform cards.
+   */
+  test('a store is never rendered as an ad platform', async ({ page }) => {
+    await page.goto('/app/integrations')
+    await expect.poll(async () => (await platformKeys(page)).length, { timeout: 20000 }).toBe(6)
+
+    const platforms = await platformKeys(page)
+    for (const store of STORES) {
+      expect(platforms).not.toContain(store)
+    }
+  })
+
+  /**
+   * **The ninth provider, gone.** The sandbox is not one of the eight and is not offered as one.
+   *
+   * It still exists in the registry outside production, because the end-to-end suite and the demo
+   * seeder need a connection to drive without a real platform credential. That is a development
+   * need; listing it here made it a provider the customer could choose.
+   */
+  test('the local fake is not offered as a provider', async ({ page }) => {
+    await page.goto('/app/integrations')
+    await expect.poll(async () => (await platformKeys(page)).length, { timeout: 20000 }).toBe(6)
+
+    expect(await platformKeys(page)).not.toContain('sandbox')
+    await expect(page.locator('[data-testid="platform-card"]').filter({ hasText: /sandbox/i })).toHaveCount(0)
+  })
+
+  /**
+   * Nothing claims to be connected without credentials, and no raw enum reaches the reader.
+   *
+   * No provider has credentials in any environment, so nothing on this page may read as connected.
    */
   test('no platform claims a connection it does not have', async ({ page }) => {
     await page.goto('/app/integrations')
@@ -64,25 +110,84 @@ test.describe('the integrations centre', () => {
     await expect(main).toBeVisible()
     await expect.poll(async () => (await main.innerText()).length, { timeout: 20000 }).toBeGreaterThan(100)
 
-    // The honesty note is on the page, in whichever language it opens in.
-    await expect(main).toContainText(/الحالات صادقة|states are honest/i)
-
-    // …and the raw connection enum is never printed at the reader.
     const text = await main.innerText()
     expect(text).not.toMatch(/\bالحساب:\s*(connected|awaiting_credentials|needs_action)\b/)
   })
 
-  /** Every ad platform's card offers the action its state allows, and no dead control. */
-  test('each ad platform offers a real action for its state', async ({ page }) => {
+  /**
+   * Every ad platform's card offers the action its state allows — and for two states that is NONE.
+   *
+   * ## What the first cut of this test got wrong
+   *
+   * It asserted every card carries at least one button, and every card in the gate has zero. That is
+   * the PRODUCT being right: `awaiting_credentials` and `unavailable` are facts about the system's
+   * configuration, not the customer's, and INTEG-UI-001 deliberately offers nothing to press for
+   * either — a customer cannot obtain our OAuth app's keys, so a «Connect» button there leads to an
+   * authorise URL that cannot be built. The card says the platform operator is setting it up, and
+   * stops.
+   *
+   * No provider has credentials in any environment here, so all six are in that state and the real
+   * assertion is the one below: the state is stated, the explanation is present, and there is no
+   * dead control.
+   */
+  test('an operator-blocked platform explains itself and offers no dead control', async ({ page }) => {
     await page.goto('/app/integrations')
-    await expect.poll(async () => (await connectorNames(page)).length, { timeout: 20000 }).toBeGreaterThan(6)
+    await expect.poll(async () => (await platformKeys(page)).length, { timeout: 20000 }).toBe(6)
 
     for (const platform of AD_PLATFORMS) {
-      const card = page.locator('main li').filter({ hasText: platform }).first()
+      const card = page.locator(`[data-testid="platform-card"][data-platform="${platform}"]`)
       await expect(card, `${platform} has no card`).toBeVisible()
-      // Awaiting credentials → the card offers "connect"; it must not offer a sync that cannot run.
-      await expect(card.getByRole('button')).not.toHaveCount(0)
+
+      // The state is named on the card, never left to be inferred.
+      await expect(card.getByTestId(`connector-state-${platform}`)).toBeVisible()
+
+      const blocked = card.getByTestId(`connector-needs-operator-${platform}`)
+
+      if (await blocked.count() > 0) {
+        await expect(blocked).toBeVisible()
+        await expect(
+          card.getByRole('button'),
+          `${platform} is waiting on the platform operator and must offer nothing to press`,
+        ).toHaveCount(0)
+      } else {
+        await expect(
+          card.getByRole('button'),
+          `${platform} is in an actionable state and must offer its action`,
+        ).not.toHaveCount(0)
+      }
     }
+  })
+
+  /**
+   * The stores and the accounts live on the same page — one place manages every source (§3).
+   *
+   * The inventory is behind its own control now (INTEGRATION-DATASOURCE-WIZARD-001 §11): the page
+   * answers «what is connected, and does anything need me?» first, and every discovered account is
+   * one deliberate click away rather than three hundred rows under the cards.
+   */
+  test('stores and the discovered accounts are on the same page as the platforms', async ({ page }) => {
+    await page.goto('/app/integrations')
+    await expect(page.getByTestId('ad-platforms-panel')).toBeVisible()
+
+    const toggle = page.getByTestId('toggle-account-inventory')
+    await expect(async () => {
+      if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
+      expect(await toggle.getAttribute('aria-expanded')).toBe('true')
+    }).toPass({ timeout: 20000 })
+
+    await expect(
+      page.locator('[data-testid="inventory-row"], [data-testid="inventory-empty"]').first(),
+      'the accounts panel never resolved',
+    ).toBeVisible({ timeout: 30000 })
+  })
+
+  /** And it is CLOSED until somebody asks: the page is a catalogue, not an inventory. */
+  test('the account inventory is not rendered until it is asked for', async ({ page }) => {
+    await page.goto('/app/integrations')
+    await expect(page.getByTestId('ad-platforms-panel')).toBeVisible()
+
+    await expect(page.getByTestId('toggle-account-inventory')).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.locator('[data-testid="inventory-row"]')).toHaveCount(0)
   })
 })
 

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import { metricSourceLabel } from './metricSource'
+import { creativeKindLabel } from './CreativesPage'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Maximize2, Minus, Plus, RotateCcw } from 'lucide-react'
@@ -14,6 +16,7 @@ import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
+import { CANONICAL_CURRENCY } from '@/lib/money/contract'
 
 /**
  * §15.6 — one creative, on its own page.
@@ -50,8 +53,8 @@ const COPY = {
   ar: {
     back: 'العودة إلى المكتبة',
     loading: 'جارٍ التحميل…',
-    error: 'تعذّر فتح هذا المحتوى.',
-    notFound: 'هذا المحتوى غير متاح لك، أو لم يعد موجودًا.',
+    error: 'تعذّر فتح هذا الإعلان.',
+    notFound: 'هذا الإعلان غير متاح لك، أو لم يعد موجودًا.',
     from: 'من',
     to: 'إلى',
     period: 'الفترة',
@@ -68,7 +71,7 @@ const COPY = {
     ad: 'الإعلان',
     objective: 'الهدف',
     path: 'المسار التسويقي',
-    kind: 'نوع المحتوى',
+    kind: 'نوع الإعلان',
     firstSeen: 'أول ظهور',
     lastActive: 'آخر نشاط',
     lastSync: 'آخر مزامنة',
@@ -89,7 +92,7 @@ const COPY = {
     cta: 'زر الإجراء',
     destination: 'الرابط الوجهة',
     figures: 'المؤشرات حسب الهدف',
-    figuresHint: 'المؤشرات التي اشتُري هذا المحتوى لتحقيقها — لا قائمة موحدة لكل الأهداف.',
+    figuresHint: 'المؤشرات التي اشتُري هذا الإعلان لتحقيقها — لا قائمة موحدة لكل الأهداف.',
     change: 'التغير عن الفترة السابقة',
     funnel: 'الفانل',
     funnelHint: 'المراحل التي أرسلتها المنصة فقط.',
@@ -101,19 +104,19 @@ const COPY = {
     noTrend: 'لا توجد أيام نشاط داخل هذه الفترة.',
     byPlatform: 'الأداء حسب المنصة',
     byCampaign: 'الأداء حسب الحملة',
-    onePlatform: 'هذا المحتوى يعمل على منصة واحدة، فلا توجد مقارنة بين المنصات.',
-    peers: 'المقارنة بمحتويات المسار نفسه',
-    peersNone: 'لا توجد محتويات أخرى على المسار نفسه للمقارنة بها.',
-    peersCount: 'محتوى في المقارنة',
-    mine: 'هذا المحتوى',
+    onePlatform: 'هذا الإعلان يعمل على منصة واحدة، فلا توجد مقارنة بين المنصات.',
+    peers: 'المقارنة بإعلانات المسار نفسه',
+    peersNone: 'لا توجد إعلانات أخرى على المسار نفسه للمقارنة بها.',
+    peersCount: 'إعلان في المقارنة',
+    mine: 'هذا الإعلان',
     average: 'متوسط المسار',
     fatigue: 'حالة الإجهاد',
     evidence: 'الأدلة',
     insights: 'التحليلات والتوصيات',
-    insightsNone: 'لا توجد تحليلات لهذا المحتوى في هذه الفترة — لم يتجاوز أي مؤشر عتبة التغير المعتبر.',
+    insightsNone: 'لا توجد تحليلات لهذا الإعلان في هذه الفترة — لم يتجاوز أي مؤشر عتبة التغير المعتبر.',
     action: 'الإجراء المقترح',
     comparedAgainst: 'المقارنة أُجريت مقابل',
-    capped: 'أعلى المحتويات إنفاقًا فقط',
+    capped: 'أعلى الإعلانات إنفاقًا فقط',
     confidence: 'مستوى الثقة',
     aiReview: 'يحتاج مراجعة بشرية',
     of: 'من',
@@ -129,8 +132,8 @@ const COPY = {
   en: {
     back: 'Back to the library',
     loading: 'Loading…',
-    error: 'Could not open this creative.',
-    notFound: 'This creative is not available to you, or no longer exists.',
+    error: 'Could not open this ad.',
+    notFound: 'This ad is not available to you, or no longer exists.',
     from: 'From',
     to: 'To',
     period: 'Period',
@@ -147,7 +150,7 @@ const COPY = {
     ad: 'Ad',
     objective: 'Objective',
     path: 'Marketing path',
-    kind: 'Creative type',
+    kind: 'Ad type',
     firstSeen: 'First seen',
     lastActive: 'Last active',
     lastSync: 'Last sync',
@@ -168,7 +171,7 @@ const COPY = {
     cta: 'Call to action',
     destination: 'Destination URL',
     figures: 'Metrics for this objective',
-    figuresHint: 'The metrics this creative was bought to move — never one list for every objective.',
+    figuresHint: 'The metrics this ad was bought to move — never one list for every objective.',
     change: 'Change vs previous period',
     funnel: 'Funnel',
     funnelHint: 'Only the stages the platform reported.',
@@ -180,19 +183,19 @@ const COPY = {
     noTrend: 'No active days inside this period.',
     byPlatform: 'By platform',
     byCampaign: 'By campaign',
-    onePlatform: 'This creative runs on one platform, so there is no cross-platform comparison.',
-    peers: 'Against creatives on the same path',
-    peersNone: 'No other creatives on the same path to compare against.',
-    peersCount: 'creatives compared',
-    mine: 'This creative',
+    onePlatform: 'This ad runs on one platform, so there is no cross-platform comparison.',
+    peers: 'Against ads on the same path',
+    peersNone: 'No other ads on the same path to compare against.',
+    peersCount: 'ads compared',
+    mine: 'This ad',
     average: 'Path average',
     fatigue: 'Fatigue',
     evidence: 'Evidence',
     insights: 'Insights and recommendations',
-    insightsNone: 'No findings for this creative in this period — nothing crossed a material threshold.',
+    insightsNone: 'No findings for this ad in this period — nothing crossed a material threshold.',
     action: 'Suggested action',
     comparedAgainst: 'Compared against',
-    capped: 'highest-spending creatives only',
+    capped: 'highest-spending ads only',
     confidence: 'Confidence',
     aiReview: 'Needs human review',
     of: 'of',
@@ -277,7 +280,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
   const data = detail.data
   const creative = data?.creative
   const metrics: CreativeMetrics | null = data?.metrics ?? null
-  const currency = data?.currency ?? 'SAR'
+  const currency = data?.currency ?? CANONICAL_CURRENCY
 
   const trendRows = useMemo(() => {
     if (!data) return []
@@ -439,10 +442,25 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
           <Fact k={t.platform} v={providerLabel(creative.provider, locale)} block />
           <Fact k={t.campaign} v={creative.campaign_name ?? t.notProvided} block />
           <Fact k={t.adSet} v={creative.external_ids.ad_set ?? t.notProvided} block ltr />
-          <Fact k={t.ad} v={creative.external_ids.ad ?? t.notProvided} block ltr />
+          {/*
+            Every ad's provider id, not one of them.
+
+            This read `external_ids.ad`, which was whichever ad the importer wrote last — a single
+            value under a label that reads as «the ad's id», on an account where four ads routinely
+            share a creative. The ads come from `external_ads.creative_id` now, so the fact is the
+            same kind of fact and is no longer a false singular.
+          */}
+          <Fact
+            k={t.ad}
+            v={(creative.ads ?? []).length > 0
+              ? (creative.ads ?? []).map((ad) => ad.external_id).join(' · ')
+              : t.notProvided}
+            block
+            ltr
+          />
           <Fact k={t.objective} v={creative.objective ? objectiveLabel(creative.objective, locale) : t.notProvided} block />
           <Fact k={t.path} v={marketingPathLabel(data.path, locale)} block />
-          <Fact k={t.kind} v={preview.kind} block />
+          <Fact k={t.kind} v={creativeKindLabel(preview.kind, ar)} block />
           <Fact k={t.firstSeen} v={creative.freshness.first_seen_at?.slice(0, 10) ?? t.notProvided} block ltr />
           <Fact k={t.lastActive} v={creative.freshness.last_active_at?.slice(0, 10) ?? t.notProvided} block ltr />
           <Fact k={t.lastSync} v={creative.freshness.last_synced_at?.slice(0, 16).replace('T', ' ') ?? t.notProvided} block ltr />
@@ -602,7 +620,13 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
                         {formatMetric(metricState(row.metrics, k), k, locale, currency)}
                       </td>
                     ))}
-                    <td className="p-2 text-xs text-text-secondary">{row.source}</td>
+                    {/*
+                      CONTENT-SOURCE-LABEL-001 — the «المصدر» column printed `platform_reported`.
+                      
+                      That column answers «where did this row come from», which is the question a
+                      reader checking a figure asks first — and it answered in the database's words.
+                    */}
+                    <td className="p-2 text-xs text-text-secondary">{metricSourceLabel(row.source, locale === 'ar')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -740,6 +764,9 @@ function Fact({ k, v, ltr = false, block = false }: { k: string; v: string; ltr?
  * The change is shown only when BOTH sides are real numbers. A «+100%» computed against a previous
  * period the platform did not report is not a rise; it is an artefact of treating silence as zero.
  */
+/** Ratios that are normally a share of a whole, so exceeding it needs saying rather than printing. */
+const RATE_KEYS = new Set(['conversion_rate', 'view_rate', 'completion_rate', 'video_completion_rate', 'engagement_rate', 'ctr'])
+
 function MetricBlock({
   metricKey,
   metrics,
@@ -762,11 +789,35 @@ function MetricBlock({
       ? (now.value - then.value) / Math.abs(then.value)
       : null
 
+  /*
+   * RATE-OVER-WHOLE-001 — «معدل التحويل 136.51%», printed flat.
+   *
+   * 172 orders against 126 clicks. Both figures are real and the ratio is arithmetically right: a
+   * view-through conversion needs no click, and the two are counted on different attribution
+   * windows, so conversions genuinely can exceed clicks. Printed without a word, «136.51%» reads as
+   * a bug in the product and teaches the reader to distrust the whole panel.
+   *
+   * This is the treatment FUNNEL-NOT-NESTED-001 established for «166%» one screen over: the figure
+   * is not hidden, corrected or clamped — nothing here knows which side is wrong — it is marked, and
+   * the marker explains itself on hover.
+   */
+  const overWhole = RATE_KEYS.has(metricKey) && now.kind === 'value' && now.value > 1
+
   return (
     <div className="rounded-md border border-border p-3">
       <p className="text-xs text-text-secondary">{metricLabel(metricKey, locale)}</p>
       <p className="mt-1 text-lg font-semibold tabular-nums text-text-primary" dir="ltr">
         {formatMetric(now, metricKey, locale, currency)}
+        {overWhole && (
+          <span
+            className="ms-1 cursor-help text-xs font-normal text-text-muted"
+            title={locale === 'ar'
+              ? 'أكبر من 100% لأن التحويلات لا تتطلب نقرة — تُحتسب مشاهدات الإعلان أيضًا، وبنافذة إسناد مختلفة عن النقرات.'
+              : 'Above 100% because a conversion does not require a click — view-throughs count too, on a different attribution window from clicks.'}
+          >
+            ⓘ
+          </span>
+        )}
       </p>
       {change !== null && (
         <p

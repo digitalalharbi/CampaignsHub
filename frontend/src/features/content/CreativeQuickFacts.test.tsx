@@ -39,7 +39,7 @@ const card = (): CreativeCard => ({
   campaign_id: 'camp1',
   campaign_name: 'Always-On — Sales',
   ad_set_id: null,
-  ad_id: null,
+  ads: [],
   preview: {
     state: 'available', kind: 'image', image_url: 'https://example.test/a.png',
     video_url: null, thumbnail_url: null, expires_at: null, note_ar: null, note_en: null,
@@ -50,6 +50,7 @@ const card = (): CreativeCard => ({
   objective: 'sales',
   path: 'conversion',
   headline_metrics: ['spend', 'conversions', 'cpa', 'roas'],
+  ad_delivered: false,
   metrics: metrics(),
   fatigue: { status: 'watch', signals: [], reason_ar: 'انخفض معدل النقر', reason_en: 'CTR has fallen' },
 })
@@ -60,7 +61,7 @@ const detail = (): CreativeDetail => ({
     copy: { body: 'Free delivery this week', headline: 'New season', description: null, cta: 'Shop now' },
     dimensions: { width: 1080, height: 1080, aspect_ratio: '1:1', file_size: null },
     destination_url: 'https://shop.test/new',
-    external_ids: { creative: 'x1', ad: null, ad_set: null, campaign: null },
+    external_ids: { creative: 'x1', ad_set: null, campaign: null },
   },
   period: { from: '2026-07-09', to: '2026-08-07', days: 30 },
   previous_period: { from: '2026-06-09', to: '2026-07-08' },
@@ -182,5 +183,60 @@ describe('the creative panel', () => {
     const views = await screen.findByTestId('quick-metric-video_views')
     expect(views).toHaveTextContent('Not provided')
     expect(views).not.toHaveTextContent(/\b0\b/)
+  })
+
+  /*
+   * ── CREATIVE-FRONTEND-ADS-001 ────────────────────────────────────────────────────────────────
+   *
+   * `ad_id` is ONE ad chosen from many by database row order. The canonical relation is
+   * `external_ads.creative_id`, and one asset is routinely placed by several ads across squads.
+   * The backend has sent the whole list since the presenter was fixed; nothing consumed it, so the
+   * product kept implying each creative belonged to exactly one ad.
+   */
+  it('names every ad running the creative, not just the first one found', async () => {
+    vi.mocked(getCreativeInReach).mockResolvedValue({
+      ...detail(),
+      creative: {
+        ...detail().creative,
+        ads: [
+          { id: 'a1', external_id: 'ad-1', name: 'Story · 9:16', status: 'active', external_ad_set_id: 's1', external_campaign_id: 'c1' },
+          { id: 'a2', external_id: 'ad-2', name: 'Feed · 1:1', status: 'paused', external_ad_set_id: 's2', external_campaign_id: 'c1' },
+        ],
+      },
+    })
+
+    open(true)
+
+    const pane = within(await screen.findByTestId('creative-quick-facts'))
+
+    expect(await pane.findByText(/Story · 9:16/)).toBeInTheDocument()
+    expect(pane.getByText(/Feed · 1:1/)).toBeInTheDocument()
+    // The count is the point: it is what says this asset is placed more than once.
+    expect(pane.getByText(/\(2\)/)).toBeInTheDocument()
+  })
+
+  /** An ad the platform left unnamed still has to be identifiable. */
+  it('falls back to the provider id when an ad has no name', async () => {
+    vi.mocked(getCreativeInReach).mockResolvedValue({
+      ...detail(),
+      creative: {
+        ...detail().creative,
+        ads: [{ id: 'a1', external_id: 'ad-77', name: null, status: 'active', external_ad_set_id: null, external_campaign_id: null }],
+      },
+    })
+
+    open(true)
+
+    expect(await within(await screen.findByTestId('creative-quick-facts')).findByText(/ad-77/)).toBeInTheDocument()
+  })
+
+  /** A creative no ad references shows no ad row at all, rather than an empty label. */
+  it('says nothing about ads when there are none', async () => {
+    open(true)
+
+    const pane = within(await screen.findByTestId('creative-quick-facts'))
+    await pane.findByText('New season')
+
+    expect(pane.queryByText(/Ads running it/)).not.toBeInTheDocument()
   })
 })

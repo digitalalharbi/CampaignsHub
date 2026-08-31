@@ -100,6 +100,7 @@ const card = (over: Partial<CreativeCard> = {}): CreativeCard =>
     objective: 'sales',
     path: 'sales',
     headline_metrics: ['spend', 'revenue', 'video_views', 'completion_rate'],
+    ad_delivered: false,
     metrics: metrics(),
     fatigue: { status: 'stable', signals: [], reason_ar: '', reason_en: '' },
     ...over,
@@ -111,6 +112,8 @@ const page = (over: Partial<LibraryPage> = {}): LibraryPage => ({
   per_page: 24,
   total: 1,
   period: { from: '2026-07-08', to: '2026-08-06' },
+  currency: 'SAR',
+  metrics_availability: { meta: { status: 'success', rows: 12, error: null, at: null } },
   filters: {
     providers: ['meta', 'tiktok'],
     formats: ['image', 'video'],
@@ -118,7 +121,7 @@ const page = (over: Partial<LibraryPage> = {}): LibraryPage => ({
     kinds: ['image', 'video', 'carousel'],
     campaigns: [{ id: 'c1', name: 'National Day Sale', objective: 'sales' }],
     ad_sets: ['set-1'],
-    ads: ['ad-1'],
+    ads: [{ value: 'ad-1', label: 'ad-1' }],
     objectives: ['sales', 'awareness'],
     paths: ['awareness', 'traffic', 'leads', 'sales'],
     projects: [{ id: 'p1', name: 'Q3 Launch', client_id: 'cl1' }],
@@ -147,15 +150,15 @@ describe('CreativesPage', () => {
 
     const bar = within(screen.getByTestId('content-filters'))
 
-    for (const axis of ['Client', 'Project', 'Platform', 'Campaign', 'Objective', 'Marketing path', 'Creative type', 'Fatigue']) {
+    for (const axis of ['Client', 'Project', 'Platform', 'Campaign', 'Objective', 'Marketing path', 'Ad type', 'Fatigue']) {
       expect(bar.getByText(axis)).toBeInTheDocument()
     }
     // Reachable without opening anything.
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     // The values come from the rows the server returned, not from a hardcoded list.
-    fireEvent.click(screen.getByTestId('content-providers'))
-    expect(screen.getByRole('option', { name: 'TikTok' })).toBeInTheDocument()
+    // Visible without opening anything — that IS the requirement now.
+    expect(screen.getByTestId('content-providers-tiktok')).toBeInTheDocument()
   })
 
   /** The rare axes still fold — that is what «More filters» is for. */
@@ -184,9 +187,11 @@ describe('CreativesPage', () => {
 
     expect(screen.queryByTestId('content-applied')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByTestId('content-providers'))
-    fireEvent.click(screen.getByRole('option', { name: 'TikTok' }))
-    fireEvent.click(screen.getByRole('option', { name: 'Meta' }))
+    // UX-FILTERS-001 — the platforms are visible chips now, so choosing one is a single press
+    // rather than «open the popover, then pick». The assertion below is unchanged: what matters is
+    // that the choice reaches the SERVER, not how the control is shaped.
+    fireEvent.click(screen.getByTestId('content-providers-tiktok'))
+    fireEvent.click(screen.getByTestId('content-providers-meta'))
 
     await waitFor(() => expect(screen.getByTestId('content-applied-providers:tiktok')).toBeInTheDocument())
     expect(screen.getByTestId('content-applied-providers:meta')).toBeInTheDocument()
@@ -202,8 +207,10 @@ describe('CreativesPage', () => {
     renderWithProviders(<CreativesPage />, { locale: 'en' })
     await screen.findByRole('article')
 
-    fireEvent.click(screen.getByTestId('content-providers'))
-    fireEvent.click(screen.getByRole('option', { name: 'TikTok' }))
+    // UX-FILTERS-001 — the platforms are visible chips now, so choosing one is a single press
+    // rather than «open the popover, then pick». The assertion below is unchanged: what matters is
+    // that the choice reaches the SERVER, not how the control is shaped.
+    fireEvent.click(screen.getByTestId('content-providers-tiktok'))
     await waitFor(() => expect(screen.getByTestId('content-applied-providers:tiktok')).toBeInTheDocument())
 
     fireEvent.click(screen.getByTestId('content-reset'))
@@ -222,8 +229,10 @@ describe('CreativesPage', () => {
     renderWithProviders(<CreativesPage />, { locale: 'en' })
     await screen.findByRole('article')
 
-    fireEvent.click(screen.getByTestId('content-providers'))
-    fireEvent.click(screen.getByRole('option', { name: 'TikTok' }))
+    // UX-FILTERS-001 — the platforms are visible chips now, so choosing one is a single press
+    // rather than «open the popover, then pick». The assertion below is unchanged: what matters is
+    // that the choice reaches the SERVER, not how the control is shaped.
+    fireEvent.click(screen.getByTestId('content-providers-tiktok'))
 
     await waitFor(() => {
       const calls = vi.mocked(listCreatives).mock.calls
@@ -272,7 +281,7 @@ describe('CreativesPage', () => {
    * because each one fetches its own metadata. Cards render a poster; the player exists only inside
    * the viewer, after somebody opens a creative.
    */
-  it('renders posters on cards and mounts no video element until a creative is opened', async () => {
+  it('renders posters on cards and mounts no video element until a ad is opened', async () => {
     vi.mocked(listCreatives).mockResolvedValue(
       page({
         creatives: [
@@ -358,7 +367,7 @@ describe('CreativesPage', () => {
   })
 
   /** `?creative=<id>` is the last rung of the drill-down — it opens that creative, not that index. */
-  it('opens the creative the address names', async () => {
+  it('opens the ad the address names', async () => {
     vi.mocked(listCreatives).mockResolvedValue(
       page({
         creatives: [card({ id: 'cr-1', name: 'Hero image' }), card({ id: 'cr-2', name: 'Brand film' })],
@@ -373,7 +382,7 @@ describe('CreativesPage', () => {
   })
 
   /** An id that this selection filtered out leaves the library open — it does not open a neighbour. */
-  it('opens nothing when the named creative is not in the results', async () => {
+  it('opens nothing when the named ad is not in the results', async () => {
     renderWithProviders(<CreativesPage />, { locale: 'en', route: '/app/content?creative=cr-missing' })
 
     await screen.findByRole('article')
@@ -419,7 +428,7 @@ describe('CreativesPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Merge as one asset/ }))
 
     await waitFor(() => expect(vi.mocked(groupCreatives)).toHaveBeenCalledWith(['cr-1', 'cr-2']))
-    expect(await screen.findByText('2 creatives were merged as one asset.')).toBeInTheDocument()
+    expect(await screen.findByText('2 ads were merged as one asset.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open group' })).toHaveAttribute(
       'href',
       expect.stringContaining('groups?group=grp-9'),
@@ -455,4 +464,68 @@ describe('CreativesPage', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/same project/)
   })
+
+  /*
+   * ── CONTENT-STATE-SEMANTICS-001 — on the RENDERED card ───────────────────────────────────────
+   *
+   * A helper test cannot catch a page that never calls the helper, and this product has already
+   * shipped one canonical reader that nothing was wired to. These render the real library.
+   */
+
+  it('tells a ad that did not run apart from one whose data failed to arrive', async () => {
+    vi.mocked(listCreatives).mockResolvedValue(
+      page({
+        creatives: [card({ metrics: null })],
+        metrics_availability: { meta: { status: 'success', rows: 814, error: null, at: null } },
+      }),
+    )
+
+    renderWithProviders(<CreativesPage />, { locale: 'ar' })
+
+    expect(await screen.findByTestId('creative-empty-did_not_run')).toHaveTextContent('لم يعمل خلال هذه الفترة')
+    expect(screen.queryByText('لا توجد بيانات')).not.toBeInTheDocument()
+  })
+
+  it('shows a failed fetch as a warning carrying the provider reason', async () => {
+    vi.mocked(listCreatives).mockResolvedValue(
+      page({
+        creatives: [card({ metrics: null })],
+        metrics_availability: {
+          meta: { status: 'failed', rows: 0, error: 'Rate limited by the platform (429).', at: null },
+        },
+      }),
+    )
+
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+
+    const el = await screen.findByTestId('creative-empty-failed')
+
+    expect(el).toHaveTextContent(/could not be fetched/i)
+    expect(el).toHaveTextContent('Rate limited by the platform (429).')
+  })
+
+  it('says a platform reports no ad performance rather than implying data is missing', async () => {
+    vi.mocked(listCreatives).mockResolvedValue(
+      page({
+        creatives: [card({ metrics: null, provider: 'tiktok' })],
+        metrics_availability: { tiktok: { status: 'unsupported', rows: 0, error: null, at: null } },
+      }),
+    )
+
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('creative-empty-unsupported')).toBeInTheDocument()
+  })
+
+  /** A creative WITH figures keeps its metric grid — the reason replaces nothing real. */
+  it('leaves a delivering ad its numbers', async () => {
+    vi.mocked(listCreatives).mockResolvedValue(page())
+
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+
+    await screen.findByText('Hero image')
+
+    expect(screen.queryByTestId(/creative-empty-/)).not.toBeInTheDocument()
+  })
+
 })

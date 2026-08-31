@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { roleLabel } from '../roleLabels'
 import { ShieldCheck, UserMinus, UserPlus } from 'lucide-react'
 import { useTeam, useTeamActions } from '../api'
 import { Field } from '@/components/ui/Field'
@@ -27,7 +28,14 @@ export function TeamTab() {
       fallbackTitle={ar ? 'تعذّر تحميل الفريق.' : 'The team could not be loaded.'} />
   }
 
-  const roleOptions = data.roles.map((r) => ({ value: r.slug, label: r.name }))
+  /*
+    ROLE-LABEL-001 — the product's own role names read in the reader's language.
+
+    This mapped `r.name` straight from the roles table, so the dropdown offered «Tenant Owner» and
+    «Team Member» inside an Arabic page. A role the TENANT created keeps the name they typed; only
+    seeded system roles are translated. See `roleLabels.ts`.
+  */
+  const roleOptions = data.roles.map((r) => ({ value: r.slug, label: roleLabel(r, ar) }))
 
   const doInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,7 +66,7 @@ export function TeamTab() {
         </div>
         <p className="mt-2 max-w-2xl text-xs leading-6 text-text-muted">
           {ar
-            ? 'تُرسل دعوة برابط ينتهي خلال ٧٢ ساعة. لا يُنشأ الحساب ولا تُمنح أي صلاحية قبل أن يفتح الشخص الرابط ويختار كلمة مروره — لذلك لا يترك البريد الخاطئ حسابًا معلّقًا.'
+            ? 'تُرسل دعوة برابط ينتهي خلال 72 ساعة. لا يُنشأ الحساب ولا تُمنح أي صلاحية قبل أن يفتح الشخص الرابط ويختار كلمة مروره — لذلك لا يترك البريد الخاطئ حسابًا معلّقًا.'
             : 'An invitation link is sent and expires in 72 hours. No account exists and nothing is granted until the person opens it and chooses a password — so a mistyped address leaves nothing behind.'}
         </p>
       </form>
@@ -79,7 +87,8 @@ export function TeamTab() {
                 <div>
                   <div className="font-medium text-text-primary" dir="ltr">{i.email}</div>
                   <div className="text-[13px] text-text-muted">
-                    {i.role_slug}
+                    {/* A pending invite showed the raw slug — «tenant-owner» — beside a translated row. */}
+                    {roleLabel({ slug: i.role_slug, name: i.role_slug, is_system: true }, ar)}
                     {i.expired
                       ? ` · ${ar ? 'انتهت صلاحية الرابط' : 'the link has expired'}`
                       : ` · ${ar ? 'ينتهي' : 'expires'} ${i.expires_at.slice(0, 10)}`}

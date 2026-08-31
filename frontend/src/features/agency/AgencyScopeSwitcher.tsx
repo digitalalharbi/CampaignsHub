@@ -224,13 +224,19 @@ function Field({ testId, icon, label, value, placeholder, options, onChange, dis
       )}
 
       <div className="relative">
+        {/*
+          The same clipping the project switcher had: a Latin client name in an RTL rail overflowed
+          at the START edge, so the first letters were cut with nothing to say so. `dir="auto"` lays
+          each name out in its own direction and the ellipsis then falls at its end.
+        */}
         <select
           data-testid={testId}
+          dir="auto"
           aria-label={label}
           disabled={disabled}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full cursor-pointer appearance-none rounded-xl border border-border bg-surface-secondary py-2 pe-8 ps-3 text-[13px] font-semibold text-text-primary transition-colors hover:border-border-strong focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full cursor-pointer appearance-none overflow-hidden text-ellipsis whitespace-nowrap rounded-xl border border-border bg-surface-secondary py-2 pe-8 ps-3 text-[13px] font-semibold text-text-primary transition-colors hover:border-border-strong focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/25 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <option value="">{placeholder}</option>
           {shown.map((o) => (

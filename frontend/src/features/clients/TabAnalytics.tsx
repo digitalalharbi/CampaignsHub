@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
+import { StatCard } from '@/components/ui/StatCard'
 import { AlertTriangle, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import { getClientAnalytics, type ClientAnalytics } from './api'
+import { ratio } from '@/features/analytics/format'
 import { useT } from '@/lib/i18n'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
@@ -15,13 +17,9 @@ function DeltaBadge({ v }: { v: number | null | undefined }) {
   return <span className={`ms-1 text-[11px] font-semibold ${up ? 'text-success' : 'text-danger'}`}>{up ? '▲' : '▼'} {pct(Math.abs(v))}</span>
 }
 
-function Kpi({ label, value, delta, muted }: { label: string; value: string; delta?: number | null; muted?: boolean }) {
-  return (
-    <div className={`rounded-xl border border-border p-4 ${muted ? 'bg-surface' : 'bg-surface-secondary'}`}>
-      <div className="text-xs text-text-muted">{label}</div>
-      <div className="mt-1 flex items-baseline"><span className="tnum text-xl font-extrabold text-text-primary">{value}</span><DeltaBadge v={delta} /></div>
-    </div>
-  )
+/** UX-KPI-PRESENTATION-001 — the shared card; `muted` is gone with the second background it named. */
+function Kpi({ label, value, delta }: { label: string; value: string; delta?: number | null; muted?: boolean }) {
+  return <StatCard label={label} value={value} trailing={<DeltaBadge v={delta} />} />
 }
 
 function FreshnessBanner({ a, t }: { a: ClientAnalytics; t: ReturnType<typeof useT> }) {
@@ -96,7 +94,7 @@ export function TabAnalytics({ clientId }: { clientId: string }) {
             <Kpi label={`${t('an_spend')}${cur}`} value={num(a.totals.spend, 2)} delta={a.delta?.spend} />
             <Kpi label={t('an_results')} value={num(a.totals.conversions)} delta={a.delta?.conversions} />
             <Kpi label={`${t('an_revenue')}${cur}`} value={num(a.totals.revenue, 2)} delta={a.delta?.revenue} />
-            <Kpi label={t('an_roas')} value={a.totals.roas === null ? '—' : `${num(a.totals.roas, 2)}×`} delta={a.delta?.roas} muted={!a.roas_is_primary} />
+            <Kpi label={t('an_roas')} value={ratio(a.totals.roas)} delta={a.delta?.roas} muted={!a.roas_is_primary} />
             <Kpi label={`${t('an_cpa')}${cur}`} value={num(a.totals.cpa, 2)} delta={a.delta?.cpa} />
             <Kpi label={t('an_ctr')} value={pct(a.totals.ctr)} delta={a.delta?.ctr} />
             <Kpi label={`${t('an_cpc')}${cur}`} value={num(a.totals.cpc, 2)} delta={a.delta?.cpc} />
@@ -143,7 +141,7 @@ function CampaignCard({ title, c, good }: { title: string; c: Record<string, unk
       <div className="text-xs font-semibold text-text-muted">{title}</div>
       <div className="mt-0.5 truncate text-sm font-bold text-text-primary">{String(c.campaign_name ?? c.client_display_name ?? '—')}</div>
       <div className="mt-1 flex gap-3 text-[11px] text-text-secondary">
-        <span>ROAS {c.roas === null || c.roas === undefined ? '—' : `${num(c.roas as number, 2)}×`}</span>
+        <span>ROAS {ratio(c.roas as number | null | undefined)}</span>
         <span>CPA {num((c.cpa as number) ?? null, 2)}</span>
         <span>Spend {num((c.spend as number) ?? null, 2)}</span>
       </div>

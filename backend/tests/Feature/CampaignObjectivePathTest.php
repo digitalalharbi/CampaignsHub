@@ -8,16 +8,18 @@ use App\Domains\Campaigns\Enums\CampaignObjective;
 use Tests\TestCase;
 
 /**
- * The objective→path grouping the dashboard's path control mirrors — UX-DASH-001.
+ * The objective→path grouping `CampaignObjective::path()` classifies a creative by — UX-DASH-001.
  *
- * `frontend/src/features/campaigns/labels.ts` holds `PATH_OBJECTIVES`, because the path filter is
- * not a server axis: it selects a path's objectives and sends them on the objective filter the
- * metrics API already supports. A drift between the two can only mis-group the CHOICES — the server
- * still filters by exactly the objectives it was handed, so no figure can come out wrong — but a
- * choice filed under the wrong heading is still a lie about what the money is for.
+ * This no longer guards a filter. ANALYTICS-OBJECTIVE-SYSTEM-001 removed the «المسار التسويقي»
+ * control and the `PATH_OBJECTIVES` map behind it, because a path and an objective were one decision
+ * offered twice — `CanonicalObjective` is the single grouping the product now offers a reader.
  *
- * So the grouping is written out here rather than derived from the enum. Deriving it would make the
- * test agree with any change automatically, which is the one thing it must not do.
+ * `path()` itself stays, and so does this test: every creative row carries a `path`, shown on the
+ * creative pages and used to compare a creative against its peers. A creative filed under the wrong
+ * heading is still a lie about what the money is for.
+ *
+ * The grouping is written out here rather than derived from the enum. Deriving it would make the test
+ * agree with any change automatically, which is the one thing it must not do.
  */
 final class CampaignObjectivePathTest extends TestCase
 {
@@ -42,11 +44,11 @@ final class CampaignObjectivePathTest extends TestCase
             $this->assertSame(
                 $objectives,
                 $found,
-                "The «{$path}» path moved. Update PATH_OBJECTIVES in frontend/src/features/campaigns/labels.ts.",
+                "The «{$path}» path moved, so every creative filed under it is now filed wrongly.",
             );
         }
 
-        // And no path exists that the dashboard has never heard of.
+        // And no path exists that the creative pages have never heard of.
         $this->assertSame([], array_diff(array_keys($actual), array_keys($expected)));
     }
 }

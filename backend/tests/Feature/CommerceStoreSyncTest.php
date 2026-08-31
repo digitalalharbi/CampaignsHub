@@ -16,10 +16,12 @@ use App\Domains\Commerce\Models\CommerceProduct;
 use App\Domains\Commerce\Services\StoreSyncer;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Metrics\Models\CurrencyRate;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -72,6 +74,13 @@ final class CommerceStoreSyncTest extends TestCase
         $this->configure('salla');
         $store = $this->store('salla');
 
+        // The rate a real deployment carries. Reporting is USD; this store bills in SAR, and without
+        // a rate the money contract correctly refuses to state a USD total at all.
+        CurrencyRate::create([
+            'base_currency' => 'SAR', 'quote_currency' => 'USD',
+            'rate' => 0.2666, 'rate_date' => '2026-07-01', 'source' => 'test',
+        ]);
+
         Http::fake([
             'api.salla.dev/*/products*' => Http::response([
                 'data' => [[
@@ -123,10 +132,21 @@ final class CommerceStoreSyncTest extends TestCase
         $this->assertSame('SAR', $product->currency);
         $this->assertSame($this->project->id, $product->project_id);
 
+        /*
+         * MONEY-USD-001 — a SAR store needs a SAR→USD rate before its total can be stated.
+         *
+         * The reporting currency is USD, and this store bills in SAR. Without a rate the money
+         * contract refuses to convert and `total` is null — correct, and the same rule that protects
+         * every other figure in the product. It is worth being explicit that the switch to USD cuts
+         * both ways: it un-withholds USD ad spend that had no SAR rate, and it withholds SAR store
+         * revenue that used to convert at par. Real deployments carry the rate; this fixture now
+         * does too.
+         */
         $order = CommerceOrder::withoutGlobalScopes()->firstOrFail();
         $this->assertSame('completed', $order->status);
         $this->assertSame('1042', $order->reference);
-        $this->assertSame('214.500000', $order->total);
+        // 214.50 SAR at the stored rate. The ORIGINAL survives beside it — see `original_total`.
+        $this->assertSame('57.185700', $order->total);
         $this->assertSame('2026-08-01', $order->placed_at->toDateString());
         $this->assertNotNull($order->commerce_customer_id);
 
@@ -217,7 +237,7 @@ final class CommerceStoreSyncTest extends TestCase
 
         $run = app(StoreSyncer::class)->sync($store, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-05'));
 
-        $this->assertSame('partial', $run->status);
+        $this->assertSame('partial_mapping', $run->status);
         $this->assertStringContainsString('does not expose abandoned carts', (string) $run->error);
 
         // The Arabic name, not «Array» and not the English placeholder.
@@ -354,14 +374,15 @@ final class CommerceStoreSyncTest extends TestCase
 
     // ── Honest refusals ───────────────────────────────────────────────────────────────────────
 
-    public function test_an_unconfigured_store_platform_calls_nothing_and_records_awaiting_credentials(): void
+    /** An unconfigured store calls nothing. §8 gives that outcome the word `failed`. */
+    public function test_an_unconfigured_store_platform_calls_nothing_and_records_a_failed_run(): void
     {
         Http::preventStrayRequests();
         Http::fake();
 
         $run = app(StoreSyncer::class)->sync($this->store('salla'), Carbon::parse('2026-08-01'), Carbon::parse('2026-08-05'));
 
-        $this->assertSame('awaiting_credentials', $run->status);
+        $this->assertSame('failed', $run->status);
         $this->assertSame(0, $run->records);
         Http::assertNothingSent();
     }
@@ -435,7 +456,7 @@ final class CommerceStoreSyncTest extends TestCase
             connectionName: $provider,
         );
 
-        return ExternalAccount::withoutGlobalScopes()->create([
+        $store = ExternalAccount::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id,
             'provider_connection_id' => $connection->getKey(),
             'provider' => $provider,
@@ -445,6 +466,26 @@ final class CommerceStoreSyncTest extends TestCase
             'currency' => 'SAR',
             'status' => 'active',
         ]);
+
+        /*
+         * Assigned to the project — COMMERCE-PROJECT-001.
+         *
+         * `StoreSyncer` used to answer «which project?» with the tenant's OLDEST project, so this
+         * fixture worked without ever saying where the store's revenue belonged. It refuses now, the
+         * same way the ad-platform syncers do, and these tests are about what a store's data DOES
+         * once somebody has said which project it feeds — so the fixture has to say it.
+         */
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $this->project->client_workspace_id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $store->getKey(),
+            'provider' => $provider,
+            'purpose' => 'ecommerce',
+            'is_active' => true,
+        ]);
+
+        return $store;
     }
 
     /**

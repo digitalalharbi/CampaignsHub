@@ -88,13 +88,59 @@ test.describe('the advertiser portal', () => {
      * Naming the objective keeps the test about what it was always about: the labels re-render in
      * the reader's language rather than freezing in whichever one loaded first.
      */
-    await page.getByTestId('dashboard-objective').selectOption('awareness')
-    await expect(page.getByText('الوصول').first()).toBeVisible({ timeout: 20000 })
+    /*
+     * `sales`, not `awareness` — the objective this account's seeded campaigns actually carry.
+     *
+     * The awareness scope holds NO rows here, and since METRICS-EMPTY-SCOPE-001 an empty scope
+     * renders one sentence about the filter rather than a row of cards each reading «لم ترسله
+     * المنصة». A scope with nothing in it has no standing to say what a platform reports.
+     *
+     * And the assertion is scoped by TESTID rather than by page text, which is the other half of
+     * what went wrong: `getByText('الوصول')` also matches the objective SELECT's own «الوصول»
+     * option, so the Arabic half used to be satisfied by the dropdown without ever touching a KPI
+     * card. Only the English half ever reached the strip — which is why this failed on one language
+     * and not the other. Asking the card directly cannot be answered by a control that happens to
+     * share a word.
+     */
+    await page.getByTestId('dashboard-objective').selectOption('sales')
+
+    const roas = page.getByTestId('metric-roas')
+
+    await expect(roas).toContainText('العائد على الإنفاق', { timeout: 20000 })
 
     await toggleLanguage(page)
-    await expect(page.getByText('Reach').first()).toBeVisible({ timeout: 20000 })
-    await expect(page.getByText('الوصول')).toHaveCount(0)
+    await expect(roas).toContainText('Return on ad spend', { timeout: 20000 })
+    await expect(roas).not.toContainText('العائد على الإنفاق')
   })
+
+  /**
+   * METRICS-EMPTY-SCOPE-001 — a filter matching nothing speaks about the FILTER, in either language.
+   *
+   * Narrowing to an objective this account never bought used to produce a row of cards each saying
+   * «لم ترسله المنصة» — a claim about Meta and Snapchat derived from an absence of CAMPAIGNS.
+   */
+  test('an objective with no campaigns says so, and says nothing about the platform', async ({ page }) => {
+    await page.goto('/app/dashboard')
+    await expect(page.locator('main')).toBeVisible()
+
+    /*
+     * The canonical bucket, not the raw objective it replaced — ANALYTICS-OBJECTIVE-SYSTEM-001.
+     *
+     * Every seeded campaign on this account carries `sales`, so «الوعي والتفاعل» covers four raw
+     * objectives and matches none of them. That is exactly the scope this test needs: a filter that
+     * really does match nothing, rather than one that happens to be empty today.
+     */
+    await page.getByTestId('dashboard-objective').selectOption('awareness_engagement')
+
+    const panel = page.getByTestId('dashboard-metrics-empty-scope')
+
+    await expect(panel).toBeVisible({ timeout: 20000 })
+    await expect(panel).toContainText('لا توجد بيانات ضمن هذه الفلاتر')
+
+    await toggleLanguage(page)
+    await expect(panel).toContainText('No data matches these filters')
+  })
+
 
   /** Every rail link opens a page with content — the advertiser's own sections, not the agency's. */
   test('every rail link opens a page that is not empty', async ({ page }) => {
@@ -148,6 +194,81 @@ test.describe('the advertiser portal', () => {
     }
 
     expect(stillArabic, `these sections are still Arabic under dir=ltr:\n${stillArabic.join('\n')}`).toEqual([])
+  })
+
+  /**
+   * LABEL-LEAK-001 — the mirror of the walk above: no section shows the database's own words.
+   *
+   * Three screens shipped with label maps written against a guessed subset of their key sets, and
+   * every one of them falls back to printing the key: the settings dropdown offered `in_house_team`
+   * and `self_serve_company`; the projects filter row read «الكل draft onboarding active paused
+   * completed archived»; the subscriptions page — the one somebody reads before paying — showed
+   * «clients 1 4 5» and «الدعم community».
+   *
+   * None of those was a broken query. Each was a map that drifted from a PHP enum or a seeder, and
+   * silently. So this walks the rail the same way and asserts that no visible text is a bare
+   * lowercase identifier, which is what every one of them looked like.
+   *
+   * The allow-list is words that are legitimately Latin in an Arabic page — file formats, metric
+   * abbreviations, platform names. Anything else that renders as `snake_case` or a lone English
+   * word is a label nobody wrote.
+   */
+  test('no section shows a raw identifier where a label belongs', async ({ page }) => {
+    const ALLOWED = new Set([
+      'pdf', 'xlsx', 'csv', 'roas', 'ctr', 'cpa', 'cpc', 'cpm', 'aov', 'api', 'url', 'id', 'ai',
+      'meta', 'google', 'tiktok', 'snapchat', 'linkedin', 'x', 'salla', 'zid',
+      'sar', 'usd', 'aed', 'demo', 'all', 'none', 'beta', 'utc', 'vat', 'ok',
+    ])
+
+    await page.goto('/app/dashboard')
+    await expect(page.getByRole('navigation').first()).toBeVisible()
+
+    const hrefs = await page.getByRole('navigation').first().locator('a[href^="/app"]')
+      .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('href')!))])
+
+    const leaks: string[] = []
+    for (const href of hrefs) {
+      await openSection(page, href)
+      await expect(page.locator('main')).toBeVisible({ timeout: 20000 })
+
+      /*
+       * Wait for the section to SETTLE, not merely to be non-empty.
+       *
+       * The first version of this test polled for «any text at all», which a heading satisfies
+       * instantly — so it read `main` before the section's queries resolved, found the header and
+       * nothing else, and passed. Reintroducing a known leak on purpose did not fail it, which is
+       * how that was discovered: a guard that cannot fail is not a guard.
+       *
+       * Two identical consecutive reads means the content has stopped arriving. That is a fact about
+       * this page rather than a sleep long enough to usually work.
+       */
+      let previous = ''
+      await expect.poll(async () => {
+        const current = (await page.locator('main').innerText()).trim()
+        const settled = current.length > 0 && current === previous
+        previous = current
+        return settled
+      }, { timeout: 20000, intervals: [250] }).toBe(true)
+
+      const found = await page.locator('main').evaluate((root, allowed) => {
+        const out = new Set<string>()
+        const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+        let node: Node | null
+        while ((node = walk.nextNode())) {
+          const text = (node.textContent ?? '').trim()
+          if (!text || text.length > 28) continue
+          // A lone lowercase word, or snake_case — the shape every leaked key had.
+          if (!/^[a-z][a-z0-9]*([_-][a-z0-9]+)*$/.test(text)) continue
+          if ((allowed as string[]).includes(text.toLowerCase())) continue
+          out.add(text)
+        }
+        return [...out]
+      }, [...ALLOWED])
+
+      if (found.length > 0) leaks.push(`${href}: ${found.join(' ')}`)
+    }
+
+    expect(leaks, `these sections render identifiers instead of labels:\n${leaks.join('\n')}`).toEqual([])
   })
 
   test('the dashboard holds together on a phone', async ({ page }) => {

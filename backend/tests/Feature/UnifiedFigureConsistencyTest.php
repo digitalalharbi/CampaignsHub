@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Models\CampaignAnnotation;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
@@ -14,9 +15,13 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
+use App\Domains\Metrics\Models\EntityDailyMetric;
+use App\Domains\Notifications\Services\DailyDigest;
+use App\Domains\Notifications\Services\DigestRecommendations;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Services\ReportGenerator;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -24,6 +29,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
@@ -67,6 +73,11 @@ final class UnifiedFigureConsistencyTest extends TestCase
     private const WINDOW = 'from=2026-07-01&to=2026-07-31';
 
     /** The figure under test. One sync wrote it; every surface must report exactly this. */
+    /** Set by `entityRows()`: `external_campaign_id` is a uuid FK, never the provider's own string id. */
+    private string $campaignA = '';
+
+    private string $campaignB = '';
+
     private const SPEND = 100.0;
 
     private const CLICKS = 50.0;
@@ -83,6 +94,9 @@ final class UnifiedFigureConsistencyTest extends TestCase
     private User $operator;
 
     private UnifiedCampaign $campaign;
+
+    /** The neighbouring CLIENT's campaign — the name that must never appear on this project's surfaces. */
+    private UnifiedCampaign $otherCampaign;
 
     private ExternalAccount $account;
 
@@ -127,6 +141,7 @@ final class UnifiedFigureConsistencyTest extends TestCase
             'name' => 'حملة أخرى', 'status' => 'active', 'objective' => 'sales',
             'total_budget' => 1000, 'budget_currency' => 'SAR',
         ]);
+        $this->otherCampaign = $otherCampaign;
 
         // ONE sync writes the figure under test; a second writes the neighbour's.
         $this->sync($this->project, $this->campaign, self::SPEND, self::CLICKS);
@@ -224,16 +239,566 @@ final class UnifiedFigureConsistencyTest extends TestCase
         $this->assertNotNull($freshness->json('meta.summary.state'), 'the figures carry no freshness verdict');
     }
 
+    /**
+     * PROVIDER-CROSS-SURFACE-PROPAGATION-001 — the surfaces this harness did not reach.
+     *
+     * The four tests above cover the dashboard, the breakdowns, the funnel and the client link. The
+     * requirement names more: budget, the objective view and the campaign detail all read the same
+     * ingested window, and each of them is a place where a second query could quietly appear.
+     *
+     * Asserted against the OTHER surfaces rather than against 100, for the reason the class docblock
+     * gives: pinning only to a literal would still pass on the day three surfaces each grew their own
+     * query and happened to agree.
+     */
+    public function test_budget_and_the_objective_view_read_the_same_window(): void
+    {
+        $dashboard = (float) $this->read('metrics/summary')->json('data.current.spend');
+
+        // `spent`, not `spend` — the budget view names the money already used against a budget, and
+        // asserting the wrong key would have passed a broken product by summing nothing to zero.
+        $budget = $this->sum($this->read('metrics/budget')->json('data'), 'spent');
+        $this->assertSame($dashboard, $budget, 'the budget view disagrees with the dashboard');
+
+        /*
+         * The objective view groups the same spend by family. Summed back up it must be the same
+         * money — a grouping that loses or invents a riyal is a grouping nobody can reconcile.
+         */
+        // `data.paths` — the objective view groups by marketing path, and each path carries its own
+        // spend. Summed back up it must be the same money: a grouping that loses or invents a riyal
+        // is a grouping nobody can reconcile against the dashboard above it.
+        $paths = $this->read('metrics/objective-performance')->json('data.paths');
+        $this->assertIsArray($paths, 'the objective view did not answer');
+        $this->assertNotEmpty($paths, 'a project with spend has no objective path');
+        $this->assertSame(
+            $dashboard,
+            $this->sum($paths, 'spend'),
+            'the objective breakdown does not sum to the dashboard',
+        );
+    }
+
+    /**
+     * The drill-down reads the same pipeline, and says so honestly when there is nothing beneath.
+     *
+     * This sync writes campaign-grain rows only, so the ad-set level has NOTHING — and the endpoint
+     * must say that rather than inventing a level or erroring. «No ad squads» is a fact about this
+     * account's data, and it is the answer a scoped report depends on being right.
+     */
+    public function test_the_drill_down_reports_what_is_beneath_without_inventing_it(): void
+    {
+        $entities = $this->read('metrics/entities/ad_set')->assertOk();
+
+        $this->assertIsArray($entities->json('data.entities'), 'the drill-down did not answer at all');
+        $this->assertSame([], $entities->json('data.entities'), 'entity rows appeared for a campaign-grain sync');
+    }
+
+    /**
+     * PROVIDER-CROSS-SURFACE-PROPAGATION-001 — the drill-down carries the SAME window, to the digit.
+     *
+     * The negative above proves the level does not invent rows. This is its other half, and the one a
+     * reader actually depends on: when a provider really does report ad-set grain, the figures that
+     * reach the drill-down are the figures the campaign level already showed.
+     *
+     * A drill-down is the surface where a second query is most tempting — it needs a parent filter the
+     * campaign breakdown does not — and the divergence it would produce is the most convincing kind,
+     * because the ad-set rows would each look plausible and only their SUM would contradict the
+     * campaign above them.
+     */
+    public function test_the_drill_down_carries_the_same_window_it_drilled_into(): void
+    {
+        $this->entityRows();
+
+        $entities = $this->read('metrics/entities/ad_set')->assertOk();
+        $rows = $entities->json('data.entities');
+
+        $this->assertNotSame([], $rows, 'the ad-set level reported nothing for a sync that wrote it');
+
+        $dashboard = (float) $this->read('metrics/summary')->json('data.current.spend');
+
+        $this->assertSame(
+            $dashboard,
+            $this->sum($rows, 'spend'),
+            'the ad sets beneath the campaign do not add up to the campaign the reader drilled into',
+        );
+    }
+
+    /**
+     * And narrowing to a parent narrows the DATA, not just the label.
+     *
+     * `parent` changes the database scope. A drill-down that filtered on the client would show one
+     * campaign's name over another campaign's rows, and every figure on the page would be real —
+     * which is precisely why nothing on screen would look wrong.
+     */
+    public function test_narrowing_the_drill_down_to_a_parent_excludes_the_other_parent(): void
+    {
+        $this->entityRows();
+
+        $mine = $this->read('metrics/entities/ad_set', '&parent='.$this->campaignA)->assertOk();
+        $names = array_column($mine->json('data.entities'), 'external_id');
+
+        $this->assertContains('sq-a', $names, 'the ad set under the requested campaign was dropped');
+        $this->assertNotContains('sq-b', $names, "another campaign's ad set survived the parent filter");
+    }
+
+    /**
+     * HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN — the two grains are read from their own tables, and
+     * neither one's figures leak into the other.
+     *
+     * `daily_metrics` answers at the campaign grain and `entity_daily_metrics` beneath it. They come
+     * from separate provider endpoints, so this deliberately does NOT assert that the children sum to
+     * the parent: a provider's own arithmetic is allowed to disagree across its endpoints, and a test
+     * demanding equality would eventually fail on truthful data and teach somebody to weaken it.
+     *
+     * What must hold is about OUR reading, and there are exactly two ways to get it wrong:
+     *
+     *   * **Duplication** — the same ad set counted under both campaigns, or its figure repeated per
+     *     matching row. Each ad set must carry exactly what was stored for it.
+     *   * **Overwrite** — the drill-down's arrival changing what the campaign grain says. The
+     *     campaign total is read from a different table and must be untouched by anything below it.
+     *
+     * Both are silent in production: the numbers stay plausible, and a client's report is off by a
+     * factor nobody can trace back to a join.
+     */
+    public function test_each_grain_reports_its_own_table_without_leaking_into_the_other(): void
+    {
+        $campaignSpend = (float) $this->read('metrics/summary')->json('data.current.spend');
+
+        $this->entityRows();
+
+        $rows = $this->read('metrics/entities/ad_set')->assertOk()->json('data.entities');
+        $bySet = array_column($rows, null, 'external_id');
+
+        $this->assertCount(2, $rows, 'the drill-down duplicated or dropped an ad set');
+
+        $half = round(self::SPEND / 2, 2);
+        foreach (['sq-a', 'sq-b'] as $adSet) {
+            $this->assertArrayHasKey($adSet, $bySet);
+            $this->assertEqualsWithDelta(
+                $half,
+                (float) $bySet[$adSet]['spend'],
+                0.01,
+                "{$adSet} does not carry the spend that was stored for it",
+            );
+        }
+
+        $this->assertEqualsWithDelta(
+            $campaignSpend,
+            (float) $this->read('metrics/summary')->json('data.current.spend'),
+            0.01,
+            'the campaign grain changed when entity rows arrived — one table is reading the other',
+        );
+    }
+
+    /**
+     * A parent-narrowed drill-down reports the child's OWN figure, not the parent's.
+     *
+     * The mistake this catches is a join that carries the campaign's spend down onto every ad set
+     * beneath it: the list looks right, the names are right, and every row shows the whole campaign's
+     * money. It reads as an ad set that spent everything.
+     */
+    public function test_a_narrowed_drill_down_reports_the_childs_figure_not_the_parents(): void
+    {
+        /*
+         * TWO ad sets under ONE campaign, and the split is uneven on purpose.
+         *
+         * The shared fixture puts one ad set under each campaign, which cannot catch this at all: with
+         * a single child, «the child's spend» and «the campaign's spend» are the same number, and a
+         * join that carried the parent's total down onto every row would pass. Two children whose
+         * figures differ is the smallest fixture where the defect is visible.
+         */
+        $campaign = (string) Str::uuid();
+        $this->adSetRow($campaign, 'sq-big', 900.0);
+        $this->adSetRow($campaign, 'sq-small', 100.0);
+
+        $rows = $this->read('metrics/entities/ad_set', '&parent='.$campaign)->assertOk()->json('data.entities');
+        $spend = array_column($rows, 'spend', 'external_id');
+
+        $this->assertCount(2, $rows);
+        $this->assertEqualsWithDelta(900.0, (float) $spend['sq-big'], 0.01);
+        $this->assertEqualsWithDelta(100.0, (float) $spend['sq-small'], 0.01, "the small ad set was given the campaign's total");
+        /* And neither carries the 1,000 the campaign spent between them. */
+        $this->assertNotEqualsWithDelta(1000.0, (float) $spend['sq-small'], 0.01);
+    }
+
+    /** One ad-set row, written where the syncer writes entity grain. */
+    private function adSetRow(string $campaignExternalId, string $externalId, float $spend): void
+    {
+        $this->holdingTenant((string) $this->tenant->id);
+
+        (new EntityDailyMetric)->forceFill([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'external_account_id' => $this->account->getKey(),
+            'provider' => 'meta',
+            'entity_type' => EntityDailyMetric::AD_SET,
+            'entity_id' => (string) Str::uuid(),
+            'external_entity_id' => $externalId,
+            'external_campaign_id' => $campaignExternalId,
+            'metric_date' => self::DATE,
+            'attribution_window' => 'default',
+            'is_demo' => false,
+            'spend' => $spend,
+            'original_currency' => 'SAR',
+            'project_currency' => 'SAR',
+        ])->save();
+
+        app(TenantContext::class)->forget();
+    }
+
+    /**
+     * PROVIDER-CROSS-SURFACE-PROPAGATION-001 — the BASIS of the figures, asserted directly.
+     *
+     * Everything else in this file compares figures to each other. That catches a surface growing its
+     * own query and cannot catch the other half of the requirement: currency, timezone and attribution
+     * were only ever asserted INDIRECTLY, by the figures happening to match.
+     *
+     * They are different kinds of wrong. A dashboard that adds a 7-day-click campaign to a
+     * 1-day-view one is not wrong in its arithmetic — every figure reconciles, every surface agrees —
+     * and the reader still draws a conclusion the data does not support. `metrics/normalization`
+     * exists to state the basis, and this asserts it states what is actually in the range rather than
+     * a default: the currency PAIR with its conversion, the timezone shift with both zones named, and
+     * every attribution window present, counted separately.
+     *
+     * The second window is the part that matters. Collapsing two windows into one row — taking the
+     * first, or the commonest — is exactly the silence the endpoint was built to break.
+     */
+    public function test_the_basis_of_the_window_is_stated_rather_than_defaulted(): void
+    {
+        // A second campaign in the SAME project, collected under a different attribution window.
+        $this->syncWindow('1d_view', 40.0);
+
+        $norm = $this->read('metrics/normalization')->json('data');
+
+        $currencies = $norm['currencies'] ?? [];
+        $this->assertNotSame([], $currencies, 'the window reported no currency at all');
+        $this->assertSame('SAR', $currencies[0]['from']);
+        $this->assertSame('SAR', $currencies[0]['to']);
+        $this->assertFalse($currencies[0]['converted'], 'nothing was converted here, and saying otherwise is a claim about a rate');
+
+        $timezones = $norm['timezones'] ?? [];
+        $this->assertNotSame([], $timezones, 'the window reported no timezone at all');
+        $this->assertSame('UTC', $timezones[0]['from']);
+        $this->assertSame('Asia/Riyadh', $timezones[0]['to']);
+        $this->assertTrue($timezones[0]['shifted'], 'a day boundary was moved and the reader was not told');
+
+        $windows = array_column((array) ($norm['attribution_windows'] ?? []), 'rows', 'window');
+        $this->assertArrayHasKey('7d_click', $windows);
+        $this->assertArrayHasKey('1d_view', $windows, 'two attribution windows were collapsed into one — the figures still add up, and the comparison does not');
+    }
+
+    /**
+     * And the window's EDGES are the same edges everywhere.
+     *
+     * A surface that computes its own range — or applies a timezone to a `metric_date` that is already
+     * a date — is off by one day at the boundary. It is invisible in the middle of a month and it is
+     * the whole of a Monday report: the day that matters most is the one that just ended.
+     *
+     * So a row on the last day of the window must be counted by every surface, and a row on the first
+     * day AFTER it by none of them. Asserted through the same three readers the rest of this file
+     * reconciles — the dashboard, the platform breakdown and the campaign list.
+     */
+    public function test_the_last_day_counts_everywhere_and_the_day_after_counts_nowhere(): void
+    {
+        $before = (float) $this->read('metrics/summary')->json('data.current.spend');
+
+        $this->syncOn('2026-07-31', 25.0);
+        $this->syncOn('2026-08-01', 999.0);
+
+        $summary = (float) $this->read('metrics/summary')->json('data.current.spend');
+        $platforms = $this->sum($this->read('metrics/platforms')->json('data'), 'spend');
+        $campaigns = $this->sum($this->read('metrics/campaigns')->json('data'), 'spend');
+
+        $this->assertEqualsWithDelta($before + 25.0, $summary, 0.01, 'the last day of the window is inside it');
+        $this->assertEqualsWithDelta($summary, $platforms, 0.01);
+        $this->assertEqualsWithDelta($summary, $campaigns, 0.01);
+        $this->assertLessThan(
+            $before + 100.0,
+            $summary,
+            'the day after the window was counted — a boundary that moves is a Monday report about the wrong week',
+        );
+    }
+
+    /**
+     * MONEY-USD-002 — every surface states the SAME unit for the same window.
+     *
+     * The harness above proves the figures match. A figure is only half a statement: 100 rendered under
+     * «SAR» when it is 100 USD is a 3.75× error that looks entirely correct, and it is the one kind of
+     * wrongness a reader cannot detect by looking. The client link is where it would survive longest —
+     * read by somebody with no session, no second surface to compare against, and no way to ask.
+     *
+     * The metrics surfaces derive the unit from the rows themselves (`rangeCurrency`). A report carries
+     * a STORED `currency` column instead. Those are two sources for one fact, which is the shape every
+     * divergence in this file has taken, so the parity is asserted rather than assumed.
+     */
+    public function test_every_surface_states_the_same_currency_for_the_window(): void
+    {
+        $summary = $this->read('metrics/summary')->json('data.currency');
+
+        $this->assertNotNull($summary, 'the dashboard did not say what its money is in');
+
+        $stated = [
+            'dashboard' => $summary,
+            'entities' => $this->read('metrics/entities/ad_set')->json('data.currency'),
+        ];
+
+        // The generated report and the client link — the two surfaces furthest from the aggregator.
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $report = Report::create([
+            'project_id' => $this->project->id,
+            'name' => 'Currency parity',
+            'type' => 'executive',
+            // Completed with a document, because an unpublished report has no client link to read —
+            // the same shape the share test above uses.
+            'status' => 'completed',
+            // Stamped SAR at creation, which is what a report carries today: a STORED unit rather than
+            // one derived from the rows. If the two can disagree, this is where it shows.
+            'currency' => 'SAR',
+            'period_start' => '2026-07-01',
+            'period_end' => '2026-07-31',
+            'data' => ['kpis' => ['spend' => self::SPEND]],
+        ]);
+
+        $generated = app(ReportGenerator::class)->generate($report);
+        $stated['report'] = $generated['currency'] ?? null;
+
+        [, $raw] = app(ShareService::class)->create($report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [$this->campaign->id],
+                'providers' => ['meta'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        app(ProjectContext::class)->forget();
+        app(TenantContext::class)->forget();
+
+        $stated['client_link'] = $this->getJson('/api/v1/reports/shared/'.$raw)
+            ->assertOk()
+            ->json('data.currency');
+
+        foreach ($stated as $surface => $currency) {
+            $this->assertSame(
+                $summary,
+                $currency,
+                "«{$surface}» states {$currency} for a window the dashboard states {$summary} for — one of them is mislabelling real money",
+            );
+        }
+    }
+
+    /**
+     * Content and Alerts read the same ingested window — and say nothing false when it is empty.
+     *
+     * Neither carries a spend total to reconcile, so the property is different and worth stating: a
+     * sync that wrote campaign-grain rows and no creatives must produce an EMPTY creative library
+     * rather than an error or an invented row, and the alert surface must answer for this workspace
+     * alone.
+     *
+     * This is the half of propagation that is easy to get wrong in the other direction — a surface
+     * that errors on an account with no creatives looks broken to a customer whose account is simply
+     * new.
+     */
+    public function test_content_and_alerts_answer_for_this_project_without_inventing_rows(): void
+    {
+        // `data.creatives`, inside a paginated envelope — asserting a bare `data` array would be
+        // asserting a shape this endpoint has never served, and would fail a working product.
+        $creatives = $this->read('creatives')->assertOk();
+        $this->assertIsArray($creatives->json('data.creatives'), 'the creative library did not answer');
+        $this->assertSame([], $creatives->json('data.creatives'), 'a creative appeared for a sync that wrote none');
+        $this->assertSame(0, $creatives->json('data.total'), 'the library counted creatives it did not return');
+
+        /*
+         * Alerts are workspace-scoped rather than project-scoped, so this asks the workspace route
+         * and requires it to answer at all. The isolation that matters here is the tenant's, and the
+         * neighbour's project belongs to a different CLIENT inside the same tenant — so an alert
+         * naming their campaign would be the leak.
+         */
+        $alerts = $this->actingAs($this->operator, 'sanctum')->getJson('/api/v1/alerts/events')->assertOk();
+        $this->assertIsArray($alerts->json('data'), 'the alert surface did not answer');
+
+        $names = array_column((array) $alerts->json('data'), 'title');
+        $this->assertNotContains('حملة أخرى', $names, 'an alert named another client’s campaign');
+    }
+
+    /**
+     * RECOMMENDATIONS: the screen and the digest agree, and neither publishes a retraction.
+     *
+     * This is the surface the harness had never reconciled. It carries no spend, so «the same figure
+     * everywhere» is the wrong property — what propagates here is a set of human judgements, read by
+     * two different services. `CampaignAnnotationController::projectIndex` builds the screen with a
+     * join and an ordering of its own; `DigestRecommendations::forProject` builds the email with an
+     * explicit tenant and project bound as values. Two readers, one table, and no reason they agree
+     * beyond having been written to agree — which is exactly the shape this harness exists to catch.
+     *
+     * Three properties, and the third is the one that would embarrass a customer:
+     *
+     *   1. The two surfaces name the SAME approved recommendations.
+     *   2. Neither carries the neighbouring client's, even though both clients live in this tenant.
+     *   3. A recommendation that was never approved reaches the screen — where its status is visible
+     *      and a reviewer can act on it — and NEVER the email. `hidden` and `rejected` are decisions
+     *      to stop showing something, and an inbox is the one surface that cannot be retracted.
+     */
+    public function test_recommendations_reach_the_screen_and_the_email_as_the_same_set(): void
+    {
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+
+        $approved = $this->recommendation($this->project->id, $this->campaign->id, 'approved', 'ارفع ميزانية الحملة');
+        $this->recommendation($this->project->id, $this->campaign->id, 'draft', 'مسودة لم تُراجع بعد');
+        $this->recommendation($this->project->id, $this->campaign->id, 'rejected', 'اقتراح مرفوض');
+        $neighbour = $this->recommendation(
+            $this->otherProject->id,
+            $this->otherCampaign->id,
+            'approved',
+            'توصية لعميل آخر',
+        );
+
+        app(TenantContext::class)->forget();
+
+        $screen = (array) $this->actingAs($this->operator, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->project->id}/recommendations?status=approved")
+            ->assertOk()
+            ->json('data');
+
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+        $email = app(DigestRecommendations::class)->forProject(
+            (string) $this->tenant->id,
+            (string) $this->project->id,
+            Carbon::today()->subDays(30),
+            Carbon::today(),
+        );
+        app(TenantContext::class)->forget();
+
+        $onScreen = array_column($screen, 'id');
+        $inEmail = array_column($email, 'id');
+
+        $this->assertSame([(string) $approved->id], $onScreen, 'the screen did not show the approved recommendation alone');
+        $this->assertSame($onScreen, $inEmail, 'the screen and the digest disagree about which recommendations exist');
+
+        // The neighbour, by id AND by title — an id match alone would pass a surface that leaked a
+        // sentence while renumbering it.
+        $this->assertNotContains((string) $neighbour->id, $inEmail, 'the digest carried another client’s recommendation');
+        $this->assertNotContains('توصية لعميل آخر', array_column($email, 'title'));
+        $this->assertNotContains('توصية لعميل آخر', array_column($screen, 'title'));
+
+        // The retraction rule, stated as an assertion rather than as a docblock.
+        $this->assertNotContains('مسودة لم تُراجع بعد', array_column($email, 'title'), 'a draft was mailed');
+        $this->assertNotContains('اقتراح مرفوض', array_column($email, 'title'), 'a rejected recommendation was mailed');
+
+        $unfiltered = array_column(
+            (array) $this->actingAs($this->operator, 'sanctum')
+                ->getJson("/api/v1/projects/{$this->project->id}/recommendations")
+                ->assertOk()
+                ->json('data'),
+            'title',
+        );
+        $this->assertContains('مسودة لم تُراجع بعد', $unfiltered, 'the draft vanished from the screen too — a reviewer cannot act on what they cannot see');
+    }
+
+    /**
+     * A generated REPORT carries the same window as the dashboard it was made from.
+     *
+     * The live link is already asserted above; a generated report is the other document a client
+     * receives, and it is built by a different service (`ReportGenerator`) reading the same
+     * aggregator. That is exactly the shape of divergence this harness exists to catch — «a page
+     * grows its own query» applies to documents too, and a report is the copy a client keeps.
+     */
+    public function test_a_generated_report_carries_the_same_spend_as_the_dashboard(): void
+    {
+        $dashboard = (float) $this->read('metrics/summary')->json('data.current.spend');
+
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $report = Report::create([
+            'project_id' => $this->project->id,
+            'name' => 'R2',
+            'type' => 'executive',
+            'status' => 'pending',
+            'currency' => 'SAR',
+            'period_start' => '2026-07-01',
+            'period_end' => '2026-07-31',
+            'data' => [],
+        ]);
+
+        // `generate()` RETURNS the document; persisting it is the job's business, so the returned
+        // array is what to assert — reading `$report->data` back would have tested the job instead.
+        $generated = app(ReportGenerator::class)->generate($report);
+
+        $kpis = (array) ($generated['kpis'] ?? []);
+        $this->assertArrayHasKey('spend', $kpis, 'the generated report carries no spend at all');
+        $this->assertSame(
+            $dashboard,
+            (float) $kpis['spend'],
+            'the generated report disagrees with the dashboard it was made from',
+        );
+
+        app(TenantContext::class)->forget();
+    }
+
+    /**
+     * The digest EMAIL reports the same money as the dashboard — the last surface in the chain.
+     *
+     * This is the one figure in the product that a person reads before they have opened anything:
+     * it arrives on a lock screen, and it is what decides whether they log in at all. A digest that
+     * disagrees with the dashboard sends somebody to look for a problem that is not there, or worse,
+     * reassures them about one that is.
+     *
+     * `buildRange` over the report's own window rather than `build`'s rolling one, so the two are
+     * asked about the SAME days — comparing a seven-day email against a July dashboard would be
+     * comparing two different questions and calling the difference a defect.
+     */
+    public function test_the_digest_email_reports_the_same_spend_as_the_dashboard(): void
+    {
+        $dashboard = (float) $this->read('metrics/summary')->json('data.current.spend');
+
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $digest = app(DailyDigest::class)->buildRange(
+            $this->operator,
+            (string) $this->tenant->id,
+            [(string) $this->project->id],
+            Carbon::parse('2026-07-01'),
+            Carbon::parse('2026-07-31'),
+        );
+
+        $this->assertSame(
+            $dashboard,
+            (float) ($digest['totals']['spend'] ?? -1),
+            'the digest email disagrees with the dashboard',
+        );
+
+        // …and it does not sum the neighbour in, which is the same isolation the pages are held to.
+        $this->assertNotSame(self::SPEND + self::OTHER_SPEND, (float) ($digest['totals']['spend'] ?? -1));
+
+        app(TenantContext::class)->forget();
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────────────────────
 
     /*
      * Named `read`, not `get`: `TestCase::get()` is public and PHP refuses to let a subclass
      * narrow it to private, so the whole file was a fatal error before it ran a single assertion.
      */
-    private function read(string $path): TestResponse
+    /** One human-written recommendation, in a given lifecycle state. */
+    private function recommendation(string $projectId, string $campaignId, string $status, string $title): CampaignAnnotation
+    {
+        return CampaignAnnotation::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $projectId,
+            'campaign_id' => $campaignId,
+            'kind' => 'recommendation',
+            'status' => $status,
+            'title' => $title,
+            'priority' => 'high',
+            'created_by' => $this->operator->getKey(),
+        ]);
+    }
+
+    private function read(string $path, string $extra = ''): TestResponse
     {
         return $this->actingAs($this->operator, 'sanctum')
-            ->getJson("/api/v1/projects/{$this->project->id}/{$path}?".self::WINDOW)
+            ->getJson("/api/v1/projects/{$this->project->id}/{$path}?".self::WINDOW.$extra)
             ->assertOk();
     }
 
@@ -270,6 +835,106 @@ final class UnifiedFigureConsistencyTest extends TestCase
         app(TenantContext::class)->forget();
 
         return $raw;
+    }
+
+    /**
+     * Ad-set grain for THIS project, split across two campaigns so a parent filter has something to
+     * exclude, and summing to exactly the campaign-grain spend the rest of the file asserts.
+     *
+     * Written straight to `entity_daily_metrics` because that is where the syncer puts entity grain —
+     * `UpsertDailyMetrics` is the campaign-grain door. Using the campaign door here would prove the
+     * drill-down agrees with a table it does not read.
+     */
+    private function entityRows(): void
+    {
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $half = round(self::SPEND / 2, 2);
+
+        $this->campaignA = (string) Str::uuid();
+        $this->campaignB = (string) Str::uuid();
+
+        foreach ([[$this->campaignA, 'sq-a'], [$this->campaignB, 'sq-b']] as [$campaignExternalId, $adSetExternalId]) {
+            (new EntityDailyMetric)->forceFill([
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $this->tenant->getKey(),
+                'project_id' => $this->project->getKey(),
+                'external_account_id' => $this->account->getKey(),
+                'provider' => 'meta',
+                'entity_type' => EntityDailyMetric::AD_SET,
+                'entity_id' => (string) Str::uuid(),
+                'external_entity_id' => $adSetExternalId,
+                'external_campaign_id' => $campaignExternalId,
+                'metric_date' => self::DATE,
+                'attribution_window' => 'default',
+                'is_demo' => false,
+                'spend' => $half,
+                'original_currency' => 'SAR',
+                'project_currency' => 'SAR',
+            ])->save();
+        }
+
+        app(TenantContext::class)->forget();
+    }
+
+    /** One more day of spend for the campaign under test, on a date of the caller's choosing. */
+    private function syncOn(string $date, float $spend): void
+    {
+        $this->writeSpend($this->campaign, $date, '7d_click', $spend);
+    }
+
+    /** A second campaign in this project whose rows were collected under another attribution window. */
+    private function syncWindow(string $window, float $spend): void
+    {
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $campaign = UnifiedCampaign::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'name' => 'حملة '.$window, 'status' => 'active', 'objective' => 'sales',
+            'total_budget' => 500, 'budget_currency' => 'SAR',
+        ]);
+
+        app(TenantContext::class)->forget();
+
+        $this->writeSpend($campaign, self::DATE, $window, $spend);
+    }
+
+    private function writeSpend(UnifiedCampaign $campaign, string $date, string $window, float $spend): void
+    {
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $external = ExternalCampaign::withoutGlobalScopes()->firstOrCreate(
+            ['unified_campaign_id' => $campaign->id, 'provider' => 'meta'],
+            [
+                'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+                'external_account_id' => $this->account->getKey(),
+                'external_id' => 'ext-'.uniqid(), 'name' => $campaign->name, 'status' => 'active',
+            ],
+        );
+
+        app(UpsertDailyMetrics::class)->handle([
+            new NormalizedMetric(
+                tenantId: (string) $this->tenant->id,
+                projectId: (string) $this->project->id,
+                provider: 'meta',
+                externalAccountId: (string) $this->account->getKey(),
+                externalCampaignId: (string) $external->getKey(),
+                unifiedCampaignId: (string) $campaign->id,
+                metricDate: Carbon::parse($date),
+                metricKey: 'spend',
+                value: $spend,
+                originalCurrency: 'SAR',
+                projectCurrency: 'SAR',
+                exchangeRate: 1.0,
+                originalTimezone: 'UTC',
+                projectTimezone: 'Asia/Riyadh',
+                attributionWindow: $window,
+                sourceType: 'api',
+                dataFreshnessAt: Carbon::parse($date)->endOfDay(),
+            ),
+        ]);
+
+        app(TenantContext::class)->forget();
     }
 
     private function sync(Project $project, UnifiedCampaign $campaign, float $spend, float $clicks): void

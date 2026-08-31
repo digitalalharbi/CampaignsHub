@@ -1,4 +1,8 @@
 import { useMemo, useState } from 'react'
+import { attributionWindow } from './attributionWindow'
+import { providerLabel } from '@/features/campaigns/labels'
+import { canonicalPlatform } from '@/lib/platforms'
+import { fmtDateTime } from '@/lib/datetime'
 import { ArrowRight, ChevronLeft, ChevronRight, CircleCheck, Image as ImageIcon, Info, LayoutGrid, OctagonAlert, Rows, TriangleAlert, Trophy } from 'lucide-react'
 import {
   ChartCard,
@@ -18,9 +22,26 @@ import type { ResolvedDisclaimer } from '@/features/disclaimers/api'
 import type { MetricReading } from '@/components/ui/MetricStrip'
 import { SPECS } from '@/features/analytics/metricCatalog'
 import { type ReportMetric, creativeReadings, previousReading, reportMetrics, trendSeries } from './reportMetrics'
+import { useUi } from '@/stores/ui'
+import { campaigns as countedCampaigns } from '@/lib/counted'
+import { ReportOutline } from './ReportOutline'
 
 export interface Slide { id: string; type: string; platform?: string; order: number; visible: boolean }
 type Row = Record<string, number | string | null>
+export interface ReportSection {
+  key: string
+  title_ar: string
+  title_en: string
+  present: boolean
+  /** The figures this section presents — absent when the section is. */
+  figures?: string[]
+  /** Why this section shows a figure an earlier one already showed. */
+  repeat_reason?: string
+  absent_reason?: string
+  absent_reason_ar?: string
+  absent_reason_en?: string
+}
+
 export interface ReportData {
   period: { from: string; to: string }
   currency: string
@@ -49,6 +70,8 @@ export interface ReportData {
   platforms: Row[]
   campaigns: Row[]
   top_creatives?: Row[]
+  /** REPORT-WORST-CREATIVES-001 — measured underperformers, never merely unmeasured ones. */
+  worst_creatives?: Row[]
   platform_notes?: Record<string, { strengths: string[]; weaknesses: string[] }>
   /**
    * The leader board, ranked on the metric this report's money was buying (§14.6).
@@ -88,6 +111,23 @@ export interface ReportData {
     failing?: Array<{ name?: string | null; provider?: string | null }>
   }
   summary?: string[]
+  /**
+   * REPORT-ANALYTICAL-DEPTH-001 — what this report contains, and why anything is missing.
+   *
+   * Derived server-side from the assembled snapshot AFTER every figure is in place, so the contents
+   * cannot promise a section the report does not have. A section that is not supported by the
+   * evidence is absent rather than present-and-empty, and carries the reason: «Findings» over an
+   * empty state tells a client the analysis failed, which is a different statement from «nothing in
+   * this period was worth reporting».
+   *
+   * Called `outline` and not `sections` because a SHARE already has `sections` — the toggles an
+   * operator sets on a link. Two different things under one word on the same screen is how a reader
+   * ends up believing the share settings decide the analysis.
+   *
+   * Optional because a snapshot written before this existed has no outline; a reader that finds none
+   * simply renders what it always did.
+   */
+  outline?: ReportSection[]
   findings?: NoteCardData[]
   recommendations?: NoteCardData[]
   next_steps?: NextStep[]
@@ -112,6 +152,7 @@ export interface ReportData {
   slides?: Slide[]
   disclaimer?: ResolvedDisclaimer | null
   mode?: string
+  data_version?: number
   generated_at?: string
   data_source?: string
   attribution_window?: string | null
@@ -215,6 +256,12 @@ const OBJECTIVE_LABEL: Record<string, string> = {
 }
 
 export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta }) {
+  /*
+   * The rest of this file is Arabic-only by design — it is the deck a Saudi agency sends a client.
+   * The outline is new copy, and new copy follows the reader: a client who has set the product to
+   * English should not meet an Arabic contents page above an Arabic deck they can at least skim.
+   */
+  const ar = useUi((s) => s.locale) === 'ar'
   const [mode, setMode] = useState<'deck' | 'scroll'>('deck')
   const [i, setI] = useState(0)
   const slides = useMemo(() => {
@@ -238,6 +285,12 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
 
   return (
     <div>
+      {/*
+        The contents, including what is not here — REPORT-ANALYTICAL-DEPTH-001. Above the mode
+        switcher because it describes the document rather than the way it is being displayed.
+      */}
+      <ReportOutline outline={data.outline} ar={ar} />
+
       <div className="mb-3 flex items-center justify-between">
         <div className="inline-flex rounded-xl border border-border bg-surface-secondary p-0.5">
           <button onClick={() => setMode('deck')} className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-semibold ${mode === 'deck' ? 'bg-surface shadow-[var(--shadow-small)]' : 'text-text-secondary'}`}><LayoutGrid size={15} /> شرائح</button>
@@ -251,6 +304,7 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
           </div>
         )}
       </div>
+      <SnapshotAge data={data} />
       {mode === 'deck' ? (
         <div className="min-h-[440px] rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] sm:p-6">{cur && render(cur)}{cur && footer(cur)}</div>
       ) : (
@@ -272,7 +326,7 @@ function Title({ platform, children, sub }: { platform?: string; children: React
   )
 }
 
-function Kpi({ label, value, exact, delta, invert, spark, accent }: { label: string; value: string; exact?: string; delta?: number | null; invert?: boolean; spark?: number[]; accent?: string }) {
+function Kpi({ label, value, exact, note, delta, invert, spark, accent }: { label: string; value: string; exact?: string; note?: string | null; delta?: number | null; invert?: boolean; spark?: number[]; accent?: string }) {
   return (
     <div className="rounded-2xl border border-border bg-surface-secondary p-3">
       <div className="flex items-center justify-between">
@@ -282,6 +336,8 @@ function Kpi({ label, value, exact, delta, invert, spark, accent }: { label: str
       <div className="tnum mt-1 text-[24px] font-extrabold leading-none tracking-tight text-text-primary">{value}</div>
       {/* Exact value under the (possibly compact) headline, so the precise figure is always in the PDF. */}
       {exact && exact !== value && <div className="tnum mt-0.5 text-[11px] text-text-muted" data-exact>{exact}</div>}
+      {/* Why a figure is not in the project's currency — the reader of a report has no other screen. */}
+      {note && <div className="mt-0.5 text-[11px] leading-tight text-text-muted">{note}</div>}
       {spark && spark.length > 1 && <div className="mt-1"><KpiSparkline points={spark} color={accent} height={22} /></div>}
     </div>
   )
@@ -302,13 +358,39 @@ const seriesOf = (rows: Row[], k: string | null): number[] | undefined => {
 const pRow = (data: ReportData, p: string) => data.platforms.find((r) => r.provider === p) as Record<string, number> | undefined
 
 /** How an absent reading is written on a card — the same two states the dashboard uses. */
+/**
+ * MONEY-TRUTH-004 — a report must never say «لا توجد بيانات» over money that exists.
+ *
+ * This predates the `withheld` variant, so it fell through the final `:` and a client report printed
+ * «لا توجد بيانات» for spend the platform really reported — the same figure Analytics shows in full.
+ * A shared report contradicting the dashboard is the worst place for this to surface, because the
+ * reader has no other screen to check it against.
+ */
 const readingText = (r: MetricReading): string =>
-  r.kind === 'value' ? r.text : r.kind === 'not_provided' ? 'لم ترسله المنصة' : 'لا توجد بيانات'
+  r.kind === 'value' ? r.text
+    : r.kind === 'withheld' ? r.original
+      : r.kind === 'not_provided' ? 'لم ترسله المنصة'
+        : 'لا توجد بيانات'
+
+/** The reason a withheld figure is not in the project's currency, for the reader of a report. */
+const readingNote = (r: MetricReading): string | null =>
+  r.kind === 'withheld' ? 'التحويل إلى عملة المشروع غير متاح حاليًا' : null
 
 /** The un-abbreviated figure for the selectable strip under the cards. */
 const exactOf = (m: ReportMetric, data: ReportData): string => {
   const direct = data.objective_performance?.direct
   const value = direct && (m.key === 'cpa' || m.key === 'roas') ? direct[m.key] : data.kpis[m.key]
+
+  /*
+   * The READING decides first, before the raw value is consulted.
+   *
+   * A withheld figure is already exact and already carries its own currency, so `moneyExact` would
+   * relabel it with the project's — and this strip is what a PDF extracts, which would put the wrong
+   * unit into a document a client keeps. Checking it before the null guard also means a payload that
+   * sends null rather than a coalesced 0 still renders the real amount instead of «—».
+   */
+  if (m.reading.kind === 'withheld') return m.reading.original
+
   if (value === null || value === undefined) return '—'
 
   return SPECS[m.key]?.format === money ? moneyExact(value, data.currency) : (m.reading.kind === 'value' ? m.reading.text : '—')
@@ -334,7 +416,7 @@ function CoverSlide({ data, meta }: { data: ReportData; meta: Meta }) {
       <div>
         <div className="text-sm opacity-80">{meta.clientName ?? 'تقرير الأداء'}</div>
         <h1 className="mt-1 text-4xl font-extrabold sm:text-5xl">{meta.reportName}</h1>
-        <div className="mt-3 flex flex-wrap gap-2">{meta.platforms.map((p) => <span key={p} className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold">{p}</span>)}</div>
+        <div className="mt-3 flex flex-wrap gap-2">{meta.platforms.map((p) => <span key={p} className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold">{providerLabel(canonicalPlatform(p), 'ar')}</span>)}</div>
       </div>
       <div className="flex flex-wrap gap-4 text-sm opacity-90">
         <span>الفترة: <span className="tnum">{data.period.from} → {data.period.to}</span></span>
@@ -365,7 +447,7 @@ function NoteCard({ note }: { note: NoteCardData }) {
         </div>
         {note.detail && <p className="mt-0.5 text-xs leading-relaxed text-text-secondary">{note.detail}</p>}
         <div className="mt-1 flex flex-wrap gap-1.5">
-          {note.platform && <span className="inline-flex items-center gap-1 text-[11px] text-text-muted"><span className="h-2 w-2 rounded-full" style={{ background: platformColor(note.platform) }} />{note.platform}</span>}
+          {note.platform && <span className="inline-flex items-center gap-1 text-[11px] text-text-muted"><span className="h-2 w-2 rounded-full" style={{ background: platformColor(note.platform) }} />{providerLabel(canonicalPlatform(note.platform), 'ar')}</span>}
           {note.kpi && <span className="text-[11px] text-text-muted">· {note.kpi}</span>}
         </div>
       </div>
@@ -429,7 +511,8 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
             key={m.key}
             label={m.label}
             value={readingText(m.reading)}
-            delta={m.delta ?? undefined}
+            note={readingNote(m.reading)}
+            delta={m.reading.kind === 'withheld' ? undefined : (m.delta ?? undefined)}
             invert={m.invertGood}
             spark={m.reading.kind === 'value' ? seriesOf(data.timeseries, m.series) : undefined}
             accent={ACCENTS[m.key] ?? 'var(--brand-600)'}
@@ -544,6 +627,7 @@ function PlatformSlide({ data, platform }: { data: ReportData; platform: string 
             key={m.key}
             label={m.label}
             value={readingText(m.reading)}
+            note={readingNote(m.reading)}
             spark={m.reading.kind === 'value' ? seriesOf(series, m.series) : undefined}
             accent={ACCENTS[m.key] ?? 'var(--brand-600)'}
           />
@@ -644,10 +728,26 @@ function ScreenshotSlide({ platform }: { platform: string }) {
 
 function CreativesSlide({ data, platform }: { data: ReportData; platform: string }) {
   const items = (data.top_creatives ?? []).filter((c) => c.provider === platform).slice(0, 3)
+
+  /*
+   * REPORT-WORST-CREATIVES-001 — what to stop, beside what to keep.
+   *
+   * A report that lists only winners tells a reader what to scale and never what to cut, and cutting
+   * is the cheaper decision. The backend ranks these by the SAME objective-aware metric as the
+   * leaders, and excludes anything the platform did not measure on it — «no ROAS reported» is not
+   * «returned nothing», and a client's report is the last place to blur those.
+   *
+   * A creative can only appear in one list. With two or three creatives on a platform the best is
+   * arithmetically also the worst, and printing the same card under both headings reads as a bug.
+   */
+  const bestIds = new Set(items.map((c) => String(c.campaign_name ?? '')))
+  const weak = (data.worst_creatives ?? [])
+    .filter((c) => c.provider === platform && !bestIds.has(String(c.campaign_name ?? '')))
+    .slice(0, 3)
   const medal = ['from-amber-400 to-amber-600', 'from-slate-300 to-slate-500', 'from-orange-400 to-orange-600']
   return (
     <div>
-      <Title platform={platform} sub="مُرتّبة حسب هدف الحملة مع سبب التصنيف">أفضل المحتويات — {platform}</Title>
+      <Title platform={platform} sub="مُرتّبة حسب هدف الحملة مع سبب التصنيف">أفضل الإعلانات — {platform}</Title>
       {items.length === 0 ? <p className="text-sm text-text-muted">لا محتويات مصنّفة لهذه المنصة.</p> : (
         <div className="grid gap-3 sm:grid-cols-3">
           {items.map((c, idx) => (
@@ -667,6 +767,27 @@ function CreativesSlide({ data, platform }: { data: ReportData; platform: string
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {weak.length > 0 && (
+        <div className="mt-5">
+          <Title platform={platform} sub="بنفس مقياس هدف الحملة — ومقصورة على ما قاسته المنصة فعلًا">أضعف الإعلانات — {platform}</Title>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {weak.map((c, idx) => (
+              <div key={idx} className="flex flex-col overflow-hidden rounded-2xl border border-danger/30 bg-surface-secondary">
+                <div className="flex flex-1 flex-col gap-2 p-3">
+                  <div className="truncate font-bold text-text-primary" title={String(c.campaign_name ?? '')}>{String(c.campaign_name ?? '—')}</div>
+                  <div className="grid grid-cols-2 gap-1.5 text-xs">
+                    {creativeReadings(c, data.objective, data.reported_by_platform?.[platform] ?? data.reported).map((r) => (
+                      <span key={r.key} className="rounded-lg bg-surface px-2 py-1">{r.label} <b className="tnum">{readingText(r.reading)}</b></span>
+                    ))}
+                  </div>
+                  <div className="mt-auto rounded-lg bg-[var(--negative-background)] px-2 py-1.5 text-xs text-danger">{String(c.reason ?? '')}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -841,7 +962,7 @@ function ObjectiveSplitSlide({ data }: { data: ReportData }) {
               {p.result_metrics_apply
                 ? <div>CPA {money(p.cpa, c)} · ROAS {ratio(p.roas)}</div>
                 : <div>لا تنطبق تكلفة الطلب على هذا المسار</div>}
-              <div>{p.campaigns.length} حملة</div>
+              <div>{countedCampaigns(p.campaigns.length, 'ar')}</div>
             </div>
           </div>
         ))}
@@ -956,11 +1077,12 @@ function BudgetSlide({ data }: { data: ReportData }) {
                     <tr key={i} className="border-b border-border last:border-0">
                       <td className="py-2 font-semibold text-text-primary">{String(r.campaign_name ?? '—')}</td>
                       <td className="tnum py-2 text-end">{money(Number(r.budget ?? 0), data.currency)}</td>
-                      <td className="tnum py-2 text-end">{money(Number(r.spent ?? 0), data.currency)}</td>
-                      <td className="tnum py-2 text-end">{money(Number(r.remaining ?? 0), data.currency)}</td>
+                      {/* PARTIAL-WITHHELD-001 — a null spend/remaining/projected is «no single figure», not «0». */}
+                      <td className="tnum py-2 text-end">{r.spent === null || r.spent === undefined ? '—' : money(Number(r.spent), data.currency)}</td>
+                      <td className="tnum py-2 text-end">{r.remaining === null || r.remaining === undefined ? '—' : money(Number(r.remaining), data.currency)}</td>
                       <td className="tnum py-2 text-end">{r.consumed_pct !== null && r.consumed_pct !== undefined ? percent(Number(r.consumed_pct), 0) : '—'}</td>
                       <td className={`tnum py-2 text-end font-semibold ${pace > 1.1 ? 'text-danger' : pace < 0.9 && pace > 0 ? 'text-warning' : 'text-text-primary'}`}>{pace ? pace.toFixed(2) : '—'}</td>
-                      <td className="tnum py-2 text-end">{money(Number(r.projected_spend ?? 0), data.currency)}</td>
+                      <td className="tnum py-2 text-end">{r.projected_spend === null || r.projected_spend === undefined ? '—' : money(Number(r.projected_spend), data.currency)}</td>
                     </tr>
                   )
                 })}
@@ -1108,7 +1230,7 @@ function DataQualitySlide({ data }: { data: ReportData }) {
         </div>
         <div className="rounded-2xl border border-border bg-surface-secondary p-3">
           <div className="text-xs text-text-muted">آخر مزامنة</div>
-          <div className="tnum font-bold text-text-primary">{f?.last_sync_at ? new Date(f.last_sync_at).toLocaleString('en-GB') : '—'}</div>
+          <div className="tnum font-bold text-text-primary">{f?.last_sync_at ? fmtDateTime(f.last_sync_at) : '—'}</div>
         </div>
         <div className="rounded-2xl border border-border bg-surface-secondary p-3">
           <div className="text-xs text-text-muted">أيام بلا بيانات</div>
@@ -1133,7 +1255,7 @@ function DataQualitySlide({ data }: { data: ReportData }) {
                   <td className={`p-2.5 ${(FRESHNESS_LABEL[s.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown).tone}`}>
                     {(FRESHNESS_LABEL[s.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown).ar}
                   </td>
-                  <td className="tnum p-2.5 text-text-secondary">{s.last_sync_at ? new Date(s.last_sync_at).toLocaleString('en-GB') : '—'}</td>
+                  <td className="tnum p-2.5 text-text-secondary">{s.last_sync_at ? fmtDateTime(s.last_sync_at) : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -1148,3 +1270,74 @@ function DataQualitySlide({ data }: { data: ReportData }) {
     </div>
   )
 }
+
+/**
+ * REPORTS-RECONCILIATION-001 — a snapshot says WHEN it was taken.
+ *
+ * `generated_at`, `mode`, `data_source` and `attribution_window` were all present on the payload
+ * and all present in this file's type — and not one of them was ever rendered. A report opened a
+ * month after it was generated showed month-old figures with nothing on screen to say so, which is
+ * indistinguishable from current performance to the person reading it.
+ *
+ * That is the failure the requirement names directly: never present a stale snapshot as current.
+ * It is also, again, a value carried the whole way to the component and then dropped — the same
+ * shape as the creative's ads, the asset URL and `last_active_at` before it.
+ *
+ * A LIVE report says so instead of quoting a generation time, because for a live report the
+ * generation time is not the answer to «how current is this».
+ */
+function SnapshotAge({ data }: { data: ReportData }) {
+  const generated = data.generated_at ?? null
+  const live = data.mode === 'live'
+
+  // Nothing known, nothing claimed. A snapshot written before this metadata existed says nothing
+  // rather than inventing a date for itself.
+  if (!live && generated === null) return null
+
+  const stamp = generated === null ? null : new Date(generated)
+
+  return (
+    <p className="mb-3 text-xs text-text-secondary" data-testid="report-snapshot-age">
+      {live ? (
+        'تقرير مباشر — الأرقام محسوبة الآن من أحدث البيانات'
+      ) : (
+        <>
+          لقطة بتاريخ{' '}
+          <span className="tnum font-semibold text-text-primary" dir="ltr">
+            {fmtDateTime(stamp?.toISOString() ?? null)}
+          </span>
+          {' '}— الأرقام كما كانت في ذلك الوقت، وليست أداءً حاليًا
+        </>
+      )}
+      {/* ATTRIBUTION-WINDOW-001 — the reader of this footer cannot decode a platform's parameter name. */}
+      {data.attribution_window ? (
+        <span className="ms-2 opacity-80">· أساس الإسناد: {attributionWindow(data.attribution_window, true).text}</span>
+      ) : null}
+
+      {/*
+        * REPORTS-RECONCILIATION-001 — a snapshot from an older contract cannot reconcile.
+        *
+        * The figures beneath have since changed twice in ways that alter NUMBERS, not presentation:
+        * unconvertible money is now withheld with its original where it used to become 0, and demo
+        * rows no longer enter an operational total. A v1 snapshot beside today's Analytics is not
+        * «a few hours stale» — the two were computed under different rules.
+        *
+        * Saying so is the honest alternative to letting a reader compare two incomparable numbers
+        * and conclude one of the screens is broken.
+        */}
+      {!live && (data.data_version ?? 1) < CURRENT_DATA_VERSION && (
+        <span className="mt-1 block text-warning" data-testid="report-stale-contract">
+          هذه اللقطة حُسبت بقواعد أقدم — قد لا تطابق التحليلات الحالية. أعد إنشاء التقرير للمقارنة.
+        </span>
+      )}
+    </p>
+  )
+}
+
+/**
+ * The aggregation contract the product computes under today — mirrors `ReportGenerator::DATA_VERSION`.
+ *
+ * Duplicated deliberately and narrowly: it is one integer whose only job is to be compared, and a
+ * round trip to fetch it would make every report wait on a request to say «this is current».
+ */
+const CURRENT_DATA_VERSION = 2

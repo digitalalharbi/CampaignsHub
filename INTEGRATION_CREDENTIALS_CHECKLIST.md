@@ -15,7 +15,7 @@ Legend: ⏳ awaiting credentials · 🧪 sandbox available · ✅ live (none yet
 | Snapchat Marketing API | ⏳ 🧪 | `SNAPCHAT_CLIENT_ID`, `SNAPCHAT_CLIENT_SECRET`, `SNAPCHAT_REDIRECT_URI` |
 | X Ads API | ⏳ 🧪 | `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_SECRET` (+ dev account approval) |
 | LinkedIn Marketing API | ⏳ 🧪 | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_REDIRECT_URI` |
-| Google Ads API | ⏳ 🧪 | `GOOGLE_ADS_DEVELOPER_TOKEN`, OAuth client id/secret, `GOOGLE_ADS_LOGIN_CUSTOMER_ID` |
+| Google Ads API | ⏳ 🧪 | `GOOGLE_ADS_DEVELOPER_TOKEN`, OAuth client id/secret — **no manager (MCC) account id** (GADS-MCC-001: it is the customer's, discovered from their own hierarchy) |
 
 Sandbox connector (`sandbox`) needs no credentials and is available in non-production only.
 
@@ -26,7 +26,7 @@ Env keys to be defined when built (Phase 5).
 
 ## Ecommerce (not yet implemented — interfaces planned, Phase 5)
 - **Salla**: `SALLA_CLIENT_ID`, `SALLA_CLIENT_SECRET`, `SALLA_WEBHOOK_SECRET`.
-- **Zid**: `ZID_CLIENT_ID`, `ZID_CLIENT_SECRET`, `ZID_WEBHOOK_SECRET`.
+- **Zid**: `ZID_CLIENT_ID`, `ZID_CLIENT_SECRET`, `ZID_WEBHOOK_USERNAME`, `ZID_WEBHOOK_PASSWORD` — **no signing secret** (ZID-WEBHOOK-001: Zid authenticates webhooks with HTTP Basic and publishes no signature scheme).
 
 ## Payments (not yet implemented — interface planned, Phase 9)
 - **Tap**: `TAP_SECRET_KEY`, `TAP_PUBLISHABLE_KEY`, `TAP_WEBHOOK_SECRET`.

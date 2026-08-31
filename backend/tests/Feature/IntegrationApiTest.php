@@ -34,7 +34,17 @@ final class IntegrationApiTest extends TestCase
         $this->user->assignRole($role);
     }
 
-    public function test_index_lists_connectors_with_status(): void
+    /**
+     * The list is the SIX ad platforms, and nothing else — INTEG-RUNTIME §2.
+     *
+     * It used to assert that `sandbox` was present. The sandbox is a local fake that exists so the
+     * end-to-end suite and the demo seeder have a connection to drive without a real platform
+     * credential; listing it here put a ninth provider on the customer's own page, wearing a green
+     * chip above the platforms they came for. It is still in the registry outside production — this
+     * is the surface that filters it, so «what this product integrates with» and «what a test can
+     * drive» stay separate facts.
+     */
+    public function test_index_lists_all_eight_providers_and_no_local_fake(): void
     {
         app(TenantContext::class)->forget();
 
@@ -43,11 +53,28 @@ final class IntegrationApiTest extends TestCase
             ->json('data');
 
         $keys = array_column($data, 'key');
-        $this->assertContains('meta', $keys);
-        $this->assertContains('sandbox', $keys);
+
+        // The SET, sorted. The product's reading order is a rendering decision and is asserted where
+        // it is made — `integrations.spec.ts`, against `@/lib/platforms`.
+        sort($keys);
+        // INTEG-STORES-001 — eight, which is what this controller's own comment always said. It
+        // walked the advertising registry, so Salla and Zid — declared in the same catalogue, with the
+        // same credential fields — appeared nowhere on the Integration Center. A customer looking at
+        // «integrations» saw six of the eight things this product integrates with.
+        $this->assertSame(['google_ads', 'linkedin', 'meta', 'salla', 'snapchat', 'tiktok', 'x', 'zid'], $keys);
+        $this->assertNotContains('sandbox', $keys);
 
         $meta = collect($data)->firstWhere('key', 'meta');
         $this->assertSame('awaiting_credentials', $meta['status']);
+        $this->assertSame('advertising', $meta['kind']);
+
+        // A store says what it is, and carries none of the ad-platform keys — a null `ad_account_id`
+        // would make it look like an ad platform that failed to connect, which is a worse lie than
+        // being absent was.
+        $zid = collect($data)->firstWhere('key', 'zid');
+        $this->assertSame('commerce', $zid['kind']);
+        $this->assertArrayNotHasKey('ad_account_id', $zid);
+        $this->assertArrayHasKey('status', $zid);
     }
 
     /**

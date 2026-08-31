@@ -9,6 +9,7 @@ use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /** An ad creative synced from a platform. Project/tenant scoped. Thumbnails are never fabricated. */
 final class ExternalCreative extends Model
@@ -19,13 +20,34 @@ final class ExternalCreative extends Model
 
     protected $fillable = [
         'tenant_id', 'project_id', 'campaign_id', 'external_campaign_id', 'external_ad_set_id', 'provider',
-        'external_creative_id', 'external_ad_id', 'name', 'client_display_name', 'format',
+        'external_creative_id', 'name', 'client_display_name', 'format',
         'thumbnail_url', 'preview_url', 'asset_url', 'video_url', 'destination_url', 'status', 'source_type',
         'width', 'height', 'aspect_ratio', 'duration_seconds', 'file_size', 'file_hash',
         'body', 'headline', 'description', 'cta',
         'first_seen_at', 'last_active_at', 'source_updated_at', 'asset_expires_at', 'raw', 'cards',
         'creative_group_id', 'last_synced_at', 'is_demo',
     ];
+
+    /**
+     * Every ad that carries this creative — CREATIVE-AD-RELATION-001.
+     *
+     * The honest inverse of `ExternalAd::creative()`, and the only truthful way to ask the question.
+     * `external_creatives.external_ad_id` looks like it answers it and does not: `creativeFor()`
+     * rewrites that column on every upsert, so it holds whichever ad was imported last. On the live
+     * Snapchat account 5,706 ads share 1,451 creatives — about four ads each — and the column names
+     * one of the four.
+     *
+     * The Snapchat shape is proven: its ads name a single `creative_id` and many ads share it, so this is
+     * many-to-one and `external_ads.creative_id` models it exactly. Other adapters emit at most one
+     * creative per ad row; Google Ads and LinkedIn emit none. Platform-native capabilities are not
+     * claimed — an association table would model something no adapter here produces.
+     *
+     * @return HasMany<ExternalAd, $this>
+     */
+    public function ads(): HasMany
+    {
+        return $this->hasMany(ExternalAd::class, 'creative_id');
+    }
 
     protected $casts = [
         'last_synced_at' => 'datetime',

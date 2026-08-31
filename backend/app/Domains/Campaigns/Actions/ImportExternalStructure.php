@@ -171,11 +171,38 @@ final class ImportExternalStructure
                 'tenant_id' => $campaign->tenant_id,
                 'campaign_id' => $campaign->unified_campaign_id,
                 'external_campaign_id' => $campaign->id,
-                'external_ad_id' => $adExternalId,
                 'name' => (string) ($creative['name'] ?? $creative['external_id']),
                 'format' => (string) ($creative['format'] ?? 'image'),
                 'thumbnail_url' => $creative['thumbnail_url'] ?? null,
                 'preview_url' => $creative['preview_url'] ?? null,
+                /*
+                 * SNAP-CREATIVE-ASSETS-001 — the file itself, when the connector resolved one.
+                 *
+                 * These two columns existed, were fillable, were read by `CreativePresenter`, and
+                 * nothing had ever written them. A connector could fetch an asset perfectly and the
+                 * row would still come out empty, so the card said «this platform does not expose
+                 * the creative's asset» — a claim about the provider that was really a gap here.
+                 *
+                 * Null-coalesced rather than omitted: a provider that sends no asset must not have
+                 * a previously-stored one silently kept alive under a new sync.
+                 */
+                'asset_url' => $creative['asset_url'] ?? null,
+                'video_url' => $creative['video_url'] ?? null,
+                /*
+                 * AD-MEDIA-RECOVERY-001 — a carousel's cards, when the connector read them.
+                 *
+                 * `cards` has been a column, a cast and a documented three-state contract since
+                 * `CreativePresenter` was written; the presenter reads it, the shared report reads
+                 * it, and NOTHING HAS EVER WRITTEN IT. So every carousel on every platform arrived
+                 * as `cards_reported: false` — «the provider sent no breakdown» — which was a claim
+                 * about the provider and really a gap here, and every five-card creative rendered as
+                 * one picture.
+                 *
+                 * The three states survive the write: absent ⇒ null (no breakdown), `[]` ⇒ the
+                 * provider sent an empty one, a list ⇒ the cards it sent.
+                 */
+                'cards' => $creative['cards'] ?? null,
+                'asset_expires_at' => $this->time($creative['asset_expires_at'] ?? null),
                 'destination_url' => $creative['destination_url'] ?? null,
                 'source_type' => 'api',
                 'is_demo' => false,

@@ -55,6 +55,37 @@ enum CampaignObjective: string
      * treated as not-a-sales-campaign until somebody says otherwise — and `objective_source` records
      * that nobody has.
      */
+    /**
+     * OBJECTIVE-NORMALIZATION-001 — which family's KPIs this objective is judged by.
+     *
+     * Distinct from {@see self::path()}, and deliberately so. `path()` answers a MONEY question —
+     * whose CPA this spend may land in — and three buckets are the right number for that. This
+     * answers «which figures are the verdict», where three is far too few: `Leads` and `AppInstalls`
+     * share the conversion path, so both were headlined with `revenue`, `roas` and `aov`, figures
+     * neither campaign was bought to produce and neither platform will ever report for them.
+     *
+     * `Conversions` maps to Sales rather than to a family of its own: a conversion campaign IS
+     * judged on cost per result and value, which is what the sales set says.
+     */
+    public function family(): ObjectiveFamily
+    {
+        return match ($this) {
+            self::Awareness, self::Reach => ObjectiveFamily::Awareness,
+            self::Traffic, self::LandingPageViews => ObjectiveFamily::Traffic,
+            self::Engagement => ObjectiveFamily::Engagement,
+            self::VideoViews => ObjectiveFamily::Video,
+            self::Leads => ObjectiveFamily::Leads,
+            self::Sales, self::Conversions, self::Purchases, self::AddToCart => ObjectiveFamily::Sales,
+            self::AppInstalls => ObjectiveFamily::App,
+            /*
+             * `StoreVisits` is a footfall objective. It reports neither online revenue nor leads,
+             * so the sales set would headline it with figures that are structurally absent — and
+             * «Unclassified» showing spend, impressions and reach is true of it.
+             */
+            self::StoreVisits, self::Other => ObjectiveFamily::Unknown,
+        };
+    }
+
     public function path(): MarketingPath
     {
         return match ($this) {

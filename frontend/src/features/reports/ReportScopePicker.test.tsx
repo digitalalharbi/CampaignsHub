@@ -31,6 +31,65 @@ describe('ReportScopePicker', () => {
     vi.mocked(listScopeTemplates).mockResolvedValue({ templates: [] })
   })
 
+  /**
+   * REPORT-SCOPE-SELECTION-001 — a list that stopped says so, where the choice is made.
+   *
+   * An operator who cannot find their campaign has two possible explanations — it was never synced,
+   * or the list stopped at the server's cap — and they lead to opposite actions. Said beside the axis
+   * rather than at the top of the form, because that is where the wrong conclusion gets drawn.
+   */
+  it('says which axis stopped at the cap', async () => {
+    vi.mocked(scopeOptions).mockResolvedValue({
+      ...OPTIONS,
+      limit: 500,
+      truncated: { campaigns: true, ad_sets: false, ads: false, creatives: false },
+    })
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} />, { locale: 'en' })
+
+    const note = await screen.findByTestId('scope-truncated-Campaigns')
+    expect(note).toHaveTextContent('Showing 500 only')
+    /* Per axis, not one banner: the ad sets were complete and must not be doubted. */
+    expect(screen.queryByTestId('scope-truncated-Ad sets')).not.toBeInTheDocument()
+  })
+
+  it('says nothing when nothing was truncated', async () => {
+    vi.mocked(scopeOptions).mockResolvedValue({
+      ...OPTIONS,
+      limit: 500,
+      truncated: { campaigns: false, ad_sets: false, ads: false, creatives: false },
+    })
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} />, { locale: 'en' })
+
+    await screen.findByText('Campaigns')
+    expect(screen.queryByTestId('scope-truncated-Campaigns')).not.toBeInTheDocument()
+  })
+
+  /*
+   * A server that has not shipped the flag says nothing, and the picker must not fill it in. Silence
+   * is «I was not told», which is different from «nothing was truncated» — and printing the second
+   * would be the client making a promise on the server's behalf.
+   */
+  it('does not invent a completeness claim the server never made', async () => {
+    vi.mocked(scopeOptions).mockResolvedValue(OPTIONS)
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} />, { locale: 'en' })
+
+    await screen.findByText('Campaigns')
+    expect(screen.queryByTestId('scope-truncated-Campaigns')).not.toBeInTheDocument()
+  })
+
+  it('says it in Arabic too', async () => {
+    vi.mocked(scopeOptions).mockResolvedValue({
+      ...OPTIONS,
+      limit: 500,
+      truncated: { campaigns: true, ad_sets: false, ads: false, creatives: false },
+    })
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} />, { locale: 'ar' })
+
+    const note = await screen.findByTestId('scope-truncated-الحملات')
+    expect(note).toHaveTextContent('يُعرض 500 فقط')
+    expect(note.textContent ?? '').not.toMatch(/[a-z]/)
+  })
+
   it('offers every axis the project has data for', async () => {
     renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} />, { locale: 'en' })
 
@@ -39,7 +98,7 @@ describe('ReportScopePicker', () => {
     expect(screen.getByText('Campaigns')).toBeInTheDocument()
     expect(screen.getByText('Marketing paths')).toBeInTheDocument()
     expect(screen.getByText('Ad sets')).toBeInTheDocument()
-    expect(screen.getByText('Creatives')).toBeInTheDocument()
+    expect(screen.getByText('Ads')).toBeInTheDocument()
   })
 
   /**
@@ -48,11 +107,11 @@ describe('ReportScopePicker', () => {
    * Ad sets and ads have no metrics at their grain in this system, and a picker that offered them
    * silently would have a reader believe a campaign's spend was one ad set's.
    */
-  it('warns that ad sets and creatives do not narrow the figures the way they look like they do', async () => {
+  it('warns that ad sets and ads do not narrow the figures the way they look like they do', async () => {
     renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} />, { locale: 'en' })
 
     expect(await screen.findByText(/No metrics are stored at this level/)).toBeInTheDocument()
-    expect(screen.getByText(/Narrows the creative section only/)).toBeInTheDocument()
+    expect(screen.getByText(/Narrows the ad section only/)).toBeInTheDocument()
   })
 
   it('adds a chosen member to its axis', async () => {

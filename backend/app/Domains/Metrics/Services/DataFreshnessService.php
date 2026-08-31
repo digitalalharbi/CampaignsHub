@@ -175,7 +175,14 @@ final class DataFreshnessService
             ->when($providers !== null && $providers !== [], fn ($q) => $q->whereIn('provider', $providers))
             ->toBase()
             ->select('project_id', 'provider')
-            ->selectRaw("MAX(finished_at) FILTER (WHERE status IN ('success', 'partial')) AS succeeded_at")
+            /*
+             * INTEG-RUNTIME §8 — «we reached the provider» is three statuses, not two.
+             *
+             * `no_data` belongs here: we asked and they answered. Leaving it out would make an account
+             * that is simply quiet look like one we have never been able to read, and then age it into
+             * a staleness alert about a problem that does not exist.
+             */
+            ->selectRaw("MAX(finished_at) FILTER (WHERE status IN ('success', 'no_data', 'partial_mapping')) AS succeeded_at")
             ->selectRaw('MAX(finished_at) AS checked_at')
             ->selectRaw("MAX(finished_at) FILTER (WHERE status = 'failed') AS failed_at")
             ->groupBy('project_id', 'provider')
@@ -272,9 +279,16 @@ final class DataFreshnessService
             ->where('type', 'commerce')
             ->toBase()
             ->select('provider_connection_id')
-            ->selectRaw("MAX(finished_at) FILTER (WHERE status IN ('success', 'partial')) AS succeeded_at")
+            /*
+             * INTEG-RUNTIME §8 — «we reached the provider» is three statuses, not two.
+             *
+             * `no_data` belongs here: we asked and they answered. Leaving it out would make an account
+             * that is simply quiet look like one we have never been able to read, and then age it into
+             * a staleness alert about a problem that does not exist.
+             */
+            ->selectRaw("MAX(finished_at) FILTER (WHERE status IN ('success', 'no_data', 'partial_mapping')) AS succeeded_at")
             ->selectRaw('MAX(finished_at) AS checked_at')
-            ->selectRaw("MAX(finished_at) FILTER (WHERE status IN ('failed', 'awaiting_credentials')) AS failed_at")
+            ->selectRaw("MAX(finished_at) FILTER (WHERE status = 'failed') AS failed_at")
             ->selectRaw('(ARRAY_AGG(error ORDER BY finished_at DESC NULLS LAST))[1] AS last_error')
             ->groupBy('provider_connection_id')
             ->get()

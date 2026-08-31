@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
@@ -64,11 +65,32 @@ final class MetricsSyncPipelineTest extends TestCase
             'connection_name' => $provider, 'scope' => 'project_only', 'status' => 'connected',
         ]);
 
-        return ExternalAccount::create([
+        $account = ExternalAccount::create([
             'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->id,
             'provider' => $provider, 'account_type' => 'ad_account', 'external_id' => 'sandbox-act-1',
             'name' => 'Acct', 'status' => 'active',
         ]);
+
+        /*
+         * Assigned, because that is what every account this pipeline runs against is.
+         *
+         * RUNTIME-100 §15 — the syncer now refuses an account nobody attached to a project, before it
+         * looks at credentials at all: there is no instruction to fetch it, so the question of whether
+         * we COULD does not arise. These tests are about the credential and connector rules, so the
+         * fixture has to satisfy the outer one to reach them. Without this they were asserting the
+         * credential refusal against an account the pipeline would never have been given.
+         */
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $this->project->client_workspace_id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $account->id,
+            'provider' => $provider,
+            'purpose' => 'advertising',
+            'is_active' => true,
+        ]);
+
+        return $account;
     }
 
     public function test_a_connected_provider_writes_normalized_metrics_and_records_a_run(): void
@@ -84,9 +106,15 @@ final class MetricsSyncPipelineTest extends TestCase
 
         $run = app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-06-01'), Carbon::parse('2026-06-02'));
 
-        // One row was mappable, the other ("sbx-cmp-2") was not — that is a partial run, not a success.
-        $this->assertSame('partial', $run->status);
-        $this->assertStringContainsString('could not be mapped', (string) $run->error);
+        /*
+         * One row was mappable, the other ("sbx-cmp-2") was not.
+         *
+         * INTEG-RUNTIME §8: that is `partial_mapping` — rows arrived and some could not be placed —
+         * and it is now told apart from `no_data`, which the single word `partial` used to cover too.
+         */
+        $this->assertSame('partial_mapping', $run->status);
+        $this->assertSame(2, (int) $run->parsed_rows);
+        $this->assertSame(1, (int) $run->mapped_campaign_rows);
         $this->assertGreaterThan(0, $run->metrics_upserted);
         $this->assertNotNull($run->finished_at);
 
@@ -124,6 +152,20 @@ final class MetricsSyncPipelineTest extends TestCase
             'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->id,
             'provider' => 'snapchat', 'account_type' => 'ad_account', 'external_id' => 'act-1',
             'name' => 'Snap acct', 'status' => 'active',
+            // SNAP-WINDOW-001 — Snapchat's DAY range must sit on this account's day boundary, so the
+            // connector needs the timezone discovery recorded rather than a default.
+            'timezone' => 'Asia/Riyadh',
+        ]);
+
+        // Assigned, because that is what every account this pipeline runs against is (RUNTIME-100 §15).
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $this->project->client_workspace_id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $account->id,
+            'provider' => 'snapchat',
+            'purpose' => 'advertising',
+            'is_active' => true,
         ]);
 
         ExternalCampaign::create([
@@ -183,13 +225,23 @@ final class MetricsSyncPipelineTest extends TestCase
         }
     }
 
-    public function test_a_provider_without_credentials_is_not_run_and_is_not_reported_as_failed(): void
+    /**
+     * A platform with no credentials is not CALLED, and the refusal keeps its own category.
+     *
+     * The run is `failed`, because §8 gives the sync six words and «awaiting credentials» is not one
+     * of them. The distinction that mattered — «we never tried» against «we tried and it broke» —
+     * survives where it is actually used: `last_sync_error_category`, which is what decides whether
+     * an operator adds keys or a platform is simply having a bad minute.
+     */
+    public function test_a_provider_without_credentials_is_not_called_and_keeps_its_own_category(): void
     {
         $account = $this->account('meta');   // no real Meta credentials in this environment
 
         $run = app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-06-01'), Carbon::parse('2026-06-07'));
 
-        $this->assertSame('awaiting_credentials', $run->status, '"we never tried" must be distinguishable from "we tried and it broke"');
+        $this->assertSame('failed', $run->status);
+        $this->assertSame('awaiting_credentials', $account->refresh()->last_sync_error_category);
+        $this->assertNull($run->provider_raw_rows, 'nothing was measured, so nothing is claimed');
         $this->assertSame(0, (int) $run->metrics_upserted);
         $this->assertStringContainsString('No credentials', (string) $run->error);
         $this->assertSame(0, DailyMetric::withoutGlobalScopes()->count(), 'nothing may be written for an unauthenticated provider');
@@ -224,7 +276,8 @@ final class MetricsSyncPipelineTest extends TestCase
 
         $run = app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-06-01'), Carbon::parse('2026-06-07'));
 
-        $this->assertSame('awaiting_credentials', $run->status);
+        $this->assertSame('failed', $run->status);
+        $this->assertSame('awaiting_credentials', $account->refresh()->last_sync_error_category);
         $this->assertStringNotContainsString('No connector is registered', (string) $run->error);
         $this->assertStringContainsString('Google Ads API', (string) $run->error);
     }

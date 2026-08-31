@@ -21,6 +21,7 @@ const RHYTHM_LABELS: Record<Rhythm, { ar: string; en: string }> = {
   immediate: { ar: 'فور حدوثه', en: 'As it happens' },
   daily: { ar: 'مع الملخص اليومي', en: 'With the daily summary' },
   weekly: { ar: 'مع الملخص الأسبوعي', en: 'With the weekly summary' },
+  monthly: { ar: 'مع الملخص الشهري', en: 'With the monthly summary' },
 }
 
 /**
@@ -111,11 +112,21 @@ export function NotificationsTab() {
     const r = p.types[t.key]?.rhythm
     if (r === 'daily' && !p.digests.daily) return 'daily'
     if (r === 'weekly' && !p.digests.weekly) return 'weekly'
+    if (r === 'monthly' && !p.digests.monthly) return 'monthly'
     return null
   }
 
   return (
-    <div className="space-y-6">
+    /*
+      SETTINGS-MOBILE-OVERFLOW-001 — `min-w-0` so the table below can actually scroll itself.
+
+      This sits inside a flex column, and a flex item's `min-width` defaults to `auto` — meaning it
+      refuses to shrink below its widest child. Its widest child is a `min-w-[560px]` table, so on a
+      375px phone this block was 461px and took the page sideways with it. The table already had an
+      `overflow-x-auto` wrapper; that wrapper could not clip anything while its ancestor was being
+      sized by the very content it was meant to contain.
+    */
+    <div className="min-w-0 space-y-6">
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
         <h2 className="text-xl font-bold text-text-primary">{ar ? 'تفضيلات الإشعارات' : 'Notification preferences'}</h2>
         <p className="mt-1 max-w-2xl text-sm leading-7 text-text-secondary">
@@ -232,7 +243,7 @@ export function NotificationsTab() {
                                 {stranded && (
                                   <p className="mt-1 max-w-xs text-[13px] leading-6 text-warning">
                                     {ar
-                                      ? `لن تصلك هذه الرسالة لأن ${stranded === 'daily' ? 'الملخص اليومي' : 'الملخص الأسبوعي'} غير مفعّل لديك.`
+                                      ? `لن تصلك هذه الرسالة لأن ${stranded === 'daily' ? 'الملخص اليومي' : stranded === 'weekly' ? 'الملخص الأسبوعي' : 'الملخص الشهري'} غير مفعّل لديك.`
                                       : `This will not reach you: your ${stranded} summary is switched off.`}
                                   </p>
                                 )}
@@ -276,6 +287,30 @@ export function NotificationsTab() {
           )}
         </div>
 
+        <div className="mt-4">
+          <Switch
+            checked={p.digests.recommendations}
+            onCheckedChange={(v) => setP({ ...p, digests: { ...p.digests, recommendations: v } })}
+            label={ar ? 'أدرج التوصيات المعتمدة في الملخص' : 'Include approved recommendations in the summary'}
+          />
+          {/*
+            EMAIL-SETTINGS-DEPTH-001 — what this opts INTO, said plainly.
+
+            The digest quotes recommendations somebody wrote and somebody approved; it derives no
+            advice of its own. A reader deciding whether to switch this on is deciding whether a
+            colleague's approved judgement should arrive in their inbox, and the sentence says that
+            rather than describing a feature.
+          */}
+          <p className="mt-2 max-w-2xl text-[13px] leading-6 text-text-muted" data-testid="recommendations-note">
+            {p.digests.recommendations
+              ? (ar
+                ? 'يقتبس الملخص التوصيات المعتمدة فقط، ضمن الفترة التي يغطيها. لا يُنشئ النظام توصيات من الأرقام.'
+                : 'The summary quotes approved recommendations only, from the period it covers. Nothing here is generated from your figures.')
+              : (ar
+                ? 'مع إيقاف هذا الخيار لن تصلك التوصيات بالبريد، وتبقى ظاهرة في «التوصيات» داخل النظام.'
+                : 'With this off, no recommendation reaches your inbox. They stay visible under Recommendations in the product.')}
+          </p>
+        </div>
         <div className="mt-5 grid gap-4 sm:grid-cols-3">
           <Field label={ar ? 'ساعة وصول الملخص' : 'Summary arrives at'} htmlFor="digest-hour">
             <Select

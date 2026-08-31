@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\Campaigns\Creative\RankingDirection;
+use App\Domains\Campaigns\Creative\RankingMetric;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativePulse;
 use App\Domains\Campaigns\Services\CreativeRows;
@@ -123,13 +125,35 @@ final class DigestCreatives
             return null;
         }
 
-        return match ((string) $metric) {
-            'roas' => sprintf('أعلى عائد على الإنفاق (%s×)', number_format((float) $value, 2)),
-            'cpa' => sprintf('أقل تكلفة نتيجة (%s)', number_format((float) $value, 2)),
-            'cpm' => sprintf('أقل تكلفة ألف ظهور (%s)', number_format((float) $value, 2)),
-            'ctr' => sprintf('أعلى معدل نقر (%s%%)', number_format((float) $value * 100, 2)),
-            default => null,
+        /*
+         * CREATIVE-RANK-001 — the label comes from the registry, so a new metric cannot go unnamed.
+         *
+         * This knew four metrics: roas, cpa, cpm, ctr. Anything else returned null and the digest
+         * simply omitted the sentence — so once the Pulse could rank on `cpl`, `cpi`,
+         * `cost_per_view` or `engagement_rate`, a lead, app, video or engagement campaign would have
+         * had its best creative silently unexplained. Not wrong, which is what makes it hard to
+         * notice: the email would have looked complete, minus one line nobody knew to expect.
+         *
+         * `RankingMetric` already carries the Arabic name and the direction. Reading both from there
+         * means the phrasing follows the registry — «أقل» for a cost, «أعلى» for a return — and a
+         * metric added to an objective is named here without anyone editing this file.
+         */
+        $key = (string) $metric;
+
+        if (! RankingMetric::isRankable($key)) {
+            return null;
+        }
+
+        $spec = RankingMetric::of($key);
+        $lead = $spec->direction === RankingDirection::LowerIsBetter ? 'أقل' : 'أعلى';
+
+        $shown = match ($key) {
+            'ctr', 'engagement_rate', 'conversion_rate', 'video_completion_rate' => number_format((float) $value * 100, 2).'%',
+            'roas' => number_format((float) $value, 2).'×',
+            default => number_format((float) $value, 2),
         };
+
+        return sprintf('%s %s (%s)', $lead, $spec->labelAr, $shown);
     }
 
     /** @param array<string,mixed>|null $row */

@@ -125,8 +125,22 @@ test('link → 409 move-confirmation → confirm move → unlink (full path)', a
    * filter is touched. And the checkbox's state is asserted afterwards instead of assumed — if the
    * control is ever genuinely dead this fails on the control, which is the thing that would be
    * broken, instead of thirty seconds later on a row that was never going to appear.
+   *
+   * ## Why «a row» was the wrong thing to wait for
+   *
+   * This waited for `link-external-row` — with «unlinked only» still ON, three lines above the
+   * comment saying the target is «correctly absent from the list» in exactly that state. So it was
+   * really waiting for some OTHER external to be unlinked, and passed only because imports used to
+   * arrive unlinked. Once a synced campaign became visible on the campaigns page by being adopted
+   * into one (CAMPAIGNS-VISIBLE-001), the pool emptied and this waited fifteen seconds for a row
+   * that was never coming — reporting a missing row for a modal that had rendered perfectly.
+   *
+   * The fact actually needed is «the query resolved», which a row OR the empty state both prove.
    */
-  await expect(page.locator('[data-testid="link-external-row"]').first()).toBeVisible({ timeout: 15000 })
+  await expect(
+    page.getByRole('dialog').locator('[data-testid="link-external-row"], [data-testid="link-external-empty"]').first(),
+    'the link modal never finished loading its list',
+  ).toBeVisible({ timeout: 15000 })
   const unlinkedOnly = page.getByRole('dialog').getByRole('checkbox')
   await unlinkedOnly.click()
   await expect(unlinkedOnly, 'the «unlinked only» filter did not come off').not.toBeChecked()

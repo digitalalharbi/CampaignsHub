@@ -1,6 +1,6 @@
 import axios, { AxiosError } from 'axios'
 import type { ApiEnvelope } from './types'
-import { describeFailure, isTimeout } from './errors'
+import { describeFailure, isTimeout, Refusal } from './errors'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -156,6 +156,29 @@ api.interceptors.request.use((config) => {
 /** Prime the CSRF cookie before the first unsafe (POST/PUT/DELETE) request. */
 export async function ensureCsrfCookie(): Promise<void> {
   await axios.get('/sanctum/csrf-cookie', { withCredentials: true })
+
+  /*
+   * WEBKIT-CSRF-RACE-001 — the request resolving is not the cookie becoming READABLE.
+   *
+   * Axios builds the next POST by reading `document.cookie` synchronously, and WebKit commits a
+   * `Set-Cookie` a moment AFTER the response settles. Chromium and Firefox commit it before, which
+   * is why this only ever failed on one browser.
+   *
+   * The symptom was 419 «This page has expired» on a form that had correctly primed its token, four
+   * times in one day across `legal-public-urls`, `public-report-noauth` and
+   * `registration-onboarding` — always webkit, always a session or form test, never reproducible on
+   * demand. It reads exactly like flake, which is what made it expensive: it blocked every merge and
+   * invited re-running until green.
+   *
+   * So this returns when the token is readable, not when the network call is done. Bounded at ~500ms
+   * so a genuinely absent token still fails fast at the POST instead of freezing the form; on the two
+   * browsers that never had the problem the first check passes and nothing is delayed.
+   */
+  if (typeof document === 'undefined') return
+
+  for (let attempt = 0; attempt < 25 && !document.cookie.includes('XSRF-TOKEN='); attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
 }
 
 /** Normalized error surfaced to the UI. */
@@ -178,9 +201,10 @@ export interface ApiError {
    *
    * `offline` is reserved for a request that got no answer at all; `http` means a server replied
    * and the status is meaningful; `timeout` is us giving up waiting, which is not the same as the
-   * customer being disconnected.
+   * customer being disconnected. `refusal` is the interface's own decision, never sent — so a retry
+   * button is as wrong there as it is on a 403.
    */
-  kind: 'http' | 'offline' | 'timeout' | 'unexpected'
+  kind: 'http' | 'offline' | 'timeout' | 'unexpected' | 'refusal'
 }
 
 /**
@@ -200,6 +224,25 @@ export interface ApiError {
  */
 export function toApiError(error: unknown): ApiError {
   const locale = useUi.getState().locale
+
+  /*
+   * RUNTIME-100 §4 — a refusal the interface decided keeps the words the interface chose.
+   *
+   * Everything below reads an axios envelope, which a locally thrown error does not have; without
+   * this branch such an error reaches the `unexpected` case and is reported as «حدث خطأ غير متوقع.»
+   * That is how the live production failure presented: the wizard knew exactly why it could not
+   * create a project, said so, and the message was discarded on the way to the screen.
+   */
+  if (error instanceof Refusal) {
+    return {
+      message: error.message,
+      status: undefined,
+      errors: error.field ? { [error.field]: [error.message] } : null,
+      meta: null,
+      kind: 'refusal',
+    }
+  }
+
   const axiosError = error as AxiosError<ApiEnvelope<unknown>> | undefined
   const response = axiosError?.response
   const envelope = response?.data

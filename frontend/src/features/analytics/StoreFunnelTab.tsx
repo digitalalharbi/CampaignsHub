@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, HelpCircle, Store, TrendingDown } from 'lucide-react'
 import { Panel } from './components'
-import { money, num } from './format'
+import { money, num, ratio } from './format'
 import { getData } from '@/lib/api/client'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState, Skeleton } from '@/components/ui/States'
@@ -223,8 +223,8 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
       </Panel>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Metric label={ar ? 'العائد على الإنفاق' : 'ROAS'} value={derived.roas === null ? null : `${derived.roas}x`} hint={ar ? 'على الإيراد الصافي بعد الاسترداد' : 'On net revenue, after refunds'} />
-        <Metric label={ar ? 'ROAS المُسند' : 'Attributed ROAS'} value={derived.attributed_roas === null ? null : `${derived.attributed_roas}x`} hint={ar ? 'الطلبات التي أمكن ربطها بحملة فقط' : 'Only orders traceable to a campaign'} />
+        <Metric label={ar ? 'العائد على الإنفاق' : 'ROAS'} value={derived.roas === null ? null : ratio(derived.roas)} hint={ar ? 'على الإيراد الصافي بعد الاسترداد' : 'On net revenue, after refunds'} />
+        <Metric label={ar ? 'ROAS المُسند' : 'Attributed ROAS'} value={derived.attributed_roas === null ? null : ratio(derived.attributed_roas)} hint={ar ? 'الطلبات التي أمكن ربطها بحملة فقط' : 'Only orders traceable to a campaign'} />
         <Metric label={ar ? 'متوسط قيمة الطلب' : 'AOV'} value={derived.aov === null ? null : money(derived.aov, cur)} />
         <Metric label={ar ? 'تكلفة الطلب' : 'CPA'} value={derived.cpa === null ? null : money(derived.cpa, cur)} hint={ar ? 'الإنفاق ÷ الطلبات' : 'Spend ÷ orders'} />
         <Metric
@@ -234,6 +234,36 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
         />
         <Metric label={ar ? 'من النقرة إلى الطلب' : 'Click → order'} value={rate(derived.conversion_rate)} />
       </div>
+
+      {/*
+        Gross → refunded → net, because the page already subtracts and never says how much.
+        
+        Every money figure here is NET: the ROAS card's own hint says «on net revenue, after
+        refunds». So a merchant reading «revenue 100,000, ROAS 4x» is told a subtraction happened and
+        cannot see its size — 500 refunded and 50,000 refunded produce the same screen, and they are
+        not the same month. The funnel has computed `refunded` and `gross_revenue` since it shipped
+        and nothing rendered either.
+        
+        Cancelled orders sit here for the same reason: an order that never completed is not a refund
+        and not a sale, and it is the other way the order count and the money can disagree.
+      */}
+      <Panel title={ar ? 'ما لم يبقَ' : 'What did not stick'}>
+        <dl data-testid="funnel-refunds" className="grid gap-3 text-sm sm:grid-cols-3">
+          <Fact label={ar ? 'الإيراد قبل الاسترداد' : 'Revenue before refunds'} value={money(totals.gross_revenue, cur)} />
+          <Fact
+            label={ar ? 'المسترد' : 'Refunded'}
+            value={money(totals.refunded, cur)}
+            /* Zero is the ordinary answer and must not be dressed as a warning. */
+            tone={totals.refunded > 0 ? 'warning' : undefined}
+          />
+          <Fact label={ar ? 'طلبات ملغاة' : 'Cancelled orders'} value={num(totals.cancelled_orders)} tone={totals.cancelled_orders > 0 ? 'warning' : undefined} />
+        </dl>
+        <p className="mt-2 text-[11px] text-text-muted">
+          {ar
+            ? 'كل مبلغ في هذه الصفحة صافٍ بعد الاسترداد — وهذا هو مقدار ما طُرح. الطلب الملغى لم يُحتسب إيرادًا أصلًا، فهو ليس استردادًا.'
+            : 'Every amount on this page is net of refunds — this is how much was taken off. A cancelled order was never counted as revenue, so it is not a refund.'}
+        </p>
+      </Panel>
 
       <Panel title={ar ? 'صدق الإسناد' : 'Attribution honesty'}>
         <dl data-testid="funnel-attribution" className="grid gap-3 text-sm sm:grid-cols-3">
@@ -252,7 +282,7 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
         <Panel title={ar ? 'المقارنة بين المنصات' : 'Across platforms'}>
           <Table
             head={[ar ? 'المنصة' : 'Platform', ar ? 'الإنفاق' : 'Spend', ar ? 'الطلبات' : 'Orders', ar ? 'الإيراد' : 'Revenue', 'ROAS']}
-            rows={comparisons.platforms.map((p) => [p.platform, money(p.spend, cur), num(p.orders), money(p.revenue, cur), p.roas === null ? '—' : `${p.roas}x`])}
+            rows={comparisons.platforms.map((p) => [p.platform, money(p.spend, cur), num(p.orders), money(p.revenue, cur), ratio(p.roas)])}
           />
         </Panel>
       )}

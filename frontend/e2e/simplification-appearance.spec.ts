@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH } from './helpers'
+import { AUTH, openFilters } from './helpers'
 
 /**
  * The simplified pages, in light and dark, in Arabic and English, on a phone and on a desktop.
@@ -93,7 +93,27 @@ for (const p of PAGES) {
            * A theme that leaves one the same colour as the surface behind it hides the control the
            * whole unit exists to expose, and a DOM assertion alone would never notice.
            */
-          const label = page.getByTestId(`${p.id}-filters`).locator('label, span').first()
+          /*
+           * The first VISIBLE one. The bar now opens with a phone-only fold toggle whose own span is
+           * first in the DOM and hidden from `sm` up, so an unqualified `.first()` asks a desktop
+           * layout to prove that a control it deliberately hides is readable.
+           */
+          /*
+           * A FILTER's label, which means the controls have to be open.
+           *
+           * Below `sm` the bar folds behind a summary (MOBILE-FILTERS-001), so on a phone the first
+           * visible thing inside it is the fold control rather than a filter — and its own count
+           * badge is a tinted pill, which is not a label and whose contrast is not this claim. The
+           * check opens the fold, exactly as a reader does, and then reads the first visible element
+           * that actually says something: the coloured dot on a platform chip is a visible span with
+           * no text, and «contrast» for a dot is text-on-brand — about 1.5:1, and meaningless.
+           */
+          await openFilters(page, p.id)
+          const label = page
+            .getByTestId(`${p.id}-filters-controls`)
+            .locator('label:visible, span:visible')
+            .filter({ hasText: /\S/ })
+            .first()
           await expect(label, `${where} has no filter label`).toBeVisible()
 
           const contrast = await label.evaluate((el) => {
@@ -131,6 +151,9 @@ for (const p of PAGES) {
          */
         const more = page.getByTestId(`${p.id}-more-filters`)
         if (vp.name === 'phone' && (await more.count()) > 0) {
+          // The bar folds on a phone (MOBILE-FILTERS-001), and «More filters» is one of the controls
+          // behind the fold — a reader opens it the same way.
+          await openFilters(page, p.id)
           await more.click()
           await expect(page.getByRole('dialog')).toBeVisible()
           expect(

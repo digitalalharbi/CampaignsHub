@@ -76,7 +76,7 @@ final class MessageCatalogue
      * One setting, one home. Storing «send me the daily summary» in both places would give the
      * scheduler and the screen separate answers the first time one of them was written alone.
      */
-    public const DIGEST_SWITCH = ['daily_digest' => 'daily', 'weekly_digest' => 'weekly'];
+    public const DIGEST_SWITCH = ['daily_digest' => 'daily', 'weekly_digest' => 'weekly', 'monthly_digest' => 'monthly'];
 
     /** Types that can be held for a digest, because the digest prints them. */
     private const DIGESTIBLE = ['immediate', 'daily', 'weekly'];
@@ -132,6 +132,7 @@ final class MessageCatalogue
             // ── التقارير ──────────────────────────────────────────────────────────────────────
             'daily_digest' => self::rhythmItself('DigestDispatcher::sendDaily'),
             'weekly_digest' => self::rhythmItself('DigestDispatcher::sendWeekly'),
+            'monthly_digest' => self::rhythmItself('DigestDispatcher::sendMonthly'),
             'report_ready' => self::event('reports', 'reports', 'AlertEvaluator', defaultEmail: true),
             'report_failed' => self::event('reports', 'reports', 'AlertEvaluator', defaultEmail: true),
 

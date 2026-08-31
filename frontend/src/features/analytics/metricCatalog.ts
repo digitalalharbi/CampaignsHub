@@ -1,6 +1,7 @@
+import { formatMoneyReading, readCostPer, readMoney, readRoas } from '@/lib/money/contract'
 import type { MetricItem, MetricReading } from '@/components/ui/MetricStrip'
 import type { MetricTotals, Summary } from '@/features/analytics/api'
-import { money, num, percent, ratio } from '@/features/analytics/format'
+import { money, moneyExact, num, percent, ratio } from '@/features/analytics/format'
 
 /**
  * Which metrics lead, for the money this campaign is — UX-DASH-001, and §14.6's rule applied.
@@ -33,6 +34,24 @@ import { money, num, percent, ratio } from '@/features/analytics/format'
  */
 
 type Fmt = (n: number) => string
+
+/**
+ * The exact counterpart of a formatter that abbreviates — NUMBER-PRESENTATION-001.
+ *
+ * Keyed by the formatter FUNCTION rather than by metric key, so it cannot fall out of step with the
+ * specs: a metric formatted by `money` compacts, therefore it has an exact form, and a metric
+ * formatted by `num` or `percent` already prints every digit and has nothing to reveal. Adding a
+ * metric never means remembering to add it here too.
+ */
+const EXACT_OF = new Map<Fmt, Fmt>([[money, moneyExact]])
+
+/** A measured figure, plus the full version of it when the display abbreviated it. */
+function valueReading(spec: Spec, n: number): { kind: 'value'; text: string; exact?: string } {
+  const text = spec.format(n)
+  const exact = EXACT_OF.get(spec.format)?.(n)
+
+  return exact !== undefined && exact !== text ? { kind: 'value', text, exact } : { kind: 'value', text }
+}
 
 const pct2 = (n: number) => percent(n, 2)
 const times = (n: number) => ratio(n, '×')
@@ -248,6 +267,22 @@ export const SPECS: Record<string, Spec> = {
  */
 export type Layout = { primary: string[]; secondary: string[] }
 
+/**
+ * HEADLINE-SCOPE-001 — `ObjectiveFamily`'s names, where they differ from this file's layout keys.
+ *
+ * The backend enum says `app`; the layout beneath is keyed `app_installs`. Left to a bare lookup
+ * that is a silent miss — an app project falls through to the operational row and simply never gets
+ * its own headline, with nothing on screen or in a log to say why. Written down, and asserted in
+ * `metricCatalog.test.ts` against the full list of families, so a family added later fails a test
+ * instead of quietly losing its metrics.
+ *
+ * `unknown` is absent deliberately: a scope whose objectives were never classified has no verdict to
+ * be headlined by, and the operational row is the right answer for it.
+ */
+const FAMILY_LAYOUT_KEY: Record<string, string> = {
+  app: 'app_installs',
+}
+
 const OBJECTIVE_LAYOUTS: Record<string, Layout> = {
   awareness: {
     primary: ['reach', 'impressions', 'frequency', 'cpm'],
@@ -293,20 +328,42 @@ const OBJECTIVE_LAYOUTS: Record<string, Layout> = {
 }
 
 /** A path is coarser than an objective, so it leads with what every objective inside it shares. */
-const PATH_LAYOUTS: Record<string, Layout> = {
-  awareness: {
-    primary: ['impressions', 'reach', 'cpm', 'spend'],
-    secondary: ['frequency', 'video_views', 'video_completion_rate', 'clicks', 'ctr', 'engagements'],
+/**
+ * ANALYTICS-OBJECTIVE-SYSTEM-001 — the headline row for a CANONICAL objective.
+ *
+ * This replaces `PATH_LAYOUTS`, which was keyed by the three «marketing paths». A path and an
+ * objective were two names for one decision, and the reader could set them to disagree; the canonical
+ * five are the only grouping the product now offers, so the headline follows them.
+ *
+ * Only the two canonical keys that span more than one family need an entry. `traffic`, `leads` and
+ * `sales` cover exactly one family each and are already answered, identically, by
+ * `OBJECTIVE_LAYOUTS` — a second copy here could only drift away from it.
+ */
+const CANONICAL_LAYOUTS: Record<string, Layout> = {
+  /*
+   * Awareness, engagement and video are one budget with three units of attention, so the row has to
+   * be the one all three are judged on: how many people, how often, at what cost. Views and the
+   * engagement rate sit in the secondary row — real, but not comparable across the three.
+   */
+  awareness_engagement: {
+    primary: ['reach', 'impressions', 'frequency', 'cpm'],
+    secondary: ['spend', 'video_views', 'video_completion_rate', 'engagements', 'engagement_rate', 'clicks', 'ctr'],
   },
-  traffic: {
-    primary: ['clicks', 'ctr', 'cpc', 'landing_page_views'],
-    secondary: ['spend', 'impressions', 'reach', 'cpm', 'conversion_rate'],
-  },
-  conversion: {
-    primary: ['conversions', 'cpa', 'conversion_rate', 'spend'],
-    secondary: ['purchases', 'add_to_cart', 'revenue', 'roas', 'aov', 'leads', 'cpl', 'clicks', 'ctr'],
+  app_promotion: {
+    primary: ['installs', 'cpi', 'registrations', 'spend'],
+    secondary: ['in_app_events', 'clicks', 'ctr', 'impressions', 'cpm'],
   },
 }
+
+/** The families each canonical objective covers — the frontend mirror of `CanonicalObjective::families()`. */
+const CANONICAL_FAMILIES: Record<string, string[]> = {
+  awareness_engagement: ['awareness', 'engagement', 'video'],
+  traffic: ['traffic'],
+  leads: ['leads'],
+  app_promotion: ['app'],
+  sales: ['sales'],
+}
+
 
 /**
  * Mixed objectives get operational figures ONLY — never a blended ROAS or CPA.
@@ -339,9 +396,48 @@ const OBJECTIVE_LABELS: Record<string, Record<string, { ar: string; en: string }
   sales: { cpa: { ar: 'تكلفة الطلب', en: 'Cost per order' }, conversions: { ar: 'الطلبات', en: 'Orders' } },
 }
 
-export function layoutFor(objective: string, path: string): Layout {
-  if (objective !== 'all' && OBJECTIVE_LAYOUTS[objective]) return OBJECTIVE_LAYOUTS[objective]
-  if (path !== 'all' && PATH_LAYOUTS[path]) return PATH_LAYOUTS[path]
+/**
+ * The headline row for a scope — chosen by the objective, then narrowed by what is actually in it.
+ *
+ * `objective` accepts a canonical key from the page's one objective control, and also a family or
+ * layout key, which is how the report presets and `reportMetrics` address a row directly. Both
+ * resolve here rather than in two places.
+ */
+export function layoutFor(objective: string, familiesInScope?: string[]): Layout {
+  if (objective !== 'all') {
+    /*
+     * A canonical bucket is deliberately wider than a family. When the scope turns out to hold
+     * exactly ONE of that canonical's families, the narrower row is the truer one — a video-only
+     * scope deserves completion rate, not the blended attention row that also has to serve a static
+     * awareness buy. A family from a DIFFERENT canonical never applies: the reader asked for this
+     * objective, and re-headlining the page around another would answer a question nobody asked.
+     */
+    const covered = CANONICAL_FAMILIES[objective]
+    if (covered && familiesInScope?.length === 1 && covered.includes(familiesInScope[0])) {
+      const narrower = OBJECTIVE_LAYOUTS[FAMILY_LAYOUT_KEY[familiesInScope[0]] ?? familiesInScope[0]]
+      if (narrower) return narrower
+    }
+
+    if (CANONICAL_LAYOUTS[objective]) return CANONICAL_LAYOUTS[objective]
+    if (OBJECTIVE_LAYOUTS[objective]) return OBJECTIVE_LAYOUTS[objective]
+  }
+
+  /*
+   * HEADLINE-SCOPE-001 — «كل الأهداف» is a statement about the filter, not about the data.
+   *
+   * `MIXED_LAYOUT` withholds cost-per and return for a good reason: a CPA spanning a brand budget
+   * and a sales budget divides one objective's money by another objective's events. But that reason
+   * only applies when the scope really is mixed. A project whose campaigns are ALL sales has exactly
+   * one objective in scope whether or not the reader narrowed to it — and the board was refusing to
+   * headline it with return on ad spend on the grounds that it might be something else.
+   *
+   * So a scope the backend reports as a single family is headlined by that family. Two or more, and
+   * the operational row stands, unchanged and for the original reason.
+   */
+  if (familiesInScope?.length === 1) {
+    const layout = OBJECTIVE_LAYOUTS[FAMILY_LAYOUT_KEY[familiesInScope[0]] ?? familiesInScope[0]]
+    if (layout) return layout
+  }
 
   return MIXED_LAYOUT
 }
@@ -358,22 +454,103 @@ export function readMetric(
   spec: Spec,
   totals: Record<string, number | null> | MetricTotals | undefined,
   reported: Record<string, boolean> | undefined,
+  reportingCurrency?: string | null,
 ): MetricReading {
   const value = (totals as Record<string, number | null> | undefined)?.[key] as number | null | undefined
 
   if (!spec.derived && reported && reported[key] === false) return { kind: 'not_provided' }
+
+  /*
+   * FX-WITHHELD-UI-001 — withheld money shows the REAL figure, never a zero.
+   *
+   * FX-001 stores `value = null` when no exchange rate exists for the day, because a converted
+   * number would be invented. The aggregator then coalesces that null to 0 for arithmetic — correct
+   * for summing, and a lie on a card. The live Snapchat account reported 3,465.33 USD and every
+   * screen read «0 SAR».
+   *
+   * `spend_original` / `revenue_original` carry what the platform actually said, and
+   * `*_withheld_rows` says whether any of it was withheld at all. Shown only when a currency is
+   * known and unambiguous: «3,465.33» without «USD» beside a project reporting in SAR would read as
+   * riyals, which is worse than the zero. Ambiguous or missing currency falls through to the
+   * existing states rather than guessing.
+   */
+  /*
+   * MONEY-TRUTH-001 — delegated, not reimplemented.
+   *
+   * These rules used to live here AND in `moneyFromTotals`. One canonical reader now owns them, so
+   * the dashboard and Analytics cannot disagree by drifting apart.
+   */
+  if (key === 'spend' || key === 'revenue') {
+    const m = readMoney(totals as Record<string, unknown> | undefined, key, reportingCurrency ?? null, true)
+
+    if (m.kind === 'withheld' && m.amount !== null) {
+      // Same formatter as every other surface — the text itself is part of the contract.
+      return { kind: 'withheld', original: formatMoneyReading(m, (n, c) => `${n} ${c ?? ''}`.trim()) }
+    }
+    if (m.kind === 'unavailable') return { kind: 'no_data' }
+  }
+
+  /*
+   * MONEY-TRUTH-003 — the DERIVED money was still reading the aggregator's zero.
+   *
+   * `spend` and `revenue` were delegated above; `roas`, `cpa` and the rest of the cost-per family
+   * were not, so they fell through to `spec.format(0)` and printed «0 SAR» and «0.00×» beside a
+   * revenue card correctly reading «12,969.03 USD». Every one of them is spend divided by a count,
+   * and spend is exactly the figure that was coalesced — so they were the original lie, one
+   * derivation down, on the same row.
+   *
+   * It stayed hidden because the mixed-scope layout shows neither: only a scope with a single
+   * objective headlines cost-per and return, and until HEADLINE-SCOPE-001 no scope ever did.
+   *
+   * The denominator is named per metric rather than inferred, because CPM's is impressions per
+   * THOUSAND — not a stored field — and a helper that guessed would silently answer «unavailable»
+   * for a typo and look like a provenance decision.
+   */
+  if (key === 'roas') {
+    const r = readRoas(totals as Record<string, unknown> | undefined, true)
+
+    if (r.kind === 'withheld' && r.value !== null) return valueReading(spec, r.value)
+    if (r.kind === 'unavailable') return { kind: 'no_data' }
+  }
+
+  const denominator = COST_PER_DENOMINATOR[key]
+  if (denominator !== undefined) {
+    const d = typeof denominator === 'function' ? denominator(totals) : denominator
+    const m = readCostPer(totals as Record<string, unknown> | undefined, key, d, reportingCurrency ?? null, true)
+
+    if (m.kind === 'withheld' && m.amount !== null) {
+      return { kind: 'withheld', original: formatMoneyReading(m, (n, c) => `${n} ${c ?? ''}`.trim()) }
+    }
+    if (m.kind === 'unavailable') return { kind: 'no_data' }
+  }
+
   if (value === null || value === undefined) return { kind: 'no_data' }
 
-  return { kind: 'value', text: spec.format(value) }
+  return valueReading(spec, value)
+}
+
+/**
+ * What each cost-per metric divides BY — MONEY-TRUTH-003.
+ *
+ * A field name where one exists, and a computed number where the denominator is not a stored field.
+ * `aov` is absent on purpose: its numerator is revenue rather than spend, so it does not share this
+ * family's provenance and reading it here would attribute spend's withholding to a revenue figure.
+ */
+const COST_PER_DENOMINATOR: Record<string, string | ((t: Record<string, number | null> | MetricTotals | undefined) => number)> = {
+  cpa: 'conversions',
+  cpc: 'clicks',
+  cpl: 'leads',
+  cpi: 'installs',
+  cpe: 'engagements',
+  cpm: (t) => Number((t as Record<string, number | null> | undefined)?.impressions ?? 0) / 1000,
 }
 
 export function dashboardMetrics(
   objective: string,
-  path: string,
   summary: Summary | undefined,
   ar: boolean,
 ): { primary: MetricItem[]; secondary: MetricItem[] } {
-  const layout = layoutFor(objective, path)
+  const layout = layoutFor(objective, summary?.objective_families_in_scope)
 
   const build = (keys: string[], lead: boolean): MetricItem[] =>
     keys

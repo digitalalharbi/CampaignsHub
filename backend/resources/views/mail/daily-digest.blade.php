@@ -65,7 +65,7 @@
                         {{ $p['verdict']['text'] }}
                     </div>
 
-                    {{-- What happened, and what changed against yesterday. --}}
+                    {{-- What happened, and what changed against the window before this one. --}}
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:14px;">
                         <tr>
                             @foreach ($p['kpis'] as $kpi)
@@ -167,6 +167,29 @@
                                 <tr>
                                     <td style="padding:4px 0; color:#b45309; font-weight:700; white-space:nowrap;">{{ $t['fatigued'] }}</td>
                                     <td style="padding:4px 0; color:#0f172a;">{{ $c['name'] }}</td>
+                                </tr>
+                            @endforeach
+                        </table>
+                    @endif
+
+                    {{--
+                      EMAIL-SETTINGS-DEPTH-001 — approved recommendations, quoted, never generated.
+
+                      Absent when the reader did not ask for them AND when there are none: the digest
+                      does not announce a section somebody switched off, and an empty heading would
+                      read as «nobody has any advice for you», which is a claim this has not made.
+                    --}}
+                    @if (!empty($p['recommendations']))
+                        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-top:16px;">{{ $t['recommendations'] }}</div>
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px; font-size:13px;">
+                            @foreach ($p['recommendations'] as $r)
+                                <tr>
+                                    <td style="padding:4px 0; color:#0f172a;">
+                                        <strong>{{ $r['title'] }}</strong>
+                                        @if ($r['body'])
+                                            <span style="color:#5b6b68;">— {{ $r['body'] }}</span>
+                                        @endif
+                                    </td>
                                 </tr>
                             @endforeach
                         </table>

@@ -12,6 +12,7 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Jobs\SyncAccountStructureJob;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
@@ -124,6 +125,199 @@ final class AdPlatformStructureSyncTest extends TestCase
         // The account now knows when its STRUCTURE was last pulled — a different clock from metrics.
         $this->assertNotNull($account->refresh()->last_structure_synced_at);
         $this->assertNull($account->last_synced_at);
+    }
+
+    /**
+     * AD-MEDIA-RECOVERY-001 — the media, from the fields Meta actually offers.
+     *
+     * The ads request asked for `creative{id,name,thumbnail_url,object_type}`. Meta answered that
+     * faithfully, so `asset_url` was never written for a Meta creative in the product's history: the
+     * only image that ever arrived was the small square Meta generates for listings, and a video with
+     * no square reached «this platform does not expose the creative's asset» — a sentence about Meta
+     * that was really about this field list.
+     *
+     * Three shapes, one response, because that is how they arrive:
+     *
+     *   * an IMAGE ad, whose full-size file is `creative.image_url`;
+     *   * a VIDEO ad, whose poster is `object_story_spec.video_data.image_url` — the frame Meta
+     *     itself shows, not one derived here;
+     *   * a CAROUSEL, whose cards are `object_story_spec.link_data.child_attachments` and which had
+     *     rendered as ONE PICTURE on every surface since the column was added.
+     */
+    public function test_meta_reads_the_image_the_poster_and_the_carousel_cards(): void
+    {
+        $this->configure('meta');
+        $account = $this->account('meta');
+
+        Http::fake([
+            'graph.facebook.com/*/campaigns*' => Http::response(['data' => [
+                ['id' => '120', 'name' => 'Ramadan', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES'],
+            ]]),
+            'graph.facebook.com/*/adsets*' => Http::response(['data' => [
+                ['id' => '220', 'campaign_id' => '120', 'name' => 'Riyadh', 'status' => 'ACTIVE'],
+            ]]),
+            'graph.facebook.com/*/ads*' => Http::response(['data' => [
+                [
+                    'id' => '301', 'adset_id' => '220', 'campaign_id' => '120', 'name' => 'Still',
+                    'status' => 'ACTIVE',
+                    'creative' => [
+                        'id' => '401', 'name' => 'Hero still', 'object_type' => 'SHARE',
+                        'thumbnail_url' => 'https://scontent.example/small.jpg',
+                        'image_url' => 'https://scontent.example/full.jpg',
+                        'object_story_spec' => ['link_data' => ['link' => 'https://shop.example/eid']],
+                    ],
+                ],
+                [
+                    'id' => '302', 'adset_id' => '220', 'campaign_id' => '120', 'name' => 'Film',
+                    'status' => 'ACTIVE',
+                    'creative' => [
+                        'id' => '402', 'name' => 'Hero film', 'object_type' => 'VIDEO',
+                        'object_story_spec' => [
+                            'video_data' => [
+                                'video_id' => '9001',
+                                'image_url' => 'https://scontent.example/poster.jpg',
+                                'call_to_action' => ['value' => ['link' => 'https://shop.example/film']],
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'id' => '303', 'adset_id' => '220', 'campaign_id' => '120', 'name' => 'Carousel',
+                    'status' => 'ACTIVE',
+                    'creative' => [
+                        'id' => '403', 'name' => 'Five cards', 'object_type' => 'SHARE',
+                        'object_story_spec' => ['link_data' => [
+                            'picture' => 'https://scontent.example/cover.jpg',
+                            'link' => 'https://shop.example/collection',
+                            'child_attachments' => [
+                                ['name' => 'Abaya', 'description' => 'From 199', 'picture' => 'https://scontent.example/c1.jpg', 'link' => 'https://shop.example/abaya'],
+                                ['name' => 'Thobe', 'picture' => 'https://scontent.example/c2.jpg', 'link' => 'https://shop.example/thobe'],
+                            ],
+                        ]],
+                    ],
+                ],
+            ]]),
+        ]);
+
+        $this->assertSame('success', app(AccountStructureSyncer::class)->sync($account)->status);
+
+        /*
+         * The request ASKED for these fields.
+         *
+         * Everything below reads a faked response, which arrives whatever we asked for — so with only
+         * those assertions, reverting the field list to `creative{id,name,thumbnail_url,object_type}`
+         * left the whole suite green while the live sync went back to returning no media at all. A
+         * mapping test that cannot see the request is a test of the fixture.
+         */
+        Http::assertSent(function ($request): bool {
+            if (! str_contains($request->url(), '/ads?') && ! str_contains($request->url(), '/ads&')) {
+                return false;
+            }
+
+            $fields = urldecode($request->url());
+
+            return str_contains($fields, 'image_url')
+                && str_contains($fields, 'object_story_spec')
+                && str_contains($fields, 'thumbnail_url');
+        });
+
+        $still = ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '401')->firstOrFail();
+        $this->assertSame('https://scontent.example/full.jpg', $still->asset_url, 'the full-size image was never read');
+        $this->assertSame('https://scontent.example/small.jpg', $still->thumbnail_url);
+        $this->assertSame('https://shop.example/eid', $still->destination_url, 'the destination sits in the story spec Meta was never asked for');
+        $this->assertNull($still->cards, 'an ad with no child attachments reports no breakdown, not an empty one');
+
+        $film = ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '402')->firstOrFail();
+        $this->assertSame('video', $film->format);
+        $this->assertSame('https://scontent.example/poster.jpg', $film->thumbnail_url, 'a video with no square thumbnail still has the poster Meta chose');
+        $this->assertSame('https://shop.example/film', $film->destination_url);
+        /* No `video_url`: turning `video_id` into a playable source is a separate call per asset. */
+        $this->assertNull($film->video_url);
+
+        $carousel = ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '403')->firstOrFail();
+        $this->assertSame('https://scontent.example/cover.jpg', $carousel->asset_url);
+        $this->assertCount(2, (array) $carousel->cards, 'a carousel rendered as one picture on every surface');
+        /*
+         * `assertEquals`, not `assertSame`: the column is `jsonb`, which does not store key order —
+         * Postgres returns keys shortest-first, so `name, image_url, description` comes back from a
+         * row written as `name, description, image_url`. The ORDER OF THE CARDS is what matters and
+         * is asserted; the order of a card's keys is a storage detail, and a test that pinned it
+         * would fail on a rename of a field it does not care about.
+         */
+        $this->assertEquals([
+            ['name' => 'Abaya', 'description' => 'From 199', 'image_url' => 'https://scontent.example/c1.jpg', 'destination_url' => 'https://shop.example/abaya'],
+            ['name' => 'Thobe', 'image_url' => 'https://scontent.example/c2.jpg', 'destination_url' => 'https://shop.example/thobe'],
+        ], $carousel->cards);
+        $this->assertSame(['Abaya', 'Thobe'], array_column((array) $carousel->cards, 'name'), 'the cards must stay in the order they ran');
+    }
+
+    /**
+     * And a creative Meta sends no media for is stored with nulls, not with something invented.
+     *
+     * This is the half that makes the test above safe to trust. A mapping that reached for a
+     * placeholder — the account's picture, a derived frame, the thumbnail of another ad — would make
+     * every assertion above pass and would put a picture of the wrong thing on a client's report.
+     */
+    public function test_meta_invents_no_media_when_the_response_carries_none(): void
+    {
+        $this->configure('meta');
+        $account = $this->account('meta');
+
+        Http::fake([
+            'graph.facebook.com/*/campaigns*' => Http::response(['data' => [
+                ['id' => '120', 'name' => 'Ramadan', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES'],
+            ]]),
+            'graph.facebook.com/*/adsets*' => Http::response(['data' => [
+                ['id' => '220', 'campaign_id' => '120', 'name' => 'Riyadh', 'status' => 'ACTIVE'],
+            ]]),
+            'graph.facebook.com/*/ads*' => Http::response(['data' => [
+                [
+                    'id' => '304', 'adset_id' => '220', 'campaign_id' => '120', 'name' => 'Bare',
+                    'status' => 'ACTIVE',
+                    'creative' => ['id' => '404', 'name' => 'Bare', 'object_type' => 'VIDEO'],
+                ],
+            ]]),
+        ]);
+
+        $this->assertSame('success', app(AccountStructureSyncer::class)->sync($account)->status);
+
+        $bare = ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '404')->firstOrFail();
+
+        $this->assertNull($bare->asset_url);
+        $this->assertNull($bare->thumbnail_url);
+        $this->assertNull($bare->video_url);
+        $this->assertNull($bare->destination_url);
+        $this->assertNull($bare->cards);
+    }
+
+    /** An empty `child_attachments` is «it sent a breakdown and it was empty» — a third sentence. */
+    public function test_an_empty_card_list_is_not_the_same_as_no_card_list(): void
+    {
+        $this->configure('meta');
+        $account = $this->account('meta');
+
+        Http::fake([
+            'graph.facebook.com/*/campaigns*' => Http::response(['data' => [
+                ['id' => '120', 'name' => 'R', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES'],
+            ]]),
+            'graph.facebook.com/*/adsets*' => Http::response(['data' => [
+                ['id' => '220', 'campaign_id' => '120', 'name' => 'S', 'status' => 'ACTIVE'],
+            ]]),
+            'graph.facebook.com/*/ads*' => Http::response(['data' => [
+                [
+                    'id' => '305', 'adset_id' => '220', 'campaign_id' => '120', 'name' => 'Empty',
+                    'status' => 'ACTIVE',
+                    'creative' => [
+                        'id' => '405', 'name' => 'Empty', 'object_type' => 'SHARE',
+                        'object_story_spec' => ['link_data' => ['child_attachments' => []]],
+                    ],
+                ],
+            ]]),
+        ]);
+
+        $this->assertSame('success', app(AccountStructureSyncer::class)->sync($account)->status);
+
+        $this->assertSame([], ExternalCreative::withoutGlobalScopes()->where('external_creative_id', '405')->firstOrFail()->cards);
     }
 
     /**
@@ -249,7 +443,8 @@ final class AdPlatformStructureSyncTest extends TestCase
 
         $run = app(AccountStructureSyncer::class)->sync($account);
 
-        $this->assertSame('partial', $run->status);
+        // INTEG-RUNTIME §8 — rows arrived and one could not be placed: `partial_mapping`.
+        $this->assertSame('partial_mapping', $run->status);
         $this->assertStringContainsString('skipped', (string) $run->error);
         $this->assertSame(0, ExternalAdSet::withoutGlobalScopes()->count());
     }
@@ -418,14 +613,21 @@ final class AdPlatformStructureSyncTest extends TestCase
 
     // ── Honest refusals ───────────────────────────────────────────────────────────────────────
 
-    public function test_an_unconfigured_platform_is_recorded_as_awaiting_credentials_and_calls_nothing(): void
+    /**
+     * An unconfigured platform is not CALLED — and §8 gives that outcome the word `failed`.
+     *
+     * The point of the test is unchanged and is asserted below: `Http::assertNothingSent()`. Nothing
+     * was fabricated and nothing went out; the run says so in words, and the account's error category
+     * still separates «add keys» from «the platform had a bad minute».
+     */
+    public function test_an_unconfigured_platform_calls_nothing_and_records_a_failed_run(): void
     {
         Http::preventStrayRequests();
         Http::fake();
 
         $run = app(AccountStructureSyncer::class)->sync($this->account('tiktok'));
 
-        $this->assertSame('awaiting_credentials', $run->status);
+        $this->assertSame('failed', $run->status);
         $this->assertSame(0, $run->records);
         Http::assertNothingSent();
     }
@@ -444,7 +646,7 @@ final class AdPlatformStructureSyncTest extends TestCase
 
         $run = app(AccountStructureSyncer::class)->sync($account);
 
-        $this->assertSame('partial', $run->status);
+        $this->assertSame('partial_mapping', $run->status);
         $this->assertStringContainsString('request limit', (string) $run->error);
         $this->assertSame(1, ExternalCampaign::withoutGlobalScopes()->count());
     }
@@ -518,7 +720,7 @@ final class AdPlatformStructureSyncTest extends TestCase
             connectionName: $provider,
         );
 
-        return ExternalAccount::withoutGlobalScopes()->create([
+        $account = ExternalAccount::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id,
             'provider_connection_id' => $connection->getKey(),
             'provider' => $provider,
@@ -526,6 +728,28 @@ final class AdPlatformStructureSyncTest extends TestCase
             'external_id' => "act_{$provider}",
             'name' => ucfirst($provider),
             'status' => 'active',
+            'discovered_at' => Carbon::now(),
         ]);
+
+        /*
+         * ORCH-100 — the account is ASSIGNED to this project.
+         *
+         * These tests are about the mapping chain (campaigns → ad sets → ads → creatives), and the
+         * fixture could previously leave the assignment out because `projectIdFor()` invented one by
+         * taking the tenant's oldest project. It no longer does, so a realistic fixture has to
+         * include the deliberate act that a real account goes through before it syncs at all.
+         */
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $this->project->client_workspace_id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $account->id,
+            'provider' => $provider,
+            'purpose' => 'advertising',
+            'is_active' => true,
+            'campaign_management_enabled' => true,
+        ]);
+
+        return $account;
     }
 }

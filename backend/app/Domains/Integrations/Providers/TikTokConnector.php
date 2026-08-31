@@ -329,6 +329,8 @@ final class TikTokConnector extends ApiAdvertisingConnector
             'end_date' => $to,
         ]);
 
+        $this->countRawInsightRows(count($reported));
+
         $rows = [];
 
         foreach ($reported as $row) {

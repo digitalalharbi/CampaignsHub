@@ -68,6 +68,21 @@ final class InsightRowNormaliser
             $reporting = $this->currency->forProject((string) $link->project_id);
             $source = strtoupper((string) ($row['currency'] ?? $account->currency ?? $reporting));
 
+            /*
+             * META-ATTRIB-001 — the window this row's figures were measured over.
+             *
+             * Read from the row for the same reason the currency is: the connector is the only thing
+             * that knows what it asked the provider for. Nothing passed this before, so every metric
+             * fell through to `NormalizedMetric`'s constructor default and the column held the single
+             * literal `default` for every row of every provider — which is exactly why a grouping on
+             * it could only ever return one bucket, and why the mixed-window warning built on top of
+             * that grouping was incapable of firing.
+             *
+             * A connector that says nothing still gets `default`, and that remains the truthful word:
+             * «this provider's own unstated default», not «the same window as everyone else».
+             */
+            $window = $this->window($row);
+
             foreach ($carriedKeys as $key) {
                 if (! array_key_exists($key, $row)) {
                     continue;
@@ -83,7 +98,7 @@ final class InsightRowNormaliser
                  * be nonsense that still looks like a number — precisely the kind that survives review.
                  */
                 if (! $this->currency->isMonetary($key)) {
-                    $metrics[] = $this->metric($account, $link, $key, $date, $amount);
+                    $metrics[] = $this->metric($account, $link, $key, $date, $amount, $window);
 
                     continue;
                 }
@@ -95,12 +110,33 @@ final class InsightRowNormaliser
                     // Null when no rate could be vouched for. NOT zero, and not the unconverted
                     // figure — see the FX-001 migration for why both alternatives are worse.
                     $money['value'],
+                    $window,
                     $money,
                 );
             }
         }
 
         return [$metrics, $skipped];
+    }
+
+    /**
+     * The window named by the row, or `default` when the connector named none.
+     *
+     * Trimmed and length-capped because it is stored in a `varchar` and grouped on: a provider that
+     * one day answers with something long or padded would otherwise split one window into two
+     * buckets and report a mixture that is not there.
+     *
+     * @param  array<string,mixed>  $row
+     */
+    private function window(array $row): string
+    {
+        $window = $row['attribution_window'] ?? null;
+
+        if (! is_string($window) || trim($window) === '') {
+            return 'default';
+        }
+
+        return mb_substr(trim($window), 0, 60);
     }
 
     /** @param  array<string,mixed>|null  $money */
@@ -110,6 +146,7 @@ final class InsightRowNormaliser
         string $key,
         Carbon $date,
         ?float $value,
+        string $window,
         ?array $money = null,
     ): NormalizedMetric {
         return new NormalizedMetric(
@@ -129,6 +166,7 @@ final class InsightRowNormaliser
             exchangeRate: $money['exchange_rate'] ?? null,
             rateDate: $money['rate_date'] ?? null,
             rateSource: $money['rate_source'] ?? null,
+            attributionWindow: $window,
         );
     }
 }

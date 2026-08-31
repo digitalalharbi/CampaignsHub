@@ -153,9 +153,10 @@ final class ReviewCatalogue
                     'TikTok asks for a written reason per scope; an unjustified scope is refused.'),
             ],
             'snapchat' => [
-                self::item('organisation_id', 'derived', 'معرّف المؤسسة (Organization ID)', 'Organization ID',
-                    'الحسابات الإعلانية معلّقة على مؤسسة؛ رمز صحيح بلا معرّف مؤسسة لا يعرض أي حساب.',
-                    'Ad accounts hang off an organisation; a valid token without the id lists nothing.'),
+                // The organisation-id item retired with the field itself (SNAP-ORG-001): a system
+                // credential that could only ever name ONE customer's organisation. Organisations and
+                // their ad accounts are discovered from each customer's own token after they connect,
+                // so there is nothing here for an operator to prepare.
                 self::item('app_submission', 'declared', 'تقديم التطبيق في Snap Business', 'App submitted in Snap Business',
                     'الوصول للإنتاج يمر بمراجعة منفصلة عن إنشاء التطبيق.',
                     'Production access goes through a review separate from creating the app.'),

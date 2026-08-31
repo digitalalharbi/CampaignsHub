@@ -59,16 +59,29 @@ final class ReportScopeController extends Controller
     {
         abort_unless($request->user()?->hasPermission('reports.view'), 403);
 
-        $campaigns = UnifiedCampaign::query()
-            ->where('project_id', $project)
-            ->orderBy('name')
-            ->get(['id', 'name', 'client_display_name', 'status', 'objective'])
-            ->map(fn (UnifiedCampaign $c): array => [
+        /*
+         * REPORT-SCOPE-SELECTION-001 — the builder's lists are BOUNDED, and every bound is stated.
+         *
+         * Campaigns had no limit at all: a project with four hundred of them sent four hundred rows
+         * into a picker, which is the cardinality this requirement exists for. The other four axes
+         * had a silent `limit(500)`, which is worse than no limit — a list that stops without saying
+         * so tells an operator their ad set does not exist, and the report they build then quietly
+         * omits it. The same rule the campaign filter already follows: fetch one past the cap so
+         * «there are more» is a FACT, and say it.
+         */
+        [$campaigns, $campaignsMore] = $this->bounded(
+            UnifiedCampaign::query()
+                ->where('project_id', $project)
+                ->orderBy('name')
+                ->orderBy('id'),
+            ['id', 'name', 'client_display_name', 'status', 'objective'],
+            fn (UnifiedCampaign $c): array => [
                 'id' => (string) $c->getKey(),
                 'name' => (string) ($c->client_display_name ?: $c->name),
                 'status' => $c->status,
                 'objective' => $c->objective,
-            ])->all();
+            ],
+        );
 
         $providers = DailyMetric::query()
             ->where('project_id', $project)
@@ -89,36 +102,39 @@ final class ReportScopeController extends Controller
                 'provider' => $a->provider,
             ])->all();
 
-        $adSets = ExternalAdSet::query()
-            ->where('project_id', $project)->orderBy('name')->limit(500)
-            ->get(['id', 'name', 'provider', 'unified_campaign_id', 'status'])
-            ->map(fn (ExternalAdSet $s): array => [
+        [$adSets, $adSetsMore] = $this->bounded(
+            ExternalAdSet::query()->where('project_id', $project)->orderBy('name')->orderBy('id'),
+            ['id', 'name', 'provider', 'unified_campaign_id', 'status'],
+            fn (ExternalAdSet $s): array => [
                 'id' => (string) $s->getKey(),
                 'name' => $s->name,
                 'provider' => $s->provider,
                 'campaign_id' => (string) $s->unified_campaign_id,
-            ])->all();
+            ],
+        );
 
-        $ads = ExternalAd::query()
-            ->where('project_id', $project)->orderBy('name')->limit(500)
-            ->get(['id', 'name', 'provider', 'unified_campaign_id', 'status'])
-            ->map(fn (ExternalAd $a): array => [
+        [$ads, $adsMore] = $this->bounded(
+            ExternalAd::query()->where('project_id', $project)->orderBy('name')->orderBy('id'),
+            ['id', 'name', 'provider', 'unified_campaign_id', 'status'],
+            fn (ExternalAd $a): array => [
                 'id' => (string) $a->getKey(),
                 'name' => $a->name,
                 'provider' => $a->provider,
                 'campaign_id' => (string) $a->unified_campaign_id,
-            ])->all();
+            ],
+        );
 
-        $creatives = ExternalCreative::query()
-            ->where('project_id', $project)->orderBy('name')->limit(500)
-            ->get(['id', 'name', 'client_display_name', 'provider', 'format', 'campaign_id'])
-            ->map(fn (ExternalCreative $c): array => [
+        [$creatives, $creativesMore] = $this->bounded(
+            ExternalCreative::query()->where('project_id', $project)->orderBy('name')->orderBy('id'),
+            ['id', 'name', 'client_display_name', 'provider', 'format', 'campaign_id'],
+            fn (ExternalCreative $c): array => [
                 'id' => (string) $c->getKey(),
                 'name' => (string) ($c->client_display_name ?: $c->name),
                 'provider' => $c->provider,
                 'format' => $c->format,
                 'campaign_id' => (string) $c->campaign_id,
-            ])->all();
+            ],
+        );
 
         return ApiResponse::success([
             'campaigns' => $campaigns,
@@ -145,6 +161,20 @@ final class ReportScopeController extends Controller
             ),
             'metrics' => self::METRICS,
             /*
+             * Which axes did not fit, so the picker can say so where the choice is made.
+             *
+             * An operator who cannot see their ad set has two possible explanations — it was not
+             * synced, or the list stopped — and they lead to opposite actions. The response is the
+             * only place that knows which.
+             */
+            'truncated' => [
+                'campaigns' => $campaignsMore,
+                'ad_sets' => $adSetsMore,
+                'ads' => $adsMore,
+                'creatives' => $creativesMore,
+            ],
+            'limit' => self::OPTION_LIMIT,
+            /*
              * What each axis can actually bound, stated up front.
              *
              * The picker offers ad sets and ads because operators think in them, and this is where it
@@ -157,6 +187,32 @@ final class ReportScopeController extends Controller
                 'creatives_only' => ['creative_ids'],
             ],
         ], 'Scope options.');
+    }
+
+    /**
+     * How many of each entity the builder offers before it says «there are more».
+     *
+     * Five hundred was already the ad-set/ad/creative ceiling; it stays, because the number was never
+     * the problem — the silence was. Campaigns join it, having had no ceiling at all.
+     */
+    private const OPTION_LIMIT = 500;
+
+    /**
+     * One page of options, plus the fact of whether more exist.
+     *
+     * One row beyond the cap is fetched so «more» is measured rather than inferred from a full page.
+     * Inferring it is wrong in both directions: exactly 500 entities would report more that are not
+     * there, and a caller who trusted a short page would never ask.
+     *
+     * @param  list<string>  $columns
+     * @return array{0: list<array<string,mixed>>, 1: bool}
+     */
+    private function bounded(mixed $query, array $columns, callable $shape): array
+    {
+        $rows = $query->limit(self::OPTION_LIMIT + 1)->get($columns);
+        $more = $rows->count() > self::OPTION_LIMIT;
+
+        return [$rows->take(self::OPTION_LIMIT)->map($shape)->values()->all(), $more];
     }
 
     /** The metrics a report may be told to show. The catalogue's client-meaningful subset. */

@@ -51,38 +51,63 @@ final class DailyDigestMail extends Mailable
         private readonly string $lang,
         private readonly string $recipientName,
         /*
-         * `daily` or `weekly` — the rhythm, not a second email.
+         * `daily`, `weekly` or `monthly` — the rhythm, not three emails.
          *
-         * One Mailable and one template serve both because every rule the daily digest follows is a
-         * rule the weekly must follow too. A second class would be two places to keep «awareness
-         * money never gets a cost per order» true, and the one nobody edits is the one that breaks.
+         * One Mailable and one template serve all three because every rule the daily digest follows
+         * is a rule the others must follow too. Three classes would be three places to keep
+         * «awareness money never gets a cost per order» true, and the one nobody edits is the one
+         * that breaks.
          */
         private readonly string $kind = 'daily',
+        /*
+         * BRANDING-HIERARCHY-001 — whose product this email is from.
+         *
+         * Null means «the platform», which is what an unbranded installation and the mail gallery
+         * both want. The AGENCY layer is the right one for a digest: it can span several of that
+         * agency's clients, so a client identity would name one of them on a summary about all of
+         * them. Resolved by the caller through the same `SharedLinkBranding` the reports use — this
+         * class must not grow a second branding engine, and the requirement says so in capitals.
+         */
+        private readonly ?string $senderName = null,
     ) {}
+
+    /** The name this email presents itself under — the agency's, or the product's. */
+    private function brandName(): string
+    {
+        $name = trim((string) ($this->senderName ?? ''));
+
+        return $name !== '' ? $name : (string) config('brand.name');
+    }
 
     public function envelope(): Envelope
     {
-        $p = new DigestPresenter($this->lang);
+        $p = new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1));
         $ar = $this->lang === 'ar';
         $totals = $this->digest['totals'] ?? [];
 
         $spend = $p->money($totals['spend'] ?? null);
         $results = number_format((float) ($totals['conversions'] ?? 0));
 
-        $when = $this->kind === 'weekly'
-            ? ($ar ? 'هذا الأسبوع' : 'this week')
-            : ($ar ? 'أمس' : 'yesterday');
+        // The subject names the period it covers. A monthly report labelled «أمس» is a monthly
+        // report nobody opens, because the subject line says it is yesterday's.
+        $when = match ($this->kind) {
+            'monthly' => $ar ? 'هذا الشهر' : 'this month',
+            'weekly' => $ar ? 'هذا الأسبوع' : 'this week',
+            // EMAIL-DAILY-WINDOW-001 — the daily email reports the last seven days, so «أمس» in the
+            // subject would name a span it does not cover. The rhythm is daily; the period is a week.
+            default => $ar ? 'آخر 7 أيام' : 'the last 7 days',
+        };
 
         return new Envelope(
             subject: $ar
-                ? config('brand.name')." — {$spend} {$when}، {$results} نتيجة"
-                : config('brand.name')." — {$spend} {$when}, {$results} results",
+                ? $this->brandName()." — {$spend} {$when}، {$results} نتيجة"
+                : $this->brandName()." — {$spend} {$when}, {$results} results",
         );
     }
 
     public function content(): Content
     {
-        $p = new DigestPresenter($this->lang);
+        $p = new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1));
         $ar = $this->lang === 'ar';
         $app = rtrim((string) config('brand.application_url'), '/');
         $site = Frontend::origin();
@@ -101,7 +126,7 @@ final class DailyDigestMail extends Mailable
                 // The side a border sits on. Logical properties do not exist in Outlook, so the
                 // direction is resolved once here rather than guessed at in the template.
                 'startSide' => $ar ? 'right' : 'left',
-                'brand' => (string) config('brand.name'),
+                'brand' => $this->brandName(),
                 'year' => date('Y'),
                 'subject' => $this->envelope()->subject,
                 'preheader' => $ar
@@ -135,18 +160,22 @@ final class DailyDigestMail extends Mailable
         );
     }
 
-    /** «الملخص اليومي · 2026-08-06» or «Weekly digest · 2026-08-01 → 2026-08-07». */
+    /** «الملخص اليومي · 2026-08-06», «Weekly digest · 2026-08-01 → 2026-08-07», or the month. */
     private function headerNote(bool $ar): string
     {
         $from = (string) ($this->digest['date'] ?? '');
 
-        if ($this->kind !== 'weekly') {
+        if ($this->kind === 'daily') {
             return ($ar ? 'الملخص اليومي · ' : 'Daily digest · ').$from;
         }
 
         $to = (string) ($this->digest['to_date'] ?? $from);
 
-        return ($ar ? 'الملخص الأسبوعي · ' : 'Weekly digest · ')."{$from} → {$to}";
+        $label = $this->kind === 'monthly'
+            ? ($ar ? 'الملخص الشهري · ' : 'Monthly digest · ')
+            : ($ar ? 'الملخص الأسبوعي · ' : 'Weekly digest · ');
+
+        return $label."{$from} → {$to}";
     }
 
     /**
@@ -267,6 +296,15 @@ final class DailyDigestMail extends Mailable
                 'funnel' => $this->funnel($p, $ar, $block['funnel'] ?? []),
                 'creatives' => $this->creatives($block['creatives'] ?? null),
                 /*
+                  EMAIL-SETTINGS-DEPTH-001 — passed through as the digest produced it.
+
+                  Nothing is re-decided here. `DigestRecommendations` has already applied the
+                  approved-only rule, the tenant, the window and the cap; this block builds its view
+                  from an explicit whitelist, so a section absent from THIS list renders nowhere no
+                  matter how completely it was plumbed underneath.
+                */
+                'recommendations' => array_values($block['recommendations'] ?? []),
+                /*
                   The budget is NOT a section of its own.
 
                   `ReportObservations` already produces a budget-pace note with the money in it, and
@@ -356,7 +394,7 @@ final class DailyDigestMail extends Mailable
     {
         return $ar ? [
             'greeting' => "صباح الخير، {$this->recipientName}",
-            'intro' => $this->kind === 'weekly'
+            'intro' => $this->kind !== 'daily'
                 ? 'هذا ما حدث هذا الأسبوع عبر مشاريعك — والقرارات التي تستحق وقتك.'
                 : 'هذا ما حدث أمس عبر مشاريعك — والقرارات التي تستحق وقتك اليوم.',
             'account_total' => 'إجمالي الحساب',
@@ -365,6 +403,7 @@ final class DailyDigestMail extends Mailable
             'projects' => 'المشاريع',
             'funnel' => 'المسار',
             'content' => 'المحتوى',
+            'recommendations' => 'التوصيات المعتمدة',
             'best_content' => 'الأفضل',
             'declining' => 'يتراجع',
             'fatigued' => 'يحتاج تجديدًا',
@@ -382,7 +421,7 @@ final class DailyDigestMail extends Mailable
             'security' => 'الأمان',
         ] : [
             'greeting' => "Good morning, {$this->recipientName}",
-            'intro' => $this->kind === 'weekly'
+            'intro' => $this->kind !== 'daily'
                 ? 'Here is the week across your projects — and what is worth your time.'
                 : 'Here is what happened yesterday across your projects — and what is worth your time today.',
             'account_total' => 'Account total',
@@ -391,6 +430,7 @@ final class DailyDigestMail extends Mailable
             'projects' => 'Projects',
             'funnel' => 'Funnel',
             'content' => 'Content',
+            'recommendations' => 'Approved recommendations',
             'best_content' => 'Best',
             'declining' => 'Slipping',
             'fatigued' => 'Needs refreshing',

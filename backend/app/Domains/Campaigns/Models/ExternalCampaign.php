@@ -24,7 +24,7 @@ final class ExternalCampaign extends Model
     protected $fillable = [
         'tenant_id', 'project_id', 'client_workspace_id', 'unified_campaign_id', 'external_account_id',
         'provider', 'external_id', 'name', 'status', 'objective', 'daily_budget', 'lifetime_budget',
-        'currency', 'starts_at', 'ends_at', 'raw', 'linked_at', 'linked_by', 'last_synced_at',
+        'currency', 'starts_at', 'ends_at', 'raw', 'linked_at', 'linked_by', 'unlinked_at', 'last_synced_at',
     ];
 
     protected $casts = [
@@ -34,6 +34,9 @@ final class ExternalCampaign extends Model
         'ends_at' => 'datetime',
         'raw' => 'array',
         'linked_at' => 'datetime',
+        // CAMPAIGNS-ADOPT-001 — the record «somebody detached this on purpose», which `unified_campaign_id
+        // IS NULL` cannot carry: that is also what «never adopted» looks like.
+        'unlinked_at' => 'datetime',
         'last_synced_at' => 'datetime',
     ];
 

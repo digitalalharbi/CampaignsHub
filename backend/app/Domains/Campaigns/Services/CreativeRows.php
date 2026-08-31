@@ -6,6 +6,7 @@ namespace App\Domains\Campaigns\Services;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
+use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
@@ -124,12 +125,23 @@ final class CreativeRows
         foreach ([
             'campaign_ids' => 'campaign_id',
             'ad_set_ids' => 'external_ad_set_id',
-            'ad_ids' => 'external_ad_id',
             'project_ids' => 'project_id',
         ] as $param => $column) {
             if (($ids = $list($param)) !== []) {
                 $query->whereIn($column, $ids);
             }
+        }
+
+        /*
+         * CREATIVE-AD-RELATION-001 — filtered THROUGH the ads, not through a column that names one.
+         *
+         * This read `whereIn('external_ad_id', $ids)`, and that column holds whichever ad was
+         * imported last. So filtering by any of the other ads carrying a creative returned nothing,
+         * and filtering by the last one returned it — with no way to tell those two apart from the
+         * result. `ads()` is the real relation, so every ad that carries the creative matches.
+         */
+        if (($adIds = $list('ad_ids')) !== []) {
+            $query->whereHas('ads', fn ($q) => $q->whereIn('external_ads.external_id', $adIds));
         }
 
         /*
@@ -264,12 +276,21 @@ final class CreativeRows
         return match ($sort) {
             'name' => $query->orderBy('name')->orderBy('id'),
             'oldest' => $query->orderBy('first_seen_at')->orderBy('id'),
+            /*
+             * SNAP-CREATIVE-METRICS-LIVE-001 — NULLS LAST, and it is not a refinement.
+             *
+             * PostgreSQL sorts NULLs FIRST under `DESC`. `last_active_at` is null for every creative
+             * that has never delivered, so the moment `UpsertCreativeDailyMetrics` began writing the
+             * column, the default order would have opened the library on the creatives with no
+             * delivery and pushed the ones that ran below them — the same empty first page, arrived
+             * at by the opposite route.
+             */
             default => $query
-                ->orderByDesc('last_active_at')
-                ->orderByDesc('last_synced_at')
+                ->orderByRaw('external_creatives.last_active_at DESC NULLS LAST')
+                ->orderByRaw('external_creatives.last_synced_at DESC NULLS LAST')
                 // `id` last, always: the first two tie freely across a batch synced in one run, and
                 // an ordering with ties repeats and skips rows across pages.
-                ->orderBy('id'),
+                ->orderBy('external_creatives.id'),
         };
     }
 
@@ -299,6 +320,48 @@ final class CreativeRows
             ->get(['id', 'name', 'objective'])
             ->keyBy('id');
 
+        /*
+         * CREATIVE-PRESENTER-ADS-BACKEND-001 — one query for every creative's ads, not one each.
+         *
+         * `card()` now reads `$creative->ads`, and this loop calls it once per row. Left to lazy
+         * loading that is a query per creative: `CreativePulseApiTest` caught it immediately —
+         * «two hundred creatives cost the same queries as two» is exactly the guard for this, and
+         * two hundred creatives had become two hundred extra round trips.
+         *
+         * `loadMissing` rather than `load`: the caller may already have eager-loaded the relation,
+         * and re-loading it would throw the saving away for a second identical query.
+         */
+        $creatives->loadMissing('ads');
+
+        /*
+         * CONTENT-AD-DELIVERED-001 — did this creative's AD run, even though the creative has no
+         * figures of its own?
+         *
+         * Production has 35 creatives in exactly that state: the platform reports the ad and never
+         * names the creative. Without this the card falls to «لم يعمل خلال هذه الفترة», which is a
+         * false statement about a creative that was live — and false in the expensive direction,
+         * because an operator reads it and leaves a running creative alone.
+         *
+         * One query for the page, not one per row. It answers a question about the AD and is
+         * reported as such: no ad figure is copied onto the creative, and nothing here reaches the
+         * KPI grid. It only decides WHICH SENTENCE an empty card gets.
+         */
+        $adDelivered = array_fill_keys(
+            DB::table('external_ads')
+                ->whereIn('creative_id', $ids)
+                ->whereIn('id', function ($sub) use ($from, $to): void {
+                    $sub->select('entity_id')
+                        ->from('entity_daily_metrics')
+                        ->where('entity_type', 'ad')
+                        ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
+                })
+                ->distinct()
+                ->pluck('creative_id')
+                ->map(static fn (mixed $v): string => (string) $v)
+                ->all(),
+            true,
+        );
+
         $out = [];
         foreach ($creatives as $creative) {
             $id = (string) $creative->getKey();
@@ -308,8 +371,15 @@ final class CreativeRows
             $row = $this->presenter->card($creative, $campaign);
             $row['objective'] = $objective;
             $row['path'] = $this->metrics->pathFor($objective)->value;
-            $row['headline_metrics'] = $this->metrics->headline($objective);
+            /*
+             * CONTENT-KPI-AVAILABILITY-001 — the row's OWN figures decide which of the family's
+             * metrics the card promises. A sales creative whose platform reports no revenue at
+             * creative grain is not helped by a cell reserved for revenue.
+             */
+            $row['headline_metrics'] = $this->metrics->headline($objective, $figures[$id] ?? null);
             $row['metrics'] = $figures[$id] ?? null;
+            // A fact about the AD, named as one — see CONTENT-AD-DELIVERED-001.
+            $row['ad_delivered'] = isset($adDelivered[$id]);
 
             if ($withFatigue) {
                 $row['fatigue'] = $this->fatigue->assess($figures[$id] ?? ['active_days' => 0], $previous[$id] ?? null);
@@ -330,6 +400,51 @@ final class CreativeRows
         }
 
         return $out;
+    }
+
+    /**
+     * The external ids of every ad reachable from these creatives — CREATIVE-AD-RELATION-001.
+     *
+     * Read from `external_ads` through the real relation rather than from
+     * `external_creatives.external_ad_id`, which holds one ad per creative and so offered a list
+     * that was really a count of creatives: 1,451 values on the live Snapchat account where 5,706
+     * ads exist, with every ad but the last of each creative unselectable.
+     *
+     * @param  Closure(): Builder  $base  a fresh bounded query, same contract as `filterOptions`
+     * @return list<array{value:string,label:string}> the ad ids to filter by, each with the name a person reads
+     */
+    private function adExternalIds(Closure $base): array
+    {
+        $creativeIds = $base()->distinct()->pluck('id')->all();
+
+        if ($creativeIds === []) {
+            return [];
+        }
+
+        /*
+         * CREATIVE-FRONTEND-ADS-001 — an ad filter that offers ids is not a control.
+         *
+         * This returned bare `external_id` strings and the select rendered them as their own
+         * labels, so narrowing the library by ad meant choosing between a column of provider ids
+         * that say nothing about which ad they are. The NAME is what somebody recognises; the id is
+         * what the filter must send, and both fit in one option.
+         *
+         * The id remains the value, deliberately: names are not unique and a name is not an
+         * address. An ad the platform left unnamed falls back to its id rather than to an empty row.
+         */
+        return ExternalAd::query()
+            ->whereIn('creative_id', $creativeIds)
+            ->orderBy('external_id')
+            ->get(['external_id', 'name'])
+            ->unique('external_id')
+            ->map(static fn (ExternalAd $ad): array => [
+                'value' => (string) $ad->external_id,
+                'label' => $ad->name !== null && $ad->name !== ''
+                    ? (string) $ad->name
+                    : (string) $ad->external_id,
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -376,7 +491,14 @@ final class CreativeRows
                 'id' => (string) $c->id, 'name' => $c->name, 'objective' => $c->objective,
             ])->all(),
             'ad_sets' => $distinct('external_ad_set_id'),
-            'ads' => $distinct('external_ad_id'),
+            /*
+             * CREATIVE-AD-RELATION-001 — the ads themselves, not `distinct('external_ad_id')`.
+             *
+             * That column carries one ad per creative, so the option list was really a count of
+             * CREATIVES wearing an ad's name: on the live Snapchat account it offered 1,451 values
+             * where 5,706 ads exist, and every ad but the last of each creative was unselectable.
+             */
+            'ads' => $this->adExternalIds($base),
             'objectives' => $campaigns->pluck('objective')->filter()->unique()->sort()->values()->all(),
             'paths' => array_map(static fn (MarketingPath $p): string => $p->value, MarketingPath::cases()),
             'projects' => $projects->map(static fn ($p): array => [

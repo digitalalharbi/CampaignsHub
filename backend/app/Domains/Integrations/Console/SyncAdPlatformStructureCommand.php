@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Console;
 
 use App\Domains\Integrations\Jobs\SyncAccountStructureJob;
-use App\Domains\Integrations\Models\ExternalAccount;
-use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Services\StructureSweepTargets;
 use Illuminate\Console\Command;
 
 /**
@@ -35,34 +34,21 @@ final class SyncAdPlatformStructureCommand extends Command
 
     protected $description = 'Queue a structure sync (campaigns, ad sets, ads, creatives) for every connected ad account.';
 
-    public function handle(): int
+    public function handle(StructureSweepTargets $targets): int
     {
-        $connections = ProviderConnection::withoutGlobalScopes()
-            ->where('status', 'connected')
-            ->when($this->option('provider'), fn ($q, $provider) => $q->where('provider', $provider))
-            ->pluck('id');
+        $accounts = $targets->accounts($this->option('provider'));
 
-        if ($connections->isEmpty()) {
-            $this->info('No connected provider connections — nothing to discover.');
+        if ($accounts->isEmpty()) {
+            $this->info('No connected, assigned ad accounts — nothing to discover.');
 
             return self::SUCCESS;
         }
 
-        $queued = 0;
+        foreach ($accounts as $account) {
+            SyncAccountStructureJob::dispatch((string) $account->id, ['source' => 'scheduler']);
+        }
 
-        ExternalAccount::withoutGlobalScopes()
-            ->whereIn('provider_connection_id', $connections)
-            ->where('account_type', 'ad_account')
-            ->where('status', 'active')
-            ->orderBy('id')
-            ->chunkById(200, function ($accounts) use (&$queued): void {
-                foreach ($accounts as $account) {
-                    SyncAccountStructureJob::dispatch((string) $account->id, ['source' => 'scheduler']);
-                    $queued++;
-                }
-            });
-
-        $this->info("Queued {$queued} structure sync(s).");
+        $this->info("Queued {$accounts->count()} structure sync(s).");
 
         return self::SUCCESS;
     }

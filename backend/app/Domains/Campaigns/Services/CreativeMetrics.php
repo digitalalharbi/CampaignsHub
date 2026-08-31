@@ -6,6 +6,7 @@ namespace App\Domains\Campaigns\Services;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -35,6 +36,61 @@ final class CreativeMetrics
      * NOT wrapped in COALESCE: a null sum is the answer when the provider reported nothing, and this
      * is the one place in the aggregation where losing that distinction costs the reader the truth.
      */
+    /**
+     * Every ratio {@see self::derive()} computes — the other half of what this service can supply.
+     *
+     * Named rather than inferred because `supportable()` has to know the difference between «this
+     * table has no such column» and «this is computed from columns it does have».
+     *
+     * @var list<string>
+     */
+    private const DERIVED = [
+        'ctr', 'cpc', 'cpm', 'cpa', 'roas', 'conversion_rate', 'aov', 'cost_per_view',
+        'view_rate', 'completion_rate', 'hook_rate', 'cost_per_lpv', 'engagement_rate',
+        'cpe', 'orders',
+    ];
+
+    /**
+     * Averaged COLUMNS, which are not derived — carried over from CONTENT-KPI-COLLAPSE-001.
+     *
+     * `frequency` and `video_avg_watch_seconds` sat in {@see self::DERIVED}, and nothing in
+     * {@see self::derive()} has ever computed either. They are columns, read as an AVG rather than a
+     * SUM because a frequency added across days grows with the length of the window and means nothing.
+     *
+     * The misfiling still matters even now that selection is availability-aware. `DERIVED` is the
+     * PIPELINE filter's answer to «can this service produce the metric at all», and for these two the
+     * honest answer is «only if a provider sends the column». Snapchat's creative-grain stats call
+     * does not ask for frequency, so the awareness family — most of this account — was promising a
+     * cell that could never be filled. Availability now catches that per row; the classification is
+     * corrected so the SHAPE is right when no row is in hand.
+     *
+     * Deriving frequency instead was considered and refused: it is impressions ÷ reach, and `reach`
+     * is summed across days, so daily uniques added together over-count the people actually reached
+     * and the quotient would be a lower bound presented as a measurement.
+     *
+     * Both stay in the payload — `shape()` still reads them — so a provider that DOES report them at
+     * creative grain is not thrown away. What stops is the headline PROMISING them.
+     *
+     * @var list<string>
+     */
+    private const AVERAGED = ['frequency', 'video_avg_watch_seconds'];
+
+    /**
+     * How many headline metrics a card is entitled to before it reads as broken.
+     *
+     * The grid renders `headline_metrics.slice(0, 4)`, so four is not a preference — it is the number
+     * the surface asks for, and a family that can answer fewer leaves visible gaps.
+     */
+    private const HEADLINE_MINIMUM = 4;
+
+    /**
+     * The keys whose absence may still be answerable, because FX-001 preserves an original beside a
+     * figure it refused to convert.
+     *
+     * @var list<string>
+     */
+    private const MONEY = ['spend', 'revenue'];
+
     private const SUMS = [
         'spend' => 'spend',
         'impressions' => 'impressions',
@@ -59,6 +115,29 @@ final class CreativeMetrics
     ];
 
     /**
+     * CREATIVE-MONEY-TRUTH-001 — the withheld half of the money, in the contract's own field names.
+     *
+     * These are deliberately the SAME keys `MetricsAggregator::MONEY_TRUTH` emits, because the
+     * frontend has one money reader (`lib/money/contract.ts`) and it keys off these names. Matching
+     * them is what lets a creative card and a dashboard KPI render an unconvertible figure the same
+     * way without a second implementation — the thing that «one contract» was supposed to mean.
+     *
+     * A row is withheld when its converted value is null AND an original survives. A row the platform
+     * never reported has neither, and must not be counted here: «not reported» and «reported but not
+     * convertible» are different sentences and the card says different things for them.
+     */
+    private const MONEY_TRUTH = [
+        'spend_withheld_rows' => 'COUNT(*) FILTER (WHERE spend IS NULL AND spend_original IS NOT NULL)',
+        'spend_original' => 'SUM(spend_original) FILTER (WHERE spend IS NULL AND spend_original IS NOT NULL)',
+        'revenue_withheld_rows' => 'COUNT(*) FILTER (WHERE revenue IS NULL AND revenue_original IS NOT NULL)',
+        'revenue_original' => 'SUM(revenue_original) FILTER (WHERE revenue IS NULL AND revenue_original IS NOT NULL)',
+        'money_original_currency' => 'MIN(original_currency) FILTER (WHERE (spend IS NULL AND spend_original IS NOT NULL) OR (revenue IS NULL AND revenue_original IS NOT NULL))',
+        // The reader refuses to name a currency when this is not exactly 1: several unconvertible
+        // currencies cannot be added, and printing one of their names would be a wrong label.
+        'money_original_currencies' => 'COUNT(DISTINCT original_currency) FILTER (WHERE (spend IS NULL AND spend_original IS NOT NULL) OR (revenue IS NULL AND revenue_original IS NOT NULL))',
+    ];
+
+    /**
      * Totals per creative for a window, with derived KPIs and a map of what was actually reported.
      *
      * @param  list<string>  $creativeIds
@@ -79,6 +158,10 @@ final class CreativeMetrics
         $select[] = 'AVG(frequency) AS frequency';
         $select[] = 'AVG(video_avg_watch_seconds) AS video_avg_watch_seconds';
         $select[] = 'COUNT(DISTINCT metric_date) AS active_days';
+
+        foreach (self::MONEY_TRUTH as $alias => $expression) {
+            $select[] = "{$expression} AS {$alias}";
+        }
 
         $rows = DB::table('creative_daily_metrics')
             ->whereIn('creative_id', $creativeIds)
@@ -110,8 +193,9 @@ final class CreativeMetrics
             $figures[$key] = $num($key);
         }
 
-        $figures['frequency'] = $num('frequency');
-        $figures['video_avg_watch_seconds'] = $num('video_avg_watch_seconds');
+        foreach (self::AVERAGED as $key) {
+            $figures[$key] = $num($key);
+        }
         $figures['active_days'] = (int) ($row['active_days'] ?? 0);
 
         $figures = $this->derive($figures);
@@ -130,8 +214,23 @@ final class CreativeMetrics
         foreach (array_keys(self::SUMS) as $key) {
             $figures['reported'][$key] = $row[$key] !== null;
         }
-        $figures['reported']['frequency'] = $row['frequency'] !== null;
-        $figures['reported']['video_avg_watch_seconds'] = $row['video_avg_watch_seconds'] !== null;
+        foreach (self::AVERAGED as $key) {
+            $figures['reported'][$key] = $row[$key] !== null;
+        }
+
+        /*
+         * Carried AFTER `reported` is built, and never inside it.
+         *
+         * These describe the money's provenance, not a metric the platform sends. Adding them to the
+         * reported map would put «Spend withheld rows» on a card as though it were a figure somebody
+         * could act on.
+         */
+        $figures['spend_withheld_rows'] = (int) ($row['spend_withheld_rows'] ?? 0);
+        $figures['revenue_withheld_rows'] = (int) ($row['revenue_withheld_rows'] ?? 0);
+        $figures['spend_original'] = $num('spend_original');
+        $figures['revenue_original'] = $num('revenue_original');
+        $figures['money_original_currency'] = $row['money_original_currency'] === null ? null : (string) $row['money_original_currency'];
+        $figures['money_original_currencies'] = (int) ($row['money_original_currencies'] ?? 0);
 
         return $figures;
     }
@@ -311,17 +410,210 @@ final class CreativeMetrics
      *
      * @return list<string>
      */
-    public function headline(?string $objective): array
+    /**
+     * @param  array<string, mixed>|null  $figures  this creative's own figures for the window, when
+     *                                              known; null asks only what the FAMILY wants
+     */
+    public function headline(?string $objective, ?array $figures = null): array
     {
-        $path = $this->pathFor($objective);
+        /*
+         * OBJECTIVE-AWARE-KPI-001 — chosen by the objective's FAMILY, not by its marketing path.
+         *
+         * The path has three cases and answers a money question. Using it here meant `Leads` and
+         * `AppInstalls` — both on the conversion path — were headlined with `revenue`, `roas` and
+         * `aov`: figures a lead-generation or app-install campaign was never bought to produce and
+         * the platform will never report for it. The requirement is explicit that a campaign must
+         * not be judged by another objective's verdict, and this was the shipping version of that.
+         *
+         * `pathFor()` is untouched and still governs whose CPA the money lands in.
+         */
+        $family = $this->familyFor($objective);
 
-        $metrics = $path->headlineMetrics();
+        $metrics = $family->headlineMetrics();
 
-        // Video adds its own headline figures on any path — a video's hook and completion matter
-        // whether it was bought for reach or for sales.
-        return $path === MarketingPath::Awareness
+        /*
+         * Video figures ride along on an awareness buy, because a video's hook and completion matter
+         * whether it was bought for reach or for sales — but NOT on the video family, which already
+         * leads with them, and not on the others, where they would push the actual verdict down.
+         */
+        $metrics = $family === ObjectiveFamily::Awareness
             ? array_values(array_unique([...$metrics, 'video_views', 'view_rate', 'completion_rate', 'cost_per_view']))
             : $metrics;
+
+        return $this->supportable($metrics, $figures);
+    }
+
+    /**
+     * Whether THIS row can answer a given metric — the question `supportable()` cannot ask alone.
+     *
+     * Three states count as answerable, and the third is the one that has been getting this wrong:
+     *
+     *   REPORTED  a value came back, including a measured zero. `0 orders` is a fact about a sales
+     *             creative and belongs on its card.
+     *   DERIVED   a ratio this service computed from figures that were reported. Null when its
+     *             denominator was missing, which is «there was nothing to divide», not «zero».
+     *   WITHHELD  money with no conversion rate. `value` is null by FX-001's design and the ORIGINAL
+     *             amount is preserved beside it, so the cell renders «79.61 USD» and is answerable.
+     *             Treating this as unanswerable would drop spend off the card of every creative on an
+     *             account with no rate — which is every creative on the account this was found on.
+     *
+     * @param  array<string, mixed>  $figures
+     */
+    private function answerable(array $figures, string $key): bool
+    {
+        if (in_array($key, self::MONEY, true)) {
+            return $this->moneyAnswerable($figures, $key);
+        }
+
+        return ($figures[$key] ?? null) !== null;
+    }
+
+    /**
+     * CONTENT-KPI-MONEY-PROVENANCE-001 — money is answerable on PROVENANCE, not on non-nullness.
+     *
+     * The first version of this asked «is the value or its original non-null», and that is not the
+     * money contract. It let `revenue_original = 0` put «0.00 USD» on a sales card as though the
+     * platform had reported a monetary zero, when a summed original of zero is not evidence of
+     * anything having been reported at all. Production creative `81632089` established a spend of
+     * 79.61 USD across 11 withheld rows; it established NO revenue, and the card was about to claim
+     * one.
+     *
+     * A withheld figure is displayable only when every part of the claim it makes is true:
+     *
+     *   · the converted value is genuinely absent (otherwise case A already answered)
+     *   · rows were actually withheld — `*_withheld_rows > 0` is the sync saying «I had an amount
+     *     and refused to convert it», which a summed original alone never says
+     *   · the original is POSITIVE. Zero is the value a sum takes when there was nothing to add.
+     *   · exactly one original currency, and a real one. Two unconvertible currencies cannot be
+     *     added into one amount, and a label over their sum would be a wrong label — the same rule
+     *     `money_original_currencies` already enforces for the reader.
+     *
+     * A converted value of 0.0 is a different thing entirely and stays answerable: the rate existed,
+     * the conversion happened, and the answer was zero.
+     *
+     * @param  array<string, mixed>  $figures
+     */
+    private function moneyAnswerable(array $figures, string $key): bool
+    {
+        // A — converted, including a measured zero.
+        if (($figures[$key] ?? null) !== null) {
+            return true;
+        }
+
+        // B — withheld, and every part of the claim holds.
+        $withheldRows = (int) ($figures[$key.'_withheld_rows'] ?? 0);
+        $original = $figures[$key.'_original'] ?? null;
+        $currency = $figures['money_original_currency'] ?? null;
+        $currencies = (int) ($figures['money_original_currencies'] ?? 0);
+
+        return $withheldRows > 0
+            && is_numeric($original)
+            && (float) $original > 0.0
+            && $currencies === 1
+            && is_string($currency)
+            && trim($currency) !== '';
+    }
+
+    /**
+     * Keep only the metrics THIS table can actually produce.
+     *
+     * `ObjectiveFamily` describes the canonical verdict for a family and is right at campaign level,
+     * where `daily_metrics` carries leads, installs, registrations and in-app events.
+     * `creative_daily_metrics` has none of those columns — a platform that breaks results down per
+     * creative does not break every result type down — so a lead campaign's creative card would put
+     * «no data» in its most prominent position, which is the opposite of an objective-aware card.
+     *
+     * The requirement is explicit: a metric must not reach the UI before the pipeline can supply it.
+     * So the family list is filtered here rather than being trimmed at its definition, and the
+     * definition stays true for the callers that CAN answer it.
+     *
+     * `spend` survives every filter, so a family whose whole verdict is unavailable still leads with
+     * the figure that is always the question.
+     *
+     * @param  list<string>  $metrics
+     * @return list<string>
+     */
+    /**
+     * CONTENT-KPI-AVAILABILITY-001 — objective-aware AND availability-aware, in that order.
+     *
+     * Two filters, and they answer different questions. The first is about the PIPELINE: can this
+     * service produce the metric at all? `ObjectiveFamily::App` names `installs` and `cpi`, and
+     * `creative_daily_metrics` has no column for either — no creative will ever answer them, so a
+     * card that promises one is promising an empty cell forever.
+     *
+     * The second is about THIS ROW: did the platform answer it, for this creative, in this window? A
+     * sales creative whose family wants `revenue` and `roas` is not helped by two blank cells when
+     * Snapchat reports neither at creative grain — and the same creative reports impressions, clicks
+     * and CTR that the card had room to show.
+     *
+     * Order matters, and it is the whole design. The family's OWN metrics are kept first and in the
+     * family's own order, because the first cell is the verdict and the objective is the only thing
+     * that knows which figure that is. Only then is the remainder topped up, from the metrics that
+     * are true of any campaign whatever it was bought for. A sales creative that CAN answer `orders`
+     * still leads with `orders`; one that cannot does not get a blank where its verdict should be.
+     *
+     * Nothing here invents a value, and nothing is projected from another grain. A metric survives
+     * only by being present in this row.
+     *
+     * With `$figures` null — a group with no aggregate, a card being described rather than rendered —
+     * only the pipeline filter applies, which is the behaviour every caller had before.
+     *
+     * @param  list<string>  $metrics
+     * @param  array<string, mixed>|null  $figures
+     * @return list<string>
+     */
+    private function supportable(array $metrics, ?array $figures = null): array
+    {
+        $producible = fn (string $key): bool => array_key_exists($key, self::SUMS)
+            || in_array($key, self::DERIVED, true);
+
+        $kept = array_values(array_filter($metrics, $producible));
+
+        if ($figures !== null) {
+            $kept = array_values(array_filter($kept, fn (string $k): bool => $this->answerable($figures, $k)));
+        }
+
+        /*
+         * Top up to the number of cells the card renders.
+         *
+         * `Unknown`'s metrics are the ones true of every campaign whatever it was bought to do, which
+         * is exactly what a family that has run out of answerable figures needs. When `$figures` is
+         * given these are held to the same availability test as the family's own — so a creative that
+         * genuinely reported four figures shows four, and one that reported two shows two rather than
+         * two figures and two apologies.
+         */
+        foreach (ObjectiveFamily::Unknown->headlineMetrics() as $universal) {
+            if (count($kept) >= self::HEADLINE_MINIMUM) {
+                break;
+            }
+
+            if (in_array($universal, $kept, true) || ! $producible($universal)) {
+                continue;
+            }
+
+            if ($figures === null || $this->answerable($figures, $universal)) {
+                $kept[] = $universal;
+            }
+        }
+
+        /*
+         * `spend` is the last resort and only when nothing at all survived — it is the one question
+         * asked of every campaign. It is NOT added when figures were supplied and spend is not among
+         * them: a card is better with three honest cells than four where the fourth is «no data».
+         */
+        if ($kept === []) {
+            return $figures === null || $this->answerable($figures, 'spend') ? ['spend'] : [];
+        }
+
+        return $kept;
+    }
+
+    /** The family whose KPIs this objective is judged by — see {@see CampaignObjective::family()}. */
+    public function familyFor(?string $objective): ObjectiveFamily
+    {
+        $case = $objective === null ? null : CampaignObjective::tryFrom($objective);
+
+        return $case?->family() ?? ObjectiveFamily::Unknown;
     }
 
     public function pathFor(?string $objective): MarketingPath

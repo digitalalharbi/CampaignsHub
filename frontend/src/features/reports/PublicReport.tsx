@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { fmtDateTime } from '@/lib/datetime'
 import { useParams } from 'react-router-dom'
 import { Download, Lock } from 'lucide-react'
-import { fetchSharedReport, sharedDownloadUrl } from './api'
+import { fetchSharedReport, sharedBranding, sharedDownloadUrl } from './api'
 import type { ReportFormat } from './api'
+import { headerIdentity, hideBrokenLogo, type SharedBranding } from './sharedBranding'
 import { InteractiveReport } from './InteractiveReport'
 import { LiveSharedReport } from './LiveSharedReport'
 import { SharedAttributionSection } from './SharedAttributionSection'
@@ -86,11 +88,48 @@ export function PublicReport() {
 
   const platforms = ((report?.data?.platforms as Array<Record<string, unknown>>) ?? []).map((p) => String(p.provider))
 
+  /*
+   * Asked separately from the report, and deliberately not gated on it: the header is the frame
+   * around the password prompt too, so a reader who has not yet unlocked the report still has to be
+   * shown WHOSE report they are being asked to unlock.
+   */
+  const [branding, setBranding] = useState<SharedBranding | undefined>(undefined)
+  useEffect(() => {
+    let alive = true
+    sharedBranding(token)
+      .then((b) => alive && setBranding(b))
+      // A failed branding lookup must never take the report down with it: `headerIdentity`
+      // already answers «CampaignsHub, no mark» for undefined, which is the honest fallback.
+      .catch(() => undefined)
+
+    return () => { alive = false }
+  }, [token])
+
+  const identity = headerIdentity(branding)
+
   return (
     <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-background text-text-primary">
       <header className="sticky top-0 z-10 border-b border-border bg-surface/85 px-4 py-3 backdrop-blur-md sm:px-8">
         <div className="mx-auto flex max-w-[1100px] items-center justify-between">
-          <span className="font-heading text-lg font-extrabold tracking-tight">{report?.branding?.name ?? 'CampaignsHub'}</span>
+          {/*
+            BRANDING-HIERARCHY-001 — the client's own identity, or the agency's, or the product's.
+          
+            This was `report.branding.name ?? 'CampaignsHub'` with no mark at all, so a report whose
+            stored config carried no branding put the PRODUCT's name on an agency's client report. The
+            chain is resolved by the backend, which alone knows the tenant; `logoUrl` is null rather
+            than a URL that 404s, because a broken image here reads as a broken report.
+          */}
+          <span className="flex items-center gap-2">
+            {identity.logoUrl && (
+              <img src={identity.logoUrl} alt="" data-testid="shared-report-logo" onError={hideBrokenLogo} className="h-7 w-auto max-w-[160px] object-contain" />
+            )}
+            <span className="font-heading text-lg font-extrabold tracking-tight" data-testid="shared-report-name">{identity.name}</span>
+            {identity.by && (
+              <span className="text-xs text-text-secondary" data-testid="shared-report-by">
+                {locale === 'ar' ? `بواسطة ${identity.by}` : `by ${identity.by}`}
+              </span>
+            )}
+          </span>
           {report && (
             <div className="flex items-center gap-2">
               {report.is_demo && <span className="rounded-full bg-[var(--warning-background)] px-2 py-0.5 text-xs font-semibold text-warning">Demo</span>}
@@ -159,7 +198,7 @@ export function PublicReport() {
                       ? 'ملخص تنفيذي — أبرز النتائج والقرارات. التفاصيل الكاملة في التقرير التفصيلي.'
                       : 'Executive summary — the headline results and decisions. Full detail lives in the detailed report.')
                   : (locale === 'ar'
-                      ? 'تقرير تفصيلي — كل المنصات والحملات والمحتويات.'
+                      ? 'تقرير تفصيلي — كل المنصات والحملات والإعلانات.'
                       : 'Detailed report — every platform, campaign and creative.')}
               </p>
 
@@ -216,7 +255,7 @@ function ReportMetaStrip({ report }: { report: Shared }) {
   const objective = typeof d.objective === 'string' ? d.objective : undefined
   const mode = (d.mode as string) === 'live' ? 'Live' : 'Snapshot'
   const items: Array<[string, string]> = [
-    ['آخر تحديث', report.generated_at ? new Date(report.generated_at).toLocaleString('en-GB') : '—'],
+    ['آخر تحديث', report.generated_at ? fmtDateTime(report.generated_at) : '—'],
     ['الفترة', period?.from && period?.to ? `${period.from} → ${period.to}` : '—'],
     ['العملة', report.currency],
     ['مصدر البيانات', String((d.data_source as string) ?? 'daily_metrics')],

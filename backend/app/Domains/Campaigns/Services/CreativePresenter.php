@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Campaigns\Services;
 
+use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 
@@ -33,13 +34,36 @@ final class CreativePresenter
     /**
      * Query parameters that mean the URL is carrying a credential.
      *
-     * Matched case-insensitively as whole parameter names. Deliberately broad: a false positive costs
-     * one preview, a false negative publishes a token.
+     * Matched case-insensitively as WHOLE parameter names, never substrings — `Key-Pair-Id` must not
+     * trip the `key` rule, and it is half of how a signed CDN URL is formed.
+     *
+     * Broad on credentials: a false negative publishes a token, which is unrecoverable. But see the
+     * note below on signatures — being broad about the WRONG thing cost every preview in the
+     * product, which is its own kind of failure.
      */
     private const CREDENTIAL_PARAMS = [
-        'access_token', 'accesstoken', 'token', 'auth', 'authorization', 'signature', 'sig',
+        'access_token', 'accesstoken', 'token', 'auth', 'authorization',
         'apikey', 'api_key', 'key', 'secret', 'bearer', 'oauth_token',
     ];
+
+    /*
+     * SNAP-SIGNED-MEDIA-001 — a CDN signature is not a credential, and treating it as one hid
+     * every asset the platform actually supplied.
+     *
+     * `signature` and `sig` were on the list above. That is how essentially every CDN serves private
+     * media — Snapchat's `download_link` included — so a media URL fetched perfectly and stored
+     * correctly was then classified «withheld» and never rendered. The Content library said the
+     * platform's link carried a credential when what it carried was a time-limited grant for one
+     * object.
+     *
+     * The distinction is not stylistic. An `access_token` or `bearer` is a key to the ACCOUNT: leak
+     * it and someone can read and change a customer's advertising. A CloudFront-style `Signature`,
+     * with its `Expires` and `Key-Pair-Id`, authorises exactly one file for a short window and can
+     * do nothing else, which is why the same URL is what the platform's own UI puts in an `<img>`.
+     *
+     * So the rule stays absolute where it matters — a token, key or secret in a query still withholds
+     * the whole URL — and stops blocking the one thing that makes provider media visible at all.
+     */
 
     /** @return array<string, mixed> the card shape used by the library, the dashboard and reports */
     public function card(ExternalCreative $creative, ?UnifiedCampaign $campaign): array
@@ -62,7 +86,30 @@ final class CreativePresenter
              * the last two steps become filters the reader has to set by hand.
              */
             'ad_set_id' => $creative->external_ad_set_id === null ? null : (string) $creative->external_ad_set_id,
-            'ad_id' => $creative->external_ad_id === null ? null : (string) $creative->external_ad_id,
+            /*
+             * CREATIVE-PRESENTER-ADS-BACKEND-001 — the ads running this creative, and only these.
+             *
+             * A singular `ad_id` used to sit here, reading `external_creatives.external_ad_id` —
+             * which `creativeFor()` rewrites on every upsert, so it named whichever ad was imported
+             * last. On the live Snapchat account four ads share each creative, so a drill-down built
+             * from it pointed at one of four while looking definite. The frontend has migrated, so
+             * it is gone rather than kept as a field that looks like a relation and is not.
+             *
+             * Read through `ExternalCreative::ads()` — the `hasMany` on `external_ads.creative_id`,
+             * which is the canonical relation. Ordered by `external_id` so the same creative renders
+             * identically on every request; an unordered collection would make a card's first ad
+             * depend on the database's row order.
+             */
+            'ads' => $creative->ads
+                ->sortBy('external_id')
+                ->map(static fn (ExternalAd $ad): array => [
+                    'id' => (string) $ad->getKey(),
+                    'external_id' => (string) $ad->external_id,
+                    'name' => $ad->name,
+                    'status' => $ad->status,
+                    'external_ad_set_id' => $ad->external_ad_set_id === null ? null : (string) $ad->external_ad_set_id,
+                    'external_campaign_id' => $ad->external_campaign_id === null ? null : (string) $ad->external_campaign_id,
+                ])->values()->all(),
             'preview' => $preview,
             'aspect_ratio' => $creative->aspect_ratio,
             'duration_seconds' => $creative->duration_seconds,
@@ -110,9 +157,17 @@ final class CreativePresenter
              * automatically would be following a link chosen by whoever wrote the ad.
              */
             'destination_url' => $creative->destination_url,
+            /*
+             * No `ad` here either, and for the same reason as the card's `ad_id`.
+             *
+             * A provider id labelled «Ad» reads as THE ad's id. It was
+             * `external_creatives.external_ad_id` — whichever ad was imported last — so on an account
+             * where four ads share a creative it named one and looked authoritative. The ads are in
+             * `ads` above, each with its own `external_id`, which is the same fact without the
+             * false singular.
+             */
             'external_ids' => [
                 'creative' => $creative->external_creative_id,
-                'ad' => $creative->external_ad_id,
                 'ad_set' => $creative->external_ad_set_id === null ? null : (string) $creative->external_ad_set_id,
                 'campaign' => $creative->external_campaign_id === null ? null : (string) $creative->external_campaign_id,
             ],

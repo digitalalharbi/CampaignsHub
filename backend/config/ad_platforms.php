@@ -94,9 +94,24 @@ return [
 
         'meta' => [
             'label' => 'Meta Marketing API',
-            'authorize_url' => 'https://www.facebook.com/v21.0/dialog/oauth',
-            'token_url' => 'https://graph.facebook.com/v21.0/oauth/access_token',
-            'api_base' => 'https://graph.facebook.com/v21.0',
+            /*
+             * META-VERSION-001 — the Marketing API keeps its OWN version table, and on it v21.0
+             * expired on 9 September 2025. This was pinned to v21.0.
+             *
+             * It never showed up as a failure because Meta does not answer an expired version with an
+             * error: the platform versioning guide states that once a version is no longer usable,
+             * calls to it default to the next-oldest usable version. So the figures kept arriving,
+             * from a version nobody chose, and no log anywhere said which.
+             *
+             * v25.0 was released 18 February 2026 and is the current stable — the only one in the
+             * table with no expiration date set. Marketing API expirations for the neighbours, so the
+             * next person can see how much runway this has: v22.0 → 19 Feb 2026, v23.0 → 9 Jun 2026,
+             * v24.0 → 6 Oct 2026. `MetaAttributionWindowTest` asserts the floor rather than the
+             * literal, so an upgrade passes and only standing still eventually fails.
+             */
+            'authorize_url' => 'https://www.facebook.com/v25.0/dialog/oauth',
+            'token_url' => 'https://graph.facebook.com/v25.0/oauth/access_token',
+            'api_base' => 'https://graph.facebook.com/v25.0',
             'scopes' => ['ads_read', 'ads_management', 'business_management'],
             'client_id' => env('META_ADS_APP_ID'),
             'client_secret' => env('META_ADS_APP_SECRET'),
@@ -106,7 +121,18 @@ return [
             'label' => 'Google Ads API',
             'authorize_url' => 'https://accounts.google.com/o/oauth2/v2/auth',
             'token_url' => 'https://oauth2.googleapis.com/token',
-            'api_base' => 'https://googleads.googleapis.com/v18',
+            /*
+             * GADS-VERSION-001 — this was **v18**, which is not merely old: it is gone.
+             *
+             * Google's sunset table lists the released versions as v21 (6 Aug 2025 → Aug 2026),
+             * v22 (15 Oct 2025 → Oct 2026), v23 (28 Jan 2026 → Feb 2027), v24 (22 Apr 2026 →
+             * May 2027) and v25 (22 Jul 2026 → Aug 2027). v18 is on none of them.
+             *
+             * And unlike Meta, Google does not degrade quietly (META-VERSION-001): its own wording is
+             * that a sunset version can no longer be used and requests to it FAIL on or after the
+             * sunset date. Every Google Ads call this platform made was refused, for every customer.
+             */
+            'api_base' => 'https://googleads.googleapis.com/v25',
             'scopes' => ['https://www.googleapis.com/auth/adwords'],
             'client_id' => env('GOOGLE_ADS_CLIENT_ID'),
             'client_secret' => env('GOOGLE_ADS_CLIENT_SECRET'),
@@ -117,7 +143,19 @@ return [
              * nothing but errors.
              */
             'developer_token' => env('GOOGLE_ADS_DEVELOPER_TOKEN'),
-            'login_customer_id' => env('GOOGLE_ADS_LOGIN_CUSTOMER_ID'),
+            /*
+             * GADS-MCC-001 — `login_customer_id` used to sit here, and it is the customer's, not ours.
+             *
+             * Google documents `login-customer-id` as the manager account through which the CALLER
+             * reaches THAT PARTICULAR client account. Held as one platform-wide value it was wrong for
+             * every tenant but at most one, and it was also stamped as `parent_external_id` on every
+             * discovered account — making one operator's MCC id the recorded parent of every client's
+             * accounts. Same defect as SNAP-ORG-001, in the same place, for the same reason.
+             *
+             * It is now read from the customer's OWN hierarchy during discovery and carried per
+             * account. `GOOGLE_ADS_LOGIN_CUSTOMER_ID` is deliberately not read anywhere: an
+             * environment variable that is silently ignored is worse than one that is absent.
+             */
         ],
 
         'x' => [
@@ -138,8 +176,22 @@ return [
             'scopes' => ['r_ads', 'r_ads_reporting', 'r_basicprofile'],
             'client_id' => env('LINKEDIN_ADS_CLIENT_ID'),
             'client_secret' => env('LINKEDIN_ADS_CLIENT_SECRET'),
-            // LinkedIn pins every REST call to a monthly version; an unpinned call is rejected.
-            'version' => env('LINKEDIN_ADS_VERSION', '202411'),
+            /*
+             * LinkedIn pins every REST call to a monthly version; an unpinned call is rejected.
+             *
+             * LINKEDIN-VERSION-001 — this defaulted to **202411** (November 2024). LinkedIn's
+             * versioning page names **202607** as the latest and states that versions are supported
+             * for a MINIMUM of one year; every page of the marketing documentation currently carries
+             * the banner «The Marketing Version 202507 (Marketing July 2025) has been sunset».
+             *
+             * So the pin was eight months older than a version LinkedIn has already retired — and
+             * because the header is mandatory rather than advisory, every LinkedIn call this platform
+             * made was against a version that no longer exists.
+             *
+             * `LinkedInPagingAndVersionTest` asserts the floor as a NUMBER, so a later monthly bump
+             * passes and only standing still fails.
+             */
+            'version' => env('LINKEDIN_ADS_VERSION', '202607'),
         ],
     ],
 ];

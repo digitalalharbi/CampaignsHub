@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react'
+import { providerLabel } from '@/features/campaigns/labels'
+import { canonicalPlatform } from '@/lib/platforms'
+import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Copy, Download, FileText, LayoutGrid, Link2, Loader2, Plus, RefreshCw, Rows3, Send, Share2, Trash2, SlidersHorizontal } from 'lucide-react'
 import {
@@ -38,7 +41,7 @@ import {
   emptyCreativeSharing,
   type CreativeSharing,
 } from './ShareCreativeControls'
-import { DemoBadge } from '@/features/analytics/components'
+import { ProvenanceBadge, type Provenance } from '@/features/analytics/components'
 import { InteractiveReport } from './InteractiveReport'
 import { AnnotationsPanel } from './AnnotationsPanel'
 import { useProject } from '@/stores/project'
@@ -137,13 +140,29 @@ export function ReportsPage() {
 
   const s = list.data?.summary
 
+  /*
+   * ANALYTICS-PROVENANCE-001 — this page used to print «Demo» beside its title unconditionally, even
+   * for a project whose every report was generated from live Snapchat spend.
+   *
+   * The rows already know: each report carries `is_demo`. Derive from ALL of them, not the filtered
+   * view, so narrowing by type cannot change what the project is said to be.
+   */
+  const demoReports = allRows.filter((r) => r.is_demo).length
+  const provenance: Provenance | undefined = allRows.length === 0
+    ? undefined
+    : {
+        source: demoReports > 0 && demoReports < allRows.length ? 'mixed' : demoReports > 0 ? 'demo' : 'live',
+        live_rows: allRows.length - demoReports,
+        demo_rows: demoReports,
+      }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{ar ? 'التقارير' : 'Reports'}</h1>
-            <DemoBadge />
+            <ProvenanceBadge provenance={provenance} />
           </div>
           <p className="mt-1 text-sm text-text-secondary">{ar ? 'مستندات محفوظة قابلة للإنشاء والتصدير والإرسال' : 'Saved documents you can generate, export and send'}</p>
         </div>
@@ -310,21 +329,25 @@ export function ReportsPage() {
             </p>
           </div>
         ) : view === 'cards' ? (
-          <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
-            {rows.map((r) => (
-              <button key={r.id} onClick={() => setPreviewId(r.id)}
-                className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4 text-start transition-colors hover:border-brand-400">
-                <div className="flex items-start justify-between gap-2">
-                  <span className="line-clamp-1 font-bold text-text-primary">{r.name}</span>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[r.status] ?? ''}`}>{statusLabel(r.status, ar)}</span>
-                </div>
-                <span className="text-[11px] text-text-muted">{typeLabel(r.type)}</span>
-                <span className="tnum text-[11px] text-text-tertiary" dir="ltr">{r.period.from ?? '…'} → {r.period.to ?? '…'}</span>
-              </button>
-            ))}
-          </div>
+          <ReportCards rows={rows} ar={ar} typeLabel={typeLabel} onOpen={setPreviewId} />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            {/*
+              TYPOGRAPHY-PRODUCT-POLISH-001 — a five-column table does not fit a phone, whichever
+              view somebody chose on a desktop.
+
+              The table is 720px wide at its narrowest, so on a 390px screen it becomes a sideways
+              scroll through «Monthly — Executive Summary» broken over three lines and a date range
+              broken around its arrow. The choice between table and cards is a choice about a
+              DESKTOP; on a phone the card list is the only one of the two that can be read, so it
+              is what a phone gets. Nothing is hidden — the same rows, the same order, the same
+              names — and the toggle still does what it says the moment there is width for it.
+            */}
+            <div className="sm:hidden" data-testid="reports-phone-cards">
+              <ReportCards rows={rows} ar={ar} typeLabel={typeLabel} onOpen={setPreviewId} />
+            </div>
+
+          <div className="hidden overflow-x-auto sm:block">
             <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-border text-text-muted">
@@ -356,6 +379,7 @@ export function ReportsPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 
@@ -472,7 +496,7 @@ function ReportRowView({
         </span>
         {report.status === 'failed' && report.error && <div className="mt-1 max-w-[220px] truncate text-xs text-danger" title={report.error}>{report.error}</div>}
       </td>
-      <td className="tnum p-3 text-text-muted">{report.created_at ? new Date(report.created_at).toLocaleDateString('en-GB') : '—'}</td>
+      <td className="tnum p-3 text-text-muted">{report.created_at ? fmtDate(report.created_at) : '—'}</td>
       <td className="p-3">
         <div className="flex items-center justify-end gap-1">
           {report.status === 'completed' && (
@@ -699,7 +723,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
               { key: 'executive_summary' as const, ar: 'ملخص تنفيذي', en: 'Executive summary',
                 hintAr: 'صفحات قليلة للقرار', hintEn: 'A few pages, for the decision' },
               { key: 'detailed' as const, ar: 'تقرير تفصيلي', en: 'Detailed report',
-                hintAr: 'كل المنصات والفانل والمحتويات', hintEn: 'Every platform, funnel and creative' },
+                hintAr: 'كل المنصات والفانل والإعلانات', hintEn: 'Every platform, funnel and ad' },
             ]).map((o) => (
               <button
                 key={o.key}
@@ -935,9 +959,9 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
                         key={p}
                         type="button"
                         onClick={() => setScopeProviders((s) => (s.includes(p) ? s.filter((v) => v !== p) : [...s, p]))}
-                        className={`rounded-lg border px-2 py-1 text-xs font-semibold capitalize ${scopeProviders.includes(p) ? 'border-brand-500 bg-[var(--brand-background)] text-brand-700' : 'border-border text-text-secondary'}`}
+                        className={`rounded-lg border px-2 py-1 text-xs font-semibold ${scopeProviders.includes(p) ? 'border-brand-500 bg-[var(--brand-background)] text-brand-700' : 'border-border text-text-secondary'}`}
                       >
-                        {p}
+                        {providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}
                       </button>
                     ))}
                   </div>
@@ -1047,7 +1071,7 @@ function ShareManager({ projectId, reportId, onClose }: { projectId: string; rep
                     {s.password_protected && <span className="text-xs text-text-muted">🔒 {ar ? 'محمي' : 'Protected'}</span>}
                     {s.hide_spend && <span className="text-xs text-text-muted">{ar ? 'إنفاق مخفي' : 'Spend hidden'}</span>}
                     <span className="tnum text-xs text-text-muted">{s.view_count} {ar ? 'مشاهدة' : 'views'}</span>
-                    {s.expires_at && <span className="tnum text-xs text-text-muted">{ar ? 'ينتهي' : 'expires'} {new Date(s.expires_at).toLocaleDateString('en-GB')}</span>}
+                    {s.expires_at && <span className="tnum text-xs text-text-muted">{ar ? 'ينتهي' : 'expires'} {fmtDate(s.expires_at)}</span>}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <button onClick={() => setLogsFor(s.id)} className="text-xs font-semibold text-text-secondary hover:underline">
@@ -1137,7 +1161,7 @@ function ShareAccessHistory({
                     <span className={l.action === 'denied' ? 'font-semibold text-danger' : ''}>{label(l.action)}</span>
                     {l.detail && <span className="ms-1 text-xs text-text-muted">({l.detail})</span>}
                   </td>
-                  <td className="tnum p-2 text-xs text-text-secondary">{new Date(l.created_at).toLocaleString('en-GB')}</td>
+                  <td className="tnum p-2 text-xs text-text-secondary">{fmtDateTime(l.created_at)}</td>
                   <td className="tnum p-2 text-xs text-text-muted">{l.ip ?? '—'}</td>
                 </tr>
               ))}
@@ -1146,5 +1170,44 @@ function ShareAccessHistory({
         </div>
       )}
     </Modal>
+  )
+}
+
+/**
+ * The report list as cards — the phone's only readable form, and the desktop's «cards» view.
+ *
+ * One component rather than two copies: the pair drifted the moment one of them gained a field, and
+ * a reader switching orientation would find a different list of facts about the same report.
+ */
+function ReportCards({
+  rows, ar, typeLabel, onOpen,
+}: {
+  rows: ReportRow[]
+  ar: boolean
+  typeLabel: (type: string) => string
+  onOpen: (id: string) => void
+}) {
+  return (
+    <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
+      {rows.map((r) => (
+        <button
+          key={r.id}
+          onClick={() => onOpen(r.id)}
+          data-testid="report-card"
+          className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4 text-start transition-colors hover:border-brand-400"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <span className="line-clamp-2 font-bold text-text-primary">{r.name}</span>
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[r.status] ?? ''}`}>
+              {statusLabel(r.status, ar)}
+            </span>
+          </div>
+          <span className="text-[11px] text-text-muted">{typeLabel(r.type)}</span>
+          <span className="tnum text-[11px] text-text-tertiary" dir="ltr">
+            {r.period.from ?? '…'} → {r.period.to ?? '…'}
+          </span>
+        </button>
+      ))}
+    </div>
   )
 }

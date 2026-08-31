@@ -85,12 +85,17 @@ final class ProviderProbe
         $client = PlatformHttp::client($provider);
 
         if ($provider === 'tiktok') {
-            // TikTok does not use the OAuth parameter names anywhere, including here.
+            /*
+             * TikTok does not use the OAuth parameter names anywhere, including here — and its
+             * documented request body is exactly these three fields (TIKTOK-AUTH-001). The
+             * `grant_type` that used to ride along was OAuth vocabulary TikTok never asked for; a
+             * probe that sends a field the provider does not publish is testing our guess as much as
+             * our credentials.
+             */
             return $client->post($tokenUrl, [
                 'app_id' => $values['client_id'],
                 'secret' => $values['client_secret'],
                 'auth_code' => self::IMPOSSIBLE_CODE,
-                'grant_type' => 'auth_code',
             ]);
         }
 

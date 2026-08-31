@@ -109,9 +109,9 @@ has ever been made for any of them.**
 | Provider | Env |
 |---|---|
 | Meta Ads | `META_ADS_APP_ID` · `META_ADS_APP_SECRET` |
-| Google Ads | `GOOGLE_ADS_CLIENT_ID` · `GOOGLE_ADS_CLIENT_SECRET` · `GOOGLE_ADS_DEVELOPER_TOKEN` · `GOOGLE_ADS_LOGIN_CUSTOMER_ID` |
+| Google Ads | `GOOGLE_ADS_CLIENT_ID` · `GOOGLE_ADS_CLIENT_SECRET` · `GOOGLE_ADS_DEVELOPER_TOKEN` — **no manager (MCC) account id** (GADS-MCC-001) |
 | TikTok Ads | `TIKTOK_ADS_APP_ID` · `TIKTOK_ADS_APP_SECRET` |
-| Snapchat Ads | `SNAPCHAT_ADS_CLIENT_ID` · `SNAPCHAT_ADS_CLIENT_SECRET` · `SNAPCHAT_ADS_ORGANIZATION_ID` |
+| Snapchat Ads | `SNAPCHAT_ADS_CLIENT_ID` · `SNAPCHAT_ADS_CLIENT_SECRET` — **no organisation id** (SNAP-ORG-001) |
 | X Ads | `X_ADS_CLIENT_ID` · `X_ADS_CLIENT_SECRET` |
 | LinkedIn Ads | `LINKEDIN_ADS_CLIENT_ID` · `LINKEDIN_ADS_CLIENT_SECRET` · `LINKEDIN_ADS_VERSION` |
 
@@ -149,7 +149,7 @@ handling are complete.
 | Provider | Env | Webhook URL |
 |---|---|---|
 | Salla | `SALLA_CLIENT_ID` · `SALLA_CLIENT_SECRET` · `SALLA_WEBHOOK_SECRET` | `POST {APP_URL}/api/v1/webhooks/commerce/salla` |
-| Zid | `ZID_CLIENT_ID` · `ZID_CLIENT_SECRET` · `ZID_WEBHOOK_SECRET` | `POST {APP_URL}/api/v1/webhooks/commerce/zid` |
+| Zid | `ZID_CLIENT_ID` · `ZID_CLIENT_SECRET` · `ZID_WEBHOOK_USERNAME` · `ZID_WEBHOOK_PASSWORD` — **no signing secret** (ZID-WEBHOOK-001) | `POST {APP_URL}/api/v1/webhooks/commerce/zid` |
 
 **Redirect URL for both:** `GET {APP_URL}/api/v1/oauth/commerce/{provider}/callback`
 

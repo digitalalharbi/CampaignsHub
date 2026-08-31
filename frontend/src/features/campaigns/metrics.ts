@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { CreativePreview } from '@/features/content/api'
 import { getData, postData, api, ensureCsrfCookie } from '@/lib/api/client'
 import type { BudgetRow, FunnelStage, PlatformRow, Range, Summary, TimePoint } from '@/features/analytics/api'
 
@@ -148,9 +149,14 @@ export interface CampaignCreative {
   provider: string
   format: string
   status: string
-  thumbnail_url: string | null
-  preview_url: string | null
-  has_preview: boolean
+  /**
+   * AD-PREVIEW-001 — the canonical preview block, which replaced this row's own `has_preview`.
+   *
+   * That boolean was `thumbnail_url !== null || preview_url !== null`, computed by the endpoint
+   * rather than by the presenter that owns the rules. It said yes for a link the presenter withholds
+   * and no for an asset that was sitting in the row.
+   */
+  preview: CreativePreview
   is_demo: boolean
   metrics: { spend: number; impressions: number; clicks: number; conversions: number; revenue: number; roas: number | null; cpa: number | null; ctr: number | null; cpm: number | null; view_rate: number | null; completion_rate: number | null }
   rank_metric: string
@@ -183,17 +189,39 @@ export interface CampaignEventsPayload {
 export const useCampaignEvents = (p: string | null, c: string | null, r: Range) =>
   useCampaignMetric<CampaignEventsPayload>('events', p, c, r)
 
+/**
+ * One run, exactly as `MetricSyncRun::logRow()` states it — INTEG-RUNTIME §9.
+ *
+ * The three row counts are NULLABLE and the nullability carries meaning: a run recorded before the
+ * counters existed measured nothing, and rendering 0 for it would put a figure on the screen that
+ * nobody ever took. The UI shows «—» for null and a number for 0.
+ */
 export interface CampaignSyncRun {
   id: string
   provider: string
   status: string
+  trigger: 'automatic' | 'manual' | 'backfill'
   window_start: string | null
   window_end: string | null
-  metrics_upserted: number
+  provider_rows: number | null
+  parsed_rows: number | null
+  mapped_rows: number | null
+  metrics_imported: number
+  duration_seconds: number | null
   attempts: number
   started_at: string | null
   finished_at: string | null
   error: string | null
+  is_demo?: boolean
+  /**
+   * How many CONSECUTIVE identical runs this row stands for — INTEG-RUNTIME §8.
+   *
+   * The sweep runs every thirty minutes, so an account the platform has nothing to report for
+   * produces forty-eight indistinguishable rows a day. They are still all recorded; the log says the
+   * answer once and counts it, because a wall nobody scrolls hides the one row that is different.
+   */
+  repeats: number
+  repeats_since: string | null
 }
 
 export interface CampaignSyncLog {

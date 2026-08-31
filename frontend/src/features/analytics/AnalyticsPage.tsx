@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import {
   Bar,
   BarChart,
@@ -13,56 +14,144 @@ import {
   YAxis,
 } from 'recharts'
 import {
+  useAccountBudgets,
   useBudget,
+  useAccounts,
   useCampaigns,
+  useEntities,
   useFreshness,
   useFunnel,
   useLastNDaysRange,
   useAttribution,
   useNormalization,
+  useObjectiveExplanations,
+  useObjectiveLeaders,
+  usePlatformObjectives,
   usePlatforms,
   useSummary,
   useTimeseries,
+  type EntityRow,
   type MetricFilters,
 } from './hooks'
-import { DemoBadge, KpiCard, Panel, SERIES, platformColor, tooltipProps } from './components'
-import { compact, money, num, percent, ratio } from './format'
+import { findingsFor, type QualityFinding } from './dataQualityFindings'
+import type { PlatformObjectives } from './api'
+import { scopeNote, type FilterScope } from './filterScope'
+import { CAMPAIGN_RELEVANCE_ORDER, orderByRelevanceWith, relevanceOf } from '@/features/campaigns/campaignRelevance'
+import { useCampaignOptionSource } from './useCampaignOptionSource'
+import { Panel, ProvenanceBadge, RateTrend, SERIES, platformColor, tooltipProps } from './components'
+import { PathAnalysis } from './PathAnalysis'
+import { listCreatives, type CreativeCard } from '@/features/content/api'
+import { compact, money, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
+import { plotSeries } from './timeseriesMoney'
+import { orderRows } from './tableSort'
+import { useUrlList, useUrlNumber, useUrlState, useUrlWriter } from './filterUrlState'
+import { familyMoney, familyTotal, type FamilyRow, familySpend } from './familyTotals'
+import { readCostPer, readMoney, readRoas } from '@/lib/money/contract'
+
+/** The two KPI keys that are money rather than a quantity or a rate. */
+const MONEY_KPIS = new Set(['spend', 'revenue'])
+import { SavedViewsBar } from '@/features/dashboard/SavedViewsBar'
+import { useSavedViews, type SavedView } from '@/features/dashboard/savedViews'
+import { MetricStrip } from '@/components/ui/MetricStrip'
+import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCampaignOverview'
+import { useOverviewVm } from '@/features/campaigns/overview/useOverviewVm'
+import { SPECS, dashboardMetrics, layoutFor } from './metricCatalog'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
+import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { listProjects } from '@/features/projects/api'
 import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
 import {
-  MARKETING_PATH_KEYS,
-  marketingPathLabel,
-  objectiveLabel,
-  objectivesForPath,
-  pathOfObjective,
-  providerLabel,
-} from '@/features/campaigns/labels'
+  CANONICAL_OBJECTIVE_KEYS,
+  canonicalObjectiveLabel,
+  rawObjectivesFor,
+  type CanonicalObjectiveKey,
+} from '@/features/campaigns/canonicalObjectives'
+import { providerLabel } from '@/features/campaigns/labels'
 
 /** The six platforms this product unifies, in the product's own order (PLATFORM-ORDER-001). */
 const ANALYTICS_PLATFORMS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
 
 /** The objectives with a layout elsewhere in the product — the same six the dashboard offers. */
-const ANALYTICS_OBJECTIVES = ['awareness', 'traffic', 'leads', 'sales', 'app_installs', 'engagement']
 import { useUi } from '@/stores/ui'
+import { accounts as countedAccounts } from '@/lib/counted'
+import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
 import { useProject } from '@/stores/project'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { useQuery } from '@tanstack/react-query'
 import { StoreFunnelTab } from './StoreFunnelTab'
 import { AttributionPanel } from './AttributionPanel'
+import { DiagnosticPanel } from './DiagnosticPanel'
+import { AdPoster } from '@/features/content/AdPoster'
+import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
+import {
+  creativeScope, decodePath, drillInto, drillUpTo, encodePath, nextLevel, parentFor, rememberName,
+  stepLabel, withNames,
+  type DrillLevel, type DrillStep,
+} from './drilldown'
 
-const TABS = [
-  { id: 'performance', ar: 'نظرة عامة على الأداء', en: 'Performance overview' },
-  { id: 'platforms', ar: 'تحليل المنصات', en: 'Platform analysis' },
-  { id: 'campaigns', ar: 'تحليل الحملات', en: 'Campaign analysis' },
-  { id: 'funnel', ar: 'التحويلات والقمع', en: 'Conversions & funnel' },
-  // FUNNEL-001 — the ad funnel and the STORE funnel in one place, with the source of every number.
-  { id: 'store', ar: 'الفانل والمتجر', en: 'Funnel & store' },
-  { id: 'budget', ar: 'تحليل الميزانية', en: 'Budget analysis' },
-  { id: 'quality', ar: 'جودة البيانات والإسناد', en: 'Data quality & attribution' },
+/*
+ * UX-ANALYTICS-TABS-001 — twelve tabs on one line, and six of them began with the same word.
+ *
+ * «تحليل المنصات · تحليل الحسابات · تحليل الحملات · تحليل المجموعات الإعلانية · تحليل الإعلانات ·
+ * تحليل الأهداف · تحليل المحتوى». The repeated «تحليل» is on a page already titled «التحليلات», so
+ * it carried no information and cost roughly a third of the bar's width — which is why the row
+ * wrapped and every label competed with every other.
+ *
+ * Two changes, and neither removes a tab: the noun stands alone, and the tabs are grouped by the
+ * QUESTION they answer. The groups matter more than the shortening — five of these tabs are one
+ * hierarchy (platform → account → campaign → ad set → ad → creative), and a flat row gave a reader
+ * no way to see that the thing they wanted was one level up from where they were looking.
+ */
+const TAB_GROUPS = [
+  {
+    key: 'overview',
+    ar: 'الأداء', en: 'Performance',
+    tabs: [
+      { id: 'performance', ar: 'نظرة عامة', en: 'Overview' },
+      { id: 'objective', ar: 'الأهداف', en: 'Objectives' },
+      { id: 'budget', ar: 'الميزانية', en: 'Budget' },
+    ],
+  },
+  {
+    // The drill-down, in the order the platforms themselves nest it.
+    key: 'breakdown',
+    ar: 'التفصيل', en: 'Breakdown',
+    tabs: [
+      { id: 'platforms', ar: 'المنصات', en: 'Platforms' },
+      { id: 'accounts', ar: 'الحسابات', en: 'Accounts' },
+      { id: 'campaigns', ar: 'الحملات', en: 'Campaigns' },
+      { id: 'ad_sets', ar: 'المجموعات', en: 'Ad sets' },
+      { id: 'ads', ar: 'الإعلانات', en: 'Ads' },
+      { id: 'creative', ar: 'الإعلان', en: 'Ad' },
+    ],
+  },
+  {
+    key: 'conversion',
+    ar: 'التحويل', en: 'Conversion',
+    tabs: [
+      { id: 'funnel', ar: 'القمع', en: 'Funnel' },
+      { id: 'store', ar: 'المتجر', en: 'Store' },
+    ],
+  },
+  {
+    key: 'trust',
+    ar: 'الجودة', en: 'Quality',
+    tabs: [{ id: 'quality', ar: 'جودة البيانات والإسناد', en: 'Data quality & attribution' }],
+  },
 ] as const
+
+/**
+ * Flattened, so nothing that had a tab before has lost one — asserted in the test.
+ *
+ * Typed through a widening alias rather than inferred: `flatMap` over a `readonly` tuple of tuples
+ * infers each group's own tuple type, and TypeScript will not union six of those into one element
+ * type on its own.
+ */
+type AnalyticsTab = { readonly id: string; readonly ar: string; readonly en: string }
+
+const TABS: readonly AnalyticsTab[] = TAB_GROUPS.flatMap((g) => g.tabs as readonly AnalyticsTab[])
 
 const axis = { stroke: 'var(--text-muted)', fontSize: 12 }
 
@@ -81,39 +170,91 @@ const useAr = () => useUi((u) => u.locale) === 'ar'
  * platform chosen on «Platform analysis» that reset itself on «Conversions & funnel» would be a
  * control that appears to work and does not.
  */
-export function AnalyticsPage() {
+/**
+ * ANALYTICS-AS-DASHBOARD-001 — this page is also «لوحة التحكم».
+ *
+ * The two surfaces had grown into the same thing said twice: a project picker, a period, platform
+ * chips, a path and an objective, over a KPI strip. The dashboard's copy carried the operational
+ * detail; this one carried the depth — twelve tabs down to ad level, the funnel, the store and the
+ * attribution. Keeping both meant the same question could be asked on two screens and answered
+ * differently, which is exactly the class of defect this codebase keeps finding.
+ *
+ * So the depth is the dashboard, and the operational overview moves INTO its first tab rather than
+ * being deleted with it.
+ *
+ * `surface` exists because the filter controls are addressed by testid, and those ids are a contract
+ * the suite holds against `/app/dashboard`. Mounting the same component under both routes with a
+ * prefixed id keeps that contract literal instead of renaming assertions to follow an implementation
+ * detail.
+ */
+export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics' | 'dashboard' } = {}) {
   const ar = useAr()
   const { currentProjectId, setCurrentProjectId } = useProject()
-  const [days, setDays] = useState(30)
-  const [tab, setTab] = useState<(typeof TABS)[number]['id']>('performance')
-  const [providers, setProviders] = useState<string[]>([])
-  const [campaignIds, setCampaignIds] = useState<string[]>([])
-  const [path, setPath] = useState('all')
-  const [objective, setObjective] = useState('all')
+  /*
+   * ANALYTICS-FILTER-TRUTH-001 — the filters live in the URL, so a refresh, Back and a shared link
+   * all show the same page. They were `useState` only: narrowing to one platform and one objective
+   * and then reloading gave the unfiltered page back, and the link a reader sent a colleague showed
+   * that colleague a different answer to the question they were discussing.
+   */
+  const [days, setDays] = useUrlNumber('days', 30)
+  const [tab, setTab] = useUrlState('tab', 'performance') as [(typeof TABS)[number]['id'], (v: string) => void]
+  const [providers, setProviders] = useUrlList('provider')
+  const [campaignIds, setCampaignIds] = useUrlList('campaign')
+  const [objectiveRaw, setObjective] = useUrlState('objective', 'all')
+  const objective = objectiveRaw as CanonicalObjectiveKey | 'all'
+
+  /*
+   * ANALYTICS-AS-DASHBOARD-001 — saved views came WITH the dashboard.
+   *
+   * They lived behind «مزيد من الفلاتر» on the old board and the analytics filter bar had no such
+   * drawer, so mounting this page at `/app/dashboard` would have quietly removed a feature people
+   * had already saved into. The default view is applied once on arrival, exactly as before.
+   */
+  const savedViews = useSavedViews()
+  const applyView = (v: SavedView) => {
+    if (v.filters?.objective) setObjective(v.filters.objective as CanonicalObjectiveKey | 'all')
+    if (v.filters?.provider) setProviders(v.filters.provider)
+    if (v.date_range?.days) setDays(v.date_range.days)
+  }
+  const appliedDefault = useRef(false)
+  useEffect(() => {
+    if (appliedDefault.current) return
+    const def = savedViews.data?.find((v) => v.is_default)
+    if (def) {
+      appliedDefault.current = true
+      applyView(def)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedViews.data])
   const range = useLastNDaysRange(days)
 
   const projectsQuery = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false), retry: false })
   const projects = projectsQuery.data ?? []
 
-  /** A path is not a server axis — it is its objectives, on the objective filter (see the dashboard). */
-  const objectiveFilter = useMemo(() => {
-    if (objective !== 'all') return [objective]
-
-    return path === 'all' ? [] : objectivesForPath(path)
-  }, [objective, path])
+  /*
+   * ANALYTICS-OBJECTIVE-SYSTEM-001 — one control, and it sends RAW objectives.
+   *
+   * The metrics API filters by raw `CampaignObjective` values, so a canonical choice has to expand
+   * into all of them. Sending the canonical key itself would narrow the label and leave the query
+   * untouched — the KPI row would move and the chart beneath it would not, which is the frontend-only
+   * filtering ANALYTICS-FILTER-TRUTH-001 forbids.
+   */
+  const objectiveFilter = useMemo(() => rawObjectivesFor(objective), [objective])
 
   const filters: MetricFilters = useMemo(
     () => ({ provider: providers, objective: objectiveFilter, campaign: campaignIds }),
     [providers, objectiveFilter, campaignIds],
   )
 
-  /* Unnarrowed by campaign, so choosing one does not collapse the list it was chosen from. */
-  const campaignOptions = useCampaigns(currentProjectId, range, useMemo(
-    () => ({ provider: providers, objective: objectiveFilter }),
-    [providers, objectiveFilter],
-  ))
+  /*
+   * The campaign axis reads the server's option endpoint, NOT the breakdown.
+   *
+   * It is unnarrowed by campaign, so choosing one does not collapse the list it was chosen from —
+   * and unwindowed by the period, so a campaign that reported nothing in the range is still
+   * reachable. That silence is usually why the reader came looking for it.
+   */
+  const campaignSource = useCampaignOptionSource(currentProjectId, campaignIds)
 
-  const objectiveChoices = ANALYTICS_OBJECTIVES.filter((key) => path === 'all' || pathOfObjective(key) === path)
 
   const applied: AppliedFilter[] = useMemo(() => {
     const out: AppliedFilter[] = []
@@ -126,39 +267,62 @@ export function AnalyticsPage() {
     campaignIds.forEach((v) => out.push({
       key: `campaign:${v}`,
       axis: ar ? 'الحملة' : 'Campaign',
-      label: campaignOptions.data?.find((c) => String(c.campaign_id) === v)?.campaign_name ?? v,
+      label: campaignSource.labelOf(v),
       onRemove: () => setCampaignIds((prev) => prev.filter((x) => x !== v)),
     }))
-    if (path !== 'all') {
-      out.push({ key: `path:${path}`, axis: ar ? 'المسار' : 'Path', label: marketingPathLabel(path, ar ? 'ar' : 'en'), onRemove: () => setPath('all') })
-    }
     if (objective !== 'all') {
-      out.push({ key: `objective:${objective}`, axis: ar ? 'الهدف' : 'Objective', label: objectiveLabel(objective, ar ? 'ar' : 'en'), onRemove: () => setObjective('all') })
+      out.push({ key: `objective:${objective}`, axis: ar ? 'الهدف' : 'Objective', label: canonicalObjectiveLabel(objective, ar ? 'ar' : 'en'), onRemove: () => setObjective('all') })
     }
     return out
-  }, [providers, campaignIds, campaignOptions.data, path, objective, ar])
+  }, [providers, campaignIds, campaignSource, objective, ar])
+
+  /*
+   * ANALYTICS-PROVENANCE-001 — the badge needs the summary, and the summary lives in the tab below.
+   *
+   * React Query dedupes on the key, so asking here costs no extra request: the Performance tab's own
+   * `useSummary` with the same project, range and filters resolves to the same cached entry.
+   */
+  const provenanceSummary = useSummary(currentProjectId, range, filters)
 
   return (
     <div className="space-y-5">
+      {/*
+        The page names the surface the reader arrived at, not the file it lives in.
+
+        One component now answers both «لوحة التحكم» and «التحليلات». Left as it was, clicking the
+        first rail item — the one most people open first — landed on a heading saying «التحليلات»,
+        which reads as a mis-click. Same board, two doors, and each door says where it went.
+      */}
       <PageIntro
-        testid="analytics-intro"
-        title={ar ? 'التحليلات' : 'Analytics'}
-        purpose={ar
-          ? 'استكشاف تفصيلي للأداء: المنصات، الحملات، القمع، المتجر، الميزانيات، وأساس كل رقم.'
-          : 'A detailed look at performance — platforms, campaigns, the funnel, the store, budgets, and the basis of every figure.'}
-        badges={<DemoBadge />}
+        testid={`${surface}-intro`}
+        title={surface === 'dashboard' ? (ar ? 'لوحة التحكم' : 'Dashboard') : (ar ? 'التحليلات' : 'Analytics')}
+        purpose={surface === 'dashboard'
+          ? (ar
+              ? 'حالة الحساب الآن: الإنفاق والنتائج والعائد، ثم المنصات والحملات والقمع — كل رقم بأساسه.'
+              : 'Where the account stands: spend, results and return, then platforms, campaigns and the funnel — every figure with its basis.')
+          : ar
+            ? 'استكشاف تفصيلي للأداء: المنصات، الحملات، القمع، المتجر، الميزانيات، وأساس كل رقم.'
+            : 'A detailed look at performance — platforms, campaigns, the funnel, the store, budgets, and the basis of every figure.'}
+        badges={<ProvenanceBadge provenance={provenanceSummary.data?.provenance} />}
       />
 
       <FilterBar
-        id="analytics"
+        id={surface}
         ar={ar}
         applied={applied}
-        onReset={() => { setProviders([]); setCampaignIds([]); setPath('all'); setObjective('all') }}
+        onReset={() => { setProviders([]); setCampaignIds([]); setObjective('all') }}
+        advancedActive={savedViews.data?.some((v) => v.is_default) ?? false}
+        advanced={
+          <div className="grid gap-2">
+            <span className="text-xs font-bold uppercase tracking-wide text-text-muted">{ar ? 'العروض المحفوظة' : 'Saved views'}</span>
+            <SavedViewsBar current={{ objective, providers, days }} onApply={applyView} />
+          </div>
+        }
       >
         <FilterChips
           label={ar ? 'الفترة' : 'Period'}
           value={String(days)}
-          testid="analytics-period"
+          testid={`${surface}-period`}
           options={[
             { value: '7', label: ar ? '7 أيام' : '7 days' },
             { value: '30', label: ar ? '30 يوم' : '30 days' },
@@ -176,7 +340,7 @@ export function AnalyticsPage() {
         <FilterSelect
           label={ar ? 'المشروع' : 'Project'}
           value={currentProjectId ?? ''}
-          testid="analytics-project"
+          testid={`${surface}-project`}
           options={[
             ...(currentProjectId ? [] : [{ value: '', label: ar ? 'لا مشروع' : 'No project' }]),
             ...projects.map((pr) => ({ value: pr.id, label: pr.name })),
@@ -184,12 +348,14 @@ export function AnalyticsPage() {
           onChange={setCurrentProjectId}
         />
 
-        <FilterMulti
+        {/* UX-FILTERS-001 — the same visible chips the dashboard uses, and the same colours the
+            charts below key off. One filter bar, one vocabulary, across both pages. */}
+        <FilterPlatforms
           label={ar ? 'المنصة' : 'Platform'}
-          ar={ar}
+          allLabel={ar ? 'الكل' : 'All'}
           values={providers}
-          testid="analytics-platform"
-          options={ANALYTICS_PLATFORMS.map((key) => ({ value: key, label: providerLabel(canonicalPlatform(key), ar ? 'ar' : 'en') }))}
+          testid={`${surface}-platform`}
+          options={ANALYTICS_PLATFORMS.map((key) => ({ value: canonicalPlatform(key), label: providerLabel(canonicalPlatform(key), ar ? 'ar' : 'en') }))}
           onChange={setProviders}
         />
 
@@ -197,55 +363,73 @@ export function AnalyticsPage() {
           label={ar ? 'الحملة' : 'Campaign'}
           ar={ar}
           values={campaignIds}
-          testid="analytics-campaign"
-          options={(campaignOptions.data ?? []).map((c) => ({ value: String(c.campaign_id), label: c.campaign_name ?? String(c.campaign_id) }))}
+          testid={`${surface}-campaign`}
+          options={campaignSource.options}
+          search={campaignSource.search}
           onChange={setCampaignIds}
         />
 
-        <FilterSelect
-          label={ar ? 'المسار التسويقي' : 'Marketing path'}
-          value={path}
-          testid="analytics-path"
-          options={[
-            { value: 'all', label: ar ? 'كل المسارات' : 'All paths' },
-            ...MARKETING_PATH_KEYS.map((key) => ({ value: key, label: marketingPathLabel(key, ar ? 'ar' : 'en') })),
-          ]}
-          onChange={(v) => {
-            setPath(v)
-            if (v !== 'all' && objective !== 'all' && pathOfObjective(objective) !== v) setObjective('all')
-          }}
-        />
+        
 
         <FilterSelect
           label={ar ? 'الهدف' : 'Objective'}
           value={objective}
-          testid="analytics-objective"
+          testid={`${surface}-objective`}
           options={[
             { value: 'all', label: ar ? 'كل الأهداف' : 'All objectives' },
-            ...objectiveChoices.map((key) => ({ value: key, label: objectiveLabel(key, ar ? 'ar' : 'en') })),
+            ...CANONICAL_OBJECTIVE_KEYS.map((key) => ({ value: key, label: canonicalObjectiveLabel(key, ar ? 'ar' : 'en') })),
           ]}
-          onChange={setObjective}
+          onChange={(v) => setObjective(v as CanonicalObjectiveKey | 'all')}
         />
       </FilterBar>
 
-      <div className="flex flex-wrap gap-1.5 border-b border-border">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`relative rounded-t-lg px-3 py-2 text-sm font-semibold transition-colors ${
-              tab === t.id ? 'text-brand-600' : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {ar ? t.ar : t.en}
-            {tab === t.id && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand-600" />}
-          </button>
+      {/*
+        The groups are separated by a rule rather than by a heading — a heading over each cluster
+        would add four more lines of text to a bar whose problem was too much text. The gap plus the
+        divider is enough to read them as clusters, and the labels stay the only words in the row.
+      */}
+      <div
+        role="tablist"
+        aria-label={ar ? 'أقسام التحليلات' : 'Analytics sections'}
+        /*
+         * `flex-wrap` AND `overflow-x-auto` was a contradiction: a wrapping row never scrolls, so on
+         * a phone eleven tabs became three stacked lines and the last one still sat under the edge.
+         * One row that scrolls below `sm`, the wrap restored from `sm` up where the row fits.
+         */
+        className="flex snap-x snap-mandatory items-end gap-x-1 gap-y-1.5 overflow-x-auto border-b border-border pb-px [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:snap-none [&::-webkit-scrollbar]:hidden"
+      >
+        {TAB_GROUPS.map((group, index) => (
+          <div key={group.key} className="flex items-end">
+            {index > 0 && <span aria-hidden className="mx-2 mb-2 h-4 w-px shrink-0 bg-border" />}
+            <div className="flex items-end gap-0.5">
+              {group.tabs.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === t.id}
+                  onClick={() => setTab(t.id)}
+                  className={`relative shrink-0 snap-start whitespace-nowrap rounded-t-lg px-3 py-3 text-sm font-semibold transition-colors sm:px-2.5 sm:py-2 ${
+                    tab === t.id ? 'text-brand-600' : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  {ar ? t.ar : t.en}
+                  {tab === t.id && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand-600" />}
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
 
-      {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} />}
+      {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} />}
       {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />}
+      {tab === 'accounts' && <AccountsTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />}
+      {tab === 'ad_sets' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />}
+      {tab === 'ads' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />}
+      {tab === 'objective' && <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />}
+      {tab === 'creative' && <CreativeTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'funnel' && <FunnelTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'store' && <StoreFunnelTab projectId={currentProjectId} range={range} />}
       {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} filters={filters} />}
@@ -258,29 +442,134 @@ export function AnalyticsPage() {
 
 type TabProps = { projectId: string | null; range: { from: string; to: string }; filters: MetricFilters }
 
+/** The overview tab also needs the objective, because its KPI row is chosen BY the objective. */
+type OverviewTabProps = TabProps & { objective: string }
+
 /*
  * The store tab takes no filters, and that is the same rule the dashboard's store strip follows:
  * spend narrows to a platform and an order does not — a large share of orders carry no attribution
  * at all, so «Meta's share of the shop's revenue» is not a quantity that exists.
  */
 
-function PerformanceTab({ projectId, range, filters }: TabProps) {
+function PerformanceTab({ projectId, range, filters, objective }: OverviewTabProps) {
   const ar = useAr()
   const s = useSummary(projectId, range, filters)
   const ts = useTimeseries(projectId, range, filters)
-  const cur = s.data?.current
-  const d = s.data?.delta ?? {}
+  const campaigns = useCampaigns(projectId, range, filters)
+  const platformRows = usePlatforms(projectId, range, filters)
+  const freshness = useFreshness(projectId, range, filters)
+  const budget = useBudget(projectId, range, filters)
+
+  const reportingCurrency = s.data?.currency ?? null
   const points = ts.data ?? []
+
+  /*
+   * ANALYTICS-TRUTH-002 — the charts read the same source the cards read.
+   *
+   * `points` carries the aggregator's coalesced zeros. Everything plotted below comes from this
+   * reading instead, so a line and the card above it cannot disagree about the same window.
+   */
+  const series = plotSeries(points, reportingCurrency, ar)
+  const chartCurrency = series.currency ?? reportingCurrency ?? 'SAR'
+
+  /*
+   * ANALYTICS-COMPARE-001 — six mute dashes were the page's way of saying «there is no yesterday».
+   *
+   * Production holds 15 days of rows and offers a 30-day range, so the entire comparison window sits
+   * before the first row that exists. Every delta divided by zero and came back null, and each card
+   * printed «— —» beneath a heading promising a comparison — indistinguishable from a month that did
+   * not move. When the comparison window is empty the pills are not rendered at all and the page
+   * says why once, above the strip.
+   */
+  const comparable = s.data?.previous_rows_in_scope !== false
+
+
+  /*
+   * ANALYTICS-AS-DASHBOARD-001 — the headline row is chosen BY the objective.
+   *
+   * Six fixed cards — spend, revenue, ROAS, results, CPA, CTR — answer a sales campaign well and an
+   * awareness campaign not at all: they report a return on ad spend for a campaign that was never
+   * bought to return anything, and never mention reach or frequency, which is what it WAS bought
+   * for. `dashboardMetrics` picks the row the objective is actually judged on, and it is the same
+   * function and the same `MetricStrip` the dashboard used, not a second reading of the same totals.
+   */
+  const metrics = useMemo(() => dashboardMetrics(objective, s.data, ar), [objective, s.data, ar])
+
+  /*
+   * With no comparison window, a delta is not «unchanged» — it does not exist. `undefined` removes
+   * the pill; `null` would still render the «— —» this is here to remove.
+   */
+  const strip = useMemo(
+    () =>
+      comparable
+        ? metrics
+        : {
+            primary: metrics.primary.map((m) => ({ ...m, delta: undefined })),
+            secondary: metrics.secondary.map((m) => ({ ...m, delta: undefined })),
+          },
+    [metrics, comparable],
+  )
+
+  const vm = useOverviewVm({
+    campaigns: campaigns.data,
+    platforms: platformRows.data,
+    freshness: freshness.data,
+    budget: budget.data,
+    currency: reportingCurrency,
+    source: s.data?.provenance?.source,
+    ar,
+  })
+
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KpiCard label={ar ? 'الإنفاق' : 'Spend'} value={money(cur?.spend)} delta={d.spend} invertGood />
-        <KpiCard label={ar ? 'الإيرادات' : 'Revenue'} value={money(cur?.revenue)} delta={d.revenue} />
-        <KpiCard label="ROAS" value={ratio(cur?.roas ?? null)} delta={d.roas} />
-        <KpiCard label={ar ? 'النتائج' : 'Results'} value={num(cur?.conversions)} delta={d.conversions} />
-        <KpiCard label="CPA" value={money(cur?.cpa)} delta={d.cpa} invertGood />
-        <KpiCard label="CTR" value={percent(cur?.ctr, 2)} delta={d.ctr} />
-      </div>
+      {!comparable && s.data && (
+        <p
+          data-testid="no-comparison-period"
+          className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary"
+        >
+          <span className="font-semibold text-text-primary">{ar ? 'لا توجد مقارنة: ' : 'No comparison: '}</span>
+          {ar
+            ? `الفترة السابقة (${s.data.previous_range.from} → ${s.data.previous_range.to}) لا تحتوي أي بيانات، فلا يوجد شيء تُقاس عليه هذه الفترة.`
+            : `The previous period (${s.data.previous_range.from} → ${s.data.previous_range.to}) holds no data, so there is nothing for this one to be measured against.`}
+        </p>
+      )}
+      <MetricStrip
+        id="dashboard"
+        ar={ar}
+        primary={strip.primary}
+        secondary={strip.secondary}
+        hasRows={s.data === undefined ? undefined : s.data.rows_in_scope}
+        /*
+          METRICS-REQUEST-STATE-001 — and a request that failed or has not answered says so.
+
+          `data` is undefined for a failure and for a load alike, so without these the row rendered with
+          nothing to read and every card printed «لا توجد بيانات» — a confident statement about this
+          account's advertising, made by a request that never came back.
+        */
+        loading={s.isPending}
+        error={s.isError ? s.error : undefined}
+        onRetry={() => void s.refetch()}
+      />
+      {/*
+       * ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — directly beneath the figures that raise the question.
+       *
+       * The strip above says WHAT happened. This says where along the journey it went wrong, reading
+       * the same `useSummary` entry the strip read — the same totals and the same `reported` map, so
+       * the two cannot disagree about the account they are both describing. The request state is
+       * forwarded rather than re-derived for the same reason.
+       */}
+      <DiagnosticPanel
+        objective={objective}
+        totals={s.data?.current as Record<string, number | null | undefined> | undefined}
+        reported={s.data?.reported}
+        rowsInScope={s.data?.rows_in_scope}
+        loading={s.isPending}
+        error={s.isError ? s.error : undefined}
+        onRetry={() => void s.refetch()}
+        ar={ar}
+      />
+      {/* The comparisons, the details and the alerts — «أ», shared with the marketing preview. */}
+      <UnifiedCampaignOverview vm={vm} lang={ar ? 'ar' : 'en'} />
       {/*
        * REPORT-OBJECTIVE-005 — «النتائج» above is the SUM of what each platform claimed.
        *
@@ -300,47 +589,195 @@ function PerformanceTab({ projectId, range, filters }: TabProps) {
           {ar ? s.data.conversions_basis.note_ar : s.data.conversions_basis.note_en}
         </p>
       )}
-      <Panel title={ar ? 'الإنفاق والنتائج والإيرادات' : 'Spend, results and revenue'} description={ar ? 'مقارنة بالفترة السابقة عبر الاتجاه اليومي' : 'Compared with the previous period, day by day'} loading={ts.isLoading} error={ts.isError} empty={!ts.isLoading && points.length === 0}>
+      {/*
+        ANALYTICS-TRUTH-002 — the chart the KPI strip contradicted.
+
+        It plotted `dataKey="spend"` off the raw row and withdrew both money lines whenever the
+        window's money was withheld, leaving a single «النتائج» line under a title naming three. The
+        money was never missing — it was unconverted, and the card above already stated it. Both
+        lines are drawn from the same reading, in whatever currency that reading is honestly in, and
+        the axis says which.
+      */}
+      <Panel
+        title={ar ? 'الإنفاق والنتائج والإيرادات' : 'Spend, results and revenue'}
+        description={
+          series.basis === 'original'
+            ? ar
+              ? `المال معروض بعملة المنصة (${series.currency}) — ${series.note ?? ''}`
+              : `Money shown in the platform's own currency (${series.currency}) — ${series.note ?? ''}`
+            : ar
+              ? 'الاتجاه اليومي للإنفاق والإيرادات والنتائج'
+              : 'Spend, revenue and results, day by day'
+        }
+        loading={ts.isLoading}
+        error={ts.isError}
+        empty={!ts.isLoading && series.rows.length === 0}
+      >
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={points} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+            <LineChart data={series.rows} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis dataKey="date" tick={axis} tickFormatter={(v) => String(v).slice(5)} minTickGap={24} />
-              <YAxis tick={axis} tickFormatter={(v) => compact(Number(v))} width={44} />
-              <Tooltip {...tooltipProps} formatter={(v: number) => num(v)} />
+              {/*
+                Money and counts are different units, so they get different axes. Drawing 4,787 USD
+                and 218 results against one scale flattens the smaller series onto the floor — which
+                is the shape the old chart had even before the money went missing.
+              */}
+              <YAxis yAxisId="money" tick={axis} tickFormatter={(v) => compact(Number(v))} width={52} />
+              <YAxis yAxisId="count" orientation={ar ? 'left' : 'right'} tick={axis} tickFormatter={(v) => compact(Number(v))} width={44} />
+              <Tooltip
+                {...tooltipProps}
+                formatter={(v: number, name: string) =>
+                  name === (ar ? 'النتائج' : 'Results') ? num(v) : money(v, chartCurrency)
+                }
+              />
               <Legend wrapperStyle={{ fontSize: 13 }} />
-              <Line name={ar ? 'الإنفاق' : 'Spend'} type="monotone" dataKey="spend" stroke={SERIES.spend} strokeWidth={2} dot={false} />
-              <Line name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} />
-              <Line name={ar ? 'النتائج' : 'Results'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} />
+              {series.hasMoney && series.basis !== 'mixed' && (
+                <Line yAxisId="money" name={ar ? 'الإنفاق' : 'Spend'} type="monotone" dataKey="spend" stroke={SERIES.spend} strokeWidth={2} dot={false} connectNulls />
+              )}
+              {series.hasMoney && series.basis !== 'mixed' && (
+                <Line yAxisId="money" name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} connectNulls />
+              )}
+              <Line yAxisId="count" name={ar ? 'النتائج' : 'Results'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
             </LineChart>
           </ResponsiveContainer>
         </div>
+        {series.basis === 'mixed' && (
+          <p data-testid="series-currency-mixed" className="mt-2 text-xs text-text-secondary">{series.note}</p>
+        )}
       </Panel>
-      <Panel title={ar ? 'اتجاه CPA و ROAS و CTR' : 'CPA, ROAS and CTR over time'} loading={ts.isLoading} error={ts.isError} empty={!ts.isLoading && points.length === 0}>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={points} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-              <XAxis dataKey="date" tick={axis} tickFormatter={(v) => String(v).slice(5)} minTickGap={24} />
-              <YAxis tick={axis} width={44} />
-              <Tooltip {...tooltipProps} />
-              <Legend wrapperStyle={{ fontSize: 13 }} />
-              <Line name="ROAS" type="monotone" dataKey="roas" stroke={SERIES.revenue} strokeWidth={2} dot={false} />
-              <Line name="CPA" type="monotone" dataKey="cpa" stroke={SERIES.conversions} strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </Panel>
+      {/*
+        Three metrics, three units — «3.20x», «21.96 USD» and «0.72%» share no axis. On one scale the
+        two small numbers lie flat on the floor and the chart says nothing, which is what shipped:
+        a single line at zero under a title naming three metrics, one of which was never plotted.
+
+        Each gets its own panel and its own scale, so each is readable.
+      */}
+      <div className="grid gap-3 lg:grid-cols-3">
+        <RateTrend title="ROAS" data={series.rows} dataKey="roas" color={SERIES.revenue} loading={ts.isLoading} error={ts.isError} format={(v: number) => ratio(v)} />
+        <RateTrend title="CPA" data={series.rows} dataKey="cpa" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => money(v, chartCurrency)} />
+        <RateTrend title="CTR" data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} />
+      </div>
     </div>
+  )
+}
+
+
+/**
+ * Each platform inside each marketing path — PLATFORM-DECISION-ANALYTICS-001.
+ *
+ * The shape is the argument. There is no list here that contains platforms from two paths, because a
+ * «best platform» card can only be written against one, and a platform buying awareness is not worse
+ * than one buying sales — what differs is the work each was given.
+ *
+ * A path where one platform spent shows its figures and NO comparison: «Meta is the best platform
+ * for awareness», said of the only platform that ran awareness, is a sentence with no evidence
+ * behind it, and it is exactly what a reader writes for themselves when handed a sorted list of one.
+ */
+function PlatformPaths({
+  data,
+  loading,
+  error,
+  ar,
+}: {
+  data: PlatformObjectives | undefined
+  loading: boolean
+  error: boolean
+  ar: boolean
+}) {
+  const REASON: Record<string, { ar: string; en: string }> = {
+    only_one_platform_spent: {
+      ar: 'منصة واحدة فقط أنفقت على هذا المسار — رقم، وليس مقارنة.',
+      en: 'Only one platform spent on this path — a figure, not a comparison.',
+    },
+    nothing_spent_on_this_path: {
+      ar: 'لم يُنفق شيء على هذا المسار في هذه الفترة.',
+      en: 'Nothing was spent on this path in this period.',
+    },
+  }
+
+  const paths = (data?.paths ?? []).filter((p) => p.platforms.length > 0)
+
+  return (
+    <Panel
+      title={ar ? 'مساهمة المنصات حسب الهدف' : 'Platform contribution by objective'}
+      description={ar
+        ? 'داخل كل مسار، لا عبره — المقارنة الوحيدة التي تصحّ'
+        : 'Inside each path, never across them — the only comparison that holds'}
+      loading={loading}
+      error={error}
+      empty={!loading && paths.length === 0}
+    >
+      <div data-testid="platform-paths" className="flex flex-col gap-4">
+        {paths.map((path) => (
+          <div key={path.path} data-testid={`platform-path-${path.path}`} className="rounded-xl border border-border p-3.5">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-bold text-text-primary">{ar ? path.label_ar : path.label_en}</span>
+              <span className="text-[11px] text-text-muted" dir="ltr">{money(path.spend)}</span>
+              {!path.comparable && (
+                <span
+                  data-testid={`platform-path-${path.path}-not-comparable`}
+                  className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] text-text-secondary"
+                >
+                  {ar ? REASON[path.comparable_reason]?.ar : REASON[path.comparable_reason]?.en}
+                </span>
+              )}
+            </div>
+
+            <ul className="flex flex-col gap-1">
+              {path.platforms.map((row) => (
+                <li key={row.provider} className="flex items-center justify-between gap-3 text-sm">
+                  <PlatformCell provider={row.provider} />
+                  <span className="flex items-center gap-3">
+                    <span className="tnum text-text-secondary" dir="ltr">{money(row.spend)}</span>
+                    {/* Share of the PATH. «40% of awareness» is a decision somebody made; «40% of
+                        everything» is the mix, and reading the second as performance is the defect. */}
+                    <span className="tnum text-text-muted" dir="ltr">
+                      {row.spend_share === null ? '—' : percent(row.spend_share, 0)}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+
+        {/*
+          Said on the page, not only in the payload. It is the sentence a «best platform» card would
+          have to contradict in order to exist.
+        */}
+        <p data-testid="platform-paths-cross" className="text-[11px] text-text-tertiary">
+          {ar ? data?.cross_path_reason_ar : data?.cross_path_reason_en}
+        </p>
+      </div>
+    </Panel>
   )
 }
 
 function PlatformsTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const p = usePlatforms(projectId, range, filters)
+  const byPath = usePlatformObjectives(projectId, range, filters)
   const rows = p.data ?? []
+  /*
+   * PLATFORM-DECISION-ANALYTICS-001 — the chart above compares platforms across the whole
+   * programme, which answers «how is each platform doing» and cannot answer «which platform is
+   * contributing most to THIS objective». The path blocks below answer that, inside each path,
+   * and say so where a path cannot support a comparison at all.
+   */
+  const leaders = useObjectiveLeaders(projectId, range, filters)
+  const explanations = useObjectiveExplanations(projectId, range, filters)
+  const summary = useSummary(projectId, range, filters)
+
   return (
     <div className="space-y-4">
+      {/*
+        PLATFORM-DECISION-ANALYTICS-001 — «which platform is contributing most to THIS objective».
+        Above the comparison chart, because that chart answers a different question: how each
+        platform is doing over every objective at once. Read as a ranking it compares a platform
+        buying awareness against one buying sales, which is a verdict about the work each was given.
+      */}
+      <PlatformPaths data={byPath.data} loading={byPath.isLoading} error={byPath.isError} ar={ar} />
       <Panel title={ar ? 'مقارنة المنصات' : 'Platform comparison'} description={ar ? 'الإنفاق مقابل ROAS لكل منصة' : 'Spend against ROAS, per platform'} loading={p.isLoading} error={p.isError} empty={!p.isLoading && rows.length === 0}>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
@@ -348,7 +785,19 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis dataKey="provider" tick={axis} />
               <YAxis yAxisId="l" tick={axis} tickFormatter={(v) => compact(Number(v))} width={44} />
-              <YAxis yAxisId="r" orientation="right" tick={axis} width={32} />
+              {/*
+                The secondary axis follows the READER, like the one above it: an RTL page puts its
+                primary axis on the right, so a second axis pinned to «right» lands on top of it and
+                the chart reads as two scales for one side. And ROAS is a ratio — «3.6x» says what
+                the bare 3.6 beside a spend axis does not.
+              */}
+              <YAxis
+                yAxisId="r"
+                orientation={ar ? 'left' : 'right'}
+                tick={axis}
+                tickFormatter={(v) => ratio(Number(v))}
+                width={44}
+              />
               <Tooltip {...tooltipProps} />
               <Legend wrapperStyle={{ fontSize: 13 }} />
               <Bar yAxisId="l" name={ar ? 'الإنفاق' : 'Spend'} dataKey="spend" radius={[6, 6, 0, 0]}>
@@ -366,16 +815,51 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
           head={ar ? ['المنصة', 'الإنفاق', 'النتائج', 'CPA', 'ROAS', 'CTR', 'CPM', 'المساهمة'] : ['Platform', 'Spend', 'Results', 'CPA', 'ROAS', 'CTR', 'CPM', 'Contribution']}
           rows={rows.map((r) => [
             <PlatformCell key="p" provider={r.provider} />,
-            money(r.spend),
+            /*
+             * MONEY-TRUTH-002 — per-row provenance, same contract as the summary cards.
+             *
+             * These read `money(r.spend)` on a field the aggregator coalesces to 0 when withheld, so
+             * a platform that spent 4,128.93 USD ranked as having spent nothing, in a table directly
+             * beneath a card showing the real figure. The rows now carry `*_withheld_rows` and
+             * `*_original` (backend half of this unit), so the same reader serves both.
+             */
+            rowMoney(r, 'spend'),
             num(r.conversions),
-            money(r.cpa),
-            ratio(r.roas),
+            rowCostPer(r, 'cpa', 'conversions'),
+            rowRoas(r),
             percent(r.ctr, 2),
-            money(r.cpm),
+            // Derived from spend, so it carried spend's withholding — missed when this row was fixed.
+            rowCostPer(r, 'cpm', Number(r.impressions ?? 0) / 1000),
             percent(r.spend_share, 1),
           ])}
+          /* The raw figures behind those cells, so the header can sort what the eye is comparing. */
+          values={rows.map((r) => [
+            providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+            readMoney(r, 'spend', null, ar).amount,
+            r.conversions ?? null,
+            readCostPer(r, 'cpa', 'conversions', null, ar).amount,
+            readRoas(r, ar).value,
+            r.ctr ?? null,
+            readCostPer(r, 'cpm', Number(r.impressions ?? 0) / 1000, null, ar).amount,
+            r.spend_share ?? null,
+          ])}
+          initialSort={{ column: 1, dir: 'desc' }}
         />
       </Panel>
+
+      {/*
+        The contribution per path is `PlatformPaths` above; this is the half it does not answer —
+        which campaign inside the path is carrying it, and what the figures say about the distance
+        between the two ends.
+      */}
+      <PathAnalysis
+        locale={ar ? 'ar' : 'en'}
+        currency={summary.data?.currency ?? null}
+        leaders={leaders.data?.paths ?? []}
+        explanations={explanations.data?.paths ?? []}
+        loading={leaders.isLoading}
+        error={leaders.isError}
+      />
     </div>
   )
 }
@@ -394,7 +878,7 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
             <div>
               <div className="text-lg font-bold text-text-primary">{best.campaign_name}</div>
               <div className="mt-1 text-sm text-text-secondary">
-                ROAS <span className="tnum font-semibold text-success">{ratio(best.roas)}</span> · {ar ? 'إنفاق' : 'spend'} {money(best.spend)}
+                ROAS <span className="tnum font-semibold text-success">{rowRoas(best)}</span> · {ar ? 'إنفاق' : 'spend'} {rowMoney(best, 'spend')}
               </div>
             </div>
           )}
@@ -404,7 +888,7 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
             <div>
               <div className="text-lg font-bold text-text-primary">{worst.campaign_name}</div>
               <div className="mt-1 text-sm text-text-secondary">
-                ROAS <span className="tnum font-semibold text-danger">{ratio(worst.roas)}</span> · {ar ? 'إنفاق' : 'spend'} {money(worst.spend)}
+                ROAS <span className="tnum font-semibold text-danger">{rowRoas(worst)}</span> · {ar ? 'إنفاق' : 'spend'} {rowMoney(worst, 'spend')}
               </div>
             </div>
           )}
@@ -416,12 +900,29 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
           rows={rows.map((r) => [
             <span key="n" className="font-semibold text-text-primary">{r.campaign_name ?? '—'}</span>,
             <PlatformCell key="p" provider={r.provider} />,
-            money(r.spend),
-            money(r.revenue),
+            /*
+             * MONEY-TRUTH-002, continued — this table sits directly beneath the platform table that
+             * was fixed for exactly this, and was left reading the raw fields. On an account whose
+             * money is withheld every campaign ranked as having spent 0 with a 0.00× return, in a
+             * ranking ordered BY spend, under a card stating the real total. Same rows, same
+             * provenance fields, same readers.
+             */
+            rowMoney(r, 'spend'),
+            rowMoney(r, 'revenue'),
             num(r.conversions),
-            money(r.cpa),
-            <span key="ro" className="tnum font-semibold">{ratio(r.roas)}</span>,
+            rowCostPer(r, 'cpa', 'conversions'),
+            <span key="ro" className="tnum font-semibold">{rowRoas(r)}</span>,
           ])}
+          values={rows.map((r) => [
+            r.campaign_name ?? '',
+            providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+            readMoney(r, 'spend', null, ar).amount,
+            readMoney(r, 'revenue', null, ar).amount,
+            r.conversions ?? null,
+            readCostPer(r, 'cpa', 'conversions', null, ar).amount,
+            readRoas(r, ar).value,
+          ])}
+          initialSort={{ column: 2, dir: 'desc' }}
         />
       </Panel>
     </div>
@@ -432,6 +933,23 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const f = useFunnel(projectId, range, filters)
   const rows = f.data ?? []
+
+  /*
+   * FUNNEL-WITHHELD-001 (frontend half) — the unit the stage costs are in.
+   *
+   * Every `cost_per` divides the window's spend, and that spend is not always in the project's
+   * currency: when no rate exists it is the platform's own. `money()` defaults to SAR, so «تكلفة
+   * 22.03 SAR» appeared against dollars.
+   *
+   * Read from the summary rather than plumbed through the funnel's `meta`, because it is the same
+   * spend over the same window and the money contract already answers «what currency is this
+   * project's spend actually in» — a second path to the same answer is how two surfaces come to
+   * disagree.
+   */
+  // Named `summary`, not `s`: the stage rows below are mapped as `s`, and the shadow compiles.
+  const summary = useSummary(projectId, range, filters)
+  const spendReading = readMoney(summary.data?.current as Record<string, unknown> | undefined, 'spend', summary.data?.currency ?? null, ar)
+  const costCurrency = spendReading.currency ?? summary.data?.currency ?? undefined
   /*
    * FUNNEL-NULL-001 — scaled against the largest REPORTED count, not `rows[0].count`.
    *
@@ -465,7 +983,7 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
             )}
             <div className="w-40 shrink-0 text-end text-xs text-text-muted">
               {s.step_rate !== null && <span>{ar ? 'انتقال' : 'step'} {percent(s.step_rate, 0)}</span>}
-              {s.cost_per !== null && <span className="ms-2">{ar ? 'تكلفة' : 'cost'} {money(s.cost_per)}</span>}
+              {s.cost_per !== null && <span className="ms-2">{ar ? 'تكلفة' : 'cost'} {money(s.cost_per, costCurrency)}</span>}
             </div>
           </div>
         ))}
@@ -483,64 +1001,243 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
   )
 }
 
-function BudgetTab({ projectId, range, filters }: TabProps) {
+/**
+ * BUDGET-ACCOUNTS-001 — how close each ad account is to the ceiling the platform enforces.
+ *
+ * The campaign table below answers «is this campaign pacing to the plan we typed». This answers the
+ * question that actually interrupts delivery: an account reaching the cap its platform holds stops
+ * spending, whatever the plan said. It rolls up to the account because that is where the payment
+ * method and the cap live.
+ *
+ * An account whose campaigns state no ceiling shows «لم تُرسل» rather than a bar at 0% — no cap is
+ * not an exhausted cap, and a progress bar at zero says the opposite of what is true.
+ */
+function AccountBudgets({ projectId, range, filters }: TabProps) {
   const ar = useAr()
-  const b = useBudget(projectId, range, filters)
-  const rows = b.data ?? []
+  const q = useAccountBudgets(projectId, range, filters)
+  const rows = q.data ?? []
+
+  /** Near the ceiling, or heading past it before the window ends — the two reasons to intervene. */
+  const atRisk = rows.filter((r) => (r.consumed_pct !== null && r.consumed_pct >= 0.8) || (r.pace !== null && r.pace > 1))
+
   return (
-    <Panel title={ar ? 'تحليل الميزانية' : 'Budget analysis'} description={ar ? 'المخطط مقابل المصروف وسرعة الصرف (Pacing)' : 'Planned against spent, and how fast it is going (pacing)'} loading={b.isLoading} error={b.isError} empty={!b.isLoading && rows.length === 0}>
+    <Panel
+      title={ar ? 'الحسابات الإعلانية مقابل حدّ المنصة' : 'Ad accounts against the platform ceiling'}
+      description={ar
+        ? 'الحدّ الذي تفرضه المنصة هو ما يوقف الصرف فعليًا — لا الخطة المكتوبة هنا.'
+        : 'The ceiling the platform enforces is what actually stops delivery — not the plan typed here.'}
+      loading={q.isLoading}
+      error={q.isError}
+      empty={!q.isLoading && rows.length === 0}
+    >
+      {atRisk.length > 0 && (
+        <p data-testid="budget-at-risk" className="mb-3 rounded-lg border border-warning/40 bg-[var(--warning-background)] px-3 py-2 text-xs text-text-primary">
+          <span className="font-semibold">{ar ? 'تنبيه: ' : 'Heads up: '}</span>
+          {ar
+            ? `${countedAccounts(atRisk.length, 'ar')} اقترب من حدّه أو يسير لتجاوزه قبل نهاية الفترة.`
+            : `${atRisk.length} account(s) are near their ceiling or on course to pass it before the period ends.`}
+        </p>
+      )}
+
       <MetricTable
-        head={ar ? ['الحملة', 'الميزانية', 'المصروف', 'المتبقي', 'الاستهلاك', 'السرعة', 'المتوقع'] : ['Campaign', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Pace', 'Projected']}
-        rows={rows.map((r) => [
-          <span key="n" className="font-semibold text-text-primary">{r.campaign_name}</span>,
-          money(r.budget),
-          money(r.spent),
-          money(r.remaining),
-          <div key="c" className="flex items-center gap-2">
-            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-secondary">
-              <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.min(100, (r.consumed_pct ?? 0) * 100)}%` }} />
-            </div>
-            <span className="tnum text-xs">{percent(r.consumed_pct, 0)}</span>
-          </div>,
-          <span key="p" className={`tnum font-semibold ${(r.pace ?? 0) > 1.2 ? 'text-danger' : (r.pace ?? 0) < 0.8 ? 'text-warning' : 'text-success'}`}>
-            {ratio(r.pace, '×')}
-          </span>,
-          money(r.projected_spend),
+        head={ar
+          ? ['الحساب', 'المنصة', 'المصروف', 'حدّ المنصة', 'المتبقي', 'الاستهلاك', 'السرعة', 'المتوقع', 'الحملات']
+          : ['Account', 'Platform', 'Spent', 'Platform cap', 'Remaining', 'Consumed', 'Pace', 'Projected', 'Campaigns']}
+        rows={rows.map((r) => {
+          const unit = r.spent_currency ?? undefined
+          const noCap = ar ? 'لم تُرسل' : 'Not sent'
+
+          return [
+            <span key="a" className="font-semibold text-text-primary">
+              {r.account_name ?? (ar ? 'حساب لم يعد متاحًا' : 'Account no longer available')}
+            </span>,
+            providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+            <span key="s" title={r.spend_withheld ? (ar ? 'بعملة المنصة — التحويل غير متاح' : "In the platform's own currency") : undefined}>
+              {money(r.spent, unit)}
+            </span>,
+            r.cap === null
+              ? <span key="c" className="text-text-muted" title={ar ? 'لم تُصرّح أي حملة على هذا الحساب بحدّ' : 'No campaign on this account states a ceiling'}>{noCap}</span>
+              : money(r.cap, unit),
+            r.remaining === null ? <span key="rm" className="text-text-muted">—</span> : money(r.remaining, unit),
+            r.consumed_pct === null
+              ? <span key="cp" className="text-text-muted">—</span>
+              : (
+                <span key="cp" className="inline-flex items-center gap-2">
+                  <span className="h-1.5 w-14 overflow-hidden rounded-full bg-surface-secondary">
+                    <span
+                      className={`block h-full rounded-full ${r.consumed_pct >= 0.9 ? 'bg-danger' : r.consumed_pct >= 0.8 ? 'bg-warning' : 'bg-brand-500'}`}
+                      style={{ width: `${Math.min(100, r.consumed_pct * 100)}%` }}
+                    />
+                  </span>
+                  <span className="tnum text-xs">{percent(r.consumed_pct, 0)}</span>
+                </span>
+              ),
+            r.pace === null
+              ? <span key="p" className="text-text-muted">—</span>
+              : <span key="p" className={`tnum font-semibold ${r.pace > 1 ? 'text-danger' : r.pace > 0.9 ? 'text-warning' : 'text-success'}`}>{ratio(r.pace, '×')}</span>,
+            money(r.projected_spend, unit),
+            <span key="n" className="tnum">
+              {r.capped_campaigns < r.campaigns
+                ? `${r.campaigns} (${ar ? `${r.capped_campaigns} بحدّ` : `${r.capped_campaigns} capped`})`
+                : String(r.campaigns)}
+            </span>,
+          ]
+        })}
+        values={rows.map((r) => [
+          r.account_name ?? '',
+          providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+          r.spent,
+          r.cap,
+          r.remaining,
+          r.consumed_pct,
+          r.pace,
+          r.projected_spend,
+          r.campaigns,
         ])}
+        /* Most consumed first: the account about to stop delivering is why this table is open. */
+        initialSort={{ column: 5, dir: 'desc' }}
       />
     </Panel>
   )
 }
 
-function QualityTab({ projectId, range, filters }: TabProps) {
+function BudgetTab({ projectId, range, filters }: TabProps) {
+  const ar = useAr()
+  const b = useBudget(projectId, range, filters)
+  const rows = b.data ?? []
+  return (
+    <div className="space-y-4">
+    <AccountBudgets projectId={projectId} range={range} filters={filters} />
+    <Panel title={ar ? 'تحليل الميزانية' : 'Budget analysis'} description={ar ? 'المخطط مقابل المصروف وسرعة الصرف (Pacing)' : 'Planned against spent, and how fast it is going (pacing)'} loading={b.isLoading} error={b.isError} empty={!b.isLoading && rows.length === 0}>
+      {/*
+        BUDGET-WITHHELD-001 — every figure here is now stated in the unit it is actually in.
+
+        `money()` defaults to SAR, and the row carried no currency, so a campaign budgeted in USD
+        read «80K SAR». Worse, `spent` was the aggregator's coalesced zero: on an account whose money
+        awaits a rate — production's, every row of it — this table reported 0 spent, 0% consumed and
+        pacing 0.00× against real spend. That is the one wrong number on this product somebody acts
+        on, because a campaign that has spent nothing and is pacing at zero is one they top up.
+
+        Pacing is blank rather than wrong when the plan and the spend are denominated differently,
+        and the row says which case it is instead of leaving a reader to guess at an empty cell.
+      */}
+      <MetricTable
+        head={ar ? ['الحملة', 'الميزانية', 'المصروف', 'المتبقي', 'الاستهلاك', 'السرعة', 'المتوقع'] : ['Campaign', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Pace', 'Projected']}
+        rows={rows.map((r) => {
+          const basisNote = r.pacing_basis === 'currency_mismatch'
+            ? (ar
+                ? `المصروف بعملة ${r.spent_currency ?? '—'} والميزانية بعملة ${r.budget_currency ?? '—'} — لا تُقارَنان`
+                : `Spent in ${r.spent_currency ?? '—'}, budgeted in ${r.budget_currency ?? '—'} — not comparable`)
+            : r.pacing_basis === 'no_budget'
+              ? (ar ? 'لا توجد ميزانية محددة لهذه الحملة' : 'No budget was set for this campaign')
+              : r.pacing_basis === 'partial'
+                ? (ar ? 'جزء من المصروف محوَّل وجزء بانتظار سعر صرف — لا يوجد إجمالي واحد' : 'Part of the spend is converted and part awaits an FX rate — no single total')
+                : r.pacing_basis === 'mixed_currency'
+                  ? (ar ? 'المصروف بعملات متعددة لا يمكن جمعها' : 'Spend is in several currencies that cannot be summed')
+                  : undefined
+
+          return [
+            <span key="n" className="font-semibold text-text-primary">{r.campaign_name}</span>,
+            money(r.budget, r.budget_currency ?? undefined),
+            r.spent === null
+              ? <span key="s" className="text-text-muted" title={basisNote}>—</span>
+              : <span key="s" title={r.spend_withheld ? (ar ? 'بعملة المنصة — التحويل غير متاح' : "In the platform's own currency — conversion unavailable") : undefined}>
+                  {money(r.spent, r.spent_currency ?? undefined)}
+                </span>,
+            r.remaining === null
+              ? <span key="rm" className="text-text-muted" title={basisNote}>—</span>
+              : money(r.remaining, r.budget_currency ?? undefined),
+            r.consumed_pct === null
+              ? <span key="c" className="text-text-muted" title={basisNote}>—</span>
+              : (
+                <div key="c" className="flex items-center gap-2">
+                  <div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-secondary">
+                    <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.min(100, r.consumed_pct * 100)}%` }} />
+                  </div>
+                  <span className="tnum text-xs">{percent(r.consumed_pct, 0)}</span>
+                </div>
+              ),
+            r.pace === null
+              ? <span key="p" className="text-text-muted" title={basisNote}>—</span>
+              : (
+                <span key="p" className={`tnum font-semibold ${r.pace > 1.2 ? 'text-danger' : r.pace < 0.8 ? 'text-warning' : 'text-success'}`}>
+                  {ratio(r.pace, '×')}
+                </span>
+              ),
+            r.projected_spend === null
+              ? <span key="pr" className="text-text-muted" title={basisNote}>—</span>
+              : money(r.projected_spend, r.spent_currency ?? undefined),
+          ]
+        })}
+        values={rows.map((r) => [
+          r.campaign_name,
+          r.budget ?? null,
+          r.spent ?? null,
+          r.remaining,
+          r.consumed_pct,
+          r.pace,
+          r.projected_spend ?? null,
+        ])}
+        /* Fastest-burning first: a campaign about to overrun is why somebody opens this table. */
+        initialSort={{ column: 5, dir: 'desc' }}
+      />
+    </Panel>
+    </div>
+  )
+}
+
+export function QualityTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const f = useFreshness(projectId, range, filters)
   const rows = f.data ?? []
+  /*
+   * DATA-QUALITY-OPERATOR-UX-001 — the findings, above the table that implies them.
+   *
+   * The table below is true and administrator-shaped: platform · latest date · last sync · days with
+   * data · missing days · status. The person who opens this tab is an account manager whose client
+   * has just asked why last week looks thin, and they need what is wrong, what it affects, how much
+   * it matters, what they can check and who can end it — derived, every time, from six columns whose
+   * relationship they have to already know.
+   *
+   * Nothing is hidden: the table stays underneath, and the findings are read from the same rows. A
+   * second source for «is this platform healthy» is how two surfaces come to disagree about one
+   * account.
+   */
+  const findings = useMemo(() => findingsFor(rows, new Date()), [rows])
+
   return (
     <div>
+      <QualityFindings findings={findings} ar={ar} loading={f.isLoading} />
       <Panel title={ar ? 'جودة البيانات والإسناد' : 'Data quality & attribution'} description={ar ? 'آخر مزامنة، حداثة البيانات، والأيام الناقصة لكل منصة' : 'Last sync, how fresh the data is, and the missing days per platform'} loading={f.isLoading} error={f.isError} empty={!f.isLoading && rows.length === 0}>
       <MetricTable
         head={ar ? ['المنصة', 'آخر تاريخ', 'آخر مزامنة', 'أيام ببيانات', 'أيام ناقصة', 'الحالة'] : ['Platform', 'Latest date', 'Last sync', 'Days with data', 'Missing days', 'Status']}
         rows={rows.map((r) => [
           <PlatformCell key="p" provider={r.provider} />,
           r.latest_metric_date ?? '—',
-          r.last_sync_at ? new Date(r.last_sync_at).toLocaleString('en-GB') : '—',
+          r.last_sync_at ? fmtDateTime(r.last_sync_at) : '—',
           num(r.days_with_data),
           r.missing_days === null ? '—'
             : r.missing_days > 0 ? <span key="m" className="font-semibold text-warning">{r.missing_days}</span> : '0',
-          <span
-            key="s"
-            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-              r.last_sync_status === 'failed'
-                ? 'bg-[var(--negative-background)] text-danger'
-                : r.last_sync_status === 'partial'
-                  ? 'bg-[var(--warning-background)] text-warning'
-                  : 'bg-[var(--positive-background)] text-success'
-            }`}
-          >
-            {r.last_sync_status ?? '—'}
-          </span>,
+          /*
+           * INTEG-RUNTIME §8 — the status cell reads the shared meaning instead of its own ternary.
+           *
+           * The chain it replaces had a green default, so EVERY status it did not know about — and
+           * after the split that includes `no_data`, `partial_mapping` and `awaiting_assignment` —
+           * was painted as a success. A raw English key on a positive green pill was the whole
+           * report a customer got about an account that had never been assigned to a project.
+           */
+          <SyncStatusPill key="s" status={r.last_sync_status} ar={ar} />,
         ])}
+        values={rows.map((r) => [
+          providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+          r.latest_metric_date ?? null,
+          r.last_sync_at ?? null,
+          r.days_with_data ?? null,
+          r.missing_days,
+          r.last_sync_status ?? null,
+        ])}
+        /* Most missing days first: the platform with the biggest hole is the reason to open this. */
+        initialSort={{ column: 4, dir: 'desc' }}
       />
       <p className="mt-3 text-xs text-text-muted">{ar ? 'لا يتم جمع Reach عبر المنصات كوصول فريد — يُعرض لكل منصة على حدة.' : 'Reach is not summed across platforms as unique reach — it is shown per platform.'}</p>
       </Panel>
@@ -555,18 +1252,85 @@ function QualityTab({ projectId, range, filters }: TabProps) {
   )
 }
 
+/**
+ * What is wrong, what it affects, what you can check — and who can end it.
+ *
+ * The owner is the answer an operator needs first, and it is the one the old table could not give at
+ * all: «the platform», «you», «somebody with the credentials», «the system, on its own». A finding
+ * that does not say which of those it is sends its reader to the wrong place, and a reader sent to
+ * the wrong place twice stops opening the tab.
+ */
+function QualityFindings({ findings, ar, loading }: { findings: QualityFinding[]; ar: boolean; loading: boolean }) {
+  if (loading) {
+    return null
+  }
+
+  const OWNER: Record<QualityFinding['owner'], { ar: string; en: string }> = {
+    system: { ar: 'النظام — تلقائيًا', en: 'The system, on its own' },
+    operator: { ar: 'أنت — خطوة واحدة', en: 'You — one step' },
+    credentials: { ar: 'يحتاج بيانات اعتماد', en: 'Needs credentials' },
+    provider: { ar: 'يحتاج فحصًا على المنصة', en: 'Needs a look on the platform' },
+  }
+
+  const TONE: Record<QualityFinding['severity'], string> = {
+    critical: 'border-danger/40 bg-danger/5',
+    attention: 'border-warning/40 bg-warning/5',
+    watch: 'border-border bg-surface-secondary',
+  }
+
+  if (findings.length === 0) {
+    return (
+      <p data-testid="quality-findings-clear" className="mb-4 rounded-xl border border-success/30 bg-success/5 p-3.5 text-sm text-text-secondary">
+        {/*
+          «لا يوجد شيء» would read as a page that failed to load. Every source being current IS the
+          answer, and saying which sources were checked is what makes it believable.
+        */}
+        {ar
+          ? 'كل مصدر في هذه الفترة محدَّث ومكتمل — لا شيء يحتاج انتباهك هنا.'
+          : 'Every source in this window is current and complete — nothing here needs your attention.'}
+      </p>
+    )
+  }
+
+  return (
+    <ul data-testid="quality-findings" className="mb-4 flex flex-col gap-2">
+      {findings.map((finding) => (
+        <li key={finding.key} data-testid={`quality-finding-${finding.provider}`} className={`rounded-xl border p-3.5 ${TONE[finding.severity]}`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-bold text-text-primary">{finding.name ?? finding.provider}</span>
+            <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+              {ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en}
+            </span>
+            {finding.coverage !== null && (
+              <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] text-text-muted" dir="ltr">
+                {ar ? 'التغطية' : 'Coverage'} {Math.round(finding.coverage * 100)}%
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-sm text-text-primary">{ar ? finding.what.ar : finding.what.en}</p>
+          <p className="mt-0.5 text-xs text-text-secondary">{ar ? finding.affects.ar : finding.affects.en}</p>
+          <p className="mt-0.5 text-xs text-text-muted">{ar ? finding.check.ar : finding.check.en}</p>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function AttributionSection({ projectId, range, filters }: TabProps) {
   const locale = useUi((u) => u.locale)
   const a = useAttribution(projectId, range, filters)
 
   return (
-    <AttributionPanel
-      data={a.data}
-      loading={a.isLoading}
-      error={a.isError}
-      locale={locale}
-      className="mt-4"
-    />
+    <>
+      <AttributionPanel
+        data={a.data}
+        loading={a.isLoading}
+        error={a.isError}
+        locale={locale}
+        className="mt-4"
+      />
+      <ScopeNote scope={a.data?.filter_scope} testid="attribution-scope" />
+    </>
   )
 }
 
@@ -586,6 +1350,26 @@ function AttributionSection({ projectId, range, filters }: TabProps) {
  * (a second currency, a second attribution window, demo rows among real ones) are called out rather
  * than resolved quietly.
  */
+/**
+ * What a panel says when it could not honour one of the filters it was sent.
+ *
+ * Silence was the defect: three panels read only the provider off a request carrying an objective
+ * and a campaign too, so they sat under chips naming one campaign and answered for the whole
+ * project. Declining an axis can be right — see `filterScope` for the two cases where narrowing
+ * would invent a figure rather than reveal one — but declining without saying so is not.
+ */
+function ScopeNote({ scope, testid }: { scope?: FilterScope; testid: string }) {
+  const ar = useAr()
+  const note = scopeNote(scope, ar)
+  if (note === null) return null
+
+  return (
+    <p data-testid={testid} className="text-xs font-semibold text-text-muted">
+      {note}
+    </p>
+  )
+}
+
 function NormalizationPanel({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const n = useNormalization(projectId, range, filters)
@@ -615,6 +1399,7 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
       className="mt-4"
     >
       <div data-testid="normalization" className="grid gap-3 text-sm">
+        <ScopeNote scope={d?.filter_scope} testid="normalization-scope" />
         {/* Currency. Silence here is a claim: a converted figure that says nothing reads as native. */}
         <Basis label={ar ? 'العملة' : 'Currency'}>
           {converted.length > 0
@@ -635,11 +1420,18 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
                 : `${num(withheld)} rows (${withheldFrom.join(' · ')}) have no trustworthy rate for their date and are in none of the amounts above. The figures shown are short by that much.`}
             </span>
           )}
-          {(d?.project_currencies.length ?? 0) > 1 && (
+          {/*
+            `d?.project_currencies?.length`, not `d?.project_currencies.length`.
+            The optional chain stopped at `d`, so a payload that HAS data and lacks this one array
+            threw `Cannot read properties of undefined` from inside the render — and took the whole
+            Data quality tab down with it, findings, table and all. The `?? 0` beside it reads as a
+            guard and guards nothing: it only ever catches `d` being absent.
+          */}
+          {(d?.project_currencies?.length ?? 0) > 1 && (
             <span className="mt-1 block font-semibold text-warning">
               {ar
-                ? `هذه الفترة تحتوي أكثر من عملة عرض (${d?.project_currencies.join(' · ')}) — لا تُجمع المبالغ كرقم واحد.`
-                : `This period holds more than one display currency (${d?.project_currencies.join(' · ')}) — the amounts are not one total.`}
+                ? `هذه الفترة تحتوي أكثر من عملة عرض (${d?.project_currencies?.join(' · ')}) — لا تُجمع المبالغ كرقم واحد.`
+                : `This period holds more than one display currency (${d?.project_currencies?.join(' · ')}) — the amounts are not one total.`}
             </span>
           )}
         </Basis>
@@ -724,15 +1516,15 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
 
         {/* Stored but read by nothing. An empty answer is stated, never left as an empty space. */}
         <Basis label={ar ? 'مقاييس غير محسوبة' : 'Metrics nothing reads'}>
-          {(d?.unread_metric_keys.length ?? 0) === 0
+          {(d?.unread_metric_keys?.length ?? 0) === 0
             ? (ar ? 'كل مقياس في بياناتك يدخل في مؤشر واحد على الأقل.' : 'Every metric key in your data feeds at least one KPI.')
             : (ar
-                ? `مخزّنة ولا يقرؤها أي مؤشر: ${d?.unread_metric_keys.join('، ')}.`
-                : `Stored but read by no KPI: ${d?.unread_metric_keys.join(', ')}.`)}
+                ? `مخزّنة ولا يقرؤها أي مؤشر: ${d?.unread_metric_keys?.join('، ')}.`
+                : `Stored but read by no KPI: ${d?.unread_metric_keys?.join(', ')}.`)}
         </Basis>
 
         {/* The catalogue: what a metric means and whether it may be summed at all. */}
-        {d?.catalogue.available && (
+        {d?.catalogue?.available && (
           <details className="rounded-xl border border-border bg-surface-secondary px-4 py-3">
             <summary className="cursor-pointer text-sm font-semibold text-text-primary">
               {ar ? `تعريفات المقاييس (${num(d.catalogue.metrics.length)})` : `Metric definitions (${num(d.catalogue.metrics.length)})`}
@@ -780,33 +1572,114 @@ function Basis({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
+/**
+ * PLATFORM-CELL-001 — the cell whose entire job is to name a platform printed its key.
+ *
+ * Three tables use this — platforms, campaign ranking and data quality — so «meta» appeared as the
+ * platform name beside an accounts table on the next tab reading «ميتا», and in the filter chips
+ * above them, which have always used `providerLabel`. The dot was localized and the word was not.
+ *
+ * The same reader as everywhere else. `canonicalPlatform` first, because the breakdowns return the
+ * provider as stored (`google_ads`) while the labels are keyed canonically (`google`) — a mismatch
+ * that would have fallen back to the key and looked exactly like the defect being fixed.
+ */
 function PlatformCell({ provider }: { provider: string }) {
+  const ar = useAr()
+
   return (
     <span className="inline-flex items-center gap-1.5 font-semibold text-text-primary">
       <span className="h-2.5 w-2.5 rounded-full" style={{ background: platformColor(provider) }} />
-      {provider}
+      {providerLabel(canonicalPlatform(provider), ar ? 'ar' : 'en')}
     </span>
   )
 }
 
-function MetricTable({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
+/** One row's sortable values, positionally matched to its cells. `null` sorts last in both directions. */
+export type SortValues = Array<number | string | null>
+
+/**
+ * TABLE-SORT-ALIGN-001 — every analytics table, sortable and squarely aligned.
+ *
+ * ## Alignment
+ *
+ * Header and cell were both `text-end`, which measured as a drift of exactly 0 on all eleven tables
+ * — they were never misaligned in the DOM. But `text-end` under `dir="rtl"` means the LEFT edge of
+ * the cell, so a number sat as far from its Arabic heading as the column is wide, and read as
+ * belonging to no column in particular. Numeric columns are centred now: header and body share one
+ * alignment, so the association is unmistakable at a glance.
+ *
+ * `tnum` stays, because it is what keeps digits the same width; centring only moves where the block
+ * of digits sits, it does not stagger them.
+ *
+ * ## Sorting
+ *
+ * Cells are `ReactNode` — a bar, a pill, a link — so they cannot be compared. `values` carries the
+ * raw figure per cell, positionally matched, and the caller passes the same source it rendered from.
+ * A table with no `values` is simply not sortable rather than sortable-and-wrong.
+ *
+ * Nulls sort last in BOTH directions on purpose: «this platform does not report CPM» is not the
+ * cheapest CPM, and letting it win an ascending sort is how an absence gets read as a best result.
+ */
+export function MetricTable({
+  head,
+  rows,
+  values,
+  initialSort,
+}: {
+  head: string[]
+  rows: React.ReactNode[][]
+  values?: SortValues[]
+  /** Column index to sort by on first render, and its direction. */
+  initialSort?: { column: number; dir: 'asc' | 'desc' }
+}) {
+  const [sort, setSort] = useState<{ column: number; dir: 'asc' | 'desc' } | null>(initialSort ?? null)
+
+  const order = useMemo(
+    () => (values && sort ? orderRows(values, sort.column, sort.dir) : rows.map((_, i) => i)),
+    [rows, values, sort],
+  )
+
+  const toggle = (i: number) => {
+    if (!values) return
+    setSort((prev) => (prev?.column === i ? { column: i, dir: prev.dir === 'desc' ? 'asc' : 'desc' } : { column: i, dir: 'desc' }))
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[640px] text-sm">
         <thead>
           <tr className="border-b border-border text-text-muted">
-            {head.map((h, i) => (
-              <th key={i} className={`py-2 font-semibold ${i === 0 ? 'text-start' : 'text-end'}`}>
-                {h}
-              </th>
-            ))}
+            {head.map((h, i) => {
+              const align = i === 0 ? 'text-start' : 'text-center'
+              const active = sort?.column === i
+
+              return (
+                <th key={i} className={`py-2 font-semibold ${align}`} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+                  {values ? (
+                    <button
+                      type="button"
+                      onClick={() => toggle(i)}
+                      className={`inline-flex items-center gap-1 hover:text-text-primary ${active ? 'text-text-primary' : ''}`}
+                      data-testid={`sort-${i}`}
+                    >
+                      {h}
+                      {/* The arrow only appears on the column actually in force, so the row does not
+                          look like six competing sort states. */}
+                      <span aria-hidden className={active ? '' : 'opacity-0 group-hover:opacity-40'}>
+                        {active ? (sort.dir === 'asc' ? '↑' : '↓') : '↕'}
+                      </span>
+                    </button>
+                  ) : h}
+                </th>
+              )
+            })}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} className="border-b border-border last:border-0 hover:bg-surface-secondary">
-              {r.map((cell, j) => (
-                <td key={j} className={`py-2.5 ${j === 0 ? 'text-start' : 'tnum text-end'}`}>
+          {order.map((rowIndex) => (
+            <tr key={rowIndex} className="border-b border-border last:border-0 hover:bg-surface-secondary">
+              {rows[rowIndex].map((cell, j) => (
+                <td key={j} className={`py-2.5 ${j === 0 ? 'text-start' : 'tnum text-center'}`}>
                   {cell}
                 </td>
               ))}
@@ -815,5 +1688,786 @@ function MetricTable({ head, rows }: { head: string[]; rows: React.ReactNode[][]
         </tbody>
       </table>
     </div>
+  )
+}
+
+/**
+ * ANALYTICS-DRILLDOWN-001 — the ad-squad and ad rungs, on screen.
+ *
+ * These two tabs did not exist, and could not have: `daily_metrics` is campaign-grain and
+ * `creative_daily_metrics` is creative-grain, so the 187 ad squads and 5,706 ads on the live account
+ * had no table to read from. `entity_daily_metrics` and its aggregator now answer for them.
+ *
+ * Money goes through the canonical reader, so a withheld ad-squad spend prints «412.50 USD» with the
+ * conversion note rather than «0 SAR» — the same sentence a dashboard KPI would give for the same
+ * money. Every ratio renders through `metricOrDash`, which prints «—» for a null rather than a zero,
+ * because a CPM that could not be computed is not a CPM of nothing.
+ */
+/**
+ * A count, or «—». Never 0 for a figure nobody reported — that is a measurement nobody made.
+ *
+ * These live at module scope now. They were declared inside `EntityTab`, so `AccountsTab` reached
+ * them only by hoisting across a sibling's body — which held until the sibling was rewritten and
+ * took them with it. Two tabs sharing a formatter should not depend on which one happens to declare
+ * it.
+ *
+ * NUMERAL-PREFERENCE-002 note: these still format through `toLocaleString('en-US')` rather than the
+ * canonical numeral layer, and are in scope for that sweep.
+ */
+function metricOrDash(value: number | null | undefined, digits = 0): string {
+  return typeof value === 'number'
+    ? value.toLocaleString('en-US', { maximumFractionDigits: digits })
+    : '—'
+}
+
+/** A rate, or «—». Same rule: an unavailable ratio is not a ratio of zero. */
+function rateOrDash(value: number | null | undefined): string {
+  return typeof value === 'number' ? `${(value * 100).toFixed(2)}%` : '—'
+}
+
+
+/** Rung order, for deciding which crumbs sit above the list on screen. */
+const ORDER_INDEX: Record<DrillLevel, number> = { campaign: 0, ad_set: 1, ad: 2, creative: 3 }
+
+/** Which tab shows each rung. The drill path and the tab are one statement about where the reader is. */
+const TAB_FOR: Record<DrillLevel, string> = {
+  campaign: 'campaigns',
+  ad_set: 'ad_sets',
+  ad: 'ads',
+  creative: 'creative',
+}
+
+/**
+ * Where the reader is, and the way back out.
+ *
+ * Rendered only when a path exists — an always-present «All» crumb over an unnarrowed list would
+ * imply a filter nobody applied. Each crumb steps OUT to that level, keeping everything above it, so
+ * leaving an ad returns to its ad set rather than to the top.
+ */
+function DrillCrumbs({ path, level, ar, onUpTo }: { path: DrillStep[]; level: DrillLevel; ar: boolean; onUpTo: (level: DrillLevel) => void }) {
+  /*
+   * Only the steps ABOVE the list being shown.
+   *
+   * A reader who drills into ads and then clicks the «Ad sets» tab directly has a path still holding
+   * an ad set, while the ad-set list is unnarrowed. Rendering that crumb would caption a
+   * project-wide list with one ad set's name — the lie this whole module exists to prevent. The path
+   * is kept so stepping back down restores it; it is simply not claimed here.
+   */
+  const shown = path.filter((s) => ORDER_INDEX[s.level] < ORDER_INDEX[level])
+
+  if (shown.length === 0) return null
+
+  const LEVEL_LABEL: Record<DrillLevel, { ar: string; en: string }> = {
+    campaign: { ar: 'حملة', en: 'Campaign' },
+    ad_set: { ar: 'مجموعة', en: 'Ad set' },
+    ad: { ar: 'إعلان', en: 'Ad' },
+    creative: { ar: 'إعلان', en: 'Ad' },
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="drill-crumbs">
+      <button
+        type="button"
+        className="text-text-muted hover:underline"
+        data-testid="drill-clear"
+        onClick={() => onUpTo('campaign')}
+      >
+        {ar ? 'كل المشروع' : 'Whole project'}
+      </button>
+      {shown.map((step) => (
+        <span key={`${step.level}:${step.id}`} className="flex items-center gap-2">
+          <span className="text-text-muted">/</span>
+          <button
+            type="button"
+            className="rounded-full border border-border px-2 py-0.5 text-text-primary hover:underline"
+            data-testid={`drill-crumb-${step.level}`}
+            onClick={() => onUpTo(step.level)}
+          >
+            <span className="text-text-muted">{(ar ? LEVEL_LABEL[step.level].ar : LEVEL_LABEL[step.level].en) + ': '}</span>
+            {/* An entity with no name shows its id — a dash would read as «nothing here». */}
+            {stepLabel(step)}
+          </button>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * What an ad set or ad is doing right now, in one word.
+ *
+ * The same three states the campaigns workspace uses, from the same rule — a stopped ad that
+ * outspent everything running is still stopped, and an operator scanning this table needs to see
+ * that without inferring it from row order.
+ */
+function EntityState({ row, windowEnd, ar }: { row: EntityRow; windowEnd: string; ar: boolean }) {
+  const state = relevanceOf(row, windowEnd)
+
+  if (state === 'serving') return <span className="text-text-muted">—</span>
+
+  return (
+    <span
+      data-testid={`entity-state-${row.entity_id}`}
+      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+        state === 'stopped' ? 'bg-surface-secondary text-text-secondary' : 'bg-warning/10 text-warning'
+      }`}
+    >
+      {state === 'stopped' ? (ar ? 'متوقف' : 'Stopped') : (ar ? 'خامل' : 'Idle')}
+    </span>
+  )
+}
+
+function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad_set' | 'ad' }) {
+  const ar = useAr()
+  /*
+   * HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN — the parent comes from the URL, and it changes the QUERY.
+   *
+   * `parent` was hardcoded `undefined` here since the endpoint shipped, so four levels the backend
+   * could already narrow were served as four flat lists. It is part of the query key as well as the
+   * request, so a cached unfiltered response is never handed back for a drilled-down question.
+   */
+  const [rawPath] = useUrlState('drill', '')
+  const path = useMemo(() => withNames(decodePath(rawPath)), [rawPath])
+  const parent = parentFor(level, path)
+  const q = useEntities(projectId, range, level, parent, filters)
+  /*
+   * ENTITY-RELEVANCE-ORDERING-001 — «currently-serving ads must not be mixed with stopped historical
+   * ads without clear grouping».
+   *
+   * This table rendered the rows exactly as the aggregator returned them: spend-first, which is
+   * right for a report and wrong for an operator. An ad that stopped three weeks ago and outspent
+   * everything still running led the list, so the first row somebody saw was one they could do
+   * nothing about — and nothing on it said so.
+   *
+   * The rule is `campaignRelevance`, unchanged and not re-implemented: it reads `status` and
+   * `last_active_on`, which every rung carries, and the campaigns workspace already orders by it.
+   * Two surfaces disagreeing about which things are live is worse than either order alone.
+   */
+  /*
+   * Judged against the window the RESPONSE describes, not the one the picker currently shows.
+   *
+   * They are the same in the ordinary case and diverge exactly when it matters: while a new range is
+   * in flight the rows on screen are still the previous window's, and reading «is this still
+   * serving» against a window those figures do not cover would relabel every row for as long as the
+   * request takes. The response is the authority on what its own numbers are about.
+   */
+  const windowEnd = q.data?.period?.to ?? range.to
+  const rows = useMemo(
+    () => orderByRelevanceWith(q.data?.entities ?? [], windowEnd, (row) => row.entity_id),
+    [q.data?.entities, windowEnd],
+  )
+  const currency = q.data?.currency ?? null
+  const child = nextLevel(level)
+
+  /*
+   * AD-PREVIEW-001 — the ads table had no media at all.
+   *
+   * It is the one surface in the product that lists ads by name and number and shows nothing of what
+   * ran: a reader deciding which of eleven ads to stop was choosing between eleven strings. The
+   * pictures come from the same library endpoint every other surface reads — filtered by the ads ON
+   * SCREEN, so the request scales with the page rather than with the estate — and open in place,
+   * because this is a comparison table and a navigation costs the reader the comparison.
+   *
+   * Ad sets have no media of their own, so the query is asked for ads only.
+   */
+  const adIds = useMemo(
+    () => (level === 'ad' ? rows.map((row) => row.external_id).filter((id): id is string => Boolean(id)) : []),
+    [level, rows],
+  )
+  const previews = useQuery({
+    queryKey: ['analytics', 'ad-previews', projectId, range.from, range.to, adIds.join(',')],
+    queryFn: () => listCreatives(
+      { from: range.from, to: range.to, per_page: Math.max(adIds.length, 1), ad_ids: adIds },
+      projectId ?? undefined,
+    ),
+    enabled: level === 'ad' && adIds.length > 0 && Boolean(projectId),
+  })
+
+  /*
+   * An ad's creative, by the ad's own provider id.
+   *
+   * One creative can be carried by several ads — that relation is why `creative.ads` is a list — so
+   * the map is built from the relation rather than from a column naming one ad.
+   */
+  const creativeByAd = useMemo(() => {
+    const map = new Map<string, CreativeCard>()
+    for (const creative of previews.data?.creatives ?? []) {
+      for (const ad of creative.ads ?? []) {
+        if (ad.external_id) map.set(ad.external_id, creative)
+      }
+    }
+    return map
+  }, [previews.data])
+
+  const [openAd, setOpenAd] = useState<{ creative: CreativeCard; figures: { label: string; value: string }[] } | null>(null)
+  /*
+   * Drilling moves the TAB as well as the path.
+   *
+   * Setting only the path would narrow a list the reader is no longer looking at: they clicked an ad
+   * set and would still be on the ad-set tab, now showing one row. The tab is URL state too, so both
+   * halves of «where am I» stay in the link.
+   */
+  const write = useUrlWriter()
+  const go = (next: DrillStep[], to: DrillLevel) => write({
+    drill: { value: encodePath(next), fallback: '' },
+    tab: { value: TAB_FOR[to], fallback: 'performance' },
+  })
+
+  const heading = level === 'ad_set'
+    ? (ar ? 'المجموعات الإعلانية' : 'Ad sets')
+    : (ar ? 'الإعلانات' : 'Ads')
+
+  /*
+   * ANALYTICS-TABLES-001 — the canonical table, for the same reasons as the Accounts tab.
+   *
+   * Hand-rolled, numeric columns `text-start` (so the figures and their headings sit against
+   * opposite edges under RTL), and unsortable — on the two levels where an operator most wants to
+   * re-order, because an ad set list is long and the interesting row is rarely the first one.
+   *
+   * Sorting reads the values array, so a withheld spend stays last in both directions instead of
+   * being read as zero, and a derived cost is sortable only where both its parts are real.
+   */
+  const head = [
+    ar ? 'الاسم' : 'Name',
+    ar ? 'الحالة' : 'State',
+    ar ? 'الإنفاق' : 'Spend',
+    ar ? 'الظهور' : 'Impressions',
+    ar ? 'الوصول' : 'Reach',
+    ar ? 'التكرار' : 'Frequency',
+    ar ? 'النقرات' : 'Clicks',
+    'CTR',
+    'CPC',
+    'CPM',
+    ar ? 'النتائج' : 'Results',
+    'CPA',
+  ]
+
+  const cells = rows.map((row) => [
+    <div key={row.entity_id} className="flex items-center gap-2">
+      {/*
+        The still, where there is one. A row whose ad the library has no creative for renders no
+        thumbnail at all rather than a grey placeholder — an empty frame beside eleven real ones
+        reads as «this ad has no media», which is a claim about the ad and not about our sync.
+      */}
+      {level === 'ad' && creativeByAd.has(row.external_id ?? '') && (
+        <button
+          type="button"
+          data-testid={`ad-preview-open-${row.entity_id}`}
+          title={ar ? 'معاينة الإعلان' : 'Preview this ad'}
+          onClick={() => {
+            const creative = creativeByAd.get(row.external_id ?? '')
+            if (!creative) return
+            setOpenAd({
+              creative,
+              // The row's own figures — the numbers the reader is looking at, not a second query.
+              figures: [
+                { label: ar ? 'الإنفاق' : 'Spend', value: rowMoney(row, 'spend', currency) },
+                { label: ar ? 'الظهور' : 'Impressions', value: metricOrDash(row.impressions) },
+                { label: 'CTR', value: rateOrDash(row.ctr) },
+              ],
+            })
+          }}
+          className="shrink-0 overflow-hidden rounded-lg border border-border transition-colors hover:border-brand-500"
+        >
+          <AdPoster
+            preview={creativeByAd.get(row.external_id ?? '')?.preview}
+            name={row.name ?? row.external_id ?? ''}
+            className="h-9 w-9"
+            testid={`ad-thumb-${row.entity_id}`}
+          />
+        </button>
+      )}
+      <div className="min-w-0">
+      {/*
+        Only a row with a level BENEATH it is a button. An ad is the last rung this table serves, and
+        a control that looks clickable and does nothing is worse than plain text.
+      */}
+      {child !== null ? (
+        <button
+          type="button"
+          className="text-start font-medium text-brand-600 hover:underline"
+          data-testid={`drill-into-${row.entity_id}`}
+          onClick={() => {
+            rememberName(row.entity_id, row.name)
+            go(drillInto(path, { level, id: row.entity_id, name: row.name }), child)
+          }}
+        >
+          {row.name ?? row.external_id}
+        </button>
+      ) : (
+        <div className="font-medium text-text-primary">
+          {/* An entity the sweep has removed keeps its provider id rather than being called
+              «Unknown», which would hide that it is gone. */}
+          {row.name ?? row.external_id}
+        </div>
+      )}
+      <div className="text-xs text-text-secondary">{row.external_id}</div>
+      </div>
+    </div>,
+    /*
+     * The state, beside the row rather than only in its position.
+     *
+     * Ordering alone is not «clear grouping»: a reader who sorts by spend, or lands mid-table, loses
+     * it entirely. `—` for serving, because the ordinary case does not need a badge and a table where
+     * every row is decorated says nothing.
+     */
+    <EntityState key={`state-${row.entity_id}`} row={row} windowEnd={windowEnd} ar={ar} />,
+    rowMoney(row, 'spend', currency),
+    metricOrDash(row.impressions),
+    metricOrDash(row.reach),
+    metricOrDash(row.frequency, 2),
+    metricOrDash(row.clicks),
+    rateOrDash(row.ctr),
+    rowCostPer(row, 'cpc', row.clicks ?? 0, currency),
+    rowCostPer(row, 'cpm', (row.impressions ?? 0) / 1000, currency),
+    metricOrDash(row.conversions),
+    rowCostPer(row, 'cpa', row.conversions ?? 0, currency),
+  ])
+
+  const money = (row: (typeof rows)[number]) => (typeof row.spend === 'number' ? row.spend : null)
+  const per = (row: (typeof rows)[number], denom: number) => {
+    const spend = money(row)
+
+    return spend !== null && denom > 0 ? spend / denom : null
+  }
+
+  const values: SortValues[] = rows.map((row) => [
+    row.name ?? row.external_id ?? '',
+    /*
+     * The state sorts by how much attention it deserves — serving, idle, stopped — not
+     * alphabetically. A reader sorting this column is asking «what is running», and «Idle» before
+     * «Stopped» before nothing is the alphabet answering a different question.
+     */
+    CAMPAIGN_RELEVANCE_ORDER.indexOf(relevanceOf(row, windowEnd)),
+    money(row),
+    row.impressions ?? null,
+    row.reach ?? null,
+    row.frequency ?? null,
+    row.clicks ?? null,
+    row.ctr ?? null,
+    per(row, row.clicks ?? 0),
+    per(row, (row.impressions ?? 0) / 1000),
+    row.conversions ?? null,
+    per(row, row.conversions ?? 0),
+  ])
+
+  return (
+    <div className="space-y-4">
+      <DrillCrumbs path={path} level={level} ar={ar} onUpTo={(lvl) => go(drillUpTo(path, lvl), lvl)} />
+      <Panel
+        title={heading}
+        description={ar ? 'الأعلى إنفاقًا أولًا — ويمكن الترتيب بأي عمود' : 'Highest spend first — sortable by any column'}
+        loading={q.isLoading}
+        error={q.isError}
+        /*
+          A narrowed list with no rows is NOT «no data».
+          The unnarrowed empty state says the project reported nothing; drilled, it must say this
+          parent reported nothing — otherwise a reader concludes the account is dead when what they
+          are looking at is one quiet ad set.
+        */
+        empty={!q.isLoading && rows.length === 0 && parent === null}
+      >
+        {!q.isLoading && !q.isError && rows.length === 0 && parent !== null ? (
+          <p className="rounded-xl border border-border p-3 text-sm text-text-muted" data-testid={`entity-empty-under-parent-${level}`}>
+            {ar
+              ? 'لم تُسجَّل أي بيانات تحت هذا المستوى في هذه الفترة. هذا ليس «لا توجد بيانات» للمشروع.'
+              : 'Nothing was reported under this parent in this period. That is not «no data» for the project.'}
+          </p>
+        ) : (
+          <div data-testid={`entity-table-${level}`}>
+            {/*
+              No initial sort. The rows arrive in the operational order — serving first, then by
+              spend — and re-sorting them by spend here would discard it, which is what happened when
+              the state column was added and the table went on sorting by «column 1». Every column is
+              still sortable; the reader chooses, and the default is the answer to the question they
+              opened the tab with.
+            */}
+            <MetricTable head={head} rows={cells} values={values} />
+
+            {openAd && (
+              <AdPreviewDialog
+                creative={openAd.creative}
+                locale={ar ? 'ar' : 'en'}
+                figures={openAd.figures}
+                onClose={() => setOpenAd(null)}
+              />
+            )}
+          </div>
+        )}
+      </Panel>
+    </div>
+  )
+}
+
+function ObjectiveTab({ projectId, range, filters }: TabProps) {
+  const ar = useAr()
+  const c = useCampaigns(projectId, range, filters)
+  const s = useSummary(projectId, range, filters)
+  const currency = s.data?.currency ?? null
+  const rows = c.data ?? []
+  /*
+   * OBJECTIVE-ANALYTICS-DEPTH-001 · FUNNEL-ANALYTICAL-PATTERN-001 — the family cards below say what
+   * each objective spent and produced. They do not say which campaign inside a family is carrying it,
+   * which is the question an operator opens this tab with, and they do not read the figures back.
+   */
+  const leaders = useObjectiveLeaders(projectId, range, filters)
+  const explanations = useObjectiveExplanations(projectId, range, filters)
+
+  /*
+   * READY-3 — the catalogue owns which KPIs an objective is judged by, and this kept its own copy.
+   *
+   * The private list named a narrower set than `metricCatalog`'s layouts: no `cpl` for leads, no
+   * `cpa`/`aov` for sales, no `cpe`, no `cpi`, no `landing_page_views`, no `registrations`. Two maps
+   * of the same thing drift, and the weaker one was the one on screen — a leads family judged
+   * without its cost per lead, on the single screen whose whole purpose is to judge each family by
+   * what it was bought for.
+   *
+   * `layoutFor` is what the rest of the product reads, so a metric added to an objective now appears
+   * here without anybody remembering this file exists.
+   *
+   * Ordered so the funnel reads top to bottom; a family with no campaigns is not shown at all.
+   */
+  const FAMILY_LABELS: Record<string, { ar: string; en: string }> = {
+    awareness: { ar: 'الوعي', en: 'Awareness' },
+    traffic: { ar: 'الزيارات', en: 'Traffic' },
+    engagement: { ar: 'التفاعل', en: 'Engagement' },
+    video: { ar: 'المشاهدات', en: 'Video' },
+    leads: { ar: 'العملاء المحتملون', en: 'Leads' },
+    sales: { ar: 'المبيعات', en: 'Sales' },
+    app: { ar: 'التطبيق', en: 'App' },
+    unknown: { ar: 'غير مصنَّف', en: 'Unclassified' },
+  }
+
+  const FAMILIES = Object.keys(FAMILY_LABELS).map((key) => ({
+    key,
+    ar: FAMILY_LABELS[key]!.ar,
+    en: FAMILY_LABELS[key]!.en,
+    kpis: layoutFor(key).primary,
+  }))
+
+  const grouped = FAMILIES.map((f) => ({
+    ...f,
+    campaigns: rows.filter((r) => (r.objective_family ?? 'unknown') === f.key),
+  })).filter((f) => f.campaigns.length > 0)
+
+  return (
+    <div className="space-y-4">
+      <Panel
+        title={ar ? 'الأداء حسب الهدف' : 'Performance by objective'}
+        description={ar
+          ? 'كل عائلة تُقاس بما اشتُريت من أجله — لا يُحكم على حملة وعي بعائد الإنفاق'
+          : 'Each family is judged by what it was bought for — an awareness campaign is not judged on ROAS'}
+        loading={c.isLoading}
+        error={c.isError}
+        empty={!c.isLoading && grouped.length === 0}
+      >
+        <div className="space-y-4" data-testid="objective-families">
+          {grouped.map((f) => {
+
+            return (
+              <div key={f.key} className="rounded-xl border border-border p-3" data-testid={`objective-family-${f.key}`}>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 className="font-semibold text-text-primary">{ar ? f.ar : f.en}</h3>
+                  <span className="text-xs text-text-secondary">
+                    {f.campaigns.length} {ar ? 'حملة' : f.campaigns.length === 1 ? 'campaign' : 'campaigns'}
+                    {' · '}
+                    <span className="tnum" dir="ltr">
+                      {/* Withheld money keeps its own currency; a converted total uses the project's. */}
+                      {/*
+                        READY-4 — this stated two things it had not checked.
+                        It hardcoded `money_original_currencies: 1`, asserting every withheld campaign in the family
+                        shared one currency, and took the currency NAME from whichever campaign was found first: two
+                        campaigns withheld in USD and EUR were summed and labelled with one of them.
+                        And on a PARTIAL family — some converted, some withheld — it dropped the converted spend
+                        entirely and printed the withheld half as the family's total.
+                        `familySpend` builds the real provenance from the rows, so a partial or multi-currency family
+                        fails closed to «—», exactly as every other total in this product does.
+                      */}
+                      {rowMoney(familySpend(f.campaigns as unknown as FamilyRow[]), 'spend', currency)}
+                    </span>
+                  </span>
+                </div>
+
+                {/* The verdict metrics for THIS family — not the same row of KPIs for every objective. */}
+                {/*
+                  OBJECTIVE-TOTALS-001 — three defects in one reduce.
+
+                  It added every KPI together. Correct for a count and meaningless for a rate, and
+                  every family's list holds one: two sales campaigns returning 3× and 5× printed
+                  «8», and two at 1.2% CTR printed «2.4%». `familyTotal` rebuilds a rate from the
+                  summed bases, which is the rule `MetricsAggregator::withDerived()` already states
+                  on the server and this was the one place re-aggregating without it.
+
+                  It printed the metric KEY as the label, so the row read «conversions 176 revenue
+                  56,320 roas 15.36» in an Arabic page.
+
+                  And it formatted money with `toLocaleString` and no currency — «56,320» of
+                  nothing — over `spend`, which is the coalesced 0 on a withheld row. So a family
+                  whose money awaits a rate would have shown a confident zero next to a revenue the
+                  KPI strip states correctly.
+                */}
+                <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+                  {f.kpis.map((k: string) => {
+                    const rows = f.campaigns as unknown as FamilyRow[]
+                    const spec = SPECS[k]
+                    const money = MONEY_KPIS.has(k)
+                    const total = money
+                      ? readMoney(familyMoney(rows), k as 'spend' | 'revenue', currency, ar).amount
+                      : familyTotal(rows, k)
+                    const unit = money
+                      ? (readMoney(familyMoney(rows), k as 'spend' | 'revenue', currency, ar).currency ?? currency ?? '')
+                      : ''
+
+                    return (
+                      <div key={k} className="flex flex-col">
+                        <dt className="text-text-secondary">
+                          {spec ? (ar ? spec.label.ar : spec.label.en) : k}
+                        </dt>
+                        <dd className="tnum text-text-primary" dir="ltr">
+                          {/* Null stays «—»: an unavailable figure is not a figure of zero. */}
+                          {total === null
+                            ? '—'
+                            : money
+                              ? `${total.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${unit}`.trim()
+                              : spec
+                                ? spec.format(total)
+                                : total.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                        </dd>
+                      </div>
+                    )
+                  })}
+                </dl>
+
+                <ul className="mt-2 space-y-0.5 text-xs text-text-secondary">
+                  {f.campaigns.slice(0, 5).map((r) => (
+                    <li key={r.campaign_id} className="truncate">{r.campaign_name ?? r.campaign_id}</li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })}
+        </div>
+      </Panel>
+
+      <PathAnalysis
+        locale={ar ? 'ar' : 'en'}
+        currency={currency}
+        leaders={leaders.data?.paths ?? []}
+        explanations={explanations.data?.paths ?? []}
+        loading={leaders.isLoading}
+        error={leaders.isError}
+      />
+    </div>
+  )
+}
+
+/**
+ * ANALYTICS-CREATIVE-VISIBLE-001 — the creative rung, inside Analytics.
+ *
+ * The last level of the drill-down: platform → campaign → ad set → ad → CREATIVE. It reads the same
+ * `CreativeAnalysisController` the Content library reads, deliberately — §15.17 calls an independent
+ * source an architectural defect rather than a discrepancy, and a second query here would let
+ * Analytics and Content disagree about the same creative.
+ *
+ * Figures come from `creative_daily_metrics` only. Nothing is projected down from the campaign or
+ * the ad: a creative that the platform does not break out shows «—», because inventing its share of
+ * a campaign total would be a number nobody measured.
+ */
+function CreativeTab({ projectId, range, filters }: TabProps) {
+  const ar = useAr()
+  /*
+   * HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN — the last rung of campaign → ad set → ad → creative.
+   *
+   * The library speaks `ad_ids` / `ad_set_ids` rather than the metrics API's single `parent`, so the
+   * path is translated rather than passed through, and it takes the DEEPEST pinned rung. It is part
+   * of the query key for the same reason `parent` is elsewhere: it changes the request, so a cached
+   * unnarrowed response must never answer a drilled-down question.
+   */
+  const [rawPath] = useUrlState('drill', '')
+  const path = useMemo(() => withNames(decodePath(rawPath)), [rawPath])
+  const scope = creativeScope(path)
+  const write = useUrlWriter()
+  const narrowed = scope.ad_ids !== undefined || scope.ad_set_ids !== undefined
+
+  /*
+   * ANALYTICS-CREATIVE-SCOPE-001 — this tab ignored the filter bar entirely.
+   *
+   * It took only `projectId` and `range`, so selecting TikTok left it listing Meta creatives with
+   * Meta's figures under a bar that said TikTok. The filter was not weak here, it was decorative —
+   * and a table that contradicts the control above it is worse than an empty one, because the
+   * reader has no way to know which of the two is lying.
+   *
+   * The library speaks a different dialect for the same axes — `providers` and `campaign_ids`
+   * against the metrics API's `provider` and `campaign` — so they are translated here rather than
+   * passed through. `objective` is deliberately not forwarded: the library filters objectives by
+   * the CAMPAIGN's objective through its own axis, and mapping the metric filter onto it would
+   * narrow twice for one choice.
+   */
+  const q = useQuery({
+    queryKey: [
+      'analytics', 'creatives', projectId, range.from, range.to, filters.provider, filters.campaign,
+      scope.ad_ids?.join(',') ?? '', scope.ad_set_ids?.join(',') ?? '',
+    ],
+    queryFn: () => listCreatives(
+      {
+        from: range.from,
+        to: range.to,
+        per_page: 24,
+        providers: filters.provider?.length ? filters.provider : undefined,
+        campaign_ids: filters.campaign?.length ? filters.campaign : undefined,
+        // The drill path, in the library's own dialect — the deepest pinned rung only.
+        ...scope,
+      },
+      projectId,
+    ),
+    enabled: Boolean(projectId),
+  })
+
+  const rows = q.data?.creatives ?? []
+  const currency = q.data?.currency ?? null
+
+  return (
+    <div className="space-y-4">
+      <DrillCrumbs path={path} level="creative" ar={ar} onUpTo={(lvl) => write({
+        drill: { value: encodePath(drillUpTo(path, lvl)), fallback: '' },
+        tab: { value: TAB_FOR[lvl], fallback: 'performance' },
+      })} />
+      <Panel
+        title={ar ? 'أداء الإعلانات' : 'Ad performance'}
+        description={ar ? 'من بيانات الإعلان نفسه — لا تُنسب أرقام الحملة إلى إعلان' : 'From ad-level data — campaign figures are never attributed to a ad'}
+        loading={q.isLoading}
+        error={q.isError}
+        /* Narrowed and empty is «nothing under this ad», never «no creatives at all». */
+        empty={!q.isLoading && rows.length === 0 && !narrowed}
+      >
+        {!q.isLoading && !q.isError && rows.length === 0 && narrowed && (
+          <p className="rounded-xl border border-border p-3 text-sm text-text-muted" data-testid="creative-empty-under-parent">
+            {ar
+              ? 'لا يوجد إعلان مسجَّل تحت هذا المستوى في هذه الفترة. هذا ليس «لا يوجد إعلان» للمشروع.'
+              : 'No ad was reported under this level in this period. That is not «no ads» for the project.'}
+          </p>
+        )}
+        {/*
+          ANALYTICS-TABLES-001 — the canonical table, last of the four hand-rolled ones.
+          Numeric columns were `text-start`, so under RTL the figures and their headings sat against
+          opposite edges; and the list could not be re-ordered, on the tab where «which creative did
+          best» is the entire question being asked.
+        */}
+        <div data-testid="creative-analysis-table">
+          <MetricTable
+            head={[
+              ar ? 'الإعلان' : 'Ad',
+              ar ? 'الحملة' : 'Campaign',
+              ar ? 'الهدف' : 'Objective',
+              ar ? 'الإنفاق' : 'Spend',
+              ar ? 'الظهور' : 'Impressions',
+              ar ? 'النقرات' : 'Clicks',
+              'CTR',
+              ar ? 'آخر نشاط' : 'Last active',
+            ]}
+            rows={rows.map((cr) => [
+              <span key={cr.id} className="block max-w-56 truncate font-medium text-text-primary">{cr.name}</span>,
+              <span key={`${cr.id}-c`} className="block max-w-40 truncate text-text-secondary">{cr.campaign_name ?? '—'}</span>,
+              cr.objective ?? '—',
+              rowMoney(cr.metrics ?? undefined, 'spend', currency),
+              metricOrDash(cr.metrics?.impressions ?? null),
+              metricOrDash(cr.metrics?.clicks ?? null),
+              rateOrDash(cr.metrics?.ctr ?? null),
+              cr.freshness?.last_active_at ? fmtDate(cr.freshness.last_active_at) : '—',
+            ])}
+            values={rows.map((cr) => [
+              cr.name ?? '',
+              cr.campaign_name ?? '',
+              cr.objective ?? '',
+              typeof cr.metrics?.spend === 'number' ? cr.metrics.spend : null,
+              cr.metrics?.impressions ?? null,
+              cr.metrics?.clicks ?? null,
+              cr.metrics?.ctr ?? null,
+              // A date sorts as a date, not as the string it is printed as.
+              cr.freshness?.last_active_at ? Date.parse(cr.freshness.last_active_at) : null,
+            ])}
+            initialSort={{ column: 3, dir: 'desc' }}
+          />
+        </div>
+      </Panel>
+    </div>
+  )
+}
+
+/**
+ * ANALYTICS-DRILLDOWN-001 — the ad accounts beneath a platform.
+ *
+ * The chain read Platform → Campaign, skipping the level an operator manages. A customer can hold
+ * several ad accounts on one platform, and «Snapchat spent X» is not an answer when two accounts run
+ * different markets from different budgets.
+ *
+ * Grouped on the account each row was INGESTED for, so the attribution is real rather than inferred
+ * from a campaign name. An account removed since ingestion keeps its spend and shows no name, rather
+ * than being called «Unknown» — which would hide that it is gone.
+ */
+function AccountsTab({ projectId, range, filters }: TabProps) {
+  const ar = useAr()
+  const a = useAccounts(projectId, range, filters)
+  const s = useSummary(projectId, range, filters)
+  const currency = s.data?.currency ?? null
+  const rows = a.data ?? []
+
+  /*
+   * ANALYTICS-TABLES-001 — the canonical table, not a hand-rolled one.
+   *
+   * This built its own `<table>` and so missed everything `MetricTable` had learned. Its numeric
+   * columns were `text-start`: under RTL the figures sat against one edge while their headings sat
+   * against the other, which is the alignment defect #109 fixed everywhere it was already used. And
+   * the rows could not be sorted at all.
+   *
+   * It also said «مرتّبة حسب الإنفاق» — ordered by spend — while sorting by impressions. A caption
+   * that had drifted from its own list, with nothing in place to catch it.
+   *
+   * Sorting reads the values array; the rendered cells stay formatted strings, so money keeps its
+   * provenance and an absent figure stays «—» instead of sorting as a zero.
+   */
+  const head = [
+    ar ? 'الحساب' : 'Account',
+    ar ? 'المنصة' : 'Platform',
+    ar ? 'الإنفاق' : 'Spend',
+    ar ? 'الظهور' : 'Impressions',
+    ar ? 'النقرات' : 'Clicks',
+    'CTR',
+    'CPM',
+  ]
+
+  const cells = rows.map((r) => [
+    r.account_name ?? (ar ? 'حساب لم يعد متاحًا' : 'Account no longer available'),
+    providerLabel(r.provider, ar ? 'ar' : 'en'),
+    rowMoney(r, 'spend', currency),
+    metricOrDash(r.impressions),
+    metricOrDash(r.clicks),
+    rateOrDash(r.ctr),
+    rowCostPer(r, 'cpm', (r.impressions ?? 0) / 1000, currency),
+  ])
+
+  const values: SortValues[] = rows.map((r) => [
+    r.account_name ?? '',
+    providerLabel(r.provider, ar ? 'ar' : 'en'),
+    typeof r.spend === 'number' ? r.spend : null,
+    r.impressions ?? null,
+    r.clicks ?? null,
+    r.ctr ?? null,
+    // CPM is derived, so it is only sortable where both parts are real — never from a coalesced zero.
+    (r.impressions ?? 0) > 0 && typeof r.spend === 'number' ? r.spend / ((r.impressions ?? 0) / 1000) : null,
+  ])
+
+  return (
+    <Panel
+      title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'}
+      description={ar ? 'الأعلى إنفاقًا أولًا — ويمكن الترتيب بأي عمود' : 'Highest spend first — sortable by any column'}
+      loading={a.isLoading}
+      error={a.isError}
+      empty={!a.isLoading && rows.length === 0}
+    >
+      <div data-testid="account-table">
+        <MetricTable head={head} rows={cells} values={values} initialSort={{ column: 2, dir: 'desc' }} />
+      </div>
+    </Panel>
   )
 }

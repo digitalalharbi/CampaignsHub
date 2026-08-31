@@ -121,7 +121,7 @@ export function TenantsPage() {
                 t.status === 'suspended' ? 'border-warning/40' : 'border-border'
               }`}>
               <button type="button" onClick={() => setOpenId(t.id)} className="min-w-0 flex-1 text-start">
-                <p className="flex items-center gap-2 text-[14.5px] font-bold text-text-primary">
+                <p className="flex items-center gap-2 text-[14px] font-bold text-text-primary">
                   <Building2 size={15} className="shrink-0 text-text-muted" aria-hidden />
                   {t.name}
                   {t.status === 'suspended' && (
@@ -130,7 +130,7 @@ export function TenantsPage() {
                     </span>
                   )}
                 </p>
-                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12.5px] text-text-muted">
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-text-muted">
                   <span dir="ltr">{t.slug}</span>
                   {/* Named, not printed. `self_serve_company` is a column value, not a word — and
                       rendering it raw made half an Arabic-first page stop being Arabic. */}
@@ -230,7 +230,7 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
           {/* GRANT-001 — what this account has beyond its plan, and who gave it. */}
           <AccountGrantsPanel tenantId={id} ar={ar} />
 
-          <h3 className="mt-5 text-[12.5px] font-semibold uppercase tracking-wide text-text-muted">
+          <h3 className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-text-muted">
             {ar ? 'من يستطيع الدخول' : 'Who can get in'}
           </h3>
           {detail.data.people.length === 0 ? (
@@ -262,7 +262,7 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-[11.5px] uppercase tracking-wide text-text-muted">{label}</dt>
+      <dt className="text-[11px] uppercase tracking-wide text-text-muted">{label}</dt>
       <dd className="font-semibold text-text-primary">{value}</dd>
     </div>
   )

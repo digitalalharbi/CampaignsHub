@@ -4,14 +4,21 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Http\Controllers;
 
+use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
+use App\Domains\Campaigns\Models\ExternalAd;
+use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Models\MetricDefinition;
 use App\Domains\Metrics\Services\AttributionTransparency;
 use App\Domains\Metrics\Services\DataFreshnessService;
+use App\Domains\Metrics\Services\EntityMetricsAggregator;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
+use App\Domains\Metrics\Support\EntityScope;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -20,6 +27,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 /**
  * Read-only metrics aggregation for the active project (project + tenant scope enforced by
@@ -28,6 +36,15 @@ use Illuminate\Support\Carbon;
  */
 final class MetricsController extends Controller
 {
+    /**
+     * How many options one request returns.
+     *
+     * Matches what `FilterMulti` will draw, so the client never holds rows it cannot show — and the
+     * search that reaches everything now reaches it through the server rather than through a payload
+     * the browser already downloaded.
+     */
+    private const OPTION_LIMIT = 120;
+
     public function __construct(
         private readonly MetricsAggregator $agg,
         private readonly DataFreshnessService $freshness,
@@ -63,6 +80,81 @@ final class MetricsController extends Controller
              * metric, and the strip renders «لم ترسله المنصة» rather than a zero for the first.
              */
             'reported' => $this->scoped($request)->reportedKeys($from, $to),
+            /*
+             * METRICS-EMPTY-SCOPE-001 — «no rows here» is not «the platform does not report this».
+             *
+             * `reportedKeys()` answers by asking which metric keys are PRESENT in the scope, so an
+             * empty scope returns every key false — and the strip renders «لم ترسله المنصة» under
+             * each one. Narrow the objective filter to a family this project never bought and the
+             * dashboard states that the platform sends no impressions, which is a claim about a
+             * connector derived from an absence of campaigns.
+             *
+             * That is what «تغيير الأهداف يجعل كل شيء فارغًا» looks like from the inside: not a
+             * broken screen, a screen confidently saying something false.
+             *
+             * So the payload carries whether the SCOPE holds anything at all. A reader with no rows
+             * shows one honest sentence about the filter; only a scope that HAS rows may speak about
+             * what the platform did or did not report inside it.
+             */
+            'rows_in_scope' => $this->scoped($request)->hasRows($from, $to),
+            /*
+             * ANALYTICS-COMPARE-001 — whether a comparison was POSSIBLE, not merely whether it moved.
+             *
+             * Every delta above divides by the previous period's figure and returns null when that
+             * figure is 0. Both «this metric did not change from a base of nothing» and «there is no
+             * previous period at all» arrive at the card as the same null, and the card renders the
+             * same «— —» for each.
+             *
+             * Production has 15 days of rows and offers a 30-day range, so the whole comparison
+             * window falls before the first row that exists. Six cards then print six mute dashes
+             * under a heading that promises «مقارنة بالفترة السابقة» — the page states a comparison
+             * it never had the data to make, and gives the reader no way to tell that from a flat
+             * month.
+             *
+             * The scope answers it directly: a comparison window with no rows cannot be compared
+             * against, and the page says so once instead of six times in a notation for «unchanged».
+             */
+            'previous_rows_in_scope' => $this->scoped($request)->hasRows($prevFrom, $prevTo),
+            'previous_range' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()],
+            /*
+             * HEADLINE-SCOPE-001 — the headline follows what is IN scope, not what the filter says.
+             *
+             * `layoutFor('all', 'all')` returns the operational row — spend, impressions, clicks,
+             * CTR — and deliberately withholds cost-per and return, because a CPA computed across a
+             * brand budget and a sales budget divides one objective's money by another objective's
+             * events. That reasoning is right and it was being applied to the wrong question.
+             *
+             * «كل الأهداف» is a statement about the FILTER. A project whose campaigns are all Sales
+             * has one objective in scope whether or not the reader narrowed to it, and the board was
+             * withholding ROAS and cost per order from it on the grounds that the scope might be
+             * mixed — when the rows themselves say it is not.
+             *
+             * So the scope reports the families it actually contains. One family means the board can
+             * headline that family's own metrics; several still means the operational row, for the
+             * original and unchanged reason.
+             */
+            'objective_families_in_scope' => $this->scoped($request)->objectiveFamiliesInScope($from, $to),
+            /*
+             * MONEY-TRUTH-001 — the currency the converted figures are IN.
+             *
+             * It was in `meta` only, and `meta` is not carried through the summary hook, so every
+             * money surface had to assume one. A generic helper defaulting to SAR states the wrong
+             * unit the first time a project reports in anything else, silently — so the payload says
+             * it rather than leaving each caller to guess.
+             *
+             * Null when this range holds no money rows at all: there is then no currency to name, and
+             * inventing one would be the same class of lie one level up.
+             */
+            'currency' => $this->rangeCurrency($from, $to),
+            /*
+             * ANALYTICS-PROVENANCE-001 — live, demo, both, or nothing.
+             *
+             * The badge was rendered unconditionally on the dashboard, campaigns and analytics, so a
+             * project syncing real Snapchat spend was labelled «بيانات تجريبية · Demo» beside its own
+             * money. Derived from `is_demo` on the rows actually in scope — not from the environment
+             * and not from a frontend constant, neither of which knows whose rows these are.
+             */
+            'provenance' => $this->scoped($request)->provenance($from, $to),
             'commerce' => $this->commerce($request, $from, $to),
             /*
              * REPORT-OBJECTIVE-005 — what the single «conversions» figure above is.
@@ -208,12 +300,160 @@ final class MetricsController extends Controller
         ], 'Campaign comparison.', meta: $this->meta($from, $to));
     }
 
+    /**
+     * ANALYTICS-DRILLDOWN-001 — the accounts beneath a platform.
+     *
+     * The chain read Platform → Campaign, skipping the level an operator manages. A customer can
+     * hold several ad accounts on one platform, and «Snapchat spent X» is not an answer when two
+     * accounts run different markets from different budgets.
+     */
+    public function accounts(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        return ApiResponse::success(
+            $this->scoped($request)->byAccount($from, $to),
+            'Metrics by ad account.',
+            meta: $this->meta($from, $to),
+        );
+    }
+
+    /**
+     * UX-MULTISELECT-SCALE-001 — the campaign filter's OPTIONS, searched on the server.
+     *
+     * The selector was populated from `campaigns()`, the full metric breakdown. `FilterMulti` already
+     * refuses to draw more than 120 rows, so the DOM was safe — but a project with 400 campaigns
+     * still shipped 400 complete metric rows over the wire to fill a dropdown, and that cost is paid
+     * on every filter change by the reader with the largest estate, who is exactly the reader this
+     * requirement is about.
+     *
+     * This returns an id and a name. It does NOT return figures: an option list that carried spend
+     * would become a second source for it, and the two would eventually disagree with the breakdown
+     * on the same screen.
+     *
+     * Deliberately NOT windowed. A campaign the reader wants to filter to may have reported nothing
+     * in the current range — that is frequently WHY they are looking for it — and hiding it because
+     * the window is narrow would make the filter unable to reach the campaign whose silence is the
+     * question.
+     */
+    public function campaignOptions(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+
+        $projectId = app(ProjectContext::class)->projectId();
+        abort_if($projectId === null, 400, 'A project is required to list campaign options.');
+
+        $q = trim($request->string('q')->toString());
+
+        /*
+         * `ids` — resolving names for campaigns the reader has ALREADY chosen.
+         *
+         * The selection lives in the URL, so a shared link arrives carrying campaign ids and nothing
+         * else. Search alone cannot answer for them: the page is the first 120 campaigns by name, and
+         * a chosen campaign is very often not in it — so the control and the applied-filter chips
+         * rendered the reader's own choice as a bare uuid, on exactly the deep link somebody sent a
+         * colleague. That is a defect this endpoint created by moving the list to the server, and it
+         * belongs here rather than in a second endpoint: the same scope, the same shape, the same
+         * isolation.
+         *
+         * A resolution is not a search. `q` is ignored when ids are asked for, the cap does not apply
+         * to a set the reader already holds, and `has_more` is false because there is no more.
+         */
+        $ids = array_values(array_filter(array_map(
+            'trim',
+            is_array($raw = $request->query('ids', [])) ? $raw : explode(',', (string) $raw),
+        )));
+
+        if ($ids !== []) {
+            /*
+             * Bounded anyway. The filter row cannot hold thousands of selections, and an unbounded
+             * `whereIn` from a query string is a request somebody else can make expensive.
+             */
+            $ids = array_slice(array_unique($ids), 0, self::OPTION_LIMIT);
+
+            /*
+             * Non-uuid input is dropped rather than queried. These are uuid columns, so a hand-edited
+             * link would otherwise come back as a 500 out of the driver — and a pasted-around link is
+             * an ordinary thing to arrive malformed.
+             */
+            $ids = array_values(array_filter(
+                $ids,
+                static fn (string $id): bool => preg_match('/^[0-9a-fA-F-]{36}$/', $id) === 1,
+            ));
+
+            $named = $ids === [] ? collect() : UnifiedCampaign::query()
+                ->where('project_id', $projectId)
+                ->whereIn('id', $ids)
+                ->orderBy('name')
+                ->orderBy('id')
+                ->get(['id', 'name']);
+
+            return ApiResponse::success([
+                'options' => $named
+                    ->map(static fn ($c): array => ['id' => (string) $c->id, 'name' => (string) $c->name])
+                    ->values(),
+                'has_more' => false,
+                'limit' => self::OPTION_LIMIT,
+            ], 'Campaign options.');
+        }
+
+        /*
+         * The explicit `project_id` is legibility, NOT the isolation.
+         *
+         * `UnifiedCampaign` is project- and tenant-scoped by global scopes that read the request's
+         * context, and that is what actually keeps one project's campaigns out of another's filter —
+         * removing this line changes no behaviour, and its test still passes, which is how I know
+         * which of the two is load-bearing. It stays because a reader of this query should not have
+         * to know the model's scopes to see what it returns.
+         */
+        $rows = UnifiedCampaign::query()
+            ->where('project_id', $projectId)
+            ->when($q !== '', fn ($b) => $b->whereRaw('LOWER(name) LIKE ?', ['%'.mb_strtolower($q).'%']))
+            /*
+             * Name, then id. The id tiebreak is not decoration: a project with many identically named
+             * campaigns is made entirely of ties, and rows that swap between two identical reads tell
+             * a reader something changed when nothing did — the same rule the breakdown follows.
+             */
+            ->orderBy('name')
+            ->orderBy('id')
+            ->limit(self::OPTION_LIMIT + 1)
+            ->get(['id', 'name']);
+
+        /*
+         * One more than the cap is fetched so «there are more» is a FACT rather than an inference
+         * from a full page. A list that silently stops tells a reader their campaign does not exist.
+         */
+        $more = $rows->count() > self::OPTION_LIMIT;
+
+        return ApiResponse::success([
+            'options' => $rows->take(self::OPTION_LIMIT)
+                ->map(static fn ($c): array => ['id' => (string) $c->id, 'name' => (string) $c->name])
+                ->values(),
+            'has_more' => $more,
+            'limit' => self::OPTION_LIMIT,
+        ], 'Campaign options.');
+    }
+
     public function campaigns(Request $request): JsonResponse
     {
         $this->authorizeView($request);
         [$from, $to] = $this->range($request);
 
-        return ApiResponse::success($this->scoped($request)->byCampaign($from, $to), 'Metrics by campaign.', meta: $this->meta($from, $to));
+        /*
+         * CAMPAIGN-INTELLIGENCE-HUB — the same immediately-preceding window `summary()` compares
+         * against, computed the same way, so the row's trend and the strip's deltas cannot disagree
+         * about what «previous» means for one request.
+         */
+        $len = $from->diffInDays($to) + 1;
+        $prevTo = $from->copy()->subDay();
+        $prevFrom = $prevTo->copy()->subDays($len - 1);
+
+        return ApiResponse::success(
+            $this->scoped($request)->byCampaign($from, $to, $prevFrom, $prevTo),
+            'Metrics by campaign.',
+            meta: $this->meta($from, $to),
+        );
     }
 
     public function funnel(Request $request): JsonResponse
@@ -229,7 +469,20 @@ final class MetricsController extends Controller
         return ApiResponse::success(
             $funnel['stages'],
             'Conversion funnel.',
-            meta: $this->meta($from, $to) + ['spend' => $funnel['spend']],
+            /*
+             * FUNNEL-WITHHELD-001 — the unit travels with the figure.
+             *
+             * `spend` here is what every `cost_per` on the chart divides, and it is not always in
+             * the project's currency: when no rate exists it is the platform's own. A reader shown
+             * «تكلفة 22.03» with no unit beside a project reporting in SAR reads riyals.
+             */
+            meta: $this->meta($from, $to) + [
+                'spend' => $funnel['spend'],
+                'spend_currency' => $funnel['spend_currency'],
+                'spend_withheld' => $funnel['spend_withheld'],
+                // Why spend/cost_per are what they are — «partial» / «mixed_currency» read as blanks otherwise.
+                'spend_state' => $funnel['spend_state'],
+            ],
         );
     }
 
@@ -256,6 +509,82 @@ final class MetricsController extends Controller
         );
     }
 
+    /**
+     * PLATFORM-DECISION-ANALYTICS-001 — platforms inside each marketing path, never across them.
+     *
+     * `platforms` answers «how is each platform doing» with one row per platform over every
+     * objective at once. That row cannot answer «which platform is contributing most to this
+     * objective», and the comparison it invites — one number per platform across a mixed programme —
+     * is the one that must never be made: a platform buying awareness and a platform buying sales
+     * are not better or worse than each other, and ranking them together invents a verdict out of
+     * the work each was given.
+     */
+    public function platformObjectives(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        $campaigns = array_values(array_filter((array) $request->input('campaign_ids', [])));
+
+        return ApiResponse::success(
+            (new ObjectivePerformance(
+                campaignIds: $campaigns === [] ? null : $campaigns,
+                providers: $this->providerFilter($request) === [] ? null : $this->providerFilter($request),
+            ))->byPlatform($from, $to),
+            'Platform contribution by objective.',
+            meta: $this->meta($from, $to),
+        );
+    }
+
+    /**
+     * OBJECTIVE-ANALYTICS-DEPTH-001 — the strongest and weakest campaign inside each path.
+     *
+     * The same refusal as `platformObjectives`, one level down: a leads campaign and an awareness
+     * campaign are not better or worse than each other, and a single «top campaigns» list across a
+     * mixed programme ranks them by whichever metric they happen to share.
+     */
+    public function objectiveLeaders(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        $campaigns = array_values(array_filter((array) $request->input('campaign_ids', [])));
+
+        return ApiResponse::success(
+            (new ObjectivePerformance(
+                campaignIds: $campaigns === [] ? null : $campaigns,
+                providers: $this->providerFilter($request) === [] ? null : $this->providerFilter($request),
+            ))->leadersByPath($from, $to),
+            'Strongest and weakest campaign per objective path.',
+            meta: $this->meta($from, $to),
+        );
+    }
+
+    /**
+     * FUNNEL-ANALYTICAL-PATTERN-001 — signal → context → explanation → evidence → action, per path.
+     *
+     * The funnel is the product's most-praised surface because it does not draw a chart and leave
+     * the reader to interpret it. This gives the objective paths the same shape, and every step of
+     * it can say nothing: a path nobody ran has no signal, a path one campaign ran has no
+     * comparison, and where there is no signal there is no action — the reason travels instead.
+     */
+    public function objectiveExplanations(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        $campaigns = array_values(array_filter((array) $request->input('campaign_ids', [])));
+
+        return ApiResponse::success(
+            (new ObjectivePerformance(
+                campaignIds: $campaigns === [] ? null : $campaigns,
+                providers: $this->providerFilter($request) === [] ? null : $this->providerFilter($request),
+            ))->explainByPath($from, $to),
+            'Objective path explanations.',
+            meta: $this->meta($from, $to),
+        );
+    }
+
     public function budget(Request $request): JsonResponse
     {
         $this->authorizeView($request);
@@ -264,6 +593,26 @@ final class MetricsController extends Controller
         return ApiResponse::success(
             $this->scoped($request)->budgetPacing($from, $to, Carbon::today()),
             'Budget pacing.',
+            meta: $this->meta($from, $to),
+        );
+    }
+
+    /**
+     * BUDGET-ACCOUNTS-001 — the same window, rolled up to the account that holds the payment method.
+     *
+     * Separate from `budget` rather than folded into it: that one answers «is this campaign pacing
+     * to the plan we typed», this one answers «how close is this account to the ceiling the platform
+     * will actually enforce». Different questions, different rows, and merging them would produce a
+     * table where a column means one thing on some rows and something else on others.
+     */
+    public function budgetAccounts(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        return ApiResponse::success(
+            $this->scoped($request)->accountBudgets($from, $to),
+            'Account budgets.',
             meta: $this->meta($from, $to),
         );
     }
@@ -293,10 +642,19 @@ final class MetricsController extends Controller
         $this->authorizeView($request);
         [$from, $to] = $this->range($request);
 
-        $scope = fn () => DailyMetric::query()
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
-            ->when($this->providerFilter($request) !== [], fn ($q) => $q->whereIn('provider', $this->providerFilter($request)))
-            ->toBase();
+        /*
+         * The canonical predicate, not a second copy of one axis of it.
+         *
+         * This clause narrowed by provider and silently ignored the objective and campaign the same
+         * request carried — so an operator who filtered to one campaign was told the currency and
+         * timezone story of the entire project, under chips naming that campaign. Every row this
+         * audit reads is a `daily_metrics` row, and every one of the three axes bounds it exactly.
+         */
+        $agg = $this->scoped($request);
+        $scope = fn () => $agg->applyScope(
+            DailyMetric::query()
+                ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+        )->toBase();
 
         // Money rows only. `original_currency` is null on impressions and clicks — a count has no
         // currency, and treating those nulls as an unknown currency would invent a warning.
@@ -384,6 +742,8 @@ final class MetricsController extends Controller
             'objectives' => $this->objectivesInRange($scope()),
             'catalogue' => $this->catalogue(),
             'unread_metric_keys' => $this->unreadMetricKeys($scope()),
+            /* Every axis this endpoint was sent, and it narrows by all three. */
+            'filter_scope' => $this->filterScope($request, ['provider', 'objective', 'campaign']),
         ], 'How these numbers were normalized.', meta: $this->meta($from, $to));
     }
 
@@ -552,6 +912,19 @@ final class MetricsController extends Controller
         }, $state['sources']);
 
         return ApiResponse::success($out, 'Data freshness.', meta: $this->meta($from, $to) + [
+            /*
+             * Provider narrows this; objective and campaign do NOT, and the response says so.
+             *
+             * A source's health is a property of a connection — when Meta last answered, whether the
+             * sweep failed, how many days of the window it covered. A campaign cannot make that
+             * verdict truer or falser, and narrowing the day count by campaign while leaving the
+             * verdict alone would produce rows reading «connected, fresh, 0 days with data», which
+             * describes the filter rather than the source and reads as an outage.
+             *
+             * So the filter is declined here rather than half-applied, and the strip is told, so it
+             * can say «across the project» instead of implying a narrowing that never happened.
+             */
+            'filter_scope' => $this->filterScope($request, ['provider']),
             'summary' => [
                 'state' => $state['state'],
                 'last_sync_at' => $state['last_sync_at'],
@@ -580,13 +953,183 @@ final class MetricsController extends Controller
         abort_if($tenantId === '' || $projectId === '', 400, 'No active project.');
 
         return ApiResponse::success(
-            $transparency->build($tenantId, $projectId, $from, $to, $this->providerFilter($request)),
+            $transparency->build($tenantId, $projectId, $from, $to, $this->providerFilter($request))
+                /*
+                 * This report compares what the platforms reported against what the store confirmed,
+                 * and only ONE of those two sides has a campaign on it. Narrowing the platform side
+                 * to a campaign while the store ledger stays whole would not answer a narrower
+                 * question — it would invent a discrepancy out of the filter and present it as an
+                 * attribution gap, which is the exact failure this endpoint exists to expose.
+                 *
+                 * So it declines the axis and says it declined, rather than ignoring it in silence
+                 * under chips that promise otherwise.
+                 */
+                + ['filter_scope' => $this->filterScope($request, ['provider'])],
             'Attribution transparency and de-duplication.',
             meta: $this->meta($from, $to),
         );
     }
 
     // ---- helpers ----------------------------------------------------------------------------------
+
+    /**
+     * ANALYTICS-DRILLDOWN-001 — the ad-squad and ad rungs, for the Analytics tabs that had no data.
+     *
+     * ## Why this endpoint exists
+     *
+     * Analytics could show Overview, Platform and Campaign because `daily_metrics` answers at the
+     * campaign grain. It had no Ad Set tab and no Ads tab because there was no table beneath that —
+     * 187 ad squads and 5,706 ads on the live account with nowhere to read a number from.
+     * `entity_daily_metrics` now holds them and `EntityMetricsAggregator` reads them; this is the
+     * only thing between that data and a screen.
+     *
+     * ## Filters narrow the QUERY, never the response
+     *
+     * `parent` is applied inside the aggregator's SQL, not by filtering rows after the fact. The
+     * difference matters on an account with 5,706 ads: post-filtering means fetching all of them to
+     * show twenty, and it means a paginated total that lies about how many there are.
+     *
+     * The window, provider, objective, campaign and attribution basis all come from the same request
+     * helpers every other metric endpoint uses, so a drill-down cannot silently change basis as it
+     * descends.
+     *
+     * That sentence used to be false. This method read the window, the parent and the attribution
+     * basis and nothing else, so the ad-set and ad tables answered for the WHOLE project under chips
+     * naming one campaign — directly beneath a campaign table that had narrowed correctly. A comment
+     * describing an intention rather than the code is worse than no comment: it is the reason the
+     * gap survived a reading.
+     */
+    public function entities(Request $request, string $project, string $level): JsonResponse
+    {
+        $this->authorizeView($request);
+
+        /*
+         * Only the two rungs this table holds. An unknown grain is refused rather than answered
+         * emptily — an empty list reads as «this ad set has no data», which is a different and
+         * wrong statement from «there is no such level».
+         */
+        // $project is the group's own {project} binding and is named here only so $level lands on
+        // the right argument — Laravel passes route parameters positionally to a controller action.
+        unset($project);
+
+        abort_unless(
+            in_array($level, [EntityDailyMetric::AD_SET, EntityDailyMetric::AD], true),
+            404,
+            'Unknown entity level.',
+        );
+
+        [$from, $to] = $this->range($request);
+
+        $projectId = app(ProjectContext::class)->projectId();
+        abort_if($projectId === null, 400, 'A project is required to read entity metrics.');
+
+        $parents = $this->parentFilter($request);
+
+        $rows = app(EntityMetricsAggregator::class)->byEntity(
+            (string) $projectId,
+            $level,
+            $from,
+            $to,
+            $parents,
+            $request->filled('attribution_window') ? $request->string('attribution_window')->toString() : null,
+            new EntityScope(
+                providers: $this->providerFilter($request),
+                objectives: $this->objectiveFilter($request),
+                campaigns: $this->campaignFilter($request),
+            ),
+        );
+
+        return ApiResponse::success([
+            'entities' => $this->nameEntities($level, $rows),
+            'entity_type' => $level,
+            'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            // What the money on these rows is IN — the same statement every other surface makes.
+            'currency' => $this->rangeCurrency($from, $to),
+            'attribution_window' => $request->string('attribution_window')->toString() ?: null,
+            /* Every axis this endpoint is sent, and it now narrows by all three. */
+            'filter_scope' => $this->filterScope($request, ['provider', 'objective', 'campaign']),
+        ], 'Entity metrics.');
+    }
+
+    /**
+     * The parents to narrow to, or null for «every entity of this grain».
+     *
+     * An EXPLICITLY EMPTY `parent=` is not the same as an absent one: it means «the parent I chose
+     * has no children», and answering it with everything in the project is how a drill-down stops
+     * being a drill-down.
+     *
+     * @return list<string>|null
+     */
+    private function parentFilter(Request $request): ?array
+    {
+        if (! $request->has('parent')) {
+            return null;
+        }
+
+        $raw = $request->string('parent')->toString();
+
+        if ($raw === '') {
+            return [];
+        }
+
+        $ids = array_values(array_filter(explode(',', $raw)));
+
+        /*
+         * These are uuid columns, and an unvalidated value goes straight into the WHERE clause: a
+         * malformed `parent` came back as a 500 out of the driver rather than a refusal. A drill-down
+         * is a linkable URL, so a truncated or hand-edited one is an ordinary event, not an attack —
+         * and it must be told it is malformed rather than shown a stack trace or, worse, an empty list
+         * that reads as «this campaign has no ad sets».
+         */
+        foreach ($ids as $id) {
+            abort_unless(
+                Str::isUuid($id),
+                422,
+                'A parent must be an entity id.',
+            );
+        }
+
+        return $ids;
+    }
+
+    /**
+     * Put a NAME on each row — a drill-down of provider ids is not a screen anybody can use.
+     *
+     * The figures come from `entity_daily_metrics` and the identity from the structure tables, joined
+     * here rather than denormalised into the metrics rows: a renamed ad squad must not need its
+     * metrics rewritten, and the metrics table has no business holding a name that can change.
+     *
+     * @param  list<array<string,mixed>>  $rows
+     * @return list<array<string,mixed>>
+     */
+    private function nameEntities(string $entityType, array $rows): array
+    {
+        $ids = array_values(array_filter(array_column($rows, 'entity_id')));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $named = $entityType === EntityDailyMetric::AD
+            ? ExternalAd::withoutGlobalScopes()->whereIn('id', $ids)
+                ->get(['id', 'name', 'status', 'external_id', 'external_ad_set_id', 'external_campaign_id'])
+            : ExternalAdSet::withoutGlobalScopes()->whereIn('id', $ids)
+                ->get(['id', 'name', 'status', 'external_id', 'external_campaign_id']);
+
+        $byId = $named->keyBy(fn ($m): string => (string) $m->getKey());
+
+        return array_map(static function (array $row) use ($byId): array {
+            $entity = $byId->get((string) $row['entity_id']);
+
+            return [
+                ...$row,
+                // Null rather than a placeholder: a row whose entity the structure sweep has since
+                // removed is a real state, and inventing «Unknown ad set» would hide it.
+                'name' => $entity?->name,
+                'status' => $entity?->status,
+            ];
+        }, $rows);
+    }
 
     private function authorizeView(Request $request): void
     {
@@ -610,7 +1153,36 @@ final class MetricsController extends Controller
     /** The objective filter from the request (?objective=sales,leads). Empty when absent. @return list<string> */
     private function objectiveFilter(Request $request): array
     {
-        return $this->listFilter($request, 'objective');
+        $objectives = $this->listFilter($request, 'objective');
+
+        /*
+         * ANALYTICS-OBJECTIVE-FILTERS-001 — a FAMILY narrows the query, not just the KPI order.
+         *
+         * `?objective=` takes exact objective values, which is right for a precise filter and wrong
+         * for the control an operator actually wants: «show me the awareness work» means awareness
+         * AND reach, and «sales» means sales, conversions, purchases and add-to-cart. Making the
+         * user tick four boxes to mean one thing is how a filter stops being used.
+         *
+         * Expanded to member objectives HERE, so the narrowing happens in the aggregator's SQL. A
+         * family resolved in the frontend would filter rows already aggregated across every
+         * objective — the totals would still be the unfiltered ones, and the page would look
+         * filtered while telling the truth about nothing.
+         */
+        foreach ($this->listFilter($request, 'objective_family') as $family) {
+            $case = ObjectiveFamily::tryFrom($family);
+
+            if ($case === null) {
+                continue;
+            }
+
+            foreach (CampaignObjective::cases() as $objective) {
+                if ($objective->family() === $case) {
+                    $objectives[] = $objective->value;
+                }
+            }
+        }
+
+        return array_values(array_unique($objectives));
     }
 
     /**
@@ -637,6 +1209,46 @@ final class MetricsController extends Controller
         $list = is_array($raw) ? $raw : ($raw === '' ? [] : explode(',', (string) $raw));
 
         return array_values(array_filter(array_map('trim', $list)));
+    }
+
+    /**
+     * ANALYTICS-FILTER-TRUTH-001 — which axes this endpoint ACTUALLY narrowed by.
+     *
+     * The client sends `provider`, `objective` and `campaign` to every metrics endpoint. Three of
+     * them read only the provider and dropped the rest on the floor, which is a worse failure than
+     * frontend-only filtering rather than a milder one: the request looks filtered, the response is
+     * shaped like a filtered response, and the panel sits under chips that name a campaign while
+     * answering for the whole project. Nothing on the screen could tell the reader.
+     *
+     * So every axis the request asked for is accounted for here, and an axis this endpoint does not
+     * apply is NAMED. A panel that cannot narrow is not a bug in every case — source health is a
+     * property of a connection, not of a campaign, and the store side of an attribution
+     * reconciliation has no campaign to narrow by at all, so narrowing only the platform side would
+     * manufacture a discrepancy out of the filter. What is a bug is not saying so.
+     *
+     * @param  list<string>  $applies  the axes this endpoint genuinely narrows by
+     * @return array{applied: list<string>, unapplied: list<string>}
+     */
+    private function filterScope(Request $request, array $applies): array
+    {
+        $requested = [];
+
+        if ($this->providerFilter($request) !== []) {
+            $requested[] = 'provider';
+        }
+
+        if ($this->objectiveFilter($request) !== []) {
+            $requested[] = 'objective';
+        }
+
+        if ($this->campaignFilter($request) !== []) {
+            $requested[] = 'campaign';
+        }
+
+        return [
+            'applied' => array_values(array_intersect($requested, $applies)),
+            'unapplied' => array_values(array_diff($requested, $applies)),
+        ];
     }
 
     /** The aggregator scoped by the dashboard's platform, objective and campaign filters. */

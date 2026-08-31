@@ -13,6 +13,7 @@ use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
+use App\Domains\Ops\Listeners\RecordScheduledRun;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
@@ -23,6 +24,10 @@ use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Console\Events\ScheduledTaskFailed;
+use Illuminate\Console\Events\ScheduledTaskFinished;
+use Illuminate\Console\Events\ScheduledTaskSkipped;
+use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
@@ -109,6 +114,18 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         // Audit authentication lifecycle events.
+        /*
+         * AUTOMATION-FIRST-OPERATIONS-001 — one subscriber records every scheduled command's run.
+         *
+         * Registered here rather than in thirteen commands so a command added later is observed
+         * without anybody editing it, and — the part that matters — so a command that THROWS is still
+         * recorded, which a write at the end of its own handler could never manage.
+         */
+        Event::listen(ScheduledTaskStarting::class, [RecordScheduledRun::class, 'starting']);
+        Event::listen(ScheduledTaskFinished::class, [RecordScheduledRun::class, 'finished']);
+        Event::listen(ScheduledTaskFailed::class, [RecordScheduledRun::class, 'failed']);
+        Event::listen(ScheduledTaskSkipped::class, [RecordScheduledRun::class, 'skipped']);
+
         Event::listen(Login::class, [RecordAuthAudit::class, 'handleLogin']);
         Event::listen(Logout::class, [RecordAuthAudit::class, 'handleLogout']);
 
@@ -237,6 +254,33 @@ class AppServiceProvider extends ServiceProvider
                 Limit::perMinute($perSubject)->by('data-subject-request:subject:'.$subject),
                 Limit::perMinute($perAddress)->by('data-subject-request:address:'.$request->ip()),
             ];
+        });
+
+        /*
+         * The public price list and the public service catalogue.
+         *
+         * PRODUCTION IS UNCHANGED at 60/min/IP — this is not a loosening of a control. It is the same
+         * environment split `auth-login`, `registration`, `requests-intake` and `otp-check` already
+         * carry, and for the identical reason: the acceptance suite drives the marketing page from ONE
+         * address, so a per-IP budget meant for the open internet ends up measuring the suite instead
+         * of the product.
+         *
+         * It presented as a defect somewhere else entirely. Adding thirty homepage loads
+         * (`mobile-first-screen.spec.ts`) pushed the window over 60, and the spec that runs next
+         * alphabetically — `platform-control` — read the 429 as `body.data.plans` on null and failed
+         * with «Cannot read properties of null». Nothing was wrong with the plan catalogue; the
+         * request had simply been refused.
+         *
+         * These two endpoints are read-only public reads. They send nothing, charge nothing and cost
+         * no credit, which is why the off-production allowance can be generous without weakening
+         * anything that matters.
+         */
+        RateLimiter::for('public-catalogue', function (Request $request): Limit {
+            $perMinute = $this->app->environment('production')
+                ? (int) config('subscriptions.public_catalogue_throttle', 60)
+                : 1200;
+
+            return Limit::perMinute($perMinute)->by((string) $request->ip());
         });
 
         // Public request intake — strict in production, relaxed for local/CI so repeated E2E runs don't 429.

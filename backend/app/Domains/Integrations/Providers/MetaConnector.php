@@ -7,7 +7,7 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 
 /**
- * Meta Marketing API (Graph v21) — Facebook and Instagram.
+ * Meta Marketing API — Facebook and Instagram.
  *
  * The awkward part is conversions. Meta does not return a `conversions` number; it returns an
  * `actions` array of every action type the campaign produced — page engagement, video views, link
@@ -27,6 +27,28 @@ final class MetaConnector extends ApiAdvertisingConnector
      * A ceiling on paging, so a wrong `paging.next` cannot become an unbounded loop.
      */
     private const MAX_PAGES = 50;
+
+    /**
+     * META-ATTRIB-001 — the window these figures are measured over, ASKED FOR rather than inherited.
+     *
+     * Meta's insights reference gives `action_attribution_windows` a default of `default`, and then
+     * says what that word means: «يشير الخيار default إلى ["7d_click","1d_view"]» — seven days after
+     * a click, one day after a view. So the previous code, which sent nothing, was not measuring
+     * over «no window». It was measuring over THIS window without knowing it, and storing the string
+     * `default` beside every figure as though the window were unknown or neutral.
+     *
+     * Two things follow from naming it. The stored window becomes a fact a reader can act on rather
+     * than a placeholder. And it becomes DIFFERENT from the placeholder the other providers still
+     * carry — which is what lets a mixed-window total be seen as mixed, instead of being flattened
+     * into a single reassuring group by the very panel that exists to catch it.
+     *
+     * The value stays Meta's own default deliberately. A shorter or longer window would be a
+     * reporting policy nobody here has chosen, applied retroactively to every client's history; this
+     * changes what we KNOW about the numbers, not what the numbers are.
+     *
+     * @var list<string>
+     */
+    private const ATTRIBUTION_WINDOWS = ['7d_click', '1d_view'];
 
     /**
      * Canonical metric ← the Meta action types that could carry it, in priority order.
@@ -201,7 +223,8 @@ final class MetaConnector extends ApiAdvertisingConnector
         $ads = [];
 
         foreach ($this->readAll($tokens, "{$adAccountId}/ads", 'ads', [
-            'fields' => 'id,name,status,effective_status,adset_id,campaign_id,preview_shareable_link,creative{id,name,thumbnail_url,object_type}',
+            'fields' => 'id,name,status,effective_status,adset_id,campaign_id,preview_shareable_link,'
+                .'creative{id,name,thumbnail_url,object_type,image_url,object_story_spec}',
             'limit' => 500,
         ]) as $a) {
             if (($a['id'] ?? null) === null) {
@@ -218,20 +241,92 @@ final class MetaConnector extends ApiAdvertisingConnector
                 'name' => (string) ($a['name'] ?? $a['id']),
                 'status' => strtolower((string) ($a['status'] ?? 'unknown')),
                 'review_status' => $this->reviewStatus($a['effective_status'] ?? null),
-                'destination_url' => null, // Meta states it inside the creative's story spec, not on the ad
-                'creative' => isset($creative['id']) ? array_filter([
-                    'external_id' => (string) $creative['id'],
-                    'name' => isset($creative['name']) ? (string) $creative['name'] : null,
-                    'format' => $this->creativeFormat($creative['object_type'] ?? null),
-                    // Passed through when Meta sends one; never constructed.
-                    'thumbnail_url' => isset($creative['thumbnail_url']) ? (string) $creative['thumbnail_url'] : null,
-                    'preview_url' => isset($a['preview_shareable_link']) ? (string) $a['preview_shareable_link'] : null,
-                ], static fn ($v) => $v !== null) : null,
+                'destination_url' => null, // Read from the creative's story spec below, where Meta states it
+                'creative' => isset($creative['id']) ? $this->creativeFrom($creative, $a) : null,
                 'raw' => (array) $a,
             ], static fn ($v) => $v !== null);
         }
 
         return $ads;
+    }
+
+    /**
+     * AD-MEDIA-RECOVERY-001 — the ad's media, from the fields Meta actually offers.
+     *
+     * ## What was asked for, and what that cost
+     *
+     * The ads request asked for `creative{id,name,thumbnail_url,object_type}` and nothing else. Meta
+     * answers that faithfully, so:
+     *
+     *   * `asset_url` was NEVER written for Meta. The only image that ever arrived was
+     *     `thumbnail_url` — a small square Meta generates for listings — and a card asked to render
+     *     a preview from it showed a postage stamp or, on a video with no thumbnail, the
+     *     «this platform does not expose the creative's asset» state. That sentence is about Meta,
+     *     and it was really about this field list.
+     *   * A CAROUSEL always rendered as one picture. `object_story_spec.link_data.child_attachments`
+     *     is where its cards live; `ExternalCreative::$casts` has held a `cards` column since the
+     *     presenter was written, the presenter reads it, the shared report reads it, and NOTHING HAS
+     *     EVER WRITTEN IT.
+     *   * `destination_url` was hardcoded null with a comment saying Meta states it inside the story
+     *     spec — an accurate note about a field nobody then read.
+     *
+     * ## Nothing here is constructed
+     *
+     * Every value is a string Meta sent. A video's poster comes from `video_data.image_url`, which is
+     * the frame Meta itself shows for that video — not a frame derived here, and not a placeholder.
+     * A creative with no media in its response still stores nulls and still reaches the honest
+     * «no preview» state, which is the whole reason those columns are nullable.
+     *
+     * `video_url` stays unset on purpose: Meta gives `video_id`, and turning it into a playable
+     * source is a separate `/{video_id}?fields=source` call PER ASSET. That is the same per-asset
+     * cost the TikTok connector declines, and it is a decision about sync budget rather than a
+     * mapping — so the poster is read (free, already in this response) and the source is not.
+     *
+     * @param  array<string,mixed>  $creative
+     * @param  array<string,mixed>  $ad
+     * @return array<string,mixed>
+     */
+    private function creativeFrom(array $creative, array $ad): array
+    {
+        $spec = (array) ($creative['object_story_spec'] ?? []);
+        $link = (array) ($spec['link_data'] ?? []);
+        $video = (array) ($spec['video_data'] ?? []);
+
+        $str = static fn (mixed $v): ?string => is_string($v) && trim($v) !== '' ? $v : null;
+
+        $children = array_values(array_filter(
+            (array) ($link['child_attachments'] ?? []),
+            static fn (mixed $c): bool => is_array($c),
+        ));
+
+        return array_filter([
+            'external_id' => (string) $creative['id'],
+            'name' => $str($creative['name'] ?? null),
+            'format' => $this->creativeFormat($creative['object_type'] ?? null),
+            // The full-size image, then the story spec's own picture. Both are Meta's, never built here.
+            'asset_url' => $str($creative['image_url'] ?? null) ?? $str($link['picture'] ?? null),
+            // A video's poster is an image Meta already chose for it; a listing thumbnail is the fallback.
+            'thumbnail_url' => $str($creative['thumbnail_url'] ?? null) ?? $str($video['image_url'] ?? null),
+            'preview_url' => $str($ad['preview_shareable_link'] ?? null),
+            'destination_url' => $str($link['link'] ?? null)
+                ?? $str($video['call_to_action']['value']['link'] ?? null),
+            /*
+             * `null` when Meta sent no `child_attachments`, `[]` when it sent an empty list — two
+             * different sentences the presenter already knows how to tell apart, and the reason an
+             * empty array must survive the filter below. It does: only nulls are dropped.
+             */
+            'cards' => $children === []
+                ? (isset($link['child_attachments']) ? [] : null)
+                : array_map(
+                    static fn (array $c): array => array_filter([
+                        'name' => $str($c['name'] ?? null),
+                        'description' => $str($c['description'] ?? null),
+                        'image_url' => $str($c['picture'] ?? null) ?? $str($c['image_url'] ?? null),
+                        'destination_url' => $str($c['link'] ?? null),
+                    ], static fn ($v) => $v !== null),
+                    $children,
+                ),
+        ], static fn ($v) => $v !== null);
     }
 
     /**
@@ -307,8 +402,17 @@ final class MetaConnector extends ApiAdvertisingConnector
             'fields' => 'campaign_id,date_start,spend,impressions,clicks,reach,actions,action_values,'
                 .'video_play_actions,video_p100_watched_actions',
             'time_range' => json_encode(['since' => $from, 'until' => $to], JSON_THROW_ON_ERROR),
+            /*
+             * JSON, like the `time_range` above it. Graph reads `list<enum>` parameters as JSON, and
+             * a PHP array would be serialised into `action_attribution_windows[0]=…`, which Graph
+             * does not parse — it would be ignored, and an ignored parameter looks exactly like one
+             * that was never sent.
+             */
+            'action_attribution_windows' => json_encode(self::ATTRIBUTION_WINDOWS, JSON_THROW_ON_ERROR),
             'limit' => 500,
         ]);
+
+        $this->countRawInsightRows(count($reported));
 
         $rows = [];
 
@@ -325,6 +429,9 @@ final class MetaConnector extends ApiAdvertisingConnector
             $mapped = [
                 'campaign_id' => $campaignId,
                 'date' => (string) ($row['date_start'] ?? $from),
+                // What these figures MEAN, carried beside them. Read by `InsightRowNormaliser` in the
+                // same way as a row's currency, and stored on every metric this row becomes.
+                'attribution_window' => implode(',', self::ATTRIBUTION_WINDOWS),
                 'spend' => isset($row['spend']) ? (float) $row['spend'] : null,
                 'impressions' => isset($row['impressions']) ? (float) $row['impressions'] : null,
                 'clicks' => isset($row['clicks']) ? (float) $row['clicks'] : null,

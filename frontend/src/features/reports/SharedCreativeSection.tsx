@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { canonicalPlatform } from '@/lib/platforms'
+import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Image as ImageIcon, LayoutGrid, Lightbulb, Rows3, TrendingDown, TrendingUp, Video } from 'lucide-react'
@@ -19,6 +21,7 @@ import { CreativeVideoPlayer } from '@/features/content/CreativeVideoPlayer'
 import { CreativeCarousel } from '@/features/content/CreativeCarousel'
 import { imageLoading } from '@/features/content/format'
 import { formatMetric, metricLabel, metricState } from '@/features/content/metrics'
+import { formatMoneyReading, readMoney } from '@/lib/money/contract'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
@@ -56,19 +59,19 @@ type SharedWinner = SharedObjectiveWinner | SharedKindWinner
 
 const COPY = {
   ar: {
-    heading: 'تحليل المحتوى',
-    library: 'مكتبة المحتوى',
+    heading: 'تحليل الإعلان',
+    library: 'مكتبة الإعلانات',
     grid: 'شبكة',
     list: 'قائمة',
-    bestByObjective: 'أفضل محتوى لكل هدف',
+    bestByObjective: 'أفضل إعلان لكل هدف',
     bestImage: 'أفضل صورة',
     bestVideo: 'أفضل فيديو',
     growing: 'الأسرع تحسنًا',
     declining: 'المتراجع',
-    fatigued: 'محتوى مُجهَد',
+    fatigued: 'إعلان مُجهَد',
     watch: 'يحتاج مراقبة',
     insufficient: 'بيانات غير كافية',
-    alerts: 'تنبيهات إجهاد المحتوى',
+    alerts: 'تنبيهات إجهاد الإعلان',
     insights: 'أبرز التحليلات',
     recommendation: 'الإجراء المقترح',
     freshness: 'آخر مزامنة',
@@ -86,8 +89,8 @@ const COPY = {
     hidden: 'غير معروض في هذا الرابط',
     thin: 'أدلة محدودة — الترتيب مبدئي',
     tie: 'لا فارق',
-    empty: 'لا يوجد محتوى ضمن هذا التحديد.',
-    error: 'تعذّر تحميل قسم المحتوى.',
+    empty: 'لا يوجد إعلان ضمن هذا التحديد.',
+    error: 'تعذّر تحميل قسم الإعلان.',
     compare: 'قارن المحدد',
     clear: 'إلغاء التحديد',
     selected: 'محدد',
@@ -101,8 +104,8 @@ const COPY = {
     severity: { warning: 'يحتاج انتباهًا', opportunity: 'فرصة', positive: 'تحسّن' },
     evidence: 'الأدلة',
     showing: 'المعروض',
-    details: 'تفاصيل المحتوى',
-    backToLibrary: 'العودة إلى مكتبة المحتوى',
+    details: 'تفاصيل الإعلان',
+    backToLibrary: 'العودة إلى مكتبة الإعلانات',
     funnel: 'الفانل',
     funnelNone: 'لم ترسل المنصة أي مرحلة يمكن بناء فانل منها.',
     funnelMissing: 'مراحل لا ترسلها هذه المنصة',
@@ -112,7 +115,7 @@ const COPY = {
     costPer: 'التكلفة لكل',
     notShown: 'غير معروضة في هذا الرابط',
     byPlatform: 'الأداء حسب المنصة',
-    onePlatform: 'هذا المحتوى يعمل على منصة واحدة، فلا توجد مقارنة بين المنصات.',
+    onePlatform: 'هذا الإعلان يعمل على منصة واحدة، فلا توجد مقارنة بين المنصات.',
     lastSync: 'آخر مزامنة',
     sourceUpdated: 'آخر تحديث من المصدر',
     previousPeriod: 'الفترة السابقة',
@@ -121,15 +124,15 @@ const COPY = {
     body: 'النص',
     cta: 'زر الإجراء',
     destination: 'الرابط الوجهة',
-    detailError: 'هذا المحتوى غير متاح في هذا الرابط.',
+    detailError: 'هذا الإعلان غير متاح في هذا الرابط.',
     notProvided: 'غير مُرسَل',
   },
   en: {
-    heading: 'Creative analysis',
-    library: 'Creative library',
+    heading: 'Ad analysis',
+    library: 'Ad library',
     grid: 'Grid',
     list: 'List',
-    bestByObjective: 'Best creative per objective',
+    bestByObjective: 'Best ad per objective',
     bestImage: 'Best image',
     bestVideo: 'Best video',
     growing: 'Fastest improving',
@@ -137,7 +140,7 @@ const COPY = {
     fatigued: 'Fatigued',
     watch: 'Needs watching',
     insufficient: 'Insufficient data',
-    alerts: 'Creative fatigue alerts',
+    alerts: 'Ad fatigue alerts',
     insights: 'Key insights',
     recommendation: 'Recommended action',
     freshness: 'Last sync',
@@ -155,8 +158,8 @@ const COPY = {
     hidden: 'Not shown on this link',
     thin: 'Thin evidence — provisional ranking',
     tie: 'No difference',
-    empty: 'No creatives in this selection.',
-    error: 'Could not load the creative section.',
+    empty: 'No ads in this selection.',
+    error: 'Could not load the ad section.',
     compare: 'Compare selected',
     clear: 'Clear selection',
     selected: 'selected',
@@ -170,8 +173,8 @@ const COPY = {
     severity: { warning: 'Needs attention', opportunity: 'Opportunity', positive: 'Improved' },
     evidence: 'Evidence',
     showing: 'Showing',
-    details: 'Creative details',
-    backToLibrary: 'Back to the creative library',
+    details: 'Ad details',
+    backToLibrary: 'Back to the ad library',
     funnel: 'Funnel',
     funnelNone: 'The platform reported no stage a funnel could be built from.',
     funnelMissing: 'Stages this platform does not report',
@@ -181,7 +184,7 @@ const COPY = {
     costPer: 'Cost per',
     notShown: 'Not shown on this link',
     byPlatform: 'By platform',
-    onePlatform: 'This creative runs on one platform, so there is no cross-platform comparison.',
+    onePlatform: 'This ad runs on one platform, so there is no cross-platform comparison.',
     lastSync: 'Last sync',
     sourceUpdated: 'Source updated at',
     previousPeriod: 'Previous period',
@@ -190,7 +193,7 @@ const COPY = {
     body: 'Body',
     cta: 'Call to action',
     destination: 'Destination URL',
-    detailError: 'This creative is not available on this link.',
+    detailError: 'This ad is not available on this link.',
     notProvided: 'Not provided',
   },
 }
@@ -352,7 +355,7 @@ export function SharedCreativeSection({
             <InsightList insights={data.insights} t={t} ar={ar} permissions={permissions} />
           )}
 
-          <Freshness data={data} t={t} />
+          <Freshness data={data} t={t} ar={ar} />
         </>
       )}
 
@@ -635,6 +638,8 @@ function FatigueBlock({
   const { locale } = useUi()
   const fatigue = data.fatigue
   const ar = locale === 'ar'
+  // One reader for the money, so this figure cannot disagree with the operator's copy of it.
+  const spendAtRisk = readMoney(fatigue.spend_at_risk, 'spend', currency ?? null, ar)
 
   return (
     <div className="grid gap-3 md:grid-cols-3">
@@ -646,9 +651,15 @@ function FatigueBlock({
         <div className="rounded-xl border border-danger/40 bg-danger/5 p-3 md:col-span-3" data-testid="fatigue-alerts">
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold text-danger">
             <AlertTriangle size={14} /> {t.alerts}
-            {permissions.spend && fatigue.spend_at_risk !== null && (
-              <span className="tnum ms-auto text-xs font-semibold" dir="ltr">
-                {formatMetric({ kind: 'value', value: fatigue.spend_at_risk }, 'spend', locale, currency)}
+            {/*
+              * CREATIVE-MONEY-TRUTH-001 — the client's own copy of this figure obeys the same
+              * contract as the operator's. A shared report is the version somebody outside the
+              * agency reads, so a wrongly-labelled currency here is the one that reaches a client.
+              */}
+            {permissions.spend && spendAtRisk.amount !== null && (
+              <span className="tnum ms-auto text-xs font-semibold" dir="ltr" title={spendAtRisk.note ?? undefined}>
+                {formatMoneyReading(spendAtRisk, (n, c) =>
+                  formatMetric({ kind: 'value', value: n ?? 0 }, 'spend', locale, c ?? currency))}
               </span>
             )}
           </h3>
@@ -739,7 +750,7 @@ function InsightList({
   )
 }
 
-function Freshness({ data, t }: { data: { freshness: CreativePulse['freshness'] }; t: Copy }) {
+function Freshness({ data, t, ar }: { data: { freshness: CreativePulse['freshness'] }; t: Copy; ar: boolean }) {
   const f = data.freshness
 
   return (
@@ -747,14 +758,14 @@ function Freshness({ data, t }: { data: { freshness: CreativePulse['freshness'] 
       <span>
         <span className="text-text-muted">{t.freshness}:</span>{' '}
         <b className="tnum font-semibold text-text-primary" dir="ltr">
-          {f.last_synced_at ? new Date(f.last_synced_at).toLocaleString('en-GB') : t.noSync}
+          {f.last_synced_at ? fmtDateTime(f.last_synced_at) : t.noSync}
         </b>
       </span>
       {f.providers.map((p) => (
         <span key={p.provider}>
-          <span className="text-text-muted capitalize">{p.provider}:</span>{' '}
+          <span className="text-text-muted">{providerLabel(canonicalPlatform(p.provider), ar ? 'ar' : 'en')}:</span>{' '}
           <b className="tnum font-semibold text-text-primary" dir="ltr">
-            {p.last_synced_at ? new Date(p.last_synced_at).toLocaleDateString('en-GB') : t.noSync}
+            {p.last_synced_at ? fmtDate(p.last_synced_at) : t.noSync}
           </b>
         </span>
       ))}

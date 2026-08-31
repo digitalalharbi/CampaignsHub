@@ -1,10 +1,61 @@
-/** Latin-digit formatters (project rule: numbers/dates/ids stay Latin even in Arabic UI). */
+import { formatMoneyReading, type MoneyTotals, readCostPer, readMoney, readRoas } from '@/lib/money/contract'
+import { formatFixed, formatNumber } from '@/lib/numerals'
+
+/**
+ * The display formatters — NUMERAL-PREFERENCE-001.
+ *
+ * These were «Latin-digit formatters (project rule: numbers/dates/ids stay Latin even in Arabic
+ * UI)». The rule still holds and is unchanged: choosing Arabic as the LANGUAGE does not change the
+ * numerals, because an Arabic screenshot has to stay comparable with the English one.
+ *
+ * What changed is that the product also ships a `number_format` preference, which nothing read.
+ * These now route through `@/lib/numerals`, so an explicit choice of Arabic digits actually reaches
+ * the screen while `locale === 'ar'` on its own still formats in Latin. Ids, ISO dates and currency
+ * codes never come through here and are unaffected.
+ */
+
+/**
+ * NUMBER-PRESENTATION-001 — one compact rule for the whole product: 1K · 1.3K · 32.4K · 1.99M · 4.85M.
+ *
+ * ## Why it is significant digits and not a decimal count
+ *
+ * This used to pick decimals by magnitude — one below ten thousand, none above — so 32,400 printed
+ * «32K» and 4,850,000 printed «4.9M». Both are lies of the accurate kind: they are what the number
+ * rounds to, and they are not what the reader needs to compare two rows. «32K» and «32K» beside each
+ * other can be 32,000 and 32,999, a difference of a thousand results, and nothing on screen hints at
+ * it. Three significant digits keeps the precision that distinguishes rows at every magnitude, and
+ * Intl drops the trailing zeros for free, which is why 1,000 reads «1K» rather than «1.0K».
+ *
+ * ## What it must never do
+ *
+ * Change the meaning. `compact` is for a card, a chart tick and a dense table cell; the exact figure
+ * stays one hover or one detail view away ({@link num} formats it), and a surface whose whole job is
+ * the precise number — an invoice line, a cost-per in a report strip — calls that instead.
+ *
+ * Currency is never folded into the abbreviation: {@link money} appends the code, so «4.85M SAR» is
+ * unambiguous where «4.85M» alone would not be.
+ *
+ * The suffixes stay Latin — K, M, B — in both languages, for the same reason the digits do: an
+ * Arabic screenshot has to stay comparable with the English one.
+ */
+const COMPACT_UNITS: readonly (readonly [number, string])[] = [
+  [1_000_000_000, 'B'],
+  [1_000_000, 'M'],
+  [1_000, 'K'],
+]
 
 export function compact(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—'
   const abs = Math.abs(n)
-  if (abs >= 1_000_000) return (n / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1) + 'M'
-  if (abs >= 1_000) return (n / 1_000).toFixed(abs >= 10_000 ? 0 : 1) + 'K'
+
+  for (const [size, suffix] of COMPACT_UNITS) {
+    if (abs >= size) {
+      // `maximumSignificantDigits` and NOT `maximumFractionDigits`: the point is to keep three
+      // digits of information whatever the magnitude, and to stop showing digits that carry none.
+      return formatNumber(n / size, { maximumSignificantDigits: 3, useGrouping: false }) + suffix
+    }
+  }
+
   /*
    * COMPACT-ZERO-001 — a real figure below one must not be rounded away to «0».
    *
@@ -15,8 +66,11 @@ export function compact(n: number | null | undefined): string {
    * A genuine zero still prints «0»: only a value the reader would otherwise be told is nothing
    * gains digits, and it gains only as many as it needs to stop being nothing.
    */
-  if (abs > 0 && abs < 1) return n.toFixed(abs < 0.01 ? 4 : 2)
-  return String(Math.round(n))
+  if (abs > 0 && abs < 1) return formatFixed(n, abs < 0.01 ? 4 : 2)
+
+  // `useGrouping: false` keeps a compact figure compact — «1234» not «1,234» — while still emitting
+  // the reader's own digits. Grouping belongs to `num()`, which is the exact-value formatter.
+  return formatNumber(Math.round(n), { useGrouping: false })
 }
 
 export function money(n: number | null | undefined, currency = 'SAR'): string {
@@ -45,7 +99,7 @@ export function money(n: number | null | undefined, currency = 'SAR'): string {
 export function moneyExact(n: number | null | undefined, currency = 'SAR'): string {
   if (n === null || n === undefined) return '—'
   if (Math.abs(n) < 1000 && !Number.isInteger(n)) {
-    return `${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)} ${currency}`
+    return `${formatFixed(n, 2)} ${currency}`
   }
 
   return `${num(n)} ${currency}`
@@ -53,17 +107,33 @@ export function moneyExact(n: number | null | undefined, currency = 'SAR'): stri
 
 export function num(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—'
-  return new Intl.NumberFormat('en-US').format(Math.round(n))
+  return formatNumber(Math.round(n))
 }
 
-export function ratio(n: number | null | undefined, suffix = 'x'): string {
+/**
+ * A multiplier — ROAS, pacing, «times as much».
+ *
+ * ## One glyph, and it is «×»
+ *
+ * The suffix defaulted to the LETTER x and four surfaces passed «×» instead, so the same ROAS read
+ * «15.36x» on the campaigns page and «15.36×» on the client's analytics tab, and a report printed a
+ * third spelling of it. Nobody chose that: each call site chose in isolation and every choice was
+ * reasonable on its own.
+ *
+ * «×» is the multiplication sign, it is what a multiplier is, and it does not read as the start of a
+ * word in either direction — which the letter does in an Arabic sentence set left-to-right.
+ *
+ * The parameter stays for the rare caller that genuinely means something else, but nothing in this
+ * product should pass it, and `formatGlyphs.test.ts` fails when a surface writes its own.
+ */
+export function ratio(n: number | null | undefined, suffix = '×'): string {
   if (n === null || n === undefined) return '—'
-  return `${n.toFixed(2)}${suffix}`
+  return `${formatFixed(n, 2)}${suffix}`
 }
 
 export function percent(n: number | null | undefined, digits = 1): string {
   if (n === null || n === undefined) return '—'
-  return `${(n * 100).toFixed(digits)}%`
+  return `${formatFixed(n * 100, digits)}%`
 }
 
 export type Trend = 'up' | 'down' | 'flat'
@@ -72,4 +142,61 @@ export type Trend = 'up' | 'down' | 'flat'
 export function trend(delta: number | null | undefined): Trend {
   if (delta === null || delta === undefined || Math.abs(delta) < 0.0005) return 'flat'
   return delta > 0 ? 'up' : 'down'
+}
+
+
+/**
+ * MONEY-TRUTH-001 — rendering only. The RULES live in `@/lib/money/contract`.
+ *
+ * This existed as a second implementation of the withheld-money rules alongside `readMetric()`, with
+ * a test proving the two currently agreed. That is not one contract: two copies drift, and the drift
+ * stays invisible until an owner sees spend on one screen and «0» on another. Both now delegate.
+ */
+export type MoneyReading = { text: string; withheld: boolean; note: string | null }
+
+export function moneyFromTotals(
+  totals: MoneyTotals,
+  key: 'spend' | 'revenue',
+  ar: boolean,
+  reportingCurrency: string | null = null,
+): MoneyReading {
+  const r = readMoney(totals, key, reportingCurrency, ar)
+
+  if (r.kind === 'unavailable' || r.kind === 'absent') {
+    return { text: '\u2014', withheld: r.kind === 'unavailable', note: r.note }
+  }
+
+  return {
+    text: formatMoneyReading(r, money),
+    withheld: r.kind === 'withheld',
+    note: r.note,
+  }
+}
+
+/**
+ * MONEY-TRUTH-002 — the row readers for breakdown tables.
+ *
+ * Platform comparison and campaign ranking read the same fields as the summary cards, one row at a
+ * time, and were the last places still calling `money()` on a raw figure. A platform that spent
+ * 4,128.93 USD ranked as having spent nothing directly beneath a card showing the real amount.
+ *
+ * They delegate to the same canonical reader, so a table and a card cannot disagree.
+ */
+export function rowMoney(row: MoneyTotals, key: 'spend' | 'revenue', currency: string | null = null): string {
+  return formatMoneyReading(readMoney(row, key, currency, true), money)
+}
+
+export function rowCostPer(
+  row: MoneyTotals,
+  key: string,
+  denominator: string | number,
+  currency: string | null = null,
+): string {
+  return formatMoneyReading(readCostPer(row, key, denominator, currency, true), money)
+}
+
+/** ROAS survives a missing rate when both sides share one currency; otherwise it is refused. */
+export function rowRoas(row: MoneyTotals): string {
+  const r = readRoas(row, true)
+  return r.value === null ? '—' : ratio(r.value)
 }

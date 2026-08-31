@@ -146,10 +146,20 @@ export function LinkExternalModal({ open, onClose, projectId, campaignId }: Prop
             <Skeleton className="h-12 w-full" />
           </div>
         ) : rows.length === 0 ? (
-          <EmptyState
-            title={unlinkedOnly ? t('no_unlinked_external') : t('no_linked_external')}
-            description={t('no_external_hint')}
-          />
+          /*
+           * The empty state is nameable, because «the list resolved and is empty» is a real answer.
+           *
+           * Without a handle on it the only proof a caller had that the query had finished was a
+           * ROW — so anything waiting for the panel to become interactive was really waiting for the
+           * pool to be non-empty, and started failing the moment imports began arriving linked. The
+           * two are different facts and now have different signals.
+           */
+          <div data-testid="link-external-empty">
+            <EmptyState
+              title={unlinkedOnly ? t('no_unlinked_external') : t('no_linked_external')}
+              description={t('no_external_hint')}
+            />
+          </div>
         ) : (
           <div className="max-h-[46vh] space-y-2 overflow-y-auto pe-1">
             {rows.map((ext) => {

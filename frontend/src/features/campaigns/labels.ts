@@ -136,32 +136,13 @@ export function marketingPathLabel(key: string, locale: Locale): string {
   return marketingPath[key]?.[locale] ?? key
 }
 
-export const MARKETING_PATH_KEYS = Object.keys(marketingPath)
-
-/**
- * Which objectives fall in each path — a mirror of `CampaignObjective::path()` (UX-DASH-001).
+/*
+ * `PATH_OBJECTIVES`, `objectivesForPath` and `pathOfObjective` lived here and are gone —
+ * ANALYTICS-OBJECTIVE-SYSTEM-001. They existed to drive a «المسار التسويقي» control that sat beside
+ * «الهدف» and answered the same question, so the two could be set to disagree.
+ * `features/campaigns/canonicalObjectives.ts` is the single grouping now.
  *
- * The dashboard's path control is not a separate server filter: it selects this path's objectives
- * and sends them on the objective axis the metrics API already supports. That is deliberate. A
- * filter this product cannot express server-side would have to be applied to rows already fetched,
- * and a page that narrows its KPI row but not its chart is worse than one that does not narrow.
- *
- * Because the request is always a list of OBJECTIVES, a drift between this map and the enum can
- * only mis-group the choices — it can never produce a wrong figure, since the server filters by
- * exactly the objectives it was handed. `CampaignObjectivePathTest` fails if the enum moves one.
+ * `marketingPathLabel` STAYS. A creative's `path` is a stored classification the backend returns on
+ * every creative row — a fact about the creative, not a second filter over objectives.
  */
-const PATH_OBJECTIVES: Record<string, string[]> = {
-  awareness: ['awareness', 'reach', 'video_views', 'engagement', 'other'],
-  traffic: ['traffic', 'landing_page_views', 'store_visits'],
-  conversion: ['leads', 'app_installs', 'add_to_cart', 'sales', 'conversions', 'purchases'],
-}
 
-/** The objectives a path covers, or every objective when no path is chosen. */
-export function objectivesForPath(path: string): string[] {
-  return PATH_OBJECTIVES[path] ?? Object.keys(objective)
-}
-
-/** The path an objective belongs to — for labelling a choice with the money it represents. */
-export function pathOfObjective(key: string): string {
-  return Object.keys(PATH_OBJECTIVES).find((p) => PATH_OBJECTIVES[p].includes(key)) ?? 'awareness'
-}

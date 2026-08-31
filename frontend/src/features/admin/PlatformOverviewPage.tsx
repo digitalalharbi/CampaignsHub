@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowLeft, ArrowRight, Building2, CheckCircle2, Info, Re
 import { fetchOverview } from './api'
 import { ATTENTION_LABELS, accountTypeLabel, planLabel, subscriptionStateLabel } from './labels'
 import { ChartCard, MetricLineChart, RankingBarChart } from '@/features/analytics/charts'
+import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 
@@ -100,7 +101,8 @@ export function PlatformOverviewPage() {
         </p>
       </header>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-4">
+        <StatGrid>
         {/*
           The money card, said honestly.
           `monthly` is what active and trialing subscriptions are worth per month. It is a COMMITMENT,
@@ -131,11 +133,12 @@ export function PlatformOverviewPage() {
           label={ar ? 'مساحات العملاء' : 'Client workspaces'} display={num(d.workload.client_workspaces)}
           hint={ar ? `${num(d.workload.open_requests)} طلب مفتوح` : `${num(d.workload.open_requests)} open requests`}
         />
+        </StatGrid>
       </div>
 
       {/* The one honesty note that has to sit beside the figure it qualifies, not in a tooltip. */}
       {d.subscriptions.collection_status === 'not_implemented' && (
-        <p data-testid="collection-note" className="mb-4 flex items-start gap-2 rounded-xl border border-border bg-surface-secondary px-4 py-2.5 text-[12.5px] leading-relaxed text-text-secondary">
+        <p data-testid="collection-note" className="mb-4 flex items-start gap-2 rounded-xl border border-border bg-surface-secondary px-4 py-2.5 text-[12px] leading-relaxed text-text-secondary">
           <Info size={15} className="mt-0.5 shrink-0 text-text-muted" aria-hidden />
           {ar
             ? 'القيمة أعلاه هي ما التزم به المشتركون شهريًا، وليست مبالغ محصّلة: تحصيل اشتراكات المنصة غير مفعّل بعد. الفواتير في النظام هي فوترة الوكالة لعملائها وتخص الوكالة وحدها.'
@@ -278,7 +281,7 @@ export function PlatformOverviewPage() {
       </div>
 
       {d.workload.unpaid_invoices > 0 && (
-        <p className="mt-4 flex items-center gap-2 text-[12.5px] text-text-muted">
+        <p className="mt-4 flex items-center gap-2 text-[12px] text-text-muted">
           <Receipt size={14} aria-hidden />
           {ar
             ? `${num(d.workload.unpaid_invoices)} فاتورة غير مسددة عبر المنصة — وهي فوترة الوكالات لعملائها، لا فواتير المنصة.`
@@ -295,13 +298,24 @@ function Empty({ text }: { ar: boolean; text: string }) {
   )
 }
 
+/**
+ * UX-KPI-PRESENTATION-001 — the platform console's tile is the product's card with a mark on it.
+ *
+ * What was local here and is now shared: the value size (26px against the product's 24/26 step), the
+ * label size, the padding, and the order — this tile put the FIGURE above its name, which is a
+ * second composition of the same object and the reason an operator moving between the console and
+ * the rest of the product met two designs of one thing.
+ *
+ * What stays local, because it is genuinely this surface's: the coloured icon chip that says which
+ * part of the platform the figure belongs to, and where pressing it goes.
+ */
 function Metric({
   to, label, display, hint, icon: Icon, tone, testId,
 }: {
   to: string; label: string; display: string; hint?: string
   icon: typeof Building2; tone: 'brand' | 'success' | 'warning' | 'info'; testId?: string
 }) {
-  const tones = {
+  const chip = {
     brand: 'bg-brand-primary-soft text-brand-700',
     success: 'bg-success/15 text-success',
     warning: 'bg-warning/15 text-warning',
@@ -309,17 +323,17 @@ function Metric({
   } as const
 
   return (
-    <Link to={to} data-testid={testId} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 transition-colors hover:border-brand-400">
-      <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${tones[tone]}`}>
-        <Icon size={18} aria-hidden />
-      </span>
-      <span>
-        <span className="tnum block font-heading text-[26px] font-extrabold leading-tight tracking-tight text-text-primary" dir="ltr">
-          {display}
-        </span>
-        <span className="mt-0.5 block text-sm font-semibold text-text-secondary">{label}</span>
-        {hint && <span className="mt-1 block text-xs text-text-muted">{hint}</span>}
-      </span>
+    <Link to={to} data-testid={testId} className="block h-full transition-colors hover:opacity-90">
+      <StatCard
+        label={label}
+        value={display}
+        hint={hint}
+        trailing={
+          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${chip[tone]}`}>
+            <Icon size={16} aria-hidden />
+          </span>
+        }
+      />
     </Link>
   )
 }

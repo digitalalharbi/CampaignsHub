@@ -26,18 +26,40 @@ Then read, in this order — they are the project's own record and they outrank 
 Work from what those say. If a document contradicts the code, the code is the fact and the document
 is a defect worth fixing.
 
-## The Claude GitHub Action is PAUSED_BY_OWNER
+## Execution policy — owner decision, 2026-08-20
 
-`.github/workflows/claude.yml` works — it was proven end to end on PR #5 — and it is **not to be
-used**. The owner paused it to avoid spending Anthropic API credits. Do not write `@claude` in an
-issue or a pull request, and do not trigger a run any other way.
+**ALL PRODUCT DEVELOPMENT EXECUTION HAPPENS DIRECTLY FROM THE CLAUDE CODE CONTAINER.**
 
-Nothing is removed: the GitHub App stays installed, `ANTHROPIC_API_KEY` stays in Actions secrets, and
-the workflow file stays exactly as it is. This is a decision about USE, not a rollback, and it is
-reversed by the owner saying so.
+**GitHub is source control, CI and deployment only. GitHub must never invoke Claude or Anthropic for
+development.**
 
-Development happens in a Claude Code conversation instead. The cycle below is unchanged — the work is
-authored in the conversation and still reaches `main` only through a branch, a pull request and CI.
+`AUTOPILOT-001` and `AUTOPILOT-CONTINUOUS-CHAIN-001` are cancelled and are no longer product
+requirements. Do not build a replacement.
+
+Both model-invoking workflows are disabled in the tree rather than deleted, so the decision is
+visible where somebody would otherwise re-add it by accident:
+
+- `.github/workflows/campaignshub-autopilot.yml` — the scheduled path. No `schedule`, no `develop`
+  job.
+- `.github/workflows/claude.yml` — the `@claude` mention path. Its four event triggers are gone, so
+  writing `@claude` on an issue or a review does nothing.
+
+Neither file contains `anthropics/claude-code-action`, `ANTHROPIC_API_KEY`, any `secrets.`
+reference, or any `uses:` at all. Each keeps a manually dispatched no-op that states the position.
+
+`scripts/autopilot/test-autopilot.sh` fails the build if either workflow regains an automatic
+trigger, the action, the key, a secret reference or any action invocation — and separately asserts
+that `ci.yml`, `deploy-production.yml` and `production-diagnostics.yml` still have jobs, so the
+cancellation cannot be achieved by breaking the workflows that do real work.
+
+The cycle is: change real product code in the container, test locally, commit, push, CI, merge,
+deploy, verify, continue to the next unit.
+
+Everything else in this document remains binding: Git outranks the matrix, which outranks
+`RESUME_STATE`; VERIFIED work is never redone without a proven fail-first defect; nothing is claimed
+LIVE_VERIFIED without real operational evidence; no change reaches `main` except through a branch, a
+pull request and green CI; and backend rows or green API tests are never completion on their own — a
+data feature is done when the chain reaches the rendered UI and, where possible, live evidence.
 
 ## How work reaches main
 

@@ -63,7 +63,14 @@ const card = (over: Partial<CreativeCard> = {}): CreativeCard =>
     campaign_id: 'c1',
     campaign_name: 'National Day Sale',
     ad_set_id: 'set-1',
-    ad_id: 'ad-1',
+    /*
+     * The canonical relation. Two ads, because one asset placed by several ads is the ordinary case
+     * on a real account — and the case the singular `ad_id` above could never represent.
+     */
+    ads: [
+      { id: 'a1', external_id: 'ad-1', name: 'Ad one', status: 'active', external_ad_set_id: 'set-1', external_campaign_id: 'c1' },
+      { id: 'a2', external_id: 'ad-2', name: 'Ad two', status: 'active', external_ad_set_id: 'set-1', external_campaign_id: 'c1' },
+    ],
     preview: {
       state: 'available',
       kind: 'image',
@@ -181,8 +188,9 @@ const pulse = (over: Partial<CreativePulse> = {}): CreativePulse => ({
     watch: empty,
     insufficient_data: empty,
     alerts: empty,
-    spend_at_risk: 0,
+    spend_at_risk: { spend: 0, spend_withheld_rows: 0, spend_original: 0, money_original_currency: null, money_original_currencies: 0 },
   },
+  currency: 'SAR',
   spend_by_kind: [
     { kind: 'image', spend: 1800, share: 0.667, creatives: 2, spend_not_reported: 1 },
     { kind: 'video', spend: 900, share: 0.333, creatives: 1, spend_not_reported: 0 },
@@ -206,7 +214,7 @@ const pulse = (over: Partial<CreativePulse> = {}): CreativePulse => ({
     kinds: ['image', 'video', 'carousel'],
     campaigns: [{ id: 'c1', name: 'National Day Sale', objective: 'sales' }],
     ad_sets: ['set-1'],
-    ads: ['ad-1'],
+    ads: [{ value: 'ad-1', label: 'ad-1' }],
     objectives: ['sales', 'awareness'],
     paths: ['awareness', 'traffic', 'conversion'],
     projects: [{ id: 'p1', name: 'Q3 Launch', client_id: 'cl1' }],
@@ -217,6 +225,18 @@ const pulse = (over: Partial<CreativePulse> = {}): CreativePulse => ({
 })
 
 const mocked = vi.mocked(getCreativePulse)
+
+/** A pulse whose one winner carries exactly these ads — the drill-down's ad step reads them. */
+const withAds = (ads: CreativeCard['ads']): CreativePulse =>
+  pulse({
+    best_by_objective: [
+      {
+        objective: 'sales', path: 'conversion', creatives: 3, spend: 2700, metric: 'roas',
+        higher_wins: true, value: 5, candidates: 3, evidenced: 3, low_evidence: false,
+        creative: card({ ads }),
+      },
+    ],
+  })
 
 describe('CreativePulseSection', () => {
   beforeEach(() => {
@@ -274,7 +294,7 @@ describe('CreativePulseSection', () => {
     expect(within(video).getByText(/Provisional/)).toBeInTheDocument()
 
     const image = screen.getByText('Best image').closest('article') as HTMLElement
-    expect(within(image).getByText('Chosen from 2 creatives')).toBeInTheDocument()
+    expect(within(image).getByText('Chosen from 2 ads')).toBeInTheDocument()
     expect(within(image).queryByText(/Provisional/)).not.toBeInTheDocument()
   })
 
@@ -287,7 +307,7 @@ describe('CreativePulseSection', () => {
    * different set of creatives than the card they clicked, which is how a drill-down stops being
    * trusted.
    */
-  it('links to the creative page carrying the filters it was computed under', async () => {
+  it('links to the ad page carrying the filters it was computed under', async () => {
     render()
 
     // The same creative is both the objective winner and the best image, so it legitimately appears
@@ -302,7 +322,7 @@ describe('CreativePulseSection', () => {
   })
 
   /** The drill-down chain is Platform › Campaign › Ad set › Ad › Creative, each one narrower. */
-  it('offers the full drill-down from platform down to the creative', async () => {
+  it('offers the full drill-down from platform down to the ad', async () => {
     render()
 
     const nav = (await screen.findAllByRole('navigation', { name: 'Drill down' }))[0]
@@ -314,12 +334,62 @@ describe('CreativePulseSection', () => {
     expect(adSet.getAttribute('href')).toContain('ad_set_ids%5B%5D=set-1')
     expect(adSet.getAttribute('href')).toContain('campaign_ids%5B%5D=c1')
 
-    const ad = within(nav).getByRole('link', { name: 'Ad' })
+    /*
+     * EVERY ad running this creative, and the label admits how many.
+     *
+     * This asserted a single `ad-1`, taken from `creative.ad_id` — one ad chosen from many by row
+     * order, rewritten on every import. On the live Snapchat account four ads share each creative,
+     * so a reader following «Ad ›» to decide whether to pause it was shown a quarter of the
+     * evidence. The canonical relation is `external_ads.creative_id`, and the step now narrows to
+     * all of it.
+     */
+    const ad = within(nav).getByRole('link', { name: 'Ad (2)' })
+    // The last rung is «Ad asset», not a second «Ad»: one creative can be carried by several ads, so
+    // two adjacent links under one word would point at different places and read as a repetition.
+    within(nav).getByRole('link', { name: 'Ad asset' })
     expect(ad.getAttribute('href')).toContain('ad_ids%5B%5D=ad-1')
+    expect(ad.getAttribute('href')).toContain('ad_ids%5B%5D=ad-2')
+  })
+
+  /** One ad is not announced as a count — «Ad (1)» is noise where «Ad» is the whole truth. */
+  it('does not count a single ad', async () => {
+    mocked.mockResolvedValue(withAds([
+      { id: 'a1', external_id: 'ad-1', name: 'Ad one', status: 'active', external_ad_set_id: 'set-1', external_campaign_id: 'c1' },
+    ]))
+    render()
+
+    const nav = (await screen.findAllByRole('navigation', { name: 'Drill down' }))[0]
+
+    expect(within(nav).getByRole('link', { name: 'Ad' })).toBeInTheDocument()
+  })
+
+  /** A creative no ad is running gets no ad step. */
+  it('offers no ad step when no ad is running the creative', async () => {
+    mocked.mockResolvedValue(withAds([]))
+    render()
+
+    const nav = (await screen.findAllByRole('navigation', { name: 'Drill down' }))[0]
+
+    expect(within(nav).queryByRole('link', { name: /^Ad( \(\d+\))?$/ })).not.toBeInTheDocument()
+  })
+
+  /**
+   * And a response that never carried `ads` behaves the same way rather than throwing.
+   *
+   * A deployed frontend meets whatever backend is live, and a payload from before this field
+   * existed must produce no ad step — not a crash that takes the whole pulse section down.
+   */
+  it('survives a response that predates the ads relation', async () => {
+    mocked.mockResolvedValue(withAds(undefined as never))
+    render()
+
+    const nav = (await screen.findAllByRole('navigation', { name: 'Drill down' }))[0]
+
+    expect(within(nav).queryByRole('link', { name: /^Ad( \(\d+\))?$/ })).not.toBeInTheDocument()
   })
 
   /** A dashboard is the worst page to mount players on — it is the one most often left open. */
-  it('mounts no video element, whatever the creative is', async () => {
+  it('mounts no video element, whatever the ad is', async () => {
     const { container } = render()
 
     await screen.findByText('Best video')
@@ -433,7 +503,7 @@ describe('CreativePulseSection', () => {
       { locale: 'en' },
     )
 
-    expect(await screen.findByText('No creatives match this selection.')).toBeInTheDocument()
+    expect(await screen.findByText('No ads match this selection.')).toBeInTheDocument()
     expect(screen.getByText(/Filtered by: Platform: Meta · Objective: Awareness/)).toBeInTheDocument()
   })
 
@@ -506,8 +576,8 @@ describe('CreativePulseSection', () => {
     expect(screen.getByText(/Previous period: 2026-06-08/)).toBeInTheDocument()
     // A truncated list says so, rather than reading as «this is everything».
     expect(screen.getByText('1/3')).toBeInTheDocument()
-    // And the finding links into the creative it names, carrying the dashboard's own window.
-    expect(screen.getByRole('link', { name: /Open creative: Brand film/ })).toHaveAttribute(
+    // And the finding links into the ad it names, carrying the dashboard's own window.
+    expect(screen.getByRole('link', { name: /Open ad: Brand film/ })).toHaveAttribute(
       'href',
       expect.stringContaining('/app/content/cr-1'),
     )
@@ -566,4 +636,89 @@ describe('CreativePulseSection', () => {
 
     expect(screen.queryByText('What the figures say')).not.toBeInTheDocument()
   })
+
+  /*
+   * ── CREATIVE-MONEY-TRUTH-001 — the strip said «SAR» whatever the money actually was ───────────
+   *
+   * This section's formatter appended a hard-coded «SAR» / «ر.س» to whatever number it was handed.
+   * `creative_daily_metrics` carried no currency at all, so on production it was labelling USD
+   * figures as Saudi riyals — 4,128.93 USD rendered «4,129 SAR», understating spend by roughly
+   * 3.75× and reading as a measured fact. A wrong number is worse than a withheld one: nothing
+   * about it looks wrong.
+   */
+
+  it('states an unconvertible figure in its own currency, never in the project\'s', async () => {
+    vi.mocked(getCreativePulse).mockResolvedValue(
+      pulse({
+        currency: 'SAR',
+        spend_by_kind: [
+          {
+            kind: 'image',
+            // Withheld exactly as the pipeline reports it: no converted figure, the original kept.
+            spend: null,
+            share: null,
+            creatives: 2,
+            spend_not_reported: 0,
+            spend_withheld_rows: 262,
+            spend_original: 4128.93,
+            money_original_currency: 'USD',
+            money_original_currencies: 1,
+          },
+        ],
+      }),
+    )
+
+    renderWithProviders(<CreativePulseSection libraryPath="/app/content" filters={{}} />, { locale: 'en' })
+
+    await screen.findByText('Spend by ad type')
+
+    // Exact, in the currency it was actually spent in — not rounded into a figure it never was.
+    expect(screen.getByText(/4,128\.93 USD/)).toBeInTheDocument()
+    expect(screen.queryByText(/4,129 SAR/)).not.toBeInTheDocument()
+  })
+
+  /** Two unconvertible currencies cannot be added, so no single figure may be printed. */
+  it('refuses to state one figure when the withheld money is in several currencies', async () => {
+    vi.mocked(getCreativePulse).mockResolvedValue(
+      pulse({
+        currency: 'SAR',
+        spend_by_kind: [
+          {
+            kind: 'image', spend: null, share: null, creatives: 2, spend_not_reported: 0,
+            spend_withheld_rows: 40, spend_original: 900, money_original_currency: 'USD',
+            money_original_currencies: 2,
+          },
+        ],
+      }),
+    )
+
+    renderWithProviders(<CreativePulseSection libraryPath="/app/content" filters={{}} />, { locale: 'en' })
+
+    // Scoped to the strip itself: other cards on this section carry their own, convertible money.
+    const strip = (await screen.findByText('Spend by ad type')).parentElement!
+
+    expect(strip).not.toHaveTextContent('900')
+    expect(strip).not.toHaveTextContent('USD')
+    expect(strip).not.toHaveTextContent('SAR')
+  })
+
+  /** A converted figure still renders in the reporting currency the SERVER named. */
+  it('uses the currency the payload declares, not one compiled into the page', async () => {
+    vi.mocked(getCreativePulse).mockResolvedValue(
+      pulse({
+        currency: 'AED',
+        spend_by_kind: [
+          { kind: 'image', spend: 1800, share: 1, creatives: 2, spend_not_reported: 0 },
+        ],
+      }),
+    )
+
+    renderWithProviders(<CreativePulseSection libraryPath="/app/content" filters={{}} />, { locale: 'en' })
+
+    await screen.findByText('Spend by ad type')
+
+    expect(screen.getByText(/1,800 AED/)).toBeInTheDocument()
+    expect(screen.queryByText(/SAR/)).not.toBeInTheDocument()
+  })
+
 })

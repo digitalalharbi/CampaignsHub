@@ -1,11 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { KeyRound, Loader2, Plug, RefreshCw } from 'lucide-react'
 import {
-  connectConnector, listConnectors, startPlatformOAuth, syncConnector,
-  type Connector, type PlatformState,
+  connectConnector, fetchResumableConnections, listConnectors, revokeConnection, startPlatformOAuth,
+  syncConnector,
+  type Connector, type PlatformState, type ResumableConnection,
 } from './api'
+import { ConnectionWizard } from './ConnectionWizard'
+import { ProviderErrorNote } from './ProviderErrorNote'
+import { AccountsPanel } from './AccountsPanel'
+import { StoresPanel } from '@/features/commerce/StoresPanel'
 import { listClientWorkspaces } from '@/features/projects/api'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -13,8 +18,11 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/Card'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useT, type TranslationKey } from '@/lib/i18n'
-import { sortByPlatform } from '@/lib/platforms'
+import { accounts as accountsCounted, adAccounts, connectedAccounts } from '@/lib/counted'
+import { canonicalPlatform, sortByPlatform } from '@/lib/platforms'
+import { platformColor } from '@/features/analytics/components'
 import { useUi } from '@/stores/ui'
+import { useProject } from '@/stores/project'
 
 /**
  * INTEG-UI-001 — the integrations page says which of four things is true, and what to do about it.
@@ -47,6 +55,23 @@ import { useUi } from '@/stores/ui'
  */
 
 /** Only these carry a state; the sandbox and analytics connectors keep the simpler status shape. */
+/**
+ * INTEGRATION-DATASOURCE-WIZARD-001 §1 §14 — the connection's own word for what it is doing.
+ *
+ * `PlatformState` describes the PLATFORM — is there an app registered, is it out of service — and a
+ * card needs both: «متصل» for a provider whose one account lost access is the sentence that stopped
+ * anybody looking. Where the server has said what the connection is doing, that wins.
+ */
+const USER_STATE_META: Record<string, { tone: 'success' | 'warning' | 'danger' | 'neutral' | 'info'; ar: string; en: string }> = {
+  ACCOUNT_SELECTION_REQUIRED: { tone: 'warning', ar: 'يحتاج اختيار حسابات', en: 'Needs account selection' },
+  SYNCING: { tone: 'info', ar: 'جارٍ أول مزامنة', en: 'First sync running' },
+  HEALTHY: { tone: 'success', ar: 'يعمل', en: 'Healthy' },
+  ATTENTION_REQUIRED: { tone: 'warning', ar: 'يحتاج انتباه', en: 'Needs attention' },
+  REAUTH_REQUIRED: { tone: 'danger', ar: 'يحتاج إعادة مصادقة', en: 'Needs reconnecting' },
+  AUTH_REQUIRED: { tone: 'warning', ar: 'يحتاج مصادقة', en: 'Needs authentication' },
+  NOT_CONNECTED: { tone: 'neutral', ar: 'غير مربوط', en: 'Not connected' },
+}
+
 const STATE_META: Record<PlatformState, { tone: 'success' | 'warning' | 'danger' | 'neutral' | 'info'; ar: string; en: string }> = {
   connected: { tone: 'success', ar: 'متصل', en: 'Connected' },
   syncing: { tone: 'info', ar: 'جارٍ المزامنة', en: 'Syncing' },
@@ -85,7 +110,7 @@ function outcomeMessage(outcome: string, reason: string | null, accounts: string
       return {
         tone: 'ok',
         text: ar
-          ? `تم الربط بنجاح. تم اكتشاف ${accounts ?? '0'} حساب إعلاني.`
+          ? `تم الربط بنجاح. تم اكتشاف ${adAccounts(Number(accounts ?? 0), 'ar')}.`
           : `Connected. ${accounts ?? '0'} ad account(s) discovered.`,
       }
     case 'denied':
@@ -136,6 +161,24 @@ export function AdPlatformsPanel() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['connectors'] }),
   })
   /*
+   * COMMAND-CENTER §26 — ending the authorisation.
+   *
+   * Three query keys, because a revoke changes three different screens at once: the connector cards,
+   * the resumable-connection states behind them, and the account inventory, where every account
+   * this connection discovered has just stopped being reachable. Invalidating only `connectors`
+   * would leave the inventory showing «مرتبط بمشروع» over a source nothing can read.
+   */
+  const revokeMutation = useMutation({
+    mutationFn: revokeConnection,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['connectors'] }),
+        queryClient.invalidateQueries({ queryKey: ['resumable-connections'] }),
+        queryClient.invalidateQueries({ queryKey: ['integration-accounts'] }),
+      ])
+    },
+  })
+  /*
    * Which client the accounts about to be discovered belong to (CONNECT-001).
    *
    * Only asked when the workspace HAS clients, which is what distinguishes an agency from an
@@ -165,8 +208,79 @@ export function AdPlatformsPanel() {
     ? outcomeMessage(outcome, params.get('reason'), params.get('accounts'), ar)
     : null
 
+
   /** The six come first and in the products order; everything else keeps its place behind them. */
   const connectors = sortByPlatform(query.data ?? [], (c) => c.key)
+
+  /*
+   * INTEG-STORES-001 · INTEGRATION-DATASOURCE-WIZARD-001 §1 — the two kinds are rendered apart, for
+   * the reason the API returns them apart.
+   *
+   * A store carries no `ad_account_id` and none of the five ad-platform states. Rendered as an
+   * ad-platform card those fields come out empty, and an empty ad-platform card reads as a platform
+   * that tried to connect and failed — a worse statement than the stores being missing from this page,
+   * which is the defect INTEG-STORES-001 exists to fix.
+   *
+   * The stores' own section is `StoresPanel`, below. It used to be BOTH: a read-only catalogue card
+   * here that could only show a chip, and the panel underneath that could actually connect the same
+   * store — so this page printed «المتاجر · Salla» twice, once as something a customer could act on
+   * and once as something they could not, and the first one they reached was the one that did
+   * nothing. That is the same duplication §1 removed from the ad platforms, and it is removed here
+   * the same way: one card per source, and it is the card that can act.
+   *
+   * A row with no `kind` is treated as advertising: that is every row this endpoint returned before
+   * stores were added, and defaulting the other way would empty the page against an older backend.
+   */
+  const advertising = connectors.filter((c) => (c.kind ?? 'advertising') === 'advertising')
+
+  /*
+   * ORCH-100 §39 §41 — where each authorisation has actually got to.
+   *
+   * Derived server-side from the record, so an authorisation left mid-way days ago still knows it is
+   * mid-way. This is what lets the page offer «أكمل اختيار الحسابات» instead of the connect button,
+   * which would have asked for a second consent to an authorisation that never lapsed.
+   */
+  const wizardStates = useQuery({ queryKey: ['resumable-connections'], queryFn: fetchResumableConnections })
+  const wizardByProvider = new Map<string, ResumableConnection>(
+    (wizardStates.data?.connections ?? []).map((w) => [w.connection.provider, w]),
+  )
+  const unfinished = wizardStates.data?.resumable ?? []
+
+  /*
+   * INTEGRATION-DATASOURCE-WIZARD-001 §2 — coming back from OAuth resumes the SAME wizard.
+   *
+   * The callback lands here with `?provider=…&outcome=connected`, and until now that produced a
+   * green banner, a nudge, and a «Resume» button: three pieces of interface telling somebody who
+   * had just authorised a provider that there was one more thing to do, without doing it. The
+   * consent screen is the middle of a journey, not the end of one.
+   *
+   * Opened once per return — the ref, not the params — so dismissing the wizard does not reopen it
+   * on the next render while the query string is still in the address bar.
+   */
+  const resumedFromCallback = useRef(false)
+
+  useEffect(() => {
+    if (resumedFromCallback.current) return
+    if (outcome !== 'connected') return
+
+    const provider = params.get('provider')
+    const match = unfinished.find((u) => u.connection.provider === provider)
+    if (!match) return
+
+    resumedFromCallback.current = true
+    setManagingProjectId(null)
+    setWizardConnectionId(match.connection.id)
+  }, [outcome, params, unfinished])
+  const [wizardConnectionId, setWizardConnectionId] = useState<string | null>(null)
+  /*
+   * INTEGRATION-DATASOURCE-WIZARD-001 §8 — the wizard opens in one of two modes.
+   *
+   * Null is «connect»: choose accounts, choose a project, confirm. A project id is «manage»: the
+   * same picker, opened on what this project already holds, saving a desired set the server diffs.
+   * The mode is a property of how it was opened, not a step the reader chooses.
+   */
+  const [managingProjectId, setManagingProjectId] = useState<string | null>(null)
+  const currentProjectId = useProject((s) => s.currentProjectId)
 
   return (
     <section className="space-y-4" data-testid="ad-platforms-panel">
@@ -199,6 +313,28 @@ export function AdPlatformsPanel() {
           >
             {ar ? 'إغلاق' : 'Dismiss'}
           </button>
+        </div>
+      )}
+
+      {unfinished.length > 0 && !wizardConnectionId && (
+        /*
+         * ORCH-100 §39 — somebody authorised and then closed the tab. The token is still valid and
+         * the inventory is still there; asking them to authorise again would be a second consent for
+         * an authorisation that never lapsed.
+         */
+        <div
+          data-testid="unfinished-connection"
+          role="status"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] bg-[var(--warning-background)] px-4 py-3 text-sm text-warning"
+        >
+          <span>
+            {ar
+              ? `لديك ربط غير مكتمل: ${accountsCounted(unfinished[0].discovered, 'ar')} متاح ولم يُربط أي حساب بمشروع بعد.`
+              : `You have an unfinished connection: ${accountsCounted(unfinished[0].discovered, 'en')} available, none connected to a project yet.`}
+          </span>
+          <Button size="sm" onClick={() => setWizardConnectionId(unfinished[0].connection.id)} data-testid="resume-connection">
+            {ar ? 'أكمل اختيار الحسابات' : 'Finish selecting accounts'}
+          </Button>
         </div>
       )}
 
@@ -242,12 +378,29 @@ export function AdPlatformsPanel() {
         </div>
       ) : query.isError ? (
         <ErrorState error={query.error} title={t('error')} onRetry={() => query.refetch()} />
+      ) : wizardConnectionId ? (
+        <ConnectionWizard
+          connectionId={wizardConnectionId}
+          manageProjectId={managingProjectId}
+          onClose={() => {
+            setWizardConnectionId(null)
+            setManagingProjectId(null)
+            void wizardStates.refetch()
+            void query.refetch()
+          }}
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {connectors.map((c) => (
+          {advertising.map((c) => (
             <ConnectorCard
               key={c.key}
               connector={c}
+              wizard={wizardByProvider.get(c.key) ?? null}
+              onOpenWizard={(id) => { setManagingProjectId(null); setWizardConnectionId(id) }}
+              onManageAccounts={currentProjectId === null ? undefined : (id) => {
+                setManagingProjectId(currentProjectId)
+                setWizardConnectionId(id)
+              }}
               ar={ar}
               t={t}
               onAuthorize={() => authorizeMutation.mutate(c.key)}
@@ -256,18 +409,39 @@ export function AdPlatformsPanel() {
               authorizing={authorizeMutation.isPending && authorizeMutation.variables === c.key}
               connecting={connectMutation.isPending && connectMutation.variables === c.key}
               syncing={syncMutation.isPending && syncMutation.variables === c.key}
+              onDisconnect={(connectionId) => revokeMutation.mutate(connectionId)}
+              disconnecting={revokeMutation.isPending}
             />
           ))}
         </div>
       )}
+
+
     </section>
   )
 }
 
 function ConnectorCard({
-  connector: c, ar, t, onAuthorize, onConnect, onSync, authorizing, connecting, syncing,
+  connector: c, wizard, onOpenWizard, onManageAccounts, ar, t, onAuthorize, onConnect, onSync, authorizing, connecting, syncing,
+  onDisconnect, disconnecting,
 }: {
   connector: Connector
+  /*
+   * ORCH-100 §41 — where this provider's authorisation has actually got to.
+   *
+   * `connected` used to be the end of the story, so an integration that had done nothing but
+   * authorise showed «متصل · آخر مزامنة الآن». For the live Snapchat connection that was 309
+   * discovered accounts, none of them chosen, and a sync button that would have synced nothing.
+   */
+  wizard: ResumableConnection | null
+  onOpenWizard: (connectionId: string) => void
+  /**
+   * Reopen the picker on what THIS project holds — absent when no project is chosen.
+   *
+   * A binding belongs to a project, so «manage accounts» is meaningless from a tenant-wide view with
+   * no project in hand; the button is not drawn rather than drawn and refusing.
+   */
+  onManageAccounts?: (connectionId: string) => void
   ar: boolean
   t: (key: TranslationKey) => string
   onAuthorize: () => void
@@ -276,19 +450,67 @@ function ConnectorCard({
   authorizing: boolean
   connecting: boolean
   syncing: boolean
+  /*
+   * COMMAND-CENTER §26 — ending the authorisation, which is NOT undoing a setting.
+   *
+   * Passed in rather than owned here so the whole panel invalidates its queries once, in one place,
+   * after a revoke changes the state of every card that shares the connection.
+   */
+  onDisconnect: (connectionId: string) => void
+  disconnecting: boolean
 }) {
   const state = c.state
-  const meta = state ? STATE_META[state] : LEGACY_META[c.status]
+  /*
+   * The connection's state outranks the platform's, where there is one.
+   *
+   * A platform that is «connected» tells a reader the app is registered and somebody authorised it.
+   * Whether the accounts behind that authorisation are syncing, one of them has lost access, or none
+   * has been chosen yet is a different question, and it is the one somebody opens this page to ask.
+   */
+  const userMeta = wizard?.user_state ? USER_STATE_META[wizard.user_state] : undefined
+  const meta = userMeta ?? (state ? STATE_META[state] : LEGACY_META[c.status])
+
+  /* The one runtime state in which re-authorising is the only thing that can succeed. */
+  const needsReauth = wizard?.user_state === 'REAUTH_REQUIRED'
 
   return (
-    <Card>
-      <div className="flex items-start justify-between gap-2">
-        <CardTitle>{c.label}</CardTitle>
-        <Badge tone={meta.tone} data-testid={`connector-state-${c.key}`}>
-          {ar ? meta.ar : meta.en}
-        </Badge>
+    /*
+     * Named so a test can ask for PLATFORM CARDS rather than for every box on the page — see
+     * `integrations.spec.ts`, which asserts the order of the six ad platforms and would otherwise
+     * be reading the store panel and the account rows as well.
+     */
+    <Card data-testid="platform-card" data-platform={c.key} className="flex h-full flex-col">
+      {/*
+        INTEGRATION-DATASOURCE-WIZARD-001 §7 · TYPOGRAPHY-PRODUCT-POLISH-001 — the head of the card
+        is «which source, and what is it doing», and both have to survive a long name on a phone.
+
+        The name is allowed to wrap to two lines and no further; the chip never wraps and never
+        shrinks, because a state chip that has been squeezed into two lines by «Snapchat Marketing
+        API» stops reading as a chip. The coloured rail is the same identifier the project panel
+        uses for the same platform — the card is recognised before it is read.
+      */}
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className="mt-0.5 h-9 w-1.5 shrink-0 rounded-full"
+          style={{ background: platformColor(canonicalPlatform(c.key)) }}
+        />
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+          <div className="min-w-0">
+            <CardTitle>{c.label}</CardTitle>
+          </div>
+          {/*
+            `whitespace-nowrap` because a state chip broken over two lines stops reading as a chip,
+            and `self-start` so that on a phone — where it sits under the name — it hugs its own text
+            instead of stretching the width of the card.
+          */}
+          <Badge tone={meta.tone} data-testid={`connector-state-${c.key}`} className="shrink-0 self-start whitespace-nowrap">
+            {ar ? meta.ar : meta.en}
+          </Badge>
+        </div>
       </div>
 
+      <div className="mb-3 flex-1">
       <CardDescription>
         {state && NEEDS_OPERATOR.includes(state) ? (
           /*
@@ -302,10 +524,47 @@ function ConnectorCard({
               : 'This platform is not open for connecting yet. The platform operator is setting it up.'}
           </span>
         ) : state === 'error' ? (
-          <span className="text-danger" data-testid={`connector-error-${c.key}`}>{c.connection_error}</span>
+          <ProviderErrorNote error={c.connection_error} locale={ar ? 'ar' : 'en'} testId={`connector-error-${c.key}`} />
+        ) : wizard?.state === 'needs_selection' ? (
+          /* Authorised, with an inventory nobody has chosen from yet. Available and connected are
+           * different numbers and are shown as different numbers. */
+          <span className="tnum" data-testid={`connector-needs-selection-${c.key}`}>
+            {ar
+              ? `تمت المصادقة · ${accountsCounted(wizard.discovered, 'ar')} متاح · لم يُربط أي حساب بمشروع بعد`
+              : `Authorised · ${accountsCounted(wizard.discovered, 'en')} available · none connected to a project yet`}
+          </span>
+        ) : wizard?.state === 'first_sync_pending' ? (
+          <span className="tnum" data-testid={`connector-first-sync-${c.key}`}>
+            {ar
+              ? `${connectedAccounts(wizard.assigned, 'ar')} · بانتظار أول مزامنة`
+              : `${connectedAccounts(wizard.assigned, 'en')} · first sync pending`}
+          </span>
+        ) : wizard?.health && wizard.health.connected > 0 ? (
+          /*
+           * RUNTIME-100 §31 — a SUMMARY of this connection's accounts, not one badge for all of them.
+           *
+           * Ten accounts behind one authorisation, nine syncing and one whose access was withdrawn,
+           * rendered as a single green «متصل» — and that one account is the only fact on this card
+           * anybody needed. The attention count is stated separately, and only when it is not zero,
+           * so «everything is fine» stays a short sentence.
+           */
+          <span className="tnum" data-testid={`connector-health-${c.key}`}>
+            {ar
+              ? `${connectedAccounts(wizard.health.connected, 'ar')} · ${wizard.health.healthy} تعمل`
+              : `${connectedAccounts(wizard.health.connected, 'en')} · ${wizard.health.healthy} healthy`}
+            {wizard.health.needs_attention > 0 && (
+              <span className="text-warning">
+                {ar
+                  ? ` · ${wizard.health.needs_attention} يحتاج انتباه`
+                  : ` · ${wizard.health.needs_attention} need attention`}
+              </span>
+            )}
+            {' · '}
+            {whenSynced(c.data_last_synced_at, ar)}
+          </span>
         ) : state === 'connected' || state === 'syncing' ? (
           <span className="tnum" data-testid={`connector-synced-${c.key}`}>
-            {ar ? `${c.accounts ?? 0} حساب إعلاني` : `${c.accounts ?? 0} ad account(s)`}
+            {adAccounts(c.accounts ?? 0, ar ? 'ar' : 'en')}
             {' · '}
             {whenSynced(c.data_last_synced_at, ar)}
           </span>
@@ -313,8 +572,14 @@ function ConnectorCard({
           <span>{ar ? 'جاهز للربط — لم يربط أحد حسابه بعد.' : 'Ready to connect — nobody has authorised it yet.'}</span>
         )}
       </CardDescription>
+      </div>
 
-      <div className="mt-3 flex flex-wrap gap-2">
+      {/*
+        Actions sit on their own band, below a rule and pushed to the bottom of the card, so a row of
+        six cards has ONE line of buttons across it however many lines of state each card carries.
+        Before this the buttons floated wherever the description ended and the row read as ragged.
+      */}
+      <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-border pt-3">
         {state && NEEDS_OPERATOR.includes(state) ? (
           /* Nothing to press: no button here can produce a connection, so none is offered. */
           <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
@@ -324,14 +589,53 @@ function ConnectorCard({
           <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
             <Loader2 size={13} className="animate-spin" /> {ar ? 'المزامنة جارية الآن' : 'A sync is running now'}
           </span>
+        ) : wizard?.state === 'needs_selection' ? (
+          /* The one action this state admits. A sync button here would sync nothing, because no
+           * account has been assigned to a project (ORCH-100 §14). */
+          <Button onClick={() => onOpenWizard(wizard.connection.id)} data-testid={`connector-select-${c.key}`}>
+            <Plug size={14} /> {ar ? 'اختيار الحسابات' : 'Select accounts'}
+          </Button>
         ) : state === 'connected' ? (
           <>
-            <Button variant="secondary" loading={syncing} onClick={onSync} data-testid={`connector-sync-${c.key}`}>
-              <RefreshCw size={14} /> {t('sync')}
-            </Button>
-            <Button variant="ghost" loading={authorizing} onClick={onAuthorize}>
-              {ar ? 'إعادة الربط' : 'Reconnect'}
-            </Button>
+            {/*
+              INTEGRATION-DATASOURCE-WIZARD-001 §9 — an authorisation that has lapsed admits ONE
+              action, and it is not this page's other three.
+
+              «Manage accounts» reads the catalogue with the stored token, «Sync now» calls the
+              platform with it. Offering either against a token the platform has stopped accepting
+              gives the reader two buttons that fail and one that works, and nothing saying which is
+              which. So while the connection needs re-authorising, reconnecting is the whole menu.
+            */}
+            {!needsReauth && onManageAccounts && wizard && (
+              <Button
+                variant="secondary"
+                onClick={() => onManageAccounts(wizard.connection.id)}
+                data-testid={`connector-manage-${c.key}`}
+              >
+                <Plug size={14} /> {ar ? 'إدارة الحسابات' : 'Manage accounts'}
+              </Button>
+            )}
+            {!needsReauth && (
+              <Button variant="secondary" loading={syncing} onClick={onSync} data-testid={`connector-sync-${c.key}`}>
+                <RefreshCw size={14} /> {t('sync')}
+              </Button>
+            )}
+            <ReconnectButton
+              ar={ar}
+              busy={authorizing}
+              urgent={needsReauth}
+              onConfirm={onAuthorize}
+              testId={`connector-reconnect-${c.key}`}
+            />
+            <span className="ms-auto" />
+            <DisconnectButton
+              connectionId={wizard?.connection.id ?? null}
+              accounts={wizard?.health?.connected ?? c.accounts ?? 0}
+              ar={ar}
+              busy={disconnecting}
+              onConfirm={onDisconnect}
+              testId={`connector-disconnect-${c.key}`}
+            />
           </>
         ) : state ? (
           <Button variant="secondary" loading={authorizing} onClick={onAuthorize} data-testid={`connector-connect-${c.key}`}>
@@ -352,10 +656,172 @@ function ConnectorCard({
 }
 
 /**
- * The standalone page kept for the tests that drive this panel in isolation, and for any surface that
- * wants only the platforms. It renders exactly what the Connection Centre mounts — one implementation,
- * not two that drift.
+ * `/integrations` — the ONE place sources are managed (INTEG-RUNTIME §3).
+ *
+ * ## What this replaced
+ *
+ * There were two pages and two runtimes. `ConnectionCenterPage` drew a grid of sixteen «connectors»
+ * from `config/connectors.php`, in which every real platform was a `NullConnector` that could not
+ * authorise, could not sync and existed only to be listed — and then mounted the REAL panels
+ * underneath it. So the customer saw Meta twice: once as a card that could do nothing, once as a
+ * platform they could actually connect. Six of those sixteen were providers this product does not
+ * integrate with at all.
+ *
+ * §1 allows one runtime and §2 allows eight providers, so the grid, its config, its service, its
+ * controller and its routes are gone, and what is left is what was always doing the work:
+ *
+ *  1. the six advertising platforms — connect, reconnect, sync, disconnect;
+ *  2. the two commerce platforms, in their own shape;
+ *  3. every account those connections reach, and which project each one feeds.
+ *
+ * Tenant-level, deliberately: an authorisation belongs to the tenant and is LENT to projects through
+ * a binding, so this page is reachable before any project is chosen.
  */
 export function IntegrationsPage() {
-  return <AdPlatformsPanel />
+  const ar = useUi((s) => s.locale) === 'ar'
+  /*
+   * INTEGRATION-DATASOURCE-WIZARD-001 §11 — the inventory is not the page.
+   *
+   * Every account every connection reaches was rendered underneath the source cards, permanently.
+   * On the live Snapchat estate that is three hundred rows below the six cards somebody came for,
+   * and the page's own question — «what is connected, and does anything need me?» — was answered
+   * somewhere above a list nobody had asked for.
+   *
+   * It is still one click away, and it is the same panel: what changes is that a reader now asks
+   * for it. Closed by default, and the control says how to get back to it.
+   */
+  const [inventoryOpen, setInventoryOpen] = useState(false)
+
+  return (
+    <div className="flex flex-col gap-4">
+      <AdPlatformsPanel />
+      <StoresPanel />
+
+      <section className="flex flex-col gap-3">
+        <button
+          type="button"
+          data-testid="toggle-account-inventory"
+          aria-expanded={inventoryOpen}
+          onClick={() => setInventoryOpen((open) => !open)}
+          className="inline-flex w-fit items-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+        >
+          {inventoryOpen
+            ? (ar ? 'إخفاء جميع الحسابات' : 'Hide all accounts')
+            : (ar ? 'عرض جميع الحسابات المكتشفة' : 'Show every discovered account')}
+        </button>
+
+        {inventoryOpen && <AccountsPanel />}
+      </section>
+    </div>
+  )
+}
+
+/**
+ * COMMAND-CENTER §26 — «قطع الاتصال» sounds like undoing a setting. It is not.
+ *
+ * Revoking ends the authorisation AND disables every project binding that used any of this
+ * connection's accounts, in every project — because leaving them active would leave projects
+ * pointing at a source nothing can read, and a stale number reported as a current one is worse than
+ * a missing one.
+ *
+ * So the confirmation states the count rather than asking «هل أنت متأكد؟». A confirmation that does
+ * not say what is about to happen is a speed bump, not a safeguard — the customer clicks through it
+ * having learnt nothing, which is exactly the case this guards.
+ *
+ * Two presses, no modal: the second press is the confirmation, it is labelled with the consequence,
+ * and it reverts on blur so a stray click cannot leave the page armed.
+ */
+/**
+ * INTEGRATION-DATASOURCE-WIZARD-001 §9 — reconnecting is a DIFFERENT question from choosing accounts.
+ *
+ * ## What readers were doing instead
+ *
+ * The three verbs on a connected card — manage, sync, reconnect — all sound like «bring this up to
+ * date», and only one of them sends somebody to a provider consent screen. Support transcripts for
+ * this product are full of one move: an account was created on the platform last week, it is not in
+ * CampaignsHub, so the customer presses the button that says «reconnect», authorises again, and waits
+ * for a discovery that would have taken one tick in the account picker.
+ *
+ * It costs them a round trip through the provider, and it costs the ones who are not the original
+ * authoriser rather more — they cannot complete it at all, and now believe the product is broken.
+ *
+ * ## So the button says what it is for before it does it
+ *
+ * One press states the distinction — this refreshes the AUTHORISATION, the selected accounts are
+ * untouched — and the second press goes. It is not a destructive-action confirm; nothing here is
+ * lost either way. It is the sentence that belongs next to the verb, shown at the moment somebody is
+ * about to act on the verb rather than in help text nobody opens.
+ *
+ * When the authorisation has actually lapsed there is nothing to disambiguate: it is the only action
+ * the card offers, it is styled as the action to take, and it goes on the first press.
+ */
+function ReconnectButton({
+  ar, busy, urgent, onConfirm, testId,
+}: {
+  ar: boolean
+  busy: boolean
+  /** The authorisation has lapsed: this is the only thing that can succeed, so no arming step. */
+  urgent: boolean
+  onConfirm: () => void
+  testId: string
+}) {
+  const [armed, setArmed] = useState(false)
+
+  if (urgent) {
+    return (
+      <Button variant="secondary" loading={busy} onClick={onConfirm} data-testid={testId}>
+        <Plug size={14} /> {ar ? 'إعادة المصادقة' : 'Reconnect'}
+      </Button>
+    )
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      loading={busy}
+      onBlur={() => setArmed(false)}
+      onClick={() => (armed ? onConfirm() : setArmed(true))}
+      data-testid={testId}
+    >
+      {armed
+        ? (ar
+            ? 'تأكيد — تجديد المصادقة فقط، ولن تتغيّر الحسابات المختارة'
+            : 'Confirm — renews the authorisation only, your selected accounts stay')
+        : (ar ? 'إعادة الربط' : 'Reconnect')}
+    </Button>
+  )
+}
+
+function DisconnectButton({
+  connectionId, accounts, ar, busy, onConfirm, testId,
+}: {
+  connectionId: string | null
+  accounts: number
+  ar: boolean
+  busy: boolean
+  onConfirm: (connectionId: string) => void
+  testId: string
+}) {
+  const [armed, setArmed] = useState(false)
+
+  // No connection id means there is nothing to revoke — a legacy row that predates the wizard. No
+  // button is offered rather than one that would fail.
+  if (connectionId === null) return null
+
+  return (
+    <Button
+      variant="ghost"
+      loading={busy}
+      onBlur={() => setArmed(false)}
+      onClick={() => (armed ? onConfirm(connectionId) : setArmed(true))}
+      data-testid={testId}
+      className={armed ? 'text-danger' : undefined}
+    >
+      {armed
+        ? (ar
+            ? `تأكيد — سيتوقف ${accountsCounted(accounts, 'ar')} عن المزامنة`
+            : `Confirm — ${accounts} account(s) stop syncing`)
+        : (ar ? 'قطع الاتصال' : 'Disconnect')}
+    </Button>
+  )
 }

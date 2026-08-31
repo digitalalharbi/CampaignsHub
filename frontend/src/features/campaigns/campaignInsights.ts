@@ -1,3 +1,4 @@
+import { moneyState, spendComparableAmount, type MoneyTotals } from '@/lib/money/contract'
 import type { UnifiedCampaign } from './types'
 
 /**
@@ -63,28 +64,81 @@ export interface AttentionMetrics {
   clicks?: number | null
   engagements?: number | null
   impressions?: number | null
+  // PARTIAL-WITHHELD-001 — money provenance, so a withheld spend is never read as «no spend».
+  spend_withheld_rows?: number | null
+  spend_original?: number | null
+  money_original_currency?: string | null
+  money_original_currencies?: number | null
 }
+
+/** Any one of these above zero means figures ARE reaching this campaign, link or no link. */
+const MEASURABLE_KEYS = ['spend', 'conversions', 'leads', 'installs', 'clicks', 'impressions', 'engagements', 'reach'] as const
 
 /**
  * Rules are deliberately conservative: each one fires only when the data actually proves the problem.
  * "No metrics at all" is reported as an unknown-state flag rather than silently looking healthy —
  * but it is never dressed up as a performance problem.
  */
-export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefined): AttentionFlag[] {
+export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefined, reportingCurrency?: string | null): AttentionFlag[] {
   const flags: AttentionFlag[] = []
-  const spend = Number(m?.spend ?? 0)
   const model = resultModel(c.objective)
   const results = model ? Number(m?.[model.metric] ?? 0) : null
 
+  /*
+   * PARTIAL-WITHHELD-001 — classify the spend by what each flag actually needs.
+   *
+   * PRESENCE («was there spend at all?»): a withheld/partial spend IS spend, even though its coalesced
+   * value is 0 — so `spendReported` reads the money state, not `spend === 0`. Only a measured zero or
+   * a truly absent figure is «no spend».
+   *
+   * AMOUNT («is spend over budget?»): a comparison needs a single spend figure in the budget's own
+   * currency. A partial/mixed scope, or a withheld spend in another currency, has none — so
+   * `spendAmount` is null and the over-budget flag simply cannot fire on a number nobody can compare.
+   */
+  const spendMoney = moneyState(m as MoneyTotals | undefined, 'spend')
+  const spendReported = spendMoney.state !== 'zero' && spendMoney.state !== 'absent'
+  // The over-budget AMOUNT comparison needs a single spend figure in the BUDGET's currency — the same
+  // contract rule the command centre uses, never assuming reporting == budget currency.
+  const spendAmount = spendComparableAmount(
+    m as MoneyTotals | undefined,
+    'spend',
+    reportingCurrency ?? null,
+    c.budget_currency ?? null,
+  )
+
+  /*
+   * CAMP-UNLINKED-001 — «لا يمكن قياس أدائها», on a campaign whose performance was on screen.
+   *
+   * The flag fired on `external_campaigns_count === 0` and asserted that nothing could be measured.
+   * But metrics reach a campaign through `unified_campaign_id`, which does not require an
+   * `external_campaigns` row — so a campaign showing 176 results and a 15.36× return was labelled
+   * unmeasurable in the same view that measured it.
+   *
+   * The link and the data are two different facts. Missing link with no data is the real problem the
+   * flag was written for. Missing link WITH data is a bookkeeping gap: the figures are trustworthy,
+   * and what is absent is the mapping that lets the platform's own campaign be opened beside them.
+   * Saying the second as though it were the first teaches readers to disbelieve the flag.
+   */
   if ((c.external_campaigns_count ?? 0) === 0) {
-    flags.push({
-      code: 'unlinked', severity: 'high',
-      ar: 'غير مرتبطة بأي حملة على منصة إعلانية — لا يمكن قياس أدائها',
-      en: 'Not linked to any ad-platform campaign — its performance cannot be measured',
+    const measured = MEASURABLE_KEYS.some((k) => {
+      const v = m?.[k]
+      return typeof v === 'number' && v > 0
     })
+
+    flags.push(measured
+      ? {
+          code: 'unlinked_but_measured', severity: 'medium',
+          ar: 'غير مرتبطة بحملة على منصة إعلانية — الأرقام تصل، لكن لا يمكن فتح الحملة على المنصة',
+          en: 'Not linked to an ad-platform campaign — the figures arrive, but the platform campaign cannot be opened beside them',
+        }
+      : {
+          code: 'unlinked', severity: 'high',
+          ar: 'غير مرتبطة بأي حملة على منصة إعلانية — لا يمكن قياس أدائها',
+          en: 'Not linked to any ad-platform campaign — its performance cannot be measured',
+        })
   }
 
-  if (c.status === 'active' && spend === 0) {
+  if (c.status === 'active' && !spendReported) {
     flags.push({
       code: 'active_no_spend', severity: 'high',
       ar: 'نشطة بلا إنفاق في الفترة المحددة',
@@ -92,7 +146,7 @@ export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefin
     })
   }
 
-  if (spend > 0 && results !== null && results === 0) {
+  if (spendReported && results !== null && results === 0) {
     flags.push({
       code: 'spend_no_results', severity: 'high',
       ar: `إنفاق بلا ${model?.labelAr ?? 'نتائج'}`,
@@ -100,7 +154,7 @@ export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefin
     })
   }
 
-  if (c.status === 'paused' && spend > 0) {
+  if (c.status === 'paused' && spendReported) {
     flags.push({
       code: 'paused_with_spend', severity: 'medium',
       ar: 'متوقفة رغم وجود إنفاق مسجَّل في الفترة',
@@ -109,11 +163,12 @@ export function attentionFlags(c: UnifiedCampaign, m: AttentionMetrics | undefin
   }
 
   const budget = Number(c.total_budget ?? 0)
-  if (budget > 0 && spend > budget) {
+  // Amount comparison — only when spend is a single figure in the budget's currency (else no verdict).
+  if (budget > 0 && spendAmount !== null && spendAmount > budget) {
     flags.push({
       code: 'over_budget', severity: 'high',
-      ar: `تجاوزت الميزانية المخططة (${Math.round((spend / budget) * 100)}%)`,
-      en: `Over its planned budget (${Math.round((spend / budget) * 100)}%)`,
+      ar: `تجاوزت الميزانية المخططة (${Math.round((spendAmount / budget) * 100)}%)`,
+      en: `Over its planned budget (${Math.round((spendAmount / budget) * 100)}%)`,
     })
   }
 

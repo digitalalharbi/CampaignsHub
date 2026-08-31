@@ -51,16 +51,16 @@ function OfferCard({ c, ar }: { c: CreatorCollaboration; ar: boolean }) {
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/15 px-2.5 py-1 text-[11.5px] font-bold text-warning">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/15 px-2.5 py-1 text-[11px] font-bold text-warning">
             <FileSignature size={13} aria-hidden />
             {ar ? 'بانتظار ردّك' : 'Awaiting your answer'}
           </span>
           <h3 dir="auto" className="mt-2 truncate font-heading text-[15px] font-bold text-text-primary">{c.title}</h3>
-          {c.client_name && <p dir="auto" className="truncate text-[12.5px] text-text-muted">{c.client_name}</p>}
+          {c.client_name && <p dir="auto" className="truncate text-[12px] text-text-muted">{c.client_name}</p>}
         </div>
         {c.fee && (
           <div className="text-end">
-            <span className="block text-[11.5px] text-text-muted">{ar ? 'أجرك' : 'Your fee'}</span>
+            <span className="block text-[11px] text-text-muted">{ar ? 'أجرك' : 'Your fee'}</span>
             <Ltr className="font-heading text-[15px] font-extrabold text-text-primary">{money(c.fee, c.currency)}</Ltr>
           </div>
         )}
@@ -81,7 +81,7 @@ function WorkCard({ c, ar }: { c: CreatorCollaboration; ar: boolean }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 dir="auto" className="truncate font-heading text-[15px] font-bold text-text-primary">{c.title}</h3>
-          {c.client_name && <p dir="auto" className="truncate text-[12.5px] text-text-muted">{c.client_name}</p>}
+          {c.client_name && <p dir="auto" className="truncate text-[12px] text-text-muted">{c.client_name}</p>}
         </div>
         {c.fee && (
           <Ltr className="font-heading text-sm font-extrabold text-text-primary">{money(c.fee, c.currency)}</Ltr>
@@ -198,7 +198,7 @@ export function CreatorWorkPage() {
           {closed.map((c) => (
             <div key={c.id} className="rounded-2xl border border-border bg-surface-secondary p-4">
               <span dir="auto" className="font-heading text-sm font-bold text-text-secondary">{c.title}</span>
-              {c.client_name && <span dir="auto" className="ms-2 text-[12.5px] text-text-muted">{c.client_name}</span>}
+              {c.client_name && <span dir="auto" className="ms-2 text-[12px] text-text-muted">{c.client_name}</span>}
             </div>
           ))}
         </section>

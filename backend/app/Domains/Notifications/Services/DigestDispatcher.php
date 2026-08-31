@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -43,21 +44,40 @@ final class DigestDispatcher
     /** Beyond this a failure is left alone: retrying a broken template every hour is not a fix. */
     private const MAX_ATTEMPTS = 3;
 
+    /** The daily email reports a WEEK, compared with the week before — see {@see sendDaily()}. */
+    public const DAILY_WINDOW_DAYS = 7;
+
     public function __construct(
         private readonly DigestScope $scope,
         private readonly DailyDigest $daily,
         private readonly ProviderRegistry $providers,
         private readonly TenantContext $tenants,
+        // The ONE branding resolver. Injected rather than newed so this class cannot grow a second.
+        private readonly SharedLinkBranding $branding,
     ) {}
 
     /**
-     * Send one person their daily digest for `$day`, or record why not.
+     * The seven days ending on `$day`, against the seven before them — EMAIL-DAILY-WINDOW-001.
+     *
+     * This used to report `$day` alone, which made the daily email a report on ONE day compared with
+     * the day before it. Two days is the noisiest comparison paid media offers: a weekend, a payday,
+     * one campaign starting or a single provider syncing late moves it enough to look like a trend,
+     * and a reader who acts on that is reacting to the calendar. Seven against seven contains a whole
+     * week in each side, so both windows hold the same weekdays and a change means something changed.
+     *
+     * What is NOT changed is the rhythm or the ledger key: this still sends once per day, keyed on
+     * `$day`, so the unique index that stops a second copy keeps working exactly as before. Only the
+     * span the email reports on widens. The comparison window follows automatically —
+     * {@see DailyDigest::buildRange()} always takes the same number of days immediately before.
      *
      * @return string the state written to the ledger
      */
     public function sendDaily(User $user, string $tenantId, Carbon $day, string $locale = 'ar'): string
     {
-        return $this->send($user, $tenantId, 'daily', $day->toDateString(), $day->copy()->startOfDay(), $day->copy()->endOfDay(), $locale);
+        $end = $day->copy()->endOfDay();
+        $start = $end->copy()->subDays(self::DAILY_WINDOW_DAYS - 1)->startOfDay();
+
+        return $this->send($user, $tenantId, 'daily', $day->toDateString(), $start, $end, $locale);
     }
 
     /**
@@ -75,7 +95,26 @@ final class DigestDispatcher
         return $this->send($user, $tenantId, 'weekly', $end->format('o-\WW'), $start, $end, $locale);
     }
 
-    /** One send, for either rhythm. */
+    /**
+     * EMAIL-INTELLIGENCE-001 — the completed month, sent once.
+     *
+     * The period key is the calendar month (`2026-08`), so a run on any day inside it converges on
+     * the same ledger row and the same unique-index guarantee that already protects daily and
+     * weekly. Everything else is the daily path: one builder, one scope, the same honest states.
+     *
+     * The window is the WHOLE month `$inMonth` falls in, not «the last 30 days». A monthly report
+     * that slides is not comparable to the one before it, and comparability is the only reason to
+     * send a monthly report rather than a weekly one.
+     */
+    public function sendMonthly(User $user, string $tenantId, Carbon $inMonth, string $locale = 'ar'): string
+    {
+        $start = $inMonth->copy()->startOfMonth()->startOfDay();
+        $end = $inMonth->copy()->endOfMonth()->endOfDay();
+
+        return $this->send($user, $tenantId, 'monthly', $start->format('Y-m'), $start, $end, $locale);
+    }
+
+    /** One send, for any of the three rhythms. */
     private function send(
         User $user,
         string $tenantId,
@@ -114,7 +153,27 @@ final class DigestDispatcher
                 return $this->finish($user, $kind, $periodKey, 'awaiting_credentials', 'no_email_provider');
             }
 
-            Mail::to($user->email)->send(new DailyDigestMail($digest, $locale, (string) $user->name, $kind));
+            /*
+             * BRANDING-HIERARCHY-001 — the digest goes out under the AGENCY's name, not the product's.
+             *
+             * Resolved through the same `SharedLinkBranding` the reports and the shared links use,
+             * with a null report so it settles at the tenant layer: a digest can span several of that
+             * agency's clients, and naming one of them on a summary about all of them would be wrong
+             * in a way the reader could not detect.
+             *
+             * Only the NAME. An email cannot hide a broken image the way the report header now does —
+             * there is no `onError` in an inbox — so a logo that 404s would be permanent, and shipping
+             * the half that is safe is better than shipping the half that cannot be repaired.
+             */
+            $identity = $this->branding->forReport(null, $tenantId, static fn (): string => '');
+
+            Mail::to($user->email)->send(new DailyDigestMail(
+                $digest,
+                $locale,
+                (string) $user->name,
+                $kind,
+                is_string($identity['name'] ?? null) ? $identity['name'] : null,
+            ));
 
             return $this->finish($user, $kind, $periodKey, 'sent', null, sentAt: Carbon::now());
         } catch (Throwable $e) {

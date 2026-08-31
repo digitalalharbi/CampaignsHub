@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Receipt, X } from 'lucide-react'
+import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { useUi } from '@/stores/ui'
 import { BillingTabs } from './BillingTabs'
 import { TaxTreatmentChip } from './QuotesPage'
@@ -79,12 +80,12 @@ export function InvoicesPage() {
 
       {/* Summary — the invoice ledger at a glance (outstanding = unpaid remainder of payable invoices). */}
       {!q.isLoading && !q.isError && all.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <InvSummaryCard label={ar ? 'إجمالي الفواتير' : 'Total invoices'} value={String(summary.total)} tone="brand" />
-          <InvSummaryCard label={ar ? 'قابلة للسداد' : 'Payable'} value={String(summary.issued)} tone="info" />
-          <InvSummaryCard label={ar ? 'مدفوعة' : 'Paid'} value={String(summary.paid)} tone="success" />
-          <InvSummaryCard label={ar ? 'المتبقي' : 'Outstanding'} value={formatMoney(summary.outstanding, all[0]?.currency ?? 'SAR')} tone="warning" />
-        </div>
+        <StatGrid>
+          <StatCard dot tone="brand" label={ar ? 'إجمالي الفواتير' : 'Total invoices'} value={String(summary.total)} />
+          <StatCard dot tone="info" label={ar ? 'قابلة للسداد' : 'Payable'} value={String(summary.issued)} />
+          <StatCard dot tone="success" label={ar ? 'مدفوعة' : 'Paid'} value={String(summary.paid)} />
+          <StatCard dot tone="warning" label={ar ? 'المتبقي' : 'Outstanding'} value={formatMoney(summary.outstanding, all[0]?.currency ?? 'SAR')} />
+        </StatGrid>
       )}
 
       <div className="flex flex-wrap gap-2">
@@ -149,19 +150,6 @@ export function InvoicesPage() {
       )}
 
       {selected ? <InvoiceDrawer invoice={selected} c={c} ar={ar} onClose={() => setSelected(null)} /> : null}
-    </div>
-  )
-}
-
-function InvSummaryCard({ label, value, tone }: { label: string; value: string; tone: 'brand' | 'info' | 'success' | 'warning' }) {
-  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', info: 'bg-info', success: 'bg-success', warning: 'bg-warning' }
-  return (
-    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
-      <div className="flex items-center gap-1.5">
-        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
-        <span className="text-xs font-semibold text-text-secondary">{label}</span>
-      </div>
-      <span className="tnum text-2xl font-extrabold text-text-primary" dir="ltr">{value}</span>
     </div>
   )
 }

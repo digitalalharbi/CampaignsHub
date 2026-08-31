@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
-import { AUTH, untranslatedChrome } from './helpers'
+import { expect, test } from '@playwright/test'
+import { AUTH, contentLength, untranslatedChrome, walkRail } from './helpers'
 
 /**
  * Every route in a portal leads somewhere real (REVIEW-001).
@@ -8,23 +8,6 @@ import { AUTH, untranslatedChrome } from './helpers'
  * and still be a page that tells the customer nothing. The two failures this catches are the ones a
  * route table cannot show — a nav link that goes nowhere, and a page that renders but is empty.
  */
-
-/**
- * A page is "empty" when the shell rendered and the content area did not.
- *
- * Measured AFTER the content area actually has something in it, because `goto` resolves on load and
- * React renders after that — measuring immediately reports every page as empty, which is a broken
- * test rather than a broken product.
- */
-async function contentLength(page: Page): Promise<number> {
-  const main = page.locator('main')
-  await expect(main).toBeVisible({ timeout: 20000 })
-  await expect
-    .poll(async () => (await main.innerText()).trim().length, { timeout: 20000 })
-    .toBeGreaterThan(0)
-
-  return (await main.innerText()).trim().length
-}
 
 test.describe('the advertiser portal', () => {
   test.use({ storageState: AUTH.advertiser })
@@ -80,11 +63,7 @@ test.describe('the advertiser portal', () => {
      */
     test.setTimeout(15_000 + hrefs.length * 8_000)
 
-    for (const href of hrefs) {
-      await page.goto(href)
-      await expect(page.getByText(/later phase/i), `${href} is a placeholder`).toHaveCount(0)
-      expect(await contentLength(page), `${href} rendered an empty page`).toBeGreaterThan(40)
-    }
+    await walkRail(page, hrefs)
   })
 })
 
@@ -103,11 +82,7 @@ test.describe('the agency portal', () => {
     // Same reasoning as the advertiser walk above: budget the clock to the number of pages opened.
     test.setTimeout(15_000 + hrefs.length * 8_000)
 
-    for (const href of hrefs) {
-      await page.goto(href)
-      await expect(page.getByText(/later phase/i), `${href} is a placeholder`).toHaveCount(0)
-      expect(await contentLength(page), `${href} rendered an empty page`).toBeGreaterThan(40)
-    }
+    await walkRail(page, hrefs)
   })
 })
 
@@ -126,11 +101,7 @@ test.describe('the platform console', () => {
     // Same reasoning as the advertiser walk above: budget the clock to the number of pages opened.
     test.setTimeout(15_000 + hrefs.length * 8_000)
 
-    for (const href of hrefs) {
-      await page.goto(href)
-      await expect(page.getByText(/later phase/i), `${href} is a placeholder`).toHaveCount(0)
-      expect(await contentLength(page), `${href} rendered an empty page`).toBeGreaterThan(40)
-    }
+    await walkRail(page, hrefs)
   })
 })
 
@@ -204,11 +175,7 @@ test.describe('the client portal', () => {
     // Same reasoning as the advertiser walk above: budget the clock to the number of pages opened.
     test.setTimeout(15_000 + hrefs.length * 8_000)
 
-    for (const href of hrefs) {
-      await page.goto(href)
-      await expect(page.getByText(/later phase/i), `${href} is a placeholder`).toHaveCount(0)
-      expect(await contentLength(page), `${href} rendered an empty page`).toBeGreaterThan(40)
-    }
+    await walkRail(page, hrefs)
   })
 
   /** Direct open, refresh and Back all land in the portal — not at its login. */

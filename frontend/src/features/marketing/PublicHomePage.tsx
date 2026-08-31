@@ -6,6 +6,7 @@ import {
   Megaphone, ShieldCheck, Sparkles, Target, UserCircle, Wallet,
 } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
+import { FooterContact } from './FooterContact'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { HeroSection } from './HeroSection'
 import { journeyTo } from './journeys'
@@ -428,7 +429,10 @@ export function PublicHomePage() {
             {/* The four ways in, restated — each going to its OWN destination from the shared journey
                 table, never back to the top of this page. */}
             <ul data-testid="closing-journeys" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-              {c.start.paths.map((p) => (
+              {/* An ANNOUNCED path has no destination, so it is not restated here: `journeyTo` would
+                  resolve it to the influencer intake and hand out the exact route the announcement
+                  exists to withhold (MKT-UGC-002). This list is links only. */}
+              {c.start.paths.filter((p) => p.soon !== true).map((p) => (
                 <li key={p.key}>
                   <Link
                     to={journeyTo(p.key)}
@@ -457,10 +461,8 @@ export function PublicHomePage() {
               <span className="font-heading font-extrabold">CampaignsHub</span>
             </div>
             <p className="mt-3 max-w-sm text-sm leading-relaxed text-text-secondary">{c.footer.tagline}</p>
-            <p className="mt-3 text-sm text-text-secondary">
-              {c.footer.contactLabel}:{' '}
-              <a href={`mailto:${c.footer.email}`} className="font-semibold text-brand-600 hover:underline" dir="ltr">{c.footer.email}</a>
-            </p>
+
+            <FooterContact locale={locale} />
           </div>
 
           {c.footer.groups.map((group) => (

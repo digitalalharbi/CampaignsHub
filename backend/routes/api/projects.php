@@ -7,6 +7,7 @@ use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Metrics\Http\Controllers\MetricsController;
 use App\Domains\Metrics\Http\Controllers\SavedDashboardViewController;
+use App\Domains\Metrics\Http\Controllers\SpendLimitController;
 use App\Domains\Metrics\Http\Controllers\SyncRunController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
 use App\Domains\Projects\Http\Controllers\ProjectController;
@@ -67,7 +68,22 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('metrics/summary', [MetricsController::class, 'summary'])->name('metrics.summary');
     Route::get('metrics/timeseries', [MetricsController::class, 'timeseries'])->name('metrics.timeseries');
     Route::get('metrics/platforms', [MetricsController::class, 'platforms'])->name('metrics.platforms');
+    Route::get('metrics/accounts', [MetricsController::class, 'accounts'])->name('metrics.accounts');
     Route::get('metrics/campaigns', [MetricsController::class, 'campaigns'])->name('metrics.campaigns');
+    /*
+     * UX-MULTISELECT-SCALE-001 — the filter's options, searched on the server rather than filled from
+     * the full metric breakdown. Declared beside it so the two stay visibly related: one carries
+     * figures, the other deliberately does not.
+     */
+    Route::get('metrics/campaign-options', [MetricsController::class, 'campaignOptions'])->name('metrics.campaign-options');
+    /*
+     * ANALYTICS-DRILLDOWN-001 — the two rungs beneath a campaign.
+     *
+     * `{level}` is `ad_set` or `ad`; anything else is refused in the controller rather than
+     * answered emptily, because an empty list reads as «this level has no data» and that is a
+     * different statement from «there is no such level».
+     */
+    Route::get('metrics/entities/{level}', [MetricsController::class, 'entities'])->name('metrics.entities');
     // CAMPAIGN-020: side-by-side comparison of 2–5 campaigns of this project.
     Route::get('metrics/compare', [MetricsController::class, 'compare'])->name('metrics.compare');
     Route::get('metrics/funnel', [MetricsController::class, 'funnel'])->name('metrics.funnel');
@@ -79,7 +95,30 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('commerce/funnel', [StoreFunnelController::class, 'show'])->name('commerce.funnel');
     // REPORT-OBJECTIVE-001: spend and results split by marketing path, Direct and Blended apart.
     Route::get('metrics/objective-performance', [MetricsController::class, 'objectivePerformance'])->name('metrics.objective');
+    /*
+     * PLATFORM-DECISION-ANALYTICS-001 — each platform's contribution to each marketing path.
+     *
+     * Separate from `metrics/platforms`, which answers «how is each platform doing» with one set of
+     * figures across every objective at once. This one answers «which platform is contributing most
+     * to THIS objective», which is the question an operator actually has, and it is the only shape in
+     * which platforms may be compared at all.
+     */
+    Route::get('metrics/platform-objectives', [MetricsController::class, 'platformObjectives'])->name('metrics.platform-objectives');
+    Route::get('metrics/objective-leaders', [MetricsController::class, 'objectiveLeaders'])->name('metrics.objective-leaders');
+    Route::get('metrics/objective-explanations', [MetricsController::class, 'objectiveExplanations'])->name('metrics.objective-explanations');
     Route::get('metrics/budget', [MetricsController::class, 'budget'])->name('metrics.budget');
+    /*
+     * BUDGET-GOVERNANCE-001 — the workspace's OWN limits, which the two routes above are not.
+     *
+     * `metrics/budget` paces against `unified_campaigns.total_budget`: the plan set inside the ad
+     * platform, which the platform itself enforces. These are internal monitoring limits over scopes
+     * no single platform can see, and nothing enforces them — every payload says so.
+     */
+    Route::get('spend-limits', [SpendLimitController::class, 'index'])->name('spend-limits.index');
+    Route::post('spend-limits', [SpendLimitController::class, 'store'])->name('spend-limits.store');
+    Route::match(['put', 'patch'], 'spend-limits/{spendLimit}', [SpendLimitController::class, 'update'])->name('spend-limits.update');
+    Route::delete('spend-limits/{spendLimit}', [SpendLimitController::class, 'destroy'])->name('spend-limits.destroy');
+    Route::get('metrics/budget-accounts', [MetricsController::class, 'budgetAccounts'])->name('metrics.budget-accounts');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');
     // NORM-001: what was done to the numbers before they were shown — currency, timezone, attribution,
     // source, objective comparability, and the canonical metric catalogue.

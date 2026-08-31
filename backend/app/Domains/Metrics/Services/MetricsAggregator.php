@@ -4,9 +4,19 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Services;
 
+use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\CampaignStatus;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Services\CreativeFunnel;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Metrics\Coverage\AggregateCoverage;
+use App\Domains\Metrics\Coverage\ContributorCoverage;
+use App\Domains\Metrics\Enums\MoneyState;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\ValueObjects\MoneyScope;
 use App\Domains\Projects\Concerns\ProjectScope;
+use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Support\AdPlatforms;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
@@ -26,6 +36,7 @@ final class MetricsAggregator
         'conversions' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'conversions'), 0)",
         'spend' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'spend'), 0)",
         'revenue' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'revenue'), 0)",
+
         // DASH-010-D: objective-specific base metrics (tall table → new keys, no schema change).
         'reach' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'reach'), 0)",
         'video_views' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'video_views'), 0)",
@@ -84,10 +95,81 @@ final class MetricsAggregator
      *
      * @return list<string>
      */
+    /**
+     * The money-truth annotations — provenance, not metrics.
+     *
+     * These describe `spend` and `revenue` (was anything withheld, and what did the platform actually
+     * report) rather than measuring anything themselves. They deliberately have no catalogue entry:
+     * a `MetricDefinition` for «spend_withheld_rows» would offer it as a KPI somebody could chart,
+     * and it is not one. Callers that check «is every emitted metric defined» subtract these.
+     *
+     * @return list<string>
+     */
+    public static function moneyTruthKeys(): array
+    {
+        return array_keys(self::MONEY_TRUTH);
+    }
+
+    /**
+     * The coverage annotations — AGGREGATION-TRUTH-001.
+     *
+     * Named, for the same reason `moneyTruthKeys()` is: these describe whether the figures beside them
+     * are the WHOLE answer, and they measure nothing themselves. A `MetricDefinition` for «coverage»
+     * would offer it as something a reader could chart, which it is not — you cannot plot «complete»
+     * against Tuesday.
+     *
+     * Kept as an explicit list so that adding an annotation later is a deliberate act rather than a
+     * quiet widening of the exemption that `MetricsTest` enforces.
+     *
+     * @return list<string>
+     */
+    public static function coverageKeys(): array
+    {
+        return ['coverage', 'spend_coverage', 'revenue_coverage'];
+    }
+
     public static function readKeys(): array
     {
         return array_values(array_unique([...array_keys(self::PIVOT), ...self::FUNNEL_STAGES]));
     }
+
+    /**
+     * FX-WITHHELD-UI-001 — money truth, kept OUT of `PIVOT` on purpose.
+     *
+     * `PIVOT` is also `readKeys()`: the list of metric keys the connectors are asked to fetch. These
+     * four are aggregates over columns we already store, not metrics any platform reports, so putting
+     * them in `PIVOT` would have made the sync request «spend_withheld_rows» from Snapchat.
+     *
+     * `*_original` sums ONLY the withheld rows. It summed every original at first, including rows
+     * that converted perfectly well, so a project mixing converted and unconvertible money reported
+     * an original larger than the amount actually withheld — 5,100 where 5,000 was withheld. It went
+     * unnoticed because production's rows are entirely withheld and entirely USD; the breakdown test
+     * is what exposed it, by grouping a converted row beside an unconvertible one.
+     *
+     * They exist because `COALESCE(SUM(value), 0)` is right for arithmetic and wrong for a KPI card.
+     * When FX-001 withholds a row there is no rate, `value` is null on purpose, and the coalesce turns
+     * that into a literal 0 — indistinguishable from a day that truly cost nothing. Production paid
+     * for the difference: 3,465.33 USD of real Snapchat spend rendered as «0» under a label saying
+     * «لم ترسله المنصة», when the platform had sent it and we withheld it.
+     */
+    private const MONEY_TRUTH = [
+        'spend_withheld_rows' => "COUNT(*) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL)",
+        'spend_original' => "COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL), 0)",
+        'revenue_withheld_rows' => "COUNT(*) FILTER (WHERE metric_key = 'revenue' AND value IS NULL AND original_amount IS NOT NULL)",
+        'revenue_original' => "COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'revenue' AND value IS NULL AND original_amount IS NOT NULL), 0)",
+
+        /*
+         * The currency the original is IN — without it the number cannot be shown.
+         *
+         * «3,465.33» beside a project that reports in SAR reads as riyals, which is a worse lie than
+         * the zero it replaces. `MIN` rather than an aggregate over many: a withheld figure is
+         * withheld precisely because one rate is missing, so these rows share a currency. If a second
+         * ever appears the reader gets one of them and the ORIGINAL total is the sum across both,
+         * which would be wrong — so the count below is what a caller must check first.
+         */
+        'money_original_currency' => 'MIN(original_currency) FILTER (WHERE value IS NULL AND original_amount IS NOT NULL)',
+        'money_original_currencies' => 'COUNT(DISTINCT original_currency) FILTER (WHERE value IS NULL AND original_amount IS NOT NULL)',
+    ];
 
     /** When set, every aggregation is scoped to this single unified campaign (command center). */
     private ?string $campaignId = null;
@@ -225,20 +307,84 @@ final class MetricsAggregator
         return $clone;
     }
 
-    private function base(Carbon $from, Carbon $to): Builder
+    /**
+     * DEMO-LIVE-AGGREGATION-ISOLATION-001 — an operational total never quietly contains demo money.
+     *
+     * ## The defect
+     *
+     * `base()` had no `is_demo` filter of any kind, so every aggregate this class produces — the
+     * dashboard KPIs, the platform breakdown, the campaign ranking — summed real rows and seeded
+     * ones together whenever both were in scope. ANALYTICS-PROVENANCE-001 made that VISIBLE by
+     * reporting «mixed», and a badge is where it stopped: the figures directly beneath it were
+     * still adding invented spend to a customer's real spend. Naming a leak is not closing it.
+     *
+     * ## The policy, and why it is derived rather than configured
+     *
+     * There is no `is_demo` column on `projects` or `tenants` — demo-ness is a fact about ROWS, put
+     * there by the seeders. So the scope's nature is read from the rows themselves:
+     *
+     *   - the scope holds any live row  → it is an OPERATIONAL scope, and demo rows are excluded;
+     *   - the scope holds only demo rows → it is a DEMO scope, and they are exactly what to show.
+     *
+     * A live project that somehow acquired demo rows therefore reports its own real numbers, and the
+     * demo tenant keeps working as a demo. Nothing has to be flagged by hand, and no environment
+     * variable decides whose money is real.
+     *
+     * ## Why the scope decides and not the window
+     *
+     * Deliberately evaluated WITHOUT the date range. If the window decided, a project with live rows
+     * in June and demo rows in July would switch policy as somebody dragged the date picker — the
+     * same KPI meaning two different things on two ranges, with nothing on screen to say so.
+     */
+    private function excludesDemo(): bool
     {
-        // Reuse the model's project/tenant scope, then drop to the query builder for aggregation.
-        $query = DailyMetric::query()
-            ->when($this->acrossProjects, fn ($q) => $q->withoutGlobalScope(ProjectScope::class))
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
+        return $this->excludesDemo ??= $this->scoped(DailyMetric::query())
+            // Qualified, as every column in this class is: `byCampaign()` left-joins
+            // `unified_campaigns`, and an unqualified name is one added column away from ambiguous.
+            ->where('daily_metrics.is_demo', false)
+            ->exists();
+    }
+
+    /** Memo for {@see excludesDemo()} — one existence check per aggregator, not per aggregate. */
+    private ?bool $excludesDemo = null;
+
+    /**
+     * The canonical filter predicate, for a caller writing its own `daily_metrics` query.
+     *
+     * Three endpoints built their own query over this table and re-implemented one axis of the
+     * narrowing — the provider — while the request also carried an objective and a campaign. A
+     * second copy of a predicate is how two panels under one set of filter chips come to answer two
+     * different questions, so there is no second copy: this is the same method every aggregation
+     * already goes through, made reachable.
+     *
+     * Scope the aggregator first (`forProviders`/`forObjectives`/`forCampaigns`), then hand it the
+     * query.
+     */
+    public function applyScope(mixed $query): mixed
+    {
+        return $this->scoped($query);
+    }
+
+    /**
+     * The scope filters alone: tenant, project, campaign, provider, account, objective. No date, no
+     * demo policy.
+     *
+     * Extracted so `excludesDemo()` can ask about the whole scope rather than one window, and so
+     * `provenance()` can count BOTH kinds — a provenance report filtered by the demo policy would
+     * only ever be able to say «live», which is the one answer it exists to be able to doubt.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<DailyMetric>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<DailyMetric>
+     */
+    private function scoped(mixed $query): mixed
+    {
+        $query->when($this->acrossProjects, fn ($q) => $q->withoutGlobalScope(ProjectScope::class));
 
         if ($this->campaignId !== null) {
             $query->where('unified_campaign_id', $this->campaignId);
         }
 
         if ($this->campaignIds !== null) {
-            // Empty set → match nothing, never "all" — see forCampaigns(). The never-matching UUID keeps
-            // the column type valid on Postgres, exactly as the project bound does.
             $query->whereIn(
                 'daily_metrics.unified_campaign_id',
                 $this->campaignIds ?: ['00000000-0000-0000-0000-000000000000'],
@@ -246,9 +392,6 @@ final class MetricsAggregator
         }
 
         if ($this->projectIds !== null) {
-            // Empty set → match nothing (a client with no projects has no metrics), never "all".
-            // A never-matching UUID keeps the column type valid on Postgres. Column is qualified because
-            // byCampaign() left-joins unified_campaigns (which also has a project_id).
             $query->whereIn('daily_metrics.project_id', $this->projectIds ?: ['00000000-0000-0000-0000-000000000000']);
         }
 
@@ -266,19 +409,108 @@ final class MetricsAggregator
             });
         }
 
+        return $query;
+    }
+
+    private function base(Carbon $from, Carbon $to): Builder
+    {
+        $query = $this->baseIncludingDemo($from, $to);
+
+        if ($this->excludesDemo()) {
+            // Operational scope: the customer's own rows are the answer, and a seeded row added to
+            // them is not a rounding error — it is invented money inside a real total.
+            $query->where('daily_metrics.is_demo', false);
+        }
+
         return $query->toBase();
     }
 
-    /** @return array<string, float> base sums + derived KPIs for the period. */
+    /**
+     * The same scope and window with NO demo policy — for counting what is actually there.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<DailyMetric>
+     */
+    private function baseIncludingDemo(Carbon $from, Carbon $to): mixed
+    {
+        return $this->scoped(DailyMetric::query())
+            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
+    }
+
+    /**
+     * Base sums, derived KPIs, and the annotations that say what they are worth.
+     *
+     * The values are NOT all floats and have not been since the money-truth keys arrived:
+     * `money_original_currency` is a string, `spend_withheld_rows` an int, and since
+     * AGGREGATION-TRUTH-001 the coverage blocks are nested arrays. The old `array<string, float>` was
+     * describing an earlier version of this method, and widening it here is the type catching up with
+     * the payload rather than being loosened to silence an analyser.
+     *
+     * @return array<string, mixed> base sums + derived KPIs + money-truth and coverage annotations
+     */
     public function totals(Carbon $from, Carbon $to): array
     {
+        $select = array_merge(self::PIVOT, self::MONEY_TRUTH);
+
         $row = $this->base($from, $to)->selectRaw(implode(', ', array_map(
             fn ($expr, $alias) => "{$expr} AS {$alias}",
-            self::PIVOT,
-            array_keys(self::PIVOT),
+            $select,
+            array_keys($select),
         )))->first();
 
-        return $this->withDerived((array) $row);
+        $out = $this->withDerived((array) $row);
+
+        /*
+         * AGGREGATION-TRUTH-001 — the figures above are a SUM of what arrived. This says whether what
+         * arrived is everything that should have.
+         *
+         * It rides beside the numbers rather than changing them: a caller doing arithmetic still gets
+         * a scalar, and a caller about to print «total spend» can ask whether it is entitled to that
+         * word. Encoding the answer into the figure — as a null, or as a zero — is exactly how this
+         * defect got in, because `COALESCE(SUM(value), 0)` is right about arithmetic and silent about
+         * coverage, and the two needed separating rather than one of them being answered differently.
+         *
+         * `coverage` is scope-wide because the contributor question is: which PLATFORMS owed this
+         * window figures. Per-metric support is a different question and `reportedKeysByProvider()`
+         * already answers it.
+         */
+        $out['coverage'] = $this->coverage($from, $to);
+        // Money inherits it. Named per metric because a caller reads one figure, not the payload.
+        $out['spend_coverage'] = $out['coverage'];
+        $out['revenue_coverage'] = $out['coverage'];
+
+        return $out;
+    }
+
+    /**
+     * Who owed this window figures, and what state each of them is actually in.
+     *
+     * @return array<string, mixed>
+     */
+    private function coverage(Carbon $from, Carbon $to): array
+    {
+        $tenantId = app(TenantContext::class)->tenantId();
+
+        if ($tenantId === null) {
+            // No tenant in context — a platform-level read. Nothing is claimed rather than guessed.
+            return AggregateCoverage::complete()->toArray();
+        }
+
+        return app(ContributorCoverage::class)->forWindow(
+            $tenantId,
+            /*
+             * One project or none. A multi-project scope (the Client Command Center) spans several
+             * lifecycles at once, and answering «is this partial» across them would need a per-project
+             * answer rolled up — which is a real question and not this commit's. Passing null keeps
+             * the coverage scope-wide for the tenant rather than silently attributing one project's
+             * gaps to another's total.
+             */
+            $this->projectIds !== null && count($this->projectIds) === 1
+                ? $this->projectIds[0]
+                : app(ProjectContext::class)->projectId(),
+            $from,
+            $to,
+            $this->providers,
+        )->toArray();
     }
 
     /**
@@ -298,6 +530,48 @@ final class MetricsAggregator
      *
      * @return array<string, bool>
      */
+    /**
+     * Whether this SCOPE holds any metric row at all in the window.
+     *
+     * Separate from `reportedKeys()` on purpose, and asked before it. That method answers «which
+     * metric keys are present», which is a question about the platform — and over an empty scope it
+     * answers every key false, which a reader renders as «the platform does not report this». An
+     * empty scope has no standing to say anything about a connector.
+     *
+     * `exists()` rather than a count: the caller only needs to know whether to speak.
+     */
+    /**
+     * HEADLINE-SCOPE-001 — the distinct objective families the rows in this scope belong to.
+     *
+     * Derived through `CampaignObjective::family()`, the same mapping the campaign breakdown uses,
+     * so «what family is this campaign» has one answer in the codebase and not two.
+     *
+     * @return list<string>
+     */
+    public function objectiveFamiliesInScope(Carbon $from, Carbon $to): array
+    {
+        $objectives = $this->base($from, $to)
+            ->join('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
+            ->distinct()
+            ->pluck('unified_campaigns.objective');
+
+        $families = [];
+        foreach ($objectives as $objective) {
+            $family = $objective === null
+                ? ObjectiveFamily::Unknown
+                : (CampaignObjective::tryFrom((string) $objective)?->family() ?? ObjectiveFamily::Unknown);
+
+            $families[$family->value] = true;
+        }
+
+        return array_keys($families);
+    }
+
+    public function hasRows(Carbon $from, Carbon $to): bool
+    {
+        return $this->base($from, $to)->exists();
+    }
+
     public function reportedKeys(Carbon $from, Carbon $to): array
     {
         $present = $this->base($from, $to)
@@ -309,6 +583,42 @@ final class MetricsAggregator
         $out = [];
         foreach (array_keys(self::PIVOT) as $key) {
             $out[$key] = in_array($key, $present, true);
+        }
+
+        return $out;
+    }
+
+    /**
+     * The same answer, per CAMPAIGN — because a card leads with one campaign's own result.
+     *
+     * `byCampaign()` sums with `COALESCE(..., 0)`, so a metric no platform ever sent for a campaign
+     * arrives as `0`, indistinguishable from a real measurement of none. A card leading a leads
+     * campaign with «العملاء المحتملون 0» when the connector has never sent a lead is the dashboard's
+     * coalesced-zero defect one grain down — and on the screen where somebody decides whether to keep
+     * paying for that campaign.
+     *
+     * @return array<string, array<string,bool>> campaign id → metric key → was it ever sent
+     */
+    public function reportedKeysByCampaign(Carbon $from, Carbon $to): array
+    {
+        $rows = $this->base($from, $to)
+            ->select('unified_campaign_id', 'metric_key')
+            ->distinct()
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            if ($row->unified_campaign_id === null) {
+                continue;
+            }
+
+            $out[(string) $row->unified_campaign_id][(string) $row->metric_key] = true;
+        }
+
+        foreach ($out as $campaign => $present) {
+            foreach (array_keys(self::PIVOT) as $key) {
+                $out[$campaign][$key] = $present[$key] ?? false;
+            }
         }
 
         return $out;
@@ -400,11 +710,63 @@ final class MetricsAggregator
     }
 
     /** @return list<array<string, mixed>> one row per provider, ordered by spend desc, with share of spend. */
+    /**
+     * ANALYTICS-PROVENANCE-001 — whether the figures in scope are real, demo, or both.
+     *
+     * Every metric surface rendered `<DemoBadge />` unconditionally, so a project syncing live
+     * Snapchat spend was labelled «بيانات تجريبية · Demo» beside its own real money. A badge that is
+     * always on says nothing, and this one says something false: it is the product's promise that a
+     * figure is NOT a customer's real spend.
+     *
+     * `is_demo` is on every row already and is what the demo seeder sets, so the answer is a count
+     * rather than an inference from environment or a frontend constant — neither of which knows
+     * whose rows these are.
+     *
+     * `mixed` is reported rather than resolved. A project holding both is a real state, and choosing
+     * one label for it would hide demo rows inside a live total, which is the leak this exists to
+     * make visible.
+     *
+     * @return array{source:'live'|'demo'|'mixed'|'none', live_rows:int, demo_rows:int}
+     */
+    public function provenance(Carbon $from, Carbon $to): array
+    {
+        $row = $this->baseIncludingDemo($from, $to)->toBase()
+            ->selectRaw('COUNT(*) FILTER (WHERE daily_metrics.is_demo = false) AS live_rows')
+            ->selectRaw('COUNT(*) FILTER (WHERE daily_metrics.is_demo = true) AS demo_rows')
+            ->first();
+
+        $live = (int) ($row->live_rows ?? 0);
+        $demo = (int) ($row->demo_rows ?? 0);
+
+        return [
+            'source' => match (true) {
+                $live > 0 && $demo > 0 => 'mixed',
+                $demo > 0 => 'demo',
+                $live > 0 => 'live',
+                default => 'none',
+            },
+            'live_rows' => $live,
+            'demo_rows' => $demo,
+        ];
+    }
+
     public function byProvider(Carbon $from, Carbon $to): array
     {
         $rows = $this->base($from, $to)
             ->select('provider')
-            ->selectRaw(implode(', ', array_map(fn ($e, $a) => "{$e} AS {$a}", self::PIVOT, array_keys(self::PIVOT))))
+            /*
+             * MONEY-TRUTH-002 — provenance per ROW, not only on the grand total.
+             *
+             * `totals()` learned to carry the withheld amounts; these breakdowns did not, so platform
+             * comparison and campaign ranking still received a coalesced 0 with nothing to say it was
+             * withheld. The same lie, one level down: a platform that spent 4,128.93 USD ranked as
+             * having spent nothing, beneath a summary card showing the real figure.
+             */
+            ->selectRaw(implode(', ', array_map(
+                fn ($e, $a) => "{$e} AS {$a}",
+                array_merge(self::PIVOT, self::MONEY_TRUTH),
+                array_keys(array_merge(self::PIVOT, self::MONEY_TRUTH)),
+            )))
             ->groupBy('provider')
             ->get()
             ->map(fn ($r) => ['provider' => $r->provider] + $this->withDerived((array) $r))
@@ -417,6 +779,50 @@ final class MetricsAggregator
         usort($rows, fn ($a, $b) => $b['spend'] <=> $a['spend']);
 
         return $rows;
+    }
+
+    /**
+     * ANALYTICS-DRILLDOWN-001 — the ACCOUNT rung, between the platform and its campaigns.
+     *
+     * The drill-down read Platform → Campaign, skipping the level an operator actually manages: a
+     * customer can hold several Snapchat ad accounts, and «Snapchat spent X» is not an answer when
+     * two accounts run different countries out of different budgets.
+     *
+     * Grouped on `daily_metrics.external_account_id`, which is the account the row was INGESTED for,
+     * so this is a real attribution rather than a guess from the campaign's name or the connection.
+     * The name is joined from `external_accounts` rather than stored here, for the same reason the
+     * entity grain joins it: a renamed account must not need its metrics rewritten.
+     *
+     * @return list<array<string, mixed>> one row per ad account
+     */
+    public function byAccount(Carbon $from, Carbon $to): array
+    {
+        $select = array_merge(self::PIVOT, self::MONEY_TRUTH);
+
+        $rows = $this->base($from, $to)
+            ->select('daily_metrics.external_account_id as account_id', 'daily_metrics.provider')
+            ->selectRaw(implode(', ', array_map(
+                static fn ($expr, $alias) => "{$expr} AS {$alias}",
+                $select,
+                array_keys($select),
+            )))
+            ->groupBy('daily_metrics.external_account_id', 'daily_metrics.provider')
+            ->get();
+
+        $names = ExternalAccount::withoutGlobalScopes()
+            ->whereIn('id', $rows->pluck('account_id')->filter()->all())
+            ->pluck('name', 'id');
+
+        return $rows->map(fn ($r): array => [
+            'account_id' => $r->account_id === null ? null : (string) $r->account_id,
+            'provider' => $r->provider,
+            /*
+             * Null rather than a placeholder when the account has been removed since the rows were
+             * ingested — «Unknown account» would hide that the account is gone, and its spend is
+             * still real and still has to be shown somewhere.
+             */
+            'account_name' => $r->account_id === null ? null : ($names[$r->account_id] ?? null),
+        ] + $this->withDerived((array) $r))->all();
     }
 
     /** @return list<array<string, mixed>> one row per unified campaign (id/name/provider) ranked by spend. */
@@ -459,7 +865,18 @@ final class MetricsAggregator
 
         $platforms = $this->base($from, $to)->whereIn('daily_metrics.unified_campaign_id', $ids)
             ->select('daily_metrics.unified_campaign_id as campaign_id', 'daily_metrics.provider')
+            /*
+             * MONEY-TRUTH-002 — the per-platform split inside a campaign, carrying its provenance.
+             *
+             * `spend` here is the coalesced 0 on a withheld row, so a campaign's platform breakdown
+             * ranked every platform at nothing and sorted by that zero. The withheld original rides
+             * with it so the reader gets the same figure the strip above does.
+             */
             ->selectRaw("COALESCE(SUM(value) FILTER (WHERE metric_key = 'spend'), 0) AS spend")
+            ->selectRaw("COUNT(*) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_withheld_rows")
+            ->selectRaw("COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL), 0) AS spend_original")
+            ->selectRaw("MIN(original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS money_original_currency")
+            ->selectRaw("COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS money_original_currencies")
             ->selectRaw("COALESCE(SUM(value) FILTER (WHERE metric_key = 'conversions'), 0) AS conversions")
             ->groupBy('daily_metrics.unified_campaign_id', 'daily_metrics.provider')
             ->get()->groupBy('campaign_id');
@@ -481,12 +898,105 @@ final class MetricsAggregator
                 'series' => collect($series->get($id) ?? [])
                     ->map(fn ($r) => ['date' => Carbon::parse($r->metric_date)->toDateString()] + $this->withDerived((array) $r))
                     ->values()->all(),
-                'platforms' => collect($platforms->get($id) ?? [])
-                    ->map(fn ($r) => ['provider' => $r->provider, 'spend' => round((float) $r->spend, 2), 'conversions' => round((float) $r->conversions, 2)])
-                    ->sortByDesc('spend')->values()->all(),
+                'platforms' => $this->rankPlatformsByMoney(collect($platforms->get($id) ?? [])
+                    ->map(fn ($r) => [
+                        'provider' => $r->provider,
+                        'spend' => round((float) $r->spend, 2),
+                        'conversions' => round((float) $r->conversions, 2),
+                        // The reader needs all four to tell «spent nothing» from «cannot convert».
+                        'spend_withheld_rows' => (int) ($r->spend_withheld_rows ?? 0),
+                        'spend_original' => round((float) ($r->spend_original ?? 0), 2),
+                        'money_original_currency' => $r->money_original_currency ?? null,
+                        'money_original_currencies' => (int) ($r->money_original_currencies ?? 0),
+                    ])->all()),
+                // Whether the platform bars are a real money ranking or a deterministic fallback order.
+                'platform_ranking' => $this->platformsComparable(collect($platforms->get($id) ?? [])
+                    ->map(fn ($r) => [
+                        'spend' => (float) $r->spend,
+                        'spend_withheld_rows' => (int) ($r->spend_withheld_rows ?? 0),
+                        'spend_original' => (float) ($r->spend_original ?? 0),
+                        'money_original_currency' => $r->money_original_currency ?? null,
+                        'money_original_currencies' => (int) ($r->money_original_currencies ?? 0),
+                    ])->all()) ? 'by_spend' : 'unavailable',
                 'creatives' => $creatives[$id] ?? [],
             ];
         }, $ids));
+    }
+
+    /**
+     * MONEY-TRUTH-002 — order a campaign's per-platform split by REAL money, never by the coalesced 0.
+     *
+     * `sortByDesc('spend')` ranked every platform of a withheld campaign at nothing and drew the bars
+     * in an arbitrary order, then the client rendered `spend_original` into that arbitrary order — a
+     * ranking that looked earned and was not. Ordering goes through the one money contract: each
+     * platform's effective figure, when the platforms are comparable in a single currency. When they
+     * are not — a converted platform beside a withheld one, or two withheld in different currencies —
+     * there is no honest monetary ranking, so a DETERMINISTIC order (by provider) is kept instead of
+     * inventing one, and `platform_ranking` says which it is.
+     *
+     * @param  list<array<string,mixed>>  $platforms
+     * @return list<array<string,mixed>>
+     */
+    private function rankPlatformsByMoney(array $platforms): array
+    {
+        if (! $this->platformsComparable($platforms)) {
+            usort($platforms, fn ($a, $b) => strcmp((string) $a['provider'], (string) $b['provider']));
+
+            return $platforms;
+        }
+
+        usort($platforms, function ($a, $b) {
+            $av = $this->platformMoney($a)->amount() ?? 0.0;
+            $bv = $this->platformMoney($b)->amount() ?? 0.0;
+
+            // Amount desc, then provider asc so the order is total and stable on ties.
+            return $bv <=> $av ?: strcmp((string) $a['provider'], (string) $b['provider']);
+        });
+
+        return $platforms;
+    }
+
+    /** The money composition of one platform-split row. */
+    private function platformMoney(array $p): MoneyScope
+    {
+        return MoneyScope::of(
+            (float) ($p['spend'] ?? 0),
+            (int) ($p['spend_withheld_rows'] ?? 0),
+            (float) ($p['spend_original'] ?? 0),
+            (int) ($p['money_original_currencies'] ?? 0),
+            $p['money_original_currency'] ?? null,
+        );
+    }
+
+    /**
+     * Whether these platform rows can be ranked by one money figure.
+     *
+     * False the moment any row has no single figure (partial / mixed currency), or the rows do not
+     * agree on a currency basis — converted rows are in the reporting currency (one shared basis),
+     * a withheld row is in its own. A pure zero ranks against anything. More than one non-zero basis
+     * is riyals-versus-dollars, which is not a ranking.
+     *
+     * @param  list<array<string,mixed>>  $platforms
+     */
+    private function platformsComparable(array $platforms): bool
+    {
+        $bases = [];
+        foreach ($platforms as $p) {
+            $scope = $this->platformMoney($p);
+            if (! $scope->hasSingleTotal()) {
+                return false; // partial / mixed currency — no figure to rank at all
+            }
+            $basis = match ($scope->state) {
+                MoneyState::CompleteConverted => '__reporting__',
+                MoneyState::CompleteWithheld => (string) $scope->originalCurrency,
+                default => null, // zero — comparable with any basis
+            };
+            if ($basis !== null) {
+                $bases[$basis] = true;
+            }
+        }
+
+        return count($bases) <= 1;
     }
 
     /**
@@ -536,16 +1046,92 @@ final class MetricsAggregator
         return $out;
     }
 
-    public function byCampaign(Carbon $from, Carbon $to): array
+    /**
+     * Spend per campaign for one window — the light query behind a row's trend.
+     *
+     * Deliberately not `byCampaign()` recursively: that joins the campaign table, resolves objectives
+     * and asks `reportedKeysByCampaign()`, none of which a comparison figure needs. A campaign absent
+     * from the result has NO row in that window, which is a different fact from a zero and is what
+     * lets the caller refuse to invent a trend.
+     *
+     * @return array<string,float>
+     */
+    public function spendByCampaign(Carbon $from, Carbon $to): array
     {
+        return $this->base($from, $to)
+            ->select('daily_metrics.unified_campaign_id as campaign_id')
+            ->selectRaw("COALESCE(SUM(daily_metrics.value) FILTER (WHERE daily_metrics.metric_key = 'spend'), 0) AS spend")
+            ->whereNotNull('daily_metrics.unified_campaign_id')
+            ->groupBy('daily_metrics.unified_campaign_id')
+            ->get()
+            ->mapWithKeys(static fn ($r): array => [(string) $r->campaign_id => (float) $r->spend])
+            ->all();
+    }
+
+    /**
+     * The change from a previous spend to this one, or null when no honest change exists.
+     *
+     * Null for an absent baseline (the campaign was not there) and null for a zero baseline (every
+     * rise from nothing is infinite). Both are «we cannot say», and the row renders that rather than
+     * a number the reader would act on.
+     */
+    public static function spendChange(?float $previous, float $current): ?float
+    {
+        if ($previous === null || $previous <= 0.0) {
+            return null;
+        }
+
+        return round(($current - $previous) / $previous, 4);
+    }
+
+    public function byCampaign(Carbon $from, Carbon $to, ?Carbon $prevFrom = null, ?Carbon $prevTo = null): array
+    {
+        $reported = $this->reportedKeysByCampaign($from, $to);
+
+        /*
+         * CAMPAIGN-INTELLIGENCE-HUB — the previous window is OPTIONAL, and its absence means «no
+         * trend», never «no change».
+         *
+         * Six callers read this method — the digest, two report services, the live link and the
+         * metrics endpoint — and only an operational listing has a comparison window to offer. Making
+         * it required would have forced five of them to invent one, and a trend measured against a
+         * window nobody chose is a figure that looks computed and is not.
+         */
+        $previousSpend = $prevFrom !== null && $prevTo !== null
+            ? $this->spendByCampaign($prevFrom, $prevTo)
+            : null;
+
         $rows = $this->base($from, $to)
             ->leftJoin('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
-            ->select('daily_metrics.unified_campaign_id as campaign_id', 'unified_campaigns.name as campaign_name', 'unified_campaigns.client_display_name as client_display_name', 'unified_campaigns.objective as objective', 'unified_campaigns.objective_source as objective_source')
+            ->select('daily_metrics.unified_campaign_id as campaign_id', 'unified_campaigns.name as campaign_name', 'unified_campaigns.client_display_name as client_display_name', 'unified_campaigns.objective as objective', 'unified_campaigns.objective_source as objective_source', 'unified_campaigns.status as status')
             ->selectRaw('MAX(daily_metrics.provider) AS provider')
+            /*
+             * ENTITY-RELEVANCE-ORDERING-001 — the last day this campaign actually DID something.
+             *
+             * Filtered on a positive value, because a day of zeros is not a day the campaign ran. A
+             * campaign dark all month still has a row for every day of it, and reading those as
+             * activity would rank it alongside one serving right now — the same confusion between
+             * «no data» and «zero» the money contract exists to prevent, one grain up.
+             */
+            ->selectRaw('MAX(daily_metrics.metric_date) FILTER (WHERE daily_metrics.value > 0) AS last_active_on')
+            /*
+             * MONEY-TRUTH-002 — the same provenance, qualified for the join.
+             *
+             * This breakdown left-joins `unified_campaigns`, so every column has to name its table or
+             * Postgres cannot resolve it. The withheld expressions read two further columns —
+             * `original_amount` and `original_currency` — which is why the qualifier below covers four
+             * names rather than the original two.
+             */
             ->selectRaw(implode(', ', array_map(
-                fn ($e, $a) => str_replace('value', 'daily_metrics.value', str_replace('metric_key', 'daily_metrics.metric_key', $e))." AS {$a}",
-                self::PIVOT,
-                array_keys(self::PIVOT),
+                function ($e, $a) {
+                    foreach (['metric_key', 'original_amount', 'original_currency', 'value'] as $column) {
+                        $e = preg_replace('/(?<!\.)\b'.$column.'\b/', 'daily_metrics.'.$column, $e);
+                    }
+
+                    return $e." AS {$a}";
+                },
+                array_merge(self::PIVOT, self::MONEY_TRUTH),
+                array_keys(array_merge(self::PIVOT, self::MONEY_TRUTH)),
             )))
             /*
              * `objective` joins the grouping because a report has to know what each campaign's money
@@ -557,19 +1143,100 @@ final class MetricsAggregator
              * Neither can change the row count: both are columns of `unified_campaigns` and the group
              * is already keyed by that table's id.
              */
-            ->groupBy('daily_metrics.unified_campaign_id', 'unified_campaigns.name', 'unified_campaigns.client_display_name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
+            ->groupBy('daily_metrics.unified_campaign_id', 'unified_campaigns.name', 'unified_campaigns.client_display_name', 'unified_campaigns.objective', 'unified_campaigns.objective_source', 'unified_campaigns.status')
             ->get()
             ->map(fn ($r) => [
                 'campaign_id' => $r->campaign_id,
                 'campaign_name' => $r->campaign_name,
                 'client_display_name' => $r->client_display_name,
                 'objective' => $r->objective,
+                /*
+                 * ANALYTICS-OBJECTIVE-VISIBLE-001 — the FAMILY, computed where the mapping lives.
+                 *
+                 * The Objective view groups campaigns into the eight canonical families and
+                 * headlines each with the metrics that family is actually judged by. That mapping is
+                 * `CampaignObjective::family()`, and it belongs here rather than mirrored in
+                 * TypeScript: a second copy would drift the first time an objective is added, and
+                 * the drift would be silent — a campaign quietly grouped under the wrong verdict.
+                 */
+                'objective_family' => $r->objective === null
+                    ? ObjectiveFamily::Unknown->value
+                    : (CampaignObjective::tryFrom((string) $r->objective)?->family() ?? ObjectiveFamily::Unknown)->value,
                 'objective_source' => $r->objective_source,
+                /*
+                 * ENTITY-RELEVANCE-ORDERING-001 — two FACTS, not a verdict.
+                 *
+                 * Nothing downstream could tell a campaign running today from one that stopped three
+                 * weeks ago and still leads on spend, because the row never said. `status` is the
+                 * canonical one and `last_active_on` is the most recent day inside the window with a
+                 * positive figure. Which of them outranks the other is a question for the surface
+                 * asking, and an operational listing answers it differently from a report.
+                 */
+                /*
+                 * Which metrics THIS campaign's platforms actually sent — never inferred from the
+                 * summed value, which is a coalesced zero for every key nobody reported.
+                 */
+                'reported' => $reported[(string) $r->campaign_id] ?? [],
+                /*
+                 * The previous window's spend for THIS campaign, and the change against it.
+                 *
+                 * Both are null unless there is something real to compare with, and the two nulls mean
+                 * different things a reader must not be handed as one:
+                 *
+                 *   - no previous window was asked for — this caller does not do trends;
+                 *   - the campaign has no row in that window at all — it did not exist yet, or nothing
+                 *     was reported for it. Rendering that as «-100%» would invent a collapse for a
+                 *     campaign that simply launched this period, which is the most convincing wrong
+                 *     figure this row could carry.
+                 *
+                 * A previous spend of exactly 0 is a real measurement and is kept, but no CHANGE is
+                 * derived from it: every increase from zero is an infinite one, and «+∞%» is not a
+                 * fact about advertising.
+                 */
+                'previous_spend' => $previousSpend === null
+                    ? null
+                    : ($previousSpend[(string) $r->campaign_id] ?? null),
+                'spend_change' => self::spendChange(
+                    $previousSpend === null ? null : ($previousSpend[(string) $r->campaign_id] ?? null),
+                    (float) ($r->spend ?? 0),
+                ),
+                'status' => $r->status === null ? null : CampaignStatus::tryFrom((string) $r->status)?->value,
+                'last_active_on' => $r->last_active_on === null ? null : Carbon::parse((string) $r->last_active_on)->toDateString(),
                 'provider' => $r->provider,
             ] + $this->withDerived((array) $r))
             ->all();
 
-        usort($rows, fn ($a, $b) => $b['spend'] <=> $a['spend']);
+        return self::orderCampaignRows($rows);
+    }
+
+    /**
+     * The one ordering rule for a campaign breakdown — ENTITY-RELEVANCE-ORDERING-001.
+     *
+     * Spend first, and then something that never ties. Sorting on spend ALONE returns 0 for two
+     * campaigns that spent the same, which leaves them in whatever order the query produced — and the
+     * query above has no `ORDER BY`, so PostgreSQL guarantees nothing about it. A project full of
+     * campaigns that spent nothing is made entirely of such ties. This is not a defect anyone has
+     * watched happen; it is an order the database has never promised to keep, and every table
+     * downstream sorts stably, so whatever it is handed is what a reader sees.
+     *
+     * It is a static function rather than a closure inside the query so it can be tested on rows
+     * handed to it in a deliberately scrambled order. Proving it through the database is not
+     * possible here: the rows come back in id order anyway, so a database test passes with or without
+     * the tiebreak and would be decoration.
+     *
+     * The RANKING stays spend-first deliberately. `byCampaign()` feeds reports, live report links and
+     * the daily digest, where «the top campaigns» means the ones that spent the most; re-ranking them
+     * by how recently they ran would change what those documents say. Relevance ordering belongs to
+     * the operational surface that asks for it, built on the `status` and `last_active_on` these rows
+     * now carry.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    public static function orderCampaignRows(array $rows): array
+    {
+        usort($rows, static fn (array $a, array $b): int => [(float) $b['spend'], (string) $a['campaign_id']]
+            <=> [(float) $a['spend'], (string) $b['campaign_id']]);
 
         return $rows;
     }
@@ -577,7 +1244,7 @@ final class MetricsAggregator
     /** @return list<array<string, mixed>> daily rows: date + requested base metrics + derived roas/cpa. */
     public function timeseries(Carbon $from, Carbon $to): array
     {
-        return $this->base($from, $to)
+        $series = $this->base($from, $to)
             ->select('metric_date')
             ->selectRaw(implode(', ', array_map(fn ($e, $a) => "{$e} AS {$a}", self::PIVOT, array_keys(self::PIVOT))))
             ->groupBy('metric_date')
@@ -585,6 +1252,41 @@ final class MetricsAggregator
             ->get()
             ->map(fn ($r) => ['date' => Carbon::parse($r->metric_date)->toDateString()] + $this->withDerived((array) $r))
             ->all();
+
+        /*
+         * AGGREGATION-TRUTH-001 — eligibility is a question about EACH DAY, not about the window.
+         *
+         * A platform that stopped on the 15th was a contributor until the 15th and is not one after
+         * it. Judging the whole window at once gets both halves wrong in opposite directions: it
+         * either keeps the platform expected all month, so every later day reads as a shortfall and
+         * the chart draws a cliff nobody's budget fell off — or it drops the platform entirely and
+         * silently rewrites the days it really did spend.
+         *
+         * Each point therefore carries the contributors expected on ITS OWN date, so a renderer can
+         * tell «this day is lower» from «this day is missing someone».
+         */
+        $tenantId = app(TenantContext::class)->tenantId();
+
+        if ($tenantId === null) {
+            return $series;
+        }
+
+        $projectId = $this->projectIds !== null && count($this->projectIds) === 1
+            ? $this->projectIds[0]
+            : app(ProjectContext::class)->projectId();
+
+        $coverage = app(ContributorCoverage::class);
+
+        return array_map(function (array $point) use ($coverage, $tenantId, $projectId): array {
+            $day = Carbon::parse((string) $point['date']);
+            $onThatDay = $coverage->forWindow($tenantId, $projectId, $day, $day, $this->providers);
+
+            return $point + [
+                'expected_contributors' => $onThatDay->toArray()['expected_contributors'],
+                'coverage_state' => $onThatDay->isComplete() ? 'complete' : 'partial',
+                'excluded_contributors' => $onThatDay->degraded(),
+            ];
+        }, $series);
     }
 
     /** @return array<string, list<array<string,mixed>>> daily series per provider (for per-platform charts). */
@@ -644,10 +1346,34 @@ final class MetricsAggregator
         ];
         // Deliberately NOT wrapped in COALESCE — see the note above. The null IS the answer.
         $selects = array_map(fn ($s) => "SUM(value) FILTER (WHERE metric_key = '{$s}') AS {$s}", $stages);
+        /*
+         * FUNNEL-WITHHELD-001 — every `cost_per` on this chart divides this number.
+         *
+         * Coalesced to 0, so on an account whose money awaits a rate the funnel reported a cost of
+         * 0 for every stage — «0 per purchase» beside 218 purchases — while the KPI strip above it
+         * stated 4,803.17 USD. The withheld original is carried alongside, as `totals()` and now
+         * `budgetPacing()` both do, and the stage costs divide whichever figure is real.
+         */
         $selects[] = "COALESCE(SUM(value) FILTER (WHERE metric_key = 'spend'), 0) AS spend";
+        $selects[] = "COUNT(*) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_withheld_rows";
+        $selects[] = "COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL), 0) AS spend_original";
+        $selects[] = "MIN(original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currency";
+        $selects[] = "COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currencies";
         $row = (array) $this->base($from, $to)->selectRaw(implode(', ', $selects))->first();
 
-        $spend = (float) ($row['spend'] ?? 0);
+        // The figure that is real, through the one money contract. `Partial` (some converted + some
+        // withheld) and `MixedCurrency` have no single total, so `amount()` is null and every
+        // `cost_per` below refuses rather than dividing the converted subset alone.
+        $scope = MoneyScope::of(
+            (float) ($row['spend'] ?? 0),
+            (int) ($row['spend_withheld_rows'] ?? 0),
+            (float) ($row['spend_original'] ?? 0),
+            (int) ($row['spend_original_currencies'] ?? 0),
+            $row['spend_original_currency'] ?? null,
+        );
+        $spend = $scope->amount();
+        $spendCurrency = $scope->currency(null);
+        $spendWithheld = $scope->state === MoneyState::CompleteWithheld;
         $out = [];
         $prev = null;
         $prevStage = null;
@@ -659,6 +1385,25 @@ final class MetricsAggregator
             // conversion rate, and neither is «a share of a step the platform never sent».
             $ratio = $count !== null && $prev !== null && $prev > 0 ? $count / $prev : null;
 
+            /*
+             * FUNNEL-NOT-NESTED-001 — a step larger than the one above it is not a drop-off.
+             *
+             * Production reports 3,048 checkouts against 1,806 add-to-carts, so this ratio is 1.66.
+             * The arithmetic is right and the reading was not: the screen said «166%» as a funnel
+             * step and «-66%» as a drop-off, which is a quantity that does not exist.
+             *
+             * The figures are both real. These events simply do not nest — a buy-now flow reaches
+             * checkout without an add-to-cart, and the platform attributes each event on its own
+             * window. A funnel assumes every stage is a subset of the one above it, and for this
+             * pair that assumption is false.
+             *
+             * So the ratio is still reported, because hiding it would hide a real fact about the
+             * account, and `drop_off` is refused rather than inverted into a negative. `exceeds_previous`
+             * says which stages broke the assumption, so the reader is told rather than left to
+             * work out why a funnel widened.
+             */
+            $exceeds = $ratio !== null && $ratio > 1;
+
             $out[] = [
                 'stage' => $s,
                 'label' => $labels[$s],
@@ -666,8 +1411,10 @@ final class MetricsAggregator
                 'count' => $count,
                 'from_stage' => $count !== null ? $prevStage : null,
                 'step_rate' => $ratio !== null ? round($ratio, 4) : null,
-                'drop_off' => $ratio !== null ? round(1 - $ratio, 4) : null,
-                'cost_per' => $count !== null && $count > 0 ? round($spend / $count, 2) : null,
+                'exceeds_previous' => $exceeds,
+                'drop_off' => $ratio !== null && ! $exceeds ? round(1 - $ratio, 4) : null,
+                // No single spend total (partial / mixed currency) ⇒ no cost-per to state.
+                'cost_per' => $spend !== null && $count !== null && $count > 0 ? round($spend / $count, 2) : null,
             ];
 
             // Only a reported stage becomes the denominator for the next one.
@@ -677,17 +1424,159 @@ final class MetricsAggregator
             }
         }
 
-        return ['stages' => $out, 'spend' => round($spend, 2)];
+        return [
+            'stages' => $out,
+            // Null when there is no single total (partial / mixed currency) — not a coalesced zero.
+            'spend' => $spend !== null ? round($spend, 2) : null,
+            /*
+             * The unit the spend and every `cost_per` are in. Null means the reporting currency;
+             * a name means the platform's own, because no rate exists to convert it yet.
+             */
+            'spend_currency' => $spendCurrency,
+            'spend_withheld' => $spendWithheld,
+            // Why spend/cost_per are what they are — so the reader sees «partial», not a blank.
+            'spend_state' => $scope->state->value,
+        ];
     }
 
-    /** Planned vs spent budget with pacing (over/under) and a linear end-of-period projection. */
+    /**
+     * BUDGET-ACCOUNTS-001 — spend per AD ACCOUNT, against whatever ceiling the platform states.
+     *
+     * The budget screen answered one question — «is this campaign pacing to its plan» — and the plan
+     * is a figure somebody typed into this product. It never showed the ceiling the PLATFORM
+     * enforces, which is the one that actually stops delivery, nor rolled spend up to the account
+     * that holds the payment method.
+     *
+     * The ceiling comes from `external_campaigns.lifetime_budget`, and where a campaign states only
+     * a daily budget, from that daily figure across the window's days — the platform's own two ways
+     * of capping, read as stored. A campaign stating neither contributes nothing rather than a zero,
+     * and `capped_campaigns` reports how many did state one, so a partial ceiling cannot be read as
+     * a total.
+     *
+     * Money goes through the same withheld/original treatment as everywhere else.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function accountBudgets(Carbon $from, Carbon $to): array
+    {
+        $days = max(1, $from->diffInDays($to) + 1);
+
+        $spend = $this->base($from, $to)
+            ->select('daily_metrics.external_account_id as account_id', 'daily_metrics.provider')
+            ->selectRaw("COALESCE(SUM(value) FILTER (WHERE metric_key = 'spend'), 0) AS spent")
+            ->selectRaw("COUNT(*) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_withheld_rows")
+            ->selectRaw("COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL), 0) AS spend_original")
+            ->selectRaw("MIN(original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currency")
+            ->selectRaw("COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currencies")
+            ->groupBy('daily_metrics.external_account_id', 'daily_metrics.provider')
+            ->get();
+
+        $accountIds = $spend->pluck('account_id')->filter()->values();
+        if ($accountIds->isEmpty()) {
+            return [];
+        }
+
+        $caps = DB::table('external_campaigns')
+            ->whereIn('external_account_id', $accountIds->all())
+            ->selectRaw('external_account_id')
+            ->selectRaw('COALESCE(SUM(lifetime_budget), 0) + COALESCE(SUM(CASE WHEN lifetime_budget IS NULL THEN daily_budget END), 0) * ? AS cap', [$days])
+            ->selectRaw('COUNT(*) FILTER (WHERE lifetime_budget IS NOT NULL OR daily_budget IS NOT NULL) AS capped_campaigns')
+            ->selectRaw('COUNT(*) AS campaigns')
+            ->groupBy('external_account_id')
+            ->get()
+            ->keyBy('external_account_id');
+
+        $names = ExternalAccount::withoutGlobalScopes()
+            ->whereIn('id', $accountIds->all())
+            ->get(['id', 'name', 'currency'])
+            ->keyBy('id');
+
+        $elapsed = min(1.0, max(1, $from->diffInDays(Carbon::now()->min($to)) + 1) / $days);
+
+        $rows = [];
+        foreach ($spend as $r) {
+            $converted = (float) $r->spent;
+            $withheldRows = (int) $r->spend_withheld_rows;
+            $original = (float) $r->spend_original;
+            $oneCurrency = (int) $r->spend_original_currencies === 1;
+
+            $withheld = $converted <= 0.0 && $withheldRows > 0 && $original > 0.0 && $oneCurrency;
+            $spent = $withheld ? $original : $converted;
+
+            $cap = (float) ($caps[$r->account_id]->cap ?? 0);
+            $cappedCampaigns = (int) ($caps[$r->account_id]->capped_campaigns ?? 0);
+            $account = $names[$r->account_id] ?? null;
+
+            // A ceiling nobody stated is null, never zero — zero reads as «nothing left to spend».
+            $hasCap = $cap > 0.0 && $cappedCampaigns > 0;
+
+            $rows[] = [
+                'account_id' => (string) $r->account_id,
+                'account_name' => $account->name ?? null,
+                'provider' => $r->provider,
+                'spent' => round($spent, 2),
+                'spent_currency' => $withheld ? $r->spend_original_currency : ($account->currency ?? null),
+                'spend_withheld' => $withheld,
+                'cap' => $hasCap ? round($cap, 2) : null,
+                'remaining' => $hasCap ? round($cap - $spent, 2) : null,
+                'consumed_pct' => $hasCap ? round($spent / $cap, 4) : null,
+                'pace' => $hasCap && $elapsed > 0 ? round(($spent / $elapsed) / $cap, 3) : null,
+                'projected_spend' => $elapsed > 0 ? round($spent / $elapsed, 2) : round($spent, 2),
+                'campaigns' => (int) ($caps[$r->account_id]->campaigns ?? 0),
+                'capped_campaigns' => $cappedCampaigns,
+            ];
+        }
+
+        usort($rows, fn ($a, $b) => $b['spent'] <=> $a['spent']);
+
+        return $rows;
+    }
+
+    /**
+     * Planned vs spent budget with pacing (over/under) and a linear end-of-period projection.
+     *
+     * ## BUDGET-WITHHELD-001 — «you have spent nothing» is the one lie somebody acts on
+     *
+     * `spent` was `COALESCE(SUM(value) FILTER (spend), 0)`. FX-001 stores `value = null` when no
+     * rate exists, so on an account whose money is entirely withheld — which is production's, every
+     * row of it — this returned 0 for every campaign. The table then reported 0 spent, 0% consumed,
+     * pacing 0.00× and the full budget remaining, against 4,803.17 USD that had actually been spent.
+     *
+     * Every other surface that read that zero printed a wrong number. This one invites an action:
+     * a campaign shown as having spent nothing and pacing at zero is a campaign somebody tops up.
+     *
+     * So the withheld original is carried alongside, exactly as `totals()` carries it, and the
+     * pacing arithmetic below uses whichever figure is real.
+     *
+     * ## The unit has to match, or the ratio is not one
+     *
+     * `total_budget` is denominated in the campaign's `budget_currency`; a withheld spend is in the
+     * platform's `original_currency`. Dividing one by the other produces a number with no meaning,
+     * so `consumed_pct`, `pace` and `remaining` are withheld — null, with `pacing_basis` naming the
+     * reason — unless the two agree. `spent` itself is still stated, because what was spent is a
+     * fact regardless of what it can be compared against.
+     */
     public function budgetPacing(Carbon $from, Carbon $to, Carbon $today): array
     {
+        /*
+         * The currency a CONVERTED sum is expressed in — read from the rows themselves rather than
+         * assumed, for the same reason `rangeCurrency()` exists: a helper that defaults to a market's
+         * currency states the wrong unit the first time a project reports in another one, silently.
+         */
+        $reportingCurrency = $this->base($from, $to)
+            ->whereNotNull('project_currency')
+            ->value('project_currency');
+
         $spentByCampaign = $this->base($from, $to)
             ->select('unified_campaign_id')
             ->selectRaw("COALESCE(SUM(value) FILTER (WHERE metric_key = 'spend'), 0) AS spent")
+            ->selectRaw("COUNT(*) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_withheld_rows")
+            ->selectRaw("COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL), 0) AS spend_original")
+            ->selectRaw("MIN(original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currency")
+            ->selectRaw("COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currencies")
             ->groupBy('unified_campaign_id')
-            ->pluck('spent', 'unified_campaign_id');
+            ->get()
+            ->keyBy('unified_campaign_id');
 
         $periodDays = max(1, $from->diffInDays($to) + 1);
         $elapsedDays = max(1, $from->diffInDays($today->min($to)) + 1);
@@ -705,19 +1594,67 @@ final class MetricsAggregator
         $rows = [];
         foreach ($campaigns as $c) {
             $budget = (float) ($c->total_budget ?? 0);
-            $spent = (float) ($spentByCampaign[$c->id] ?? 0);
+            $budgetCurrency = $c->budget_currency;
+            $row = $spentByCampaign[$c->id] ?? null;
+
+            /*
+             * The figure that is REAL, and the unit it is in — through the one money contract.
+             *
+             * A converted sum is in the project's reporting currency; a withheld one in the platform's,
+             * nameable only when the withheld rows agree on a currency. `Partial` (some converted + some
+             * withheld) and `MixedCurrency` have NO single figure — `amount()` is null, and every
+             * pacing derivation below refuses rather than pacing against the converted subset alone,
+             * which is the one number an operator tops a campaign up on.
+             */
+            $scope = MoneyScope::of(
+                (float) ($row->spent ?? 0),
+                (int) ($row->spend_withheld_rows ?? 0),
+                (float) ($row->spend_original ?? 0),
+                (int) ($row->spend_original_currencies ?? 0),
+                $row->spend_original_currency ?? null,
+            );
+            $spent = $scope->amount();
+            $spentCurrency = $scope->currency($reportingCurrency);
+            $hasSpend = $spent !== null;
+
+            /*
+             * Comparable only when a single spend figure exists AND it is denominated like the budget.
+             * Otherwise the ratio divides riyals by dollars, or by nothing at all — refused, with the
+             * reason carried in `pacing_basis`.
+             */
+            $comparable = $hasSpend
+                && $budget > 0
+                && is_string($spentCurrency)
+                && is_string($budgetCurrency)
+                && strtoupper($spentCurrency) === strtoupper($budgetCurrency);
+
             $expected = $budget * $elapsedFraction;
-            $projected = $elapsedFraction > 0 ? $spent / $elapsedFraction : $spent;
+            $projected = $hasSpend ? ($elapsedFraction > 0 ? $spent / $elapsedFraction : $spent) : null;
+
             $rows[] = [
                 'campaign_id' => $c->id,
                 'campaign_name' => $c->name,
                 'status' => $c->status,
                 'budget' => round($budget, 2),
-                'spent' => round($spent, 2),
-                'remaining' => round($budget - $spent, 2),
-                'consumed_pct' => $budget > 0 ? round($spent / $budget, 4) : null,
-                'pace' => $expected > 0 ? round($spent / $expected, 3) : null, // >1 over-pacing, <1 under
-                'projected_spend' => round($projected, 2),
+                'budget_currency' => $budgetCurrency,
+                'spent' => $hasSpend ? round($spent, 2) : null,
+                'spent_currency' => $spentCurrency,
+                'spend_withheld' => $scope->state === MoneyState::CompleteWithheld,
+                'spend_state' => $scope->state->value,
+                'remaining' => $comparable ? round($budget - $spent, 2) : null,
+                'consumed_pct' => $comparable ? round($spent / $budget, 4) : null,
+                'pace' => $comparable && $expected > 0 ? round($spent / $expected, 3) : null, // >1 over-pacing
+                'projected_spend' => $projected !== null ? round($projected, 2) : null,
+                /*
+                 * Why pacing is absent, when it is. `comparable` — computed. `currency_mismatch` —
+                 * the spend is real but denominated differently from the plan. `no_budget` — nobody
+                 * set one. `partial`/`mixed_currency` — there is no single spend figure to pace at all.
+                 */
+                'pacing_basis' => $comparable
+                    ? 'comparable'
+                    : (! $hasSpend
+                        ? $scope->state->value
+                        : ($budget > 0 ? 'currency_mismatch' : 'no_budget')),
             ];
         }
         usort($rows, fn ($a, $b) => ($b['pace'] ?? 0) <=> ($a['pace'] ?? 0));
@@ -752,6 +1689,18 @@ final class MetricsAggregator
             'conversions' => round($conv, 2),
             'spend' => round($spend, 2),
             'revenue' => round($revenue, 2),
+
+            /*
+             * FX-WITHHELD-UI-001 — carried through, because this method returns a fresh literal and
+             * anything not named here is silently dropped. That is exactly how the withholding
+             * became invisible: the aggregate existed in SQL and never reached a caller.
+             */
+            'spend_withheld_rows' => (int) ($row['spend_withheld_rows'] ?? 0),
+            'spend_original' => round((float) ($row['spend_original'] ?? 0), 2),
+            'revenue_withheld_rows' => (int) ($row['revenue_withheld_rows'] ?? 0),
+            'revenue_original' => round((float) ($row['revenue_original'] ?? 0), 2),
+            'money_original_currency' => $row['money_original_currency'] ?? null,
+            'money_original_currencies' => (int) ($row['money_original_currencies'] ?? 0),
             'reach' => round($reach, 2),
             'video_views' => round($videoViews, 2),
             'video_completions' => round($videoCompletions, 2),

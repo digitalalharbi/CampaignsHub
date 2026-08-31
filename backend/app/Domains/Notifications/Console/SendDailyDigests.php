@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Console;
 
 use App\Domains\Notifications\Services\DigestDispatcher;
+use App\Domains\Notifications\Support\DigestSchedule;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -40,7 +41,7 @@ final class SendDailyDigests extends Command
         {--force : Ignore the recipient’s chosen hour (still idempotent per period)}
         {--date= : The day to summarise, YYYY-MM-DD. Defaults to the recipient’s yesterday}';
 
-    protected $description = 'Send each recipient their daily and weekly digests at their own local hour.';
+    protected $description = 'Send each recipient their daily, weekly and monthly digests at their own local hour.';
 
     public function handle(DigestDispatcher $dispatcher): int
     {
@@ -78,7 +79,13 @@ final class SendDailyDigests extends Command
                 continue;
             }
 
-            // «Yesterday» in the reader's own timezone — see the note above.
+            /*
+             * The window's LAST day, in the reader's own timezone — see the note above.
+             *
+             * Yesterday rather than today because today is still being written: a provider that syncs
+             * at 03:00 would make the same email different depending on the hour it went out. Since
+             * EMAIL-DAILY-WINDOW-001 this is the END of a seven-day window, not the whole report.
+             */
             $day = $this->option('date') !== null
                 ? Carbon::parse((string) $this->option('date'), $timezone)
                 : $local->copy()->subDay();
@@ -99,10 +106,30 @@ final class SendDailyDigests extends Command
              * the idempotency key is the ISO week, a `--force` run on any other day still converges
              * on the same single send.
              */
-            if (in_array('weekly', $digests, true) && ($this->option('force') || $local->isMonday())) {
+            if (in_array('weekly', $digests, true) && ($this->option('force') || $local->dayOfWeekIso === $this->weekday($row))) {
                 $state = $dispatcher->sendWeekly($user, $tenantId, $day->copy()->endOfDay(), $locale);
                 $state === 'sent' ? $sent++ : $skipped++;
                 $this->line("{$user->email} weekly: {$state}");
+            }
+
+            /*
+             * EMAIL-INTELLIGENCE-001 — the monthly goes out on the FIRST of the month, and reports
+             * the month that just finished.
+             *
+             * Sending on the 1st for the previous month is the only arrangement where the figures
+             * are complete when they arrive. Reporting the current month on the 1st would be a
+             * report about a few hours, and reporting it on the 31st would be a report the reader
+             * cannot compare with anything, because the previous one covered a different number of
+             * days.
+             *
+             * `--force` sends the month currently in progress, which is what a manual run is for;
+             * the idempotency key is the calendar month either way, so it can only land once.
+             */
+            if (in_array('monthly', $digests, true) && ($this->option('force') || $local->day === $this->monthday($row))) {
+                $month = $this->option('force') ? $day->copy() : $day->copy()->subMonthNoOverflow();
+                $state = $dispatcher->sendMonthly($user, $tenantId, $month, $locale);
+                $state === 'sent' ? $sent++ : $skipped++;
+                $this->line("{$user->email} monthly: {$state}");
             }
         }
 
@@ -124,7 +151,7 @@ final class SendDailyDigests extends Command
         $chosen = $row->digests === null ? [] : (array) json_decode((string) $row->digests, true);
 
         return array_values(array_filter(
-            ['daily', 'weekly'],
+            ['daily', 'weekly', 'monthly'],
             static fn (string $kind): bool => ($chosen[$kind] ?? false) === true,
         ));
     }
@@ -135,8 +162,35 @@ final class SendDailyDigests extends Command
      * One bad row would otherwise abort the sweep and silence everybody else's digest — a single
      * malformed preference taking down the feature for the whole installation.
      */
+    /**
+     * The weekday this recipient chose, ISO-8601 — EMAIL-SCHEDULE-001.
+     *
+     * Monday when unset, which is what the hard-coded `isMonday()` did, so no existing recipient's
+     * mail moves. Anything outside 1–7 falls back to Monday rather than silently never matching: a
+     * digest that stops arriving because a column holds 9 is a failure nobody would think to look for.
+     */
+    private function weekday(object $row): int
+    {
+        return DigestSchedule::weekday($row->digest_weekday ?? null);
+    }
+
+    /**
+     * The day of the month this recipient chose.
+     *
+     * 1–28 accepted; anything else falls back to the FIRST. The migration's reason for the 28 is that
+     * a report set for the 30th would never arrive in February and would do so silently.
+     *
+     * Delegated to `DigestSchedule` — EMAIL-SETTINGS-DEPTH-001 — so the settings screen's «next send»
+     * and this sweep cannot answer differently. A screen that promises a date no email arrives on is
+     * worse than one that promises nothing.
+     */
+    private function monthday(object $row): int
+    {
+        return DigestSchedule::monthday($row->digest_monthday ?? null);
+    }
+
     private function timezone(string $timezone): string
     {
-        return in_array($timezone, timezone_identifiers_list(), true) ? $timezone : 'UTC';
+        return DigestSchedule::timezone($timezone);
     }
 }

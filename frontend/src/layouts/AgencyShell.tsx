@@ -1,7 +1,10 @@
 import { Outlet } from 'react-router-dom'
-import { PortalFooter } from '@/features/legal/PolicyFooter'
 import { useQuery } from '@tanstack/react-query'
 import {
+  Building2,
+  Inbox,
+  LayoutDashboard,
+  Megaphone,
   Menu,
   Moon,
   PanelLeft,
@@ -16,6 +19,24 @@ import { useUi } from '@/stores/ui'
 import { AgencyScopeSwitcher } from '@/features/agency/AgencyScopeSwitcher'
 import { SidebarNav } from './SidebarNav'
 import { agencyNavGroups } from './agencyNav'
+import { PortalFrame } from './PortalFrame'
+import type { MobileTab } from './MobileTabBar'
+import { moreGroupsFrom } from './mobileTabs'
+
+/**
+ * The four an agency operator opens this portal for (MOBILE-APP-001).
+ *
+ * Clients is the axis an agency's whole day hangs off — it is second only to knowing where things
+ * stand — and Requests is the inbox work arrives through. Projects, content, tasks, conversations,
+ * alerts, analytics, reports, files, both kinds of invoicing, connections, team and settings are all
+ * in More: eighteen sections is a rail, not a tab bar, and none of them is dropped.
+ */
+const AGENCY_TABS: MobileTab[] = [
+  { to: '/agency/dashboard', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard },
+  { to: '/agency/clients', ar: 'العملاء', en: 'Clients', icon: Building2 },
+  { to: '/agency/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone },
+  { to: '/agency/requests', ar: 'الطلبات', en: 'Requests', icon: Inbox },
+]
 
 /**
  * The agency portal's shell (ADR 0002).
@@ -65,7 +86,7 @@ function AgencyIdentity({ collapsed }: { collapsed?: boolean }) {
           <span className="block truncate font-heading text-[15px] font-extrabold tracking-tight text-text-primary">
             {current?.tenant.name ?? 'CampaignsHub'}
           </span>
-          <span data-testid="agency-scope-note" className="block truncate text-[11.5px] text-text-muted">
+          <span data-testid="agency-scope-note" className="block truncate text-[11px] text-text-muted">
             {ar ? 'بوابة الوكالة' : 'Agency portal'}
             {scoped && ` · ${ar ? 'عملاء محدّدون' : 'Selected clients'}`}
           </span>
@@ -79,68 +100,71 @@ export function AgencyShell() {
   const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } =
     useUi()
   const ar = locale === 'ar'
-  const railWidth = sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'
 
   return (
-    <div data-testid="agency-shell" className="flex min-h-screen bg-background text-text-primary">
-      <aside
-        className={`sticky top-0 hidden h-screen shrink-0 flex-col gap-6 overflow-y-auto border-e border-border bg-surface p-3.5 transition-[width] duration-200 md:flex ${railWidth}`}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <AgencyIdentity collapsed={sidebarCollapsed} />
-          {!sidebarCollapsed && (
+    <PortalFrame
+      testId="agency-shell"
+      railWidth={sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'}
+      tabs={AGENCY_TABS}
+      moreGroups={moreGroupsFrom(agencyNavGroups, AGENCY_TABS)}
+      // The agency's client → project scope, for the same reason (MOBILE-APP-001): every section
+      // below it is read through that choice, and the drawer is no longer the phone's way in.
+      moreHeader={<div className="grid gap-3"><AgencyScopeSwitcher /><AccountMenu variant="sidebar" /></div>}
+      drawerOpen={sidebarOpen}
+      onDrawerClose={() => setSidebarOpen(false)}
+      rail={
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <AgencyIdentity collapsed={sidebarCollapsed} />
+            {!sidebarCollapsed && (
+              <button
+                onClick={toggleSidebarCollapsed}
+                aria-label={ar ? 'طي القائمة' : 'Collapse sidebar'}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+              >
+                <PanelLeft size={17} />
+              </button>
+            )}
+          </div>
+          {sidebarCollapsed && (
             <button
               onClick={toggleSidebarCollapsed}
-              aria-label={ar ? 'طي القائمة' : 'Collapse sidebar'}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+              aria-label={ar ? 'توسيع القائمة' : 'Expand sidebar'}
+              className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
             >
-              <PanelLeft size={17} />
+              <PanelLeft size={17} className="rotate-180" />
             </button>
           )}
-        </div>
-        {sidebarCollapsed && (
-          <button
-            onClick={toggleSidebarCollapsed}
-            aria-label={ar ? 'توسيع القائمة' : 'Expand sidebar'}
-            className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
-          >
-            <PanelLeft size={17} className="rotate-180" />
-          </button>
-        )}
-        {/* Client → project, the agency's own scope control (AGENCY-006). Above the rail because
-            every section below it is read through that choice. */}
-        <AgencyScopeSwitcher collapsed={sidebarCollapsed} />
-        <NavItems ar={ar} collapsed={sidebarCollapsed} />
-        <AccountMenu variant="sidebar" collapsed={sidebarCollapsed} />
-      </aside>
-
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={() => setSidebarOpen(false)} />
-          <aside className="absolute inset-y-0 start-0 flex h-full w-[280px] max-w-[82vw] flex-col gap-6 overflow-y-auto border-e border-border bg-surface p-3.5 shadow-[var(--shadow-large)]">
-            <div className="flex items-center justify-between gap-2">
-              <AgencyIdentity />
-              <button
-                onClick={() => setSidebarOpen(false)}
-                aria-label={ar ? 'إغلاق' : 'Close'}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <AgencyScopeSwitcher />
-            <NavItems ar={ar} onNavigate={() => setSidebarOpen(false)} />
-            <AccountMenu variant="sidebar" />
-          </aside>
-        </div>
-      )}
-
-      <div className="flex min-w-0 flex-1 flex-col">
+          {/* Client → project, the agency's own scope control (AGENCY-006). Above the rail because
+              every section below it is read through that choice. */}
+          <AgencyScopeSwitcher collapsed={sidebarCollapsed} />
+          <NavItems ar={ar} collapsed={sidebarCollapsed} />
+          <AccountMenu variant="sidebar" collapsed={sidebarCollapsed} />
+        </>
+      }
+      drawer={
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <AgencyIdentity />
+            <button
+              onClick={() => setSidebarOpen(false)}
+              aria-label={ar ? 'إغلاق' : 'Close'}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <AgencyScopeSwitcher />
+          <NavItems ar={ar} onNavigate={() => setSidebarOpen(false)} />
+          <AccountMenu variant="sidebar" />
+        </>
+      }
+      header={
         <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-border bg-surface/85 px-4 py-2.5 backdrop-blur-md sm:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
             aria-label={ar ? 'فتح القائمة' : 'Open menu'}
-            className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:h-9 sm:w-9 md:hidden"
+            className="hidden h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:flex sm:h-9 sm:w-9 md:hidden"
           >
             <Menu size={19} />
           </button>
@@ -164,12 +188,9 @@ export function AgencyShell() {
             <div className="ms-1"><AccountMenu variant="topbar" /></div>
           </div>
         </header>
-
-        <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-12 pt-4 sm:px-5 lg:px-6">
-          <Outlet />
-          <PortalFooter />
-        </main>
-      </div>
-    </div>
+      }
+    >
+      <Outlet />
+    </PortalFrame>
   )
 }

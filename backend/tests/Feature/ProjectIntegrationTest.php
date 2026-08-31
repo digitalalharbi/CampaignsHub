@@ -85,7 +85,15 @@ final class ProjectIntegrationTest extends TestCase
             ->assertJsonCount(0, 'data');
     }
 
-    public function test_sharing_an_account_across_projects_requires_confirmation(): void
+    /**
+     * ORCH-100 §I — one account feeds ONE project, and the second attempt is refused.
+     *
+     * This used to warn with a 409 and then share the account on `confirm=true`. That behaviour was
+     * in the code rather than in any requirement, and the failure mode if it is wrong is a client
+     * seeing another client's spend on their own report — so the safer reading wins. Detaching is how
+     * an account moves; there is no way to have it in two places at once.
+     */
+    public function test_an_account_already_connected_to_a_project_cannot_be_connected_to_a_second(): void
     {
         $accountId = $this->connectAndGetAdAccount($this->projectA);
 
@@ -94,43 +102,53 @@ final class ProjectIntegrationTest extends TestCase
                 'external_account_id' => $accountId, 'purpose' => 'advertising',
             ])->assertCreated();
 
-        // Binding the SAME account to Project B without confirm → 409 warning.
+        // Project B is refused, and told where the account already lives.
         $this->actingAs($this->user, 'sanctum')
             ->postJson("/api/v1/projects/{$this->projectB->id}/integrations/bindings", [
                 'external_account_id' => $accountId, 'purpose' => 'advertising',
-            ])->assertStatus(409)->assertJsonPath('meta.requires_confirmation', true);
+            ])->assertStatus(409)->assertJsonPath('meta.assigned_project_id', $this->projectA->id);
 
-        // With confirm=true it is shared; now both projects see it.
+        // `confirm` is not a way round it any more — the rule is the rule.
         $this->actingAs($this->user, 'sanctum')
             ->postJson("/api/v1/projects/{$this->projectB->id}/integrations/bindings", [
                 'external_account_id' => $accountId, 'purpose' => 'advertising', 'confirm' => true,
-            ])->assertCreated();
+            ])->assertStatus(409);
 
         $this->actingAs($this->user, 'sanctum')->getJson("/api/v1/projects/{$this->projectA->id}/integrations")->assertJsonCount(1, 'data');
-        $this->actingAs($this->user, 'sanctum')->getJson("/api/v1/projects/{$this->projectB->id}/integrations")->assertJsonCount(1, 'data');
+        $this->actingAs($this->user, 'sanctum')->getJson("/api/v1/projects/{$this->projectB->id}/integrations")->assertJsonCount(0, 'data');
     }
 
-    public function test_detach_from_one_project_keeps_the_other_and_does_not_revoke(): void
+    /**
+     * Detaching frees the account, and leaves the OAuth connection alone.
+     *
+     * Rewritten for ORCH-100 §I: the account can no longer be in two projects at once, so the claim
+     * this test carries is now the one that matters — detach releases it, the connection survives,
+     * and the account can then be connected somewhere else.
+     */
+    public function test_detaching_frees_the_account_without_revoking_the_connection(): void
     {
         $accountId = $this->connectAndGetAdAccount($this->projectA);
-        foreach ([$this->projectA, $this->projectB] as $i => $project) {
-            $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$project->id}/integrations/bindings", [
-                'external_account_id' => $accountId, 'purpose' => 'advertising', 'confirm' => $i > 0,
-            ])->assertCreated();
-        }
+
+        $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$this->projectA->id}/integrations/bindings", [
+            'external_account_id' => $accountId, 'purpose' => 'advertising',
+        ])->assertCreated();
 
         $bindingA = $this->actingAs($this->user, 'sanctum')
             ->getJson("/api/v1/projects/{$this->projectA->id}/integrations")->json('data.0.id');
 
-        // Detach from A.
         $this->actingAs($this->user, 'sanctum')
             ->deleteJson("/api/v1/projects/{$this->projectA->id}/integrations/bindings/{$bindingA}")
             ->assertOk();
 
-        // A now empty; B still has it; the connection/account still exist (not revoked).
         $this->actingAs($this->user, 'sanctum')->getJson("/api/v1/projects/{$this->projectA->id}/integrations")->assertJsonCount(0, 'data');
-        $this->actingAs($this->user, 'sanctum')->getJson("/api/v1/projects/{$this->projectB->id}/integrations")->assertJsonCount(1, 'data');
+
+        // The OAuth connection is untouched — detaching an account is not giving up the authorisation.
         $this->assertDatabaseHas('provider_connections', ['status' => 'connected']);
+
+        // And the freed account may now be connected to the other project.
+        $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$this->projectB->id}/integrations/bindings", [
+            'external_account_id' => $accountId, 'purpose' => 'advertising',
+        ])->assertCreated();
     }
 
     public function test_revoking_the_connection_disables_all_its_bindings(): void

@@ -329,6 +329,43 @@ export function fetchStatus(): Promise<PlatformStatus> {
   return getData('/admin/status')
 }
 
+/**
+ * AUTOMATION-FIRST-OPERATIONS-001 — what the schedulers did, and whether anybody can see them.
+ *
+ * `state` is the one field a reader must not skim past. `never_observed` means no run of this
+ * command has ever been recorded — which is NOT «it is fine», and not «it failed» either. It is «we
+ * cannot see», and it calls for a different action from both.
+ */
+export interface ScheduledWorkRow {
+  command: string
+  expression: string
+  state: 'never_observed' | 'observed'
+  last_outcome: 'completed' | 'failed' | 'skipped' | null
+  last_started_at: string | null
+  last_duration_ms: number | null
+  failure_class: string | null
+  failure_message: string | null
+  /** Null when there is no history to judge against — rendered as its own thing, never as «fine». */
+  overdue: boolean | null
+  consecutive_failures: number
+}
+
+export interface ScheduledWork {
+  scheduled: ScheduledWorkRow[]
+  summary: {
+    total: number
+    failing: number
+    overdue: number
+    never_observed: number
+    /** Counted apart from `failing`: failed once and failing every night are different problems. */
+    failing_repeatedly: number
+  }
+}
+
+export function fetchScheduledWork(): Promise<ScheduledWork> {
+  return getData('/admin/scheduled-work')
+}
+
 /* --------------------------------------- PORTAL-AUTH-001: cutover readiness & conflicts */
 
 export interface PortalConflict {

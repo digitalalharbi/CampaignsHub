@@ -1,7 +1,9 @@
 import { useId, useState } from 'react'
 import { Area, AreaChart, ResponsiveContainer } from 'recharts'
 import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Info, Minus } from 'lucide-react'
-import { TOUCH_TARGET } from './touch'
+import { QueryFailure } from './QueryFailure'
+import { TOUCH_CONTROL, TOUCH_TARGET } from './touch'
+import { CARD_GAP, CARD_PAD_DENSE, METRIC_HINT, METRIC_LABEL, METRIC_VALUE, METRIC_VALUE_DENSE } from '@/styles/scale'
 
 /**
  * The metrics that matter first, and the honest absence of the rest — UX-METRICS-001.
@@ -29,12 +31,30 @@ import { TOUCH_TARGET } from './touch'
  */
 
 export type MetricReading =
-  /** A real, measured figure — already formatted, including a real zero. */
-  | { kind: 'value'; text: string }
+  /**
+   * A real, measured figure — already formatted, including a real zero.
+   *
+   * `exact` is the same figure written out in full, present only when `text` abbreviated it —
+   * NUMBER-PRESENTATION-001. A card has room for «4.85M SAR» and a reader comparing two of them
+   * eventually needs the rest of the digits; the compact form is the display, never the record.
+   */
+  | { kind: 'value'; text: string; exact?: string }
   /** The platform does not report this metric. */
   | { kind: 'not_provided' }
   /** Reported, but nothing for this window — or a ratio whose denominator is missing. */
   | { kind: 'no_data' }
+  /**
+   * The platform DID report it, and we cannot convert it to the project's currency.
+   *
+   * FX-WITHHELD-UI-001. This is not «no data» and it is certainly not zero. FX-001 withholds a money
+   * figure when no exchange rate exists for the day, because a converted number would be invented.
+   * Without this variant the withheld null fell through to `no_data`, and a project whose platform
+   * reported 3,465.33 USD read «0» under «لم ترسله المنصة» — a sentence the payload disproves.
+   *
+   * `original` is the platform's own figure, already formatted WITH its own currency, so the reader
+   * sees the real amount and is told plainly why it is not in their currency.
+   */
+  | { kind: 'withheld'; original: string }
 
 export type MetricItem = {
   key: string
@@ -62,6 +82,16 @@ export type MetricItem = {
 const T = {
   notProvided: { ar: 'لم ترسله المنصة', en: 'Not provided' },
   noData: { ar: 'لا توجد بيانات', en: 'No data' },
+  loading: { ar: 'جارِ تحميل المؤشرات', en: 'Loading metrics' },
+  loadFailed: { ar: 'تعذّر تحميل المؤشرات', en: 'These metrics could not be loaded' },
+  withheldHint: {
+    ar: 'المنصة أرسلت هذا الرقم، ولا يتوفر سعر صرف لتحويله إلى عملة المشروع.',
+    en: 'The platform reported this figure; no exchange rate is available to convert it.',
+  },
+  withheldNote: {
+    ar: 'التحويل إلى عملة المشروع غير متاح حاليًا',
+    en: 'Conversion to the project currency is unavailable',
+  },
   notProvidedHint: {
     ar: 'هذه المنصة لا ترسل هذا المؤشر — والقيمة ليست صفرًا.',
     en: 'This platform does not report this metric — the value is not zero.',
@@ -152,7 +182,12 @@ function Delta({
 }
 
 export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
-  const missing = item.reading.kind !== 'value'
+  /*
+   * A withheld figure is NOT missing. It has a real number to show, so it must not take the muted
+   * «nothing here» treatment that `not_provided` and `no_data` share — that treatment is what made
+   * 3,465.33 USD look like an absence.
+   */
+  const missing = item.reading.kind === 'not_provided' || item.reading.kind === 'no_data'
   const missingText =
     item.reading.kind === 'not_provided' ? t('notProvided', ar) : t('noData', ar)
   const missingHint =
@@ -162,12 +197,14 @@ export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
     <div
       data-testid={`metric-${item.key}`}
       data-state={item.reading.kind}
-      className={`flex flex-col gap-1.5 rounded-2xl border bg-surface p-3 ${
-        item.lead ? 'border-brand-500/50 shadow-[var(--shadow-small)]' : 'border-border'
+      className={`flex flex-col gap-1.5 rounded-2xl border bg-surface ${CARD_PAD_DENSE} ${
+        item.lead
+          ? 'border-brand-500/50 ring-1 ring-brand-500/20 shadow-[var(--shadow-small)]'
+          : 'border-border'
       }`}
     >
       <div className="flex items-start justify-between gap-1">
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-text-secondary">
+        <span className={`inline-flex items-center gap-1 text-text-secondary ${METRIC_LABEL}`}>
           {item.label}
           {item.hint && <InfoHint text={item.hint} label={`${t('definition', ar)}: ${item.label}`} />}
         </span>
@@ -181,8 +218,37 @@ export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
       </div>
 
       {item.reading.kind === 'value' ? (
-        <span dir="ltr" className="tnum text-2xl font-extrabold leading-none tracking-tight text-text-primary">
+        <span
+          dir="ltr"
+          // `title` rather than a custom tooltip: it is the one hover that also works for a keyboard
+          // user's screen reader and survives being inside a chart card, a table cell or a PDF print.
+          title={item.reading.exact}
+          /*
+           * `dir="ltr"` and `text-start` are two different settings and the card needs both. The
+           * first keeps «56.3K SAR» in digit order inside an Arabic page; without the second the
+           * span inherits its own LTR alignment, so the figure drifts to the left edge while its
+           * label stays at the right — the pair stops reading as one thing.
+           */
+          className={`block text-start text-text-primary ${item.lead ? METRIC_VALUE : METRIC_VALUE_DENSE}`}
+        >
           {item.reading.text}
+        </span>
+      ) : item.reading.kind === 'withheld' ? (
+        /*
+          FX-WITHHELD-UI-001 — the real figure, at full weight, with the reason underneath.
+
+          It reads at the same size as a converted number because it IS the number the platform
+          reported; only the currency is not the reader's. `dir="ltr"` keeps «3,465.33 USD» in Latin
+          order inside an RTL page, exactly as a converted figure is kept.
+        */
+        <span className="flex flex-col gap-0.5">
+          <span dir="ltr" className={`block text-start text-text-primary ${item.lead ? METRIC_VALUE : METRIC_VALUE_DENSE}`}>
+            {item.reading.original}
+          </span>
+          <span className={`inline-flex items-center gap-1 font-medium text-text-muted ${METRIC_HINT}`}>
+            {t('withheldNote', ar)}
+            <InfoHint text={t('withheldHint', ar)} label={t('withheldNote', ar)} />
+          </span>
         </span>
       ) : (
         <span className="inline-flex items-center gap-1 py-1 text-sm font-semibold text-text-muted">
@@ -224,6 +290,10 @@ export function MetricStrip({
   secondary = [],
   comparisonLabel,
   note,
+  hasRows,
+  loading = false,
+  error,
+  onRetry,
 }: {
   id: string
   ar: boolean
@@ -235,11 +305,108 @@ export function MetricStrip({
   comparisonLabel?: string
   /** Freshness, a caveat, whatever the row needs said beside it rather than under each card. */
   note?: string
+  /**
+   * METRICS-EMPTY-SCOPE-001 — whether the current filters match any row at all.
+   *
+   * `false` replaces the whole row with one sentence about the FILTER. Left undefined by callers
+   * that have no scope to speak of, which keeps every existing use unchanged.
+   */
+  hasRows?: boolean
+  /**
+   * METRICS-REQUEST-STATE-001 — the request has not answered yet.
+   *
+   * Without this the strip rendered anyway: with no totals to read, every card fell to `no_data` and
+   * printed «لا توجد بيانات» — an absence of evidence rendered as evidence of absence.
+   */
+  loading?: boolean
+  /** The failed request, passed straight to `QueryFailure` so a refusal reads as a refusal. */
+  error?: unknown
+  onRetry?: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
 
+  /*
+   * METRICS-REQUEST-STATE-001 — a failure outranks everything below it.
+   *
+   * Both a failure and an empty scope can be true in the props at once — the previous scope was
+   * empty and the refetch then failed — and «your filter matched nothing» is a claim the failed
+   * request gave no standing to make. `QueryFailure` owns the four arms (refusal, expired session,
+   * missing record, dead server) so this surface cannot drift into a fifth.
+   */
+  if (error !== undefined && error !== null) {
+    return (
+      <section data-testid={`${id}-metrics`} className="space-y-2">
+        <QueryFailure
+          error={error}
+          ar={ar}
+          onRetry={onRetry}
+          fallbackTitle={t('loadFailed', ar)}
+          testId={`${id}-metrics-failure`}
+        />
+      </section>
+    )
+  }
+
+  /*
+   * A request still in flight is not an answer. The skeleton holds the row's shape so the page does
+   * not jump when the figures land, and says nothing about them.
+   */
+  if (loading) {
+    return (
+      <section data-testid={`${id}-metrics`} className="space-y-2">
+        <div
+          data-testid={`${id}-metrics-loading`}
+          aria-busy="true"
+          aria-label={t('loading', ar)}
+          className={`grid grid-cols-2 ${CARD_GAP} lg:grid-cols-3 xl:grid-cols-4`}
+        >
+          {primary.map((item) => (
+            <div key={item.key} className="h-[96px] animate-pulse rounded-2xl border border-border bg-surface-secondary/40" />
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  /*
+   * An empty scope has no standing to describe a connector.
+   *
+   * Every card's absence is read from `reported`, which answers «which metric keys are present in
+   * this scope» — so with no rows at all it answers every key false and fourteen cards say «لم
+   * ترسله المنصة». That is a claim about Meta and Snapchat derived from an absence of CAMPAIGNS,
+   * and it is what «تغيير الأهداف يجعل كل شيء فارغًا» looks like from the inside: not a broken
+   * screen, a screen confidently saying something false.
+   *
+   * One true sentence about the filter replaces all of them.
+   */
+  if (hasRows === false) {
+    return (
+      <section data-testid={`${id}-metrics`} className="space-y-2">
+        {(comparisonLabel || note) && (
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-text-secondary">
+            {comparisonLabel && <span data-testid={`${id}-metrics-comparison`}>{comparisonLabel}</span>}
+            {note && <span data-testid={`${id}-metrics-note`}>{note}</span>}
+          </div>
+        )}
+        <div
+          data-testid={`${id}-metrics-empty-scope`}
+          className="rounded-xl border border-dashed border-border bg-surface-secondary/40 px-4 py-6 text-center"
+        >
+          <p className="text-sm font-semibold text-text-primary">
+            {ar ? 'لا توجد بيانات ضمن هذه الفلاتر' : 'No data matches these filters'}
+          </p>
+          <p className="mt-1 text-xs text-text-secondary">
+            {ar
+              ? 'جرّب توسيع الفترة أو تغيير الهدف أو المنصة. هذا ليس نقصًا في بيانات المنصة.'
+              : 'Try widening the period, or changing the objective or platform. This is not a gap in the platform’s data.'}
+          </p>
+        </div>
+      </section>
+    )
+  }
+
   return (
-    <section data-testid={`${id}-metrics`} className="space-y-2">
+    <section data-testid={`${id}-metrics`} className="space-y-3">
       {(comparisonLabel || note) && (
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-text-secondary">
           {comparisonLabel && (
@@ -251,7 +418,7 @@ export function MetricStrip({
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className={`grid grid-cols-2 ${CARD_GAP} lg:grid-cols-3 xl:grid-cols-4`}>
         {primary.map((item) => (
           <MetricCard key={item.key} item={item} ar={ar} />
         ))}
@@ -264,7 +431,7 @@ export function MetricStrip({
             data-testid={`${id}-metrics-toggle`}
             aria-expanded={expanded}
             onClick={() => setExpanded((e) => !e)}
-            className="inline-flex items-center gap-1 rounded-lg px-1 py-1 text-xs font-semibold text-text-secondary underline underline-offset-2 hover:text-text-primary"
+            className={`inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-secondary/60 px-3 text-xs font-semibold text-text-secondary hover:bg-surface-hover hover:text-text-primary ${TOUCH_CONTROL}`}
           >
             {expanded ? <ChevronUp size={13} aria-hidden /> : <ChevronDown size={13} aria-hidden />}
             {expanded ? t('less', ar) : `${t('more', ar)} (${secondary.length})`}
@@ -273,7 +440,7 @@ export function MetricStrip({
           {expanded && (
             <div
               data-testid={`${id}-metrics-secondary`}
-              className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+              className={`grid grid-cols-2 ${CARD_GAP} lg:grid-cols-3 xl:grid-cols-4`}
             >
               {secondary.map((item) => (
                 <MetricCard key={item.key} item={item} ar={ar} />

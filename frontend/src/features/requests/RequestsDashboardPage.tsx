@@ -11,6 +11,7 @@ import { SearchableSelect } from '@/components/forms'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { useT, type TranslationKey } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
+import { StatCard } from '@/components/ui/StatCard'
 
 // Board-column layout order (a request-workflow layout constant, not a select's option source — those now come
 // from the taxonomy engine). Terminal states (rejected/cancelled/archived) are intentionally not columns.
@@ -253,17 +254,16 @@ function KanbanView({ rows, onMove, ar }: { rows: RequestRow[]; onMove: (id: str
   )
 }
 
+/**
+ * UX-KPI-PRESENTATION-001 — the shared card. The tone dot is this surface's; the design is not.
+ *
+ * This drew its own copy: the same `p-4`, the same 2px dot, the same `text-2xl` figure. Four files
+ * agreed by coincidence, and a row of cards here beside a row on the dashboard lined up only until
+ * somebody touched one of them.
+ */
 function ReqSummaryCard({ label, value, tone }: { label: string; value: number; tone: 'brand' | 'info' | 'warning' | 'muted' }) {
-  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', info: 'bg-info', warning: 'bg-warning', muted: 'bg-text-muted' }
-  return (
-    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
-      <div className="flex items-center gap-1.5">
-        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
-        <span className="text-xs font-semibold text-text-secondary">{label}</span>
-      </div>
-      <span className="tnum text-2xl font-extrabold text-text-primary" dir="ltr">{value}</span>
-    </div>
-  )
+  // `muted` is this surface's word for «nothing special»; the shared card calls it neutral.
+  return <StatCard label={label} value={value} tone={tone === 'muted' ? 'neutral' : tone} dot />
 }
 
 

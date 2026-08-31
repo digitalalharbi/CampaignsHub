@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Http\Controllers;
 
+use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Metrics\Services\AttributionTransparency;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
@@ -384,10 +385,71 @@ final class PublicReportController extends Controller
         return response()->streamDownload(fn () => print ($content), "report.{$format}", ['Content-Type' => $mime]);
     }
 
+    /**
+     * BRANDING-HIERARCHY-001 — whose identity this report carries.
+     *
+     * Everything is derived from the token: the tenant, the client and the logo. The request's query
+     * string is not read at all, which is the property the isolation test asserts by appending every
+     * parameter an enumerator would reach for and requiring the answer not to move.
+     *
+     * No password gate here on purpose: a header is the frame around the password prompt itself, and
+     * a reader who has not yet typed the password still has to be shown WHOSE report they are being
+     * asked to unlock. It discloses a name and a logo the link already implies, and no figures.
+     */
+    public function sharedBranding(Request $request, string $token, SharedLinkBranding $branding): JsonResponse
+    {
+        $this->throttleBranding($request);
+        $share = $this->shares->resolveActive($token);
+        if (! $share) {
+            return ApiResponse::error('الرابط غير صالح أو انتهت صلاحيته أو أُلغي.', status: 404);
+        }
+
+        $report = Report::withoutGlobalScopes()->find($share->report_id);
+
+        return ApiResponse::success($branding->forShare($share, $token, $report), 'Report branding.');
+    }
+
+    /**
+     * The logo bytes, addressed by the token — never by asset id.
+     *
+     * The asset is re-resolved from the share rather than looked up by an id in the URL, so there is
+     * no id to change. A 404 when nothing resolves is deliberate: the caller has already been told
+     * `logo_url: null` and should not have asked, and inventing a placeholder image here would put a
+     * logo on a report that has none.
+     */
+    public function sharedBrandingLogo(Request $request, string $token, SharedLinkBranding $branding): mixed
+    {
+        $this->throttleBranding($request);
+        $share = $this->shares->resolveActive($token);
+        abort_unless((bool) $share, 404);
+
+        $file = $branding->logoFor(Report::withoutGlobalScopes()->find($share->report_id), (string) $share->tenant_id);
+        abort_unless($file !== null, 404);
+
+        return $file;
+    }
+
     private function throttle(Request $request): void
     {
         $key = 'share:'.$request->ip();
         abort_if(RateLimiter::tooManyAttempts($key, 60), 429, 'Too many requests.');
+        RateLimiter::hit($key, 60);
+    }
+
+    /**
+     * A separate bucket for branding — it must not spend the quota that protects the FIGURES.
+     *
+     * Adding a second request per page load to the shared `share:{ip}` bucket is a real cost, and it
+     * showed up immediately: the public report started rendering «تعذّر فتح التقرير — Too many
+     * requests» on a link that had been fine, which on this surface means a paying client is told the
+     * report is broken. The figures endpoint is what the 60/minute ceiling exists to protect;
+     * branding is one small, idempotent response per page that carries no figures at all, so it gets
+     * its own ceiling rather than eating that one.
+     */
+    private function throttleBranding(Request $request): void
+    {
+        $key = 'share-branding:'.$request->ip();
+        abort_if(RateLimiter::tooManyAttempts($key, 120), 429, 'Too many requests.');
         RateLimiter::hit($key, 60);
     }
 }

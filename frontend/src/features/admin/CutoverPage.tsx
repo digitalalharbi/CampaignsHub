@@ -5,6 +5,7 @@ import {
   fetchCutoverReadiness, fetchPortalConflicts, resolvePortalConflict,
   type PortalConflict,
 } from './api'
+import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { ErrorState, Skeleton } from '@/components/ui/States'
@@ -142,7 +143,8 @@ export function CutoverPage() {
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="mb-4">
+        <StatGrid>
         <Condition
           label={ar ? 'تعارضات مفتوحة' : 'Open conflicts'}
           value={d.open_conflicts}
@@ -158,6 +160,7 @@ export function CutoverPage() {
           value={d.parity.mismatched}
           hint={ar ? `من ${d.parity.checked} تم فحصهم` : `of ${d.parity.checked} checked`}
         />
+        </StatGrid>
       </div>
 
       <p className="mb-5 text-xs text-text-muted">
@@ -247,7 +250,7 @@ export function CutoverPage() {
               <li key={c.id} data-testid={`conflict-${c.id}`} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border px-4 py-3">
                 <div className="min-w-0">
                   <p className="text-[14px] font-bold text-text-primary" dir="ltr">{c.contact_email ?? c.contact_phone}</p>
-                  <p className="mt-0.5 text-[12.5px] text-text-muted">
+                  <p className="mt-0.5 text-[12px] text-text-muted">
                     {REASON_LABELS[c.reason] ? (ar ? REASON_LABELS[c.reason].ar : REASON_LABELS[c.reason].en) : c.reason}
                     {c.tenant_name && ` · ${c.tenant_name}`}
                     {/* The consequence, before the choice. */}
@@ -314,14 +317,13 @@ export function CutoverPage() {
   )
 }
 
+/**
+ * UX-KPI-PRESENTATION-001 — a cutover condition is a labelled figure, and it reads like every other.
+ *
+ * The one thing this surface genuinely decides is the TONE: zero is the state that lets a cutover
+ * proceed, so zero is success and anything else is a warning — which is the opposite of most figures
+ * in the product and is exactly why the tone is passed rather than inferred.
+ */
 function Condition({ label, value, hint }: { label: string; value: number; hint: string }) {
-  return (
-    <div className={`rounded-2xl border bg-surface p-5 ${value === 0 ? 'border-border' : 'border-warning/40'}`}>
-      <span className={`tnum block font-heading text-3xl font-extrabold ${value === 0 ? 'text-success' : 'text-warning'}`} dir="ltr">
-        {num(value)}
-      </span>
-      <span className="mt-0.5 block text-sm font-semibold text-text-primary">{label}</span>
-      <span className="mt-1 block text-xs text-text-muted">{hint}</span>
-    </div>
-  )
+  return <StatCard label={label} value={num(value)} hint={hint} tone={value === 0 ? 'success' : 'warning'} />
 }

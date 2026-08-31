@@ -139,3 +139,140 @@ test.describe('every surface fits the screen it is opened on @responsive', () =>
     }
   }
 })
+
+/**
+ * SHELL-001 — the desktop frame fills the window, and the footer sinks.
+ *
+ * ## The defect, and how it is measured
+ *
+ * `<main>` was `flex-1` with block-flow children, so on any page shorter than the viewport the
+ * footer sat immediately under the content and everything below it was empty — often more than half
+ * the screen, with the copyright line stranded in the middle of a grey band. Four shells carried
+ * their own copy of that markup, so it was one defect in four places.
+ *
+ * A screenshot proves it once. What is measured here is the property behind it: **the distance from
+ * the bottom of the footer to the bottom of the document**. On a correct shell that is the footer's
+ * own padding and nothing more, whether the page is short (the content box absorbed the slack) or
+ * long (the footer follows the content). On the broken shell it was hundreds of pixels, and it grew
+ * with the window — which is exactly why it looked worse on a large monitor.
+ *
+ * `/app/dashboard` at 2560×1440 is the worst case in the product: the widest window, and a page that
+ * is short when a fresh workspace has no projects yet. That is the screenshot this came from.
+ */
+const DESKTOP_VIEWPORTS = [
+  { name: '1280x720', width: 1280, height: 720 },
+  { name: '1366x768', width: 1366, height: 768 },
+  { name: '1440x900', width: 1440, height: 900 },
+  { name: '1536x864', width: 1536, height: 864 },
+  { name: '1920x1080', width: 1920, height: 1080 },
+  { name: '2560x1440', width: 2560, height: 1440 },
+] as const
+
+test.describe('the portal frame fills its window @responsive', () => {
+  for (const vp of DESKTOP_VIEWPORTS) {
+    for (const portal of PORTAL_ROUTES) {
+      test.describe(`${portal.path} at ${vp.name}`, () => {
+        test.use({ viewport: { width: vp.width, height: vp.height }, storageState: portal.state })
+
+        test('the footer sits at the bottom, with no dead band under it', async ({ page }) => {
+          await page.goto(portal.path)
+          await page.waitForLoadState('networkidle').catch(() => undefined)
+
+          const m = await page.evaluate(() => {
+            const doc = document.documentElement
+            const footer = document.querySelector('[data-testid="portal-footer"]')
+            if (footer === null) return null
+
+            const rect = footer.getBoundingClientRect()
+
+            return {
+              // Document coordinates: the viewport offset has to be added back.
+              gapBelowFooter: Math.round(doc.scrollHeight - (rect.bottom + window.scrollY)),
+              overflow: doc.scrollWidth - doc.clientWidth,
+            }
+          })
+
+          expect(m, 'the shell must render its footer').not.toBeNull()
+          // 48px covers the footer's own bottom padding at every breakpoint. The defect measured in
+          // the hundreds, so this discriminates without being a pixel assertion.
+          expect(
+            m!.gapBelowFooter,
+            `${portal.path} at ${vp.name} leaves ${m!.gapBelowFooter}px of empty page below the footer`,
+          ).toBeLessThanOrEqual(48)
+          expect(m!.overflow, `${portal.path} at ${vp.name} scrolls sideways`).toBeLessThanOrEqual(0)
+        })
+      })
+    }
+  }
+})
+
+/**
+ * MOBILE-APP-001 — a phone gets an app shell, not the desktop rail made small.
+ *
+ * Four claims, each the kind that silently stops being true: the desktop rail is really gone, the
+ * bottom bar is really there, the bar does not sit on top of the content, and «More» really reaches
+ * the sections the bar does not show.
+ */
+test.describe('the portals are an app on a phone @responsive', () => {
+  test.use({ viewport: { width: 390, height: 844 } })
+
+  for (const portal of PORTAL_ROUTES) {
+    test.describe(portal.path, () => {
+      test.use({ storageState: portal.state })
+
+      test('bottom navigation replaces the desktop rail, and covers nothing', async ({ page }) => {
+        await page.goto(portal.path)
+        await page.waitForLoadState('networkidle').catch(() => undefined)
+
+        const bar = page.getByTestId('mobile-tab-bar')
+        await expect(bar, 'a phone must have the tab bar').toBeVisible()
+
+        // The desktop rail is the thing being replaced. It must not merely be off-screen.
+        const railVisible = await page.evaluate(() =>
+          [...document.querySelectorAll('aside')].some((el) => {
+            const r = el.getBoundingClientRect()
+
+            return r.width > 200 && r.height > 300 && getComputedStyle(el).display !== 'none'
+          }))
+        expect(railVisible, 'the desktop rail must be gone on a phone').toBe(false)
+
+        /*
+         * The bar is `fixed`, so it is out of flow and would sit ON the last rows of the page. The
+         * frame pays for it with padding; this is that payment being checked rather than trusted —
+         * scroll to the very bottom and assert the footer clears the bar.
+         */
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+        const clears = await page.evaluate(() => {
+          const footer = document.querySelector('[data-testid="portal-footer"]')
+          const tabs = document.querySelector('[data-testid="mobile-tab-bar"]')
+          if (footer === null || tabs === null) return null
+
+          return Math.round(tabs.getBoundingClientRect().top - footer.getBoundingClientRect().bottom)
+        })
+        expect(clears, 'footer and tab bar must both be present').not.toBeNull()
+        expect(clears!, `the tab bar covers the footer by ${-clears!}px`).toBeGreaterThanOrEqual(0)
+      })
+
+      test('More opens a sheet, and it holds the sections the bar does not', async ({ page }) => {
+        await page.goto(portal.path)
+        await page.waitForLoadState('networkidle').catch(() => undefined)
+
+        const more = page.getByTestId('mobile-more-toggle')
+        await expect(more).toBeVisible()
+        await expect(more).toHaveAttribute('aria-expanded', 'false')
+
+        await more.click()
+        const sheet = page.getByTestId('mobile-more-sheet')
+        await expect(sheet).toBeVisible()
+        await expect(more).toHaveAttribute('aria-expanded', 'true')
+        // Every portal here has more sections than the bar shows, so an empty sheet is a defect.
+        expect(await sheet.getByRole('link').count()).toBeGreaterThan(0)
+
+        // Escape closes it — a sheet you cannot dismiss is a trap on a device with no Escape key,
+        // and the backdrop tap is the same handler.
+        await page.keyboard.press('Escape')
+        await expect(sheet).toHaveCount(0)
+      })
+    })
+  }
+})

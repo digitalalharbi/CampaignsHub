@@ -29,7 +29,7 @@ use Illuminate\Support\Facades\Route;
  * the same figures the checkout will charge. Rate limited because it is public and unauthenticated,
  * not because reading a price list is sensitive.
  */
-Route::middleware('throttle:60,1')->group(function (): void {
+Route::middleware('throttle:public-catalogue')->group(function (): void {
     Route::get('plans', [PublicPlanController::class, 'index'])->name('plans.index');
     Route::get('plans/{code}/quote', [PublicPlanController::class, 'quote'])->name('plans.quote');
 });

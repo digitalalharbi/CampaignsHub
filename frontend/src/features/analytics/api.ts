@@ -1,8 +1,9 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { getData } from '@/lib/api/client'
+import type { FilterScope } from './filterScope'
 
 /** KPI bundle returned by every aggregation (base sums + derived ratios; nulls when undefined). */
-export interface MetricTotals {
+export interface MetricTotals extends MoneyProvenance {
   impressions: number
   clicks: number
   conversions: number
@@ -100,6 +101,22 @@ export interface ConversionsBasis {
   note_en: string
 }
 
+/**
+ * MONEY-TRUTH-002 — provenance on breakdown rows.
+ *
+ * The backend's `byProvider` and `byCampaign` now carry the same withheld fields the summary does, so
+ * a table row can tell «spent nothing» from «spent something we cannot convert». Declared here rather
+ * than cast at the call site: a field that silently stops arriving should break the build.
+ */
+export interface MoneyProvenance {
+  spend_withheld_rows?: number | null
+  spend_original?: number | null
+  revenue_withheld_rows?: number | null
+  revenue_original?: number | null
+  money_original_currency?: string | null
+  money_original_currencies?: number | null
+}
+
 export interface Summary {
   current: MetricTotals
   previous: MetricTotals
@@ -113,13 +130,56 @@ export interface Summary {
    * sent, and their own `null` already says «there was no denominator».
    */
   reported: Record<string, boolean>
+  /**
+   * METRICS-EMPTY-SCOPE-001 — whether this SCOPE holds any row at all.
+   *
+   * `reported` answers «which metric keys are present», which is a question about the platform —
+   * and over an empty scope it answers every key false, so the strip renders «لم ترسله المنصة»
+   * under each one. Narrow the objective to a family this project never bought and the dashboard
+   * states the platform sends no impressions: a claim about a connector, derived from an absence of
+   * campaigns.
+   *
+   * An empty scope has no standing to say anything about a connector. When this is false the reader
+   * says one true thing about the FILTER instead.
+   */
+  rows_in_scope: boolean
+  /**
+   * ANALYTICS-COMPARE-001 — whether the comparison window holds any rows to compare against.
+   *
+   * A delta is null both when a metric did not move off a base of zero and when there IS no previous
+   * period. The cards rendered the same «— —» for each, under a heading promising a comparison. This
+   * says which, so the page can state «no previous period» once rather than six mute dashes.
+   */
+  previous_rows_in_scope: boolean
+  previous_range: { from: string; to: string }
+  /**
+   * HEADLINE-SCOPE-001 — the objective families the rows in scope actually belong to.
+   *
+   * «كل الأهداف» describes the filter, not the data. A project whose campaigns are all Sales has one
+   * objective in scope either way, and the headline row follows this rather than the filter value.
+   */
+  objective_families_in_scope: string[]
   commerce: CommerceSummary | null
   conversions_basis: ConversionsBasis
+  /**
+   * MONEY-TRUTH-001 — the currency `current`'s converted money is expressed in.
+   *
+   * Null when the range holds no money rows, in which case there is no currency to name. Every money
+   * surface reads this instead of assuming a market's currency.
+   */
+  currency: string | null
+  /**
+   * ANALYTICS-PROVENANCE-001 — whether these figures are real, seeded, or both.
+   *
+   * Derived by the backend from `is_demo` on the rows actually in scope. The frontend must not infer
+   * it from the environment or a constant: neither knows whose rows these are.
+   */
+  provenance: { source: 'live' | 'demo' | 'mixed' | 'none'; live_rows: number; demo_rows: number }
 }
 export interface TimePoint extends MetricTotals {
   date: string
 }
-export interface PlatformRow extends MetricTotals {
+export interface PlatformRow extends MetricTotals, MoneyProvenance {
   provider: string
   spend_share: number
 }
@@ -127,6 +187,43 @@ export interface CampaignRow extends MetricTotals {
   campaign_id: string
   campaign_name: string | null
   provider: string
+  objective: string | null
+  /**
+   * ANALYTICS-OBJECTIVE-VISIBLE-001 — the canonical family, computed by the BACKEND.
+   *
+   * Never derived here. `CampaignObjective::family()` is the one mapping, and a copy in TypeScript
+   * would drift the first time an objective is added — silently grouping a campaign under a verdict
+   * it was never bought for.
+   */
+  objective_family: string | null
+  objective_source: string | null
+  /**
+   * ENTITY-RELEVANCE-ORDERING-001 — two facts about relevance, neither of them a verdict.
+   *
+   * `status` is the canonical `CampaignStatus`, normalised from each platform's own vocabulary by the
+   * backend rather than guessed from a provider string here. `last_active_on` is the most recent day
+   * INSIDE the requested window on which this campaign reported a positive figure — null when it
+   * reported none, which is a different fact from a day of zeros.
+   *
+   * They exist so an operational listing can keep a campaign serving today apart from one that
+   * stopped three weeks ago and still leads on spend. The rows arrive spend-first regardless, because
+   * the same breakdown feeds reports and the digest, where «top campaigns» means largest spend.
+   */
+  status: string | null
+  last_active_on: string | null
+  /**
+   * CAMPAIGN-INTELLIGENCE-HUB — the previous window, and the change against it.
+   *
+   * Both are nullable and the nulls are load-bearing. `previous_spend` is null when this campaign has
+   * NO row in the comparison window — it did not exist yet, or nothing was reported — which is a
+   * different fact from having spent zero. `spend_change` is additionally null for a zero baseline,
+   * because every rise from nothing is infinite.
+   *
+   * A caller that asked for no comparison window gets null for both, and «no trend» must never be
+   * rendered as «no change».
+   */
+  previous_spend: number | null
+  spend_change: number | null
 }
 /**
  * One stage of the project (or campaign) funnel — FUNNEL-NULL-001.
@@ -145,19 +242,73 @@ export interface FunnelStage {
    *  above it in theory. Null on the first reported stage, and on an unreported one. */
   from_stage: string | null
   step_rate: number | null
+  /**
+   * FUNNEL-NOT-NESTED-001 — this stage counted MORE than the one above it.
+   *
+   * Production reports 3,048 checkouts against 1,806 add-to-carts. Both figures are real; the events
+   * simply do not nest — a buy-now flow reaches checkout without an add-to-cart, and each event is
+   * attributed on its own window. A funnel assumes every stage is a subset of the one above, and for
+   * that pair the assumption is false.
+   *
+   * The screen used to print «166%» as a step and «-66%» as a drop-off, which is not a quantity.
+   */
+  exceeds_previous?: boolean
+  /** Null when the stage exceeded the one above it: there was no drop to measure. */
   drop_off: number | null
   cost_per: number | null
 }
+/**
+ * BUDGET-ACCOUNTS-001 — one ad account, and the ceiling the platform will actually enforce.
+ *
+ * `BudgetRow` measures a campaign against the plan somebody typed into this product. This measures
+ * an account against `external_campaigns.lifetime_budget` (and a daily budget across the window's
+ * days), which is the figure that stops delivery.
+ */
+export interface AccountBudgetRow {
+  account_id: string
+  /** Null when the account has been removed since these rows were ingested — its spend is still real. */
+  account_name: string | null
+  provider: string
+  spent: number
+  spent_currency: string | null
+  spend_withheld: boolean
+  /** Null when no campaign on this account states a ceiling — never 0, which reads as «nothing left». */
+  cap: number | null
+  remaining: number | null
+  consumed_pct: number | null
+  /** >1 means this account reaches its ceiling before the window ends, at the current rate. */
+  pace: number | null
+  projected_spend: number
+  campaigns: number
+  /** How many of them stated a ceiling, so a partial cap cannot be read as a total. */
+  capped_campaigns: number
+}
+
 export interface BudgetRow {
   campaign_id: string
   campaign_name: string
   status: string
   budget: number
-  spent: number
-  remaining: number
+  /** The campaign's plan is denominated in this; a spend in another currency cannot be paced against it. */
+  budget_currency: string | null
+  /** Null when there is no single spend figure — a partial or mixed-currency scope (see `spend_state`). */
+  spent: number | null
+  /** BUDGET-WITHHELD-001 — the unit `spent` is actually in, which is not always the project's. */
+  spent_currency: string | null
+  /** True when `spent` is the platform's own figure because no rate exists to convert it. */
+  spend_withheld: boolean
+  /** PARTIAL-WITHHELD-001 — the money composition behind `spent`. */
+  spend_state?: 'complete_converted' | 'complete_withheld' | 'partial' | 'mixed_currency' | 'absent' | 'zero'
+  /** Null when spend and budget are denominated differently — see `pacing_basis`. */
+  remaining: number | null
   consumed_pct: number | null
   pace: number | null
-  projected_spend: number
+  projected_spend: number | null
+  /**
+   * `comparable` — pacing computed. `currency_mismatch` — real spend, different unit. `no_budget` —
+   * none set. `partial` / `mixed_currency` — no single spend figure exists to pace at all.
+   */
+  pacing_basis: 'comparable' | 'currency_mismatch' | 'no_budget' | 'partial' | 'mixed_currency'
 }
 /**
  * One source behind the project's figures — an ad platform OR a connected store (UNIFIED-001).
@@ -221,6 +372,8 @@ export interface MetricDefinitionRow {
   is_additive: boolean
 }
 export interface Normalization {
+  /** ANALYTICS-FILTER-TRUTH-001 — which requested axes this endpoint actually narrowed by. */
+  filter_scope?: FilterScope
   project_currency: string | null
   project_currencies: string[]
   currencies: CurrencyBasis[]
@@ -276,6 +429,8 @@ export interface DuplicatedShop {
 }
 
 export interface Attribution {
+  /** ANALYTICS-FILTER-TRUTH-001 — the campaign axis is declined here, and the response says so. */
+  filter_scope?: FilterScope
   period: Range
   platform_reported: {
     label_ar: string
@@ -306,6 +461,27 @@ export interface Attribution {
     attributed_orders?: number
     duplicates_collapsed?: number
     shops_connected_more_than_once?: DuplicatedShop[]
+  }
+  /**
+   * CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — how much of what the platforms claim is the same sale.
+   *
+   * A FLOOR, never a count. `at_least_duplicated` is claimed − confirmed: a claim with no confirmed
+   * sale behind it may be one order two platforms both claimed, a sale that never happened, or a
+   * real sale the shop cannot see, and nothing in the data tells them apart.
+   */
+  overlap: {
+    available: boolean
+    reason: string | null
+    note_ar: string
+    note_en: string
+    platforms_claim?: number
+    store_confirms?: number
+    at_least_duplicated?: number
+    claims_per_confirmed_sale?: number | null
+    attributed_orders?: number
+    /** Share of the ledger that could be attributed at all — the bound on everything above. */
+    coverage?: number | null
+    platforms_compared?: number
   }
   dedup: {
     platform_reported: { status: string; reason_ar: string; reason_en: string; may_be_summed: boolean }
@@ -363,31 +539,293 @@ export interface MetricFilters {
   /** UX-DASH-001 — the dashboard's campaign control. Absent means every campaign, never none. */
   campaign?: string[]
 }
-const qf = (f?: MetricFilters) =>
+export const qf = (f?: MetricFilters) =>
   (f?.provider?.length ? `&provider=${f.provider.join(',')}` : '') +
   (f?.objective?.length ? `&objective=${f.objective.join(',')}` : '') +
   (f?.campaign?.length ? `&campaign=${f.campaign.join(',')}` : '')
 
+/**
+ * ANALYTICS-FILTER-TRUTH-001 — every axis that narrows the REQUEST also keys the cache.
+ *
+ * `useEntities` built its key by hand and left `campaign` out of it, so drilling into one campaign's
+ * ad squads was served the response cached for every campaign: a narrowed heading over unnarrowed
+ * rows. One builder now feeds every metrics query, so an axis added to `MetricFilters` cannot be
+ * carried by the URL and forgotten by the key.
+ */
+export const filterKeyParts = (f?: MetricFilters): string[] => [
+  f?.provider?.join(',') ?? '',
+  f?.objective?.join(',') ?? '',
+  f?.campaign?.join(',') ?? '',
+]
+
 function useMetric<T>(key: string, projectId: string | null, range: Range, path: string, filters?: MetricFilters) {
   return useQuery({
-    queryKey: [
-      'metrics', key, projectId, range.from, range.to,
-      filters?.provider?.join(',') ?? '',
-      filters?.objective?.join(',') ?? '',
-      // Part of the key, or the campaign filter would return whatever the unfiltered request cached.
-      filters?.campaign?.join(',') ?? '',
-    ],
+    queryKey: ['metrics', key, projectId, range.from, range.to, ...filterKeyParts(filters)],
     queryFn: () => getData<T>(`${base(projectId!)}/${path}?${q(range)}${qf(filters)}`),
     enabled: Boolean(projectId),
   })
 }
 
+/**
+ * ANALYTICS-DRILLDOWN-001 — one row per ad squad or ad, from `entity_daily_metrics`.
+ *
+ * Extends `MoneyProvenance` for the same reason every other row shape does: the canonical money
+ * reader keys off those field names, so an ad squad's withheld spend renders through the identical
+ * code path as a dashboard KPI rather than a second implementation that agrees by luck.
+ */
+export interface EntityRow extends MoneyProvenance {
+  entity_id: string
+  external_id: string
+  /** Null when the structure sweep has since removed the entity — a real state, not a placeholder. */
+  name: string | null
+  status: string | null
+  campaign_id: string | null
+  ad_set_id: string | null
+  active_days: number
+  last_active_on: string | null
+  spend: number | null
+  impressions: number | null
+  reach: number | null
+  frequency: number | null
+  clicks: number | null
+  landing_page_views: number | null
+  engagements: number | null
+  video_views: number | null
+  video_p25: number | null
+  video_p50: number | null
+  video_p75: number | null
+  video_p100: number | null
+  video_watch_seconds: number | null
+  conversions: number | null
+  purchases: number | null
+  leads: number | null
+  installs: number | null
+  revenue: number | null
+  ctr: number | null
+  cpc: number | null
+  cpm: number | null
+  cpa: number | null
+  cpl: number | null
+  cpi: number | null
+  cpe: number | null
+  cost_per_view: number | null
+  cost_per_lpv: number | null
+  roas: number | null
+  aov: number | null
+  conversion_rate: number | null
+  engagement_rate: number | null
+  completion_rate: number | null
+  view_rate: number | null
+}
+
+export interface EntityPage {
+  /** ANALYTICS-FILTER-TRUTH-001 — the drill-down applies all three axes; this states that it did. */
+  filter_scope?: FilterScope
+  entities: EntityRow[]
+  entity_type: string
+  period: { from: string; to: string }
+  currency: string | null
+  attribution_window: string | null
+}
+
+/**
+ * The ad-squad or ad level, optionally narrowed to one parent.
+ *
+ * `parent` is part of the query key AND the request: it changes the DATABASE scope, so a cached
+ * unfiltered response must never be handed back for a drilled-down request.
+ */
+export const useEntities = (
+  p: string | null,
+  r: Range,
+  level: 'ad_set' | 'ad',
+  parent?: string | null,
+  f?: MetricFilters,
+) =>
+  useQuery({
+    queryKey: ['metrics', 'entities', level, p, r.from, r.to, parent ?? '', ...filterKeyParts(f)],
+    queryFn: () =>
+      getData<EntityPage>(
+        `${base(p!)}/entities/${level}?${q(r)}${qf(f)}${parent === undefined || parent === null ? '' : `&parent=${encodeURIComponent(parent)}`}`,
+      ),
+    enabled: Boolean(p),
+  })
+
 export const useSummary = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Summary>('summary', p, r, 'summary', f)
 export const useTimeseries = (p: string | null, r: Range, f?: MetricFilters) => useMetric<TimePoint[]>('timeseries', p, r, 'timeseries', f)
 export const usePlatforms = (p: string | null, r: Range, f?: MetricFilters) => useMetric<PlatformRow[]>('platforms', p, r, 'platforms', f)
+export interface AccountRow extends MetricTotals {
+  account_id: string | null
+  provider: string
+  /** Null when the account has been removed since these rows were ingested — its spend is still real. */
+  account_name: string | null
+}
+
+/** ANALYTICS-DRILLDOWN-001 — the ad accounts beneath a platform. */
+export const useAccounts = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<AccountRow[]>('accounts', p, r, 'accounts', f)
+
 export const useCampaigns = (p: string | null, r: Range, f?: MetricFilters) => useMetric<CampaignRow[]>('campaigns', p, r, 'campaigns', f)
+/**
+ * UX-MULTISELECT-SCALE-002 — the campaign selector's options come from the SERVER.
+ *
+ * The selector used to read `useCampaigns`, the breakdown. That is the wrong source twice over.
+ *
+ * It is windowed by the chosen period, so a campaign that reported nothing in the range is absent
+ * from the control — and «this campaign went quiet» is frequently the exact question the reader
+ * opened the filter to ask. And it carries a full metrics row per campaign to populate a list that
+ * needs an id and a name, so the wire cost of opening a filter scales with the estate.
+ *
+ * `q` is the reader's term, sent to the server. The endpoint answers a bounded page and states
+ * `has_more` as a fact rather than leaving the client to infer it from a full page.
+ */
+export interface CampaignOption {
+  id: string
+  name: string
+}
+
+export interface CampaignOptionPage {
+  options: CampaignOption[]
+  /** The server matched more than it returned. NOT a count — the endpoint deliberately never counts. */
+  has_more: boolean
+  limit: number
+}
+
+/**
+ * The NAMES of campaigns the reader has already chosen.
+ *
+ * The selection lives in the URL, so a shared link arrives carrying ids and nothing else — and the
+ * option page is the first 120 campaigns by name, which very often does not contain them. Without
+ * this the control and the applied-filter chips render the reader's own choice as a bare uuid on
+ * exactly the deep link somebody sent a colleague.
+ *
+ * A separate query rather than a widened one: it is keyed by the ids, so it is cached per selection
+ * and is not refetched by every keystroke in the search box.
+ */
+export const useCampaignNames = (projectId: string | null, ids: string[]) =>
+  useQuery({
+    queryKey: ['metrics', 'campaign-names', projectId, [...ids].sort().join(',')],
+    queryFn: () =>
+      getData<CampaignOptionPage>(
+        `${base(projectId!)}/campaign-options?ids=${encodeURIComponent(ids.join(','))}`,
+      ),
+    enabled: Boolean(projectId) && ids.length > 0,
+    /* Names do not change while a page is open, and a re-render must not re-ask. */
+    staleTime: 5 * 60_000,
+  })
+
+export const useCampaignOptions = (projectId: string | null, term: string) =>
+  useQuery({
+    queryKey: ['metrics', 'campaign-options', projectId, term],
+    queryFn: () =>
+      getData<CampaignOptionPage>(
+        `${base(projectId!)}/campaign-options${term === '' ? '' : `?q=${encodeURIComponent(term)}`}`,
+      ),
+    enabled: Boolean(projectId),
+    /*
+     * The previous page stays on screen while the next term is in flight. Without this every
+     * keystroke empties the list for the duration of a round trip, and an empty list is how the
+     * control tells a reader their campaign does not exist — so it would say that, repeatedly and
+     * wrongly, to anyone who types at a normal speed.
+     */
+    placeholderData: keepPreviousData,
+  })
+
 export const useFunnel = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FunnelStage[]>('funnel', p, r, 'funnel', f)
 export const useBudget = (p: string | null, r: Range, f?: MetricFilters) => useMetric<BudgetRow[]>('budget', p, r, 'budget', f)
+export const useAccountBudgets = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<AccountBudgetRow[]>('budget-accounts', p, r, 'budget-accounts', f)
+/**
+ * PLATFORM-DECISION-ANALYTICS-001 — each platform's contribution to each marketing path.
+ *
+ * Separate from `usePlatforms`, which answers «how is each platform doing» with one row per platform
+ * over every objective at once. That row cannot answer «which platform is contributing most to THIS
+ * objective», and the comparison it invites — one number per platform across a mixed programme — is
+ * the one that must never be made.
+ */
+export interface PlatformPathRow {
+  provider: string
+  spend: number
+  impressions: number
+  clicks: number
+  landing_page_views: number
+  orders: number
+  revenue: number
+  campaigns: number
+  /** Share of THIS PATH's spend, never of the account's. Null when the path spent nothing. */
+  spend_share: number | null
+}
+
+export interface PlatformPath {
+  path: string
+  label_ar: string
+  label_en: string
+  headline_metrics: string[]
+  platforms: PlatformPathRow[]
+  spend: number
+  /** True only where two or more platforms actually SPENT on this path. */
+  comparable: boolean
+  comparable_reason: 'two_or_more_platforms_spent' | 'only_one_platform_spent' | 'nothing_spent_on_this_path'
+}
+
+export interface PlatformObjectives {
+  paths: PlatformPath[]
+  cross_path_comparison: false
+  cross_path_reason_ar: string
+  cross_path_reason_en: string
+}
+
+export const usePlatformObjectives = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<PlatformObjectives>('platform-objectives', p, r, 'platform-objectives', f)
+
 export const useFreshness = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FreshnessRow[]>('freshness', p, r, 'freshness', f)
 export const useNormalization = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Normalization>('normalization', p, r, 'normalization', f)
 export const useAttribution = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Attribution>('attribution', p, r, 'attribution', f)
+
+export interface PathLeader {
+  id: string
+  name: string
+  objective: string
+  metric: string
+  value: number | null
+}
+
+export interface PathLeaders {
+  path: string
+  label_ar: string
+  label_en: string
+  metric: string
+  comparable: boolean
+  comparable_reason: string
+  strongest: PathLeader | null
+  weakest: PathLeader | null
+  campaigns: number
+}
+
+export interface ObjectiveLeaders {
+  paths: PathLeaders[]
+  cross_path_comparison: boolean
+}
+
+/** The funnel's shape — signal, context, explanation, evidence, action — applied to a path. */
+export interface PathExplanation {
+  path: string
+  label_ar: string
+  label_en: string
+  signal: {
+    metric: string
+    best: { campaign: string; value: number | null }
+    worst: { campaign: string; value: number | null }
+  } | null
+  context: { scope: string; campaigns: number; from: string; to: string } | null
+  explanation: { ar: string; en: string } | null
+  evidence: string[]
+  action: { ar: string; en: string } | null
+  /** Why there is nothing to say, when there is nothing to say. */
+  silent_reason: string | null
+}
+
+export const useObjectiveLeaders = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<ObjectiveLeaders>('objective-leaders', p, r, 'objective-leaders', f)
+
+export const useObjectiveExplanations = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<{ paths: PathExplanation[] }>('objective-explanations', p, r, 'objective-explanations', f)

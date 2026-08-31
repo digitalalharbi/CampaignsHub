@@ -75,7 +75,24 @@ test.describe('a client opens their live report', () => {
   test('the page says how fresh each platform is', async ({ page }) => {
     await page.goto(URL)
     await expect(page.getByTestId('live-freshness')).toBeVisible({ timeout: 20000 })
-    await expect(page.getByTestId('live-freshness')).toContainText(/meta/i)
+
+    /*
+     * Asserted on the platform's NAME, not on its key.
+     *
+     * This read `/meta/i`, which the page satisfied by rendering the column value `meta` under a
+     * `capitalize` class — so it passed while showing a client a database identifier dressed up to
+     * look like a brand. Accepting either language keeps the test about what it is for: that each
+     * platform is named here at all.
+     */
+    await expect(page.getByTestId('live-freshness')).toContainText(/ميتا|Meta/)
+
+    /*
+     * And no snake_case key survives in this block. `meta` is indistinguishable from its own English
+     * label, but `google_ads` is not — this is the assertion that would actually have caught the
+     * defect, and it fails on any provider whose key differs from its name.
+     */
+    const text = await page.getByTestId('live-freshness').innerText()
+    expect(text, `the freshness block shows a raw key:\n${text}`).not.toMatch(/[a-z]+_[a-z]+/)
   })
 
   test('the link is marked as demo data rather than passing seeded figures off as real', async ({ page }) => {

@@ -84,6 +84,16 @@ export interface HomeCopy {
       cta: string
       to?: string
       action?: 'reveal-services'
+      /**
+       * An ANNOUNCEMENT, not an offer (MKT-UGC-002).
+       *
+       * A path carrying this has no destination and no action, and the chooser renders it as a
+       * card that cannot be selected. It exists so the visitor learns the service is coming
+       * without being handed a route into a sub-system that is switched off — the two things
+       * that «show it as coming soon» has to mean at once.
+       */
+      soon?: true
+      badge?: string
     }[]
   }
 
@@ -127,6 +137,18 @@ export interface HomeCopy {
     tagline: string
     contactLabel: string
     email: string
+    /**
+     * The contact block at the bottom of the public site (MKT-CONTACT-001).
+     *
+     * `phone` is what a person READS and `phoneHref` is what the device DIALS — they are different
+     * strings on purpose. The readable form is spaced for a Saudi mobile; `tel:` refuses spaces in
+     * some dialers, so the href keeps the unbroken E.164 number.
+     */
+    contactTitle: string
+    emailLabel: string
+    phoneLabel: string
+    phone: string
+    phoneHref: string
     /** Grouped footer navigation — product, company and legal each get their own column. */
     groups: { title: string; links: { label: string; to: string }[] }[]
     rights: string
@@ -174,7 +196,7 @@ const ar: HomeCopy = {
   },
   preview: {
     kpis: { spend: 'إجمالي الإنفاق', results: 'النتائج', active: 'الحملات النشطة', cpr: 'متوسط تكلفة النتيجة' },
-    tabs: { comparison: 'مقارنة أداء المنصات', distribution: 'توزيع الإنفاق', creatives: 'أفضل المحتويات الإعلانية', campaigns: 'أعلى الحملات أداءً' },
+    tabs: { comparison: 'مقارنة أداء المنصات', distribution: 'توزيع الإنفاق', creatives: 'أفضل الإعلانات', campaigns: 'أعلى الحملات أداءً' },
     cols: { platform: 'المنصة', spend: 'الإنفاق', results: 'النتائج', active: 'نشطة', cpr: 'التكلفة', roas: 'العائد', sync: 'آخر مزامنة' },
     roasNote: '* العائد يظهر عند ملاءمة هدف الحملة.',
     syncPrefix: 'قبل',
@@ -362,7 +384,7 @@ const ar: HomeCopy = {
       { title: 'مقارنة الأداء', desc: 'قارن الحملات والمنصات واكتشف الأفضل بسرعة.' },
       { title: 'التقارير', desc: 'تقارير حسب الهدف، جاهزة للعميل أو للفريق.' },
       { title: 'الميزانيات', desc: 'راقب سرعة الصرف وتوقّع التجاوز مبكرًا.' },
-      { title: 'المحتويات الإعلانية', desc: 'قارن أداء الإعلانات واعرف الأفضل تأثيرًا.' },
+      { title: 'الإعلانات', desc: 'قارن أداء الإعلانات واعرف الأفضل تأثيرًا.' },
       { title: 'التنبيهات', desc: 'تنبيه عند ارتفاع التكلفة أو توقف المزامنة.' },
     ],
   },
@@ -405,6 +427,11 @@ const ar: HomeCopy = {
     legal: ['الخصوصية', 'الشروط', 'الدعم'],
     contactLabel: 'للتواصل',
     email: 'info@campaignshub.io',
+    contactTitle: 'تواصل معنا',
+    emailLabel: 'البريد الإلكتروني',
+    phoneLabel: 'الجوال',
+    phone: '+966 53 211 5582',
+    phoneHref: '+966532115582',
     groups: [
       {
         title: 'المنتج',
@@ -485,7 +512,7 @@ const en: HomeCopy = {
   },
   preview: {
     kpis: { spend: 'Total spend', results: 'Results', active: 'Active campaigns', cpr: 'Avg cost per result' },
-    tabs: { comparison: 'Platform performance', distribution: 'Spend distribution', creatives: 'Top creatives', campaigns: 'Top campaigns' },
+    tabs: { comparison: 'Platform performance', distribution: 'Spend distribution', creatives: 'Top ads', campaigns: 'Top campaigns' },
     cols: { platform: 'Platform', spend: 'Spend', results: 'Results', active: 'Active', cpr: 'Cost', roas: 'Return', sync: 'Last sync' },
     roasNote: '* Return is shown when it fits the campaign objective.',
     syncPrefix: '',
@@ -716,6 +743,11 @@ const en: HomeCopy = {
     legal: ['Privacy', 'Terms', 'Support'],
     contactLabel: 'Contact',
     email: 'info@campaignshub.io',
+    contactTitle: 'Contact us',
+    emailLabel: 'Email',
+    phoneLabel: 'Phone',
+    phone: '+966 53 211 5582',
+    phoneHref: '+966532115582',
     groups: [
       {
         title: 'Product',
@@ -768,7 +800,38 @@ function offeredCopy(copy: HomeCopy): HomeCopy {
     ...copy,
     start: {
       ...copy.start,
-      paths: copy.start.paths.filter((p) => p.key !== 'influencer'),
+      /*
+       * MKT-UGC-002 — ANNOUNCED where it used to be REMOVED.
+       *
+       * Filtering the card out entirely is why the service is invisible on the homepage: a visitor
+       * who wants influencer or UGC work reads three options, none of which is theirs, and leaves
+       * believing the product does not do it. Announcing it answers that without reopening
+       * anything — the replacement has no `to` and no `action`, so there is no route to a
+       * sub-system `features.influencersUgc` has switched off.
+       *
+       * The wording is READ from `serviceAreas.soon`, the string this page already announces the
+       * same service with further down. Writing it again here would give the product two Arabic
+       * sentences for one thing, and they would drift the first time either is edited.
+       *
+       * Position is inherited, not chosen: the influencer path is already last in `paths`, so
+       * mapping in place puts the announcement directly below «أحتاج خدمات إعلانية».
+       */
+      paths: copy.start.paths.map((p) =>
+        p.key === 'influencer'
+          ? {
+              key: p.key,
+              title: copy.serviceAreas.soon.title,
+              kicker: copy.serviceAreas.soon.badge,
+              desc: copy.serviceAreas.soon.desc,
+              badge: copy.serviceAreas.soon.badge,
+              // Nothing to include yet, and nothing to click: an empty list keeps the shape without
+              // promising features the closed sub-system would have to deliver.
+              includes: [],
+              cta: copy.serviceAreas.soon.badge,
+              soon: true as const,
+            }
+          : p,
+      ),
     },
     options: {
       ...copy.options,

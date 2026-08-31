@@ -7,9 +7,15 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Campaigns\Models\CreativeGroup;
+use App\Domains\Campaigns\Models\ExternalAd;
+use App\Domains\Campaigns\Models\ExternalAdSet;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Models\Tenant;
@@ -119,6 +125,106 @@ final class CreativeLibraryApiTest extends TestCase
     private function window(): string
     {
         return '?from='.now()->subDays(29)->toDateString().'&to='.now()->toDateString();
+    }
+
+    /**
+     * CONTENT-AD-DELIVERED-001 — the card must be able to tell «did not run» from «the platform did
+     * not break this result down per creative».
+     *
+     * 35 creatives on production sit in the second state: `entity_daily_metrics` holds the AD's
+     * figures and `creative_daily_metrics` holds nothing. Without this flag the library falls back
+     * to the availability record, which — the request having SUCCEEDED — says «لم يعمل خلال هذه
+     * الفترة» about a creative that was live.
+     *
+     * The flag is a fact about the AD and is asserted as one. No ad figure appears in the payload's
+     * `metrics`, which stays null.
+     */
+    public function test_a_creative_whose_ad_delivered_is_marked_even_with_no_figures_of_its_own(): void
+    {
+        $ran = $this->creative(['name' => 'Ad ran']);
+        $silent = $this->creative(['name' => 'Nothing ran']);
+
+        /*
+         * The full chain, because the schema insists on it: `external_ad_sets.external_campaign_id`
+         * and `external_ads.external_campaign_id` are both NOT NULL, and an external campaign names
+         * a real account. That refusal is the database being right — a metric row that names no
+         * parent is invisible to every screen that walks the hierarchy downwards.
+         */
+        $connection = app(TokenVault::class)->open(
+            tenantId: (string) $this->tenant->getKey(),
+            provider: 'meta',
+            tokens: new OAuthTokens('AT', 'RT', now()->addDays(30)),
+            connectionName: 'meta',
+        );
+
+        $account = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(),
+            'provider_connection_id' => $connection->getKey(),
+            'provider' => 'meta',
+            'account_type' => 'ad_account',
+            'external_id' => 'act-1',
+            'name' => 'Acct',
+            'status' => 'active',
+            'discovered_at' => now(),
+        ]);
+
+        $externalCampaign = ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'external_account_id' => $account->getKey(),
+            'provider' => 'meta',
+            'external_id' => 'cmp-1',
+            'name' => 'Campaign',
+            'status' => 'active',
+        ]);
+
+        $adSet = ExternalAdSet::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'external_campaign_id' => $externalCampaign->getKey(),
+            'provider' => 'meta',
+            'external_id' => 'sq-1',
+            'name' => 'Squad',
+            'status' => 'active',
+        ]);
+
+        $ad = ExternalAd::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'external_ad_set_id' => $adSet->getKey(),
+            'external_campaign_id' => $externalCampaign->getKey(),
+            'provider' => 'meta',
+            'external_id' => 'ad-1',
+            'name' => 'Ad',
+            'status' => 'active',
+        ]);
+
+        $ad->forceFill(['creative_id' => $ran->getKey()])->save();
+
+        DB::table('entity_daily_metrics')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'entity_type' => 'ad',
+            'entity_id' => $ad->getKey(),
+            'external_entity_id' => 'ad-1',
+            'provider' => 'meta',
+            'metric_date' => now()->toDateString(),
+            'impressions' => 900,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $rows = collect($this->actingAs($this->operator, 'sanctum')
+            ->getJson($this->url($this->window()))
+            ->assertOk()
+            ->json('data.creatives'))->keyBy('name');
+
+        $this->assertTrue($rows['Ad ran']['ad_delivered'], 'Its ad has figures for this window.');
+        $this->assertFalse($rows['Nothing ran']['ad_delivered']);
+
+        // The flag never becomes a figure: the creative still reports no metrics of its own.
+        $this->assertNull($rows['Ad ran']['metrics'], 'An ad figure must not be projected onto a creative.');
     }
 
     public function test_the_library_lists_creatives_with_figures_that_match_their_objective(): void
@@ -592,5 +698,38 @@ final class CreativeLibraryApiTest extends TestCase
         $this->actingAs($viewer, 'sanctum')
             ->postJson($this->url('/group'), ['creative_ids' => [(string) $a->getKey(), (string) $b->getKey()]])
             ->assertForbidden();
+    }
+
+    /**
+     * SNAP-CREATIVE-METRICS-LIVE-001 — the library must open on the creatives that ran.
+     *
+     * PostgreSQL sorts NULLs FIRST under `DESC`, and `last_active_at` is null for every creative
+     * that has never delivered. With the column finally being written, a plain `DESC` would have
+     * opened the page on the creatives with no numbers and pushed the delivering ones underneath —
+     * reproducing the empty first page by the opposite route.
+     */
+    public function test_creatives_that_delivered_sort_above_those_that_never_did(): void
+    {
+        $neverRan = $this->creative(['name' => 'Never ran', 'last_active_at' => null]);
+        $ranOnce = $this->creative(['name' => 'Ran a while ago', 'last_active_at' => now()->subDays(20)]);
+        $ranToday = $this->creative(['name' => 'Ran today', 'last_active_at' => now()]);
+
+        $names = collect($this->actingAs($this->operator, 'sanctum')
+            ->getJson($this->url($this->window()))
+            ->assertOk()
+            ->json('data.creatives'))
+            ->pluck('name')
+            ->all();
+
+        $this->assertSame(
+            ['Ran today', 'Ran a while ago', 'Never ran'],
+            $names,
+            'A creative with no delivery must never outrank one that ran.',
+        );
+
+        // Guard the fixture itself: the assertion above is only meaningful if the null is real.
+        $this->assertNull($neverRan->fresh()?->last_active_at);
+        $this->assertNotNull($ranOnce->fresh()?->last_active_at);
+        $this->assertNotNull($ranToday->fresh()?->last_active_at);
     }
 }

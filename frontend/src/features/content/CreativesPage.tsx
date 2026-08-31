@@ -5,7 +5,11 @@ import { GitCompare, Layers, LayoutGrid, Rows3 } from 'lucide-react'
 import { CreativeViewer } from './CreativeViewer'
 import { CreativeCompare } from './CreativeCompare'
 import { formatMetric, metricLabel, metricState } from './metrics'
+import { creativeGrainMissing, emptyReason, noDisplayableMetrics, type EmptyReason, type MetricsAvailability } from './availability'
 import { imageLoading } from './format'
+import { creativeMoney } from './creativeMoney'
+import { VideoPoster } from './VideoPoster'
+import { anyDisplayablePreview } from './previewPresence'
 import {
   groupCreatives,
   libraryQueryString,
@@ -18,6 +22,7 @@ import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { FilterBar, FilterMulti, FilterSearch, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
+import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
@@ -70,8 +75,8 @@ import { campaignStatusLabel, marketingPathLabel, objectiveLabel, providerLabel 
 
 const COPY = {
   ar: {
-    title: 'مكتبة المحتويات',
-    subtitle: 'كل محتوى إعلاني مزامَن — بأرقامه الحقيقية، ومقارنته بمسار هدفه.',
+    title: 'مكتبة الإعلانات',
+    subtitle: 'كل إعلان مزامَن — بأرقامه الحقيقية، ومقارنته بمسار هدفه.',
     search: 'ابحث بالاسم أو نص الإعلان…',
     grid: 'شبكة',
     list: 'قائمة',
@@ -84,7 +89,7 @@ const COPY = {
     ad: 'الإعلان',
     objective: 'الهدف',
     path: 'المسار التسويقي',
-    kind: 'نوع المحتوى',
+    kind: 'نوع الإعلان',
     status: 'الحالة',
     health: 'حالة الإجهاد',
     from: 'من',
@@ -96,22 +101,23 @@ const COPY = {
     sortConversions: 'الأعلى نتائج',
     sortName: 'الاسم',
     compare: 'مقارنة',
-    compareHint: 'اختر محتويين أو أكثر للمقارنة.',
+    compareHint: 'اختر إعلانين أو أكثر للمقارنة.',
     selected: 'محدَّد',
     merge: 'دمج كأصل واحد',
     merging: 'جارٍ الدمج…',
-    merged: 'تم دمج {n} محتويات كأصل واحد.',
-    mergeFailed: 'تعذّر الدمج. تأكد أن المحتويات المختارة تتبع المشروع نفسه.',
+    merged: 'تم دمج {n} إعلانات كأصل واحد.',
+    mergeFailed: 'تعذّر الدمج. تأكد أن الإعلانات المختارة تتبع المشروع نفسه.',
     openGroup: 'فتح المجموعة',
     groups: 'المجموعات',
     clearSelection: 'إلغاء التحديد',
-    empty: 'لا توجد محتويات تطابق هذا التحديد.',
-    emptyAll: 'لا توجد محتويات بعد — تظهر هنا بعد مزامنة الحملات.',
+    empty: 'لا توجد إعلانات تطابق هذا التحديد.',
+    emptyAll: 'لا توجد إعلانات بعد — تظهر هنا بعد مزامنة الحملات.',
     error: 'تعذّر تحميل المكتبة.',
     demo: 'وضع تجريبي',
     grouped: 'مجمَّع عبر المنصات',
     cards: (n: number) => `${n} بطاقات`,
     noPreview: 'لا تتوفر معاينة',
+    noPreviewAll: 'لم تُرجع المنصة ملف أي إعلان في هذه النتيجة؛ الأرقام أدناه كاملة.',
     lastSync: 'آخر مزامنة',
     never: 'لم تتم بعد',
     showing: 'المعروض',
@@ -123,9 +129,9 @@ const COPY = {
     name: 'الاسم',
     result: 'النتيجة',
     efficiency: 'الكفاءة',
-    details: 'تفاصيل المحتوى',
+    details: 'تفاصيل الإعلان',
     source: 'المصدر: منصة الإعلان',
-    allContent: 'كل المحتوى',
+    allContent: 'كل الإعلانات',
     /*
      * Plurals for the applied-state line, one word per axis.
      *
@@ -145,8 +151,8 @@ const COPY = {
     manyStatuses: 'حالات',
   },
   en: {
-    title: 'Creative library',
-    subtitle: 'Every synced creative — with its real figures, judged against its own objective.',
+    title: 'Ads library',
+    subtitle: 'Every synced ad — with its real figures, judged against its own objective.',
     search: 'Search by name or ad copy…',
     grid: 'Grid',
     list: 'List',
@@ -159,7 +165,7 @@ const COPY = {
     ad: 'Ad',
     objective: 'Objective',
     path: 'Marketing path',
-    kind: 'Creative type',
+    kind: 'Ad type',
     status: 'Status',
     health: 'Fatigue',
     from: 'From',
@@ -171,22 +177,23 @@ const COPY = {
     sortConversions: 'Most results',
     sortName: 'Name',
     compare: 'Compare',
-    compareHint: 'Select two or more creatives to compare.',
+    compareHint: 'Select two or more ads to compare.',
     selected: 'selected',
     merge: 'Merge as one asset',
     merging: 'Merging…',
-    merged: '{n} creatives were merged as one asset.',
-    mergeFailed: 'The merge failed. Check that the selected creatives belong to the same project.',
+    merged: '{n} ads were merged as one asset.',
+    mergeFailed: 'The merge failed. Check that the selected ads belong to the same project.',
     openGroup: 'Open group',
     groups: 'Groups',
     clearSelection: 'Clear selection',
-    empty: 'No creatives match this selection.',
-    emptyAll: 'No creatives yet — they appear here after campaigns sync.',
+    empty: 'No ads match this selection.',
+    emptyAll: 'No ads yet — they appear here after campaigns sync.',
     error: 'Could not load the library.',
     demo: 'Demo',
     grouped: 'Grouped across platforms',
     cards: (n: number) => `${n} cards`,
     noPreview: 'No preview available',
+    noPreviewAll: 'The platform returned no creative file for anything in this result; the figures below are complete.',
     lastSync: 'Last sync',
     never: 'Not yet',
     showing: 'Showing',
@@ -198,9 +205,9 @@ const COPY = {
     name: 'Name',
     result: 'Result',
     efficiency: 'Efficiency',
-    details: 'Creative details',
+    details: 'Ad details',
     source: 'Source: ad platform',
-    allContent: 'All content',
+    allContent: 'All ads',
     manyClients: 'clients',
     manyProjects: 'projects',
     manyPlatforms: 'platforms',
@@ -231,10 +238,27 @@ const FATIGUE_LABEL: Record<FatigueStatus, { ar: string; en: string }> = {
   insufficient_data: { ar: 'بيانات غير كافية', en: 'Insufficient data' },
 }
 
-const KIND_LABEL: Record<string, { ar: string; en: string }> = {
+/**
+ * CONTENT-KIND-LABEL-001 — the creative's type, in words.
+ *
+ * The library badge has always said «فيديو»; the creative DETAIL page rendered `preview.kind`
+ * straight, so opening a creative to read about it showed «نوع المحتوى video» — the one screen
+ * dedicated to describing an asset naming its type in the database's words.
+ *
+ * Exported so the detail page reads this map rather than growing a second one three lines long,
+ * which is how the label maps in this codebase have drifted every previous time.
+ */
+export const KIND_LABEL: Record<string, { ar: string; en: string }> = {
   image: { ar: 'صورة', en: 'Image' },
   video: { ar: 'فيديو', en: 'Video' },
   carousel: { ar: 'دوّار', en: 'Carousel' },
+}
+
+/** An unknown kind shows as itself: a format the product does not recognise is worth seeing. */
+export function creativeKindLabel(kind: string | null | undefined, ar: boolean): string {
+  if (!kind) return '—'
+  const label = KIND_LABEL[kind]
+  return label ? (ar ? label.ar : label.en) : kind
 }
 
 /**
@@ -407,6 +431,14 @@ export function CreativesPage() {
 
   const data = libraryQuery.data
   const creatives = data?.creatives ?? []
+
+  /**
+   * CONTENT-NO-PREVIEW-001 — does ANY creative in this result carry a displayable asset?
+   *
+   * Computed over the whole result rather than per card, because the question the layout is asking
+   * is «is the preview column worth reserving at all», and one card cannot answer it.
+   */
+  const anyPreview = useMemo(() => anyDisplayablePreview(creatives), [creatives])
   const options = data?.filters
   const total = data?.total ?? 0
   const perPage = data?.per_page ?? 24
@@ -550,7 +582,8 @@ export function CreativesPage() {
             <div className="flex flex-wrap items-end gap-3">
               {multi('statuses', t.status, options.statuses.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) })))}
               {multi('ad_set_ids', t.adSet, options.ad_sets.map((id) => ({ value: id, label: id })))}
-              {multi('ad_ids', t.ad, options.ads.map((id) => ({ value: id, label: id })))}
+              {/* Already labelled by the server — the id is the value, the ad's name is what is read. */}
+              {multi('ad_ids', t.ad, options.ads)}
             </div>
           )
         }
@@ -617,7 +650,16 @@ export function CreativesPage() {
           <>
             {multi('client_ids', t.client, options.clients.map((c) => ({ value: c.id, label: c.name })))}
             {multi('project_ids', t.project, options.projects.map((p) => ({ value: p.id, label: p.name })))}
-            {multi('providers', t.platform, options.providers.map((p) => ({ value: p, label: providerLabel(p, locale) })))}
+            {/* UX-FILTERS-001 — platforms as visible chips here too, so the library filters the
+                same way the dashboard and analytics do. */}
+            <FilterPlatforms
+              label={t.platform}
+              allLabel={ar ? 'الكل' : 'All'}
+              values={axes.providers ?? []}
+              testid="content-providers"
+              options={options.providers.map((p) => ({ value: p, label: providerLabel(p, locale) }))}
+              onChange={(next) => setAxis('providers', next)}
+            />
             {multi('campaign_ids', t.campaign, options.campaigns.map((c) => ({ value: c.id, label: c.name })))}
             {multi('objectives', t.objective, options.objectives.map((o) => ({ value: o, label: objectiveLabel(o, locale) })))}
             {multi('paths', t.path, options.paths.map((p) => ({ value: p, label: marketingPathLabel(p, locale) })))}
@@ -698,18 +740,39 @@ export function CreativesPage() {
         </div>
       )}
 
+      {/*
+        CONTENT-NO-PREVIEW-001 — the same sentence, four times, in four large empty boxes.
+
+        Every card reserves a 16:9 panel for the asset. When the platform returns no asset for ANY
+        creative in the result — which is every Meta result today, because the ad API does not hand
+        back the creative file — the grid becomes rows of identical grey rectangles each repeating
+        «لا تتوفر معاينة», and the numbers people came for are pushed below the fold.
+    
+        The fact is not hidden: it is stated ONCE, above the grid, and the cards drop the reserved
+        panel so the metrics move up. A grid where SOME creatives have assets keeps every panel, so
+        the ones that are missing stay visibly missing rather than being quietly levelled.
+      */}
+      {creatives.length > 0 && !anyPreview && (
+        <p data-testid="creatives-no-previews" className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary">
+          {t.noPreview} — {t.noPreviewAll}
+        </p>
+      )}
+
       {creatives.length > 0 && view === 'grid' && (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {creatives.map((creative, index) => (
             <li key={creative.id}>
               <CreativeGridCard
                 creative={creative}
+                currency={data?.currency ?? null}
+                availability={data?.metrics_availability?.[creative.provider]}
                 t={t}
                 ar={ar}
                 locale={locale}
                 selected={selected.includes(creative.id)}
                 onSelect={() => toggleSelected(creative.id)}
                 onOpen={() => setViewerIndex(index)}
+                showPreviewPanel={anyPreview}
                 detailsTo={`${creative.id}${libraryAddress}`}
               />
             </li>
@@ -735,7 +798,16 @@ export function CreativesPage() {
             <thead className="bg-surface-hover text-start text-xs text-text-secondary">
               <tr>
                 <th className="p-2" />
-                <th className="p-2 text-start">{t.preview}</th>
+                {/*
+                  CONTENT-NO-PREVIEW-001, in the table.
+                  
+                  The grid stopped reserving space for an asset nobody returned; this column did
+                  not, so a Meta-only result was a strip of «لا تتوفر معاينة» repeated down the
+                  page, pushing spend and results to the right on a narrow screen. Dropped only
+                  when NOTHING in the result has an asset, so a mixed set keeps the column and the
+                  missing ones stay visibly missing.
+                */}
+                {anyPreview && <th className="p-2 text-start">{t.preview}</th>}
                 <th className="p-2 text-start">{t.name}</th>
                 <th className="p-2 text-start">{t.platform}</th>
                 <th className="p-2 text-start">{t.campaign}</th>
@@ -752,6 +824,15 @@ export function CreativesPage() {
                 const resultKey = primaryResultKey(creative.headline_metrics)
                 const efficiencyKey = primaryEfficiencyKey(creative.headline_metrics)
                 const poster = creative.preview.thumbnail_url ?? creative.preview.image_url
+                /*
+                 * CONTENT-PREVIEW-VIDEO-001 — a video with no poster is not «no preview».
+                 *
+                 * Snapchat returns a video creative's file as `video_url` and frequently supplies no
+                 * separate thumbnail. This row derived its poster from `thumbnail_url ?? image_url`
+                 * only, so a creative with a perfectly good video asset rendered «لا توجد معاينة» —
+                 * the product claiming to have nothing while holding the thing itself.
+                 */
+                const video = poster === null ? creative.preview.video_url : null
 
                 return (
                   <tr
@@ -775,7 +856,7 @@ export function CreativesPage() {
                         onChange={() => toggleSelected(creative.id)}
                       />
                     </td>
-                    <td className="p-2">
+                    {anyPreview && <td className="p-2">
                       {poster ? (
                         <img
                           src={poster}
@@ -784,12 +865,27 @@ export function CreativesPage() {
                           decoding="async"
                           className="h-10 w-16 rounded object-cover"
                         />
+                      ) : video ? (
+                        /*
+                         * `preload="metadata"` and no `autoPlay`: the browser fetches enough to draw
+                         * the first frame and stops. A grid of twenty `preload="auto"` videos would
+                         * cost a phone tens of megabytes to open a list page, which is why cards
+                         * never mounted a player before — the answer is a cheap one, not none.
+                         *
+                         * `muted` and `playsInline` so the frame renders on iOS without asking to
+                         * play; `#t=0.1` because some browsers draw nothing at exactly zero.
+                         */
+                        <VideoPoster
+                          src={video}
+                          className="h-10 w-16 rounded object-cover"
+                          onUnavailable={() => undefined}
+                        />
                       ) : (
                         <span className="flex h-10 w-16 items-center justify-center rounded bg-surface-hover text-[10px] text-text-muted">
                           {t.noPreview}
                         </span>
                       )}
-                    </td>
+                    </td>}
                     <td className="p-2" onClick={(e) => e.stopPropagation()}>
                       <Link to={`${creative.id}${libraryAddress}`} className="text-start font-medium text-text-primary underline-offset-2 hover:underline">
                         {creative.name}
@@ -801,14 +897,21 @@ export function CreativesPage() {
                       {creative.objective ? objectiveLabel(creative.objective, locale) : marketingPathLabel(creative.path, locale)}
                     </td>
                     <td className="p-2 tabular-nums" dir="ltr">
-                      {formatMetric(metricState(creative.metrics, 'spend'), 'spend', locale)}
+                      {/*
+                        * CONTENT-MONEY-VISIBLE-001 — through the canonical reader, not `metricState`.
+                        *
+                        * `metricState` sees only the CONVERTED column, so a withheld figure — which
+                        * is every Snapchat row on production, a USD account with no USD→SAR rate —
+                        * rendered as «No data». Real, measured spend reported as never having run.
+                        */}
+                      {creativeMoney(creative.metrics, 'spend', data?.currency ?? null, locale).text}
                     </td>
                     <td className="p-2" dir="ltr">
                       {resultKey === null ? (
                         <span className="text-text-muted">—</span>
                       ) : (
                         <span className="tabular-nums">
-                          {formatMetric(metricState(creative.metrics, resultKey), resultKey, locale)}
+                          {formatMetric(metricState(creative.metrics, resultKey), resultKey, locale, data?.currency ?? null)}
                           <span className="ms-1 text-[11px] text-text-muted">{metricLabel(resultKey, locale)}</span>
                         </span>
                       )}
@@ -818,7 +921,7 @@ export function CreativesPage() {
                         <span className="text-text-muted">—</span>
                       ) : (
                         <span className="tabular-nums">
-                          {formatMetric(metricState(creative.metrics, efficiencyKey), efficiencyKey, locale)}
+                          {formatMetric(metricState(creative.metrics, efficiencyKey), efficiencyKey, locale, data?.currency ?? null)}
                           <span className="ms-1 text-[11px] text-text-muted">{metricLabel(efficiencyKey, locale)}</span>
                         </span>
                       )}
@@ -885,15 +988,24 @@ export function CreativesPage() {
 
 function CreativeGridCard({
   creative,
+  currency,
+  availability,
   t,
   ar,
   locale,
   selected,
   onSelect,
   onOpen,
+  showPreviewPanel = true,
   detailsTo,
 }: {
   creative: CreativeCard
+  /** False when nothing in the result has an asset — the reserved 16:9 panel is then dead space. */
+  showPreviewPanel?: boolean
+  /** CREATIVE-MONEY-TRUTH-001 — stated by the payload, never assumed by the card. */
+  currency: string | null
+  /** CONTENT-STATE-SEMANTICS-001 — what the sync recorded for THIS creative's provider. */
+  availability: MetricsAvailability | undefined
   t: (typeof COPY)['ar']
   ar: boolean
   locale: 'ar' | 'en'
@@ -904,6 +1016,21 @@ function CreativeGridCard({
 }) {
   const preview = creative.preview
   const poster = preview.thumbnail_url ?? preview.image_url
+  /*
+   * CONTENT-PREVIEW-VIDEO-001 — a video with no poster is not «no preview».
+   *
+   * Snapchat returns a video creative's file as `video_url` and often supplies no separate
+   * thumbnail, so this card said «لا توجد معاينة» while holding the asset itself.
+   */
+  /*
+   * CONTENT-VIDEO-POSTER-001 — a video that will not decode is «no preview», not a black box.
+   *
+   * An expired signed link, a CDN that refuses the range request, a codec the browser declines:
+   * each leaves a `<video>` that paints nothing and keeps its space. The card falls back to the
+   * sentence it already has for an absent asset, so one fact gets one statement.
+   */
+  const [brokenVideo, setBrokenVideo] = useState(false)
+  const video = poster === null && !brokenVideo ? preview.video_url : null
   const note = ar ? preview.note_ar : preview.note_en
 
   return (
@@ -913,7 +1040,7 @@ function CreativeGridCard({
           type="button"
           onClick={onOpen}
           aria-label={`${t.open}: ${creative.name}`}
-          className="block aspect-video w-full bg-surface-hover"
+          className={showPreviewPanel ? 'block aspect-video w-full bg-surface-hover' : 'block w-full bg-surface-hover'}
         >
           {poster ? (
             <img
@@ -926,11 +1053,52 @@ function CreativeGridCard({
               decoding="async"
               className="h-full w-full object-cover"
             />
-          ) : (
+          ) : video ? (
+            /*
+             * The cheapest thing that shows the asset: `preload="metadata"` fetches enough for a
+             * first frame and stops, and nothing autoplays. Twenty `preload="auto"` videos on one
+             * grid would cost a phone tens of megabytes to open the page — which is the reason
+             * cards never mounted a player, and the reason this one is deliberately inert.
+             *
+             * CONTENT-VIDEO-POSTER-001 — the seek is PERFORMED, not requested. See `VideoPoster`.
+             */
+            <VideoPoster
+              src={video}
+              className="h-full w-full object-cover"
+              onUnavailable={() => setBrokenVideo(true)}
+            />
+          ) : showPreviewPanel ? (
             <span className="flex h-full flex-col items-center justify-center gap-1 p-3 text-center text-xs text-text-secondary">
               <span>{t.noPreview}</span>
               {note && <span className="text-[11px] opacity-80">{note}</span>}
             </span>
+          ) : (
+            /*
+             * CONTENT-NO-PREVIEW-001 — the PANEL goes, the reason stays.
+             *
+             * A first pass dropped this branch entirely and took the note with it. The absences are
+             * not interchangeable: «the platform does not hand back the file» and «the link carries
+             * a credential, so we will not show it» are different facts about this creative, and the
+             * second is one the reader needs in order to stop looking for the asset. One line, no
+             * reserved box.
+             */
+            note && (
+              /*
+                The line has to clear the two controls floating over this corner.
+
+                The compare checkbox is pinned to the START corner and the «فيديو» badge to the END
+                one, and both are absolutely positioned over this strip: with plain padding the note
+                rendered UNDER the checkbox, so an Arabic reader's card opened «…ج هذه المنصة أصل
+                المحتوى» — a sentence with its first three words hidden, which reads as a rendering
+                fault rather than as the reason it is.
+              */
+              <span
+                data-testid="creative-absence-note"
+                className="block py-2 pe-14 ps-12 text-start text-[11px] leading-snug text-text-secondary"
+              >
+                {note}
+              </span>
+            )
           )}
         </button>
 
@@ -981,18 +1149,66 @@ function CreativeGridCard({
           {creative.objective ? ` · ${objectiveLabel(creative.objective, locale)}` : ''}
         </p>
 
-        {/* The creative's OWN headline metrics — chosen by its objective, so an awareness video is
-            never asked for a cost per order it was not bought to produce. */}
-        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-          {creative.headline_metrics.slice(0, 4).map((key) => (
-            <div key={key} className="flex flex-col">
-              <dt className="text-text-secondary">{metricLabel(key, locale)}</dt>
-              <dd className="tabular-nums text-text-primary" dir="ltr">
-                {formatMetric(metricState(creative.metrics, key), key, locale)}
-              </dd>
-            </div>
-          ))}
-        </dl>
+        {/*
+          * CONTENT-STATE-SEMANTICS-001 — a creative with NO figures says why, once.
+          *
+          * Repeating «لا توجد بيانات» four times down a metric grid told the operator nothing and
+          * hid the only fact that mattered: whether the platform was asked, answered, or refused.
+          * A creative that has figures keeps the grid; one that has none gets the reason instead.
+          */}
+        {creative.metrics === null ? (
+          /*
+             CONTENT-AD-DELIVERED-001 — three absences, three sentences.
+
+             `metrics_availability` answers what happened to the REQUEST, and when the request
+             succeeded it says «لم يعمل خلال هذه الفترة». That is true of a creative that did not
+             deliver and FALSE of one whose ad ran while the platform declined to break the result
+             down per creative — 35 creatives on this account. The ad-level fact decides which.
+          */
+          creative.ad_delivered ? (
+            <EmptyReasonPanel reason={creativeGrainMissing(locale)} />
+          ) : (
+            <CardEmptyReason availability={availability} locale={locale} />
+          )
+        ) : creative.headline_metrics.length === 0 ? (
+          /*
+             CONTENT-KPI-EMPTY-STATE-001 — «it ran and we cannot headline it» is its OWN sentence.
+             
+             This branch used to share the one above, and that was a false statement. A creative with
+             a metrics object HAS figures — the platform answered for it — so printing
+             «لم يعمل خلال هذه الفترة» over it tells the operator to leave alone a creative that is
+             actually running. `metrics_availability` cannot answer this either: it records what
+             happened to the REQUEST, and the request succeeded.
+             
+             Still not an empty grid: mapping over an empty list would render a `<dl>` with nothing
+             in it, which reads as a broken card rather than as a true statement.
+          */
+          <EmptyReasonPanel reason={noDisplayableMetrics(locale)} />
+        ) : (
+          /* The creative's OWN headline metrics — chosen by its objective, so an awareness video is
+             never asked for a cost per order it was not bought to produce. */
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+            {creative.headline_metrics.slice(0, 4).map((key) => (
+              <div key={key} className="flex flex-col">
+                <dt className="text-text-secondary">{metricLabel(key, locale)}</dt>
+                <dd className="tabular-nums text-text-primary" dir="ltr">
+                  {/*
+                    * CONTENT-MONEY-VISIBLE-001 — money through the canonical reader, everything
+                    * else through `metricState`.
+                    *
+                    * `metricState` reads the CONVERTED column only, so a withheld spend rendered as
+                    * «No data» — on production that is every Snapchat creative, because the account
+                    * spends USD and no USD→SAR rate exists. Counts and ratios keep the old path,
+                    * which is correct for them: it already tells a measured zero from «not sent».
+                    */}
+                  {key === 'spend' || key === 'revenue'
+                    ? creativeMoney(creative.metrics, key, currency, locale).text
+                    : formatMetric(metricState(creative.metrics, key), key, locale, currency)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
 
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
           <span className={`rounded px-1.5 py-0.5 text-[11px] ${FATIGUE_TONE[creative.fatigue.status]}`}>
@@ -1020,5 +1236,51 @@ function CreativeGridCard({
         </p>
       </div>
     </article>
+  )
+}
+
+/**
+ * CONTENT-STATE-SEMANTICS-001 — the reason, rendered once, with the right weight.
+ *
+ * `failed` is the only state drawn as a warning: numbers exist at the platform and we do not have
+ * them, which is a pipeline to go and fix. A creative that simply did not run is not a problem and
+ * must not be dressed as one — that is how real alerts stop being read.
+ */
+function CardEmptyReason({
+  availability,
+  locale,
+}: {
+  availability: MetricsAvailability | undefined
+  locale: 'ar' | 'en'
+}) {
+  return <EmptyReasonPanel reason={emptyReason(availability, locale)} />
+}
+
+/**
+ * One panel, several sentences — the sentence is the whole difference.
+ *
+ * Extracted so «this creative did not run» and «this creative ran and none of its figures can be
+ * headlined» look identical and READ differently. They were briefly the same branch, and a shared
+ * branch is how the second came to print the first's words over a creative that was delivering.
+ *
+ * `data-testid` carries the kind, so a test can assert WHICH sentence rendered rather than that
+ * something grey appeared.
+ */
+function EmptyReasonPanel({ reason }: { reason: EmptyReason }) {
+  return (
+    <div
+      className={`rounded-md px-2 py-1.5 text-xs ${
+        reason.tone === 'warning'
+          ? 'bg-warning/10 text-warning'
+          : 'bg-surface-muted text-text-secondary'
+      }`}
+      data-testid={`creative-empty-${reason.kind}`}
+    >
+      {reason.text}
+      {/* The provider's own words — «rate limited» is actionable in a way «no data» never was. */}
+      {reason.kind === 'failed' && reason.detail !== null && (
+        <span className="mt-0.5 block text-[11px] opacity-80">{reason.detail}</span>
+      )}
+    </div>
   )
 }

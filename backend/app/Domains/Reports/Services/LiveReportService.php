@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Support\ReportScope;
@@ -58,7 +59,7 @@ final class LiveReportService
      * @param  string  $currency  the report's own currency; every figure here is already normalised to it
      * @return array<string, mixed>
      */
-    public function build(ReportShare $share, array $requested, string $currency = 'SAR'): array
+    public function build(ReportShare $share, array $requested, string $currency = ReportingCurrency::DEFAULT): array
     {
         $scope = $this->ceiling($share);
         $applied = $this->intersect($scope, $requested);

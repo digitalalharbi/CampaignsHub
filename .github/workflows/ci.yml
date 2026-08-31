@@ -3,6 +3,19 @@ name: CI
 on:
   pull_request:
 
+# One run per pull request, and a new push cancels the one it supersedes.
+#
+# Without this, every push left its predecessor running: eleven open PRs were holding nineteen live
+# CI runs, three of them for the same branch at three different commits. The gate is a three-browser
+# Playwright suite that takes about an hour, so the superseded runs were not merely noise — they held
+# the runners, and the runs that mattered sat queued behind answers nobody was waiting for.
+#
+# Cancelling is safe precisely because a superseded run cannot gate anything: merges are pinned to a
+# tested head, so a green result for an older commit is never what lets a PR land.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -34,6 +47,23 @@ jobs:
           coverage: none
       - run: composer install --no-interaction --prefer-dist
       - run: cp .env.example .env && php artisan key:generate
+      # `ArabicTextLayerTest` drives the real python contract suite behind the PDF text-layer
+      # normaliser. Without pikepdf on the runner it marked itself SKIPPED — so the one test that
+      # proves an Arabic PDF is searchable rather than merely legible was the one test CI never ran,
+      # and a green tick said so anyway. Installing the dependency is the fix; making the test
+      # optional would be deleting the coverage while keeping the reassurance.
+      - name: Python dependency for the PDF text-layer contract
+        run: python3 -m pip install --quiet pikepdf
+      # AUTOPILOT-001 — the agent's cost guard and merge gate, exercised with a stubbed `gh`.
+      # Cheap, hermetic, no network: it is here because a workflow that only parses is not a
+      # workflow that behaves, and the two claims worth protecting are "an idle hour costs nothing"
+      # and "only an exact-head green PR can be merged".
+      - name: Autopilot controllers
+        # `working-directory: backend` applies to this job, so the path must be absolute from the
+        # workspace root — the suite lives at the repository root, not inside the Laravel app.
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/autopilot/test-autopilot.sh
+
       - name: Pint (style)
         run: ./vendor/bin/pint --test
       - name: Larastan (static analysis)
@@ -70,3 +100,142 @@ jobs:
         run: npm run test
       - name: Production build
         run: npm run build
+
+  # ── The browser gate, on a runner that is only running the gate ────────────────────────────────
+  #
+  # `npm run gate` verbatim: same script, same Playwright config, same three projects, same
+  # `workers: 1`. Nothing about what the gate MEANS changes here — only where, and now in how many
+  # jobs, it runs.
+  #
+  # It was run on a developer's laptop, and that is the whole reason for this job. A gate competing
+  # with a browser, an editor and Spotlight produced single layout assertions taking fifty-seven
+  # minutes and wholesale firefox failures across specs that had passed on chromium minutes earlier
+  # — an environment collapsing, reported as a hundred product defects. A verdict that depends on
+  # what else the machine happens to be doing is not a verdict.
+  # One JOB per browser, because the gate was already one isolated RUN per browser.
+  #
+  # `run-gate.mjs` gives chromium, firefox and webkit their own database reset, their own servers and
+  # their own Node process — deliberately, so that firefox never meets what chromium created. Nothing
+  # is shared between them, which is exactly the property that makes them separable jobs.
+  #
+  # In one job they ran in sequence: 13.5 + 22.5 + 22.5 ≈ 59 minutes of tests, and 49–70 minutes of
+  # wall clock. That hour is the queue's whole throughput — a merge invalidates every other open head,
+  # so the drain lands about one pull request per gate. Three jobs cost the same runner-minutes and
+  # finish in the time of the slowest browser.
+  #
+  # Each also installs only the browser it runs. Installing all three took several minutes per job to
+  # download two engines it would never open.
+  gate:
+    runs-on: ubuntu-latest
+    strategy:
+      # Every browser reports its own verdict. `fail-fast: false` because «webkit failed» and
+      # «webkit failed AND firefox failed» are different bugs, and cancelling the others hides the
+      # second one until somebody fixes the first.
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    name: gate (${{ matrix.browser }})
+    # A gate that cannot START its tests is not a verdict, and must not look like one.
+    #
+    # Sized from measurement: the slowest single browser is ~22.5 minutes of tests, and the job also
+    # installs a browser and boots two servers. Ninety minutes is real headroom for one of them, where
+    # two hours was headroom for all three. GitHub's default is SIX, which is how a stalled browser
+    # download sat `in_progress` for 2h40m on run 32224855943 with backend and frontend long since
+    # green and not one test executed.
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mediabuying_e2e
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=10s
+          --health-timeout=5s --health-retries=5
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, redis, intl, bcmath, gd, zip, pcntl
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Backend dependencies
+        working-directory: backend
+        run: composer install --no-interaction --prefer-dist
+      - name: Backend environment
+        working-directory: backend
+        run: cp .env.example .env && php artisan key:generate
+      # The gate's own servers read these; `e2e/env.ts` overrides the rest per run.
+      - name: Frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      # Pure download, no application code. It takes ~2 minutes when GitHub's mirror is healthy; the
+      # bound is here so a stall on their side fails in fifteen minutes and says which step did it,
+      # instead of holding a runner until the job timeout and reporting nothing at all.
+      # The matrix browser AND chromium.
+      #
+      # Every project in `playwright.config.ts` declares `dependencies: ['setup']`, and the `setup`
+      # project carries no `use` — so it runs under Playwright's default, chromium. The firefox job
+      # therefore launches chromium before it launches firefox, and installing only firefox failed
+      # six tests with «Executable doesn't exist at …/chromium_headless_shell». Playwright dedupes
+      # the repeat when the matrix browser IS chromium.
+      - name: Browsers
+        working-directory: frontend
+        timeout-minutes: 15
+        run: npx playwright install --with-deps chromium ${{ matrix.browser }}
+      # The report exporter's Arabic text-layer pass (CAMPAIGNSHUB-PDF-TEXTLAYER) shells out to
+      # python3 + pikepdf. It is best-effort and never blocks an export, but leaving it absent here
+      # would mean the gate exercises a different code path than a developer's machine does.
+      - name: Arabic text-layer toolchain
+        run: python3 -m pip install --quiet pikepdf
+      - name: Gate — ${{ matrix.browser }}
+        working-directory: frontend
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+          REDIS_HOST: 127.0.0.1
+          REDIS_CLIENT: phpredis
+          # The default is all three; a job that runs one names it.
+          GATE_BROWSERS: ${{ matrix.browser }}
+        # No `continue-on-error`, no retry wrapper: the script exits with the first non-zero code it
+        # saw, and that code is the gate's verdict.
+        run: npm run gate
+      # A 500 the gate saw, and could not explain.
+      #
+      # `expansion-surfaces.spec.ts` failed with «the server responded with a status of 500» on
+      # /app/integrations, twice on the same head. That sentence is the entire report: Playwright's
+      # artifacts describe the BROWSER's side — a status code and a screenshot of the resulting page
+      # — while the exception, its file, its line and its stack were written to the backend's log
+      # inside the runner and discarded when the job ended.
+      #
+      # Tailed inline as well as uploaded, so the next occurrence is readable from the run page
+      # instead of behind an artifact download.
+      - name: Backend log (why the server answered 500)
+        if: failure()
+        run: |
+          echo "::group::backend/storage/logs — last 200 lines"
+          tail -n 200 backend/storage/logs/*.log 2>/dev/null || echo "(no backend log was written)"
+          echo "::endgroup::"
+
+      - name: Failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-artifacts
+          path: |
+            frontend/test-results/
+            frontend/playwright-report/
+            backend/storage/logs/
+          retention-days: 7

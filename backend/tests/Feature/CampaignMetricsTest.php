@@ -259,6 +259,54 @@ final class CampaignMetricsTest extends TestCase
         $this->actingAs($this->owner)->getJson("/api/v1/projects/{$this->projectB->id}/campaigns/{$this->campA1->id}/annotations")->assertNotFound();
     }
 
+    /**
+     * RECOMMENDATIONS-001 — the project-wide list, which had no endpoint and no screen.
+     *
+     * Recommendations were readable one campaign at a time, so «what should we act on» could only be
+     * answered by opening every campaign. This asserts the gathered list, its ordering, its filters
+     * and — the part that matters most — that it does not reach across projects.
+     */
+    public function test_recommendations_are_gathered_across_the_project_and_ranked_by_priority(): void
+    {
+        $base = "/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA1->id}/annotations";
+
+        $this->actingAs($this->owner)->postJson($base, [
+            'kind' => 'recommendation', 'title' => 'Scale Google', 'evidence' => 'ROAS 8.4x vs 4.9x', 'priority' => 'low',
+        ])->assertCreated();
+
+        $critical = $this->actingAs($this->owner)->postJson($base, [
+            'kind' => 'recommendation', 'title' => 'Pause the losing ad set', 'evidence' => 'Spend 3,200 with 0 orders', 'priority' => 'critical',
+        ])->assertCreated()->json('data.id');
+
+        // A NOTE is not a recommendation, and must not appear on a page about what to do.
+        $this->actingAs($this->owner)->postJson($base, ['kind' => 'note', 'title' => 'Client called'])->assertCreated();
+
+        $rows = $this->actingAs($this->owner)
+            ->getJson("/api/v1/projects/{$this->projectA->id}/recommendations")
+            ->assertOk()->json('data');
+
+        $this->assertCount(2, $rows, 'Two recommendations; the note is not one.');
+        $this->assertSame($critical, $rows[0]['id'], 'Critical outranks low regardless of when it was written.');
+        $this->assertSame('Pause the losing ad set', $rows[0]['title']);
+
+        // The campaign's name travels with the row: a recommendation read off its campaign page has
+        // lost the context that makes it actionable.
+        $this->assertSame($this->campA1->name, $rows[0]['campaign_name']);
+        $this->assertSame('Spend 3,200 with 0 orders', $rows[0]['evidence']);
+
+        // Filters narrow without inventing.
+        $high = $this->actingAs($this->owner)
+            ->getJson("/api/v1/projects/{$this->projectA->id}/recommendations?priority=critical")
+            ->assertOk()->json('data');
+        $this->assertCount(1, $high);
+
+        // Another project's list does not carry this project's rows.
+        $other = $this->actingAs($this->owner)
+            ->getJson("/api/v1/projects/{$this->projectB->id}/recommendations")
+            ->assertOk()->json('data');
+        $this->assertSame([], $other, 'Project B has written none, and must not see project A’s.');
+    }
+
     public function test_creatives_are_scoped_and_ranked_by_objective(): void
     {
         // Two creatives on campA1 with distinct ROAS (sales objective ranks by ROAS).

@@ -24,7 +24,7 @@ import { objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 
 const COPY = {
   ar: {
-    title: 'مقارنة المحتويات',
+    title: 'مقارنة الإعلانات',
     close: 'إغلاق',
     metric: 'المؤشر',
     winner: 'الأفضل في هذا المؤشر',
@@ -35,7 +35,7 @@ const COPY = {
     noWinner: 'لا يمكن الترجيح',
   },
   en: {
-    title: 'Compare creatives',
+    title: 'Compare ads',
     close: 'Close',
     metric: 'Metric',
     winner: 'Best on this metric',
@@ -150,7 +150,7 @@ export function CreativeCompare({
                         className={`p-2 tabular-nums ${isWinner ? 'bg-success/10 font-semibold text-text-primary' : 'text-text-secondary'}`}
                         dir="ltr"
                       >
-                        {formatMetric(metricState(creative.metrics, key), key, locale)}
+                        {formatMetric(metricState(creative.metrics, key), key, locale, comparison.data?.currency ?? null)}
                         {isWinner && <span className="sr-only"> — {t.winner}</span>}
                       </td>
                     )

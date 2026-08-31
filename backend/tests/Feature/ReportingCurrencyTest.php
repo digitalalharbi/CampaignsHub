@@ -33,11 +33,14 @@ use Tests\TestCase;
  *
  * `daily_metrics` has carried `original_currency`, `project_currency`, `original_amount`,
  * `converted_amount` and `exchange_rate` since C3.1. Nothing populated them:
- * `AccountMetricsSyncer::ingest()` built every metric from `value` alone. A USD ad account's spend was
- * written as a bare number and summed into a SAR dashboard as though it were riyals.
+ * `AccountMetricsSyncer::ingest()` built every metric from `value` alone. A SAR ad account's spend was
+ * written as a bare number and summed into a USD dashboard as though it were dollars.
  *
- * `test_the_old_pipeline_would_have_added_dollars_to_riyals` is the fail-first proof, written so it
+ * `test_the_old_pipeline_would_have_added_riyals_to_dollars` is the fail-first proof, written so it
  * fails against the previous code and passes against this one — see its own note for how.
+ *
+ * The basis is USD for every project (MONEY-USD-001). It is not read from the workspace: `value` is
+ * the column every screen sums, and a per-tenant basis would make two projects unaddable.
  *
  * ## What is deliberately NOT here
  *
@@ -48,6 +51,9 @@ use Tests\TestCase;
 final class ReportingCurrencyTest extends TestCase
 {
     use RefreshDatabase;
+
+    /** 1/3.75 — the riyal's peg read the way this codebase converts, SAR into the canonical USD. */
+    private const SAR_USD = 0.2666666667;
 
     private Tenant $tenant;
 
@@ -61,7 +67,10 @@ final class ReportingCurrencyTest extends TestCase
         $this->tenant = Tenant::create(['name' => 'Agency', 'slug' => 'fx-agency', 'status' => 'active']);
         app(TenantContext::class)->setTenantId($this->tenant->id);
 
-        // The client is who the report is for, and its currency is the reporting currency.
+        /*
+         * SAR deliberately, and it is a guard rather than a setting: the reporting currency is USD
+         * regardless of what a workspace prefers. See the MONEY-USD-001 test at the foot of the file.
+         */
         $workspace = ClientWorkspace::create(['name' => 'Client', 'slug' => 'fx-client', 'mode' => 'managed', 'default_currency' => 'SAR']);
         $this->project = Project::create(['client_workspace_id' => $workspace->id, 'name' => 'P', 'status' => 'active']);
     }
@@ -153,73 +162,73 @@ final class ReportingCurrencyTest extends TestCase
     // ── the fail-first proof ─────────────────────────────────────────────────────────────────────
 
     /**
-     * THE DEFECT: dollars added to riyals, and the sum presented as riyals.
+     * THE DEFECT: two currencies added together, and the sum presented as one of them.
      *
-     * $1,000 at 3.75 is 3,750 SAR, so a project spending $1,000 on one account and 1,000 SAR on
-     * another has spent 4,750 SAR. The old pipeline wrote both figures raw and answered 2,000 — a
-     * number that is not true in any currency, and the reason nothing looked broken is that every
-     * screen was wrong in the same way.
+     * 1,000 SAR at 0.2666… is 266.67 USD, so a project spending 1,000 USD on one account and 1,000
+     * SAR on another has spent 1,266.67 USD. The old pipeline wrote both figures raw and answered
+     * 2,000 — a number that is not true in any currency, and the reason nothing looked broken is that
+     * every screen was wrong in the same way.
      *
      * Fail-first, and MEASURED rather than asserted from memory: reproducing the old pass-through
      * (the normaliser with `spend` unmarked as currency, which is exactly what the previous code did
-     * unconditionally) makes this window total **2000.0**. Nothing else in the test had to change to
-     * show it — the old figure understates the real 4,750 by more than half.
+     * unconditionally) makes this window total **2000.0**, overstating the real 1,266.67 by more than
+     * half.
      */
-    public function test_the_old_pipeline_would_have_added_dollars_to_riyals(): void
+    public function test_the_old_pipeline_would_have_added_riyals_to_dollars(): void
     {
-        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
 
         $this->sync($this->account('USD', 'usd'), [['campaign_id' => 'c-usd', 'date' => '2026-06-01', 'spend' => 1000]]);
         $this->sync($this->account('SAR', 'sar'), [['campaign_id' => 'c-sar', 'date' => '2026-06-01', 'spend' => 1000]]);
 
         $totals = $this->totals(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-01'));
 
-        $this->assertEqualsWithDelta(4750.0, (float) $totals['spend'], 0.01, 'dollars are being added to riyals');
+        $this->assertEqualsWithDelta(1266.67, (float) $totals['spend'], 0.01, 'riyals are being added to dollars');
     }
 
     // ── conversion, per currency ─────────────────────────────────────────────────────────────────
 
-    /** SAR → SAR is an identity, and is still RECORDED as one. */
+    /** USD → USD is an identity, and is still RECORDED as one. */
     public function test_the_reporting_currency_needs_no_rate_and_is_still_labelled(): void
     {
-        $this->sync($this->account('SAR', 'sar'), [['campaign_id' => 'c-sar', 'date' => '2026-06-01', 'spend' => 500]]);
+        $this->sync($this->account('USD', 'usd'), [['campaign_id' => 'c-usd', 'date' => '2026-06-01', 'spend' => 500]]);
 
         $row = $this->spendRow();
 
         $this->assertEqualsWithDelta(500.0, (float) $row->value, 0.01);
-        $this->assertSame('SAR', $row->original_currency);
-        $this->assertSame('SAR', $row->project_currency);
+        $this->assertSame('USD', $row->original_currency);
+        $this->assertSame('USD', $row->project_currency);
         $this->assertEqualsWithDelta(500.0, (float) $row->original_amount, 0.01);
         $this->assertEqualsWithDelta(1.0, (float) $row->exchange_rate, 0.000001);
     }
 
-    /** USD → SAR converts, and keeps the dollars it started from. */
-    public function test_a_dollar_account_is_converted_and_the_original_survives(): void
+    /** SAR → USD converts, and keeps the riyals it started from. */
+    public function test_a_riyal_account_is_converted_and_the_original_survives(): void
     {
-        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
 
-        $this->sync($this->account('USD', 'usd'), [['campaign_id' => 'c-usd', 'date' => '2026-06-01', 'spend' => 200]]);
+        $this->sync($this->account('SAR', 'sar'), [['campaign_id' => 'c-sar', 'date' => '2026-06-01', 'spend' => 750]]);
 
         $row = $this->spendRow();
 
-        $this->assertEqualsWithDelta(750.0, (float) $row->value, 0.01);
-        $this->assertEqualsWithDelta(750.0, (float) $row->converted_amount, 0.01);
-        $this->assertEqualsWithDelta(200.0, (float) $row->original_amount, 0.01, 'the dollars were destroyed');
-        $this->assertSame('USD', $row->original_currency);
-        $this->assertSame('SAR', $row->project_currency);
-        $this->assertEqualsWithDelta(3.75, (float) $row->exchange_rate, 0.000001);
+        $this->assertEqualsWithDelta(200.0, (float) $row->value, 0.01);
+        $this->assertEqualsWithDelta(200.0, (float) $row->converted_amount, 0.01);
+        $this->assertEqualsWithDelta(750.0, (float) $row->original_amount, 0.01, 'the riyals were destroyed');
+        $this->assertSame('SAR', $row->original_currency);
+        $this->assertSame('USD', $row->project_currency);
+        $this->assertEqualsWithDelta(self::SAR_USD, (float) $row->exchange_rate, 0.000001);
     }
 
     /** A third currency is not a special case — the same lookup, the same columns. */
     public function test_a_third_currency_converts_the_same_way(): void
     {
-        $this->rate('AED', 'SAR', 1.02, '2026-06-01');
+        $this->rate('AED', 'USD', 0.2723, '2026-06-01');
 
         $this->sync($this->account('AED', 'aed'), [['campaign_id' => 'c-aed', 'date' => '2026-06-01', 'spend' => 100]]);
 
         $row = $this->spendRow();
 
-        $this->assertEqualsWithDelta(102.0, (float) $row->value, 0.01);
+        $this->assertEqualsWithDelta(27.23, (float) $row->value, 0.01);
         $this->assertSame('AED', $row->original_currency);
     }
 
@@ -231,7 +240,7 @@ final class ReportingCurrencyTest extends TestCase
      */
     public function test_a_currency_on_the_row_beats_the_accounts(): void
     {
-        $this->rate('AED', 'SAR', 1.02, '2026-06-01');
+        $this->rate('AED', 'USD', 0.2723, '2026-06-01');
 
         $this->sync($this->account('USD', 'mix'), [
             ['campaign_id' => 'c-mix', 'date' => '2026-06-01', 'spend' => 100, 'currency' => 'AED'],
@@ -250,14 +259,14 @@ final class ReportingCurrencyTest extends TestCase
      */
     public function test_a_historical_day_uses_the_rate_of_that_day(): void
     {
-        $this->rate('USD', 'SAR', 3.60, '2026-01-01');
-        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
+        $this->rate('SAR', 'USD', 0.26, '2026-01-01');
+        $this->rate('SAR', 'USD', 0.28, '2026-06-01');
 
-        $this->sync($this->account('USD', 'old'), [['campaign_id' => 'c-old', 'date' => '2026-03-15', 'spend' => 100]]);
+        $this->sync($this->account('SAR', 'old'), [['campaign_id' => 'c-old', 'date' => '2026-03-15', 'spend' => 100]]);
 
         $row = $this->spendRow();
 
-        $this->assertEqualsWithDelta(360.0, (float) $row->value, 0.01, 'a March day was converted at June’s rate');
+        $this->assertEqualsWithDelta(26.0, (float) $row->value, 0.01, 'a March day was converted at June’s rate');
         // Nearest on-or-before: the rate genuinely came from January, and the row says so rather than
         // implying a quote existed on the fifteenth of March.
         $this->assertSame('2026-01-01', Carbon::parse((string) $row->rate_date)->toDateString());
@@ -290,19 +299,97 @@ final class ReportingCurrencyTest extends TestCase
     /** A withheld row does not poison the total, and does not silently vanish from it either. */
     public function test_a_withheld_figure_is_excluded_from_totals_and_is_countable(): void
     {
-        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
 
-        $this->sync($this->account('USD', 'usd'), [['campaign_id' => 'c-usd', 'date' => '2026-06-01', 'spend' => 100]]);
+        $this->sync($this->account('SAR', 'sar'), [['campaign_id' => 'c-sar', 'date' => '2026-06-01', 'spend' => 750]]);
         $this->sync($this->account('JPY', 'jpy'), [['campaign_id' => 'c-jpy', 'date' => '2026-06-01', 'spend' => 5000]]);
 
         $totals = $this->totals(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-01'));
 
-        $this->assertEqualsWithDelta(375.0, (float) $totals['spend'], 0.01, 'an unconvertible figure entered the total');
+        $this->assertEqualsWithDelta(200.0, (float) $totals['spend'], 0.01, 'an unconvertible figure entered the total');
 
         $withheld = DailyMetric::withoutGlobalScopes()
             ->where('metric_key', 'spend')->whereNull('value')->count();
 
         $this->assertSame(1, $withheld, 'the withheld row is not countable, so nobody can be told');
+    }
+
+    /**
+     * FX-WITHHELD-UI-001 — the AGGREGATOR must say «withheld», not just the database.
+     *
+     * The test above proves a withheld row is countable with a direct query. No screen runs direct
+     * queries: every surface reads `MetricsAggregator`, and until now that returned `spend => 0` with
+     * nothing beside it. So a project whose platform reported 5,000 JPY rendered «0» on the
+     * dashboard, «0 USD» as CPA and «—» as ROAS, over a label reading «لم ترسله المنصة» — which is
+     * false, because the platform sent it and we withheld it.
+     *
+     * The totals now carry the original amount and the withheld row count, so a reader can show the
+     * real figure and say the conversion is unavailable, instead of showing a zero that is a lie.
+     */
+    public function test_the_totals_report_the_withheld_original_beside_the_converted_zero(): void
+    {
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
+
+        $this->sync($this->account('SAR', 'sar'), [['campaign_id' => 'c-sar', 'date' => '2026-06-01', 'spend' => 750]]);
+        // No JPY rate exists, so this 5,000 is withheld rather than invented.
+        $this->sync($this->account('JPY', 'jpy'), [['campaign_id' => 'c-jpy', 'date' => '2026-06-01', 'spend' => 5000]]);
+
+        $totals = $this->totals(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-01'));
+
+        // The converted total still excludes what cannot be converted — that part was always right.
+        $this->assertEqualsWithDelta(200.0, (float) $totals['spend'], 0.01);
+
+        // What is new: the total itself now admits the withholding.
+        $this->assertSame(
+            1,
+            (int) $totals['spend_withheld_rows'],
+            'The aggregator hides the withholding, so every screen reading it must render 0 as if it were true.',
+        );
+
+        /*
+         * ONLY the withheld original — 5,000 JPY. The 750 SAR converted perfectly well and is already
+         * inside the 200 USD asserted above; adding its original here would count it twice and
+         * overstate what could not be converted.
+         *
+         * This assertion read 5,750 at first, which encoded the bug rather than the rule. The
+         * breakdown test is what exposed it, by grouping a converted row beside an unconvertible one.
+         */
+        $this->assertEqualsWithDelta(
+            5000.0,
+            (float) $totals['spend_original'],
+            0.01,
+            'The withheld original is wrong, so a card would state an amount nobody withheld.',
+        );
+    }
+
+    /**
+     * MONEY-TRUTH-002 — the BREAKDOWNS carry provenance too, not only the grand total.
+     *
+     * `totals()` learned this first, and platform comparison and campaign ranking read different
+     * methods entirely. A platform that spent 5,000 JPY ranked as having spent nothing, directly
+     * beneath a summary card showing the real amount — the same lie one level down.
+     */
+    public function test_the_provider_breakdown_reports_withheld_money(): void
+    {
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
+
+        $this->sync($this->account('SAR', 'sar'), [['campaign_id' => 'c-sar', 'date' => '2026-06-01', 'spend' => 750]]);
+        $this->sync($this->account('JPY', 'jpy'), [['campaign_id' => 'c-jpy', 'date' => '2026-06-01', 'spend' => 5000]]);
+
+        app(ProjectContext::class)->setProjectId($this->project->id);
+        $rows = app(MetricsAggregator::class)->byProvider(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-01'));
+        app(ProjectContext::class)->forget();
+
+        $this->assertNotEmpty($rows, 'The breakdown returned nothing at all.');
+
+        $withheld = array_values(array_filter($rows, fn ($r) => (int) ($r['spend_withheld_rows'] ?? 0) > 0));
+
+        $this->assertNotEmpty(
+            $withheld,
+            'No row admits the withholding, so a platform that spent real money ranks as having spent nothing.',
+        );
+        $this->assertEqualsWithDelta(5000.0, (float) $withheld[0]['spend_original'], 0.01);
+        $this->assertSame('JPY', $withheld[0]['money_original_currency']);
     }
 
     /** Once the rate exists, a re-sync replaces the withheld figure — nothing has to be re-fetched. */
@@ -314,10 +401,10 @@ final class ReportingCurrencyTest extends TestCase
         $this->sync($account, $rows);
         $this->assertNull($this->spendRow()->value);
 
-        $this->rate('JPY', 'SAR', 0.025, '2026-06-01');
+        $this->rate('JPY', 'USD', 0.0067, '2026-06-01');
         $this->sync($account, $rows);
 
-        $this->assertEqualsWithDelta(125.0, (float) $this->spendRow()->refresh()->value, 0.01);
+        $this->assertEqualsWithDelta(33.5, (float) $this->spendRow()->refresh()->value, 0.01);
     }
 
     // ── money only ───────────────────────────────────────────────────────────────────────────────
@@ -325,17 +412,17 @@ final class ReportingCurrencyTest extends TestCase
     /**
      * Counts are not multiplied by a rate.
      *
-     * Impressions × 3.75 is nonsense that still looks like a number, which is exactly the kind that
-     * survives a review. `metric_definitions.is_currency` is what decides, so a metric catalogued as
-     * money later is normalised without anybody editing the syncer.
+     * Impressions × 0.2666… is nonsense that still looks like a number, which is exactly the kind
+     * that survives a review. `metric_definitions.is_currency` is what decides, so a metric
+     * catalogued as money later is normalised without anybody editing the syncer.
      */
     public function test_counts_are_never_converted(): void
     {
-        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
 
-        $this->sync($this->account('USD', 'usd'), [[
-            'campaign_id' => 'c-usd', 'date' => '2026-06-01',
-            'spend' => 100, 'impressions' => 1000, 'clicks' => 50, 'purchases' => 4,
+        $this->sync($this->account('SAR', 'sar'), [[
+            'campaign_id' => 'c-sar', 'date' => '2026-06-01',
+            'spend' => 750, 'impressions' => 1000, 'clicks' => 50, 'purchases' => 4,
         ]]);
 
         foreach (['impressions' => 1000.0, 'clicks' => 50.0, 'purchases' => 4.0] as $key => $expected) {
@@ -349,14 +436,14 @@ final class ReportingCurrencyTest extends TestCase
     /** Revenue is money and is converted with the same rate spend was. */
     public function test_revenue_is_converted_like_spend(): void
     {
-        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
 
-        $this->sync($this->account('USD', 'usd'), [[
-            'campaign_id' => 'c-usd', 'date' => '2026-06-01', 'spend' => 100, 'revenue' => 400,
+        $this->sync($this->account('SAR', 'sar'), [[
+            'campaign_id' => 'c-sar', 'date' => '2026-06-01', 'spend' => 750, 'revenue' => 3000,
         ]]);
 
-        $this->assertEqualsWithDelta(1500.0, (float) $this->spendRow('revenue')->value, 0.01);
-        $this->assertEqualsWithDelta(3.75, (float) $this->spendRow('revenue')->exchange_rate, 0.000001);
+        $this->assertEqualsWithDelta(800.0, (float) $this->spendRow('revenue')->value, 0.01);
+        $this->assertEqualsWithDelta(self::SAR_USD, (float) $this->spendRow('revenue')->exchange_rate, 0.000001);
     }
 
     // ── edges ────────────────────────────────────────────────────────────────────────────────────
@@ -364,9 +451,9 @@ final class ReportingCurrencyTest extends TestCase
     /** Zero is a real figure and stays zero — converted, labelled, and not confused with «unknown». */
     public function test_zero_spend_is_converted_and_stays_zero(): void
     {
-        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
 
-        $this->sync($this->account('USD', 'usd'), [['campaign_id' => 'c-usd', 'date' => '2026-06-01', 'spend' => 0]]);
+        $this->sync($this->account('SAR', 'sar'), [['campaign_id' => 'c-sar', 'date' => '2026-06-01', 'spend' => 0]]);
 
         $row = $this->spendRow();
 
@@ -377,39 +464,58 @@ final class ReportingCurrencyTest extends TestCase
     /** An unlabelled account is treated as already reporting — stated, not assumed silently. */
     public function test_an_account_with_no_currency_is_treated_as_the_reporting_currency(): void
     {
-        $account = $this->account('SAR', 'none');
+        $account = $this->account('USD', 'none');
         $account->forceFill(['currency' => null])->save();
 
         $this->sync($account, [['campaign_id' => 'c-none', 'date' => '2026-06-01', 'spend' => 90]]);
 
-        $this->assertSame('SAR', $this->spendRow()->original_currency);
+        $this->assertSame('USD', $this->spendRow()->original_currency);
         $this->assertEqualsWithDelta(90.0, (float) $this->spendRow()->value, 0.01);
     }
 
     /** Several currencies in one window all land in one reporting currency, and add up correctly. */
     public function test_three_currencies_in_one_window_aggregate_correctly(): void
     {
-        $this->rate('USD', 'SAR', 3.75, '2026-06-01');
-        $this->rate('AED', 'SAR', 1.02, '2026-06-01');
+        $this->rate('SAR', 'USD', self::SAR_USD, '2026-06-01');
+        $this->rate('AED', 'USD', 0.2723, '2026-06-01');
 
-        $this->sync($this->account('USD', 'usd'), [['campaign_id' => 'c-usd', 'date' => '2026-06-01', 'spend' => 100]]);
+        $this->sync($this->account('SAR', 'sar'), [['campaign_id' => 'c-sar', 'date' => '2026-06-01', 'spend' => 750]]);
         $this->sync($this->account('AED', 'aed'), [['campaign_id' => 'c-aed', 'date' => '2026-06-01', 'spend' => 100]]);
-        $this->sync($this->account('SAR', 'sar'), [['campaign_id' => 'c-sar', 'date' => '2026-06-01', 'spend' => 100]]);
+        $this->sync($this->account('USD', 'usd'), [['campaign_id' => 'c-usd', 'date' => '2026-06-01', 'spend' => 100]]);
 
         $totals = $this->totals(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-01'));
 
-        // 375 + 102 + 100
-        $this->assertEqualsWithDelta(577.0, (float) $totals['spend'], 0.01);
+        // 200 + 27.23 + 100
+        $this->assertEqualsWithDelta(327.23, (float) $totals['spend'], 0.01);
     }
 
-    /** A client reporting in something other than SAR gets that, not the platform default. */
-    public function test_the_clients_own_currency_is_the_reporting_currency(): void
+    /**
+     * MONEY-USD-001 — a workspace's own currency does NOT override the canonical basis.
+     *
+     * This test asserted the opposite until the basis was fixed: `forProject()` read
+     * `client_workspaces.default_currency` and normalised into it, so this project stored riyals and
+     * a dollar-preferring one stored dollars. That is two truths in one column. `value` is what every
+     * read path sums — dashboard, analytics, funnel, reports, public links — so a per-workspace basis
+     * means two projects cannot be added together and the same scope answers differently depending on
+     * who asked.
+     *
+     * The workspace built in `setUp()` still says SAR, deliberately: it is the guard. If somebody
+     * reinstates the override, this fails rather than silently splitting the column again.
+     *
+     * What a workspace may still choose is how money is DISPLAYED — applied on the way out, over one
+     * stored basis.
+     */
+    public function test_a_workspace_currency_does_not_override_the_canonical_basis(): void
     {
         $workspace = ClientWorkspace::create(['name' => 'US Client', 'slug' => 'fx-us', 'mode' => 'managed', 'default_currency' => 'USD']);
         $project = Project::create(['client_workspace_id' => $workspace->id, 'name' => 'US', 'status' => 'active']);
 
         $this->assertSame('USD', app(ReportingCurrency::class)->forProject((string) $project->id));
-        $this->assertSame('SAR', app(ReportingCurrency::class)->forProject((string) $this->project->id));
+        $this->assertSame(
+            'USD',
+            app(ReportingCurrency::class)->forProject((string) $this->project->id),
+            'A workspace preference reopened a second aggregation basis.',
+        );
     }
 
     // ── the resolver itself ──────────────────────────────────────────────────────────────────────

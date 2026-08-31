@@ -56,21 +56,53 @@ export function HeroSection({
 
   return (
     <section id="usage" className="border-b border-border bg-surface-secondary">
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-3 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.42fr)] lg:py-5">
+      {/*
+        * MOBILE-HERO-001 — the phone's first screen is the headline and the three doors.
+        *
+        * On one column the grid used to stack: eyebrow, headline, description, support line, four
+        * benefits, the chooser's own title and subtitle, three path cards, an includes list — and only
+        * THEN «إنشاء حساب / تسجيل الدخول / متابعة طلباتي». Roughly 900px of page before the first
+        * decision, so on a 667px phone the three things a visitor came to do were all below the fold,
+        * and two of them were otherwise only in the hamburger.
+        *
+        * The order below fixes that with `order` alone: nothing is removed, nothing is duplicated,
+        * and from `lg` up the explicit column/row placement wins so the desktop layout is unchanged.
+        */}
+      {/*
+        * HERO-LAYOUT-001 — the dashboard sat in a hole the chooser dug.
+        *
+        * The grid was two columns by two ROWS: the promise at (1,1), the chooser at (2,1), the login
+        * card at (2,2) and the dashboard at (1,2). Grid rows span the whole grid, so row 1's height
+        * was whichever of the promise and the chooser was taller — always the chooser. The dashboard,
+        * pinned to row 2, therefore began below the CHOOSER's bottom edge rather than below the text
+        * it belongs to, leaving a large empty band above it and an unbalanced hero.
+        *
+        * `items-start` cannot fix that: the gap is the row's height, not a stretched item. A negative
+        * margin would only drag the image back over a hole that is still there, and would break the
+        * moment the copy or the chooser changed length.
+        *
+        * So the rows are gone. Each column is now its own flow — `contents` on one column so the
+        * mobile `order` sequence below is completely unaffected, a flex column from `lg` up — and the
+        * dashboard follows the promise immediately, because nothing else is in its column.
+        */}
+      <div className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.42fr)] lg:py-5">
 
         {/* ── The promise ── */}
-        <div className="order-1 lg:col-start-1 lg:row-start-1">
-          <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3 py-1 text-[12px] font-semibold text-brand-700">
-            {txt('hero', 'eyebrow', c.hero.eyebrow)}
-          </p>
-          <h1 className="mt-2 font-heading text-[24px] font-extrabold leading-[1.14] tracking-tight sm:text-[32px]">
-            {txt('hero', 'title', c.hero.title)}
-          </h1>
-          <p className="mt-2 max-w-3xl text-[14px] leading-relaxed text-text-secondary">{txt('hero', 'desc', c.hero.desc)}</p>
-          <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-text-muted">{c.hero.support}</p>
+        <div className="contents lg:col-start-1 lg:flex lg:flex-col lg:gap-3">
+          <div className="order-1">
+            <p className="inline-flex w-fit rounded-full bg-brand-primary-soft px-3 py-1 text-[12px] font-semibold text-brand-700">
+              {txt('hero', 'eyebrow', c.hero.eyebrow)}
+            </p>
+            {/* 21px on a phone, and the approved 32px from `sm` up — the wording is untouched. */}
+            <h1 data-testid="hero-heading" className="mt-1.5 font-heading text-[21px] font-extrabold leading-[1.18] tracking-tight sm:mt-2 sm:text-[32px]">
+              {txt('hero', 'title', c.hero.title)}
+            </h1>
+            <p className="mt-1.5 max-w-3xl text-[13.5px] leading-snug text-text-secondary sm:mt-2 sm:text-[14px] sm:leading-relaxed">{txt('hero', 'desc', c.hero.desc)}</p>
+            <p className="mt-1 max-w-3xl text-[12.5px] leading-snug text-text-muted sm:text-[13px] sm:leading-relaxed">{c.hero.support}</p>
+          </div>
 
-          {/* The four approved benefits. */}
-          <ul className="mt-2.5 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+          {/* The four approved benefits — below the decision on a phone, beside the promise on desktop. */}
+          <ul className="order-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:mt-2.5">
             {c.hero.points.map((pt, i) => {
               const Icon = BENEFIT_ICON[i] ?? Check
               return (
@@ -83,10 +115,33 @@ export function HeroSection({
               )
             })}
           </ul>
+
+          {/* ── The proof: the product's own dashboard ──
+          *
+          * Inside the promise's column now, not a grid cell of its own, so it rises to sit directly
+          * beneath the text instead of waiting for the chooser's row to end. `order-5` keeps it last
+          * on a phone, which is where it belongs: the headline and the three doors come first.
+          */}
+          <div id="preview" className="order-5">
+            <HeroDashboard c={c} />
+          </div>
+
         </div>
 
-        {/* ── The decision ── */}
-        <div className="order-2 flex flex-col rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)] lg:col-start-2 lg:row-span-2 lg:row-start-1">
+        {/*
+          * ── The decision ──
+          *
+          * The chooser and the sign-in card are ONE card visually, joined seam to seam. That used to
+          * be two grid cells in rows 1 and 2 with `-mt-3` cancelling the grid gap between them — the
+          * same row structure that pushed the dashboard down the left column.
+          *
+          * A wrapper is the honest version: they share a container with no gap, so they meet exactly
+          * whatever the grid gap later becomes. `contents` below `lg` so the mobile `order` sequence
+          * is untouched — on a phone the sign-in card still comes second, right after the headline,
+          * while `lg:order-*` restores the desktop reading order the old row placement used to give.
+          */}
+        <div className="contents lg:col-start-2 lg:flex lg:flex-col">
+        <div className="order-4 flex flex-col rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)] lg:order-1 lg:rounded-b-none lg:border-b-0">
           <h2 className="font-heading text-[18px] font-extrabold text-text-primary">{c.options.title}</h2>
           <p className="mt-1 text-[12px] leading-snug text-text-secondary">{c.options.subtitle}</p>
 
@@ -94,6 +149,47 @@ export function HeroSection({
             {c.start.paths.map((opt) => {
               const Icon = PATH_ICON[opt.key] ?? Building2
               const on = opt.key === pathKey
+
+              /*
+               * MKT-UGC-002 — an ANNOUNCED path is not a control.
+               *
+               * Rendered as a `div` rather than a disabled `button`, because there is no action to
+               * disable: it has no destination, no reveal, and no place in the radio group. A
+               * disabled button would still be in the accessibility tree as something that could
+               * have been pressed, and `aria-pressed` on it would claim membership of a selection
+               * this card can never join. `aria-disabled` states the fact instead.
+               *
+               * It keeps the geometry of the three real cards — same padding, same icon well, same
+               * two lines — so the chooser reads as one list, and differs where the difference is
+               * the point: the badge, the muted ground, and no radio mark.
+               */
+              if (opt.soon === true) {
+                return (
+                  <div
+                    key={opt.key}
+                    data-testid={`hero-path-soon-${opt.key}`}
+                    aria-disabled="true"
+                    className="flex items-start gap-2.5 rounded-xl border border-dashed border-border bg-surface-secondary/50 p-2.5 text-start"
+                  >
+                    {/* Where the radio mark sits on a selectable card — held empty, so the four
+                        titles stay on one vertical line instead of the fourth stepping inwards. */}
+                    <span className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <span className="block text-[13px] font-bold leading-tight text-text-secondary">{opt.title}</span>
+                        <span className="rounded bg-brand-primary-soft px-1.5 py-0.5 text-[10px] font-bold leading-none text-brand-600">
+                          {opt.badge}
+                        </span>
+                      </span>
+                      <span className="mt-0.5 block text-[11.5px] leading-snug text-text-muted">{opt.desc}</span>
+                    </span>
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-secondary text-text-muted">
+                      <Icon size={15} />
+                    </span>
+                  </div>
+                )
+              }
+
               return (
                 <button
                   key={opt.key}
@@ -131,41 +227,52 @@ export function HeroSection({
             ))}
           </ul>
 
-          {/* Account actions: continue on the chosen path, log in, or track existing requests. */}
-          <div className="mt-3 space-y-2 border-t border-border pt-3">
-            {authed ? (
-              <Link to="/app/dashboard" className="block"><Button className="w-full">{c.nav.dashboard} <Arrow size={15} /></Button></Link>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 gap-2">
-                  <Link to={primaryTo} data-testid="hero-primary-cta"><Button className="w-full"><UserPlus size={15} /> {primaryLabel}</Button></Link>
-                  <Link to={ACCOUNT_ROUTES.login}><Button variant="secondary" className="w-full"><LogIn size={15} /> {c.nav.login}</Button></Link>
-                </div>
-                <Link to={ACCOUNT_ROUTES.trackRequests} data-testid="hero-track-requests" className="block">
+        </div>
+
+        {/*
+          ── The decision, made ──
+
+          Second on a phone, directly under the headline: «إنشاء حساب» full width, then «تسجيل الدخول»
+          and «متابعة طلباتي» side by side — the shape a visitor is asked for. On desktop it sits in
+          the right column immediately below the chooser and joins it seam to seam (`lg:-mt-px`, no
+          top rounding), which is exactly where it rendered before, so nothing there moves.
+        */}
+        <div
+          data-testid="hero-actions"
+          className="order-2 rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)] lg:order-2 lg:rounded-t-none lg:border-t-0 lg:pt-0 lg:shadow-none"
+        >
+          {authed ? (
+            <Link to="/app/dashboard" className="block"><Button className="w-full">{c.nav.dashboard} <Arrow size={15} /></Button></Link>
+          ) : (
+            <div className="space-y-2">
+              <Link to={primaryTo} data-testid="hero-primary-cta" className="block">
+                <Button size="lg" className="w-full"><UserPlus size={16} /> {primaryLabel}</Button>
+              </Link>
+              <div className="grid grid-cols-2 gap-2">
+                <Link to={ACCOUNT_ROUTES.login} data-testid="hero-login">
+                  <Button variant="secondary" className="w-full"><LogIn size={15} /> {c.nav.login}</Button>
+                </Link>
+                <Link to={ACCOUNT_ROUTES.trackRequests} data-testid="hero-track-requests">
                   <Button variant="secondary" className="w-full"><FileText size={15} /> {c.nav.clientLogin}</Button>
                 </Link>
-                <p className="flex items-start gap-1.5 text-[11px] leading-snug text-text-muted">
-                  <ShieldCheck size={12} className="mt-0.5 shrink-0 text-brand-500" /> {c.options.login.helper}
-                </p>
-              </>
-            )}
-          </div>
-
-          {/* Every journey stays a real link, not only a selection — a visitor who never clicks a path
-              (and any crawler) still finds all four routes. */}
-          {!authed && (
-            <nav aria-label={c.options.title} className="mt-auto flex flex-wrap gap-x-3 gap-y-1 pt-3 text-[10.5px]">
-              {c.start.paths.filter((o) => o.key !== pathKey).map((o) => (
-                <Link key={o.key} to={journeyTo(o.key)} data-testid={`hero-journey-link-${o.key}`} className="text-text-muted hover:text-brand-600 hover:underline">{o.title}</Link>
-              ))}
-            </nav>
+              </div>
+              <p className="flex items-start gap-1.5 text-[11px] leading-snug text-text-muted">
+                <ShieldCheck size={12} className="mt-0.5 shrink-0 text-brand-500" /> {c.options.login.helper}
+              </p>
+              {/* Every journey stays a real link, not only a selection — a visitor who never clicks a
+                  path (and any crawler) still finds all four routes. */}
+              <nav aria-label={c.options.title} className="flex flex-wrap gap-x-3 gap-y-1 pt-1 text-[10.5px]">
+                {/* `soon` excluded: `journeyTo` would resolve it to the influencer intake, which is
+                    exactly the route the announcement exists to NOT hand out (MKT-UGC-002). */}
+                {c.start.paths.filter((o) => o.key !== pathKey && o.soon !== true).map((o) => (
+                  <Link key={o.key} to={journeyTo(o.key)} data-testid={`hero-journey-link-${o.key}`} className="text-text-muted hover:text-brand-600 hover:underline">{o.title}</Link>
+                ))}
+              </nav>
+            </div>
           )}
         </div>
-
-        {/* ── The proof: the product's own dashboard ── */}
-        <div id="preview" className="order-3 lg:col-start-1 lg:row-start-2">
-          <HeroDashboard c={c} />
         </div>
+
       </div>
 
       {/* The paid-media services selector opens in a dialog: it is a long list, and letting it stretch

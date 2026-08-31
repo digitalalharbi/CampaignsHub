@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Providers;
 
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\Reporting\ReportingWindow;
+use App\Domains\Integrations\ValueObjects\SyncResult;
 
 /**
  * Snapchat Marketing API (`adsapi.snapchat.com/v1`).
@@ -17,7 +20,7 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
  *
  * Awaiting credentials on this install — no round trip has been made against a real organisation.
  */
-final class SnapchatConnector extends ApiAdvertisingConnector
+final class SnapchatConnector extends ApiAdvertisingConnector implements ReportsCreativeInsights
 {
     /** Snapchat states money in millionths. */
     private const MICRO = 1_000_000;
@@ -29,6 +32,14 @@ final class SnapchatConnector extends ApiAdvertisingConnector
      * because a sync job that never returns is worse than one that stops and says it stopped.
      */
     private const MAX_PAGES = 50;
+
+    /**
+     * The documented maximum page size for stats — «The maximum pagination limit is 200.»
+     *
+     * Asked for explicitly rather than left to the default, because the default is small and the
+     * cost of a page is a round trip against a per-application rate limit.
+     */
+    private const STATS_PAGE_SIZE = 200;
 
     /**
      * Read a list endpoint to its END, not just its first page.
@@ -69,29 +80,64 @@ final class SnapchatConnector extends ApiAdvertisingConnector
         return 'snapchat';
     }
 
+    /**
+     * The organisations THIS token can reach, with their ad accounts — SNAP-ORG-001.
+     *
+     * ## What this replaced, and why it had to
+     *
+     * It read `organization_id` out of the platform's own `/admin` settings and asked for
+     * `organizations/{that one id}/adaccounts`. CampaignsHub is multi-tenant: every customer
+     * authorises with their own Business Manager member, holding access to their own organisation.
+     * One organisation id in one system row pointed every customer's token at the operator's
+     * organisation — so a tenant saw accounts that were not theirs, or, far more often, none at all,
+     * because their token has no access there and Snapchat refuses the call. **A system-level field
+     * cannot be correct for more than one customer at a time**, which made it a tenancy defect rather
+     * than a configuration inconvenience.
+     *
+     * `GET /me/organizations?with_ad_accounts=true` is the documented answer: the organisations the
+     * authenticated member can reach, each with its ad accounts nested and the member's role on them.
+     * The endpoint existed all along; the field was standing in for a call nobody made.
+     *
+     * ## Absent stays absent
+     *
+     * A payload that omits currency or timezone yields NULL, never a default. A guessed currency
+     * silently mis-states every figure derived from it, and this product would rather report that it
+     * does not know than convert with a number nobody supplied.
+     */
     protected function fetchAdAccounts(OAuthTokens $tokens): array
     {
-        $organization = (string) $this->credentials()->get('organization_id');
-
         $accounts = [];
 
-        foreach ($this->readAll($tokens, "organizations/{$organization}/adaccounts", 'adaccounts', 'ad accounts') as $wrapper) {
-            /** @var array<string,mixed> $a */
-            $a = (array) ($wrapper['adaccount'] ?? []);
+        foreach ($this->readAll($tokens, 'me/organizations?with_ad_accounts=true', 'organizations', 'organisations') as $wrapper) {
+            /** @var array<string,mixed> $organization */
+            $organization = (array) ($wrapper['organization'] ?? []);
+            $organizationId = isset($organization['id']) ? (string) $organization['id'] : null;
 
-            if (($a['id'] ?? null) === null) {
+            if ($organizationId === null) {
                 continue;
             }
 
-            $accounts[] = [
-                'external_id' => (string) $a['id'],
-                'name' => (string) ($a['name'] ?? $a['id']),
-                'currency' => isset($a['currency']) ? (string) $a['currency'] : null,
-                'timezone' => isset($a['timezone']) ? (string) $a['timezone'] : null,
-                'status' => strtolower((string) ($a['status'] ?? 'active')),
-                'parent_external_id' => $organization,
-                'raw' => $a,
-            ];
+            /** @var list<array<string,mixed>> $adAccounts */
+            $adAccounts = (array) ($organization['ad_accounts'] ?? []);
+
+            foreach ($adAccounts as $a) {
+                if (($a['id'] ?? null) === null) {
+                    continue;
+                }
+
+                $accounts[] = [
+                    'external_id' => (string) $a['id'],
+                    'name' => (string) ($a['name'] ?? $a['id']),
+                    'currency' => isset($a['currency']) ? (string) $a['currency'] : null,
+                    'timezone' => isset($a['timezone']) ? (string) $a['timezone'] : null,
+                    'status' => strtolower((string) ($a['status'] ?? 'active')),
+                    // The organisation this account genuinely belongs to, read from the response —
+                    // not a constant every tenant would have shared.
+                    'parent_external_id' => $organizationId,
+                    'parent_name' => isset($organization['name']) ? (string) $organization['name'] : null,
+                    'raw' => $a,
+                ];
+            }
         }
 
         return $accounts;
@@ -200,6 +246,32 @@ final class SnapchatConnector extends ApiAdvertisingConnector
     /**
      * @return array<string,array<string,mixed>> creative id → the creative row we can state honestly
      */
+    /** Snapchat takes up to 2,000 media ids per batch; chunked so a larger account is never truncated. */
+    private const MEDIA_PER_REQUEST = 2000;
+
+    /** How many media ids the last sweep asked about, and how many came back with a usable file. */
+    private int $mediaAsked = 0;
+
+    private int $mediaResolved = 0;
+
+    /** The first media refusal, kept so the caller can say WHY the column is empty. */
+    private ?string $mediaFailure = null;
+
+    /**
+     * What the last media sweep did — counts and a reason, never a URL.
+     *
+     * @return array{asked:int, resolved:int, error:?string}
+     */
+    public function lastMediaOutcome(): array
+    {
+        return [
+            'asked' => $this->mediaAsked,
+            'resolved' => $this->mediaResolved,
+            // A message, never a link: a signed URL in a log is the leak this product refuses.
+            'error' => $this->mediaFailure,
+        ];
+    }
+
     private function creativesById(OAuthTokens $tokens, string $adAccountId): array
     {
         $creatives = [];
@@ -221,12 +293,177 @@ final class SnapchatConnector extends ApiAdvertisingConnector
                     'COLLECTION' => 'carousel',
                     default => null,
                 },
-                // Snapchat's preview needs a separately-signed URL; it is not in this body, so there
-                // is nothing honest to put here.
+                /*
+                 * SNAP-CREATIVE-ASSETS-001 — the asset lives behind a second call, and this is its key.
+                 *
+                 * `top_snap_media_id` is «the Media ID of the top snap (image/video)». The creative
+                 * body carries the id and never the file, which is why this used to store nothing
+                 * and every Snapchat card read «لا تتيح هذه المنصة أصل المحتوى» — a statement about
+                 * the PLATFORM that was false. Snapchat exposes the asset perfectly well; we had
+                 * not asked.
+                 */
+                'media_id' => isset($c['top_snap_media_id']) ? (string) $c['top_snap_media_id'] : null,
+            ], static fn ($v) => $v !== null);
+        }
+
+        return $this->withMedia($tokens, $adAccountId, $creatives);
+    }
+
+    /**
+     * SNAP-CREATIVE-ASSETS-001 — resolve every creative's media in ONE call, not one call each.
+     *
+     * ## Why the batch endpoint and not `GET /media/{id}`
+     *
+     * The live account holds 1,451 creatives. Asking per creative is 1,451 round trips against an
+     * API that rate-limits, on a job that already had to have its timeout raised to fifteen minutes
+     * — it would turn a working structure sweep into a throttled one. `get_media_by_ids` takes up
+     * to 2,000 ids per request, so the whole account is one call, with chunking left in place
+     * because an account may exceed that and a silently truncated list is the worst outcome.
+     *
+     * ## What is stored, and what is deliberately not
+     *
+     * `download_link` is the file. It is a signed URL, so it is stored with the expiry the platform
+     * states and `CreativePresenter` already refuses to render an expired one — «انتهت صلاحية رابط
+     * المنصة» rather than a broken image.
+     *
+     * A link carrying a credential in its QUERY is never stored at all. The presenter has a
+     * `withheld` state for exactly this, and the rule is that a token must not reach the browser or
+     * the logs. Snapchat signs with an opaque signature rather than an access token, so this is a
+     * guard rather than an expectation — but a guard is what makes it safe to be wrong about.
+     *
+     * @param  array<string,array<string,mixed>>  $creatives
+     * @return array<string,array<string,mixed>>
+     */
+    private function withMedia(OAuthTokens $tokens, string $adAccountId, array $creatives): array
+    {
+        $this->mediaAsked = 0;
+        $this->mediaResolved = 0;
+        $this->mediaFailure = null;
+
+        $mediaIds = array_values(array_unique(array_filter(
+            array_map(static fn (array $c): ?string => $c['media_id'] ?? null, $creatives),
+        )));
+
+        $this->mediaAsked = count($mediaIds);
+
+        if ($mediaIds === []) {
+            return $creatives;
+        }
+
+        $media = [];
+
+        foreach (array_chunk($mediaIds, self::MEDIA_PER_REQUEST) as $chunk) {
+            try {
+                $body = $this->read(
+                    $this->api($tokens)->post(
+                        /*
+                         * SNAP-MEDIA-URL-001 — the ad account id belongs IN the path.
+                         *
+                         * This asked `adaccounts/get_media_by_ids` with no account, and Snapchat
+                         * answered «Request URL can not be correctly processed» — for every chunk,
+                         * on every sweep. Production proved it exactly: 1,038 creatives carried a
+                         * media id, the call was made, and 0 resolved, so all 1,456 cards were
+                         * blank while the structure run reported success.
+                         *
+                         * The documented route is `POST /adaccounts/{ad_account_id}/get_media_by_ids`.
+                         * Found only because the refusal was recorded rather than swallowed — the
+                         * message names the fault precisely, and a row count never could.
+                         */
+                        $this->url("adaccounts/{$adAccountId}/get_media_by_ids"),
+                        /*
+                         * SNAP-MEDIA-BODY-001 — `entity_ids`, and each entry is an OBJECT.
+                         *
+                         * This sent `{"media_ids": ["a", "b"]}`. The documented body is
+                         * `{"entity_ids": [{"id": "a"}, {"id": "b"}]}` — a different key AND a
+                         * different element shape, so the request was wrong twice over.
+                         *
+                         * Production named this the moment the URL was fixed: the refusal changed
+                         * from «Request URL can not be correctly processed» to «Request BODY can not
+                         * be correctly processed». One word, and it moved the search from the route
+                         * to the payload. That is the entire argument for recording a provider's own
+                         * message instead of a row count.
+                         */
+                        ['entity_ids' => array_map(static fn (string $id): array => ['id' => $id], $chunk)],
+                    ),
+                    'media',
+                );
+            } catch (\Throwable $e) {
+                /*
+                 * The asset is an enrichment. A creative with no picture is still a creative, and
+                 * failing the whole structure sweep because a media lookup was throttled would cost
+                 * the campaigns, ad squads and ads that came with it.
+                 *
+                 * Contained, but no longer INVISIBLE. Swallowing this meant a media fetch could fail
+                 * for every creative in the account while the run reported success and the owner saw
+                 * blank cards — «the platform sent no media» and «we never managed to ask» produced
+                 * the identical empty column. Only the first message is kept: the rest are the same
+                 * refusal once per chunk, and repetition is not evidence.
+                 */
+                $this->mediaFailure ??= $e->getMessage();
+
+                continue;
+            }
+
+            foreach ((array) ($body['media'] ?? []) as $wrapper) {
+                $m = (array) (((array) $wrapper)['media'] ?? []);
+
+                if (($m['id'] ?? null) === null) {
+                    continue;
+                }
+
+                $media[(string) $m['id']] = $m;
+            }
+        }
+
+        foreach ($creatives as $id => $creative) {
+            $m = $media[$creative['media_id'] ?? ''] ?? null;
+
+            if ($m === null) {
+                continue;
+            }
+
+            $link = $this->safeAssetUrl($m['download_link'] ?? null);
+
+            if ($link !== null) {
+                $this->mediaResolved++;
+            }
+            $isVideo = strtoupper((string) ($m['type'] ?? '')) === 'VIDEO';
+
+            $creatives[$id] = array_filter([
+                ...$creative,
+                // A video's file is the video; an image's file is the image. Storing a video URL in
+                // the image column is what makes a card try to render an MP4 as a picture.
+                'asset_url' => $isVideo ? null : $link,
+                'video_url' => $isVideo ? $link : null,
+                'source_updated_at' => isset($m['updated_at']) ? (string) $m['updated_at'] : null,
             ], static fn ($v) => $v !== null);
         }
 
         return $creatives;
+    }
+
+    /**
+     * A URL is stored only when it carries no credential.
+     *
+     * `CreativePresenter` has a `withheld` state for a preview link that bears one, and the standing
+     * rule is that a provider token must never reach the browser or a log line. Returning null here
+     * is what makes that state reachable instead of theoretical.
+     */
+    private function safeAssetUrl(mixed $url): ?string
+    {
+        if (! is_string($url) || $url === '') {
+            return null;
+        }
+
+        $query = strtolower((string) (parse_url($url, PHP_URL_QUERY) ?? ''));
+
+        foreach (['access_token', 'oauth', 'bearer', 'apikey', 'api_key'] as $secret) {
+            if (str_contains($query, $secret)) {
+                return null;
+            }
+        }
+
+        return $url;
     }
 
     private function reviewStatus(mixed $status): ?string
@@ -308,65 +545,581 @@ final class SnapchatConnector extends ApiAdvertisingConnector
         'revenue' => 'conversion_purchases_value',
     ];
 
+    /**
+     * CANONICAL-METRIC-CATALOG-001 — the full set Snapchat exposes, for the ad-squad and ad grains.
+     *
+     * Deliberately separate from {@see self::METRICS} rather than an extension of it. That map feeds
+     * `daily_metrics`, whose catalogue decides which keys survive; adding to it would push keys
+     * through a pipeline that filters them out anyway, and any mistake there would land on the
+     * campaign totals every surface already reads. This map feeds `entity_daily_metrics` only.
+     *
+     * Field names verified against the current Marketing API (developers.snap.com, August 2026).
+     * Nothing here is guessed: a metric Snapchat does not expose is absent from this table rather
+     * than present and empty, which is the difference between UNSUPPORTED and NOT_REPORTED.
+     */
+    private const ENTITY_METRICS = [
+        // delivery
+        'spend' => 'spend',
+        'impressions' => 'impressions',
+        'reach' => 'uniques',
+        'frequency' => 'frequency',
+        // traffic — Snapchat calls a click a swipe
+        'clicks' => 'swipes',
+        'landing_page_views' => 'conversion_page_views',
+        // video. `screen_time_millis` is MILLISECONDS and is converted at this edge, once.
+        'video_views' => 'video_views',
+        'video_views_2s' => 'video_views_time_based',
+        'video_views_5s' => 'video_views_5s',
+        'video_views_15s' => 'video_views_15s',
+        'video_p25' => 'quartile_1',
+        'video_p50' => 'quartile_2',
+        'video_p75' => 'quartile_3',
+        'video_p100' => 'view_completion',
+        'video_watch_seconds' => 'screen_time_millis',
+        // results
+        'conversions' => 'conversion_purchases',
+        'purchases' => 'conversion_purchases',
+        'revenue' => 'conversion_purchases_value',
+        'add_to_cart' => 'conversion_add_cart',
+        'checkout' => 'conversion_start_checkout',
+        'leads' => 'native_leads',
+        'sign_ups' => 'conversion_sign_ups',
+        'installs' => 'total_installs',
+        'app_opens' => 'conversion_app_opens',
+        'page_views' => 'conversion_page_views',
+    ];
+
+    /** Reported in milliseconds; the product reports watch time in seconds. Divided once, here. */
+    private const MILLIS = ['video_watch_seconds'];
+
     /** The fields stated in micro-units of the account currency, divided once at this edge. */
     private const MONEY = ['spend', 'revenue'];
 
+    /**
+     * Daily stats for one ad account, broken down by campaign — SNAP-WINDOW-001, SNAP-PAGING-001.
+     *
+     * ## The live failure this replaced
+     *
+     * The first real Snapchat metrics sync returned **0 metrics** and «Request cannot be processed
+     * due to validation error». The range was a string literal:
+     *
+     * ```php
+     * 'start_time' => $from.'T00:00:00.000-00:00',
+     * 'end_time'   => $to.'T00:00:00.000-00:00',
+     * ```
+     *
+     * UTC midnight, for every account on the platform. Snapchat's measurement reference states the
+     * rule outright — «time must be of day boundary, start_time and end_time must be both specified,
+     * or neither» — and its own DAY responses carry the ad account's offset. For an account in
+     * `Asia/Riyadh` that literal is 03:00 local, which is not a day boundary, so the request was
+     * refused before a single figure was read. Structure synced and metrics did not, because
+     * structure never calls `/stats`.
+     *
+     * ## And the first page was being treated as the whole answer
+     *
+     * `breakdown=campaign` returns one entity per campaign, and the reference gives the pagination
+     * contract: `limit` up to 200, with `paging.next_link` for the rest. This read one response and
+     * returned. An account with 201 campaigns reported the first 200 and lost the rest silently —
+     * the same defect LinkedIn had at a page size of 10, which is why it was found there first.
+     */
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("adaccounts/{$adAccountId}/stats"), [
-                'granularity' => 'DAY',
-                'breakdown' => 'campaign',
-                // Asked for from the map, so a metric cannot be mapped and then never requested.
-                'fields' => implode(',', array_values(array_unique(self::METRICS))),
-                'start_time' => $from.'T00:00:00.000-00:00',
-                'end_time' => $to.'T00:00:00.000-00:00',
-            ]),
-            'daily stats',
-        );
+        $window = ReportingWindow::localDays($this->accountTimezone($adAccountId), $from, $to);
 
         $rows = [];
 
-        foreach ((array) ($body['timeseries_stats'] ?? []) as $wrapper) {
-            /** @var array<string,mixed> $series */
-            $series = (array) ($wrapper['timeseries_stat'] ?? []);
-            $campaignId = (string) ($series['id'] ?? '');
-
-            if ($campaignId === '') {
-                continue;
-            }
-
-            foreach ((array) ($series['timeseries'] ?? []) as $point) {
-                /** @var array<string,mixed> $stats */
-                $stats = (array) ($point['stats'] ?? []);
-
-                $row = [
-                    'campaign_id' => $campaignId,
-                    'date' => substr((string) ($point['start_time'] ?? $from), 0, 10),
-                ];
-
-                foreach (self::METRICS as $canonical => $field) {
-                    /*
-                     * ABSENT, not zero.
-                     *
-                     * A metric this account does not report must arrive as a missing key, so the
-                     * pipeline stores no row for it and every surface says «غير مُرسَل» rather than
-                     * printing a measured zero. An awareness campaign that was never asked to sell
-                     * anything has no purchases; it does not have zero of them.
-                     */
-                    if (! array_key_exists($field, $stats)) {
-                        continue;
-                    }
-
-                    $row[$canonical] = in_array($canonical, self::MONEY, true)
-                        ? (float) $stats[$field] / self::MICRO
-                        : (float) $stats[$field];
-                }
-
+        /*
+         * One request per chunk — SNAP-WINDOW-001 §8.
+         *
+         * A first sync asks for thirty days at once, and a provider that caps a DAY range refuses
+         * the WHOLE request rather than truncating it: the customer's very first sync would be the
+         * one that fails. Each chunk is upserted idempotently on `(account, campaign, date, metric)`,
+         * so splitting costs round trips and nothing else.
+         */
+        foreach ($window->chunked($this->maxDaysPerRequest()) as $chunk) {
+            foreach ($this->fetchWindow($adAccountId, $tokens, $chunk) as $row) {
                 $rows[] = $row;
             }
         }
 
         return $rows;
+    }
+
+    /**
+     * SNAP-CREATIVE-METRICS-001 — the same stats call, asked at the CREATIVE level.
+     *
+     * `fetchInsights()` above is untouched: it feeds `daily_metrics`, whose natural key is
+     * `(account, campaign, metric, date, window)` and which has no column for a creative. This is a
+     * separate read with a separate destination — `creative_daily_metrics`, keyed
+     * `(creative_id, metric_date)` — so campaign totals cannot be disturbed by it.
+     *
+     * The window is chunked identically, for the identical reason: a provider that caps a DAY range
+     * refuses the whole request rather than truncating it, and a first sync asks for thirty days.
+     *
+     * Rows come back in the same canonical shape `pointToRow()` produces, except that the id in
+     * `campaign_id` is the PROVIDER'S CREATIVE id. The caller resolves it against
+     * `external_creatives.external_creative_id`; a creative we have not discovered yet is the
+     * caller's decision to skip, not this adapter's to invent.
+     */
+    public function syncCreativeInsights(string $adAccountId, string $from, string $to): SyncResult
+    {
+        /*
+         * No `refusal()` pre-check — it is private to the base class, and duplicating it here would
+         * put a second copy of the credential rule in the codebase. `tokens()` throws when there are
+         * none, and the catch below turns that into the same failed result the pre-check would have
+         * produced. One rule, one place.
+         */
+        try {
+            return SyncResult::of($this->fetchCreativeInsights($this->tokens(), $adAccountId, $from, $to));
+        } catch (\Throwable $e) {
+            return SyncResult::failed($e->getMessage());
+        }
+    }
+
+    /** @return list<array<string,mixed>> */
+    public function fetchCreativeInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
+    {
+        $window = ReportingWindow::localDays($this->accountTimezone($adAccountId), $from, $to);
+
+        $rows = [];
+
+        foreach ($window->chunked($this->maxDaysPerRequest()) as $chunk) {
+            foreach ($this->fetchWindow($adAccountId, $tokens, $chunk, 'creative') as $row) {
+                $rows[] = $row;
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * METRICS-BACKBONE-001 — stats for the two rungs the product could not measure.
+     *
+     * ## Why this is per-parent and not one account call
+     *
+     * The creative grain works from `adaccounts/{id}/stats?breakdown=creative` — one call for the
+     * whole account. The API offers no such shortcut here: `breakdown=adsquad` lives on the CAMPAIGN
+     * stats endpoint and `breakdown=ad` on the AD SQUAD endpoint, so each parent must be asked for
+     * its own children. On the live account that is 89 campaigns, then 187 ad squads.
+     *
+     * That cost is why this is its own method taking a parent list, rather than another `$breakdown`
+     * value on `fetchWindow()`: the caller decides how much of the account to sweep.
+     *
+     * @param  list<string>  $parentIds  campaign ids for the ad-squad grain, ad-squad ids for the ad grain
+     * @return list<array<string,mixed>>
+     */
+    /**
+     * The caller-facing entry point, mirroring `syncCreativeInsights()`.
+     *
+     * Tokens are resolved INSIDE the connector — `tokens()` is protected on the base class, and one
+     * rule about credentials living in one place is worth more than a shorter signature.
+     *
+     * @param  list<string>  $parentIds
+     */
+    public function syncEntityInsights(
+        string $adAccountId,
+        string $parentPath,
+        string $breakdown,
+        array $parentIds,
+        string $from,
+        string $to,
+    ): SyncResult {
+        try {
+            return SyncResult::of($this->fetchEntityInsights(
+                $this->tokens(), $adAccountId, $parentPath, $breakdown, $parentIds, $from, $to,
+            ));
+        } catch (\Throwable $e) {
+            return SyncResult::failed($e->getMessage());
+        }
+    }
+
+    /** The first refusal seen while sweeping a grain, kept so the caller can record WHY it is empty. */
+    private ?string $entityFailure = null;
+
+    /** The first refusal from the last sweep, or null when every parent answered. */
+    public function lastEntityFailure(): ?string
+    {
+        return $this->entityFailure;
+    }
+
+    public function fetchEntityInsights(
+        OAuthTokens $tokens,
+        string $adAccountId,
+        string $parentPath,
+        string $breakdown,
+        array $parentIds,
+        string $from,
+        string $to,
+    ): array {
+        $window = ReportingWindow::localDays($this->accountTimezone($adAccountId), $from, $to);
+        $rows = [];
+        $this->entityFailure = null;
+
+        foreach ($parentIds as $parentId) {
+            /*
+             * SNAP-AD-STATS-ROUTE-001 — a parent with no provider id must never become a request.
+             *
+             * `url("campaigns/{$parentId}/stats")` with an empty id builds `campaigns//stats`, and
+             * Snapchat answers that with «Request URL can not be correctly processed» — the exact
+             * refusal production recorded while the SAME sweep wrote 1,165 ad rows. Most calls were
+             * fine and some were not, which is the signature of a URL built from a value that is
+             * sometimes wrong rather than a route that is always wrong.
+             *
+             * The id comes from `external_campaigns.external_id`. A row the structure sweep stored
+             * without the provider's own id cannot be asked about, and asking anyway costs an
+             * unexplained refusal in the run log that outlives every attempt to read it.
+             *
+             * Skipped rather than failed: this is one parent's children, and the sweep already
+             * treats a single parent's loss as containable.
+             */
+            if (trim($parentId) === '') {
+                $this->entityFailure ??= "A {$breakdown} parent was stored with no provider id, so it could not be asked for stats.";
+
+                continue;
+            }
+
+            foreach ($window->chunked($this->maxDaysPerRequest()) as $chunk) {
+                /*
+                 * One parent's failure costs that parent's children and nothing else. A sweep of 187
+                 * ad squads that abandoned everything because the ninth was throttled would report
+                 * far less than it knows, and the result would look like an account with no ads
+                 * rather than one call that needs retrying.
+                 */
+                try {
+                    foreach ($this->fetchEntityWindow($parentPath, $parentId, $tokens, $chunk, $breakdown) as $row) {
+                        $rows[] = $row;
+                    }
+                } catch (\Throwable $e) {
+                    /*
+                     * Contained, but no longer silent.
+                     *
+                     * Swallowing this is what made an empty `entity_daily_metrics` unexplainable:
+                     * «the sweep has not run yet» and «the platform refused every call» produced the
+                     * identical empty table. The first message is kept — the rest are almost always
+                     * the same refusal repeated once per parent, and 187 copies is not evidence.
+                     */
+                    /*
+                     * The PATH is recorded beside the message, and only the path.
+                     *
+                     * «Request URL can not be correctly processed» says nothing about WHICH url, and
+                     * the whole cost of that refusal was three days of not knowing whether the route
+                     * was wrong, a segment was empty, or a paging link came back malformed. The query
+                     * string is dropped — it carries the window and the field list, neither of which
+                     * is needed to read the shape — and no platform here authenticates in a URL, so
+                     * a path is not a credential.
+                     */
+                    $this->entityFailure ??= $e->getMessage()
+                        .' [path: '.($this->entityPath($parentPath, $parentId)).']';
+
+                    continue;
+                }
+            }
+        }
+
+        return $rows;
+    }
+
+    /** The path a stats call for this parent goes to — no query, no host, no credential. */
+    private function entityPath(string $parentPath, string $parentId): string
+    {
+        return (string) parse_url($this->url("{$parentPath}/{$parentId}/stats"), PHP_URL_PATH);
+    }
+
+    /** @return list<array<string,mixed>> */
+    private function fetchEntityWindow(
+        string $parentPath,
+        string $parentId,
+        OAuthTokens $tokens,
+        ReportingWindow $window,
+        string $breakdown,
+    ): array {
+        $url = $this->url("{$parentPath}/{$parentId}/stats").'?'.http_build_query([
+            'granularity' => 'DAY',
+            'breakdown' => $breakdown,
+            'fields' => implode(',', array_values(array_unique(self::ENTITY_METRICS))),
+            'start_time' => $window->startIso(),
+            'end_time' => $window->endIso(),
+            'limit' => self::STATS_PAGE_SIZE,
+        ]);
+
+        $rows = [];
+
+        for ($page = 0; $page < self::MAX_PAGES && $url !== null; $page++) {
+            $body = $this->read($this->api($tokens)->get($url), "{$breakdown} stats");
+
+            foreach ((array) ($body['timeseries_stats'] ?? []) as $wrapper) {
+                $series = (array) (((array) $wrapper)['timeseries_stat'] ?? []);
+
+                foreach ($this->entitySeries($series, $breakdown) as $entityId => $points) {
+                    foreach ($points as $point) {
+                        $rows[] = $this->entityPointToRow($entityId, (array) $point);
+                    }
+                }
+            }
+
+            $next = $body['paging']['next_link'] ?? null;
+            $url = is_string($next) && $next !== '' ? $next : null;
+        }
+
+        return $rows;
+    }
+
+    /**
+     * The per-entity series inside one response.
+     *
+     * @param  array<string,mixed>  $series
+     * @return array<string, list<array<string,mixed>>>
+     */
+    private function entitySeries(array $series, string $breakdown): array
+    {
+        $out = [];
+
+        foreach ((array) ($series['breakdown_stats'][$breakdown] ?? []) as $entry) {
+            $entry = (array) $entry;
+            $id = (string) ($entry['id'] ?? '');
+
+            if ($id === '') {
+                continue;
+            }
+
+            $out[$id] = (array) ($entry['timeseries'] ?? []);
+        }
+
+        return $out;
+    }
+
+    /**
+     * One point, in the canonical shape the upsert expects.
+     *
+     * @param  array<string,mixed>  $point
+     * @return array<string,mixed>
+     */
+    private function entityPointToRow(string $entityId, array $point): array
+    {
+        /** @var array<string,mixed> $stats */
+        $stats = (array) ($point['stats'] ?? []);
+
+        $row = [
+            'entity_id' => $entityId,
+            'date' => substr((string) ($point['start_time'] ?? ''), 0, 10),
+        ];
+
+        foreach (self::ENTITY_METRICS as $canonical => $field) {
+            // ABSENT, not zero: a metric this account does not report arrives as a missing key so
+            // the column stays null and the reader says «not reported» rather than «none».
+            if (! array_key_exists($field, $stats)) {
+                continue;
+            }
+
+            $value = (float) $stats[$field];
+
+            $row[$canonical] = match (true) {
+                in_array($canonical, self::MONEY, true) => $value / self::MICRO,
+                in_array($canonical, self::MILLIS, true) => $value / 1000,
+                default => $value,
+            };
+        }
+
+        return $row;
+    }
+
+    /**
+     * One provider-valid window's worth of stats, read to its last page.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function fetchWindow(string $adAccountId, OAuthTokens $tokens, ReportingWindow $window, string $breakdown = 'campaign'): array
+    {
+        $url = $this->url("adaccounts/{$adAccountId}/stats").'?'.http_build_query([
+            'granularity' => 'DAY',
+            /*
+             * SNAP-CREATIVE-METRICS-001 — the level is a parameter, not a constant.
+             *
+             * It was hardcoded to `campaign`, so the only metrics this product ever held were
+             * campaign totals. The content library listed 1,451 real creatives with «لا توجد بيانات»
+             * under every one of them, and that was accurate: not a single creative-level row
+             * existed to show. `creative_daily_metrics` has been in the schema since
+             * `2026_07_27_120000`, complete and empty, because nobody ever asked Snapchat for it.
+             */
+            'breakdown' => $breakdown,
+            // Asked for from the map, so a metric cannot be mapped and then never requested.
+            'fields' => implode(',', array_values(array_unique(self::METRICS))),
+            'start_time' => $window->startIso(),
+            'end_time' => $window->endIso(),
+            // The documented maximum. Fewer pages is fewer round trips against a per-app rate limit.
+            'limit' => self::STATS_PAGE_SIZE,
+        ]);
+
+        $rows = [];
+
+        for ($page = 0; $page < self::MAX_PAGES && $url !== null; $page++) {
+            $body = $this->read($this->api($tokens)->get($url), 'daily stats');
+
+            foreach ((array) ($body['timeseries_stats'] ?? []) as $wrapper) {
+                /** @var array<string,mixed> $series */
+                $series = (array) (((array) $wrapper)['timeseries_stat'] ?? []);
+
+                foreach ($this->campaignSeries($series, $breakdown) as $campaignId => $points) {
+                    /*
+                     * Counted for the CAMPAIGN level only — SYNC-TRUTH-004.
+                     *
+                     * The four counters describe the metrics run, whose parsed and mapped figures are
+                     * campaign rows. Counting the creative pass here too made `provider_raw_rows` 4
+                     * against `parsed_rows` 2 on a run that had parsed everything it fetched, so a
+                     * healthy sweep reported itself as having dropped half its rows. A diagnostic
+                     * that lies about loss is worse than no diagnostic.
+                     */
+                    if ($breakdown === 'campaign') {
+                        $this->countRawInsightRows(count($points));
+                    }
+
+                    foreach ($points as $point) {
+                        $rows[] = $this->pointToRow((string) $campaignId, (array) $point, $window->startIso());
+                    }
+                }
+            }
+
+            $next = $body['paging']['next_link'] ?? null;
+            $url = is_string($next) && $next !== '' ? $next : null;
+        }
+
+        return $rows;
+    }
+
+    /**
+     * The per-CAMPAIGN day series inside one `timeseries_stat` — SNAP-BREAKDOWN-001.
+     *
+     * ## The live defect this exists for
+     *
+     * The connector read `timeseries_stat.timeseries` and took `timeseries_stat.id` for a campaign.
+     * With `breakdown=campaign` Snapchat returns neither. The series IS the ad account, and the
+     * campaigns hang underneath it:
+     *
+     * ```json
+     * {"timeseries_stat":{
+     *    "id":"3072e77d-…","type":"AD_ACCOUNT",
+     *    "breakdown_stats":{"campaign":[
+     *      {"id":"20c79671-…","type":"CAMPAIGN","granularity":"DAY","timeseries":[{"stats":{…}}]}
+     *    ]}}}
+     * ```
+     *
+     * So `timeseries` was an absent key and the loop produced nothing — **zero rows, every thirty
+     * minutes, for a live account that had returned 100.17 USD of spend, 44,396 impressions and two
+     * purchases in the same body**. The run said «the provider returned no insight rows for this
+     * window», which was the one thing the body disproved. Every test agreed with the connector
+     * because the fixture invented the same shape; see `SnapchatReportingWindowTest::series()`.
+     *
+     * The unbroken-down shape is still read, second. A request without `breakdown` returns the
+     * series keyed by the entity itself, and that is a real Snapchat response — supporting only the
+     * shape we currently ask for would break the moment somebody asks a different question.
+     *
+     * @param  array<string,mixed>  $series  one `timeseries_stat`
+     * @return array<string, list<mixed>> provider campaign id → its day points
+     */
+    private function campaignSeries(array $series, string $level = 'campaign'): array
+    {
+        /** @var array<string,mixed> $breakdown */
+        $breakdown = (array) ($series['breakdown_stats'] ?? []);
+
+        if (isset($breakdown[$level]) && is_array($breakdown[$level])) {
+            $byCampaign = [];
+
+            foreach ($breakdown[$level] as $entry) {
+                /** @var array<string,mixed> $campaign */
+                $campaign = (array) $entry;
+                $id = (string) ($campaign['id'] ?? '');
+
+                if ($id === '') {
+                    continue;
+                }
+
+                /*
+                 * Merged rather than assigned. Snapchat may split one campaign across entries when a
+                 * window is chunked, and assigning would keep only the last of them — a silent loss
+                 * of every earlier day, which is precisely the class of bug this method exists for.
+                 */
+                $byCampaign[$id] = [...($byCampaign[$id] ?? []), ...array_values((array) ($campaign['timeseries'] ?? []))];
+            }
+
+            return $byCampaign;
+        }
+
+        // No breakdown: the series is the entity, and its id is what the rows belong to.
+        $id = (string) ($series['id'] ?? '');
+
+        if ($id === '' || ! isset($series['timeseries'])) {
+            return [];
+        }
+
+        return [$id => array_values((array) $series['timeseries'])];
+    }
+
+    /**
+     * One timeseries point, mapped onto canonical keys.
+     *
+     * The date is taken from the point's own `start_time`, which Snapchat returns on the ACCOUNT's
+     * offset — so a day is the account's day, and a spend figure lands on the date the advertiser
+     * would name rather than on whatever UTC made of it.
+     *
+     * @param  array<string,mixed>  $point
+     * @return array<string,mixed>
+     */
+    private function pointToRow(string $campaignId, array $point, string $fallbackDate): array
+    {
+        /** @var array<string,mixed> $stats */
+        $stats = (array) ($point['stats'] ?? []);
+
+        $row = [
+            'campaign_id' => $campaignId,
+            'date' => substr((string) ($point['start_time'] ?? $fallbackDate), 0, 10),
+        ];
+
+        foreach (self::METRICS as $canonical => $field) {
+            /*
+             * ABSENT, not zero.
+             *
+             * A metric this account does not report must arrive as a missing key, so the pipeline
+             * stores no row for it and every surface says «غير مُرسَل» rather than printing a
+             * measured zero. An awareness campaign that was never asked to sell anything has no
+             * purchases; it does not have zero of them.
+             */
+            if (! array_key_exists($field, $stats)) {
+                continue;
+            }
+
+            $row[$canonical] = in_array($canonical, self::MONEY, true)
+                ? (float) $stats[$field] / self::MICRO
+                : (float) $stats[$field];
+        }
+
+        return $row;
+    }
+
+    /** The configured ceiling on how many local days one request may cover. */
+    private function maxDaysPerRequest(): int
+    {
+        return max(1, (int) config('integrations.chunking.max_days_per_request', 7));
+    }
+
+    /**
+     * The ad account's own timezone, read from what discovery recorded.
+     *
+     * Not guessed at, and not defaulted: a default is precisely what broke this. An account whose
+     * timezone was never captured is one we cannot place a reporting day for, and `ReportingWindow`
+     * says so rather than producing a figure that belongs to the wrong day.
+     */
+    private function accountTimezone(string $adAccountId): ?string
+    {
+        if ($this->connection === null) {
+            return null;
+        }
+
+        $timezone = ExternalAccount::withoutGlobalScopes()
+            ->where('provider_connection_id', $this->connection->getKey())
+            ->where('external_id', $adAccountId)
+            ->where('account_type', 'ad_account')
+            ->value('timezone');
+
+        return is_string($timezone) && $timezone !== '' ? $timezone : null;
     }
 }
