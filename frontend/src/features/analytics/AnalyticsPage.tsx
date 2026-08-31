@@ -76,9 +76,8 @@ import { providerLabel } from '@/features/campaigns/labels'
 const ANALYTICS_PLATFORMS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
 
 /** The objectives with a layout elsewhere in the product — the same six the dashboard offers. */
-import { countedAr, countedEn, days as countedDays } from '@/lib/counted'
+import { accounts as countedAccounts, countedAr, countedEn, days as countedDays } from '@/lib/counted'
 import { useUi } from '@/stores/ui'
-import { accounts as countedAccounts, days as countedDays } from '@/lib/counted'
 import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
 import { useProject } from '@/stores/project'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
