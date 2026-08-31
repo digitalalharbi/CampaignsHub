@@ -241,24 +241,38 @@ test.describe('a project’s integrations', () => {
       expect(text, `a platform is missing: ${platform}`).toMatch(platform)
     }
 
-    // The capability list is per platform, and none of it is claimed as working.
-    expect(text).toMatch(/بانتظار بيانات اعتماد|Awaiting credentials/i)
-    expect(text).toMatch(/لم تُنفَّذ أي مزامنة|no sync has run/i)
+    /*
+      INTEGRATION-DATASOURCE-WIZARD-001 §12 — what this page may say about a silent platform.
+
+      It used to say «بانتظار بيانات اعتماد»: a fact about how many platforms this INSTALL holds keys
+      for. It is the platform operator's number, nothing on a project page can change it, and on a
+      customer's own project it reads as «none of your platforms work». What a project reader can act
+      on is that the platform is not feeding THIS project, and where to choose its accounts — so that
+      is what the page says now, and what this asserts.
+    */
+    expect(text).toMatch(/لا حسابات هنا|No accounts here/i)
+    expect(text).toMatch(/لا يُغذّي|is not feeding this project yet/i)
+    expect(text).toMatch(/لم تُنفَّذ أي مزامنة|No sync has run/i)
+
+    // And the install's credential state is NOT restated to a project reader.
+    expect(text).not.toMatch(/بانتظار بيانات اعتماد|Awaiting credentials/i)
   })
 
   /**
-   * Zero credentials is stated as a NUMBER, not implied by absence.
+   * A silent platform is explained as a PROJECT fact, not implied by absence.
    *
-   * "0 platforms have credentials" is a fact the operator can act on; a page that simply showed
-   * nothing would read as still loading.
+   * This asserted «0 platforms have credentials», which was true and was the platform operator's
+   * number — unchangeable from this page and readable there as «none of your platforms work»
+   * (§12). What replaced it is the sentence a project reader can act on, and it still must be
+   * stated rather than left to an empty space, which reads as a page still loading.
    */
-  test('say plainly that no real keys exist yet', async ({ page }) => {
+  test('say plainly that nothing is feeding this project yet', async ({ page }) => {
     const projects = await page.request.get('/api/v1/projects', {
       headers: { Accept: 'application/json', Origin: E2E_ORIGIN },
     })
     const projectId = (await projects.json()).data[0].id as string
 
     await page.goto(`/app/projects/${projectId}/integrations`)
-    await expect(page.locator('main')).toContainText(/لا توجد مفاتيح حقيقية بعد|no real keys yet/i, { timeout: 20000 })
+    await expect(page.locator('main')).toContainText(/لا يُغذّي|is not feeding this project yet/i, { timeout: 20000 })
   })
 })
