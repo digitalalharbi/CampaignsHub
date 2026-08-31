@@ -16,6 +16,7 @@ import {
 import {
   useAccountBudgets,
   useBudget,
+  useBudgetExplanation,
   useAccounts,
   useCampaigns,
   useEntities,
@@ -41,6 +42,7 @@ import { scopeNote, type FilterScope } from './filterScope'
 import { CAMPAIGN_RELEVANCE_ORDER, orderByRelevanceWith, relevanceOf } from '@/features/campaigns/campaignRelevance'
 import { useCampaignOptionSource } from './useCampaignOptionSource'
 import { Panel, ProvenanceBadge, RateTrend, SERIES, platformColor, tooltipProps } from './components'
+import { BudgetReading } from './BudgetReading'
 import { PathAnalysis } from './PathAnalysis'
 import { listCreatives, type CreativeCard } from '@/features/content/api'
 import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
@@ -1184,10 +1186,20 @@ function AccountBudgets({ projectId, range, filters }: TabProps) {
 function BudgetTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const b = useBudget(projectId, range, filters)
+  const reading = useBudgetExplanation(projectId, range, filters)
   const rows = b.data ?? []
   return (
     <div className="space-y-4">
     <AccountBudgets projectId={projectId} range={range} filters={filters} />
+    {/*
+      FUNNEL-ANALYTICAL-PATTERN-001 — the reading ABOVE the table it reads.
+
+      A reader who meets the percentages first has already formed a view of them, and the four steps
+      that follow arrive as a justification rather than as the reading they are.
+    */}
+    {!reading.isLoading && !reading.isError && (
+      <BudgetReading reading={reading.data} locale={ar ? 'ar' : 'en'} />
+    )}
     <Panel title={ar ? 'تحليل الميزانية' : 'Budget analysis'} description={ar ? 'المخطط مقابل المصروف وسرعة الصرف (Pacing)' : 'Planned against spent, and how fast it is going (pacing)'} loading={b.isLoading} error={b.isError} empty={!b.isLoading && rows.length === 0}>
       {/*
         BUDGET-WITHHELD-001 — every figure here is now stated in the unit it is actually in.
