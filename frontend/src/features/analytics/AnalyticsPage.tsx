@@ -685,11 +685,22 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
 function PlatformPaths({
   data,
   freshness,
+  currency,
   loading,
   error,
   ar,
 }: {
   data: PlatformObjectives | undefined
+  /**
+   * MONEY-USD-001 — the currency these figures were measured in, passed rather than assumed.
+   *
+   * Every money figure in this block used `money()` with no currency, so it printed the helper's
+   * default — «6.67 SAR» beside an account denominated in USD. Nothing converted it and nothing
+   * claimed a rate: the unit was simply invented, on a page whose Arabic locale made that look
+   * deliberate. Null where the scope has not stated one; the figure then goes out without a unit,
+   * which is incomplete rather than wrong.
+   */
+  currency: string | null
   /**
    * PLATFORM-DECISION-ANALYTICS-001 — a comparison between a complete platform and a half-reported
    * one is not a comparison, and the reader cannot see the difference from the figures.
@@ -743,7 +754,7 @@ function PlatformPaths({
           <div key={path.path} data-testid={`platform-path-${path.path}`} className="rounded-xl border border-border p-3.5">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="text-sm font-bold text-text-primary">{ar ? path.label_ar : path.label_en}</span>
-              <span className="text-[11px] text-text-muted" dir="ltr">{money(path.spend)}</span>
+              <span className="text-[11px] text-text-muted" dir="ltr">{money(path.spend, currency)}</span>
               {!path.comparable && (
                 <span
                   data-testid={`platform-path-${path.path}-not-comparable`}
@@ -803,7 +814,7 @@ function PlatformPaths({
                     </span>
 
                     <span className="flex flex-wrap items-center gap-3">
-                      <span className="tnum text-text-secondary" dir="ltr">{money(row.spend)}</span>
+                      <span className="tnum text-text-secondary" dir="ltr">{money(row.spend, currency)}</span>
                       {/* Share of the PATH. «40% of awareness» is a decision somebody made; «40% of
                           everything» is the mix, and reading the second as performance is the defect. */}
                       <span className="tnum text-text-muted" dir="ltr">
@@ -827,7 +838,7 @@ function PlatformPaths({
                           compacts, and a cost per thousand of 6.67 printed «7 SAR» — a seven per cent
                           error in the figure the comparison is actually about.
                         */}
-                        {efficiency.value === null ? '—' : moneyExact(efficiency.value)}
+                        {efficiency.value === null ? '—' : moneyExact(efficiency.value, currency)}
                       </span>
 
                       {returned.value !== null && (
@@ -883,6 +894,7 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
       <PlatformPaths
         data={byPath.data}
         freshness={freshness.data ?? []}
+        currency={summary.data?.currency ?? null}
         loading={byPath.isLoading}
         error={byPath.isError}
         ar={ar}
@@ -2288,9 +2300,16 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
     rowCostPer(row, 'cpa', row.conversions ?? 0, currency),
   ])
 
-  const money = (row: (typeof rows)[number]) => (typeof row.spend === 'number' ? row.spend : null)
+  /*
+   * Named `spendOf`, not `money`.
+   *
+   * It was `money` — a local shadow of the FORMATTER, returning a raw number. Two meanings of one
+   * word in one file is precisely how «18.05 SAR» on a USD account survived review: a reader
+   * checking «does this call state its currency» sees `money(row)` and moves on.
+   */
+  const spendOf = (row: (typeof rows)[number]) => (typeof row.spend === 'number' ? row.spend : null)
   const per = (row: (typeof rows)[number], denom: number) => {
-    const spend = money(row)
+    const spend = spendOf(row)
 
     return spend !== null && denom > 0 ? spend / denom : null
   }
@@ -2303,7 +2322,7 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
      * «Stopped» before nothing is the alphabet answering a different question.
      */
     CAMPAIGN_RELEVANCE_ORDER.indexOf(relevanceOf(row, windowEnd)),
-    money(row),
+    spendOf(row),
     row.impressions ?? null,
     row.reach ?? null,
     row.frequency ?? null,

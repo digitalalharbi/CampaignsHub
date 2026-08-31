@@ -73,9 +73,33 @@ export function compact(n: number | null | undefined): string {
   return formatNumber(Math.round(n), { useGrouping: false })
 }
 
-export function money(n: number | null | undefined, currency = 'SAR'): string {
+/**
+ * A money figure, in the currency it was actually measured in.
+ *
+ * ## Why the currency has no default any more
+ *
+ * It defaulted to `'SAR'`, so a surface with no currency to hand omitted the argument and the figure
+ * was stamped with the market this product happens to sell in. Production showed «تكلفة النتيجة
+ * 18.05 SAR» on an account denominated in USD: nothing converted it and nothing claimed a rate — the
+ * helper simply supplied a currency the caller had never stated, on an Arabic page where that looked
+ * deliberate. A wrong currency is worse than a missing one, because 18.05 USD and 18.05 SAR are
+ * different costs and a buyer acts on the number in front of them.
+ *
+ * Required, therefore: a caller that does not know the currency has to go and find it, and the
+ * compiler makes that unavoidable rather than optional. `moneyCurrency.test.ts` holds the same line
+ * over the call sites, where the defect actually lived.
+ */
+export function money(n: number | null | undefined, currency: string | null | undefined): string {
   if (n === null || n === undefined) return '—'
-  return `${compact(n)} ${currency}`
+
+  /*
+   * An unknown currency prints NO currency, never a guessed one.
+   *
+   * «18.05» is incomplete and reads as incomplete. «18.05 SAR» on a USD account is a different
+   * number wearing a label, and the reader has no way to tell. Where a surface genuinely cannot
+   * reach the currency, the figure goes out bare and the surface's own copy says what it is.
+   */
+  return currency ? `${compact(n)} ${currency}` : compact(n)
 }
 
 /**
@@ -96,7 +120,7 @@ export function money(n: number | null | undefined, currency = 'SAR'): string {
  * The threshold keeps every large total reading exactly as it did — spend, revenue and the rest are
  * unchanged — and gives decimals only where they carry meaning.
  */
-export function moneyExact(n: number | null | undefined, currency = 'SAR'): string {
+export function moneyExact(n: number | null | undefined, currency: string | null | undefined): string {
   if (n === null || n === undefined) return '—'
   if (Math.abs(n) < 1000 && !Number.isInteger(n)) {
     return `${formatFixed(n, 2)} ${currency}`

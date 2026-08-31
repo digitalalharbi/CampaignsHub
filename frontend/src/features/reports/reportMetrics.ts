@@ -122,8 +122,11 @@ export function reportMetrics(data: Input, ar = true): ReportMetric[] {
         // A substituted figure is a derived ratio of a NARROWER scope than `reported` describes, so
         // it is read straight: `reported` would answer a question about the wrong denominator.
         reading: substituted
-          ? (value === null || value === undefined ? { kind: 'no_data' } : { kind: 'value', text: spec.format(value) })
-          : readMetric(key, spec, data.kpis, data.reported),
+          ? (value === null || value === undefined
+              ? { kind: 'no_data' }
+              // MONEY-USD-001 — the report's own currency, not the formatter's default.
+              : { kind: 'value', text: spec.format(value, data.currency ?? null) })
+          : readMetric(key, spec, data.kpis, data.reported, data.currency ?? null),
         // The period-over-period change belongs to the blended figure it was computed from. Showing
         // it beside a Direct value would attach one scope's movement to another scope's number.
         delta: substituted ? undefined : (data.delta?.[key] ?? null),
@@ -158,7 +161,7 @@ export function previousReading(metric: ReportMetric, data: Input): { text: stri
     : data.kpis[metric.key]
 
   return {
-    text: spec.format(before),
+    text: spec.format(before, data.currency ?? null),
     // Recomputed for a substituted metric: the snapshot's `delta` belongs to the blended pair.
     change: metric.substituted
       ? (current === null || current === undefined || before === 0 ? null : (current - before) / Math.abs(before))
@@ -209,12 +212,14 @@ export function creativeReadings(
   objective: string | undefined,
   reported: Record<string, boolean> | undefined,
   ar = true,
+  /** MONEY-USD-001 — the report's currency. Null prints the figure without a unit, never «SAR». */
+  currency: string | null = null,
 ): Array<{ key: string; label: string; reading: MetricReading }> {
   return creativeChips(objective)
     .filter((key) => SPECS[key])
     .map((key) => ({
       key,
       label: ar ? SPECS[key].label.ar : SPECS[key].label.en,
-      reading: readMetric(key, SPECS[key], row as Record<string, number | null>, reported),
+      reading: readMetric(key, SPECS[key], row as Record<string, number | null>, reported, currency),
     }))
 }

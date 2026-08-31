@@ -680,7 +680,7 @@ function PlatformInsights({ data, platform }: { data: ReportData; platform: stri
           <div>
             <div className="truncate font-semibold text-text-primary" title={String(creative.campaign_name ?? '')}>{String(creative.campaign_name ?? '—')}</div>
             <div className="mt-1.5 grid grid-cols-2 gap-1.5 text-xs">
-              {creativeReadings(creative, data.objective, data.reported_by_platform?.[platform] ?? data.reported).slice(0, 2).map((r) => (
+              {creativeReadings(creative, data.objective, data.reported_by_platform?.[platform] ?? data.reported, true, data.currency ?? null).slice(0, 2).map((r) => (
                 <span key={r.key} className="rounded-lg bg-surface px-2 py-1">{r.label} <b className="tnum">{readingText(r.reading)}</b></span>
               ))}
             </div>
@@ -796,7 +796,7 @@ function CreativesSlide({ data, platform }: { data: ReportData; platform: string
                 <div className="truncate font-bold text-text-primary" title={String(c.campaign_name ?? '')}>{String(c.campaign_name ?? '—')}</div>
                 {/* §14.8 — judged on what this content was made to do, not on a fixed four. */}
                 <div className="grid grid-cols-2 gap-1.5 text-xs">
-                  {creativeReadings(c, data.objective, data.reported_by_platform?.[platform] ?? data.reported).map((r) => (
+                  {creativeReadings(c, data.objective, data.reported_by_platform?.[platform] ?? data.reported, true, data.currency ?? null).map((r) => (
                     <span key={r.key} className="rounded-lg bg-surface px-2 py-1">{r.label} <b className="tnum">{readingText(r.reading)}</b></span>
                   ))}
                 </div>
@@ -816,7 +816,7 @@ function CreativesSlide({ data, platform }: { data: ReportData; platform: string
                 <div className="flex flex-1 flex-col gap-2 p-3">
                   <div className="truncate font-bold text-text-primary" title={String(c.campaign_name ?? '')}>{String(c.campaign_name ?? '—')}</div>
                   <div className="grid grid-cols-2 gap-1.5 text-xs">
-                    {creativeReadings(c, data.objective, data.reported_by_platform?.[platform] ?? data.reported).map((r) => (
+                    {creativeReadings(c, data.objective, data.reported_by_platform?.[platform] ?? data.reported, true, data.currency ?? null).map((r) => (
                       <span key={r.key} className="rounded-lg bg-surface px-2 py-1">{r.label} <b className="tnum">{readingText(r.reading)}</b></span>
                     ))}
                   </div>

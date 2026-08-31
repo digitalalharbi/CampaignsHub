@@ -19,13 +19,13 @@ describe('compact never rounds a real figure away to nothing', () => {
 
   it('still says zero when the figure IS zero', () => {
     expect(compact(0)).toBe('0')
-    expect(money(0)).toBe('0 SAR')
+    expect(money(0, 'SAR')).toBe('0 SAR')
   })
 
   it('says nothing when there is nothing to say', () => {
     expect(compact(null)).toBe('—')
     expect(compact(undefined)).toBe('—')
-    expect(money(null)).toBe('—')
+    expect(money(null, 'SAR')).toBe('—')
     expect(num(null)).toBe('—')
     expect(ratio(null)).toBe('—')
     expect(percent(null)).toBe('—')
@@ -62,25 +62,25 @@ describe('compact never rounds a real figure away to nothing', () => {
  */
 describe('moneyExact', () => {
   it('keeps the decimals on a cost-per, where they are the number', () => {
-    expect(moneyExact(29.71)).toBe('29.71 SAR')
-    expect(moneyExact(73.72)).toBe('73.72 SAR')
-    expect(moneyExact(1.83)).toBe('1.83 SAR')
+    expect(moneyExact(29.71, 'SAR')).toBe('29.71 SAR')
+    expect(moneyExact(73.72, 'SAR')).toBe('73.72 SAR')
+    expect(moneyExact(1.83, 'SAR')).toBe('1.83 SAR')
   })
 
   it('leaves every large total reading exactly as it did', () => {
-    expect(moneyExact(96121)).toBe('96,121 SAR')
-    expect(moneyExact(96121.37)).toBe('96,121 SAR')
-    expect(moneyExact(8900)).toBe('8,900 SAR')
+    expect(moneyExact(96121, 'SAR')).toBe('96,121 SAR')
+    expect(moneyExact(96121.37, 'SAR')).toBe('96,121 SAR')
+    expect(moneyExact(8900, 'SAR')).toBe('8,900 SAR')
   })
 
   it('does not dress a whole number in decimals it does not have', () => {
-    expect(moneyExact(30)).toBe('30 SAR')
-    expect(moneyExact(0)).toBe('0 SAR')
+    expect(moneyExact(30, 'SAR')).toBe('30 SAR')
+    expect(moneyExact(0, 'SAR')).toBe('0 SAR')
   })
 
   it('still says nothing rather than zero for an absent figure', () => {
-    expect(moneyExact(null)).toBe('—')
-    expect(moneyExact(undefined)).toBe('—')
+    expect(moneyExact(null, 'SAR')).toBe('—')
+    expect(moneyExact(undefined, 'SAR')).toBe('—')
   })
 })
 

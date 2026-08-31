@@ -52,17 +52,34 @@ describe('money truth', () => {
   })
 
   it('a genuinely measured zero stays zero', () => {
-    const r = moneyFromTotals({ spend: 0, spend_withheld_rows: 0, spend_original: 0 }, 'spend', false)
+    const r = moneyFromTotals({ spend: 0, spend_withheld_rows: 0, spend_original: 0 }, 'spend', false, 'SAR')
 
     expect(r.text).toBe('0 SAR')
     expect(r.withheld).toBe(false)
   })
 
-  it('a converted figure is shown in the project currency', () => {
-    const r = moneyFromTotals({ spend: 15480.5, spend_withheld_rows: 0 }, 'spend', false)
+  it('a converted figure is shown in the currency the scope states', () => {
+    const sar = moneyFromTotals({ spend: 15480.5, spend_withheld_rows: 0 }, 'spend', false, 'SAR')
+    expect(sar.text).toContain('SAR')
+    expect(sar.withheld).toBe(false)
 
-    expect(r.text).toContain('SAR')
-    expect(r.withheld).toBe(false)
+    // The same figure in a USD scope is USD. It used to be «SAR» either way.
+    expect(moneyFromTotals({ spend: 15480.5, spend_withheld_rows: 0 }, 'spend', false, 'USD').text).toContain('USD')
+  })
+
+  /**
+   * MONEY-USD-001 — a scope that states no currency gets no currency, not the market's.
+   *
+   * `money()` defaulted to `'SAR'`, so a reading with no currency was stamped with the market this
+   * product sells in — «تكلفة النتيجة 18.05 SAR» on an account denominated in USD, with nothing
+   * converted and no rate claimed. A bare figure is incomplete; a figure wearing the wrong unit is
+   * a different number, and the reader cannot tell.
+   */
+  it('states no currency where the scope stated none, rather than the market’s', () => {
+    const r = moneyFromTotals({ spend: 18.05, spend_withheld_rows: 0 }, 'spend', false)
+
+    expect(r.text).not.toContain('SAR')
+    expect(r.text).toContain('18')
   })
 
   it('nothing reported is not zero', () => {
@@ -180,7 +197,10 @@ describe('breakdown rows', () => {
 
   /** A row that genuinely spent nothing must still say zero — this is a measurement. */
   it('a row that spent nothing still reads zero', () => {
-    expect(rowMoney({ spend: 0, spend_withheld_rows: 0 }, 'spend')).toBe('0 SAR')
+    expect(rowMoney({ spend: 0, spend_withheld_rows: 0 }, 'spend', 'SAR')).toBe('0 SAR')
+
+    // And a row in a scope that stated no currency reads «0», not «0 SAR» (MONEY-USD-001).
+    expect(rowMoney({ spend: 0, spend_withheld_rows: 0 }, 'spend')).toBe('0')
   })
 })
 

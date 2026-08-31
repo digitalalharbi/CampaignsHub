@@ -312,7 +312,7 @@ describe('creative analysis by objective', () => {
   /** A chip for a metric the creative's own platform never sends is a state, not a zero. */
   it('reads an unreported chip as a state', () => {
     const row = { campaign_name: 'حملة', reach: 0, cpm: 12, impressions: 400000, engagements: 0 }
-    const readings = creativeReadings(row, 'awareness', { reach: false, cpm: true, impressions: true, engagements: false })
+    const readings = creativeReadings(row, 'awareness', { reach: false, cpm: true, impressions: true, engagements: false }, true, 'SAR')
 
     expect(readings.find((r) => r.key === 'reach')!.reading).toEqual({ kind: 'not_provided' })
     expect(readings.find((r) => r.key === 'cpm')!.reading).toEqual({ kind: 'value', text: '12 SAR' })

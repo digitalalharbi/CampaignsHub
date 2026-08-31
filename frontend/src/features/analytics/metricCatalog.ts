@@ -33,7 +33,18 @@ import { money, moneyExact, num, percent, ratio } from '@/features/analytics/for
  * where `?? 0` could quietly turn the first two into the third.
  */
 
-type Fmt = (n: number) => string
+/**
+ * MONEY-USD-001 — a formatter is handed the currency; it never decides one.
+ *
+ * This was `(n: number) => string`, so a money metric formatted through the catalogue had no way to
+ * receive a currency and `money()` supplied its own default — «تكلفة النتيجة 18.05 SAR» on an
+ * account denominated in USD. The reader below already knew the reporting currency; the type simply
+ * had nowhere to put it.
+ *
+ * Formatters that are not money ignore the second argument, which is why it is optional rather than
+ * threaded through every one of them.
+ */
+type Fmt = (n: number, currency?: string | null) => string
 
 /**
  * The exact counterpart of a formatter that abbreviates — NUMBER-PRESENTATION-001.
@@ -46,9 +57,9 @@ type Fmt = (n: number) => string
 const EXACT_OF = new Map<Fmt, Fmt>([[money, moneyExact]])
 
 /** A measured figure, plus the full version of it when the display abbreviated it. */
-function valueReading(spec: Spec, n: number): { kind: 'value'; text: string; exact?: string } {
-  const text = spec.format(n)
-  const exact = EXACT_OF.get(spec.format)?.(n)
+function valueReading(spec: Spec, n: number, currency: string | null): { kind: 'value'; text: string; exact?: string } {
+  const text = spec.format(n, currency)
+  const exact = EXACT_OF.get(spec.format)?.(n, currency)
 
   return exact !== undefined && exact !== text ? { kind: 'value', text, exact } : { kind: 'value', text }
 }
@@ -509,7 +520,7 @@ export function readMetric(
   if (key === 'roas') {
     const r = readRoas(totals as Record<string, unknown> | undefined, true)
 
-    if (r.kind === 'withheld' && r.value !== null) return valueReading(spec, r.value)
+    if (r.kind === 'withheld' && r.value !== null) return valueReading(spec, r.value, reportingCurrency ?? null)
     if (r.kind === 'unavailable') return { kind: 'no_data' }
   }
 
@@ -526,7 +537,7 @@ export function readMetric(
 
   if (value === null || value === undefined) return { kind: 'no_data' }
 
-  return valueReading(spec, value)
+  return valueReading(spec, value, reportingCurrency ?? null)
 }
 
 /**
@@ -563,7 +574,17 @@ export function dashboardMetrics(
         return {
           key,
           label: named ? (ar ? named.ar : named.en) : (ar ? spec.label.ar : spec.label.en),
-          reading: readMetric(key, spec, summary?.current, summary?.reported),
+          /*
+           * MONEY-USD-001 — the currency the summary states, handed to the reader.
+           *
+           * This called `readMetric` with four arguments and left the fifth — the reporting
+           * currency — off, although `summary.currency` was in the payload it had just been given.
+           * The reader passed nothing down, `money()` supplied its own `'SAR'`, and every money card
+           * on the dashboard and Analytics printed riyals: «تكلفة النتيجة 18.05 SAR» on an account
+           * denominated in USD, with nothing converted and no rate claimed. It is the whole defect,
+           * and it was one omitted argument.
+           */
+          reading: readMetric(key, spec, summary?.current, summary?.reported, summary?.currency ?? null),
           delta: summary?.delta?.[key as keyof MetricTotals] ?? null,
           invertGood: spec.invertGood,
           neutral: spec.neutral,
