@@ -122,7 +122,13 @@ final class CrmLeadTest extends TestCase
         $otherUser = User::create(['name' => 'O', 'email' => 'o@other.test', 'password' => 'secret123']);
         $this->grantMembership($otherUser, $other);
         $role = Role::create(['tenant_id' => $other->id, 'name' => 'Owner', 'slug' => 'owner']);
-        $role->givePermissionTo('leads.view');
+        /*
+         * `leads.pii.view` as well as `leads.view` — this test is about TENANTS, and it reads a name.
+         * Since LEAD-OPERATIONS-001 the two are separate permissions, so an owner who holds only the
+         * first sees their own tenant's lead with its identity withheld, and the isolation assertion
+         * below would pass for the wrong reason.
+         */
+        $role->givePermissionTo('leads.view', 'leads.pii.view');
         $otherUser->assignRole($role);
 
         // The other tenant's user only sees their own lead.

@@ -166,7 +166,17 @@ final class LeadDedupVisibilityTest extends TestCase
         $queries = count(DB::getQueryLog());
         DB::disableQueryLog();
 
-        $this->assertLessThan(16, $queries, "listing 16 leads took {$queries} queries");
+        /*
+         * Raised from 16 to 18 by LEAD-OPERATIONS-001, and the point of the guard is unchanged.
+         *
+         * Identity is now a permission, so the resource asks whether this reader may see who each
+         * lead is. That question is memoised per (reader, project) for the life of the request —
+         * without the memo it was a membership lookup PER ROW and this guard caught it at 49
+         * queries, which is exactly what it exists for. What is left is a constant: one lookup for
+         * the reader's memberships, one per distinct project in the page. The budget must stay a
+         * constant that does not grow with the page size, which is the property being defended.
+         */
+        $this->assertLessThan(18, $queries, "listing 16 leads took {$queries} queries");
     }
 
     // ---- helpers ---------------------------------------------------------------------------------
