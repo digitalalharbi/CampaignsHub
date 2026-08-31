@@ -67,6 +67,31 @@ final class ProviderAdaptersTest extends TestCase
 
         $this->assertTrue($provider->isConfigured());
     }
+
+    public function test_production_mail_identity_is_centralised_in_laravel_mail_config(): void
+    {
+        config()->set('mail.from.address', 'no-reply@campaignshub.io');
+        config()->set('mail.from.name', 'CampaignsHub');
+        config()->set('mail.reply_to.address', 'info@campaignshub.io');
+        config()->set('mail.reply_to.name', 'CampaignsHub');
+
+        $this->assertSame('CampaignsHub', config('mail.from.name'));
+        $this->assertSame('no-reply@campaignshub.io', config('mail.from.address'));
+        $this->assertSame('info@campaignshub.io', config('mail.reply_to.address'));
+        $this->assertSame('CampaignsHub', config('mail.reply_to.name'));
+    }
+
+    public function test_laravel_mail_provider_does_not_treat_placeholder_smtp_as_live(): void
+    {
+        config()->set('mail.default', 'smtp');
+        config()->set('mail.mailers.smtp.host', '127.0.0.1');
+        config()->set('mail.mailers.smtp.username', null);
+        config()->set('providers.channels.email', LaravelMailProvider::class);
+
+        $provider = app(ProviderRegistry::class)->for('email');
+
+        $this->assertFalse($provider->isConfigured());
+    }
 }
 
 /** A stand-in for a real, credentialed provider — used only to prove the honest-status mapping. */
