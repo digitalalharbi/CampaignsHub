@@ -29,7 +29,12 @@ const PATHS = {
       comparable: true,
       comparable_reason: 'two_or_more_platforms_spent',
       platforms: [
-        { provider: 'meta', spend: 6_000, impressions: 900_000, clicks: 0, landing_page_views: 0, orders: 0, revenue: 0, campaigns: 2, spend_share: 0.75 },
+        /*
+          Revenue on an AWARENESS row is not a mistake in the fixture — it is what the aggregator
+          reports when a sale gets credited to an impression nobody was asked to buy. The page must
+          refuse to price it as a return; that refusal is what this figure is here to exercise.
+        */
+        { provider: 'meta', spend: 6_000, impressions: 900_000, clicks: 0, landing_page_views: 0, orders: 0, revenue: 90_000, campaigns: 2, spend_share: 0.75 },
         { provider: 'tiktok', spend: 2_000, impressions: 400_000, clicks: 0, landing_page_views: 0, orders: 0, revenue: 0, campaigns: 1, spend_share: 0.25 },
       ],
     },
@@ -99,6 +104,55 @@ describe('platform contribution, inside each path', () => {
     expect(await screen.findByTestId('platform-path-conversion-not-comparable'))
       .toHaveTextContent('Only one platform spent on this path')
     expect(screen.queryByTestId('platform-path-awareness-not-comparable')).toBeNull()
+  })
+
+  /**
+   * The cost each path was actually paying, and no column for the ones it was not.
+   *
+   * A fixed four-column efficiency block breaks this requirement's hard constraint one column at a
+   * time: two of them are «—» on every row, and the reader compares the two that are populated.
+   * Awareness is priced by the thousand impressions; a conversion path by the result, with the
+   * return beside it because that is the only path where returning is what the money was for.
+   */
+  it('prices each path by what it was buying, and nothing else', async () => {
+    route()
+    await openPlatforms()
+
+    const awareness = await screen.findByTestId('path-efficiency-awareness-meta')
+    expect(awareness).toHaveTextContent(/Cost per 1,000/)
+    // 6,000 over 900,000 impressions — 6.67 per thousand.
+    expect(awareness).toHaveTextContent(/6\.6[0-9]/)
+    // Never a return on a path nobody was buying returns on.
+    expect(screen.getByTestId('platform-path-awareness')).not.toHaveTextContent(/[0-9]\.[0-9]{2}[x×]/)
+
+    const conversion = await screen.findByTestId('path-efficiency-conversion-snapchat')
+    expect(conversion).toHaveTextContent(/Cost per result/)
+    // The glyph belongs to `ratio()` and is held by `formatGlyphs.test.ts`; this is about the figure.
+    expect(screen.getByTestId('platform-path-conversion')).toHaveTextContent(/8\.00/)
+  })
+
+  /**
+   * A platform three days short in this window is not a platform that performed worse.
+   *
+   * The share above it says nothing about which of the two it is, and sending the reader to another
+   * tab to find out means they will read the ranking instead. So the gap is stated here.
+   */
+  it('marks a platform whose window is incomplete, where the comparison is made', async () => {
+    vi.mocked(getData).mockImplementation((url: string) => {
+      if (url.includes('platform-objectives')) return PATHS as never
+      if (url.includes('freshness')) {
+        return [
+          { kind: 'ad_platform', provider: 'tiktok', account_id: 'a1', name: 'TikTok', latest_metric_date: '2026-08-27', data_freshness_at: null, days_with_data: 27, missing_days: 3, last_sync_status: 'fresh', last_sync_at: null, last_sync_error: null },
+        ] as never
+      }
+      if (url.includes('disclaimer')) return null as never
+      if (url.includes('/summary')) return { current: {}, previous: {}, delta: {}, currency: 'SAR' } as never
+      return [] as never
+    })
+    await openPlatforms()
+
+    expect(await screen.findByTestId('path-gap-awareness-tiktok')).toHaveTextContent('3 days missing')
+    expect(screen.queryByTestId('path-gap-awareness-meta')).toBeNull()
   })
 
   /** And the page says outright that platforms are not compared across paths. */
