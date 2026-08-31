@@ -148,14 +148,26 @@ test('export button → queue → download → the downloaded Arabic PDF is a va
   // 4. Wait for the queue job to finish, then resolve THIS report's fresh download token via the API
   //    (unambiguous — the list can show many reports' PDF links).
   let token = ''
+  /*
+   * The last state the export reached, kept for the failure message.
+   *
+   * Waiting for a token and reporting «expected null not to be null» says nothing about WHY: an
+   * export that failed to render and one whose queue never ran look identical from here, and the
+   * difference is the whole diagnosis. This carries the row's own status and error into the message.
+   */
+  let lastSeen = 'no export row was created'
   await expect.poll(async () => {
     const r = await page.request.get(`/api/v1/projects/${projectId}/reports/${reportId}`, { headers: API_HEADERS })
     if (!r.ok()) return null
-    const exp = ((await r.json()).data.exports as Array<{ format: string; status: string; token: string | null }>)
-      .find((e) => e.format === 'pdf' && e.status === 'completed' && e.token)
+    const exports = (await r.json()).data.exports as Array<{ format: string; status: string; token: string | null; error?: string | null }>
+    const pdf = exports.filter((e) => e.format === 'pdf')
+    if (pdf.length > 0) {
+      lastSeen = pdf.map((e) => `${e.status}${e.error ? `: ${e.error}` : ''}`).join(' | ')
+    }
+    const exp = pdf.find((e) => e.status === 'completed' && e.token)
     token = exp?.token ?? ''
     return token || null
-  }, { timeout: 90_000, intervals: [2000] }).not.toBeNull()
+  }, { message: () => `the PDF export never produced a token — last seen ${lastSeen}`, timeout: 90_000, intervals: [2000] }).not.toBeNull()
 
   // 5. Click THIS report's actual UI download link and capture the file the browser receives.
   expect(token).not.toBe('')

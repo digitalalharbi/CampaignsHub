@@ -228,7 +228,24 @@ final class ReportGenerator
              */
             'freshness' => $this->freshnessFor($report, $from, $to),
             'audience' => $report->audience ?? 'client',
-            'slides' => $config['slides'] ?? [],
+            /*
+             * REPORT-AD-PREVIEW-001 — a deck does not carry a page whose only content is «no ads».
+             *
+             * The ads slide is in every template because the section belongs in the closing sequence,
+             * and the REASON a report has no ad-level rows belongs in the outline, which carries it.
+             * A printed page holding a heading and one sentence is a different thing: the PDF's layout
+             * gate calls it empty and refuses the whole export — correctly, because a client's document
+             * should not have a blank page in it either.
+             *
+             * So the slide travels when there is something to show, and the absence keeps its home in
+             * `ads_absent_reason` and the outline.
+             */
+            'slides' => $ads['ads'] === []
+                ? array_values(array_filter(
+                    $config['slides'] ?? [],
+                    static fn (array $slide): bool => ($slide['type'] ?? null) !== 'ads',
+                ))
+                : ($config['slides'] ?? []),
             // Effective disclaimer/methodology copy, snapshotted so a shared report is self-contained
             // and reproducible even if the org later edits its notes.
             'disclaimer' => $this->disclaimers->resolve(

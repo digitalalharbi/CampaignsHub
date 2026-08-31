@@ -111,6 +111,21 @@ final class ReportAdsSectionTest extends TestCase
         $this->assertSame('no_creatives_in_window', $data['ads_absent_reason']);
         // And it does not claim to be an ad-level report while showing nothing.
         $this->assertSame('campaign', $data['ads_level']);
+
+        /*
+         * Nor does it carry an ads PAGE.
+         *
+         * The section is in every template because it belongs in the closing sequence, and the reason
+         * a report has no ad-level rows belongs in the outline, which keeps it. A printed page whose
+         * whole content is «there are no ads» is a different thing: the PDF's layout gate calls it
+         * empty and refuses the export — rightly, because a document a client keeps should not have a
+         * blank page in it either.
+         */
+        $this->assertNotContains(
+            'ads',
+            array_column($data['slides'], 'type'),
+            'an empty ads page would fail the export layout gate',
+        );
     }
 
     /**
