@@ -472,6 +472,135 @@ final class ObjectivePerformance
         return ['id' => $row['id'], 'name' => $row['name'], 'metric' => $metric, 'value' => $row[$metric]];
     }
 
+    /**
+     * OBJECTIVE-ANALYTICS-DEPTH-001 — each path, day by day, in the metric that path was buying.
+     *
+     * ## Why a trend per PATH and not one trend with a path filter
+     *
+     * A single series over a mixed programme moves for reasons that have nothing to do with each
+     * other: awareness spend rising while sales spend falls is one line going nowhere, and a reader
+     * watching it concludes the account is flat. Separated, the same two weeks say «brand went up,
+     * sales went down», which is a sentence somebody can act on.
+     *
+     * ## Every day in the window appears, including the empty ones
+     *
+     * A day with no row is not a day the chart may skip: skipping it draws the line straight through
+     * a gap and turns a pause into a slope. Days that reported nothing carry `reported: false`, so a
+     * renderer can break the line rather than inventing a value across it — the same rule the funnel
+     * and the KPI cards follow for a metric no platform sent.
+     *
+     * ## The cost is derived per DAY, never averaged from the totals
+     *
+     * A window's cost per result is the window's spend over the window's results. A day's is that
+     * day's, and the two are different numbers whenever a day's results land after its spend — which
+     * is every attribution model there is. Deriving one from the other is how a chart comes to
+     * disagree with the card above it.
+     *
+     * @return array<string,mixed>
+     */
+    public function trendByPath(Carbon $from, Carbon $to): array
+    {
+        $rows = $this->dailyRows($from, $to);
+
+        /** @var array<string, array<string, array{spend: float, results: float, revenue: float, impressions: float, clicks: float}>> $byPath */
+        $byPath = [];
+
+        foreach ($rows as $row) {
+            $objective = CampaignObjective::tryFrom((string) $row->objective) ?? CampaignObjective::Other;
+            $path = $objective->path()->value;
+            $date = (string) $row->metric_date;
+
+            $byPath[$path][$date] ??= ['spend' => 0.0, 'results' => 0.0, 'revenue' => 0.0, 'impressions' => 0.0, 'clicks' => 0.0];
+            $byPath[$path][$date]['spend'] += (float) $row->spend;
+            $byPath[$path][$date]['results'] += (float) $row->orders;
+            $byPath[$path][$date]['revenue'] += (float) $row->revenue;
+            $byPath[$path][$date]['impressions'] += (float) $row->impressions;
+            $byPath[$path][$date]['clicks'] += (float) $row->clicks;
+        }
+
+        $days = [];
+        for ($day = $from->copy(); $day->lte($to); $day->addDay()) {
+            $days[] = $day->toDateString();
+        }
+
+        $out = [];
+
+        foreach (MarketingPath::cases() as $path) {
+            $measured = $byPath[$path->value] ?? [];
+
+            // A path nobody spent on in this window is absent rather than a flat line at zero: a
+            // chart of nothing reads as a result, and «nothing ran» is a different fact.
+            if ($measured === []) {
+                continue;
+            }
+
+            $series = [];
+
+            foreach ($days as $date) {
+                $point = $measured[$date] ?? null;
+
+                $series[] = [
+                    'date' => $date,
+                    'reported' => $point !== null,
+                    'spend' => $point === null ? null : round($point['spend'], 2),
+                    'results' => $point === null ? null : round($point['results'], 2),
+                    'revenue' => $point === null ? null : round($point['revenue'], 2),
+                    // Derived from THIS day's own sums — never from the window's, which is a
+                    // different number the moment a result lands after the spend that bought it.
+                    'cost_per_result' => $point === null || $point['results'] <= 0
+                        ? null
+                        : round($point['spend'] / $point['results'], 2),
+                    'cpm' => $point === null || $point['impressions'] <= 0
+                        ? null
+                        : round(($point['spend'] / $point['impressions']) * 1000, 2),
+                ];
+            }
+
+            $out[] = [
+                'path' => $path->value,
+                'label_ar' => $path->labels()['ar'],
+                'label_en' => $path->labels()['en'],
+                'headline_metrics' => $path->headlineMetrics(),
+                'days' => $series,
+                'days_reported' => count($measured),
+                'days_in_window' => count($days),
+            ];
+        }
+
+        return ['paths' => $out];
+    }
+
+    /** The same bounded read as {@see rows()}, one row per (day, campaign, platform). */
+    private function dailyRows(Carbon $from, Carbon $to): Collection
+    {
+        return DailyMetric::query()
+            ->when($this->projectIds !== null, fn ($q) => $q->withoutGlobalScope(ProjectScope::class))
+            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->join('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
+            ->when($this->projectIds !== null, fn ($q) => $q->whereIn(
+                'daily_metrics.project_id',
+                $this->projectIds ?: ['00000000-0000-0000-0000-000000000000'],
+            ))
+            ->when($this->campaignIds !== null, fn ($q) => $q->whereIn(
+                'daily_metrics.unified_campaign_id',
+                $this->campaignIds ?: ['00000000-0000-0000-0000-000000000000'],
+            ))
+            ->when($this->providers !== null, fn ($q) => $q->whereIn('daily_metrics.provider', $this->providers ?: ['__none__']))
+            ->when($this->accountIds !== null, fn ($q) => $q->whereIn(
+                'daily_metrics.external_account_id',
+                $this->accountIds ?: ['00000000-0000-0000-0000-000000000000'],
+            ))
+            ->groupBy('daily_metrics.metric_date', 'unified_campaigns.objective')
+            ->select('daily_metrics.metric_date', 'unified_campaigns.objective')
+            ->selectRaw($this->sum('spend'))
+            ->selectRaw($this->sum('impressions'))
+            ->selectRaw($this->sum('clicks'))
+            ->selectRaw($this->sum('revenue'))
+            ->selectRaw("COALESCE(SUM(daily_metrics.value) FILTER (WHERE metric_key = 'conversions'), 0) AS orders")
+            ->toBase()
+            ->get();
+    }
+
     private function rows(Carbon $from, Carbon $to): Collection
     {
         $query = DailyMetric::query()
