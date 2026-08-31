@@ -329,6 +329,7 @@ final class PlatformObjectiveContributionTest extends TestCase
         float $spend,
         float $orders = 0,
         float $impressions = 0,
+        string $date = '2026-08-10',
     ): void {
         $campaign = UnifiedCampaign::create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
@@ -356,7 +357,7 @@ final class PlatformObjectiveContributionTest extends TestCase
                 'unified_campaign_id' => $campaign->id,
                 'provider' => $provider,
                 'metric_key' => $key,
-                'metric_date' => '2026-08-10',
+                'metric_date' => $date,
                 'value' => $value,
                 'original_amount' => $key === 'spend' ? $value : null,
                 'original_currency' => $key === 'spend' ? 'SAR' : null,
@@ -364,6 +365,73 @@ final class PlatformObjectiveContributionTest extends TestCase
                 'exchange_rate' => 1,
             ]);
         }
+    }
+
+    /**
+     * OBJECTIVE-ANALYTICS-DEPTH-001 — each path's own trend, and the days nobody reported.
+     *
+     * One series over a mixed programme moves for reasons that cancel each other: awareness rising
+     * while sales falls is a flat line, and the reader concludes the account is doing nothing.
+     *
+     * The empty days matter as much as the measured ones. A day with no row is not a day the chart
+     * may skip — skipping it draws the line straight through the gap and turns a pause into a slope —
+     * so every day in the window appears and says whether anything reported.
+     */
+    public function test_each_path_gets_its_own_series_with_every_day_in_the_window(): void
+    {
+        $this->spendWith('meta', 'awareness', spend: 300, impressions: 60_000, date: '2026-08-10');
+        $this->spendWith('snapchat', 'sales', spend: 500, orders: 10, date: '2026-08-12');
+
+        $trend = $this->trend('2026-08-10', '2026-08-12');
+        $paths = array_column($trend['paths'], null, 'path');
+
+        $this->assertArrayHasKey('awareness', $paths);
+        $this->assertArrayHasKey('conversion', $paths);
+
+        // Three days in the window, three points per path — including the two nobody reported.
+        $this->assertCount(3, $paths['awareness']['days']);
+        $this->assertSame([true, false, false], array_column($paths['awareness']['days'], 'reported'));
+        $this->assertSame([false, false, true], array_column($paths['conversion']['days'], 'reported'));
+
+        // A day nobody reported carries null, never a zero: a zero is a measurement.
+        $this->assertNull($paths['awareness']['days'][1]['spend']);
+        $this->assertSame(300.0, $paths['awareness']['days'][0]['spend']);
+    }
+
+    /**
+     * The day's cost is the day's own, never the window's average.
+     *
+     * A window's cost per result is its spend over its results; a day's is that day's. They differ
+     * the moment a result lands after the spend that bought it — which is every attribution model
+     * there is — and deriving one from the other is how a chart comes to disagree with the card
+     * above it.
+     */
+    public function test_the_cost_of_a_day_is_derived_from_that_day(): void
+    {
+        $this->spendWith('snapchat', 'sales', spend: 400, orders: 10, date: '2026-08-10');
+        $this->spendWith('snapchat', 'sales', spend: 600, orders: 60, date: '2026-08-11');
+
+        $days = array_column($this->trend('2026-08-10', '2026-08-11')['paths'], null, 'path')['conversion']['days'];
+
+        $this->assertSame(40.0, $days[0]['cost_per_result']);
+        $this->assertSame(10.0, $days[1]['cost_per_result']);
+    }
+
+    /** A path nobody spent on is absent — a flat line at zero reads as a result. */
+    public function test_a_path_nobody_ran_has_no_series_at_all(): void
+    {
+        $this->spendWith('meta', 'awareness', spend: 300, impressions: 60_000, date: '2026-08-10');
+
+        $paths = array_column($this->trend('2026-08-10', '2026-08-11')['paths'], 'path');
+
+        $this->assertContains('awareness', $paths);
+        $this->assertNotContains('conversion', $paths);
+    }
+
+    /** @return array<string,mixed> */
+    private function trend(string $from, string $to): array
+    {
+        return (new ObjectivePerformance)->trendByPath(Carbon::parse($from), Carbon::parse($to));
     }
 
     /** @return array<string,mixed> */
