@@ -77,6 +77,26 @@ export function posterSource(reading: PreviewReading): string | null {
  * and it is what the presenter composed for exactly this moment.
  */
 export function absenceLabel(reading: PreviewReading, ar: boolean): string {
+  /*
+   * CONTENT-PREVIEW-SHAPES-001 — a video whose platform sent no still frame.
+   *
+   * This function answers one question — «`posterSource` gave me nothing; what do I say?» — and for
+   * two months it had no answer for the commonest case of all. A video reading is not `none`, so it
+   * returned the empty string, and every surface drew a grey box with nothing written in it: the
+   * library, the pulse strip, the campaign centre, the analytics grid, the client's report and the
+   * printed deck. That is the ONE outcome the whole module exists to prevent, and it was reachable
+   * from the most ordinary state a Snapchat or TikTok video ad can be in — `video_url` resolved,
+   * `thumbnail_url` never sent.
+   *
+   * The sentence says what is there rather than what is missing, because something IS there: the
+   * film plays, it simply has no cover.
+   */
+  if (reading.kind === 'video' && reading.poster === null) {
+    return ar
+      ? 'فيديو — لم ترسل المنصة صورة غلاف له. افتح الإعلان لتشغيله.'
+      : 'A video — the platform sent no cover frame for it. Open the ad to play it.'
+  }
+
   if (reading.kind !== 'none') {
     return ''
   }
