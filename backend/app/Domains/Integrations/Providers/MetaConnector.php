@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Providers;
 
 use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\ValueObjects\SyncResult;
 
 /**
  * Meta Marketing API — Facebook and Instagram.
@@ -21,7 +22,7 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
  *
  * Awaiting credentials on this install.
  */
-final class MetaConnector extends ApiAdvertisingConnector
+final class MetaConnector extends ApiAdvertisingConnector implements ReportsEntityGrains
 {
     /**
      * A ceiling on paging, so a wrong `paging.next` cannot become an unbounded loop.
@@ -417,49 +418,151 @@ final class MetaConnector extends ApiAdvertisingConnector
         $rows = [];
 
         foreach ($reported as $row) {
-            $campaignId = (string) ($row['campaign_id'] ?? '');
+            $mapped = $this->mapInsightRow($row, 'campaign_id', 'campaign_id', $from);
 
-            if ($campaignId === '') {
-                continue;
+            if ($mapped !== null) {
+                $rows[] = $mapped;
             }
-
-            $actions = $row['actions'] ?? null;
-            $purchases = $this->pick($actions, self::ACTIONS['purchases']);
-
-            $mapped = [
-                'campaign_id' => $campaignId,
-                'date' => (string) ($row['date_start'] ?? $from),
-                // What these figures MEAN, carried beside them. Read by `InsightRowNormaliser` in the
-                // same way as a row's currency, and stored on every metric this row becomes.
-                'attribution_window' => implode(',', self::ATTRIBUTION_WINDOWS),
-                'spend' => isset($row['spend']) ? (float) $row['spend'] : null,
-                'impressions' => isset($row['impressions']) ? (float) $row['impressions'] : null,
-                'clicks' => isset($row['clicks']) ? (float) $row['clicks'] : null,
-                'reach' => isset($row['reach']) ? (float) $row['reach'] : null,
-                'revenue' => $this->pick($row['action_values'] ?? null, self::ACTIONS['purchases']),
-                'video_views' => $this->total($row['video_play_actions'] ?? null),
-                'video_completions' => $this->total($row['video_p100_watched_actions'] ?? null),
-                /*
-                 * Meta publishes no generic «conversions» figure — it publishes actions, and which of
-                 * them is the result depends on the objective. This connector's definition of a
-                 * conversion has always been a purchase, so the two are the same number HERE and are
-                 * stated as such rather than one being quietly derived from the other. On a platform
-                 * where they differ (TikTok's `conversion` against `complete_payment`) they are
-                 * mapped apart, which is why the funnel now reads `purchases` for its Purchase stage.
-                 */
-                'purchases' => $purchases,
-                'conversions' => $purchases,
-            ];
-
-            foreach (['add_to_cart', 'checkout', 'landing_page_views', 'engagements'] as $canonical) {
-                $mapped[$canonical] = $this->pick($actions, self::ACTIONS[$canonical]);
-            }
-
-            // ABSENT, not zero — every null drops out here and no surface can print it as a measured 0.
-            $rows[] = array_filter($mapped, static fn ($v) => $v !== null);
         }
 
         return $rows;
+    }
+
+    /**
+     * ADSET-METRICS-TRUTH-001 — one mapping, whichever level the row came from.
+     *
+     * Meta answers `level=campaign`, `level=adset` and `level=ad` with the SAME fields; only the id
+     * on the row changes. Writing the mapping again per level is how one of them ends up with a
+     * different idea of what a conversion is — so there is one, and the caller says which key names
+     * the entity and what to call it in the canonical row.
+     *
+     * @param  array<string,mixed>  $row
+     * @return array<string,mixed>|null null when the row names no entity
+     */
+    private function mapInsightRow(array $row, string $idField, string $idKey, string $from): ?array
+    {
+        $id = (string) ($row[$idField] ?? '');
+
+        if ($id === '') {
+            return null;
+        }
+
+        $actions = $row['actions'] ?? null;
+        $purchases = $this->pick($actions, self::ACTIONS['purchases']);
+
+        $mapped = [
+            $idKey => $id,
+            'date' => (string) ($row['date_start'] ?? $from),
+            // What these figures MEAN, carried beside them. Read by `InsightRowNormaliser` in the
+            // same way as a row's currency, and stored on every metric this row becomes.
+            'attribution_window' => implode(',', self::ATTRIBUTION_WINDOWS),
+            'spend' => isset($row['spend']) ? (float) $row['spend'] : null,
+            'impressions' => isset($row['impressions']) ? (float) $row['impressions'] : null,
+            'clicks' => isset($row['clicks']) ? (float) $row['clicks'] : null,
+            'reach' => isset($row['reach']) ? (float) $row['reach'] : null,
+            'revenue' => $this->pick($row['action_values'] ?? null, self::ACTIONS['purchases']),
+            'video_views' => $this->total($row['video_play_actions'] ?? null),
+            'video_completions' => $this->total($row['video_p100_watched_actions'] ?? null),
+            /*
+             * Meta publishes no generic «conversions» figure — it publishes actions, and which of
+             * them is the result depends on the objective. This connector's definition of a
+             * conversion has always been a purchase, so the two are the same number HERE and are
+             * stated as such rather than one being quietly derived from the other. On a platform
+             * where they differ (TikTok's `conversion` against `complete_payment`) they are
+             * mapped apart, which is why the funnel now reads `purchases` for its Purchase stage.
+             */
+            'purchases' => $purchases,
+            'conversions' => $purchases,
+        ];
+
+        foreach (['add_to_cart', 'checkout', 'landing_page_views', 'engagements'] as $canonical) {
+            $mapped[$canonical] = $this->pick($actions, self::ACTIONS[$canonical]);
+        }
+
+        // ABSENT, not zero — every null drops out here and no surface can print it as a measured 0.
+        return array_filter($mapped, static fn ($v) => $v !== null);
+    }
+
+    /** The first refusal of the last grain sweep, kept so the run log can say WHY the table is empty. */
+    private ?string $entityFailure = null;
+
+    public function lastEntityFailure(): ?string
+    {
+        return $this->entityFailure;
+    }
+
+    /**
+     * ADSET-METRICS-TRUTH-001 — the two rungs between a campaign and an ad, from Meta.
+     *
+     * ## What was wrong
+     *
+     * Nothing here was broken; nothing here EXISTED. `AccountMetricsSyncer` asked for these grains
+     * behind `if ($connector instanceof SnapchatConnector)`, so a Meta account showed «—» for
+     * ad-set spend, CPC, CPM and CPA — and Meta reports all four perfectly well. The product was
+     * printing our own silence as the platform's.
+     *
+     * ## One call, not a sweep
+     *
+     * Graph takes `level` on the ACCOUNT insights endpoint, so an ad-set grain is one request for
+     * the whole account rather than one per campaign. The parent list the interface passes is for
+     * providers whose API has no such breakdown, and is ignored here — asking Meta per campaign
+     * would be eighty-nine requests for something one answers.
+     *
+     * The fields are the campaign grain's, plus the id of the level being asked for. Same window,
+     * same attribution windows, same mapping: a figure that disagrees with the campaign total
+     * because its two levels were mapped differently is worse than no figure at all, which is why
+     * `mapInsightRow()` is shared rather than repeated.
+     *
+     * @param  list<string>  $campaignExternalIds  unused: Meta answers for the whole account at once
+     */
+    public function entityInsights(
+        string $adAccountId,
+        string $grain,
+        array $campaignExternalIds,
+        string $from,
+        string $to,
+    ): SyncResult {
+        $this->entityFailure = null;
+
+        $idField = $grain === ReportsEntityGrains::AD_SET ? 'adset_id' : 'ad_id';
+
+        try {
+            $reported = $this->readAll($this->tokens(), "{$adAccountId}/insights", "{$grain} insights", [
+                'level' => $grain === ReportsEntityGrains::AD_SET ? 'adset' : 'ad',
+                'time_increment' => 1,
+                'fields' => "{$idField},campaign_id,date_start,spend,impressions,clicks,reach,actions,"
+                    .'action_values,video_play_actions,video_p100_watched_actions',
+                'time_range' => json_encode(['since' => $from, 'until' => $to], JSON_THROW_ON_ERROR),
+                'action_attribution_windows' => json_encode(self::ATTRIBUTION_WINDOWS, JSON_THROW_ON_ERROR),
+                'limit' => 500,
+            ]);
+        } catch (\Throwable $e) {
+            /*
+             * Contained, and recorded. A grain that fails must not cost the campaign figures already
+             * ingested — but a swallowed refusal is what makes an empty table unexplainable, because
+             * «not swept yet» and «refused every call» look identical from a row count.
+             */
+            $this->entityFailure = $e->getMessage();
+
+            return SyncResult::failed($e->getMessage());
+        }
+
+        $rows = [];
+
+        foreach ($reported as $row) {
+            /*
+             * `entity_id` is what the upsert reads, and it resolves the provider's id against what
+             * the structure sweep already discovered. A row naming an ad set we have never seen is
+             * skipped there rather than invented here: structure owns identity, this owns numbers.
+             */
+            $mapped = $this->mapInsightRow($row, $idField, 'entity_id', $from);
+
+            if ($mapped !== null) {
+                $rows[] = $mapped;
+            }
+        }
+
+        return SyncResult::of($rows);
     }
 
     /**
