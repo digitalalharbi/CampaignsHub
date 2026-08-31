@@ -1,4 +1,5 @@
 import type { AdsReading, ReportAd } from './ReportAdsSection'
+import type { ObjectivePerformance } from './InteractiveReport'
 
 import { getData, postData, putData } from '@/lib/api/client'
 import type { SharedBranding } from './sharedBranding'
@@ -228,6 +229,14 @@ export interface LivePayload {
   ads_level?: string | null
   ads_absent_reason?: string | null
   ads_reading?: AdsReading
+  /**
+   * REPORT-OBJECTIVE-003/004 — Direct against Blended, on the surface where it matters most.
+   *
+   * `totals` above rolls the whole scope together, so its cost per order divides EVERY campaign's
+   * spend by the orders the sales campaigns produced. The link is where the person paying asks what
+   * an order costs, and that is not the same question.
+   */
+  objective_performance?: ObjectivePerformance
   store_funnel: StoreFunnelPayload | null
   freshness: Array<{
     provider: string

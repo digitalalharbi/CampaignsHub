@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\ReportShare;
@@ -189,6 +190,23 @@ final class LiveReportService
              * the deck it accompanies would put a different ad first for no reason a reader could see.
              */
             ...$this->adsFor($share, $applied, $scope, $from, $to),
+            /*
+             * REPORT-OBJECTIVE-003/004 — the split the client link did not have, and needs most.
+             *
+             * `totals` above rolls the whole scope together, so its cost per order divides EVERY
+             * campaign's spend by the orders the sales campaigns produced. That is the right answer
+             * to «what did this programme cost», and the wrong one to «what does an order cost» —
+             * and the link is the surface where the second question is asked, by the person paying.
+             *
+             * The same service the deck calls, on the same bounds: a link that computed its own
+             * split would eventually disagree with the document it accompanies about what a sale
+             * cost, and the client holds both.
+             */
+            'objective_performance' => (new ObjectivePerformance(
+                projectIds: $scope['project_id'] === '' ? null : [$scope['project_id']],
+                campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : ($scope['campaign_ids'] ?: null),
+                providers: $applied['providers'] !== [] ? $applied['providers'] : ($scope['providers'] ?: null),
+            ))->build($from, $to),
             'store_funnel' => $this->storeFunnel($share, $scope['project_id'], $from, $to),
             'freshness' => $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers']),
             /*
