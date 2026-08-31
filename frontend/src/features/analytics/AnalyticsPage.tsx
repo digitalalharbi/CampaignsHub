@@ -78,7 +78,7 @@ const ANALYTICS_PLATFORMS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snap
 /** The objectives with a layout elsewhere in the product — the same six the dashboard offers. */
 import { countedAr, countedEn, days as countedDays } from '@/lib/counted'
 import { useUi } from '@/stores/ui'
-import { accounts as countedAccounts } from '@/lib/counted'
+import { accounts as countedAccounts, days as countedDays } from '@/lib/counted'
 import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
 import { useProject } from '@/stores/project'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
@@ -768,7 +768,7 @@ function PlatformPaths({
                           className="rounded-full bg-warning/10 px-2 py-0.5 text-[11px] text-warning"
                         >
                           {gap.missing > 0
-                            ? (ar ? `ناقص ${gap.missing} يومًا` : `${gap.missing} days missing`)
+                            ? (ar ? `ناقص ${countedDays(gap.missing, 'ar')}` : `${countedDays(gap.missing, 'en')} missing`)
                             : (ar ? 'آخر مزامنة لم تنجح' : 'last sync did not succeed')}
                         </span>
                       )}
