@@ -221,7 +221,25 @@ export function PrintDocument({
                 <tr key={i}>
                   <td className="doc-ad-thumb">
                     {ad.thumb
-                      ? <img src={ad.thumb} alt="" />
+                      ? (
+                        /*
+                          A picture that fails becomes the sentence, not a broken frame: an expired
+                          signed URL is the ordinary case here, and a grey box in a document a client
+                          keeps reads as a failed export rather than as the honest absence it is.
+                        */
+                        <img
+                          src={ad.thumb}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            const img = e.currentTarget
+                            const note = img.ownerDocument.createElement('span')
+                            note.className = 'doc-ad-absent'
+                            note.textContent = ad.absence
+                            img.replaceWith(note)
+                          }}
+                        />
+                      )
                       : <span className="doc-ad-absent">{ad.absence}</span>}
                   </td>
                   <td>{ad.name}</td>

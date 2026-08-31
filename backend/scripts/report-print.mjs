@@ -35,7 +35,21 @@ try {
   page.on('console', (m) => { if (m.type() === 'error' && !benign.test(m.text())) fatalErrors.push(m.text()) })
   page.on('pageerror', (e) => fatalErrors.push(String(e)))
 
-  const resp = await page.goto(url, { waitUntil: 'networkidle', timeout: timeoutMs })
+  /*
+   * REPORT-AD-PREVIEW-001 — a picture must not be able to hold an export open.
+   *
+   * This waited for `networkidle`, which means «no request for 500ms» — and the document now carries
+   * ad thumbnails from provider CDNs. One signed URL that has expired, one host that answers slowly,
+   * one network that cannot reach it at all, and networkidle never arrives: the render times out and
+   * a client's export fails over a decoration.
+   *
+   * The page's OWN readiness signals are stronger than networkidle anyway — data, charts, images and
+   * fonts each report themselves below — so navigation waits only for the document, and the network
+   * is given a bounded chance to settle after that. What cannot load is simply not in the picture,
+   * which is the same rule the report follows everywhere else.
+   */
+  const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs })
+  await page.waitForLoadState('networkidle', { timeout: Math.min(8000, timeoutMs) }).catch(() => {})
   if (!resp || !resp.ok()) fail('navigation_failed', `status ${resp ? resp.status() : 'none'}`)
 
   // Explicit failure signalled by the print route (bad token / API error).
