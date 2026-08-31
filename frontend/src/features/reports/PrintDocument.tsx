@@ -11,6 +11,22 @@ import type { ReportData } from './InteractiveReport'
 
 type Row = Record<string, number | string | null | undefined>
 
+/**
+ * One section of the report's own outline, as `ReportStructure` emits it.
+ *
+ * `absent_reason` is always present as a key and null when the section is — a renderer that has to
+ * ask whether the key exists before reading it is one that will print «undefined» to a client.
+ */
+type OutlineSection = {
+  key: string
+  title_ar: string
+  title_en: string
+  present: boolean
+  absent_reason: string | null
+  absent_reason_en?: string | null
+  absent_reason_ar?: string | null
+}
+
 /** One ad as the generator emits it — the fields this document prints, and its preview block. */
 type AdRow = {
   name?: string | null
@@ -154,6 +170,44 @@ export function PrintDocument({
 
   const recs = (data.recommendations ?? []).filter((r) => (r as { status?: string }).status === 'approved' || !(r as { status?: string }).status)
 
+  /*
+   * REPORT-ANALYTICAL-DEPTH-001 — the document's sections come from the report's OWN outline.
+   *
+   * The numbering here was hardcoded — «1. Executive Summary», «2. Platform Performance» — and the
+   * order with it, so a report whose generator had nothing to say about platforms still printed the
+   * heading with an empty table under it, and the numbers stepped over whatever was skipped.
+   *
+   * `outline` is derived from the assembled snapshot by `ReportStructure`, which also says WHY a
+   * section is absent. Reading it here means the deck, the client's link and this document cannot
+   * disagree about what the report contains — and an absent section prints its reason instead of an
+   * empty table, which is the difference between «there were no campaigns in this window» and a
+   * document that looks broken.
+   */
+  const outline = (data.outline ?? []) as OutlineSection[]
+  const section = (key: string): OutlineSection | undefined => outline.find((s) => s.key === key)
+  /** The printed number of a section — counted over what is actually printed, never over the list. */
+  const numbers = new Map<string, number>()
+  outline.filter((s) => s.present).forEach((s, i) => numbers.set(s.key, i + 1))
+  const heading = (key: string, fallback: string): string => {
+    const s = section(key)
+    const title = s ? s.title_en : fallback
+    const n = numbers.get(key)
+
+    return n === undefined ? title : `${n}. ${title}`
+  }
+  /** An absent section prints WHY, in the words the generator chose. */
+  const Absent = ({ sectionKey, fallback }: { sectionKey: string; fallback: string }) => {
+    const s = section(sectionKey)
+    if (s === undefined || s.present) return null
+
+    return (
+      <section className="doc-section" data-absent={sectionKey}>
+        <h2>{s.title_en}</h2>
+        <p>{s.absent_reason_en ?? fallback}</p>
+      </section>
+    )
+  }
+
   return (
     <div className="doc-root">
       <style>{DOC_CSS}</style>
@@ -172,29 +226,38 @@ export function PrintDocument({
       </header>
 
       {/* Executive summary */}
-      <section className="doc-section">
-        <h2>1. Executive Summary</h2>
-        {(data.summary ?? []).map((s, i) => <p key={i}>{s}</p>)}
-        <h3>Key metrics</h3>
-        <Table head={['Metric', 'Value']} rows={kpiRows} />
-      </section>
+      {section('executive_summary')?.present !== false && (
+        <section className="doc-section">
+          <h2>{heading('executive_summary', 'Executive Summary')}</h2>
+          {(data.summary ?? []).map((s, i) => <p key={i}>{s}</p>)}
+          <h3>Key metrics</h3>
+          <Table head={['Metric', 'Value']} rows={kpiRows} />
+        </section>
+      )}
+      <Absent sectionKey="executive_summary" fallback="No summary could be composed from this period’s figures." />
 
       {/* Platform performance */}
-      <section className="doc-section">
-        <h2>2. Platform Performance</h2>
-        <Table head={['Platform', 'Spend', 'Revenue', 'Results', 'ROAS']} rows={platformRows} />
-      </section>
+      {section('platforms')?.present !== false && (
+        <section className="doc-section">
+          <h2>{heading('platforms', 'Platform Performance')}</h2>
+          <Table head={['Platform', 'Spend', 'Revenue', 'Results', 'ROAS']} rows={platformRows} />
+        </section>
+      )}
+      <Absent sectionKey="platforms" fallback="No platform reported figures in this window." />
 
       {/* Campaigns — the multi-page table */}
-      <section className="doc-section">
-        <h2>3. Campaigns</h2>
-        <Table head={['Campaign', 'Platform', 'Status', 'Spend', 'Results', 'CPA']} rows={campaignRows} />
-      </section>
+      {section('campaigns')?.present !== false && (
+        <section className="doc-section">
+          <h2>{heading('campaigns', 'Campaigns')}</h2>
+          <Table head={['Campaign', 'Platform', 'Status', 'Spend', 'Results', 'CPA']} rows={campaignRows} />
+        </section>
+      )}
+      <Absent sectionKey="campaigns" fallback="No campaign spent in this window." />
 
       {/* Budget */}
       {budgetRows.length > 0 && (
         <section className="doc-section">
-          <h2>4. Budget Pacing</h2>
+          <h2>Budget Pacing</h2>
           <Table head={['Line', 'Budget', 'Spent', 'Remaining', 'Pacing']} rows={budgetRows} />
         </section>
       )}
@@ -211,7 +274,7 @@ export function PrintDocument({
       */}
       {adRows.length > 0 ? (
         <section className="doc-section">
-          <h2>5. Ads</h2>
+          <h2>{heading('ads', 'Ads')}</h2>
           <table className="doc-table doc-ads">
             <thead>
               <tr><th>Preview</th><th>Ad</th><th>Platform</th><th>Campaign</th><th>Spend</th><th>Results</th></tr>
@@ -254,15 +317,16 @@ export function PrintDocument({
         </section>
       ) : (
         <section className="doc-section">
-          <h2>5. Ads</h2>
-          <p>{adsAbsence}</p>
+          <h2>{section('ads')?.title_en ?? 'Ads'}</h2>
+          {/* The generator's own reason, not this file's guess at one. */}
+          <p>{section('ads')?.absent_reason_en ?? adsAbsence}</p>
         </section>
       )}
 
       {/* Recommendations */}
       {recs.length > 0 && (
         <section className="doc-section">
-          <h2>6. Recommendations</h2>
+          <h2>{heading('recommendations', 'Recommendations')}</h2>
           <ol className="doc-recs">
             {recs.map((r, i) => {
               const body = (r as { detail?: string; body?: string }).detail ?? (r as { body?: string }).body

@@ -138,7 +138,7 @@ final class LiveReportService
         $totals = $engine->totals($from, $to);
         $previous = $this->previousPeriod($engine, $from, $to);
 
-        return [
+        $payload = [
             'period' => [
                 'from' => $from->toDateString(),
                 'to' => $to->toDateString(),
@@ -210,6 +210,19 @@ final class LiveReportService
             ],
             'applied' => $applied,
         ];
+
+        /*
+         * REPORT-ANALYTICAL-DEPTH-001 — the client's link says what it contains, and why anything is
+         * missing, from the SAME derivation the generated report uses.
+         *
+         * It is computed over the assembled payload, after every figure is in place, so the contents
+         * cannot promise a section the link does not have. A live link that listed its own sections
+         * would be a second answer to «what is in this report», and the first time the two disagreed
+         * the client would be holding both.
+         */
+        $payload['outline'] = (new ReportStructure)->sections($payload);
+
+        return $payload;
     }
 
     /**
