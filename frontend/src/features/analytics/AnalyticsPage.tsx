@@ -74,7 +74,7 @@ import { providerLabel } from '@/features/campaigns/labels'
 const ANALYTICS_PLATFORMS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
 
 /** The objectives with a layout elsewhere in the product — the same six the dashboard offers. */
-import { countedAr, countedEn } from '@/lib/counted'
+import { countedAr, countedEn, days as countedDays } from '@/lib/counted'
 import { useUi } from '@/stores/ui'
 import { accounts as countedAccounts } from '@/lib/counted'
 import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
@@ -1317,8 +1317,8 @@ function WindowConfidenceLine({ c, windowDays, ar }: { c: WindowConfidence; wind
               ? 'لا مصدر تُقاس تغطيته بالأيام في هذه الفترة.'
               : 'No source in this window is measured in days.')
           : (ar
-              ? `${c.daysWithData} من ${c.daysExpected} يوم عبر ${countedAr(c.sourcesCounted, SOURCE_AR)} (${windowDays} يومًا لكل مصدر).`
-              : `${c.daysWithData} of ${c.daysExpected} days across ${countedEn(c.sourcesCounted, 'source', 'sources')} (${windowDays} days each).`)}
+              ? `${c.daysWithData} من ${countedDays(c.daysExpected, 'ar')} عبر ${countedAr(c.sourcesCounted, SOURCE_AR)} (${countedDays(windowDays, 'ar')} لكل مصدر).`
+              : `${c.daysWithData} of ${countedDays(c.daysExpected, 'en')} across ${countedEn(c.sourcesCounted, 'source', 'sources')} (${countedDays(windowDays, 'en')} each).`)}
       </span>
 
       {worst !== null && (
