@@ -177,6 +177,24 @@ final class CreativeRankingService
      * @return array{0:?string,1:string,2:callable} sort key (null ⇒ this scope cannot be ranked),
      *                                              direction, reason builder
      */
+    /**
+     * Which metric an order over THESE rows rests on — null when nothing in the objective's layout
+     * was reported.
+     *
+     * REPORT-AD-PREVIEW-001 §A — a section that calls ads «top performing» has to be able to say on
+     * what, and the honest answer is sometimes «nothing anybody reported», which is why this returns
+     * null rather than the objective's primary. The ranking itself already refuses to order such a
+     * scope; this exposes the same decision so the page can print it.
+     *
+     * @param  list<array<string,mixed>>  $items
+     */
+    public function metricFor(string $objective, array $items = []): ?string
+    {
+        [$key] = $this->strategy($objective, $items);
+
+        return $key;
+    }
+
     private function strategy(string $objective, array $items = []): array
     {
         /*
