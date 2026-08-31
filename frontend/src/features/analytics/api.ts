@@ -836,5 +836,35 @@ export interface PathExplanation {
 export const useObjectiveLeaders = (p: string | null, r: Range, f?: MetricFilters) =>
   useMetric<ObjectiveLeaders>('objective-leaders', p, r, 'objective-leaders', f)
 
+/** One day of a path's trend. A day nobody reported carries nulls and `reported: false`. */
+export interface PathTrendDay {
+  date: string
+  reported: boolean
+  spend: number | null
+  results: number | null
+  revenue: number | null
+  cost_per_result: number | null
+  cpm: number | null
+}
+
+export interface PathTrend {
+  path: string
+  label_ar: string
+  label_en: string
+  headline_metrics: string[]
+  days: PathTrendDay[]
+  days_reported: number
+  days_in_window: number
+}
+
+/**
+ * OBJECTIVE-ANALYTICS-DEPTH-001 — each path's own trend, in the metric that path was buying.
+ *
+ * Separate from `useTimeseries`, which is one line over a mixed programme: awareness rising while
+ * sales falls is a flat line, and the reader concludes the account is doing nothing.
+ */
+export const useObjectiveTrend = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<{ paths: PathTrend[] }>('objective-trend', p, r, 'objective-trend', f)
+
 export const useObjectiveExplanations = (p: string | null, r: Range, f?: MetricFilters) =>
   useMetric<{ paths: PathExplanation[] }>('objective-explanations', p, r, 'objective-explanations', f)
