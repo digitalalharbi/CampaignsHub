@@ -1,4 +1,4 @@
-import type { AdsReading, ReportAd } from './ReportAdsSection'
+import type { AdGroup, AdsReading, ReportAd } from './ReportAdsSection'
 import type { ObjectivePerformance } from './InteractiveReport'
 import type { PathLeaders } from '@/features/analytics/api'
 
@@ -227,6 +227,8 @@ export interface LivePayload {
    * a claim about the client's advertising made by a gap in ours.
    */
   ads?: ReportAd[]
+  /** REPORT-AD-PREVIEW-001 §A — one ranked list per objective, each on its own metric. */
+  ads_groups?: AdGroup[]
   ads_level?: string | null
   ads_absent_reason?: string | null
   ads_reading?: AdsReading

@@ -162,6 +162,8 @@ final class ReportGenerator
              */
             'ads' => $ads['ads'],
             'ads_level' => $ads['level'],
+            // REPORT-AD-PREVIEW-001 §A — ranked INSIDE each objective, with the metric that ordered it.
+            'ads_groups' => $ads['groups'],
             'ads_absent_reason' => $ads['reason'],
             /*
              * FUNNEL-ANALYTICAL-PATTERN-001 — the ads section, read back in the funnel's own shape.

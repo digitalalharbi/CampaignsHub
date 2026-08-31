@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
-import { ReportAdsSection } from './ReportAdsSection'
+import { ReportAdDetail } from './ReportAdDetail'
+import { ReportAdsSection, type ReportAd } from './ReportAdsSection'
 import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDateTime } from '@/lib/datetime'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
@@ -71,6 +72,8 @@ export function LiveSharedReport({
   const [payload, setPayload] = useState<LivePayload | null>(null)
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  /* REPORT-AD-PREVIEW-001 §C — the ad whose detail is open, or none. */
+  const [openAd, setOpenAd] = useState<ReportAd | null>(null)
 
   /*
    * A request counter, so a slow answer cannot overwrite a fast one.
@@ -495,11 +498,13 @@ export function LiveSharedReport({
         <div className="mt-6">
           <ReportAdsSection
             ads={payload.ads}
+            groups={payload.ads_groups}
+            currency={currency}
             absentReason={payload.ads_absent_reason}
             level={payload.ads_level}
             reading={payload.ads_reading}
             locale={ar ? 'ar' : 'en'}
-            title={ar ? 'الإعلانات التي عملت' : 'The ads that ran'}
+            onOpen={setOpenAd}
           />
         </div>
 
@@ -569,6 +574,16 @@ export function LiveSharedReport({
           </div>
         )}
       </div>
+
+      {/* REPORT-AD-PREVIEW-001 §C — read-only, and only what this share already carries. */}
+      {openAd && (
+        <ReportAdDetail
+          ad={openAd}
+          currency={currency}
+          locale={ar ? 'ar' : 'en'}
+          onClose={() => setOpenAd(null)}
+        />
+      )}
     </div>
   )
 }
