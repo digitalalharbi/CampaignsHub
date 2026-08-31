@@ -84,7 +84,7 @@ describe('the formatters, under each system', () => {
       signInWithFormat(f)
       expect(num(null)).toBe('—')
       expect(percent(undefined)).toBe('—')
-      expect(money(null)).toBe('—')
+      expect(money(null, 'SAR')).toBe('—')
     }
   })
 

@@ -109,7 +109,11 @@ export function LiveSharedReport({
   const toggle = (list: string[], set: (v: string[]) => void, value: string) =>
     set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value])
 
-  const money = useMemo(
+  /*
+   * `asMoney`, not `money`: this closure already carries the payload's currency, and a second thing
+   * called `money` in a file that also formats money is how a missing currency hides in plain sight.
+   */
+  const asMoney = useMemo(
     () => (v: number | null | undefined) =>
       v === null || v === undefined
         ? '—'
@@ -151,7 +155,7 @@ export function LiveSharedReport({
     purchases: { ar: 'المشتريات', en: 'Purchases', format: (t, _p, _m, count) => count(t.purchases) },
     revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, p) => moneyFromTotals(t as MoneyTotals, 'revenue', ar, p.currency).text },
     roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => { const r = readRoas(t as MoneyTotals, ar); return ratio(r.value) } },
-    cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (t, p, money) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cpa', 'conversions', p.currency, ar), (v) => money(v)) },
+    cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (t, p, fmt) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cpa', 'conversions', p.currency, ar), (v) => fmt(v)) },
   }
 
   const DEFAULT_METRICS = ['spend', 'impressions', 'clicks', 'conversions', 'add_to_cart', 'purchases', 'revenue', 'roas']
@@ -297,7 +301,7 @@ export function LiveSharedReport({
               <KpiCard
                 key={key}
                 label={ar ? meta.ar : meta.en}
-                value={meta.format(t, payload, money, count)}
+                value={meta.format(t, payload, asMoney, count)}
                 delta={d[key]}
                 invertGood={meta.invertGood}
                 spark={meta.spark ? series(key) : undefined}
@@ -451,7 +455,7 @@ export function LiveSharedReport({
                   <dl className="mt-1 grid grid-cols-2 gap-1.5 text-xs">
                     <div>
                       <dt className="text-text-muted">{ar ? 'الإنفاق' : 'Spend'}</dt>
-                      <dd dir="ltr" className="tnum font-semibold text-text-primary">{money(block.spend)}</dd>
+                      <dd dir="ltr" className="tnum font-semibold text-text-primary">{asMoney(block.spend)}</dd>
                     </div>
                     <div>
                       <dt className="text-text-muted">{ar ? 'تكلفة الطلب' : 'Cost per order'}</dt>
@@ -463,10 +467,10 @@ export function LiveSharedReport({
                         {kind === 'direct'
                           ? (block as typeof payload.objective_performance.direct).cpa === null
                             ? '—'
-                            : money((block as typeof payload.objective_performance.direct).cpa)
+                            : asMoney((block as typeof payload.objective_performance.direct).cpa)
                           : (block as typeof payload.objective_performance.blended).blended_cpa === null
                             ? '—'
-                            : money((block as typeof payload.objective_performance.blended).blended_cpa)}
+                            : asMoney((block as typeof payload.objective_performance.blended).blended_cpa)}
                       </dd>
                     </div>
                   </dl>
