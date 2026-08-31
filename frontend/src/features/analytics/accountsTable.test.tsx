@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { orderRows } from './tableSort'
-import type { SortValues } from './AnalyticsPage'
+import { orderRows } from '@/lib/tableSort'
+import type { SortValues } from '@/components/ui/MetricTable'
 
 /**
  * ANALYTICS-TABLES-001 — the Accounts tab uses the canonical table.
