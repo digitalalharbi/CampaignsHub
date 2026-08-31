@@ -217,6 +217,59 @@ final class ReportAdsSectionTest extends TestCase
         }
     }
 
+    /**
+     * REPORT-AD-PREVIEW-001 §A — «top performing» is a claim, and a spend order is not one.
+     *
+     * Production titled this section «الإعلانات التي عملت» and ordered it «أعلى الإنفاق (578)»: the
+     * report spanned objectives, so the ranker resolved to the UNKNOWN family, whose fallback order
+     * begins with spend. Spending most is the one ordering that can never be a judgement, and under
+     * a performance heading it tells a client their biggest bill is their best ad.
+     */
+    public function test_ads_are_ranked_inside_their_objective_and_say_which_metric_ordered_them(): void
+    {
+        $sales = $this->campaign('Eid sales', CampaignObjective::Sales, spend: 5_000, orders: 100, revenue: 40_000);
+        $this->creative($sales, 'Sales winner', spend: 3_000, conversions: 80, revenue: 30_000);
+        $this->creative($sales, 'Sales loser', spend: 2_000, conversions: 10, revenue: 3_000);
+
+        $awareness = $this->campaign('Brand', CampaignObjective::Awareness, spend: 4_000, orders: 0, revenue: 0);
+        $this->creative($awareness, 'Brand film', spend: 4_000, conversions: 0, revenue: 0, impressions: 900_000);
+
+        $groups = array_column($this->generate()['ads_groups'], null, 'family');
+
+        $this->assertArrayHasKey('sales', $groups, 'a sales ad must be ranked as a sales ad');
+        $this->assertArrayHasKey('awareness', $groups);
+
+        // Each group states what ordered it, and it is never spend on a family that measures better.
+        $this->assertNotSame('spend', $groups['sales']['metric']);
+        $this->assertNotNull($groups['sales']['metric_label_en']);
+        $this->assertSame('Sales winner', $groups['sales']['ads'][0]['name']);
+
+        // And an awareness ad is never ranked by a sales metric.
+        $this->assertNotSame('roas', $groups['awareness']['metric']);
+    }
+
+    /**
+     * A group whose objective reported none of its metrics claims no order.
+     *
+     * `ranked: false` is the section's licence to show the ads without a heading that says one of
+     * them is best — the alternative is the spend list production was printing.
+     */
+    public function test_a_group_with_nothing_measurable_makes_no_claim(): void
+    {
+        $campaign = $this->campaign('Unclassified', CampaignObjective::Other, spend: 1_000, orders: 0, revenue: 0);
+        $this->creative($campaign, 'Only ad', spend: 1_000, conversions: 0, revenue: 0);
+
+        $groups = $this->generate()['ads_groups'];
+
+        $this->assertNotEmpty($groups);
+        foreach ($groups as $group) {
+            if ($group['ranked'] === false) {
+                $this->assertNull($group['metric'], 'an unranked group must not name a metric');
+                $this->assertNotEmpty($group['ads'], 'the ads are still shown; only the claim is withheld');
+            }
+        }
+    }
+
     /** @return array<string,mixed> */
     private function generate(): array
     {
@@ -268,7 +321,8 @@ final class ReportAdsSectionTest extends TestCase
         float $spend,
         float $conversions,
         float $revenue,
-        ?string $thumbnail,
+        ?string $thumbnail = 'https://cdn/thumb.jpg',
+        float $impressions = 100_000,
     ): void {
         $external = ExternalCampaign::withoutGlobalScopes()->where('unified_campaign_id', $campaign->id)->firstOrFail();
 
@@ -295,7 +349,7 @@ final class ReportAdsSectionTest extends TestCase
             'creative_id' => $creative->getKey(),
             'metric_date' => self::DATE,
             'spend' => $spend,
-            'impressions' => 100_000,
+            'impressions' => $impressions,
             'clicks' => 1_200,
             'conversions' => $conversions,
             'revenue' => $revenue,

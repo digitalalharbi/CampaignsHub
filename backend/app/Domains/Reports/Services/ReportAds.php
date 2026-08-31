@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Campaigns\Creative\RankingMetric;
+use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativeRows;
 use Illuminate\Support\Carbon;
@@ -45,7 +48,7 @@ final class ReportAds
 
     /**
      * @param  array<string, mixed>  $filters  `project_ids`, `providers`, `campaign_ids` — the scope
-     * @return array{ads: list<array<string,mixed>>, worst: list<array<string,mixed>>, level: string, reason: string|null}
+     * @return array{ads: list<array<string,mixed>>, worst: list<array<string,mixed>>, groups: list<array<string,mixed>>, level: string, reason: string|null}
      */
     public function for(string $objective, Carbon $from, Carbon $to, array $filters = []): array
     {
@@ -63,7 +66,7 @@ final class ReportAds
         );
 
         if ($rows === []) {
-            return ['ads' => [], 'worst' => [], 'level' => 'campaign', 'reason' => 'no_creatives_in_window'];
+            return ['ads' => [], 'worst' => [], 'groups' => [], 'level' => 'campaign', 'reason' => 'no_creatives_in_window'];
         }
 
         // The same ranker the campaign leaders use, on the same objective — one definition of «best».
@@ -97,8 +100,73 @@ final class ReportAds
          */
         $weakest = $this->ranking->worst($objective, $rankable);
 
+        /*
+         * REPORT-AD-PREVIEW-001 §A — «top performing» is a claim, and it needs a metric that says so.
+         *
+         * A report whose campaigns span objectives resolves to the UNKNOWN family, whose fallback
+         * order begins with SPEND — so production titled a section «الإعلانات التي عملت» and ordered
+         * it «أعلى الإنفاق (578)». Spending most is not performing best; it is the one ordering that
+         * can never be a judgement, and printed under a performance heading it tells a client their
+         * biggest bill is their best ad.
+         *
+         * The ads are grouped by the objective each was bought for, ranked inside it on that
+         * objective's own metric, and the metric travels with the group so the page can say what the
+         * order means. A group whose objective reported none of its metrics carries a NULL metric:
+         * the section then shows those ads without claiming an order over them.
+         */
+        $groups = $this->groupsByObjective($rankable);
+
         return $ranked === []
-            ? ['ads' => [], 'worst' => [], 'level' => 'ad', 'reason' => 'no_rankable_metric_for_this_objective']
-            : ['ads' => $ranked, 'worst' => $weakest, 'level' => 'ad', 'reason' => null];
+            ? ['ads' => [], 'worst' => [], 'groups' => $groups, 'level' => 'ad', 'reason' => 'no_rankable_metric_for_this_objective']
+            : ['ads' => $ranked, 'worst' => $weakest, 'groups' => $groups, 'level' => 'ad', 'reason' => null];
+    }
+
+    /**
+     * The ads, grouped by the objective they were bought for and ranked inside it.
+     *
+     * @param  list<array<string,mixed>>  $rankable
+     * @return list<array<string,mixed>>
+     */
+    private function groupsByObjective(array $rankable): array
+    {
+        /** @var array<string, list<array<string,mixed>>> $byFamily */
+        $byFamily = [];
+
+        foreach ($rankable as $row) {
+            $objective = (string) ($row['objective'] ?? '');
+            $family = ObjectiveFamily::tryFrom($objective)
+                ?? (CampaignObjective::tryFrom($objective)?->family() ?? ObjectiveFamily::Unknown);
+
+            $byFamily[$family->value][] = $row;
+        }
+
+        $groups = [];
+
+        foreach ($byFamily as $familyKey => $rows) {
+            $family = ObjectiveFamily::from($familyKey);
+            $ranked = $this->ranking->rank($familyKey, $rows, 3);
+
+            /*
+             * The metric the ORDER rests on, read from the ranked rows rather than from the
+             * objective's layout: the layout says what this family WOULD be judged on, and the rows
+             * say what anybody actually reported. A group ranked on a metric no row carries is the
+             * defect this section exists to remove.
+             */
+            $metric = $ranked === [] ? null : $this->ranking->metricFor($familyKey, $rows);
+
+            $groups[] = [
+                'family' => $family->value,
+                'label_ar' => $family->label()['ar'] ?? $family->value,
+                'label_en' => $family->label()['en'] ?? $family->value,
+                'metric' => $metric,
+                'metric_label_ar' => $metric === null ? null : RankingMetric::of((string) $metric)->labelAr,
+                'metric_label_en' => $metric === null ? null : RankingMetric::of((string) $metric)->labelEn,
+                // Ordered where a metric exists; otherwise the rows as they came, with no claim made.
+                'ads' => $ranked === [] ? array_slice($rows, 0, 3) : $ranked,
+                'ranked' => $ranked !== [],
+            ];
+        }
+
+        return $groups;
     }
 }

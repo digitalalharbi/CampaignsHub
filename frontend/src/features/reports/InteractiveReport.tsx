@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { attributionWindow } from './attributionWindow'
-import { ReportAdsSection, type AdsReading, type ReportAd } from './ReportAdsSection'
+import { ReportAdDetail } from './ReportAdDetail'
+import { ReportAdsSection, type AdGroup, type AdsReading, type ReportAd } from './ReportAdsSection'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDateTime } from '@/lib/datetime'
@@ -81,6 +82,8 @@ export interface ReportData {
   ads?: ReportAd[]
   ads_level?: string | null
   ads_absent_reason?: string | null
+  /** REPORT-AD-PREVIEW-001 §A — ranked inside each objective, with the metric that ordered it. */
+  ads_groups?: AdGroup[]
   /** The five-step reading of the ranked grid — absent where no range could be read. */
   ads_reading?: AdsReading
   /** REPORT-WORST-CREATIVES-001 — measured underperformers, never merely unmeasured ones. */
@@ -748,17 +751,35 @@ function ScreenshotSlide({ platform }: { platform: string }) {
  */
 function AdsSlide({ data }: { data: ReportData }) {
   const ar = useUi((s) => s.locale) === 'ar'
+  const [open, setOpen] = useState<ReportAd | null>(null)
 
   return (
     <div>
       <ReportAdsSection
         ads={data.ads}
+        groups={data.ads_groups}
+        currency={data.currency ?? null}
         absentReason={data.ads_absent_reason}
         level={data.ads_level}
         reading={data.ads_reading}
         locale={ar ? 'ar' : 'en'}
-        title={ar ? 'الإعلانات التي عملت' : 'The ads that ran'}
+        onOpen={setOpen}
       />
+
+      {/*
+        REPORT-AD-PREVIEW-001 §C — the card opens its own detail.
+
+        Production rendered these as inert `<article>`s: a client pressing their best ad got
+        silence. The detail is READ-ONLY and shows only what the report already carries.
+      */}
+      {open && (
+        <ReportAdDetail
+          ad={open}
+          currency={data.currency ?? null}
+          locale={ar ? 'ar' : 'en'}
+          onClose={() => setOpen(null)}
+        />
+      )}
     </div>
   )
 }
