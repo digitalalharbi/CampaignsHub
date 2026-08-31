@@ -95,6 +95,27 @@ test.describe('a client opens their live report', () => {
     expect(text, `the freshness block shows a raw key:\n${text}`).not.toMatch(/[a-z]+_[a-z]+/)
   })
 
+  /**
+   * REPORT-OBJECTIVE-003/004 — the client's own link states Direct against Blended.
+   *
+   * The headline above it rolls the whole scope together: its cost per order divides every
+   * campaign's spend by the orders the SALES campaigns produced. That is the right answer to «what
+   * did this programme cost» and the wrong one to «what does an order cost» — and this is the page
+   * where the second question is asked, by the person paying for it.
+   */
+  test('the client’s link separates direct cost from blended', async ({ page }) => {
+    await page.goto(URL)
+
+    await expect(page.getByTestId('live-objective-split')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('live-objective-direct')).toBeVisible()
+    await expect(page.getByTestId('live-objective-blended')).toBeVisible()
+
+    // The two blocks are not the same figure under two names.
+    const direct = await page.getByTestId('live-objective-direct').innerText()
+    const blended = await page.getByTestId('live-objective-blended').innerText()
+    expect(direct).not.toBe(blended)
+  })
+
   test('the link is marked as demo data rather than passing seeded figures off as real', async ({ page }) => {
     await page.goto(URL)
     await expect(page.getByText('Demo').first()).toBeVisible({ timeout: 20000 })

@@ -400,6 +400,61 @@ export function LiveSharedReport({
           * does. A client asking «من أين جاء هذا الرقم؟» gets the same answer their agency would.
           */}
         {/*
+          REPORT-OBJECTIVE-003/004 — Direct beside Blended, before the ads and after the platforms.
+
+          The headline above this rolls the whole scope together: its cost per order divides every
+          campaign's spend by the orders the SALES campaigns produced. That is the right answer to
+          «what did this programme cost» and the wrong one to «what does an order cost» — and this is
+          the page where the second question gets asked, by the person paying for it.
+        */}
+        {payload.objective_performance && (
+          <div data-testid="live-objective-split" className="mt-6 rounded-2xl border border-border bg-surface p-4">
+            <h3 className="text-base font-bold text-text-primary">
+              {ar ? 'المباشر مقابل المخلوط' : 'Direct against blended'}
+            </h3>
+
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              {([['direct', payload.objective_performance.direct], ['blended', payload.objective_performance.blended]] as const).map(([kind, block]) => (
+                <div key={kind} data-testid={`live-objective-${kind}`} className="rounded-xl border border-border p-3">
+                  <div className="text-sm font-semibold text-text-primary">{ar ? block.label_ar : block.label_en}</div>
+                  <dl className="mt-1 grid grid-cols-2 gap-1.5 text-xs">
+                    <div>
+                      <dt className="text-text-muted">{ar ? 'الإنفاق' : 'Spend'}</dt>
+                      <dd dir="ltr" className="tnum font-semibold text-text-primary">{money(block.spend)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-text-muted">{ar ? 'تكلفة الطلب' : 'Cost per order'}</dt>
+                      <dd dir="ltr" className="tnum font-semibold text-text-primary">
+                        {/*
+                          Null stays «—». A cost per order that nobody could compute is not a cost of
+                          zero, and this is the figure a client acts on.
+                        */}
+                        {kind === 'direct'
+                          ? (block as typeof payload.objective_performance.direct).cpa === null
+                            ? '—'
+                            : money((block as typeof payload.objective_performance.direct).cpa)
+                          : (block as typeof payload.objective_performance.blended).blended_cpa === null
+                            ? '—'
+                            : money((block as typeof payload.objective_performance.blended).blended_cpa)}
+                      </dd>
+                    </div>
+                  </dl>
+                  <p className="mt-1 text-[11px] leading-relaxed text-text-muted">
+                    {kind === 'direct'
+                      ? (ar
+                          ? 'إنفاق الحملات البيعية وحدها، مقسومًا على طلباتها.'
+                          : 'The spend of the sales campaigns alone, over the orders they produced.')
+                      : (ar
+                          ? 'كل الإنفاق في الفترة، بما فيه ما لم يكن يشتري طلبًا.'
+                          : 'All the spend in the window, including what was not buying an order.')}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/*
           REPORT-AD-PREVIEW-001 — the same section as the deck and the PDF, from the same payload key.
         */}
         <div className="mt-6">
