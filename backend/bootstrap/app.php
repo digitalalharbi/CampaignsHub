@@ -21,6 +21,7 @@ use App\Domains\Notifications\Console\RenderMailPreviews;
 use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
 use App\Domains\Platform\Console\BackupCommand;
+use App\Domains\Projects\Middleware\RequireProjectCapability;
 use App\Domains\Projects\Middleware\ResolveProject;
 use App\Domains\Reports\Console\DispatchScheduledReports;
 use App\Domains\Reports\Console\InvalidateLegacyExportsCommand;
@@ -182,6 +183,14 @@ return Application::configure(basePath: dirname(__DIR__))
             // membership to gate on. See EnsurePlatformAdmin.
             'platform' => EnsurePlatformAdmin::class,
             'project' => ResolveProject::class,
+            /*
+             * TEAM-PROJECT-RBAC-001 — `project.can:leads.pii.view` on the route itself.
+             *
+             * Runs after `project`, which has already established that the project exists inside
+             * this tenant and that the reader may reach it. This answers the narrower question, and
+             * it is where the answer has to live: a menu item nobody draws is still a URL.
+             */
+            'project.can' => RequireProjectCapability::class,
             'entitlement' => EnsureEntitlement::class,
             'throttle' => ConditionalThrottle::class,
         ]);
@@ -198,6 +207,8 @@ return Application::configure(basePath: dirname(__DIR__))
             ResolveMembership::class,
             EnsurePortal::class,
             ResolveProject::class,
+            // The capability check needs the project context `ResolveProject` sets, so it follows it.
+            RequireProjectCapability::class,
             SubstituteBindings::class,
             Authorize::class,
         ]);
