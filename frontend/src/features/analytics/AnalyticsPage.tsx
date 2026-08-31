@@ -37,6 +37,7 @@ import {
 } from './hooks'
 import { findingsFor, windowConfidence, type QualityFinding, type WindowConfidence } from './dataQualityFindings'
 import { efficiencyFor, returnFor } from './pathEfficiency'
+import { platformReadings } from './platformReading'
 import { attributionFindings, type AttributionFinding } from './attributionFindings'
 import { distributionFor } from './familyDistribution'
 import type { FreshnessRow, PlatformObjectives } from './api'
@@ -714,6 +715,8 @@ function PlatformPaths({
   }
 
   const paths = (data?.paths ?? []).filter((p) => p.platforms.length > 0)
+  /* The range each path's own rows imply — computed once, keyed by path. */
+  const readings = new Map(platformReadings(paths).map((r) => [r.path, r]))
 
   /** What this window is missing, per platform — keyed the way the payload names them. */
   const gaps = new Map<string, { missing: number; status: string | null }>()
@@ -750,6 +753,27 @@ function PlatformPaths({
                 </span>
               )}
             </div>
+
+            {/*
+              FUNNEL-ANALYTICAL-PATTERN-001 — the range this list implies, said once above it.
+
+              The rows carry each platform's cost; which of them is dearest, and by how much, is the
+              question the reader was left to answer from the column. It is stated inside ONE path
+              and on ONE metric, because a range with two units is not a range and a comparison
+              across paths is the one this section exists to refuse.
+            */}
+            {(() => {
+              const reading = readings.get(path.path)
+              if (reading === undefined || !('cheapest' in reading) || reading.spread <= 1) return null
+
+              return (
+                <p data-testid={`platform-path-${path.path}-reading`} className="mb-2 text-xs text-text-secondary">
+                  {ar
+                    ? `${providerLabel(reading.dearest.provider, 'ar')} أغلى ${reading.spread}× من ${providerLabel(reading.cheapest.provider, 'ar')} على هذا المسار.`
+                    : `${providerLabel(reading.dearest.provider, 'en')} costs ${reading.spread}× what ${providerLabel(reading.cheapest.provider, 'en')} costs on this path.`}
+                </p>
+              )
+            })()}
 
             <ul className="flex flex-col gap-1">
               {path.platforms.map((row) => {
