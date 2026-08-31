@@ -1,98 +1,113 @@
-# START HERE — 2026-08-30, the overnight run: fourteen new requirements opened, the queue draining
+# START HERE — 2026-09-01
 
 Read this file, then `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then `git log origin/main`.
-**Do not re-audit the whole project.** Everything below is Git, GitHub or Production evidence.
 Operational authority: `Git → REQUIREMENTS_TRACEABILITY_MATRIX.md → RESUME_STATE.md`.
+This file owns **resumability**. The Matrix owns **requirements and status**; do not keep a second
+copy of them here.
+
+**Read this before you trust any row: a status is a claim about the PRODUCT, not about the code.**
+On 2026-08-31 the owner opened the live client report and found four rows that said VERIFIED over
+behaviour that was not there. Where this document and the running product disagree, the product is
+right, and the row is downgraded rather than defended. `PRODUCTION-TRUTH-AUDIT-001` carries that
+obligation and is not closed.
 
 ---
 
-## 1. Current state
+## 1. Where the tree is
 
 ```
-origin/main = 1820b0f9  (#186 merged and deployed 2026-08-30 05:28 UTC)
-production  = https://campaignshub.io/  200 after every deploy below
-open PRs    = 3 in flight, ~11 more prepared and waiting on the queue
+origin/main = 4845f99e7942c80caaa42bf014d3a9483d47b20c
+production  = https://campaignshub.io/   (200 after every deploy; the VPS resets hard to origin/main on push)
+open PRs    = #242 top performing ads + the openable card  ·  #241 money currency truth
 ```
 
-## 2. What changed about the QUEUE, which is the thing that changes everything else
+Reference share used for browser acceptance: the live client report the owner opened. **Do not
+hard-code its token into product logic or fixtures** — read it in a browser, then discard it.
 
-The browser gate was chromium 13.5m + firefox 22.5m + webkit 22.5m **in sequence**: 49–70 minutes of
-wall clock. A merge invalidates every other open head, so the drain landed about one pull request per
-gate.
+## 2. The active unit
 
-`run-gate.mjs` was already giving each browser its own database reset, its own servers and its own
-Node process — deliberately, so firefox never meets what chromium created. Nothing was shared, so
-they were separable all along. #187 made them three matrix jobs: same runner-minutes, finishing in
-the time of the slowest browser. **Observed: 28 minutes for a full green CI, against 60+.**
+`feat/top-performing-ads` → **PR #242**, the first slice of the production reality correction.
+Backend groups the report's ads by objective family and ranks each group on that family's own metric;
+the section prints «الإعلانات الأعلى أداءً» with the basis stated per group; the card is a button
+where a surface can open one; `ReportAdDetail` is the read-only modal, bounded by the share scope,
+reusing the product's one media reader. Guards proven by injection.
 
-If a gate job fails on one browser, `gh run rerun --failed <run>` re-runs only that job.
+## 3. What binds, and where it is written down
 
-## 3. Merged and deployed this session, per commit
+Three requirement packages arrived on 2026-08-30/31 and are **all still binding**. They are recorded
+in the Matrix — §56 registers what had no owner, and fifteen existing rows were extended in place.
+None of it lives in a chat window any more.
 
-| PR | what it delivered | merge SHA |
-|---|---|---|
-| #177 | status vocabulary normalised (first pass) | `d5e8e458` |
-| #184 | entity relevance grouping | `64adad32` |
-| #179 | ANALYTICS-FILTER-TRUTH at entity/drill-down grain | `f89be7f2` |
-| #181 | REPORT-SCOPE-SELECTION — bounded scope selection | `9dc8d06c` |
-| #182 | a report ranked creatives by ROAS for objectives nobody bought revenue on | `ef9f271f` |
-| #187 | the gate as three jobs | `b0d89ce0` |
-| #180 | UX-MULTISELECT-SCALE — server-side campaign options wired into the filter | `f577a4fe` |
-| #176 | LEAD-DEDUP made visible | `338db889` |
-| #183 | creative → ad drill-down | `dbd3f59d` |
-| #186 | `durationSeconds()` returned a float against a declared int — the sync log crashed on any run that took longer than nothing | `1820b0f9` |
+* **Product corrections and analytical depth** — `TABLE-PRESENTATION-CONTRACT-001`,
+  `ADSET-METRICS-TRUTH-001`, `ANALYTICS-DIFFERENTIATION-001`, `INSUFFICIENT-DATA-EXPLAINED-001`,
+  `STORE-TABLE-PRESENTATION-001`, `BUDGET-ALERT-EMAIL-001`, `MONEY-SCOPE-TRUTH-001`, plus the
+  extensions on `UX-KPI-PRESENTATION-001`, `NUMBER-PRESENTATION-001`, `OBJECTIVE-ANALYTICS-DEPTH-001`,
+  `BUDGET-GOVERNANCE-001`, `PLATFORM-DECISION-ANALYTICS-001`, `DATA-QUALITY-OPERATOR-UX-001`,
+  `CROSS-PLATFORM-ATTRIBUTION-DEPTH-001`.
+* **Content** — `CONTENT-TERMINOLOGY-001` (the customer-facing experience is «المحتويات» / Content;
+  the technical Ad entity is not renamed), `CONTENT-PREVIEW-SHAPES-001`, `CONTENT-DETAIL-MODAL-001`.
+* **Reports, live share and branding** — `REPORT-PRODUCT-MODEL-001` (LIVE × Dashboard, LIVE ×
+  Detailed Report, SNAPSHOT × Executive Summary, SNAPSHOT × Detailed Report),
+  `REPORT-DETAIL-PARITY-001`, `REPORT-CREATION-UX-001`, `REPORT-INTERACTION-PARITY-001`,
+  `BRANDING-RENDER-EVIDENCE-001`, and the reopened `REPORT-AD-PREVIEW-001` and
+  `BRANDING-HIERARCHY-001`.
+* **Campaign, lead and team operations** — `LEAD-OPERATIONS-001`, `TEAM-PROJECT-RBAC-001`,
+  `EXECUTIVE-DAILY-DIGEST-001`, `LEAD-SOURCE-ATTRIBUTION-001`, `CAMPAIGN-OUTCOME-DIMENSION-001`,
+  `LEAD-SLA-NOTIFICATION-001`, `EXECUTIVE-OPS-DASHBOARD-001`,
+  `WHATSAPP-CONVERSATION-SOURCE-001`.
+* **Governance** — `GOVERNANCE-ANTILOSS-001`, `PRODUCTION-TRUTH-AUDIT-001`.
 
-Every deploy reported success and production answered 200.
+## 4. Dependency order, so a cold session does not start in the wrong place
 
-## 4. The fourteen new requirements, all opened with a first slice
+```
+MONEY-SCOPE-TRUTH-001 ─┬─→ REPORT-AD-PREVIEW-001 ─→ REPORT-INTERACTION-PARITY-001
+CONTENT-PREVIEW-SHAPES-001 ─┴─→ CONTENT-DETAIL-MODAL-001
+TABLE-PRESENTATION-CONTRACT-001 ─→ OBJECTIVE-ANALYTICS-DEPTH-001 · STORE-TABLE-PRESENTATION-001
+                                 · DATA-QUALITY-OPERATOR-UX-001 · ADSET-METRICS-TRUTH-001 (presentation half)
+REPORT-PRODUCT-MODEL-001 ─→ REPORT-DETAIL-PARITY-001 ─→ REPORT-CREATION-UX-001
+BRANDING-HIERARCHY-001 ─→ BRANDING-RENDER-EVIDENCE-001
+TEAM-PROJECT-RBAC-001 ─→ LEAD-OPERATIONS-001 ─→ LEAD-SLA-NOTIFICATION-001 ─→ EXECUTIVE-OPS-DASHBOARD-001
+                                             └─→ EXECUTIVE-DAILY-DIGEST-001
+LEAD-SOURCE-ATTRIBUTION-001 runs beside LEAD-OPERATIONS-001; neither may invent identity from a click.
+```
 
-Added to the Matrix with dependencies and acceptance criteria in `docs/canonical-statuses-2`, then
-each given real work rather than a row:
+`ADSET-METRICS-TRUTH-001` is a pipeline fix and does not wait for the table contract; only its
+presentation half does.
 
-| Requirement | first slice | status |
-|---|---|---|
-| NUMBER-PRESENTATION-001 | 3 significant digits, exact figure reachable, 4 Arabic-Indic literals fixed | PARTIAL |
-| UX-KPI-PRESENTATION-001 | one `StatCard`/`StatGrid`; `dir="ltr"` + `text-start`; 3 surfaces migrated | PARTIAL |
-| ADS-TERMINOLOGY-001 | «الإعلانات» / «Ads» across 20 files, two deliberate exceptions | PARTIAL |
-| AD-PREVIEW-001 | one canonical media reader; the ad opens in place | PARTIAL |
-| AD-MEDIA-RECOVERY-001 | Meta was asked for four fields; carousels, posters, destinations | PARTIAL |
-| REPORT-AD-PREVIEW-001 | `ads` in the snapshot, absent-with-a-reason when empty | PARTIAL |
-| REPORT-ANALYTICAL-DEPTH-001 | `outline` — the sections in the order they argue | PARTIAL |
-| BUDGET-GOVERNANCE-001 | internal limits, pacing, evidence-gated projection, alerting, `/app/spend-limits` | PARTIAL |
-| PLATFORM-DECISION-ANALYTICS-001 | platform contribution per path; no cross-path ranking | PARTIAL |
-| OBJECTIVE-ANALYTICS-DEPTH-001 | strongest/weakest inside each path; cost metrics invert | PARTIAL |
-| CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 | overlap as a floor, with coverage beside it | PARTIAL |
-| FUNNEL-ANALYTICAL-PATTERN-001 | signal → context → explanation → evidence → action, per path | PARTIAL |
-| DATA-QUALITY-OPERATOR-UX-001 | findings that say who can end it | PARTIAL |
-| TYPOGRAPHY-PRODUCT-POLISH-001 | 13 sizes measured, 6 half-pixel ones collapsed, guard | PARTIAL |
+## 5. How to run it
 
-Each row carries what remains. None claims more than its evidence.
+```bash
+# backend suite — a throwaway database, because the suite migrates
+DB=ch_$(date +%s); createdb $DB
+cd backend && DB_DATABASE=$DB DB_USERNAME=$(whoami) DB_PASSWORD="" php artisan test
+./vendor/bin/pint --test && ./vendor/bin/phpstan analyse --memory-limit=1G
 
-## 5. Branches waiting on the queue
+# frontend
+cd frontend && npm run typecheck && npx vitest run && npm run lint
 
-Prepared, pushed, full suites green locally, held so the open queue stays small (the opener keeps at
-most three PRs in flight, because every merge re-runs every other open head):
+# the browser gate — check the ports first, four checkouts share them
+lsof -ti:8100,5273,5373 | xargs kill -9 2>/dev/null; npm run gate
+```
 
-`test/grain-parity` · `docs/canonical-statuses-2` · `feat/alerts-queue-order` · `feat/ads-terminology`
-· `feat/ad-media-recovery` · `feat/budget-governance` · `feat/attribution-overlap` ·
-`feat/platform-by-objective` · `feat/report-ads-section` · `feat/type-scale` ·
-`feat/report-download-identity` · `test/locale-does-not-narrow`
+Lanes live under `~/Developer/CampaignsHub-lanes/*`, each a git worktree of this repository.
 
-## 6. What is still externally blocked, and is not a to-do
+## 6. Truthful blockers
 
-`PROVIDER-LIVE-VERIFICATION-001` and the six `INTEGRATION-*` rows need OAuth credentials nobody here
-holds. `MAIL-SEND` needs SMTP. `PAY-001` / `PORTAL-PAY-001` need Moyasar or Stripe keys.
-`AGGREGATION-TRUTH-001` and `MONEY-USD-002` need production observation. Those are the only rows
-whose next step is not ours.
+* `WHATSAPP-CONVERSATION-SOURCE-001` — needs the WhatsApp Business Platform authorisation. Meta's
+  click-to-WhatsApp ad metrics are a DIFFERENT source and may not stand in for conversations.
+* `INTEGRATION-TIKTOK-001` — provider approval pending. Not VERIFIED, and it blocks nothing else.
+* `MAIL-SEND` — no live SMTP credential; composition and ledgers are proven, delivery is not.
+* Several `BLOCKED_OPERATIONAL_EVIDENCE` rows need observation on Production, not code.
 
-## 7. Two things worth knowing before touching CI or the matrix
+Never request a secret in chat or in a GitHub issue.
 
-**The matrix conflict resolver** (`/tmp/ops/resolve_matrix.py` in the run's scratch) treats main's
-table as authoritative and lets a branch carry only the rows it changed. It compares the notes CELL,
-not the whole row, because a normalisation that PREPENDS a sentence makes two nearly identical rows
-diverge at the first character.
+## 7. Standing decisions
 
-**`MatrixStatusVocabularyTest` had the blind spot it exists to catch.** It matched
-`^\*\*([A-Z_]+)\*\*$`, so it could only ever see cells that were already canonical in shape, and
-reported «no drift» across twenty cells of exactly the drift it guards. It now finds the status
-COLUMN from each table's own header.
+```
+Theme     dark = default/reference; light = explicit and remembered; never system-driven
+Numerals  Latin by default; language never switches numerals
+Money     subscriptions USD, reporting SAR, the original currency always kept; totals fail closed
+          on a partial or mixed scope, and a figure carries the currency it was measured in or none
+Metrics   one canonical model — no per-page objective maps, money rules or currency logic
+Engines   extend what exists. No second CRM, RBAC, scheduler, mail, media or reporting engine.
+```
