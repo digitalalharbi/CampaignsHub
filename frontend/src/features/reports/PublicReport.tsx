@@ -7,6 +7,7 @@ import type { ReportFormat } from './api'
 import { headerIdentity, hideBrokenLogo, type SharedBranding } from './sharedBranding'
 import { InteractiveReport } from './InteractiveReport'
 import { LiveSharedReport } from './LiveSharedReport'
+import { productLabel } from './reportProduct'
 import { SharedAttributionSection } from './SharedAttributionSection'
 import { SharedCreativeSection } from './SharedCreativeSection'
 import { Button } from '@/components/ui/Button'
@@ -193,13 +194,7 @@ export function PublicReport() {
                 incomplete — the one reading the trimming was meant to prevent.
               */}
               <p data-testid="report-form-label" className="mb-4 text-xs font-semibold text-text-secondary">
-                {report.form === 'executive_summary'
-                  ? (locale === 'ar'
-                      ? 'ملخص تنفيذي — أبرز النتائج والقرارات. التفاصيل الكاملة في التقرير التفصيلي.'
-                      : 'Executive summary — the headline results and decisions. Full detail lives in the detailed report.')
-                  : (locale === 'ar'
-                      ? 'تقرير تفصيلي — كل المنصات والحملات والإعلانات.'
-                      : 'Detailed report — every platform, campaign and creative.')}
+                {productLabel(report.mode ?? 'snapshot', report.form ?? 'detailed', locale)}
               </p>
 
               {/*
@@ -209,7 +204,7 @@ export function PublicReport() {
                 mislabel one half of itself.
               */}
               {report.mode === 'live' ? (
-                <LiveSharedReport token={token} password={accepted} currency={report.currency} />
+                <LiveSharedReport token={token} password={accepted} currency={report.currency} form={report.form ?? 'detailed'} />
               ) : (
                 <>
                   <InteractiveReport
