@@ -14,7 +14,7 @@ import {
   RankingBarChart,
 } from '@/features/analytics/charts'
 import { KpiCard, platformColor } from '@/features/analytics/components'
-import { moneyFromTotals, ratio } from '@/features/analytics/format'
+import { money, moneyFromTotals, ratio } from '@/features/analytics/format'
 import { campaigns as countedCampaigns } from '@/lib/counted'
 import { formatMoneyReading, moneyState, rankableMoney, readCostPer, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import { fetchLiveShared, type LivePayload } from './api'
@@ -127,14 +127,20 @@ export function LiveSharedReport({
   /*
    * `asMoney`, not `money`: this closure already carries the payload's currency, and a second thing
    * called `money` in a file that also formats money is how a missing currency hides in plain sight.
+   *
+   * ## Why it delegates rather than formatting its own way — MONEY-SCOPE-TRUTH-001
+   *
+   * It used `Intl` with `style: 'currency'`, which printed «$7,420» — while every table on the SAME
+   * page, drawn by `MetricTable` through the money contract, printed «7.75K USD». One document, two
+   * notations for one currency, observed on the owner's live link. A reader comparing the strip to
+   * the table below it has to decide whether they are looking at the same units, and that is a
+   * question a report must never make them ask.
+   *
+   * Two further things the symbol form got wrong and this does not: a currency the scope cannot
+   * state comes back bare rather than under a guessed symbol, and `$` is the symbol of a dozen
+   * currencies — «USD» spelled out is the one form that cannot be misread.
    */
-  const asMoney = useMemo(
-    () => (v: number | null | undefined) =>
-      v === null || v === undefined
-        ? '—'
-        : new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(v),
-    [currency],
-  )
+  const asMoney = useMemo(() => (v: number | null | undefined) => money(v, currency || null), [currency])
   const count = (v: number | null | undefined) =>
     v === null || v === undefined ? '—' : new Intl.NumberFormat('en-US').format(Math.round(v))
 

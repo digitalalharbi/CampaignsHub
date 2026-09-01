@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import type { ReportData } from './InteractiveReport'
+import { moneyExact } from '@/features/analytics/format'
 
 /**
  * English, LTR, A4-portrait DOCUMENT rendering of a report (distinct from the RTL 16:9 slide
@@ -54,8 +55,16 @@ const PRINT_ADS_ABSENT: Record<string, string> = {
 const nfmt = (n: number | null | undefined, opts?: Intl.NumberFormatOptions) =>
   n == null ? '—' : new Intl.NumberFormat('en-US', opts).format(n)
 
-const money = (n: number | null | undefined, currency: string) =>
-  n == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n)
+/*
+ * The printed document states money the way the screen does — MONEY-SCOPE-TRUTH-001.
+ *
+ * This printed «$7,420» through `style: 'currency'` while the report it is a copy OF printed
+ * «7.75K USD». A PDF that a client files beside the link they were sent must not restate the same
+ * figure in a different notation — and `$` is the symbol of a dozen currencies, so the reader cannot
+ * even confirm they match. `moneyExact` is used rather than the compact form because a document is
+ * read once and kept: the precise figure is what somebody checks against an invoice.
+ */
+const money = (n: number | null | undefined, currency: string) => moneyExact(n, currency || null)
 
 const dateFmt = (s?: string) =>
   s ? new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(s)) : '—'
