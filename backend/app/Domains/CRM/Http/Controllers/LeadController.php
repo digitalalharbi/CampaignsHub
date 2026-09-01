@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\CRM\Http\Controllers;
 
+use App\Domains\CRM\Actions\AdvanceLead;
 use App\Domains\CRM\Actions\ConvertLead;
 use App\Domains\CRM\Actions\CreateLead;
 use App\Domains\CRM\Actions\UpdateLead;
+use App\Domains\CRM\Enums\LeadStage;
 use App\Domains\CRM\DTOs\LeadData;
 use App\Domains\CRM\Http\Requests\StoreLeadRequest;
 use App\Domains\CRM\Http\Requests\UpdateLeadRequest;
@@ -16,6 +18,9 @@ use App\Domains\CRM\Resources\OpportunityResource;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
+use InvalidArgumentException;
 use Illuminate\Http\Request;
 
 final class LeadController extends Controller
@@ -130,4 +135,102 @@ final class LeadController extends Controller
             status: 201,
         );
     }
+
+    /**
+     * LEAD-OPERATIONS-001 — move a lead along the pipeline.
+     *
+     * Guarded by `leads.update` on the lead's OWN project, and by the same visibility rule the list
+     * uses: an agent may work the leads they were given and no others. Both checks, because the
+     * first says «may this person move leads here» and the second says «may they move THIS one».
+     */
+    public function advance(Request $request, Lead $lead, AdvanceLead $action): JsonResponse
+    {
+        $this->assertMayWork($request, $lead, ProjectCapability::LEADS_UPDATE);
+
+        $data = $request->validate([
+            'stage' => ['required', Rule::in(LeadStage::values())],
+        ]);
+
+        try {
+            $lead = $action->execute($lead, LeadStage::from($data['stage']), $request->user());
+        } catch (InvalidArgumentException $e) {
+            /*
+             * 422, not 403: the mover is entitled to move this lead, and the move itself is the
+             * thing that is wrong. A 403 would send them to ask for a permission they already have.
+             */
+            return ApiResponse::error($e->getMessage(), status: 422);
+        }
+
+        return ApiResponse::success(new LeadResource($lead), 'Lead moved.');
+    }
+
+    /**
+     * Hand a lead to somebody, or take it back.
+     *
+     * `leads.assign` and not `leads.update`: working a lead and deciding who works it are different
+     * jobs, and an agent who can quietly reassign their own difficult leads to a colleague is a
+     * pipeline nobody can manage.
+     */
+    public function assign(Request $request, Lead $lead, AdvanceLead $action): JsonResponse
+    {
+        $this->assertMayWork($request, $lead, ProjectCapability::LEADS_ASSIGN);
+
+        $data = $request->validate([
+            'owner_id' => ['present', 'nullable', 'integer', 'exists:users,id'],
+        ]);
+
+        return ApiResponse::success(
+            new LeadResource($action->assign($lead, $data['owner_id'] === null ? null : (int) $data['owner_id'])),
+            'Lead assigned.',
+        );
+    }
+
+    /** Record what the agent promised. Null clears it — «no call-back planned» is an answer. */
+    public function followUp(Request $request, Lead $lead, AdvanceLead $action): JsonResponse
+    {
+        $this->assertMayWork($request, $lead, ProjectCapability::LEADS_UPDATE);
+
+        $data = $request->validate([
+            'next_follow_up_at' => ['present', 'nullable', 'date'],
+        ]);
+
+        return ApiResponse::success(
+            new LeadResource($action->scheduleFollowUp(
+                $lead,
+                $data['next_follow_up_at'] === null ? null : Carbon::parse($data['next_follow_up_at']),
+            )),
+            'Follow-up recorded.',
+        );
+    }
+
+    /**
+     * Both halves of «may this person do this to THIS lead», in one place.
+     *
+     * The capability is asked of the lead's own project rather than the request's, so a reader
+     * cannot change the answer by changing a parameter. The visibility scope is asked as well,
+     * because a capability grants the ACT and the scope decides which rows it may be performed on —
+     * an agent holding `leads.update` may still only update the leads they were given.
+     */
+    private function assertMayWork(Request $request, Lead $lead, string $capability): void
+    {
+        $user = $request->user();
+        $projectId = $lead->project_id === null ? null : (string) $lead->project_id;
+
+        abort_unless(
+            $user !== null && ($projectId === null
+                ? $user->hasPermission(str_replace('.', '.', $capability))
+                : app(ProjectAbilities::class)->allows($user, $projectId, $capability)),
+            403,
+            'You do not have this permission on this project.',
+        );
+
+        abort_unless(
+            app(LeadVisibility::class)
+                ->scopeForReader(Lead::query()->whereKey($lead->getKey()), $user, $projectId)
+                ->exists(),
+            403,
+            'This lead is not assigned to you.',
+        );
+    }
+
 }

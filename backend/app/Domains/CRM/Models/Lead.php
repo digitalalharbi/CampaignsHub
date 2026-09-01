@@ -78,6 +78,9 @@ final class Lead extends Model
         'first_attempt_at' => 'datetime',
         'first_contact_at' => 'datetime',
         'qualified_at' => 'datetime',
+        'last_contact_at' => 'datetime',
+        'next_follow_up_at' => 'datetime',
+        'contact_attempts' => 'integer',
     ];
 
     /** The lead this one duplicates, when a dedup signal matched. Never deleted, only related. */
