@@ -10,6 +10,7 @@ import { CampaignDetailPage } from '@/features/campaigns/CampaignDetailPage'
 import { CampaignsPage } from '@/features/campaigns/CampaignsPage'
 import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
 import { RecommendationsPage } from '@/features/recommendations/RecommendationsPage'
+import { FollowUpWorkspacePage } from '@/features/crm/FollowUpWorkspacePage'
 import { LeadsPage } from '@/features/crm/LeadsPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
@@ -450,6 +451,15 @@ export const router = createBrowserRouter(withErrorBoundary([
           },
           // Sales CRM (behind sales_crm_enabled; routes always exist, nav is gated).
           { path: 'leads', element: <LeadsPage /> },
+          /*
+           * LEAD-OPERATIONS-001 — the follow-up workspace.
+           *
+           * A child of `leads` rather than a rail entry of its own: the rail is gated by an
+           * entitlement key and there is no `leads` one, so inventing a key to hang a link on would
+           * put a nav decision inside a feature commit. It is reached from the leads screen, which
+           * is where a reader asking «what is overdue» already is.
+           */
+          { path: 'leads/workspace', element: <FollowUpWorkspacePage /> },
         ],
         }],
       },

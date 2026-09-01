@@ -74,3 +74,58 @@ export async function convertLead(id: string): Promise<Opportunity> {
 export function listOpportunities(): Promise<Opportunity[]> {
   return getData<Opportunity[]>('/opportunities')
 }
+
+/**
+ * LEAD-OPERATIONS-001 — the follow-up workspace.
+ *
+ * `FollowUpWorkspace` has been served at `GET /leads/workspace` since it shipped, tested, and called
+ * by nobody: every figure it computes — unassigned, overdue, never contacted, the rates, the median
+ * first response — reached only the daily digest. This is the client for it.
+ *
+ * A rate is `null` where its denominator was zero, and stays null all the way to the screen: «0%
+ * contacted» out of no leads is a verdict on nothing.
+ */
+export interface FollowUpSummary {
+  window: { from: string; to: string }
+  received: number
+  unassigned: number
+  contacted: number
+  not_contacted: number
+  qualified: number
+  appointments: number
+  won: number
+  lost: number
+  invalid: number
+  overdue: number
+  /** «all_open» — overdue is asked of the whole pipeline, not of the window. The payload says so. */
+  overdue_scope: string
+  contact_rate: number | null
+  qualification_rate: number | null
+  appointment_rate: number | null
+  win_rate: number | null
+  first_response: { median_minutes: number | null; measured: number; of: number }
+}
+
+export interface FollowUpOwnerRow extends FollowUpSummary {
+  owner_id: number | null
+  /** Staff, not lead PII. Null for the unassigned bucket, which is a row and not a person. */
+  owner_name: string | null
+}
+
+export interface FollowUpWorkspaceResult {
+  summary: FollowUpSummary
+  /** Null for a reader who does not run the pipeline — a colleague league table nobody asked for. */
+  by_owner: FollowUpOwnerRow[] | null
+}
+
+export async function fetchFollowUpWorkspace(params: {
+  from?: string
+  to?: string
+  project_id?: string
+}): Promise<FollowUpWorkspaceResult> {
+  const query = new URLSearchParams(
+    Object.entries(params).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  ).toString()
+
+  return getData<FollowUpWorkspaceResult>(`/leads/workspace${query ? `?${query}` : ''}`)
+}
