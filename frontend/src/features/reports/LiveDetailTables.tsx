@@ -128,9 +128,20 @@ export function LiveDetailTables({
     <span key="name" className="font-semibold">{(row.campaign_name as string | null) ?? '—'}</span>
   ))
 
+  /*
+   * REPORT-DETAIL-PARITY-001 — the ad set says which ad set it is.
+   *
+   * Production showed twenty-two rows of «—»: the server sent no `name` (the naming lived in the
+   * operator's controller, and this payload comes from the aggregator directly), and the fallback
+   * read `external_entity_id`, which is the COLUMN name — the aggregator shapes it as `external_id`.
+   * Two independent misses in one cell, and the visible result of either is the same dash.
+   *
+   * The provider id is a poor label and a real one; it stays as the last resort, above a dash, for
+   * a row whose ad set the structure sweep has since removed.
+   */
   const adSets = body((payload.ad_sets ?? []) as Array<Record<string, unknown>>, (row) => (
     <span key="name" className="font-semibold">
-      {(row.name as string | null) ?? (row.external_entity_id as string | null) ?? '—'}
+      {(row.name as string | null) ?? (row.external_id as string | null) ?? '—'}
     </span>
   ))
 

@@ -6,8 +6,6 @@ namespace App\Domains\Metrics\Http\Controllers;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
-use App\Domains\Campaigns\Models\ExternalAd;
-use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Metrics\Models\DailyMetric;
@@ -1089,7 +1087,14 @@ final class MetricsController extends Controller
         );
 
         return ApiResponse::success([
-            'entities' => $this->nameEntities($level, $rows),
+            /*
+             * Already named by the aggregator — REPORT-DETAIL-PARITY-001.
+             *
+             * The naming used to live here, which meant the client's shared report, calling the
+             * aggregator directly, got rows with no name at all. Moving it down means both surfaces
+             * are named by construction rather than by each caller remembering.
+             */
+            'entities' => $rows,
             'entity_type' => $level,
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             // What the money on these rows is IN — the same statement every other surface makes.
@@ -1139,45 +1144,6 @@ final class MetricsController extends Controller
         }
 
         return $ids;
-    }
-
-    /**
-     * Put a NAME on each row — a drill-down of provider ids is not a screen anybody can use.
-     *
-     * The figures come from `entity_daily_metrics` and the identity from the structure tables, joined
-     * here rather than denormalised into the metrics rows: a renamed ad squad must not need its
-     * metrics rewritten, and the metrics table has no business holding a name that can change.
-     *
-     * @param  list<array<string,mixed>>  $rows
-     * @return list<array<string,mixed>>
-     */
-    private function nameEntities(string $entityType, array $rows): array
-    {
-        $ids = array_values(array_filter(array_column($rows, 'entity_id')));
-
-        if ($ids === []) {
-            return [];
-        }
-
-        $named = $entityType === EntityDailyMetric::AD
-            ? ExternalAd::withoutGlobalScopes()->whereIn('id', $ids)
-                ->get(['id', 'name', 'status', 'external_id', 'external_ad_set_id', 'external_campaign_id'])
-            : ExternalAdSet::withoutGlobalScopes()->whereIn('id', $ids)
-                ->get(['id', 'name', 'status', 'external_id', 'external_campaign_id']);
-
-        $byId = $named->keyBy(fn ($m): string => (string) $m->getKey());
-
-        return array_map(static function (array $row) use ($byId): array {
-            $entity = $byId->get((string) $row['entity_id']);
-
-            return [
-                ...$row,
-                // Null rather than a placeholder: a row whose entity the structure sweep has since
-                // removed is a real state, and inventing «Unknown ad set» would hide it.
-                'name' => $entity?->name,
-                'status' => $entity?->status,
-            ];
-        }, $rows);
     }
 
     private function authorizeView(Request $request): void
