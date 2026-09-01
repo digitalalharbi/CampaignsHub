@@ -5,6 +5,7 @@ import {
 import { getData, postData } from '@/lib/api/client'
 import { Badge } from '@/components/ui/Badge'
 import { Skeleton } from '@/components/ui/States'
+import { StatCard, type StatTone } from '@/components/ui/StatCard'
 import { platformColor } from '@/features/analytics/components'
 import { useAuth } from '@/stores/auth'
 import { syncStatusMeaning } from '@/lib/syncStatus'
@@ -293,14 +294,16 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
   )
 }
 
-function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'success' | 'warning' }) {
-  return (
-    <div className="rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)]">
-      <span className="text-sm text-text-secondary">{label}</span>
-      <div className={`tnum mt-1 text-2xl font-extrabold ${tone === 'success' ? 'text-success' : tone === 'warning' ? 'text-warning' : 'text-text-primary'}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-[11px] text-text-muted">{sub}</div>}
-    </div>
-  )
+/**
+ * UX-KPI-PRESENTATION-001 — the integrations summary, on the product's own card.
+ *
+ * It drew its own: same shape, its own label size, its own value size, its own padding. A second
+ * opinion about type on a page a reader reaches from the same rail as every surface using the
+ * shared one. The tone still comes from here, because whether «two accounts awaiting credentials»
+ * is a warning is a fact about integrations and not about cards.
+ */
+function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: StatTone }) {
+  return <StatCard label={label} value={value} hint={sub} tone={tone ?? 'neutral'} />
 }
 
 function Mini({ label, value }: { label: string; value: number }) {
