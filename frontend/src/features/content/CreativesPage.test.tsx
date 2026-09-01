@@ -150,7 +150,11 @@ describe('CreativesPage', () => {
 
     const bar = within(screen.getByTestId('content-filters'))
 
-    for (const axis of ['Client', 'Project', 'Platform', 'Campaign', 'Objective', 'Marketing path', 'Ad type', 'Fatigue']) {
+    /*
+     * «Content type», not «Ad type», since CONTENT-TERMINOLOGY-001: this filter narrows the LIBRARY,
+     * and the library holds the asset rather than the ad that carried it.
+     */
+    for (const axis of ['Client', 'Project', 'Platform', 'Campaign', 'Objective', 'Marketing path', 'Content type', 'Fatigue']) {
       expect(bar.getByText(axis)).toBeInTheDocument()
     }
     // Reachable without opening anything.

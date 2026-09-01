@@ -75,7 +75,7 @@ import { campaignStatusLabel, marketingPathLabel, objectiveLabel, providerLabel 
 
 const COPY = {
   ar: {
-    title: 'مكتبة الإعلانات',
+    title: 'مكتبة المحتويات',
     subtitle: 'كل إعلان مزامَن — بأرقامه الحقيقية، ومقارنته بمسار هدفه.',
     search: 'ابحث بالاسم أو نص الإعلان…',
     grid: 'شبكة',
@@ -89,7 +89,7 @@ const COPY = {
     ad: 'الإعلان',
     objective: 'الهدف',
     path: 'المسار التسويقي',
-    kind: 'نوع الإعلان',
+    kind: 'نوع المحتوى',
     status: 'الحالة',
     health: 'حالة الإجهاد',
     from: 'من',
@@ -129,7 +129,7 @@ const COPY = {
     name: 'الاسم',
     result: 'النتيجة',
     efficiency: 'الكفاءة',
-    details: 'تفاصيل الإعلان',
+    details: 'تفاصيل المحتوى',
     source: 'المصدر: منصة الإعلان',
     allContent: 'كل الإعلانات',
     /*
@@ -151,8 +151,8 @@ const COPY = {
     manyStatuses: 'حالات',
   },
   en: {
-    title: 'Ads library',
-    subtitle: 'Every synced ad — with its real figures, judged against its own objective.',
+    title: 'Content library',
+    subtitle: 'Every synced piece of content — with its real figures, judged against its own objective.',
     search: 'Search by name or ad copy…',
     grid: 'Grid',
     list: 'List',
@@ -165,7 +165,7 @@ const COPY = {
     ad: 'Ad',
     objective: 'Objective',
     path: 'Marketing path',
-    kind: 'Ad type',
+    kind: 'Content type',
     status: 'Status',
     health: 'Fatigue',
     from: 'From',
@@ -205,7 +205,7 @@ const COPY = {
     name: 'Name',
     result: 'Result',
     efficiency: 'Efficiency',
-    details: 'Ad details',
+    details: 'Content details',
     source: 'Source: ad platform',
     allContent: 'All ads',
     manyClients: 'clients',

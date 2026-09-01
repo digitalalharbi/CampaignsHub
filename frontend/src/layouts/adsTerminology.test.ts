@@ -1,34 +1,39 @@
 import { describe, expect, it } from 'vitest'
 
 /**
- * ADS-TERMINOLOGY-001 — the advertising entity has ONE user-facing name.
+ * CONTENT-TERMINOLOGY-001 · ADS-TERMINOLOGY-001 — two things, two names, and neither borrows the
+ * other's.
  *
- * «الإعلانات» in Arabic, «Ads» in English. The product had three names for it and showed all of
- * them: navigation said «المحتوى / Content», the library called itself «مكتبة المحتويات / Creative
- * library», the report scope said «المحتويات», and the paid-media brief offered «المحتويات /
- * الإبداعات» in one field label. Every one of those is defensible on its own and the set is not: a
- * customer reading «المحتوى» in the sidebar, «المحتويات» in a report and «الإبداعات» in a form has
- * to work out that they are the same thing, and some of them will decide they are not.
+ * ## What this file used to enforce, and why it changed
+ *
+ * It insisted on ONE name — «الإعلانات / Ads» — for everything creative, because the product had
+ * three and showed all of them: the sidebar said «المحتوى», the library «مكتبة المحتويات», a report
+ * «المحتويات», a form «الإبداعات». Collapsing them to one word fixed the confusion and introduced a
+ * different one, which the owner named directly: the library is not a list of ads. It is the
+ * pictures and films themselves, one of which is carried by several ads across several platforms —
+ * a relation the schema has always modelled and the vocabulary had stopped expressing.
+ *
+ * So there are two names now, and the split is the product's own:
+ *
+ *   * **«المحتويات» / «Content»** — the media library: the asset, its preview, its own performance.
+ *   * **«الإعلانات» / «Ads»** — the advertising entity: what a campaign bought, ranked, reported on.
+ *
+ * A report's «الإعلانات الأعلى أداءً» is ads, correctly, and it is not the library. The library's
+ * «مكتبة المحتويات» is content, correctly, and it is not a campaign.
  *
  * ## What this deliberately does NOT touch
  *
  * The `Creative` model, `external_creatives`, `/api/v1/creatives`, the `creative` route param, the
- * `content` entitlement key and every test id built from them. A creative is carried by many ads —
- * that relation is real, the schema says so, and renaming it would be a destructive change dressed
- * as a copy fix. This is about the words on screen.
+ * `content` entitlement key and every test id built from them. Renaming those would be a
+ * destructive change dressed as a copy fix. This is about the words on screen.
  *
- * Two places also keep a different word ON PURPOSE, and the guard allows exactly them:
- *
- *   * `CreativePulseSection`'s drill-down calls its last rung «المادة الإعلانية / Ad asset», because
- *     the rung ABOVE it is the ad and «… › الإعلان › الإعلان» is two links, one word, two places.
- *   * The influencer and UGC surfaces say «المحتوى» meaning content made by a creator, which is a
- *     different domain and not an advertising entity at all.
+ * The influencer and UGC surfaces keep «المحتوى» meaning content made by a creator — a different
+ * domain, and the reason this guard names strings rather than scanning blindly.
  */
 
 /*
  * Read through Vite rather than `node:fs`: this suite's tsconfig carries no Node types, and adding
- * them to type a few `readFileSync` calls would widen the app's type surface to buy nothing. The
- * glob is eager and resolved at build time, so its keys are repository paths in every runner.
+ * them to type a few `readFileSync` calls would widen the app's type surface to buy nothing.
  */
 const TREE: Record<string, string> = import.meta.glob('/src/**/*.{ts,tsx}', {
   query: '?raw',
@@ -43,8 +48,8 @@ function read(path: string): string {
   return source
 }
 
-/** The words that must not name an advertising entity in navigation. */
-const COMPETING = ['المحتوى', 'المحتويات', 'الإبداعات']
+/** The word the CONTENT surfaces must not use: it names the advertising entity, not the asset. */
+const NOT_CONTENT = ['الإعلانات', 'الإعلان ', 'الإبداعات']
 
 type Leaf = { to: string; ar: string; en: string }
 
@@ -56,16 +61,17 @@ function leaves(file: string): Leaf[] {
   )
 }
 
-describe('ADS-TERMINOLOGY-001 — navigation', () => {
-  it.each(['appNav.ts', 'agencyNav.ts'])('%s names the ads destination «الإعلانات» / «Ads»', (file) => {
-    const ads = leaves(file).find((l) => l.to.endsWith('/content'))
+describe('CONTENT-TERMINOLOGY-001 — navigation', () => {
+  it.each(['appNav.ts', 'agencyNav.ts'])('%s names the library «المحتويات» / «Content»', (file) => {
+    const library = leaves(file).find((l) => l.to.endsWith('/content'))
 
-    expect(ads, `${file} has no ads destination — the parser found nothing`).toBeDefined()
-    expect(ads).toMatchObject({ ar: 'الإعلانات', en: 'Ads' })
+    expect(library, `${file} has no library destination — the parser found nothing`).toBeDefined()
+    expect(library).toMatchObject({ ar: 'المحتويات', en: 'Content' })
   })
 
-  it.each(['appNav.ts', 'agencyNav.ts'])('%s uses none of the competing names anywhere', (file) => {
-    const offenders = leaves(file).filter((l) => COMPETING.some((w) => l.ar.includes(w)) || /Creative/i.test(l.en))
+  /** «الإبداعات» was never one of the two names and is still not. */
+  it.each(['appNav.ts', 'agencyNav.ts'])('%s never says «الإبداعات» or «Creative»', (file) => {
+    const offenders = leaves(file).filter((l) => l.ar.includes('الإبداعات') || /Creative/i.test(l.en))
 
     expect(offenders).toEqual([])
   })
@@ -78,76 +84,52 @@ describe('ADS-TERMINOLOGY-001 — navigation', () => {
 })
 
 /**
- * And the surfaces that carry the entity keep the name in their own titles.
+ * The library's own headings say what the library holds.
  *
- * A `title:` in a COPY block is the heading a reader sees at the top of a page, which is the second
- * place after navigation where a product states what something is called.
+ * A `title:` in a COPY block is the heading at the top of a page, which is the second place after
+ * navigation where a product states what something is called — and the place a customer reads when
+ * the rail is collapsed.
  */
-describe('ADS-TERMINOLOGY-001 — page titles on the ads surfaces', () => {
+describe('CONTENT-TERMINOLOGY-001 — the library surfaces', () => {
   const SURFACES = [
     'src/features/content/CreativesPage.tsx',
-    'src/features/content/CreativeDetailPage.tsx',
     'src/features/content/CreativeGroupsPage.tsx',
     'src/features/content/CreativePulseSection.tsx',
-    'src/features/reports/SharedCreativeSection.tsx',
-    'src/features/reports/ReportScopePicker.tsx',
   ]
 
-  it.each(SURFACES)('%s states no competing name in a title', (path) => {
-    /*
-     * The keys that NAME the entity, not every string on the page. `CreativeDetailPage` has no
-     * `title` of its own — it is opened from the library and titled by the creative's name — so a
-     * scan for `title` alone silently found nothing there and passed.
-     */
+  it.each(SURFACES)('%s names its subject as content, not as an ad', (path) => {
     const titles = [...read(path).matchAll(/\b(?:title|heading|library|details|kind|members):\s*'([^']+)'/g)]
       .map(([, text]) => text!)
 
     expect(titles.length, 'no titles were found — the parser is agreeing with itself').toBeGreaterThan(0)
-    expect(titles.filter((t) => COMPETING.some((w) => t.includes(w)) || /Creative/i.test(t))).toEqual([])
+    expect(titles.filter((t) => NOT_CONTENT.some((w) => t.includes(w)) || /\bads?\b/i.test(t))).toEqual([])
   })
-})
 
-/** Nothing above can pass by accident: the words really are still in the tree, in their own domain. */
-describe('the influencer surfaces keep their own word', () => {
-  it('still says «المحتوى» where a creator made it', () => {
-    const source = read('src/features/auth/AuthPanel.tsx')
+  it('states the library heading in both languages', () => {
+    const source = read('src/features/content/CreativesPage.tsx')
 
-    expect(source).toContain('المحتوى')
-  })
-})
-
-/** A directory walk exists so the two describes above cannot silently point at deleted files. */
-describe('the files this guard names still exist', () => {
-  it('finds every layout it reads', () => {
-    const present = Object.keys(TREE)
-      .filter((path) => path.startsWith('/src/layouts/'))
-      .map((path) => path.slice('/src/layouts/'.length))
-
-    expect(present).toEqual(expect.arrayContaining(['appNav.ts', 'agencyNav.ts']))
+    expect(source).toContain("title: 'مكتبة المحتويات'")
+    expect(source).toContain("title: 'Content library'")
   })
 })
 
 /**
- * The vocabulary has to hold where the customer reads the RESULT, not only in the rail.
+ * And the ADVERTISING surfaces keep the other name.
  *
- * Navigation was the loudest instance and not the only one: the interactive report titled its
- * slides «أفضل المحتويات», the shared report described itself as covering «المحتويات», the campaign
- * overview said «أفضل المحتويات الإعلانية», and the shared label table answered `content` and
- * `tab_creatives` with «المحتويات» — so a customer met the sidebar's word, then three others on the
- * pages that word led to.
- *
- * Named strings rather than a blanket scan, because the influencer and UGC surfaces say «المحتوى»
- * about creator content on purpose and a scan that failed them would be deleted within a week.
+ * This half is what stops the correction becoming the original defect with the words swapped. A
+ * report ranking what a campaign bought is ranking ADS: «الإعلانات الأعلى أداءً» is right there and
+ * «المحتويات الأعلى أداءً» would be wrong, because the thing being ranked is the ad and its spend,
+ * not the picture.
  */
-describe('the surfaces the rail leads to say it too', () => {
+describe('ADS-TERMINOLOGY-001 — the advertising surfaces keep «الإعلانات»', () => {
   const SAYS_ADS: [string, string[]][] = [
-    ['src/lib/i18n.ts', ["content: 'الإعلانات'", "tab_creatives: 'الإعلانات'", "content: 'Ads'", "tab_creatives: 'Ads'"]],
+    ['src/features/reports/ReportAdsSection.tsx', ['الإعلانات الأعلى أداءً', 'Top performing ads']],
     ['src/features/reports/InteractiveReport.tsx', ['أفضل الإعلانات', 'أضعف الإعلانات']],
     /*
-     * The sentence moved to `reportProduct.ts` with REPORT-PRODUCT-MODEL-001 — the label is now
-     * chosen by mode AND form, and lives with the other three. The guard follows the copy rather
-     * than the file it used to sit in; pinning it to `PublicReport.tsx` would have been satisfied
-     * by a page that no longer says anything.
+     * The report label moved to `reportProduct.ts` with REPORT-PRODUCT-MODEL-001 — it is chosen by
+     * mode AND form now and lives with the other three. The guard follows the copy rather than the
+     * file it used to sit in; pinning it to `PublicReport.tsx` would be satisfied by a page that no
+     * longer says anything at all.
      */
     ['src/features/reports/reportProduct.ts', ['كل المنصات والحملات والإعلانات']],
     ['src/features/campaigns/overview/UnifiedCampaignOverview.tsx', ["topCreatives: 'أفضل الإعلانات'", "topCreatives: 'Best ads'"]],
@@ -160,4 +142,32 @@ describe('the surfaces the rail leads to say it too', () => {
       for (const phrase of expected) expect(source).toContain(phrase)
     })
   }
+
+  /** The shared label table answers the library's keys with the library's word. */
+  it('the label table names the library, not the ads', () => {
+    const source = read('src/lib/i18n.ts')
+
+    expect(source).toContain("content: 'المحتويات'")
+    expect(source).toContain("tab_creatives: 'المحتويات'")
+    expect(source).toContain("content: 'Content'")
+    expect(source).toContain("tab_creatives: 'Content'")
+  })
+})
+
+/** Nothing above can pass by accident: the creator-content word really is still in the tree. */
+describe('the influencer surfaces keep their own word', () => {
+  it('still says «المحتوى» where a creator made it', () => {
+    expect(read('src/features/auth/AuthPanel.tsx')).toContain('المحتوى')
+  })
+})
+
+/** A directory walk exists so the describes above cannot silently point at deleted files. */
+describe('the files this guard names still exist', () => {
+  it('finds every layout it reads', () => {
+    const present = Object.keys(TREE)
+      .filter((path) => path.startsWith('/src/layouts/'))
+      .map((path) => path.slice('/src/layouts/'.length))
+
+    expect(present).toEqual(expect.arrayContaining(['appNav.ts', 'agencyNav.ts']))
+  })
 })
