@@ -1,5 +1,5 @@
 import { useUi } from '@/stores/ui'
-import { absenceLabel, posterSource, readPreview } from './adPreview'
+import { absenceLabel, posterSource, previewShape, readPreview } from './adPreview'
 import type { CreativePreview } from './api'
 
 /**
@@ -14,11 +14,24 @@ export function AdPoster({
   name,
   className = 'h-32 w-full',
   testid,
+  width,
+  height,
+  aspectRatio,
 }: {
   preview: CreativePreview | null | undefined
   name: string
   className?: string
   testid?: string
+  /**
+   * CONTENT-PREVIEW-SHAPES-001 — the asset's own dimensions, where the platform reported them.
+   *
+   * A 9:16 story cropped into a landscape card keeps the middle third and throws away the top and
+   * the bottom, which on a story is the logo and the call to action. The card then shows a picture
+   * the ad never was, and two creatives compared side by side are two crops this product invented.
+   */
+  width?: number | null
+  height?: number | null
+  aspectRatio?: string | null
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const reading = readPreview(preview, ar)
@@ -37,10 +50,18 @@ export function AdPoster({
     )
   }
 
+  /*
+   * A portrait asset is contained, never covered — the whole frame is the point of a story. The
+   * backdrop is what stops the letter-boxing reading as a broken image: a picture floating on the
+   * page looks like a layout fault, and one sitting on a surface looks deliberate.
+   */
+  const portrait = previewShape(width, height, aspectRatio) === 'portrait'
+
   return (
     <img
       src={src}
       alt={name}
+      data-shape={portrait ? 'portrait' : 'landscape'}
       data-testid={testid}
       /*
        * A `data:` URI must load eagerly. A lazy one never enters the viewport observer, never
@@ -48,7 +69,7 @@ export function AdPoster({
        * came to render ten empty cards.
        */
       loading={src.startsWith('data:') ? 'eager' : 'lazy'}
-      className={`rounded-lg object-cover ${className}`}
+      className={`rounded-lg ${portrait ? 'bg-surface-secondary object-contain' : 'object-cover'} ${className}`}
     />
   )
 }

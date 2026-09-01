@@ -6,6 +6,7 @@ import { CreativeViewer } from './CreativeViewer'
 import { CreativeCompare } from './CreativeCompare'
 import { formatMetric, metricLabel, metricState } from './metrics'
 import { creativeGrainMissing, emptyReason, noDisplayableMetrics, type EmptyReason, type MetricsAvailability } from './availability'
+import { previewShape } from './adPreview'
 import { imageLoading } from './format'
 import { creativeMoney } from './creativeMoney'
 import { VideoPoster } from './VideoPoster'
@@ -1066,7 +1067,20 @@ function CreativeGridCard({
               // exempt: see `imageLoading`, where lazy-loading a `data:` URI stopped it loading at all.
               loading={imageLoading(poster)}
               decoding="async"
-              className="h-full w-full object-cover"
+              /*
+               * CONTENT-PREVIEW-SHAPES-001 — a story is contained, never covered.
+               *
+               * `object-cover` on a 9:16 asset in a 16:9 card keeps the middle third and throws away
+               * the top and the bottom — on a story that is the logo and the call to action. The card
+               * then shows a picture the ad never was, and two creatives compared side by side are
+               * two crops this product invented.
+               */
+              data-shape={previewShape(creative.width, creative.height, creative.aspect_ratio)}
+              className={`h-full w-full ${
+                previewShape(creative.width, creative.height, creative.aspect_ratio) === 'portrait'
+                  ? 'object-contain'
+                  : 'object-cover'
+              }`}
             />
           ) : video ? (
             /*
