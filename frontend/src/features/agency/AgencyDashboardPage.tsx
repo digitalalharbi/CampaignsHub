@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { StatCard, type StatTone } from '@/components/ui/StatCard'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Building2, FolderKanban, Inbox, Megaphone, ShieldCheck } from 'lucide-react'
 import { fetchAgencyDashboard, type AgencyDashboard } from './api'
@@ -33,6 +34,17 @@ const OBJECTIVE_LABELS: Record<string, { ar: string; en: string }> = {
 /** Latin digits everywhere, per the product's standing rule — never locale-native numerals. */
 const num = (n: number) => n.toLocaleString('en-US')
 
+/**
+ * UX-KPI-PRESENTATION-001 — the agency dashboard's figures, on the product's own card.
+ *
+ * This drew its own: a rounded card, a tinted icon square, a 3xl tabular figure, a label under it.
+ * The composition was fine and that was never the problem — the problem is that it was a SECOND
+ * opinion about the label size, the value size, the padding and the height, on a page a reader
+ * reaches from the same rail as every surface that uses the shared one.
+ *
+ * What stays local is what is genuinely this page's: which icon names the figure, which tone it
+ * carries, and where pressing it goes. The card owns the type.
+ */
 function Metric({
   to,
   label,
@@ -46,30 +58,30 @@ function Metric({
   value: number
   hint?: string
   icon: typeof Building2
-  tone: 'brand' | 'success' | 'warning' | 'info'
+  tone: StatTone
 }) {
-  const tones = {
+  const tones: Record<string, string> = {
     brand: 'bg-brand-primary-soft text-brand-700',
     success: 'bg-success/15 text-success',
     warning: 'bg-warning/15 text-warning',
     info: 'bg-info/15 text-info',
-  } as const
+  }
 
   return (
-    <Link
-      to={to}
-      className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 transition-colors hover:border-brand-400"
-    >
-      <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${tones[tone]}`}>
-        <Icon size={18} aria-hidden />
-      </span>
-      <span>
-        <span className="tnum block font-heading text-3xl font-extrabold tracking-tight text-text-primary" dir="ltr">
-          {num(value)}
-        </span>
-        <span className="mt-0.5 block text-sm font-semibold text-text-secondary">{label}</span>
-        {hint && <span className="mt-1 block text-xs text-text-muted">{hint}</span>}
-      </span>
+    <Link to={to} className="block transition-colors [&>*]:hover:border-brand-400">
+      <StatCard
+        tone={tone}
+        label={
+          <span className="flex items-center gap-2">
+            <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${tones[tone] ?? ''}`}>
+              <Icon size={15} aria-hidden />
+            </span>
+            {label}
+          </span>
+        }
+        value={<span dir="ltr">{num(value)}</span>}
+        hint={hint}
+      />
     </Link>
   )
 }
