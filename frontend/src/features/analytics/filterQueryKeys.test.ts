@@ -15,11 +15,12 @@ describe('every filter axis narrows both the request and the cache key', () => {
     provider: ['meta'],
     objective: ['sales'],
     campaign: ['c-1'],
+    outcome: ['native_lead_form'],
   }
 
   // Written out rather than derived from `all`, so adding an axis to `MetricFilters` without adding
   // it here fails the count assertion below instead of silently passing.
-  const AXES: Array<keyof MetricFilters> = ['provider', 'objective', 'campaign']
+  const AXES: Array<keyof MetricFilters> = ['provider', 'objective', 'campaign', 'outcome']
 
   it('covers every axis the type declares', () => {
     expect(Object.keys(all).sort()).toEqual([...AXES].sort())
