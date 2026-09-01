@@ -539,11 +539,19 @@ export interface MetricFilters {
   objective?: string[]
   /** UX-DASH-001 — the dashboard's campaign control. Absent means every campaign, never none. */
   campaign?: string[]
+  /**
+   * CAMPAIGN-OUTCOME-DIMENSION-001 — the ACTION bought, which is not the objective.
+   *
+   * «Show me the lead work» and «show me what actually collected forms» are two different questions
+   * about the same set of campaigns, and only this axis can ask the second.
+   */
+  outcome?: string[]
 }
 export const qf = (f?: MetricFilters) =>
   (f?.provider?.length ? `&provider=${f.provider.join(',')}` : '') +
   (f?.objective?.length ? `&objective=${f.objective.join(',')}` : '') +
-  (f?.campaign?.length ? `&campaign=${f.campaign.join(',')}` : '')
+  (f?.campaign?.length ? `&campaign=${f.campaign.join(',')}` : '') +
+  (f?.outcome?.length ? `&outcome=${f.outcome.join(',')}` : '')
 
 /**
  * ANALYTICS-FILTER-TRUTH-001 — every axis that narrows the REQUEST also keys the cache.
@@ -557,6 +565,7 @@ export const filterKeyParts = (f?: MetricFilters): string[] => [
   f?.provider?.join(',') ?? '',
   f?.objective?.join(',') ?? '',
   f?.campaign?.join(',') ?? '',
+  f?.outcome?.join(',') ?? '',
 ]
 
 function useMetric<T>(key: string, projectId: string | null, range: Range, path: string, filters?: MetricFilters) {
