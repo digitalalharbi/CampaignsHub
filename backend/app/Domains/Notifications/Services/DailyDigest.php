@@ -7,8 +7,10 @@ namespace App\Domains\Notifications\Services;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Services\ReportObjectiveLens;
 use App\Domains\Reports\Services\ReportObservations;
@@ -56,6 +58,7 @@ final class DailyDigest
         private readonly MetricsAggregator $metrics,
         private readonly DataFreshnessService $freshness,
         private readonly ReportObservations $observations,
+        private readonly SpendLimitGovernor $limits,
         private readonly ReportTemplateEngine $template,
         private readonly DigestCreatives $creatives,
         private readonly DigestRecommendations $recommendations,
@@ -234,10 +237,69 @@ final class DailyDigest
             'metric_set' => $block['metric_set'],
             'platforms' => $platforms,
             'budget' => $budget,
+            /*
+             * BUDGET-ALERT-EMAIL-001 — the workspace's own ceilings, so a crossing reaches an inbox.
+             *
+             * `AlertEvaluator` already records the crossing and raises it in-app. The dispatcher
+             * builds its findings from THESE observations, so a crossing that never became one was
+             * never emailed — which is the half of «budget alerts» that was missing.
+             */
+            'spend_limits' => $this->spendLimits($projectId, $to),
             'freshness' => $freshness,
         ]);
 
         return $block;
+    }
+
+    /**
+     * This project's own spend ceilings, and which threshold each has passed.
+     *
+     * Read through `SpendLimitGovernor`, the same service the screen and the alert evaluator use —
+     * a second reading here would eventually disagree with the panel an operator is looking at while
+     * the email says something else.
+     *
+     * A limit with no comparable figure is returned with `crossed: null` rather than dropped, so the
+     * caller can tell «nothing crossed» from «nothing could be computed».
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function spendLimits(string $projectId, Carbon $day): array
+    {
+        $out = [];
+
+        SpendLimit::query()
+            ->where('project_id', $projectId)
+            ->where('active', true)
+            ->whereDate('starts_on', '<=', $day->toDateString())
+            ->whereDate('ends_on', '>=', $day->toDateString())
+            ->get()
+            ->each(function (SpendLimit $limit) use ($day, &$out): void {
+                $reading = $this->limits->read($limit, $day->copy()->startOfDay());
+                $utilisation = $reading['utilisation'] ?? null;
+
+                $crossed = null;
+
+                if ($utilisation !== null) {
+                    $passed = array_filter(
+                        $limit->thresholdPercents(),
+                        static fn (int $t): bool => (float) $utilisation * 100 >= $t,
+                    );
+                    $crossed = $passed === [] ? null : max($passed);
+                }
+
+                $out[] = [
+                    'id' => (string) $limit->getKey(),
+                    'scope' => $limit->scope->value,
+                    'name' => (string) ($limit->name ?? $limit->scope->value),
+                    'currency' => $limit->currency,
+                    'amount' => $reading['amount'] ?? null,
+                    'consumed' => $reading['consumed'] ?? null,
+                    'utilisation' => $utilisation,
+                    'crossed' => $crossed,
+                ];
+            });
+
+        return $out;
     }
 
     /**

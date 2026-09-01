@@ -106,6 +106,16 @@ final class MessageCatalogue
             // Money moving the wrong way defaults to ON. The rest of `performance` defaults off
             // because it is analysis; this is the one that costs something while nobody is looking.
             'budget_pace' => self::note('budget', 'budget', defaultEmail: true),
+            /*
+             * BUDGET-ALERT-EMAIL-001 — the workspace's OWN limit, which is a different object from a
+             * platform budget and reaches the same inbox.
+             *
+             * `budget_pace` is a platform budget the platform itself enforces. This is an internal
+             * ceiling nothing enforces, so the message has to say so — and it has to arrive by
+             * email, because the whole reason somebody sets a limit nothing enforces is that they
+             * intend to act on it themselves.
+             */
+            'internal_spend_limit' => self::note('budget', 'budget', defaultEmail: true),
             'rising_cost' => self::note('budget', 'budget', defaultEmail: true),
             'reallocation' => self::note('budget', 'budget', defaultEmail: true),
             'budget_risk' => self::event('budget', 'budget', 'AlertEvaluator', defaultEmail: true),
