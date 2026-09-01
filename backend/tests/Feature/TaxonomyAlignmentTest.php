@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\CampaignOutcome;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Enums\ClientStatus;
 use App\Domains\ClientWorkspaces\Enums\Industry;
@@ -88,6 +89,7 @@ final class TaxonomyAlignmentTest extends TestCase
         // definition key => the live enum/validator values it MUST contain (verbatim keys).
         $live = [
             'campaign.objective' => CampaignObjective::values(),
+            'campaign.outcome' => CampaignOutcome::values(),
             'client.status' => ClientStatus::values(),
             'client.service_level' => ServiceLevel::values(),
             'client.industry' => Industry::values(),
@@ -145,6 +147,7 @@ final class TaxonomyAlignmentTest extends TestCase
         // The critical fix: these closed sets must be EXACTLY the live enum — no aspirational extras left active.
         $exact = [
             'campaign.objective' => CampaignObjective::values(),
+            'campaign.outcome' => CampaignOutcome::values(),
             'client.industry' => Industry::values(),
             'client.service_level' => ServiceLevel::values(),
             'client.priority' => ['low', 'normal', 'high'],

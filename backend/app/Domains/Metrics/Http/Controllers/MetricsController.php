@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Http\Controllers;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\CampaignOutcome;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Services\StoreFunnelService;
@@ -789,8 +790,8 @@ final class MetricsController extends Controller
             'objectives' => $this->objectivesInRange($scope()),
             'catalogue' => $this->catalogue(),
             'unread_metric_keys' => $this->unreadMetricKeys($scope()),
-            /* Every axis this endpoint was sent, and it narrows by all three. */
-            'filter_scope' => $this->filterScope($request, ['provider', 'objective', 'campaign']),
+            /* Every axis this endpoint was sent, and it narrows by all four. */
+            'filter_scope' => $this->filterScope($request, ['provider', 'objective', 'campaign', 'outcome']),
         ], 'How these numbers were normalized.', meta: $this->meta($from, $to));
     }
 
@@ -1100,7 +1101,15 @@ final class MetricsController extends Controller
             // What the money on these rows is IN — the same statement every other surface makes.
             'currency' => $this->rangeCurrency($from, $to),
             'attribution_window' => $request->string('attribution_window')->toString() ?: null,
-            /* Every axis this endpoint is sent, and it now narrows by all three. */
+            /*
+             * Every axis this endpoint is sent, and it narrows by the three it can.
+             *
+             * `outcome` is deliberately NOT listed: the entity grain is scoped through `EntityScope`,
+             * which narrows in SQL on columns of `entity_daily_metrics`, and the action is resolved
+             * from the provider payload rather than stored. Claiming it here would report an axis as
+             * applied that this query does not apply — the exact dishonesty `filter_scope` exists to
+             * prevent — so an ad-set drill-down says «outcome requested, not applied» instead.
+             */
             'filter_scope' => $this->filterScope($request, ['provider', 'objective', 'campaign']),
         ], 'Entity metrics.');
     }
@@ -1212,6 +1221,20 @@ final class MetricsController extends Controller
      *
      * @return list<string>
      */
+    /**
+     * The actions filter (?outcome=native_lead_form,messaging) — CAMPAIGN-OUTCOME-DIMENSION-001.
+     *
+     * Values outside the enum are DROPPED rather than passed through: an unrecognised value would
+     * match no campaign and fail the whole request closed, so a typo would empty the dashboard
+     * instead of being ignored the way an unknown provider key is.
+     *
+     * @return list<string>
+     */
+    private function outcomeFilter(Request $request): array
+    {
+        return array_values(array_intersect($this->listFilter($request, 'outcome'), CampaignOutcome::values()));
+    }
+
     private function campaignFilter(Request $request): array
     {
         return $this->listFilter($request, 'campaign');
@@ -1260,6 +1283,10 @@ final class MetricsController extends Controller
             $requested[] = 'campaign';
         }
 
+        if ($this->outcomeFilter($request) !== []) {
+            $requested[] = 'outcome';
+        }
+
         return [
             'applied' => array_values(array_intersect($requested, $applies)),
             'unapplied' => array_values(array_diff($requested, $applies)),
@@ -1273,7 +1300,14 @@ final class MetricsController extends Controller
 
         $agg = $this->agg
             ->forProviders($this->providerFilter($request))
-            ->forObjectives($this->objectiveFilter($request));
+            ->forObjectives($this->objectiveFilter($request))
+            /*
+             * CAMPAIGN-OUTCOME-DIMENSION-001 — «what did it buy», beside «what was it for».
+             *
+             * `forOutcomes([])` is the no-filter case here, unlike `forCampaigns`: an operator ADDS
+             * this axis to narrow, and an unset axis has never meant «nothing» on this side.
+             */
+            ->forOutcomes($this->outcomeFilter($request));
 
         /*
          * Applied only when the operator asked for one — `forCampaigns([])` means «no campaigns» to
