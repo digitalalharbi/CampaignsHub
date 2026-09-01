@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, HelpCircle, Store, TrendingDown } from 'lucide-react'
+import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { Panel } from './components'
 import { money, num, ratio } from './format'
 import { getData } from '@/lib/api/client'
@@ -315,6 +316,7 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
           <Table
             head={[ar ? 'المنصة' : 'Platform', ar ? 'الإنفاق' : 'Spend', ar ? 'الطلبات' : 'Orders', ar ? 'الإيراد' : 'Revenue', 'ROAS']}
             rows={comparisons.platforms.map((p) => [p.platform, money(p.spend, cur), num(p.orders), money(p.revenue, cur), ratio(p.roas)])}
+            values={comparisons.platforms.map((p) => [p.platform, p.spend, p.orders, p.revenue, p.roas])}
           />
         </Panel>
       )}
@@ -329,6 +331,9 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
               money(c.revenue, cur),
               ar ? (METHOD_AR[c.attribution_method ?? 'none'] ?? c.attribution_method) : c.attribution_method,
             ])}
+            values={comparisons.campaigns.map((c) => [
+              c.external_campaign_id, c.orders, c.revenue, c.attribution_method ?? null,
+            ])}
           />
         </Panel>
       )}
@@ -338,6 +343,7 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
           <Table
             head={[ar ? 'المنتج' : 'Product', ar ? 'الكمية' : 'Quantity', ar ? 'الإيراد' : 'Revenue']}
             rows={comparisons.products.map((p) => [p.name, num(p.quantity), money(p.revenue, cur)])}
+            values={comparisons.products.map((p) => [p.name, p.quantity, p.revenue])}
           />
         </Panel>
       )}
@@ -414,24 +420,35 @@ function Fact({ label, value, tone }: { label: string; value: string; tone?: 'wa
   )
 }
 
-function Table({ head, rows }: { head: string[]; rows: Array<Array<string | null>> }) {
+/**
+ * STORE-TABLE-PRESENTATION-001 — the store tables, on the product's own table.
+ *
+ * This was a fourth hand-rolled table: no sort on any column, every figure left-aligned under a
+ * left-aligned header, and its own idea of what a missing value looks like. The store tab is where
+ * an operator compares platforms and campaigns against orders that actually happened, and comparing
+ * is exactly what a table with no sort cannot help with.
+ *
+ * `values` carries the raw figures behind the formatted cells, so ordering is done on the number
+ * rather than on «1.2K» as a string — and a figure the money contract refused to state sorts LAST
+ * rather than as a zero, because «this platform's spend is in another currency» is not the cheapest
+ * spend.
+ */
+function Table({
+  head,
+  rows,
+  values,
+}: {
+  head: string[]
+  rows: Array<Array<string | null>>
+  values?: SortValues[]
+}) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border text-start text-xs text-text-secondary">
-            {head.map((h) => <th key={h} className="px-2 py-1.5 text-start font-semibold">{h}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr key={i} className="border-b border-border/50">
-              {row.map((cell, j) => <td key={j} className="tnum px-2 py-1.5 text-text-primary">{cell ?? '—'}</td>)}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <MetricTable
+      head={head}
+      rows={rows.map((row) => row.map((cell) => cell ?? '—'))}
+      values={values}
+      initialSort={values ? { column: 1, dir: 'desc' } : undefined}
+    />
   )
 }
 
