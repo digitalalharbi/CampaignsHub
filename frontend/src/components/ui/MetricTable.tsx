@@ -82,8 +82,17 @@ export function MetricTable({
     setSort((prev) => (prev?.column === i ? { column: i, dir: prev.dir === 'desc' ? 'asc' : 'desc' } : { column: i, dir: 'desc' }))
   }
 
+  /*
+   * `min-w-0` and `max-w-full`, or the container does not contain anything.
+   *
+   * A grid or flex ITEM defaults to `min-width: auto`, which means «as wide as my content» — so an
+   * `overflow-x-auto` wrapper holding a 640px table grows the ITEM to 640px instead of clipping, and
+   * the page scrolls sideways on a phone while the wrapper looks perfectly correct in isolation. The
+   * live report's detail tables did exactly that: three browsers, four locale/theme combinations,
+   * and the gate caught every one of them.
+   */
   return (
-    <div className="overflow-x-auto">
+    <div className="min-w-0 max-w-full overflow-x-auto">
       <table className="w-full min-w-[640px] text-sm">
         <thead>
           <tr className="border-b border-border text-text-muted">

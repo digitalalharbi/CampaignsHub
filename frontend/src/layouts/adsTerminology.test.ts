@@ -143,7 +143,13 @@ describe('the surfaces the rail leads to say it too', () => {
   const SAYS_ADS: [string, string[]][] = [
     ['src/lib/i18n.ts', ["content: 'الإعلانات'", "tab_creatives: 'الإعلانات'", "content: 'Ads'", "tab_creatives: 'Ads'"]],
     ['src/features/reports/InteractiveReport.tsx', ['أفضل الإعلانات', 'أضعف الإعلانات']],
-    ['src/features/reports/PublicReport.tsx', ['كل المنصات والحملات والإعلانات']],
+    /*
+     * The sentence moved to `reportProduct.ts` with REPORT-PRODUCT-MODEL-001 — the label is now
+     * chosen by mode AND form, and lives with the other three. The guard follows the copy rather
+     * than the file it used to sit in; pinning it to `PublicReport.tsx` would have been satisfied
+     * by a page that no longer says anything.
+     */
+    ['src/features/reports/reportProduct.ts', ['كل المنصات والحملات والإعلانات']],
     ['src/features/campaigns/overview/UnifiedCampaignOverview.tsx', ["topCreatives: 'أفضل الإعلانات'", "topCreatives: 'Best ads'"]],
   ]
 

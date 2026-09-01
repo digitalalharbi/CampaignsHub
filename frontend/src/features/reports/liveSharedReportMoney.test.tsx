@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { LiveSharedReport } from './LiveSharedReport'
 import { renderWithProviders } from '@/test/utils'
 
@@ -60,10 +60,20 @@ describe('a live shared report over a partially-withheld spend', () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" />, { locale: 'en' })
     await screen.findByTestId('live-report')
 
+    /*
+     * Scoped to the KPI cards, which are where the TOTAL is claimed.
+     *
+     * A ROW may legitimately print «500.00 USD» — that is the contract's other half, the original in
+     * its own currency, and the detailed form's campaign table follows it exactly as the breakdown
+     * charts do. What may never appear is a single figure standing for the whole scope, and that
+     * claim lives here.
+     */
+    const kpis = within(screen.getByTestId('live-kpis'))
+
     // Not the converted subset in the report currency, and not the withheld half on its own.
-    expect(screen.queryByText(/SAR\s*1,?000/)).not.toBeInTheDocument()
-    expect(screen.queryByText('1,000')).not.toBeInTheDocument()
-    expect(screen.queryByText('500.00 USD')).not.toBeInTheDocument()
+    expect(kpis.queryByText(/SAR\s*1,?000/)).not.toBeInTheDocument()
+    expect(kpis.queryByText('1,000')).not.toBeInTheDocument()
+    expect(kpis.queryByText('500.00 USD')).not.toBeInTheDocument()
   })
 
   it('keeps the platforms it can size, and says how many it left out', async () => {
