@@ -62,11 +62,26 @@ export function MetricTable({
   head,
   rows,
   values,
+  exact,
   initialSort,
 }: {
   head: string[]
   rows: ReactNode[][]
   values?: SortValues[]
+  /**
+   * NUMBER-PRESENTATION-001 — the exact figure behind an abbreviated one, per cell.
+   *
+   * A compact number is a reading aid and a lossy one: «1.2M» is any of eleven thousand different
+   * figures, and two rows both reading «32K» can be a thousand results apart with nothing on screen
+   * to say so. The rule the product already applies on KPI cards is that the exact value travels
+   * WITH the compact one and is always one hover or one tap away — this is that rule reaching the
+   * tables, which is where most of the product's numbers actually live.
+   *
+   * Positional, like `values`, and sparse: a cell with nothing to reveal passes `null` and gets no
+   * tooltip, because a tooltip that repeats what is already on screen teaches a reader to stop
+   * looking at them.
+   */
+  exact?: (string | null)[][]
   /** Column index to sort by on first render, and its direction. */
   initialSort?: { column: number; dir: 'asc' | 'desc' }
 }) {
@@ -125,11 +140,28 @@ export function MetricTable({
         <tbody>
           {order.map((rowIndex) => (
             <tr key={rowIndex} className="border-b border-border last:border-0 hover:bg-surface-secondary">
-              {rows[rowIndex].map((cell, j) => (
-                <td key={j} className={`py-2.5 ${j === 0 ? 'text-start' : 'tnum text-center'}`}>
-                  {cell}
-                </td>
-              ))}
+              {rows[rowIndex].map((cell, j) => {
+                const full = exact?.[rowIndex]?.[j] ?? null
+
+                return (
+                  <td
+                    key={j}
+                    /*
+                     * `title`, and a dotted underline so it is discoverable.
+                     *
+                     * An affordance nobody can see is not an affordance: a reader who does not know
+                     * the figure can be revealed will never hover, and the abbreviation stays the
+                     * only number they ever have. `decoration-dotted` is the quietest mark that
+                     * still reads as «there is more here».
+                     */
+                    title={full ?? undefined}
+                    className={`py-2.5 ${j === 0 ? 'text-start' : 'tnum text-center'}`
+                      + (full === null ? '' : ' cursor-help underline decoration-dotted underline-offset-4')}
+                  >
+                    {cell}
+                  </td>
+                )
+              })}
             </tr>
           ))}
         </tbody>
