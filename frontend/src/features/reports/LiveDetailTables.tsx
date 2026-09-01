@@ -102,7 +102,7 @@ export function LiveDetailTables({
   ))
 
   return (
-    <div data-testid="live-detail-tables" className="mt-3 grid gap-3">
+    <div data-testid="live-detail-tables" className="mt-3 grid gap-3 [&>*]:min-w-0">
       <Section title={t.campaigns} testid="live-detail-campaigns" empty={payload.campaigns.length === 0} none={t.none}>
         <MetricTable head={head(t.campaign)} rows={campaigns.rows} values={campaigns.values} initialSort={{ column: 1, dir: 'desc' }} />
       </Section>
@@ -128,7 +128,7 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <div data-testid={testid} className="rounded-2xl border border-border bg-surface p-4">
+    <div data-testid={testid} className="min-w-0 overflow-hidden rounded-2xl border border-border bg-surface p-4">
       <h3 className="mb-2 font-bold text-text-primary">{title}</h3>
       {/* An empty section says so. A table with a heading and no rows reads as one that failed. */}
       {empty ? <p className="py-6 text-center text-sm text-text-muted">{none}</p> : children}
