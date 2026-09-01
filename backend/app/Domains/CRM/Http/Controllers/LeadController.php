@@ -133,7 +133,14 @@ final class LeadController extends Controller
 
     public function show(Request $request, Lead $lead): JsonResponse
     {
+        /*
+         * TEAM-PROJECT-RBAC-001 — the tenant permission opens the SCREEN; the project capability
+         * decides whether it opens for THIS client. Both, because either alone is a hole: the tenant
+         * layer cannot say «not this client», and the project layer is absent on a lead that has no
+         * project.
+         */
         abort_unless($request->user()->hasPermission('leads.view'), 403);
+        $this->assertMayWork($request, $lead, ProjectCapability::LEADS_VIEW, 'leads.view');
 
         /*
          * A lead an agent was not given is a lead they may not open.
@@ -166,6 +173,14 @@ final class LeadController extends Controller
 
     public function update(UpdateLeadRequest $request, Lead $lead, UpdateLead $action): JsonResponse
     {
+        /*
+         * `UpdateLeadRequest::authorize()` checks the TENANT's `leads.update`, which cannot say «not
+         * this client» — it is the same permission whichever project the lead belongs to. So an
+         * employee entitled to edit leads could edit ANY lead in the workspace by its id, including
+         * one on a client they have no part in.
+         */
+        $this->assertMayWork($request, $lead, ProjectCapability::LEADS_UPDATE, 'leads.update');
+
         $lead = $action->execute($lead, LeadData::fromArray(array_merge($lead->toArray(), $request->validated())));
 
         return ApiResponse::success(new LeadResource($lead), 'Lead updated.');
@@ -174,6 +189,8 @@ final class LeadController extends Controller
     public function destroy(Request $request, Lead $lead): JsonResponse
     {
         abort_unless($request->user()->hasPermission('leads.delete'), 403);
+        // Deleting somebody else's client's lead needs the capability on THAT client, not on ours.
+        $this->assertMayWork($request, $lead, ProjectCapability::LEADS_UPDATE, 'leads.update');
         $lead->delete();
 
         return ApiResponse::success(null, 'Lead deleted.', status: 200);
@@ -182,6 +199,7 @@ final class LeadController extends Controller
     public function convert(Request $request, Lead $lead, ConvertLead $action): JsonResponse
     {
         abort_unless($request->user()->hasPermission('leads.convert'), 403);
+        $this->assertMayWork($request, $lead, ProjectCapability::LEADS_UPDATE, 'leads.update');
 
         $opportunity = $action->execute($lead, $request->string('opportunity_name')->toString() ?: null);
 

@@ -282,6 +282,75 @@ final class LeadPipelineTest extends TestCase
             ->assertStatus(422);
     }
 
+    // ── Every lead route, not one of them ────────────────────────────────────────────────────────
+
+    /**
+     * TEAM-PROJECT-RBAC-001 — the capability holds on the whole surface, not on the endpoints that
+     * happened to be written last.
+     *
+     * All four checked only the TENANT permission, which is the same permission whichever project
+     * the lead belongs to and therefore cannot say «not this client». Every subject below holds the
+     * tenant permissions in full, so the tenant layer refuses nothing and the project layer is the
+     * only thing left doing the work — without that, this test would pass on a permission the
+     * subject simply lacks and would prove nothing at all.
+     *
+     * The agent half: a lead they were not given.
+     */
+    public function test_an_agent_cannot_reach_a_lead_they_were_not_given(): void
+    {
+        $agent = $this->member(ProjectRole::LEAD_AGENT, self::EVERY_LEAD_PERMISSION);
+        $theirs = $this->lead();
+
+        foreach ($this->everyLeadRoute($theirs) as [$method, $url, $body]) {
+            $this->actingAs($agent, 'sanctum')->json($method, $url, $body)->assertForbidden();
+        }
+
+        $this->assertSame('نورة', $theirs->refresh()->name, 'the lead was edited by somebody with no claim to it');
+    }
+
+    /**
+     * The capability half: somebody who legitimately READS this client's leads and may not change
+     * one.
+     *
+     * A management viewer holds `leads.view` on this project and every lead permission the tenant
+     * has to give. What they do not hold is `leads.update` HERE, and that is what must stop them —
+     * the executive question is «how many, how fast, what did each cost», and none of it involves
+     * editing somebody's record.
+     */
+    public function test_a_reader_of_this_project_still_cannot_change_its_leads(): void
+    {
+        $viewer = $this->member(ProjectRole::MANAGEMENT_VIEWER, self::EVERY_LEAD_PERMISSION);
+        $lead = $this->lead();
+
+        foreach ($this->everyLeadRoute($lead) as [$method, $url, $body]) {
+            if ($method === 'GET') {
+                // Reading is exactly what this role is for.
+                $this->actingAs($viewer, 'sanctum')->json($method, $url, $body)->assertOk();
+
+                continue;
+            }
+
+            $this->actingAs($viewer, 'sanctum')->json($method, $url, $body)->assertForbidden();
+        }
+
+        $this->assertSame('نورة', $lead->refresh()->name);
+    }
+
+    /** @return list<array{0: string, 1: string, 2: array<string,mixed>}> */
+    private function everyLeadRoute(Lead $lead): array
+    {
+        $id = $lead->getKey();
+
+        return [
+            ['GET', "/api/v1/leads/{$id}", []],
+            ['PATCH', "/api/v1/leads/{$id}", ['name' => 'changed']],
+            ['POST', "/api/v1/leads/{$id}/stage", ['stage' => 'contact_attempted']],
+            ['POST', "/api/v1/leads/{$id}/follow-up", ['next_follow_up_at' => null]],
+            ['POST', "/api/v1/leads/{$id}/convert", []],
+            ['DELETE', "/api/v1/leads/{$id}", []],
+        ];
+    }
+
     private function lead(?int $ownerId = null): Lead
     {
         $lead = new Lead;
@@ -302,7 +371,14 @@ final class LeadPipelineTest extends TestCase
         return $lead;
     }
 
-    private function member(string $role): User
+    /** Every lead permission the tenant layer has to give, so it refuses nothing and the project decides. */
+    private const EVERY_LEAD_PERMISSION = [
+        'projects.view', 'leads.view', 'leads.pii.view', 'leads.update', 'leads.delete',
+        'leads.convert', 'leads.assign', 'leads.export',
+    ];
+
+    /** @param  list<string>|null  $tenantPermissions */
+    private function member(string $role, ?array $tenantPermissions = null): User
     {
         $user = User::create([
             'name' => 'U', 'email' => 'u-'.uniqid().'@test.test', 'password' => 'secret123',
@@ -311,7 +387,9 @@ final class LeadPipelineTest extends TestCase
         $this->grantMembership($user, $this->tenant);
 
         $tenantRole = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'R', 'slug' => 'r-'.uniqid()]);
-        $tenantRole->givePermissionTo(...Permission::whereIn('key', ['projects.view', 'leads.view'])->pluck('key')->all());
+        $tenantRole->givePermissionTo(
+            ...Permission::whereIn('key', $tenantPermissions ?? ['projects.view', 'leads.view'])->pluck('key')->all(),
+        );
         $user->assignRole($tenantRole);
 
         ProjectMembership::withoutGlobalScopes()->create([
