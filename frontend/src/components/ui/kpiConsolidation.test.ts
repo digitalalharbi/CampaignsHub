@@ -26,18 +26,21 @@ const EXEMPT = {
 }
 
 /**
- * Not yet migrated, and named so the number can only go down.
+ * Empty, and it took twelve units to get here.
  *
- * These twelve draw a figure-above-label card of their own. They are a different composition from
- * the shared card rather than a different opinion about the same one, so converting them changes
- * what each page looks like and belongs in its own unit with its own screenshots — not smuggled in
- * beside a component change. What this list does is stop a THIRTEENTH appearing: a new file that
- * draws its own card is not on it, and fails.
+ * This list held the surfaces that drew a figure-above-label card of their own. Each conversion
+ * changed what a page looks like, so each belonged in its own unit with its own screenshots rather
+ * than smuggled in beside a component change — and the list existed to stop a THIRTEENTH appearing
+ * while the twelve were worked through.
+ *
+ * The last two went with UX-KPI-PRESENTATION-001's final pass: the agency dashboard, which kept its
+ * icon and its tone and gave up its type, and the integrations summary, which kept its tone for the
+ * same reason — whether «two accounts awaiting credentials» is a warning is a fact about
+ * integrations, not about cards.
+ *
+ * It stays here, empty, because an empty list is a guard and a deleted one is not.
  */
-const NOT_YET_MIGRATED = [
-  'src/features/agency/AgencyDashboardPage.tsx',
-  'src/features/projects/PlatformIntegrationsPanel.tsx',
-]
+const NOT_YET_MIGRATED: string[] = []
 
 describe('no surface draws its own KPI card', () => {
   it('finds no file that builds a labelled figure without the shared card', () => {
@@ -49,7 +52,16 @@ describe('no surface draws its own KPI card', () => {
         // The shape of the thing: a rounded card, a tabular figure at KPI weight, in one element.
         const drawsCard = /rounded-2xl[^"'`]*bg-surface/.test(source)
         const drawsFigure = /tnum[^"'`]*text-(2xl|3xl|\[2[0-9]px\])[^"'`]*font-extrabold/.test(source)
-        return drawsCard && drawsFigure && !source.includes("from '@/components/ui/StatCard'")
+        /*
+         * The import is NOT an escape.
+         *
+         * It used to be: a file that imported the shared card was skipped entirely, so any surface
+         * using it once could hand-draw a second card beside it and the guard would agree. Found by
+         * injecting exactly that — a hand-drawn card in a file that had just been migrated, which
+         * this passed. Reading the source for the SHAPE catches both, and a file that genuinely uses
+         * only the shared card has no reason to contain these classes at all.
+         */
+        return drawsCard && drawsFigure
       })
       .map(([path]) => path)
 
