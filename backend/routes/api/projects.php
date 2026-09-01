@@ -116,10 +116,18 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * platform, which the platform itself enforces. These are internal monitoring limits over scopes
      * no single platform can see, and nothing enforces them — every payload says so.
      */
-    Route::get('spend-limits', [SpendLimitController::class, 'index'])->name('spend-limits.index');
-    Route::post('spend-limits', [SpendLimitController::class, 'store'])->name('spend-limits.store');
-    Route::match(['put', 'patch'], 'spend-limits/{spendLimit}', [SpendLimitController::class, 'update'])->name('spend-limits.update');
-    Route::delete('spend-limits/{spendLimit}', [SpendLimitController::class, 'destroy'])->name('spend-limits.destroy');
+    /*
+     * TEAM-PROJECT-RBAC-001 — the first routes to carry a PROJECT capability.
+     *
+     * Reading a spend limit and changing one are different acts by different people: a management
+     * viewer is entitled to know the ceiling, and setting it is a decision with money behind it.
+     * `budget.view` and `budget.manage` say so on the route, so the refusal happens on the server
+     * for every caller, ours or otherwise.
+     */
+    Route::get('spend-limits', [SpendLimitController::class, 'index'])->middleware('project.can:budget.view')->name('spend-limits.index');
+    Route::post('spend-limits', [SpendLimitController::class, 'store'])->middleware('project.can:budget.manage')->name('spend-limits.store');
+    Route::match(['put', 'patch'], 'spend-limits/{spendLimit}', [SpendLimitController::class, 'update'])->middleware('project.can:budget.manage')->name('spend-limits.update');
+    Route::delete('spend-limits/{spendLimit}', [SpendLimitController::class, 'destroy'])->middleware('project.can:budget.manage')->name('spend-limits.destroy');
     Route::get('metrics/budget-accounts', [MetricsController::class, 'budgetAccounts'])->name('metrics.budget-accounts');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');
     // NORM-001: what was done to the numbers before they were shown — currency, timezone, attribution,

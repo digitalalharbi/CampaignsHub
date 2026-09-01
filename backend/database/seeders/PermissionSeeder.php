@@ -20,7 +20,16 @@ final class PermissionSeeder extends Seeder
             'archive', 'restore', 'manage_team', 'manage_files', 'manage_settings',
             'view_analytics', 'view_reports', 'create_reports', 'share_reports',
         ],
-        'leads' => ['view', 'create', 'update', 'delete', 'convert'],
+        /*
+         * TEAM-PROJECT-RBAC-001 — the identity, the handover and the export are their own permissions.
+         *
+         * `leads.view` used to carry all three, so anybody who could count leads could also read the
+         * people behind them, reassign them and take the list out of the product. Those are three
+         * different decisions about a client's customers and they are made about different people.
+         */
+        'leads' => ['view', 'create', 'update', 'delete', 'convert', 'pii.view', 'assign', 'export'],
+        /** Internal spend governance — reading a ceiling and setting one are different acts. */
+        'budget' => ['view', 'manage'],
         'proposals' => ['view', 'create', 'update', 'approve'],
         'campaigns' => ['view', 'create', 'update', 'launch', 'pause', 'link', 'budget.change'],
         'content' => ['view', 'create', 'update', 'approve', 'reject'],
