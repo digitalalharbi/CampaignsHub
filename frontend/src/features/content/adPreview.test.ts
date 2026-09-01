@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { absenceLabel, posterSource, readPreview } from './adPreview'
+import { absenceLabel, posterSource, previewShape, readPreview } from './adPreview'
 import type { CreativePreview } from './api'
 
 /**
@@ -121,5 +121,49 @@ describe('a video the platform sent no cover for', () => {
 
     expect(posterSource(covered)).toBe('https://cdn/cover.jpg')
     expect(absenceLabel(covered, false)).toBe('')
+  })
+})
+
+/**
+ * CONTENT-PREVIEW-SHAPES-001 — a story is not a crop of itself.
+ *
+ * `object-cover` on a 9:16 asset in a landscape card keeps the middle third and throws away the top
+ * and the bottom, which on a story is the logo and the call to action. The card then shows a picture
+ * the ad never was — and two creatives compared side by side are two crops this product invented,
+ * which is a worse failure than showing nothing, because it looks like evidence.
+ */
+describe('the shape of the asset', () => {
+  it('reads a portrait asset from its dimensions', () => {
+    expect(previewShape(1080, 1920)).toBe('portrait')
+    expect(previewShape(1920, 1080)).toBe('landscape')
+  })
+
+  /**
+   * «Roughly square» is not a story.
+   *
+   * A 1080×1200 feed image does not want a story's frame, so the threshold sits above 1.2 rather
+   * than at «taller than it is wide».
+   */
+  it('keeps a nearly-square asset out of the portrait frame', () => {
+    expect(previewShape(1080, 1200)).toBe('landscape')
+    expect(previewShape(1080, 1080)).toBe('landscape')
+  })
+
+  /** The provider's own string, where the numbers never arrived. */
+  it('reads the ratio the platform reported', () => {
+    expect(previewShape(null, null, '9:16')).toBe('portrait')
+    expect(previewShape(null, null, '1080x1920')).toBe('portrait')
+    expect(previewShape(null, null, '16:9')).toBe('landscape')
+  })
+
+  /**
+   * Unknown is treated as landscape, deliberately.
+   *
+   * Cropping a landscape asset slightly is a cosmetic loss; letter-boxing every asset whose
+   * dimensions a platform did not report would make the common case worse to protect the rare one.
+   */
+  it('does not guess when the platform reported nothing', () => {
+    expect(previewShape(null, null, null)).toBe('unknown')
+    expect(previewShape(0, 0, 'square-ish')).toBe('unknown')
   })
 })
