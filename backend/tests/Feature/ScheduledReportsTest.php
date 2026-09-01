@@ -12,6 +12,7 @@ use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportSchedule;
 use App\Domains\Reports\Services\ScheduledReportDispatcher;
+use App\Domains\Reports\Support\ReportIdentity;
 use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\DTOs\MembershipGrant;
@@ -83,6 +84,32 @@ final class ScheduledReportsTest extends TestCase
         $s->refresh();
         $this->assertNotNull($s->last_run_at);
         $this->assertTrue($s->next_run_at->isFuture());
+    }
+
+    /**
+     * REPORT-TITLE-METADATA-001 — the delivery records the line the recipient reads first.
+     *
+     * `report_deliveries` is an honest ledger of what will be sent to whom, and it carried no
+     * subject. With no mail provider on this install every row waits at
+     * `awaiting_provider_credentials`, so a subject left to send-time would be chosen months later
+     * from a report whose name may have changed — and an operator reading the ledger today could not
+     * tell what any of these emails will say.
+     *
+     * The subject is the DOCUMENT's own name, not a second phrasing: a subject line and the report it
+     * carries disagreeing is how a client ends up asking which of the two is the real one.
+     */
+    public function test_a_delivery_records_the_subject_it_will_be_sent_under(): void
+    {
+        $this->schedule();
+        app(ScheduledReportDispatcher::class)->dispatchDue();
+
+        $report = Report::withoutGlobalScopes()->where('project_id', $this->project->id)->firstOrFail();
+        $subject = DB::table('report_deliveries')->value('subject');
+
+        $this->assertNotNull($subject, 'the delivery does not know what it will be sent as');
+        $this->assertSame(ReportIdentity::subject($report), $subject);
+        // It names the document rather than the product.
+        $this->assertStringNotContainsString('CampaignsHub', (string) $subject);
     }
 
     public function test_internal_report_is_suppressed_for_external_recipients(): void
