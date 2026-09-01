@@ -454,6 +454,169 @@ final class MatrixStatusVocabularyTest extends TestCase
     }
 
     /**
+     * GOVERNANCE-ANTILOSS-001 — a row's evidence names a test that exists.
+     *
+     * The status column says whether a requirement is met. The EVIDENCE column says how anybody
+     * could check, and it is the half that rots silently: a test gets renamed in a refactor, the row
+     * keeps the old name, and the row still reads VERIFIED. Nothing fails, because nothing was ever
+     * checking that the named file was real — the name is prose to every reader and to every tool.
+     *
+     * The sweep that added this found `LIFECYCLE-001` citing `AccountInventoryPanel.test.tsx`, gone
+     * since the panel was rewritten, on a row marked VERIFIED for a four-state model the product had
+     * deliberately reduced to two. One stale name, and behind it a requirement that had stopped being
+     * true.
+     *
+     * Only names that are unambiguously tests are checked — a PHP test class, a Playwright spec, a
+     * vitest file. A backticked column name or method is not a file and is not asked to be one.
+     */
+    public function test_every_named_test_in_the_evidence_column_exists(): void
+    {
+        $present = self::knownTestFiles();
+        $offenders = [];
+
+        foreach (self::evidenceCells(file($this->matrixPath())) as [$id, $cell]) {
+            preg_match_all('/`([^`]+)`/', $cell, $found);
+
+            foreach ($found[1] ?? [] as $name) {
+                $name = trim($name);
+
+                if (preg_match('/^[A-Za-z0-9_.\/-]+$/', $name) !== 1) {
+                    continue;
+                }
+
+                $isTest = str_ends_with($name, 'Test')
+                    || str_ends_with($name, '.spec.ts')
+                    || str_ends_with($name, '.test.ts')
+                    || str_ends_with($name, '.test.tsx');
+
+                if (! $isTest) {
+                    continue;
+                }
+
+                $base = basename($name);
+
+                if (isset($present[$base]) || isset($present[$base.'.php'])) {
+                    continue;
+                }
+
+                $offenders[] = "{$id} → {$name}";
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            "these rows cite evidence that does not exist. Rename the reference, or say what replaced it:\n  "
+            .implode("\n  ", array_unique($offenders)),
+        );
+    }
+
+    /**
+     * The reader finds evidence to check.
+     *
+     * A sweep that silently matched nothing would pass forever, which is the same failure mode as
+     * the drift it exists to catch — the lesson this file already learned once about statuses.
+     */
+    public function test_the_evidence_reader_actually_finds_named_tests(): void
+    {
+        $named = 0;
+
+        foreach (self::evidenceCells(file($this->matrixPath())) as [, $cell]) {
+            $named += preg_match_all('/`[A-Za-z0-9_.\/-]*(Test|\.spec\.ts|\.test\.tsx?)`/', $cell);
+        }
+
+        $this->assertGreaterThan(200, $named, 'the evidence reader is not reading the evidence column');
+    }
+
+    /**
+     * Every test file in the repository, by basename.
+     *
+     * @return array<string, true>
+     */
+    private static function knownTestFiles(): array
+    {
+        $root = dirname(__DIR__, 3);
+        $names = [];
+
+        foreach (['backend/tests', 'frontend/src', 'frontend/e2e'] as $dir) {
+            $path = $root.'/'.$dir;
+
+            if (! is_dir($path)) {
+                continue;
+            }
+
+            $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS));
+
+            foreach ($files as $file) {
+                /** @var \SplFileInfo $file */
+                $names[$file->getFilename()] = true;
+            }
+        }
+
+        return $names;
+    }
+
+    /**
+     * The evidence cell of every row, located by its own table's header.
+     *
+     * @param  list<string>  $lines
+     * @return list<array{0: string, 1: string}>
+     */
+    private static function evidenceCells(array $lines): array
+    {
+        $out = [];
+        $width = null;
+        $columns = [];
+
+        foreach ($lines as $line) {
+            $line = rtrim($line);
+
+            if (! str_starts_with($line, '| ')) {
+                if (! str_starts_with(trim($line), '|')) {
+                    $width = null;
+                    $columns = [];
+                }
+
+                continue;
+            }
+
+            $cells = preg_split('/(?<!\\\\)\|/', $line);
+            $trimmed = array_map(trim(...), $cells);
+
+            if (in_array($trimmed[1] ?? '', ['ID', 'Req ID'], true)) {
+                $width = count($cells);
+                $columns = [];
+
+                foreach (['Test', 'Tests', 'Evidence'] as $header) {
+                    $at = array_search($header, $trimmed, true);
+
+                    if ($at !== false) {
+                        $columns[] = $at;
+                    }
+                }
+
+                continue;
+            }
+
+            if ($columns === [] || count($cells) !== $width) {
+                continue;
+            }
+
+            $id = $trimmed[1];
+
+            if (preg_match('/^[A-Z][A-Za-z0-9._-]*$/', $id) !== 1) {
+                continue;
+            }
+
+            foreach ($columns as $at) {
+                $out[] = [$id, $trimmed[$at] ?? ''];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Tables, each with its own header width and the columns it declares.
      *
      * @param  list<string>  $lines
