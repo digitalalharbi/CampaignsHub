@@ -45,7 +45,7 @@ import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/ca
 
 const COPY = {
   ar: {
-    title: 'تحليل الإعلان',
+    title: 'تحليل المحتوى',
     subtitle: 'من الأرقام نفسها التي تقرأها المكتبة والتقارير — لا مصدر ثانٍ.',
     openLibrary: 'فتح المكتبة',
     empty: 'لا توجد إعلانات ضمن هذا التحديد.',
@@ -102,7 +102,7 @@ const COPY = {
     client: 'العميل',
     project: 'المشروع',
     objective: 'الهدف',
-    kind: 'نوع الإعلان',
+    kind: 'نوع المحتوى',
     lastDays: (n: string) => `آخر ${countedDays(Number(n), 'ar')}`,
     provisional: 'مبدئي',
     applied: 'مطبَّق',
@@ -117,7 +117,7 @@ const COPY = {
     } as Record<string, string>,
   },
   en: {
-    title: 'Ad analysis',
+    title: 'Content analysis',
     subtitle: 'From the same figures the library and the reports read — never a second source.',
     openLibrary: 'Open the library',
     empty: 'No ads match this selection.',
@@ -165,7 +165,7 @@ const COPY = {
     client: 'Client',
     project: 'Project',
     objective: 'Objective',
-    kind: 'Ad type',
+    kind: 'Content type',
     lastDays: (n: string) => `Last ${countedDays(Number(n), 'en')}`,
     provisional: 'provisional',
     applied: 'Filtered by',
