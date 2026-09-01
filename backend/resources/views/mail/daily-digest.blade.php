@@ -196,6 +196,60 @@
                     @endif
 
                     {{--
+                      EXECUTIVE-DAILY-DIGEST-001 — what happened AFTER the lead arrived.
+
+                      Above the notes, because a manager reading this on a phone at 8am is asking
+                      «is anybody being called», and below the money, because the money is what
+                      produced them. Counts only: no name, no phone, no email travels in this mail.
+                    --}}
+                    @if ($p['follow_up'])
+                        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-top:16px;">{{ $t['follow_up'] }}</div>
+
+                        @if ($p['follow_up']['attention'])
+                            {{-- What needs a person, before the figures that merely describe the day. --}}
+                            <div style="margin-top:6px; padding:9px 11px; border-radius:8px; background-color:{{ $toneBg['warn'] }}; border-{{ $startSide }}:3px solid {{ $tone['warn'] }};">
+                                @foreach ($p['follow_up']['attention'] as $item)
+                                    <div style="font-size:13px; font-weight:700; color:#0f172a;">{{ $item }}</div>
+                                @endforeach
+                            </div>
+                        @endif
+
+                        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:8px;">
+                            @foreach (array_chunk($p['follow_up']['rows'], 3) as $row)
+                                <tr>
+                                    @foreach ($row as $cell)
+                                        <td width="33%" style="padding:6px 0;">
+                                            <div style="font-size:11px; color:#8b9a97;">{{ $cell['label'] }}</div>
+                                            <div style="font-size:15px; font-weight:700; color:#0f172a;">{{ $cell['value'] }}</div>
+                                        </td>
+                                    @endforeach
+                                </tr>
+                            @endforeach
+                        </table>
+
+                        @if ($p['follow_up']['owners'])
+                            {{-- Who, when there is more than one who. One owner is not a comparison. --}}
+                            <div style="font-size:11px; color:#8b9a97; margin-top:10px;">{{ $t['by_owner'] }}</div>
+                            <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:4px;">
+                                <tr>
+                                    <td style="font-size:11px; color:#8b9a97; padding:3px 0;">{{ $t['owner'] }}</td>
+                                    <td style="font-size:11px; color:#8b9a97; padding:3px 0;">{{ $t['received_short'] }}</td>
+                                    <td style="font-size:11px; color:#8b9a97; padding:3px 0;">{{ $t['contacted_short'] }}</td>
+                                    <td style="font-size:11px; color:#8b9a97; padding:3px 0;">{{ $t['overdue_short'] }}</td>
+                                </tr>
+                                @foreach ($p['follow_up']['owners'] as $owner)
+                                    <tr>
+                                        <td style="font-size:13px; color:#0f172a; padding:3px 0;">{{ $owner['name'] }}</td>
+                                        <td style="font-size:13px; color:#0f172a; padding:3px 0;">{{ $owner['received'] }}</td>
+                                        <td style="font-size:13px; color:#0f172a; padding:3px 0;">{{ $owner['contacted'] }}</td>
+                                        <td style="font-size:13px; color:{{ $owner['overdue'] === '0' ? '#5b6b68' : $tone['warn'] }}; padding:3px 0;">{{ $owner['overdue'] }}</td>
+                                    </tr>
+                                @endforeach
+                            </table>
+                        @endif
+                    @endif
+
+                    {{--
                       The notes: what happened, what it means, what to do.
 
                       Three at most. A fourth is not read, and a mail that lists ten alerts every
