@@ -195,6 +195,51 @@ final class FollowUpWorkspaceTest extends TestCase
         $this->assertContains($agent->id, $owners);
     }
 
+    /**
+     * EXECUTIVE-OPS-DASHBOARD-001 — the money, the people and the work, through the route.
+     *
+     * The unit cases hold the join; this holds the wiring, which is where every previous «backbone
+     * nobody calls» defect in this product actually lived: the service existed, was tested, and no
+     * route reached it.
+     */
+    public function test_the_executive_view_joins_the_spend_to_the_leads(): void
+    {
+        $this->lead(LeadStage::Contacted, contactedAfterMinutes: 20);
+        $this->lead(LeadStage::Invalid);
+
+        $body = $this->actingAs($this->member(ProjectRole::SALES_MANAGER), 'sanctum')
+            ->getJson('/api/v1/leads/executive?project_id='.$this->project->id)
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame(2, $body['leads']['received']);
+        $this->assertSame(1, $body['leads']['invalid']);
+        $this->assertArrayHasKey('cost_per_lead', $body);
+        $this->assertArrayHasKey('attention', $body);
+        /*
+         * No spend ran in this window, so there is no cost to report. «0 per lead» would read as
+         * «these leads were free», which is a claim about the advertising rather than about the
+         * absence of it.
+         */
+        $this->assertNull($body['cost_per_lead']['amount']);
+        $this->assertSame('no_spend', $body['cost_per_lead']['reason']);
+    }
+
+    /** And it is scoped like everything else: an agent sees their own leads here too. */
+    public function test_the_executive_view_reads_the_callers_own_scope(): void
+    {
+        $agent = $this->member(ProjectRole::LEAD_AGENT);
+        $this->lead(LeadStage::Contacted, owner: $agent->id, contactedAfterMinutes: 5);
+        $this->lead(LeadStage::Contacted, contactedAfterMinutes: 5);
+
+        $body = $this->actingAs($agent, 'sanctum')
+            ->getJson('/api/v1/leads/executive?project_id='.$this->project->id)
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame(1, $body['leads']['received']);
+    }
+
     /** @return array<string,mixed> */
     private function workspace(User $user): array
     {
