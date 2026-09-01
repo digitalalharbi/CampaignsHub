@@ -68,9 +68,24 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
     () => groupByLifecycle(options.data?.campaigns ?? [], { periodKnown: Boolean(from && to) }),
     [options.data, from, to],
   )
+  /*
+   * REPORT-CREATION-UX-001 — WHICH report this link is.
+   *
+   * The endpoint has been able to store a form since REPORT-PRODUCT-MODEL-001, and this builder
+   * never sent one, so every link an operator created came out as whatever the default happened to
+   * be. «The dashboard» and «the dashboard with every campaign and platform beneath it» are two
+   * different documents to send a client, and which one they got was decided by nobody.
+   *
+   * Defaults to the summary because that is the smaller promise: a link that shows less than the
+   * operator meant is a question they get asked, and one that shows more is a disclosure they
+   * cannot take back.
+   */
+  const [form, setForm] = useState<'executive_summary' | 'detailed'>('executive_summary')
   const [password, setPassword] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
   const [hideSpend, setHideSpend] = useState(false)
+  const [hideRevenue, setHideRevenue] = useState(false)
+  const [allowDownload, setAllowDownload] = useState(false)
   const [created, setCreated] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -83,7 +98,10 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         metrics,
         from,
         to,
+        form,
         hide_spend: hideSpend,
+        hide_revenue: hideRevenue,
+        allow_download: allowDownload,
         ...(password ? { password } : {}),
         ...(expiresAt ? { expires_at: expiresAt } : {}),
       }),
@@ -135,8 +153,28 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
       ? (ar ? 'كل المنصات' : 'All platforms')
       : providers.map((p) => providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')).join(ar ? '، ' : ', '))
     parts.push(metrics.length === 0 ? (ar ? 'كل المؤشرات' : 'All metrics') : `${metrics.length} ${ar ? 'مؤشر' : 'metrics'}`)
+    /*
+     * The CONSEQUENCE of each choice, in words, before it is saved — REPORT-CREATION-UX-001.
+     *
+     * The summary listed what was selected. What an operator is actually deciding is what a client
+     * will be able to see, and «detailed» versus «summary» changes that more than any chip above it
+     * does. So the sentence names the document, and then names what is withheld — because «hide
+     * spend» ticked and forgotten is how a client is sent a report with a hole in it.
+     */
+    parts.push(form === 'detailed'
+      ? (ar ? 'تقرير تفصيلي' : 'Detailed report')
+      : (ar ? 'ملخّص تنفيذي' : 'Executive summary'))
+
+    const withheld: string[] = []
+    if (hideSpend) withheld.push(ar ? 'الإنفاق' : 'spend')
+    if (hideRevenue) withheld.push(ar ? 'الإيراد' : 'revenue')
+    if (withheld.length > 0) {
+      parts.push(ar ? `بدون ${withheld.join(' و')}` : `without ${withheld.join(' and ')}`)
+    }
+    if (allowDownload) parts.push(ar ? 'مع إمكانية التنزيل' : 'downloadable')
+
     return parts.join(' · ')
-  }, [campaigns, providers, metrics, ar])
+  }, [campaigns, providers, metrics, form, hideSpend, hideRevenue, allowDownload, ar])
 
   return (
     <Modal open onClose={onClose} title={ar ? 'رابط تقرير لحظي للعميل' : 'Live client report link'} size="lg">
@@ -266,9 +304,49 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             </Field>
           </div>
 
+          {/*
+            The document itself, above the withholding switches: what the link IS comes before what
+            it leaves out.
+          */}
+          <div className="grid gap-2">
+            <span className="text-xs font-bold text-text-muted">{ar ? 'شكل التقرير' : 'What the link shows'}</span>
+            <div className="flex flex-wrap gap-1.5">
+              {([
+                ['executive_summary', ar ? 'ملخّص تنفيذي' : 'Executive summary', ar ? 'اللوحة وحدها' : 'the dashboard alone'],
+                ['detailed', ar ? 'تفصيلي' : 'Detailed', ar ? 'اللوحة ومعها كل حملة ومنصة' : 'the dashboard, and every campaign and platform'],
+              ] as const).map(([key, label, note]) => (
+                <button
+                  key={key}
+                  type="button"
+                  data-testid={`live-link-form-${key}`}
+                  onClick={() => setForm(key)}
+                  title={note}
+                  className={chip(form === key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
             <span>{ar ? 'إخفاء الإنفاق عن العميل' : 'Hide spend from the client'}</span>
-            <input type="checkbox" checked={hideSpend} onChange={(e) => setHideSpend(e.target.checked)} className="h-4 w-4 accent-brand-600" />
+            <input type="checkbox" data-testid="live-link-hide-spend" checked={hideSpend} onChange={(e) => setHideSpend(e.target.checked)} className="h-4 w-4 accent-brand-600" />
+          </label>
+
+          <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
+            <span>{ar ? 'إخفاء الإيراد عن العميل' : 'Hide revenue from the client'}</span>
+            <input type="checkbox" data-testid="live-link-hide-revenue" checked={hideRevenue} onChange={(e) => setHideRevenue(e.target.checked)} className="h-4 w-4 accent-brand-600" />
+          </label>
+
+          {/*
+            The endpoint has accepted this since it shipped and no control ever sent it, so every
+            link was created non-downloadable — a default nobody chose, in the one setting whose
+            wrong value a client notices immediately.
+          */}
+          <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
+            <span>{ar ? 'السماح للعميل بتنزيل التقرير' : 'Let the client download the report'}</span>
+            <input type="checkbox" data-testid="live-link-allow-download" checked={allowDownload} onChange={(e) => setAllowDownload(e.target.checked)} className="h-4 w-4 accent-brand-600" />
           </label>
 
           {/* What the link will show, in words, before it is created — see ViewCustomiser for the same idea. */}
