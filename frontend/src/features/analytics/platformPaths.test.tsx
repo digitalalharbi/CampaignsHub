@@ -169,3 +169,63 @@ describe('platform contribution, inside each path', () => {
       .toHaveTextContent('not compared across paths')
   })
 })
+
+/**
+ * INSUFFICIENT-DATA-EXPLAINED-001 — a path that cannot state a spread says which silence it is.
+ *
+ * `platformReadings` has always computed the reason — the path's platforms are not comparable, or
+ * no platform reported the cost this path is judged on — and the page rendered nothing at all. An
+ * absent sentence where the sibling paths have one reads as a page that failed to load, and a reader
+ * goes looking for a sync problem. Both reasons are ordinary; they are actionable in completely
+ * different ways.
+ */
+describe('a path that cannot state a spread', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProject.setState({ currentProjectId: 'p1' })
+    signInWith(['campaigns.view'])
+  })
+  afterEach(() => signOut())
+
+  it('says which silence it is rather than leaving a gap', async () => {
+    route()
+    await openPlatforms()
+
+    // The conversion path has ONE platform, so there are not two ends to compare.
+    const silent = await screen.findByTestId('platform-path-conversion-silent')
+
+    expect(silent).toHaveTextContent(/not comparable on one metric|No platform reported the cost/)
+  })
+
+  /**
+   * «They cost the same» is an answer, not a silence.
+   *
+   * A reader who sees nothing assumes the comparison was never made — which is the same wrong
+   * conclusion the missing reason produced, arrived at from the other side.
+   */
+  it('says so when the platforms cost about the same', async () => {
+    vi.mocked(getData).mockImplementation((url: string) => {
+      if (url.includes('platform-objectives')) {
+        return {
+          ...PATHS,
+          paths: [{
+            ...PATHS.paths[0]!,
+            path: 'even',
+            label_en: 'Even',
+            headline_metrics: ['spend', 'orders'],
+            platforms: [
+              { provider: 'meta', spend: 1_000, impressions: 100_000, clicks: 0, landing_page_views: 0, orders: 10, revenue: 0, campaigns: 1, spend_share: 0.5 },
+              { provider: 'tiktok', spend: 1_000, impressions: 100_000, clicks: 0, landing_page_views: 0, orders: 10, revenue: 0, campaigns: 1, spend_share: 0.5 },
+            ],
+          }],
+        } as never
+      }
+      if (url.includes('disclaimer')) return null as never
+      if (url.includes('/summary')) return { current: {}, previous: {}, delta: {}, currency: 'SAR' } as never
+      return [] as never
+    })
+    await openPlatforms()
+
+    expect(await screen.findByTestId('platform-path-even-reading')).toHaveTextContent(/cost about the same/)
+  })
+})
