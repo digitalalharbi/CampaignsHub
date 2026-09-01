@@ -17,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 /**
  * LIVEREP-002 — build a live client link from a CHOICE, not from a document.
@@ -188,6 +189,19 @@ final class LiveReportBuilderController extends Controller
             'hide_spend' => ['boolean'],
             'hide_revenue' => ['boolean'],
             'allow_download' => ['boolean'],
+            /*
+             * REPORT-CREATION-UX-001 — WHICH report this link is, asked rather than defaulted.
+             *
+             * `ShareService` has stored a form since REPORT-PRODUCT-MODEL-001 and this endpoint never
+             * accepted one, so every live link an operator built came out as whatever the report
+             * happened to be. The two are genuinely different documents — a dashboard, or the same
+             * dashboard with every campaign and platform beneath it — and which one a client receives
+             * was decided by a default nobody chose.
+             *
+             * Nullable, and null still means «whatever the report is»: that is what every link made
+             * before this meant, and reinterpreting them would change what an existing link shows.
+             */
+            'form' => ['nullable', Rule::in(['executive_summary', 'detailed'])],
         ]);
 
         /*
@@ -241,6 +255,7 @@ final class LiveReportBuilderController extends Controller
             'allow_download' => $data['allow_download'] ?? false,
             'hide_spend' => $data['hide_spend'] ?? false,
             'hide_revenue' => $data['hide_revenue'] ?? false,
+            'form' => $data['form'] ?? null,
             'scope' => [
                 'project_id' => (string) $project,
                 'campaign_ids' => $campaignIds,
