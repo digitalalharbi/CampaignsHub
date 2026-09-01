@@ -352,7 +352,18 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`rounded px-2 py-0.5 text-xs ${FATIGUE_TONE[data.fatigue.status] ?? ''}`}>
+          {/*
+            INSUFFICIENT-DATA-EXPLAINED-001 — the header chip carries the reason too.
+
+            The detail page prints the reason lower down, beside the signals, which is right for a
+            reader who scrolls. This chip is what the reader sees first, and «بيانات غير كافية» with
+            nothing attached reads as a fault in the data rather than as a creative that started on
+            Thursday.
+          */}
+          <span
+            className={`rounded px-2 py-0.5 text-xs ${FATIGUE_TONE[data.fatigue.status] ?? ''}`}
+            title={(ar ? data.fatigue.reason_ar : data.fatigue.reason_en) || undefined}
+          >
             {FATIGUE_LABEL[data.fatigue.status]?.[ar ? 'ar' : 'en'] ?? data.fatigue.status}
           </span>
           <span className={`rounded px-2 py-0.5 text-xs ${creative.is_demo ? 'bg-warning/15 text-warning' : 'bg-surface-hover text-text-secondary'}`}>

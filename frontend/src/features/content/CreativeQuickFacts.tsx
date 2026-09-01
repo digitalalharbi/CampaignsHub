@@ -396,7 +396,10 @@ export function CreativeQuickFacts({
       )}
 
       <Section title={t.fatigue}>
-        <span className={`inline-block rounded px-1.5 py-0.5 text-xs ${FATIGUE_TONE[data.fatigue.status] ?? ''}`}>
+        <span
+          className={`inline-block rounded px-1.5 py-0.5 text-xs ${FATIGUE_TONE[data.fatigue.status] ?? ''}`}
+          title={(ar ? data.fatigue.reason_ar : data.fatigue.reason_en) || undefined}
+        >
           {FATIGUE_LABEL[data.fatigue.status]?.[ar ? 'ar' : 'en'] ?? data.fatigue.status}
         </span>
         <p className="mt-1.5 text-xs text-white/60">{ar ? data.fatigue.reason_ar : data.fatigue.reason_en}</p>
