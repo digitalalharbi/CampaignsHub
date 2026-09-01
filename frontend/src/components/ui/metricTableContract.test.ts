@@ -42,7 +42,6 @@ function withoutComments(source: string): string {
 
 /** Surfaces that still render their own analytical table, and why each is still waiting. */
 const EXEMPT: Record<string, string> = {
-  'src/features/analytics/StoreFunnelTab.tsx': 'store funnel rows carry a stage ladder, not a metric grid',
   'src/features/analytics/AttributionPanel.tsx': 'attribution rows pair a claim with a store fact; the columns are not metrics',
   'src/features/reports/ReportsPage.tsx': 'a list of reports, not an analytical table',
   'src/features/reports/InteractiveReport.tsx': 'the deck lays out to a fixed slide, and its own layout gate measures it',
@@ -98,5 +97,22 @@ describe('the analytical table contract', () => {
 
     expect(source).toContain("from '@/components/ui/MetricTable'")
     expect(source).toContain('<MetricTable head={head} rows={rows} values={values} />')
+  })
+})
+
+/**
+ * STORE-TABLE-PRESENTATION-001 — the store tab is a consumer now, and the list is one shorter.
+ *
+ * The exemption list is only meaningful if it shrinks. This pins the direction: the store tab must
+ * stay migrated, so a later change that hand-rolls a table there again has to remove this test in
+ * front of somebody rather than quietly adding a line to EXEMPT.
+ */
+describe('the store tab uses the product’s table', () => {
+  it('renders through the primitive and is no longer exempt', () => {
+    const source = TREE['/src/features/analytics/StoreFunnelTab.tsx'] ?? ''
+
+    expect(source).toContain("from '@/components/ui/MetricTable'")
+    expect(source).toContain('<MetricTable')
+    expect(Object.keys(EXEMPT)).not.toContain('src/features/analytics/StoreFunnelTab.tsx')
   })
 })
