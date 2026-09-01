@@ -28,4 +28,30 @@ final class BrandingAsset extends Model
         'height' => 'integer',
         'bytes' => 'integer',
     ];
+
+    /**
+     * BRANDING-HIERARCHY-001 — a `platform`-scope row belongs to no tenant.
+     *
+     * `BelongsToTenant` auto-fills `tenant_id` from the request's context, which is right for every
+     * other row in this table and wrong for this one: the product's own mark is not a customer's,
+     * and stored under whoever uploaded it the platform layer could only ever answer for them. That
+     * is what made the documented client → agency → CampaignsHub fallback unreachable for everybody
+     * else.
+     *
+     * Cleared HERE rather than by weakening the trait — the auto-fill is the backbone of tenant
+     * isolation, and the exception belongs with the one scope that has a reason for it.
+     */
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        $detach = static function (self $model): void {
+            if ($model->getAttribute('scope') === 'platform') {
+                $model->setAttribute('tenant_id', null);
+            }
+        };
+
+        self::creating($detach);
+        self::updating($detach);
+    }
 }
