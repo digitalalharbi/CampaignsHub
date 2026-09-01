@@ -59,7 +59,14 @@ final class BrandingService
             throw new InvalidArgumentException("Branding kind [{$kind}] does not support light/dark themes.");
         }
 
-        $tenantId = $this->tenant->tenantId();
+        /*
+         * A platform-scope file is the product's own mark and belongs to no tenant.
+         *
+         * Writing it under whoever uploaded it is what made this scope mean two different things —
+         * unreachable for every other tenant, and silently theirs for one. `BrandingCenterController`
+         * is what decides WHO may write it; this decides what the row says once they have.
+         */
+        $tenantId = $scope === 'platform' ? null : $this->tenant->tenantId();
         $disk = (string) config('branding.disk', 'local');
 
         // Read everything we need from the temp file BEFORE it is moved by the store.
@@ -124,16 +131,41 @@ final class BrandingService
     {
         $layers = $this->fallbackLayers($scope, $scopeId);
 
-        $candidates = BrandingAsset::query()
-            ->where(function ($query) use ($layers): void {
-                foreach ($layers as [$layerScope, $layerId]) {
-                    $query->orWhere(function ($inner) use ($layerScope, $layerId): void {
-                        $inner->where('scope', $layerScope);
-                        $layerId === null ? $inner->whereNull('scope_id') : $inner->where('scope_id', $layerId);
-                    });
-                }
-            })
-            ->get();
+        $tenantLayers = array_values(array_filter($layers, static fn (array $l): bool => $l[0] !== 'platform'));
+
+        $candidates = $tenantLayers === []
+            ? BrandingAsset::query()->whereRaw('1 = 0')->get()
+            : BrandingAsset::query()
+                ->where(function ($query) use ($tenantLayers): void {
+                    foreach ($tenantLayers as [$layerScope, $layerId]) {
+                        $query->orWhere(function ($inner) use ($layerScope, $layerId): void {
+                            $inner->where('scope', $layerScope);
+                            $layerId === null ? $inner->whereNull('scope_id') : $inner->where('scope_id', $layerId);
+                        });
+                    }
+                })
+                ->get();
+
+        /*
+         * BRANDING-HIERARCHY-001 — the platform layer belongs to no tenant, so it is read outside the
+         * tenant scope.
+         *
+         * `BrandingAsset` is tenant-scoped, and the chain's last link is the PRODUCT's own mark. Read
+         * through the tenant scope it could only ever answer for whichever customer happened to hold
+         * the row, which made the documented client → agency → CampaignsHub fallback unreachable for
+         * everybody else. The rows carry `tenant_id IS NULL` and the query says so explicitly rather
+         * than dropping the scope wholesale — a bare `withoutGlobalScopes()` here would let one
+         * tenant's client-scoped asset answer for another.
+         */
+        if (in_array('platform', array_column($layers, 0), true)) {
+            $candidates = $candidates->merge(
+                BrandingAsset::withoutGlobalScopes()
+                    ->whereNull('tenant_id')
+                    ->where('scope', 'platform')
+                    ->whereNull('scope_id')
+                    ->get(),
+            );
+        }
 
         $resolved = [];
         foreach (BrandingSpec::KINDS as $kind) {
@@ -159,7 +191,8 @@ final class BrandingService
         }
 
         return BrandingSetting::updateOrCreate(
-            ['tenant_id' => $this->tenant->tenantId(), 'scope' => $scope, 'scope_id' => $scopeId],
+            // The platform's own settings belong to no tenant, exactly as its assets do.
+            ['tenant_id' => $scope === 'platform' ? null : $this->tenant->tenantId(), 'scope' => $scope, 'scope_id' => $scopeId],
             [
                 'colors' => $data['colors'] ?? null,
                 'fonts' => $data['fonts'] ?? null,
@@ -231,12 +264,15 @@ final class BrandingService
         return is_array($info) ? [(int) $info[0], (int) $info[1]] : [null, null];
     }
 
-    private function directory(string $tenantId, string $scope, ?string $scopeId, string $kind): string
+    private function directory(?string $tenantId, string $scope, ?string $scopeId, string $kind): string
     {
         $root = trim((string) config('branding.root', 'branding'), '/');
         $segment = $scopeId !== null ? "{$scope}/{$scopeId}" : $scope;
+        // The platform's own files sit outside every tenant's directory, because they are outside
+        // every tenant. `_platform` rather than an empty segment, which would collapse the path.
+        $owner = $tenantId ?? '_platform';
 
-        return "{$root}/{$tenantId}/{$segment}/{$kind}";
+        return "{$root}/{$owner}/{$segment}/{$kind}";
     }
 
     /**
