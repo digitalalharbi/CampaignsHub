@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Reports\Models\ReportExport;
 use App\Domains\Reports\Services\ReportExporter;
+use App\Domains\Reports\Support\ReportIdentity;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -34,7 +35,15 @@ final class ReportDownloadController extends Controller
 
         abort_unless(Storage::disk($export->disk)->exists($export->path), 404, 'File missing.');
 
-        $filename = basename($export->path);
+        /*
+         * REPORT-TITLE-METADATA-001 — the stored path names a blob; the DOWNLOAD names the report.
+         *
+         * `basename($export->path)` is a uuid with an extension on it. It is the right name for a
+         * file on a disk and the wrong one for a file a client is about to keep.
+         */
+        $filename = $export->report === null
+            ? basename($export->path)
+            : ReportIdentity::filename($export->report, $export->format);
 
         return Storage::disk($export->disk)->download($export->path, $filename, [
             'Content-Type' => self::MIME[$export->format] ?? 'application/octet-stream',
