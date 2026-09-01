@@ -24,6 +24,7 @@ export interface Lead {
    */
   canonical_lead_id?: string | null
   duplicate_reason?: string | null
+  attribution?: LeadAttribution
   /** How many later arrivals this lead absorbed. Absent unless the list asked for it. */
   duplicate_count?: number
 }
@@ -72,3 +73,45 @@ export const LEAD_SOURCES = [
   'api',
   'webhook',
 ] as const
+
+/**
+ * LEAD-SOURCE-ATTRIBUTION-001 — where the lead came from, rung by rung.
+ *
+ * The four states are the whole point. A screen that renders «platform does not offer this», «this
+ * lead lost it», and «nothing paid for this lead» as the same dash has answered none of them, and
+ * the client cannot tell a platform limit from a broken sync.
+ */
+export type AttributionState = 'named' | 'not_offered' | 'missing' | 'no_platform'
+
+export interface AttributionRung {
+  rung: 'creative' | 'ad' | 'adset' | 'campaign'
+  state: AttributionState
+  id: string | null
+  name: string | null
+  /** Present only for `not_offered`: why this platform has nothing to say about this rung. */
+  reason: string | null
+  /**
+   * The same sentence in English.
+   *
+   * Both are sent rather than one resolved server-side, because the reader can switch language in
+   * the browser and a chain already on screen must follow — and because a reason that exists in one
+   * language only degrades to the unexplained dash this feature exists to remove.
+   */
+  reason_en: string | null
+}
+
+export interface LeadAttribution {
+  route: 'native_form' | 'website_form' | 'manual' | 'imported'
+  route_label: string
+  route_label_en: string
+  platform: {
+    state: 'named' | 'unrecognised' | 'no_platform'
+    provider: string | null
+    label: string | null
+    label_en: string | null
+  }
+  rungs: AttributionRung[]
+  /** «Nothing is missing that COULD have been here» — not «all four rungs are named». */
+  complete: boolean
+  web: Record<string, string>
+}
