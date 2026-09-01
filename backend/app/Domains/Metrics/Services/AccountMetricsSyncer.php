@@ -14,6 +14,7 @@ use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Providers\ReportsCreativeInsights;
+use App\Domains\Integrations\Providers\ReportsEntityGrains;
 use App\Domains\Integrations\Providers\SnapchatConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
@@ -269,7 +270,17 @@ final class AccountMetricsSyncer
          * Same guarantees as the creative call above: a separate table, so a failure here cannot
          * cost the campaign figures already ingested, and failures do not turn a healthy run red.
          */
-        if ($connector instanceof SnapchatConnector) {
+        /*
+         * ADSET-METRICS-TRUTH-001 — asked of every provider that can answer, not of one.
+         *
+         * This read `instanceof SnapchatConnector`. Everything underneath it — the sweep, the
+         * upsert, the aggregator, the drill-down, the Ad Set and Ads tabs — was provider-agnostic
+         * and worked for any of them; one `instanceof` decided that of eight platforms exactly one
+         * would ever fill the table. A Meta account therefore showed «—» for ad-set spend, CPC, CPM
+         * and CPA, which Meta reports perfectly well, and the product printed our silence as the
+         * platform's.
+         */
+        if ($connector instanceof ReportsEntityGrains) {
             $this->syncEntityGrains($connector, $account, $run, $from, $to);
         }
 
@@ -400,7 +411,7 @@ final class AccountMetricsSyncer
      * the rest; this wraps the whole grain so a provider change cannot cost the metrics run.
      */
     private function syncEntityGrains(
-        SnapchatConnector $connector,
+        ReportsEntityGrains $connector,
         ExternalAccount $account,
         MetricSyncRun $run,
         Carbon $from,
@@ -412,8 +423,8 @@ final class AccountMetricsSyncer
             ->pluck('external_id', 'id');
 
         $squadRows = $this->grain(
-            fn (): array => $connector->syncEntityInsights(
-                $account->external_id, 'campaigns', 'adsquad',
+            fn (): array => $connector->entityInsights(
+                $account->external_id, ReportsEntityGrains::AD_SET,
                 $campaigns->values()->all(), $from->toDateString(), $to->toDateString(),
             )->records,
         );
@@ -453,8 +464,8 @@ final class AccountMetricsSyncer
              *
              * Asking campaigns for both grains is also 89 calls instead of 187 + 89.
              */
-            fn (): array => $connector->syncEntityInsights(
-                $account->external_id, 'campaigns', 'ad',
+            fn (): array => $connector->entityInsights(
+                $account->external_id, ReportsEntityGrains::AD,
                 $campaigns->values()->all(),
                 $from->toDateString(), $to->toDateString(),
             )->records,
