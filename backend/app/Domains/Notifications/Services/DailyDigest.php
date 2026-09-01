@@ -7,6 +7,8 @@ namespace App\Domains\Notifications\Services;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\CRM\Models\Lead;
+use App\Domains\CRM\Services\FollowUpWorkspace;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
@@ -62,6 +64,7 @@ final class DailyDigest
         private readonly ReportTemplateEngine $template,
         private readonly DigestCreatives $creatives,
         private readonly DigestRecommendations $recommendations,
+        private readonly FollowUpWorkspace $followUp,
     ) {}
 
     /**
@@ -152,9 +155,23 @@ final class DailyDigest
          */
         $anySpend = array_sum(array_map(static fn (array $b): float => $b['totals']['spend'] ?? 0.0, $blocks)) > 0;
 
+        /*
+         * EXECUTIVE-DAILY-DIGEST-001 — a lead-generation day is a day, even with no spend recorded.
+         *
+         * Spend arrives through a sync that can lag by hours; a lead arrives the moment somebody
+         * submits a form. Gating the whole email on spend meant a morning with eleven new leads and
+         * a late Meta sync sent nothing at all, and the reader learned about the leads a day later.
+         * Either signal makes it a day worth reporting.
+         */
+        $anyLeads = array_sum(array_map(
+            static fn (array $b): int => (int) ($b['follow_up']['received'] ?? 0)
+                + (int) ($b['follow_up']['overdue'] ?? 0),
+            $blocks,
+        )) > 0;
+
         return [
-            'sendable' => $anySpend,
-            'reason' => $anySpend ? null : 'no_activity',
+            'sendable' => $anySpend || $anyLeads,
+            'reason' => $anySpend || $anyLeads ? null : 'no_activity',
             'date' => $from->toDateString(),
             'to_date' => $to->toDateString(),
             'days' => $days,
@@ -162,6 +179,69 @@ final class DailyDigest
             'projects' => $blocks,
             'totals' => $this->rollUp($blocks),
         ];
+    }
+
+    /**
+     * The follow-up picture for one project, in counts.
+     *
+     * Built from the SAME service the follow-up workspace screen uses — a second set of definitions
+     * would let the email and the screen disagree about what «contacted» means, and the reader has
+     * no way to tell which is right. `FollowUpWorkspace` is handed a scoped query and answers it;
+     * this class resolves no permissions and widens no scope.
+     *
+     * Returns null where the project has no CRM activity at all, so a media-only client's digest
+     * does not grow a section of zeroes that says nothing.
+     *
+     * @return array<string,mixed>|null
+     */
+    private function followUpFor(string $tenantId, string $projectId, Carbon $from, Carbon $to): ?array
+    {
+        $scope = Lead::query()
+            ->withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('project_id', $projectId);
+
+        if (! (clone $scope)->exists()) {
+            return null;
+        }
+
+        $summary = $this->followUp->summary(clone $scope, $from, $to);
+
+        /*
+         * The three that need a person, separated from the twelve that describe the day.
+         *
+         * A digest that lists every figure equally is a digest nobody acts on. These are the ones
+         * where the answer is «somebody has to do something», and the presenter leads with them.
+         */
+        $summary['attention'] = array_values(array_filter([
+            $summary['unassigned'] > 0 ? ['kind' => 'unassigned_leads', 'count' => $summary['unassigned']] : null,
+            $summary['overdue'] > 0 ? ['kind' => 'overdue_follow_up', 'count' => $summary['overdue']] : null,
+            $summary['not_contacted'] > 0 ? ['kind' => 'never_contacted', 'count' => $summary['not_contacted']] : null,
+        ]));
+
+        /*
+         * And the same picture per owner, so «the team is slow» can be answered with «who».
+         *
+         * A team member's NAME is staff, not lead PII — the constraint this section observes is
+         * about the client's customers, and blanking a colleague's name would make the block
+         * useless without protecting anybody. Owners with no leads in the window are dropped: a
+         * roster of zeroes is not a report on the team.
+         */
+        $names = User::query()
+            ->whereIn('id', array_values(array_filter(array_column($this->followUp->byOwner(clone $scope, $from, $to), 'owner_id'))))
+            ->pluck('name', 'id');
+
+        $summary['by_owner'] = array_values(array_filter(
+            array_map(
+                static fn (array $row): array => $row + [
+                    'owner_name' => $row['owner_id'] === null ? null : ($names[$row['owner_id']] ?? null),
+                ],
+                $this->followUp->byOwner(clone $scope, $from, $to),
+            ),
+            static fn (array $row): bool => ($row['received'] ?? 0) > 0 || ($row['overdue'] ?? 0) > 0,
+        ));
+
+        return $summary;
     }
 
     /**
@@ -220,6 +300,19 @@ final class DailyDigest
                 ? $this->recommendations->forProject($tenantId, $projectId, $from, $to)
                 : [],
             'freshness' => $freshness,
+            /*
+             * EXECUTIVE-DAILY-DIGEST-001 — what happened AFTER the lead arrived.
+             *
+             * The digest could already say what was spent and what it produced, and stopped exactly
+             * where a lead-generation client's day starts. «40 leads» is not an outcome; forty leads
+             * of which eleven nobody has called is.
+             *
+             * **Counts only — never a name, an email or a phone number.** A digest goes to whoever
+             * subscribed to it, through an inbox nobody in this product controls, and lead PII may
+             * not be mailed by default. The figures below identify no one, and the link into the
+             * product is where a person with the permission goes to see who.
+             */
+            'follow_up' => $this->followUpFor($tenantId, $projectId, $from, $to),
         ];
 
         /*
