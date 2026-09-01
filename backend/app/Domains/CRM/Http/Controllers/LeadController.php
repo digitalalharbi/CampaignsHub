@@ -16,6 +16,7 @@ use App\Domains\CRM\Http\Requests\UpdateLeadRequest;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Resources\LeadResource;
 use App\Domains\CRM\Resources\OpportunityResource;
+use App\Domains\CRM\Services\FollowUpWorkspace;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Context\ProjectContext;
@@ -133,7 +134,14 @@ final class LeadController extends Controller
 
     public function show(Request $request, Lead $lead): JsonResponse
     {
+        /*
+         * TEAM-PROJECT-RBAC-001 — the tenant permission opens the SCREEN; the project capability
+         * decides whether it opens for THIS client. Both, because either alone is a hole: the tenant
+         * layer cannot say «not this client», and the project layer is absent on a lead that has no
+         * project.
+         */
         abort_unless($request->user()->hasPermission('leads.view'), 403);
+        $this->assertMayWork($request, $lead, ProjectCapability::LEADS_VIEW, 'leads.view');
 
         /*
          * A lead an agent was not given is a lead they may not open.
@@ -166,6 +174,14 @@ final class LeadController extends Controller
 
     public function update(UpdateLeadRequest $request, Lead $lead, UpdateLead $action): JsonResponse
     {
+        /*
+         * `UpdateLeadRequest::authorize()` checks the TENANT's `leads.update`, which cannot say «not
+         * this client» — it is the same permission whichever project the lead belongs to. So an
+         * employee entitled to edit leads could edit ANY lead in the workspace by its id, including
+         * one on a client they have no part in.
+         */
+        $this->assertMayWork($request, $lead, ProjectCapability::LEADS_UPDATE, 'leads.update');
+
         $lead = $action->execute($lead, LeadData::fromArray(array_merge($lead->toArray(), $request->validated())));
 
         return ApiResponse::success(new LeadResource($lead), 'Lead updated.');
@@ -174,6 +190,8 @@ final class LeadController extends Controller
     public function destroy(Request $request, Lead $lead): JsonResponse
     {
         abort_unless($request->user()->hasPermission('leads.delete'), 403);
+        // Deleting somebody else's client's lead needs the capability on THAT client, not on ours.
+        $this->assertMayWork($request, $lead, ProjectCapability::LEADS_UPDATE, 'leads.update');
         $lead->delete();
 
         return ApiResponse::success(null, 'Lead deleted.', status: 200);
@@ -182,6 +200,7 @@ final class LeadController extends Controller
     public function convert(Request $request, Lead $lead, ConvertLead $action): JsonResponse
     {
         abort_unless($request->user()->hasPermission('leads.convert'), 403);
+        $this->assertMayWork($request, $lead, ProjectCapability::LEADS_UPDATE, 'leads.update');
 
         $opportunity = $action->execute($lead, $request->string('opportunity_name')->toString() ?: null);
 
@@ -287,5 +306,66 @@ final class LeadController extends Controller
             403,
             'This lead is not assigned to you.',
         );
+    }
+
+    /**
+     * LEAD-SLA-NOTIFICATION-001 — the follow-up workspace, read through the caller's own scope.
+     *
+     * The figures come from the SAME query the inbox is narrowed by, so a lead agent's dashboard
+     * describes the leads they can actually see and a manager's describes the pipeline. Computing
+     * them from an unscoped table would show an agent a contact rate they cannot act on and a count
+     * they cannot reconcile with the list beside it.
+     *
+     * `leads.view` is enough: these are counts and rates, and none of them is a person. That is the
+     * whole reason `leads.pii.view` is a separate capability — a management viewer is entitled to
+     * «how many, how fast, what did each cost» without being handed anybody's phone number.
+     */
+    public function followUpWorkspace(Request $request, FollowUpWorkspace $workspace): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('leads.view'), 403);
+
+        $projectId = app(ProjectContext::class)->projectId() ?? ($request->string('project_id')->toString() ?: null);
+
+        if ($projectId !== null) {
+            abort_unless(
+                app(ProjectAbilities::class)->allows($request->user(), $projectId, ProjectCapability::LEADS_VIEW),
+                403,
+                'You do not have this permission on this project.',
+            );
+        }
+
+        $to = $request->date('to') ?? Carbon::now();
+        $from = $request->date('from') ?? (clone $to)->subDays(29);
+
+        $scope = app(LeadVisibility::class)->scopeForReader(
+            Lead::query()->when($projectId !== null, static fn ($q) => $q->where('project_id', $projectId)),
+            $request->user(),
+            $projectId,
+        );
+
+        return ApiResponse::success([
+            'summary' => $workspace->summary(clone $scope, $from->startOfDay(), $to->endOfDay()),
+            /*
+             * The per-owner table only for somebody who runs the pipeline. An agent seeing their
+             * colleagues' contact rates is a performance ranking nobody asked this product to
+             * publish, and it is not information they can act on.
+             */
+            'by_owner' => $this->supervises($request, $projectId)
+                ? $workspace->byOwner(clone $scope, $from->startOfDay(), $to->endOfDay())
+                : null,
+        ], 'Follow-up workspace.');
+    }
+
+    private function supervises(Request $request, ?string $projectId): bool
+    {
+        $user = $request->user();
+
+        if ($user === null) {
+            return false;
+        }
+
+        return $projectId === null
+            ? $user->hasPermission('leads.assign')
+            : app(ProjectAbilities::class)->allows($user, $projectId, ProjectCapability::LEADS_ASSIGN);
     }
 }
