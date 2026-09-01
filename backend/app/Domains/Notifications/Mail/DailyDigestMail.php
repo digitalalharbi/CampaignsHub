@@ -312,6 +312,14 @@ final class DailyDigestMail extends Mailable
                   fact, which reads as two problems.
                 */
                 'notes' => $this->notes($block['observations'] ?? []),
+                /*
+                  EXECUTIVE-DAILY-DIGEST-001 — what happened after the lead arrived.
+
+                  Counts and rates, and not one name. A digest reaches whatever inbox somebody
+                  subscribed with, and lead PII is not mailed by default — so the email says «11
+                  never contacted» and the link says who.
+                */
+                'follow_up' => $this->followUp($p, $ar, $block['follow_up'] ?? null),
                 'url' => $app.'/app/dashboard',
             ];
         }
@@ -389,6 +397,97 @@ final class DailyDigestMail extends Mailable
         return ($ar ? 'آخر مزامنة: ' : 'Last sync: ').$when;
     }
 
+    /**
+     * The follow-up section, as rows of label and figure.
+     *
+     * Three things it deliberately refuses. It prints no NAME — a digest travels to an inbox nobody
+     * in this product controls, and the requirement is explicit that raw lead PII is not emailed by
+     * default. It prints no rate whose denominator was zero — «0% contacted» out of no leads is a
+     * verdict on nothing. And it puts what needs a person FIRST, because a list where every figure
+     * carries equal weight is a list nobody acts on.
+     *
+     * @param  array<string,mixed>|null  $follow
+     * @return array{rows: list<array{label: string, value: string}>, attention: list<string>, owners: list<array{name: string, received: string, contacted: string, overdue: string}>}|null
+     */
+    private function followUp(DigestPresenter $p, bool $ar, ?array $follow): ?array
+    {
+        if ($follow === null || ((int) ($follow['received'] ?? 0) === 0 && (int) ($follow['overdue'] ?? 0) === 0)) {
+            return null;
+        }
+
+        $rows = [];
+
+        foreach ([
+            'received' => ['وصل', 'Received'],
+            'contacted' => ['تم التواصل', 'Contacted'],
+            'not_contacted' => ['لم يُتواصل معه', 'Not contacted'],
+            'qualified' => ['مؤهَّل', 'Qualified'],
+            'appointments' => ['مواعيد', 'Appointments'],
+            'won' => ['مكسوب', 'Won'],
+        ] as $key => $labels) {
+            $rows[] = [
+                'label' => $ar ? $labels[0] : $labels[1],
+                'value' => number_format((float) ($follow[$key] ?? 0)),
+            ];
+        }
+
+        /*
+         * A rate whose denominator was zero comes back null from the workspace, and stays absent
+         * here rather than becoming «0%». They are different statements and only one is true.
+         */
+        foreach ([
+            'contact_rate' => ['نسبة التواصل', 'Contact rate'],
+            'qualification_rate' => ['نسبة التأهيل', 'Qualification rate'],
+        ] as $key => $labels) {
+            if (($follow[$key] ?? null) !== null) {
+                $rows[] = ['label' => $ar ? $labels[0] : $labels[1], 'value' => $p->percent($follow[$key], 0)];
+            }
+        }
+
+        $median = $follow['first_response']['median_minutes'] ?? null;
+
+        if ($median !== null) {
+            $rows[] = [
+                'label' => $ar ? 'وسيط زمن أول رد' : 'Median first response',
+                'value' => number_format((float) $median).($ar ? ' دقيقة' : ' min'),
+            ];
+        }
+
+        $attention = [];
+
+        foreach ($follow['attention'] ?? [] as $item) {
+            $n = number_format((float) ($item['count'] ?? 0));
+            $attention[] = match ($item['kind'] ?? '') {
+                'unassigned_leads' => $ar ? $n.' عميل محتمل بلا مسؤول' : $n.' lead(s) with no owner',
+                'overdue_follow_up' => $ar ? $n.' متابعة متأخرة' : $n.' overdue follow-up(s)',
+                'never_contacted' => $ar ? $n.' لم يُتواصل معه بعد' : $n.' never contacted',
+                default => '',
+            };
+        }
+
+        /*
+         * The team, only when there IS a team.
+         *
+         * One owner is not a comparison, and «unassigned» alone is already said above under what
+         * needs a person — printing it again as a one-row league table says the same thing twice.
+         */
+        $owners = array_values(array_filter(
+            $follow['by_owner'] ?? [],
+            static fn (array $row): bool => ($row['owner_name'] ?? null) !== null,
+        ));
+
+        return [
+            'rows' => $rows,
+            'attention' => array_values(array_filter($attention)),
+            'owners' => count($owners) < 2 ? [] : array_map(static fn (array $row): array => [
+                'name' => (string) $row['owner_name'],
+                'received' => number_format((float) ($row['received'] ?? 0)),
+                'contacted' => number_format((float) ($row['contacted'] ?? 0)),
+                'overdue' => number_format((float) ($row['overdue'] ?? 0)),
+            ], $owners),
+        ];
+    }
+
     /** @return array<string,string> */
     private function copy(bool $ar): array
     {
@@ -409,6 +508,12 @@ final class DailyDigestMail extends Mailable
             'fatigued' => 'يحتاج تجديدًا',
             'budget' => 'الميزانية',
             'notes' => 'ما يستحق الانتباه',
+            'follow_up' => 'متابعة العملاء المحتملين',
+            'by_owner' => 'حسب المسؤول',
+            'owner' => 'المسؤول',
+            'received_short' => 'وصل',
+            'contacted_short' => 'تم التواصل',
+            'overdue_short' => 'متأخر',
             'no_blended_note' => 'لا تُجمَع تكلفة النتيجة ولا العائد عبر المشاريع — ذلك يقسم أموال عميل على نتائج عميل آخر. تجدها داخل كل مشروع، وبحسب المسار.',
             'by_path' => 'حسب المسار التسويقي',
             'best' => 'الأفضل',
@@ -436,6 +541,12 @@ final class DailyDigestMail extends Mailable
             'fatigued' => 'Needs refreshing',
             'budget' => 'Budget',
             'notes' => 'Worth your attention',
+            'follow_up' => 'Lead follow-up',
+            'by_owner' => 'By owner',
+            'owner' => 'Owner',
+            'received_short' => 'Received',
+            'contacted_short' => 'Contacted',
+            'overdue_short' => 'Overdue',
             'no_blended_note' => 'Cost per result and return are not summed across projects — that would divide one client’s money by another client’s results. They appear inside each project, by marketing path.',
             'by_path' => 'By marketing path',
             'best' => 'Best',
