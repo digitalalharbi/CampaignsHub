@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\CRM\Resources;
 
 use App\Domains\CRM\Access\LeadVisibility;
+use App\Domains\CRM\Attribution\LeadAttributionChain;
 use App\Domains\CRM\Models\Lead;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -71,6 +72,19 @@ final class LeadResource extends JsonResource
              * paginated and the alternative is a query per lead.
              */
             'duplicate_count' => $this->whenCounted('duplicates'),
+            /*
+             * LEAD-SOURCE-ATTRIBUTION-001 — the chain, and what it cannot say.
+             *
+             * Sent on every lead rather than only on the detail view, because a list that cannot show
+             * which campaign produced a row is the list a lead-generation client spends their day in.
+             * It costs no query: the chain is computed from columns this row already carries, and it
+             * is forbidden from opening a metrics table — a click is not a person.
+             *
+             * Not gated behind identity permission. The chain describes the AD that ran, which is
+             * the client's own media buying and not the person's data; an agent who may see that a
+             * lead exists may see which campaign paid for it.
+             */
+            'attribution' => app(LeadAttributionChain::class)->for($this->resource),
             'activities' => ActivityResource::collection($this->whenLoaded('activities')),
         ];
     }

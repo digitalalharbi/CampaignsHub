@@ -38,6 +38,8 @@ export interface AlertEvent {
 export const ALERT_TYPES = [
   'budget_risk', 'cpa_increase', 'cpl_increase', 'roas_drop', 'no_results',
   'sync_failure', 'token_expiry', 'report_failed', 'sla_warning',
+  // LEAD-SLA-NOTIFICATION-001 — three follow-up promises, kept in step with the server's own list.
+  'lead_unassigned', 'lead_no_contact', 'lead_follow_up_overdue',
 ] as const
 
 export type AlertType = (typeof ALERT_TYPES)[number]

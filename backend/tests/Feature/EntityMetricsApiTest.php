@@ -16,12 +16,14 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Models\EntityDailyMetric;
+use App\Domains\Metrics\Services\EntityMetricsAggregator;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -100,6 +102,35 @@ final class EntityMetricsApiTest extends TestCase
             'external_campaign_id' => $this->campaign->getKey(), 'provider' => 'snapchat',
             'external_id' => 'sq-1', 'name' => 'Riyadh · 18-34', 'status' => 'active',
         ]);
+    }
+
+    /**
+     * The AGGREGATOR names the row, not the controller — REPORT-DETAIL-PARITY-001.
+     *
+     * The test below proves the operator's endpoint carries a name, and it passed while the client's
+     * shared report showed twenty-two ad-set rows labelled «—» in production. The naming lived in
+     * `MetricsController`, and `LiveReportService` calls `EntityMetricsAggregator` directly, so the
+     * two surfaces that were promised to «not disagree about one ad set» disagreed about the only
+     * part a reader uses to find it.
+     *
+     * Asserting it HERE, one layer below the endpoint, is what makes the endpoint test stop being
+     * the only thing holding the name up.
+     */
+    public function test_the_aggregator_itself_names_the_row_so_every_caller_gets_it(): void
+    {
+        $this->metric($this->squad->getKey(), ['impressions' => 90000, 'clicks' => 300]);
+
+        $rows = app(EntityMetricsAggregator::class)->byEntity(
+            (string) $this->project->getKey(),
+            EntityDailyMetric::AD_SET,
+            // The fixture writes 2026-08-01; the window is stated rather than counted back from now,
+            // so this test does not start failing on a date nobody changed.
+            Carbon::parse('2026-07-25'),
+            Carbon::parse('2026-08-10'),
+        );
+
+        $this->assertSame('Riyadh · 18-34', $rows[0]['name'], 'a caller that is not the controller got no name');
+        $this->assertSame('active', $rows[0]['status']);
     }
 
     /** An ad squad reaches the API with a NAME — a drill-down of provider ids is not a screen. */

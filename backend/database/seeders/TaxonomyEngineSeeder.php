@@ -584,6 +584,12 @@ final class TaxonomyEngineSeeder extends Seeder
                     ['key' => 'token_expiry', 'label_ar' => 'انتهاء التوكن', 'label_en' => 'Token expiry', 'color' => '#f59e0b', 'icon' => 'key-round'],
                     ['key' => 'report_failed', 'label_ar' => 'فشل التقرير', 'label_en' => 'Report failed', 'color' => '#dc2626', 'icon' => 'file-x'],
                     ['key' => 'sla_warning', 'label_ar' => 'تحذير SLA', 'label_en' => 'SLA warning', 'color' => '#f59e0b', 'icon' => 'clock-alert'],
+                    // LEAD-SLA-NOTIFICATION-001 — the three follow-up promises. Seeded rather than
+                    // migrated because `platform:provision` runs on every deploy and this seeder is
+                    // idempotent, which is exactly the case it was built for.
+                    ['key' => 'lead_unassigned', 'label_ar' => 'عميل محتمل بلا مسؤول', 'label_en' => 'Lead with no owner', 'color' => '#f59e0b', 'icon' => 'user-x'],
+                    ['key' => 'lead_no_contact', 'label_ar' => 'لم يُتواصل مع العميل المحتمل', 'label_en' => 'Lead not contacted', 'color' => '#ef4444', 'icon' => 'phone-off'],
+                    ['key' => 'lead_follow_up_overdue', 'label_ar' => 'متابعة متأخرة', 'label_en' => 'Follow-up overdue', 'color' => '#dc2626', 'icon' => 'clock-alert'],
                 ],
             ],
             [
