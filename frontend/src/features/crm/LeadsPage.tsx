@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { convertLead, listLeads } from './api'
@@ -202,11 +203,27 @@ export function LeadsPage() {
               : 'The leads your campaigns and forms brought in — each with its source and where it stands.'}
           </p>
         </div>
-        {canCreate && (
-          <Button onClick={() => setModalOpen(true)}>
-            <Plus size={15} /> {t('add_lead')}
-          </Button>
-        )}
+        <div className="flex items-center gap-3">
+          {/*
+            LEAD-OPERATIONS-001 — the way into the follow-up workspace.
+
+            Here rather than in the rail: the rail is gated by an entitlement key and there is no
+            «leads» one, so hanging a link there would put a nav decision inside a feature commit.
+            This is where a reader asking «what is overdue» already is.
+          */}
+          <Link
+            to="/app/leads/workspace"
+            className="text-accent text-sm hover:underline"
+            data-testid="leads-workspace-link"
+          >
+            {locale === 'ar' ? 'المتابعة' : 'Follow-up'}
+          </Link>
+          {canCreate && (
+            <Button onClick={() => setModalOpen(true)}>
+              <Plus size={15} /> {t('add_lead')}
+            </Button>
+          )}
+        </div>
       </div>
 
       {convertError && <Alert severity="danger" title={convertError.message} />}

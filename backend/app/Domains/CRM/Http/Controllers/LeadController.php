@@ -23,6 +23,7 @@ use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -353,9 +354,37 @@ final class LeadController extends Controller
              * publish, and it is not information they can act on.
              */
             'by_owner' => $this->supervises($request, $projectId)
-                ? $workspace->byOwner(clone $scope, $from->startOfDay(), $to->endOfDay())
+                ? $this->named($workspace->byOwner(clone $scope, $from->startOfDay(), $to->endOfDay()))
                 : null,
         ], 'Follow-up workspace.');
+    }
+
+    /**
+     * Put the owner's NAME on each row — LEAD-OPERATIONS-001.
+     *
+     * A workspace that lists user ids is a workspace nobody can act on: «3 overdue» beside `17` tells
+     * a manager to go and look the number up. The same defect the ad-set table had, and it is fixed
+     * in the same place — where the row is produced, not in whichever surface remembers.
+     *
+     * A team member's name is staff, not the client's customer data. The constraint this module
+     * observes is about lead PII, and blanking a colleague would make the table useless without
+     * protecting anybody. `null` for the unassigned bucket, which is a real row and not a person.
+     *
+     * @param  list<array<string,mixed>>  $rows
+     * @return list<array<string,mixed>>
+     */
+    private function named(array $rows): array
+    {
+        $names = User::query()
+            ->whereIn('id', array_values(array_filter(array_column($rows, 'owner_id'))))
+            ->pluck('name', 'id');
+
+        return array_map(
+            static fn (array $row): array => $row + [
+                'owner_name' => $row['owner_id'] === null ? null : ($names[$row['owner_id']] ?? null),
+            ],
+            $rows,
+        );
     }
 
     private function supervises(Request $request, ?string $projectId): bool

@@ -196,6 +196,32 @@ final class FollowUpWorkspaceTest extends TestCase
     }
 
     /**
+     * A workspace that lists user ids is a workspace nobody can act on — LEAD-OPERATIONS-001.
+     *
+     * «3 overdue» beside `17` tells a manager to go and look the number up. The same defect the
+     * ad-set table shipped with, and it is fixed in the same place: where the row is produced, not in
+     * whichever surface remembers to join.
+     *
+     * A colleague's NAME is staff, not the client's customer data — the constraint this module
+     * observes is about lead PII, and blanking a team member would make the table useless without
+     * protecting anybody. The unassigned pile keeps a null name because it is a row, not a person.
+     */
+    public function test_each_owner_row_carries_the_persons_name(): void
+    {
+        $agent = $this->member(ProjectRole::LEAD_AGENT);
+        $this->lead(LeadStage::Contacted, owner: $agent->id, contactedAfterMinutes: 5);
+        $this->lead(LeadStage::New);
+
+        $rows = collect($this->workspace($this->member(ProjectRole::SALES_MANAGER))['by_owner']);
+
+        $named = $rows->firstWhere('owner_id', $agent->id);
+        $this->assertSame($agent->name, $named['owner_name']);
+
+        $unowned = $rows->firstWhere('owner_id', null);
+        $this->assertNull($unowned['owner_name'], 'the unassigned pile is a row, not a person');
+    }
+
+    /**
      * EXECUTIVE-OPS-DASHBOARD-001 — the money, the people and the work, through the route.
      *
      * The unit cases hold the join; this holds the wiring, which is where every previous «backbone
