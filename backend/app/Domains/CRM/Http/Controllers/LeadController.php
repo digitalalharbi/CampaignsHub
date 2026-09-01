@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\CRM\Http\Controllers;
 
+use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Actions\ConvertLead;
 use App\Domains\CRM\Actions\CreateLead;
 use App\Domains\CRM\Actions\UpdateLead;
@@ -13,6 +14,7 @@ use App\Domains\CRM\Http\Requests\UpdateLeadRequest;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Resources\LeadResource;
 use App\Domains\CRM\Resources\OpportunityResource;
+use App\Domains\Projects\Context\ProjectContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -36,6 +38,23 @@ final class LeadController extends Controller
          */
         $query = Lead::query()->latest()->withCount('duplicates');
 
+        /*
+         * LEAD-OPERATIONS-001 — the rows this reader is entitled to at all.
+         *
+         * A lead agent works their own leads. The capability grants the SCREEN; which rows appear on
+         * it is a separate question, and it is answered here rather than in the UI — a list that
+         * showed everything and a client that filtered it would be one `curl` away from the whole
+         * pipeline.
+         */
+        $visibility = app(LeadVisibility::class);
+        $projectId = app(ProjectContext::class)->projectId() ?? ($request->string('project_id')->toString() ?: null);
+
+        if ($projectId !== null) {
+            $query->where('project_id', $projectId);
+        }
+
+        $query = $visibility->scopeForReader($query, $request->user(), $projectId);
+
         if ($status = $request->string('status')->toString()) {
             $query->where('status', $status);
         }
@@ -43,6 +62,16 @@ final class LeadController extends Controller
             $query->where('source', $source);
         }
         if ($search = $request->string('search')->toString()) {
+            /*
+             * The search box is part of the redaction.
+             *
+             * A reader who cannot SEE a phone number but can SEARCH by one has the number: they type
+             * it and watch the count change. A redaction with an oracle beside it is not a
+             * redaction, so a reader without the identity permission is refused the search rather
+             * than quietly given an empty result — which would be a lie about the client's leads.
+             */
+            abort_unless($visibility->searchable($request->user(), $projectId), 403, 'Searching by name, email or phone needs permission to see them.');
+
             $query->where(function ($q) use ($search): void {
                 $q->where('name', 'ilike', "%{$search}%")
                     ->orWhere('email', 'ilike', "%{$search}%")
@@ -98,6 +127,31 @@ final class LeadController extends Controller
     public function show(Request $request, Lead $lead): JsonResponse
     {
         abort_unless($request->user()->hasPermission('leads.view'), 403);
+
+        /*
+         * A lead an agent was not given is a lead they may not open.
+         *
+         * The list already hides it; without this the id is enough — and ids are guessable, get
+         * pasted into chat, and outlive the reason somebody had one. 403 rather than 404, because
+         * the reader is a colleague who should be told to ask.
+         */
+        abort_unless(
+            app(LeadVisibility::class)
+                /*
+                 * The LEAD's own project is the scope here, not the request's. One lead belongs to
+                 * one client, and asking the request would let a reader change the answer by
+                 * changing a parameter.
+                 */
+                ->scopeForReader(
+                    Lead::query()->whereKey($lead->getKey()),
+                    $request->user(),
+                    $lead->project_id === null ? null : (string) $lead->project_id,
+                )
+                ->exists(),
+            403,
+            'This lead is not assigned to you.',
+        );
+
         $lead->load('activities');
 
         return ApiResponse::success(new LeadResource($lead), 'Lead retrieved.');
