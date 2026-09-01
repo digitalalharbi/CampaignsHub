@@ -115,3 +115,41 @@ export function absenceLabel(reading: PreviewReading, ar: boolean): string {
 
   return ar ? pair[0] : pair[1]
 }
+
+/**
+ * CONTENT-PREVIEW-SHAPES-001 — the shape of the asset, so a story is not shown as a crop of itself.
+ *
+ * A 9:16 story rendered with `object-cover` into a landscape card keeps the middle third and throws
+ * away the top and the bottom — which on a story is the logo and the call to action. The card then
+ * shows a picture the ad never was, and a reader comparing two creatives is comparing two crops
+ * this product invented.
+ *
+ * `unknown` when the platform reported no dimensions, and it is treated as landscape rather than
+ * guessed at: cropping a landscape asset slightly is a cosmetic loss, and letter-boxing every
+ * unknown asset would make the common case worse to protect the rare one.
+ *
+ * The 1.2 threshold keeps «roughly square» out of portrait — a 1080×1200 feed image is not a story
+ * and does not want a story's frame.
+ */
+export type PreviewShape = 'portrait' | 'landscape' | 'unknown'
+
+export function previewShape(width?: number | null, height?: number | null, aspectRatio?: string | null): PreviewShape {
+  if (typeof width === 'number' && typeof height === 'number' && width > 0 && height > 0) {
+    return height > width * 1.2 ? 'portrait' : 'landscape'
+  }
+
+  /*
+   * The provider's own string, where the numbers are absent. Read as «w:h» or «w x h» — Snapchat
+   * reports `9:16`, Meta reports `1080x1920`, and a ratio nobody can parse is not a shape.
+   */
+  const parsed = (aspectRatio ?? '').match(/(\d+(?:\.\d+)?)\s*[:x×]\s*(\d+(?:\.\d+)?)/i)
+
+  if (parsed) {
+    const w = Number(parsed[1])
+    const h = Number(parsed[2])
+
+    if (w > 0 && h > 0) return h > w * 1.2 ? 'portrait' : 'landscape'
+  }
+
+  return 'unknown'
+}
