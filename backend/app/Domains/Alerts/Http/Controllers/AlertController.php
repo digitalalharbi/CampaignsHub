@@ -41,11 +41,15 @@ final class AlertController extends Controller
      * cannot fire is at least visible to whoever reads the logs instead of silently reporting health.
      */
     /** The threshold keys the evaluator actually reads. Anything else is a typo, not a setting. */
-    private const THRESHOLD_KEYS = ['days', 'pct', 'ratio'];
+    private const THRESHOLD_KEYS = ['days', 'pct', 'ratio', 'minutes'];
 
     private const TYPES = [
         'budget_risk', 'cpa_increase', 'cpl_increase', 'roas_drop', 'no_results',
         'sync_failure', 'token_expiry', 'report_failed', 'sla_warning',
+        // LEAD-SLA-NOTIFICATION-001. Three types rather than one, because they are three different
+        // failures with three different people to tell — and a rule carries `project_id` and a
+        // `threshold`, so the SLA is the client's own rather than a constant somebody compromised on.
+        'lead_unassigned', 'lead_no_contact', 'lead_follow_up_overdue',
     ];
 
     /**
@@ -132,6 +136,14 @@ final class AlertController extends Controller
             // A budget ratio at or above 1 is «tell me after I have overspent», which is not a risk
             // warning; at or below 0 it fires on every campaign the moment it exists.
             'threshold.ratio' => ['sometimes', 'numeric', 'gt:0', 'lt:1.5'],
+            /*
+             * LEAD-SLA-NOTIFICATION-001 — a follow-up SLA is counted in MINUTES.
+             *
+             * Days is the wrong unit for the thing being promised: «we call within the hour» is the
+             * commitment a lead-generation client sells, and expressing it as a fraction of a day is
+             * how it stops being checkable. The ceiling is a week, past which the rule is not an SLA.
+             */
+            'threshold.minutes' => ['sometimes', 'numeric', 'integer', 'min:1', 'max:10080'],
             'cooldown_minutes' => ['nullable', 'integer', 'min:5', 'max:20160'],
             'channels' => ['nullable', 'array'],
             'channels.*' => ['string', 'in:in_app,email,whatsapp'],

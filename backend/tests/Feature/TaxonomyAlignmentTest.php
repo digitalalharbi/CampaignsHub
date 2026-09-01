@@ -121,7 +121,7 @@ final class TaxonomyAlignmentTest extends TestCase
             'report.type' => ['executive', 'project', 'campaign', 'platform', 'platform_comparison', 'weekly', 'monthly', 'custom'],
             'report.audience' => ['client', 'internal', 'executive'],
             // AlertController::TYPES + severity + channels Rule::in
-            'alert.type' => ['budget_risk', 'cpa_increase', 'cpl_increase', 'roas_drop', 'no_results', 'sync_failure', 'token_expiry', 'report_failed', 'sla_warning'],
+            'alert.type' => ['budget_risk', 'cpa_increase', 'cpl_increase', 'roas_drop', 'no_results', 'sync_failure', 'token_expiry', 'report_failed', 'sla_warning', 'lead_unassigned', 'lead_no_contact', 'lead_follow_up_overdue'],
             'alert.severity' => ['info', 'warning', 'critical'],
             'alert.channel' => ['in_app', 'email', 'whatsapp'],
         ];
