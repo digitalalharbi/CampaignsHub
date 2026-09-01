@@ -73,6 +73,9 @@ export function AdPreviewDialog({
           name={creative.name}
           className="h-64 w-full"
           testid="ad-preview-dialog-poster"
+          width={creative.width}
+          height={creative.height}
+          aspectRatio={creative.aspect_ratio}
         />
 
         <dl className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
