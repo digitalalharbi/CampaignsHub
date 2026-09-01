@@ -1,6 +1,8 @@
+import type { ReactNode } from 'react'
 import { Panel } from './components'
 import { money, num, percent } from './format'
 import type { Attribution, PlatformClaim } from './api'
+import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { providerLabel } from '@/features/campaigns/labels'
 import type { Locale } from '@/stores/ui'
 import { campaigns as countedCampaigns } from '@/lib/counted'
@@ -82,24 +84,37 @@ export function AttributionPanel({
             {ar ? data?.platform_reported?.basis_ar : data?.platform_reported?.basis_en}
           </p>
 
+          {/*
+            DATA-QUALITY-OPERATOR-UX-001 · TABLE-PRESENTATION-CONTRACT-001 — the attribution half on
+            the product's own table.
+
+            This was the last hand-rolled table on the analytics tabs: no sort on any column, and the
+            one question an operator brings to this panel is «which platform is overclaiming the
+            most», which is a sort. `values` carries the raw figures behind the stacked cells, so the
+            order is on the number rather than on «94K SAR» as a string, and a platform with no store
+            connected sorts LAST rather than as a zero difference — «nobody checked» is not «the shop
+            saw none», and that distinction is the entire point of this panel.
+          */}
           {platforms.length > 0 && (
-            <div className="mt-3 min-w-0 overflow-x-auto">
-              <table className="w-full min-w-[620px] text-sm">
-                <thead>
-                  <tr className="border-b border-border text-xs uppercase tracking-wide text-text-muted">
-                    <th className="p-2 text-start font-bold">{ar ? 'المنصة' : 'Platform'}</th>
-                    <th className="p-2 text-start font-bold">{ar ? 'أبلغت المنصة' : 'Platform-Reported'}</th>
-                    <th className="p-2 text-start font-bold">{ar ? 'أكّده المتجر' : 'Store-Confirmed'}</th>
-                    <th className="p-2 text-start font-bold">{ar ? 'الفرق' : 'Difference'}</th>
-                    <th className="p-2 text-start font-bold">{ar ? 'نافذة الإسناد' : 'Attribution window'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {platforms.map((p) => (
-                    <ClaimRow key={p.provider} claim={p} ar={ar} locale={locale} />
-                  ))}
-                </tbody>
-              </table>
+            <div className="mt-3">
+              <MetricTable
+                head={[
+                  ar ? 'المنصة' : 'Platform',
+                  ar ? 'أبلغت المنصة' : 'Platform-Reported',
+                  ar ? 'أكّده المتجر' : 'Store-Confirmed',
+                  ar ? 'الفرق' : 'Difference',
+                  ar ? 'نافذة الإسناد' : 'Attribution window',
+                ]}
+                rows={platforms.map((p) => claimCells(p, ar, locale))}
+                values={platforms.map((p): SortValues => [
+                  providerLabel(p.provider, locale),
+                  p.platform_reported_orders,
+                  p.store_confirmed_orders,
+                  p.difference,
+                  p.attribution.window_known ? (p.attribution.click_through_days ?? null) : null,
+                ])}
+                initialSort={{ column: 3, dir: 'desc' }}
+              />
             </div>
           )}
 
@@ -228,88 +243,94 @@ export function AttributionPanel({
   )
 }
 
-function ClaimRow({ claim, ar, locale }: { claim: PlatformClaim; ar: boolean; locale: Locale }) {
+/**
+ * One platform's claim, as the five cells the table renders.
+ *
+ * Cells rather than a row since the migration onto `MetricTable`: the table owns the `<tr>`, the
+ * alignment and the sort, and this owns what each cell SAYS. Every sentence below is unchanged —
+ * the stacked count-over-money, the «no store connected» that is not a zero, the mixed-window
+ * warning — because none of them was the problem; the missing sort was.
+ *
+ * @return list of five cells, positionally matched to the header
+ */
+function claimCells(claim: PlatformClaim, ar: boolean, locale: Locale): ReactNode[] {
   const a = claim.attribution
 
-  return (
-    <tr className="border-b border-border last:border-0">
-      <td className="p-2 align-top font-semibold text-text-primary">{providerLabel(claim.provider, locale)}</td>
-      {/*
-       * An order COUNT and a MONEY amount stack rather than sitting side by side.
-       *
-       * Inline, «267» and «94K SAR» read as one token — live, the cell said «26794K SAR», which is
-       * not a number this product has. A four-pixel margin is not a separator between two figures in
-       * different units.
-       */}
+  return [
+    <span key="p" className="font-semibold text-text-primary">{providerLabel(claim.provider, locale)}</span>,
+
+    /*
+     * An order COUNT and a MONEY amount stack rather than sitting side by side.
+     *
+     * Inline, «267» and «94K SAR» read as one token — live, the cell said «26794K SAR», which is not
+     * a number this product has. A four-pixel margin is not a separator between two figures in
+     * different units.
+     */
+    <Pair
+      key="reported"
+      primary={num(claim.platform_reported_orders)}
+      secondary={money(claim.platform_reported_revenue, claim.currency ?? undefined)}
+      unit={ar ? 'طلب' : 'orders'}
+    />,
+
+    /* Null, never a dash standing in for zero — «nobody checked» is not «the shop saw none». */
+    claim.store_confirmed_orders === null ? (
+      <span key="store" className="text-text-muted">{ar ? 'لا يوجد متجر مربوط' : 'No store connected'}</span>
+    ) : (
       <Pair
-        primary={num(claim.platform_reported_orders)}
-        secondary={money(claim.platform_reported_revenue, claim.currency ?? undefined)}
+        key="store"
+        primary={num(claim.store_confirmed_orders)}
+        secondary={money(claim.store_confirmed_revenue ?? 0, claim.currency ?? undefined)}
         unit={ar ? 'طلب' : 'orders'}
       />
-      {/* Null, never a dash standing in for zero — «nobody checked» is not «the shop saw none». */}
-      <td className="p-2 align-top text-text-secondary">
-        {claim.store_confirmed_orders === null ? (
-          <span className="text-text-muted">{ar ? 'لا يوجد متجر مربوط' : 'No store connected'}</span>
-        ) : (
+    ),
+
+    <span key="difference" className="text-text-secondary">
+      <span className="block">
+        {claim.difference === null ? '—' : num(claim.difference)}
+        {/* A literal space, not only a margin — the unit has to survive copy-paste and screen readers. */}
+        {claim.difference !== null && (
           <>
-            <span className="block">
-              {num(claim.store_confirmed_orders)}{' '}
-              <span className="text-xs text-text-muted">{ar ? 'طلب' : 'orders'}</span>
-            </span>
-            <span className="block text-xs text-text-muted">
-              {money(claim.store_confirmed_revenue ?? 0, claim.currency ?? undefined)}
-            </span>
+            {' '}
+            <span className="text-xs text-text-muted">{ar ? 'طلب' : 'orders'}</span>
           </>
         )}
-      </td>
-      <td className="p-2 align-top text-text-secondary">
-        <span className="block">
-          {claim.difference === null ? '—' : num(claim.difference)}
-          {/* A literal space, not only a margin — the unit has to survive copy-paste and screen readers. */}
-          {claim.difference !== null && (
-            <>
-              {' '}
-              <span className="text-xs text-text-muted">{ar ? 'طلب' : 'orders'}</span>
-            </>
-          )}
+      </span>
+      {claim.ratio !== null && (
+        <span className="block text-xs text-text-muted">
+          {ar ? `المنصة تُبلّغ ×${claim.ratio}` : `platform reports ×${claim.ratio}`}
         </span>
-        {claim.ratio !== null && (
-          <span className="block text-xs text-text-muted">
-            {ar ? `المنصة تُبلّغ ×${claim.ratio}` : `platform reports ×${claim.ratio}`}
+      )}
+    </span>,
+
+    <span key="window" className="text-text-secondary">
+      {a.window_known ? (
+        <>
+          <span>
+            {ar ? `نقرة ${countedDays(a.click_through_days ?? 0, 'ar')}` : `${a.click_through_days}d click`}
           </span>
-        )}
-      </td>
-      <td className="p-2 align-top text-text-secondary">
-        {a.window_known ? (
-          <>
-            <span>
+          <span className="ms-2">
+            {a.view_through_days === null
+              ? ar
+                ? '· بلا مشاهدة'
+                : '· no view-through'
+              : ar
+                ? `· مشاهدة ${countedDays(a.view_through_days as number, 'ar')}`
+                : `· ${a.view_through_days}d view`}
+          </span>
+          {a.mixed_windows && (
+            <span className="mt-0.5 block text-xs font-semibold text-warning">
               {ar
-                ? `نقرة ${countedDays(a.click_through_days ?? 0, 'ar')}`
-                : `${a.click_through_days}d click`}
+                ? 'أكثر من نافذة داخل هذه المنصة — أرقامها غير متقارنة فيما بينها.'
+                : 'More than one window inside this platform — its own figures are not comparable to each other.'}
             </span>
-            <span className="ms-2">
-              {a.view_through_days === null
-                ? ar
-                  ? '· بلا مشاهدة'
-                  : '· no view-through'
-                : ar
-                  ? `· مشاهدة ${countedDays(a.view_through_days as number, 'ar')}`
-                  : `· ${a.view_through_days}d view`}
-            </span>
-            {a.mixed_windows && (
-              <span className="mt-0.5 block text-xs font-semibold text-warning">
-                {ar
-                  ? 'أكثر من نافذة داخل هذه المنصة — أرقامها غير متقارنة فيما بينها.'
-                  : 'More than one window inside this platform — its own figures are not comparable to each other.'}
-              </span>
-            )}
-          </>
-        ) : (
-          <span className="text-text-muted">{ar ? a.unknown_ar : a.unknown_en}</span>
-        )}
-      </td>
-    </tr>
-  )
+          )}
+        </>
+      ) : (
+        <span className="text-text-muted">{ar ? a.unknown_ar : a.unknown_en}</span>
+      )}
+    </span>,
+  ]
 }
 
 /**
@@ -326,12 +347,12 @@ function arabicTimes(n: number): string {
 /** A count over its money amount — two units, two lines, never one run-together token. */
 function Pair({ primary, secondary, unit }: { primary: string; secondary: string; unit: string }) {
   return (
-    <td className="p-2 align-top text-text-secondary">
+    <span className="text-text-secondary">
       <span className="block">
         {primary} <span className="text-xs text-text-muted">{unit}</span>
       </span>
       <span className="block text-xs text-text-muted">{secondary}</span>
-    </td>
+    </span>
   )
 }
 
