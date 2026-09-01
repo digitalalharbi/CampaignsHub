@@ -13,6 +13,7 @@ use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Reports\Services\ReportExporter;
 use App\Domains\Reports\Services\SharedCreativeView;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\ReportIdentity;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -382,7 +383,18 @@ final class PublicReportController extends Controller
 
         $mime = ['pdf' => 'application/pdf', 'csv' => 'text/csv', 'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'][$format];
 
-        return response()->streamDownload(fn () => print ($content), "report.{$format}", ['Content-Type' => $mime]);
+        /*
+         * REPORT-TITLE-METADATA-001 — the file a client keeps has the report's own name.
+         *
+         * This was `report.pdf`, every time, from every project, for every period. A client who
+         * keeps four of them has four files called `report.pdf` in one folder and no way to tell
+         * them apart without opening each one.
+         */
+        return response()->streamDownload(
+            fn () => print ($content),
+            ReportIdentity::filename($report, $format),
+            ['Content-Type' => $mime],
+        );
     }
 
     /**
