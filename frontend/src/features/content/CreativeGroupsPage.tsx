@@ -53,8 +53,8 @@ import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/ca
  */
 const COPY = {
   ar: {
-    title: 'الإعلانات المرتبطة',
-    subtitle: 'الإعلان نفسه على أكثر من منصة، مقروءًا كوحدة واحدة.',
+    title: 'المحتويات المرتبطة',
+    subtitle: 'المحتوى نفسه على أكثر من منصة، مقروءًا كوحدة واحدة.',
     back: 'رجوع إلى المجموعات',
     backToLibrary: 'المكتبة',
     from: 'من',
@@ -62,7 +62,7 @@ const COPY = {
     empty: 'لا توجد مجموعات في هذه المساحة بعد.',
     emptyHint: 'اختر إعلانين أو أكثر في المكتبة ثم ادمجهما كأصل واحد.',
     platforms: 'المنصات',
-    members: 'الإعلانات',
+    members: 'المحتويات',
     method: 'طريقة التجميع',
     methods: {
       file_hash: 'بصمة الملف',
@@ -98,7 +98,7 @@ const COPY = {
     groupError: 'تعذّر تحميل هذه المجموعة.',
   },
   en: {
-    title: 'Linked ads',
+    title: 'Linked content',
     subtitle: 'The same content on more than one platform, read as one unit.',
     back: 'Back to groups',
     backToLibrary: 'Library',
@@ -107,7 +107,7 @@ const COPY = {
     empty: 'There are no groups in this workspace yet.',
     emptyHint: 'Select two or more ads in the library and merge them as one asset.',
     platforms: 'Platforms',
-    members: 'Ads',
+    members: 'Content',
     method: 'Grouped by',
     methods: {
       file_hash: 'File hash',
