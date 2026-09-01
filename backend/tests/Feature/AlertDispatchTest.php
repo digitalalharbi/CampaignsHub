@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
+use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Providers\MessageProvider;
 use App\Domains\Notifications\Services\AlertDispatcher;
@@ -83,6 +84,128 @@ final class AlertDispatchTest extends TestCase
      * The figures are chosen so the observations engine produces a `warning`: clicks collapse
      * against a flat impression count, which is CTR falling by more than its threshold.
      */
+
+    /**
+     * BUDGET-ALERT-EMAIL-001 — the workspace's own ceiling reaches an inbox.
+     *
+     * `AlertEvaluator` has recorded internal spend-limit crossings in `spend_limit_events` and
+     * raised them in-app since the governance work. It could not email one: the dispatcher builds
+     * its findings from the digest's OBSERVATIONS, and a crossing that never became an observation
+     * was never a finding. So the one budget object nothing enforces — the one somebody set
+     * precisely because they intend to act on it themselves — was the one nobody was told about
+     * outside the product.
+     *
+     * The message has to say «internal» and has to say nothing stops delivery, in as many words: an
+     * operator who reads a generic «budget at risk» and assumes the platform stopped it will not go
+     * and pause anything.
+     */
+    public function test_an_internal_spend_limit_crossing_reaches_the_inbox(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        $this->seedSpendAgainstAnInternalLimit();
+
+        $counts = app(AlertDispatcher::class)->sweep($this->user, (string) $this->tenant->id, Carbon::parse('2026-08-07'));
+
+        $this->assertSame(1, $counts['sent'], 'the crossing produced no email');
+
+        Mail::assertSent(AlertBundleMail::class, function (AlertBundleMail $m): bool {
+            $detail = implode(' ', array_map(static fn (array $i): string => (string) ($i['detail'] ?? ''), $m->items));
+
+            return $m->hasTo('ops@alerts.test')
+                // «internal», and «nothing stops delivery» — the two facts that separate it from a
+                // platform budget, which the platform itself enforces.
+                && str_contains($detail, 'داخلي')
+                && str_contains($detail, 'لا يوقف CampaignsHub العرض');
+        });
+    }
+
+    /**
+     * And it is announced once.
+     *
+     * The crossing already has a ledger — `spend_limit_events` is unique on (limit, threshold) — and
+     * the dispatcher has a three-day cooldown. Both exist; this holds them to it, because a ceiling
+     * that emails every morning for the rest of the period is one people filter.
+     */
+    public function test_the_crossing_is_not_repeated_the_next_morning(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        $this->seedSpendAgainstAnInternalLimit();
+
+        $dispatcher = app(AlertDispatcher::class);
+        $first = $dispatcher->sweep($this->user, (string) $this->tenant->id, Carbon::parse('2026-08-07'));
+        $second = $dispatcher->sweep($this->user, (string) $this->tenant->id, Carbon::parse('2026-08-07'));
+
+        $this->assertSame(1, $first['sent']);
+        $this->assertSame(0, $second['sent']);
+        $this->assertSame(1, $second['already_sent']);
+    }
+
+    /** A limit nothing has crossed says nothing. Silence is the correct output, not a 0% note. */
+    public function test_a_limit_nobody_is_near_produces_no_email(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        $this->seedSpendAgainstAnInternalLimit(amount: 1_000_000);
+
+        $counts = app(AlertDispatcher::class)->sweep($this->user, (string) $this->tenant->id, Carbon::parse('2026-08-07'));
+
+        $this->assertSame(0, $counts['sent']);
+    }
+
+    /**
+     * Spend, and a ceiling it has passed.
+     *
+     * 8,000 against a 10,000 limit with an 80% threshold: the case this exists for, since at 100%
+     * somebody has usually already noticed.
+     */
+    private function seedSpendAgainstAnInternalLimit(float $amount = 10_000.0): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+
+        /*
+         * Written WITH its currency columns, the way the governor reads it.
+         *
+         * `SpendLimitGovernor` refuses a figure it cannot compare — a spend in another currency with
+         * no rate is «unknown», never «understated» — so a row with no `original_currency` produces a
+         * null utilisation and no crossing. That is correct behaviour, and it would have made this
+         * test pass for entirely the wrong reason.
+         */
+        app(UpsertDailyMetrics::class)->handle([
+            new NormalizedMetric(
+                tenantId: (string) $this->tenant->id,
+                projectId: (string) $this->project->id,
+                externalAccountId: '11111111-1111-1111-1111-111111111111',
+                externalCampaignId: '22222222-2222-2222-2222-222222222222',
+                provider: 'meta',
+                metricKey: 'spend',
+                metricDate: Carbon::parse('2026-08-07'),
+                value: 8_000.0,
+                originalCurrency: 'SAR',
+                projectCurrency: 'SAR',
+                originalAmount: 8_000.0,
+                convertedAmount: 8_000.0,
+                exchangeRate: 1.0,
+            ),
+        ]);
+
+        SpendLimit::create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'scope' => 'project',
+            'scope_id' => null,
+            'amount' => $amount,
+            'currency' => 'SAR',
+            'starts_on' => '2026-08-01',
+            'ends_on' => '2026-08-31',
+            'thresholds' => [80, 100],
+            'active' => true,
+        ]);
+
+        app(TenantContext::class)->forget();
+    }
+
     private function seedFallingCtr(): void
     {
         app(TenantContext::class)->setTenantId($this->tenant->id);

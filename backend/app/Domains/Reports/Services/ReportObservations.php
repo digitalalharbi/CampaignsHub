@@ -91,6 +91,7 @@ final class ReportObservations
             $this->fallingEngagement($lens, $data),
             $this->frequencySaturation($data),
             $this->budgetPace($data, $currency),
+            $this->internalSpendLimits($data),
             $this->reallocation($lens, $data, $currency),
             $this->missingMetrics($data),
             $this->staleData($data),
@@ -258,6 +259,78 @@ final class ReportObservations
                 self::times((float) $frequency),
             ),
         ]];
+    }
+
+    /**
+     * BUDGET-ALERT-EMAIL-001 — the workspace's OWN ceiling, crossed.
+     *
+     * ## Why this is a different note from `budget_pace`
+     *
+     * A platform budget is enforced BY the platform: when it is exhausted delivery stops. An
+     * internal spend limit is a number this workspace wrote down, and nothing anywhere stops
+     * anything when it is passed. The two need different sentences, because an operator who reads a
+     * generic «budget at risk» and assumes the first will not go and pause a campaign — and the
+     * whole reason somebody sets a limit nothing enforces is that they intend to act on it
+     * themselves.
+     *
+     * ## Why it arrives through this stream rather than its own mailer
+     *
+     * `AlertEvaluator` already writes the crossing to `spend_limit_events`, whose unique
+     * (limit, threshold) index is both the audit trail and the dedup, and raises an in-app
+     * notification. What it could not do is reach an inbox: the dispatcher builds its findings from
+     * the digest's observations, so a crossing that never became one was never emailed. Adding it
+     * HERE gives it the recipients, the categories, the quiet hours and the three-day cooldown that
+     * already exist, rather than a second mail path that would drift from them.
+     *
+     * @param  array<string,mixed>  $data
+     * @return list<array<string,mixed>>
+     */
+    private function internalSpendLimits(array $data): array
+    {
+        $out = [];
+
+        foreach ($data['spend_limits'] ?? [] as $limit) {
+            $crossed = $limit['crossed'] ?? null;
+
+            // Nothing crossed, or no comparable figure to cross with. Silence, not a warning.
+            if ($crossed === null || ($limit['utilisation'] ?? null) === null) {
+                continue;
+            }
+
+            $percent = (int) $crossed;
+            $currency = (string) ($limit['currency'] ?? 'SAR');
+
+            $out[] = [
+                'id' => 'spend_limit:'.($limit['id'] ?? '').':'.$percent,
+                'kind' => 'internal_spend_limit',
+                /*
+                 * Exhausted is critical; a warning threshold is a warning. Both are ALERTABLE, so
+                 * both reach an inbox — a ceiling passed at 80% with nobody told is the case this
+                 * exists for, since at 100% somebody has usually already noticed.
+                 */
+                'severity' => $percent >= 100 ? 'critical' : 'warning',
+                'scope' => ['type' => (string) ($limit['scope'] ?? 'project'), 'name' => (string) ($limit['name'] ?? '')],
+                'metric' => 'spend',
+                'reveals' => ['spend'],
+                'value' => $percent.'%',
+                'change' => null,
+                'title' => sprintf('حدّ الإنفاق الداخلي عند %d%%', $percent),
+                /*
+                 * The sentence says «internal» and says nothing stops delivery, in as many words.
+                 * A reader who acts on this has to go to the platform; a reader who assumes we did
+                 * it for them keeps spending.
+                 */
+                'detail' => sprintf(
+                    'صُرف %s %s من حدّ داخلي قدره %s %s. لا يوقف CampaignsHub العرض — أوقف الحملة على المنصة إن كان هذا المقصود.',
+                    number_format((float) ($limit['consumed'] ?? 0), 2),
+                    $currency,
+                    number_format((float) ($limit['amount'] ?? 0), 2),
+                    $currency,
+                ),
+            ];
+        }
+
+        return $out;
     }
 
     /** Money going out faster or slower than the plan it was given. */
