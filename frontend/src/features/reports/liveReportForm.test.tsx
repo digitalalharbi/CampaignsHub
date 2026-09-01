@@ -166,4 +166,22 @@ describe('a live link and the form it was shared as', () => {
 
     expect(within(await screen.findByTestId('live-detail-campaigns')).getByText(/No rows in this period/)).toBeInTheDocument()
   })
+
+  /**
+   * NUMBER-PRESENTATION-001 at the surface a CLIENT reads.
+   *
+   * The impressions column prints «90K» because the column is sixty pixels wide. A client deciding
+   * which campaign to keep is entitled to the figure that abbreviation came from, and on a shared
+   * link there is nobody to ask for it.
+   */
+  it('lets a client reach the exact figure behind an abbreviated one', async () => {
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    await screen.findByTestId('live-report')
+
+    const campaigns = within(await screen.findByTestId('live-detail-campaigns'))
+    const cell = campaigns.getAllByText('90K')[0]?.closest('td')
+
+    expect(cell).toHaveAttribute('title', '90,000')
+  })
+
 })

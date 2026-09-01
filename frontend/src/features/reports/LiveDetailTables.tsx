@@ -67,6 +67,22 @@ export function LiveDetailTables({
   const spendValue = (row: Record<string, unknown>): number | null =>
     spendOf(row).text === '\u2014' ? null : numberOf(row, 'spend')
 
+  /*
+   * NUMBER-PRESENTATION-001 — the exact figure behind every abbreviation on this table.
+   *
+   * `compact()` prints «90K» where the column is 60px wide, which is the right call for scanning and
+   * the wrong one for deciding: two campaigns both reading «32K» can be a thousand results apart.
+   * The full number is one hover away, and `null` where there is nothing to reveal — a tooltip that
+   * repeats what is already on screen teaches a reader to stop looking at them.
+   */
+  const full = (v: number | null): string | null => {
+    if (v === null) return null
+    const shown = compact(v)
+    const whole = v.toLocaleString('en-US')
+
+    return shown === whole ? null : whole
+  }
+
   const body = (rows: Array<Record<string, unknown>>, nameOf: (row: Record<string, unknown>) => React.ReactNode) => ({
     rows: rows.map((row) => [
       nameOf(row),
@@ -87,6 +103,18 @@ export function LiveDetailTables({
       numberOf(row, 'clicks'),
       numberOf(row, 'conversions'),
     ]),
+    /*
+     * The spend cell is deliberately absent: its text is produced by the money contract, which
+     * already decides what may be shown — and a «—» that a tooltip turned back into a number would
+     * hand the reader exactly the figure the contract refused to state.
+     */
+    exact: rows.map((row) => [
+      null,
+      null,
+      full(numberOf(row, 'impressions')),
+      full(numberOf(row, 'clicks')),
+      full(numberOf(row, 'conversions')),
+    ]),
   })
 
   const head = (first: string) => [first, t.spend, t.impressions, t.clicks, t.results]
@@ -104,11 +132,11 @@ export function LiveDetailTables({
   return (
     <div data-testid="live-detail-tables" className="mt-3 grid gap-3 [&>*]:min-w-0">
       <Section title={t.campaigns} testid="live-detail-campaigns" empty={payload.campaigns.length === 0} none={t.none}>
-        <MetricTable head={head(t.campaign)} rows={campaigns.rows} values={campaigns.values} initialSort={{ column: 1, dir: 'desc' }} />
+        <MetricTable head={head(t.campaign)} rows={campaigns.rows} values={campaigns.values} exact={campaigns.exact} initialSort={{ column: 1, dir: 'desc' }} />
       </Section>
 
       <Section title={t.platforms} testid="live-detail-platforms" empty={payload.platforms.length === 0} none={t.none}>
-        <MetricTable head={head(t.platform)} rows={platforms.rows} values={platforms.values} initialSort={{ column: 1, dir: 'desc' }} />
+        <MetricTable head={head(t.platform)} rows={platforms.rows} values={platforms.values} exact={platforms.exact} initialSort={{ column: 1, dir: 'desc' }} />
       </Section>
     </div>
   )
