@@ -11,6 +11,13 @@ use Illuminate\Support\Facades\Route;
 */
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(function (): void {
     Route::get('leads', [LeadController::class, 'index'])->name('leads.index');
+    /*
+     * LEAD-SLA-NOTIFICATION-001 — the manager's screen, before the individual leads.
+     *
+     * Above `leads/{lead}` so «workspace» is never bound as a lead id, which is the classic way a
+     * literal segment disappears behind a wildcard and returns a 404 nobody can explain.
+     */
+    Route::get('leads/workspace', [LeadController::class, 'followUpWorkspace'])->name('leads.workspace');
     Route::post('leads', [LeadController::class, 'store'])->name('leads.store');
     Route::get('leads/{lead}', [LeadController::class, 'show'])->name('leads.show');
     Route::match(['put', 'patch'], 'leads/{lead}', [LeadController::class, 'update'])->name('leads.update');
