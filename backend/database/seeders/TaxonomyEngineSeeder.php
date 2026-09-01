@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Domains\Campaigns\Enums\CampaignOutcome;
 use App\Domains\Requests\Journey\RequestTaxonomy;
 use App\Domains\Taxonomy\Models\TaxonomyDefinition;
 use App\Domains\Taxonomy\Models\TaxonomyOption;
@@ -467,6 +468,21 @@ final class TaxonomyEngineSeeder extends Seeder
                 'options' => $this->campaignObjectiveOptions(),
             ],
             [
+                /*
+                 * CAMPAIGN-OUTCOME-DIMENSION-001 — the ACTION, beside the objective.
+                 *
+                 * A second dimension rather than more objectives: the objective is what the client
+                 * asked for and the action is what the media buyer chose, and the same brief runs as
+                 * a lead form this month and as click-to-WhatsApp the next. Four `leads` campaigns
+                 * can buy four different actions whose costs are not comparable, and a taxonomy that
+                 * cannot express that has to lie about one of them.
+                 */
+                'key' => 'campaign.outcome', 'module' => 'campaigns', 'field_type' => 'single', 'is_system' => true,
+                'label_ar' => 'الإجراء المُشترى', 'label_en' => 'Action bought',
+                'description' => 'App\\Domains\\Campaigns\\Enums\\CampaignOutcome.',
+                'options' => $this->campaignOutcomeOptions(),
+            ],
+            [
                 'key' => 'campaign.platforms', 'module' => 'campaigns', 'field_type' => 'multi', 'is_system' => false,
                 'label_ar' => 'المنصات', 'label_en' => 'Platforms',
                 'options' => [
@@ -817,6 +833,37 @@ final class TaxonomyEngineSeeder extends Seeder
      *
      * @return list<array<string,mixed>>
      */
+    /**
+     * CAMPAIGN-OUTCOME-DIMENSION-001 — the actions, from the enum's own words.
+     *
+     * Labels are read off `CampaignOutcome::label()` rather than retyped, so the picker and the
+     * report cannot come to call the same action two different things.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function campaignOutcomeOptions(): array
+    {
+        $colour = [
+            'native_lead_form' => '#f59e0b', 'website_lead' => '#f97316', 'link_click' => '#0ea5e9',
+            'landing_page_visit' => '#38bdf8', 'phone_call' => '#14b8a6', 'messaging' => '#22c55e',
+            'purchase' => '#16a34a', 'app_install' => '#6366f1', 'attention' => '#8b5cf6',
+            'unknown' => '#6b7280',
+        ];
+
+        return array_map(static function (CampaignOutcome $outcome) use ($colour): array {
+            $label = $outcome->label();
+
+            return [
+                'key' => $outcome->value,
+                'label_ar' => $label['ar'],
+                'label_en' => $label['en'],
+                'color' => $colour[$outcome->value] ?? '#6b7280',
+                'icon' => 'target',
+                'metadata' => ['produces_a_lead' => $outcome->producesALead()],
+            ];
+        }, CampaignOutcome::cases());
+    }
+
     private function campaignObjectiveOptions(): array
     {
         return [
