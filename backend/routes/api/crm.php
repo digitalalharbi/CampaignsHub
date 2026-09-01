@@ -18,6 +18,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
      * literal segment disappears behind a wildcard and returns a 404 nobody can explain.
      */
     Route::get('leads/workspace', [LeadController::class, 'followUpWorkspace'])->name('leads.workspace');
+    /*
+     * EXECUTIVE-OPS-DASHBOARD-001 — the money, the people and the work in one answer. Above
+     * `leads/{lead}` for the same reason as the workspace: a literal segment behind a wildcard is a
+     * 404 nobody can explain.
+     */
+    Route::get('leads/executive', [LeadController::class, 'executive'])->name('leads.executive');
     Route::post('leads', [LeadController::class, 'store'])->name('leads.store');
     Route::get('leads/{lead}', [LeadController::class, 'show'])->name('leads.show');
     Route::match(['put', 'patch'], 'leads/{lead}', [LeadController::class, 'update'])->name('leads.update');

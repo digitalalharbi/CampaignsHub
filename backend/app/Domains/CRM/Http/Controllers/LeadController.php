@@ -16,7 +16,9 @@ use App\Domains\CRM\Http\Requests\UpdateLeadRequest;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Resources\LeadResource;
 use App\Domains\CRM\Resources\OpportunityResource;
+use App\Domains\CRM\Services\ExecutiveOperations;
 use App\Domains\CRM\Services\FollowUpWorkspace;
+use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Context\ProjectContext;
@@ -367,5 +369,53 @@ final class LeadController extends Controller
         return $projectId === null
             ? $user->hasPermission('leads.assign')
             : app(ProjectAbilities::class)->allows($user, $projectId, ProjectCapability::LEADS_ASSIGN);
+    }
+
+    /**
+     * EXECUTIVE-OPS-DASHBOARD-001 — the money, the people and the work, on one screen.
+     *
+     * The spend is on the dashboard, the leads are in the inbox, the follow-up is in the workspace.
+     * Each is correct and none answers «what did a lead cost us», which a manager currently works
+     * out by opening three screens and holding the numbers in their head.
+     *
+     * Both halves are read from the services that already own them and joined by
+     * `ExecutiveOperations`, which computes exactly one figure of its own — the cost per lead — for
+     * the reason it exists: neither side can see it.
+     */
+    public function executive(Request $request, FollowUpWorkspace $workspace, ExecutiveOperations $executive, MetricsAggregator $metrics): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('leads.view'), 403);
+
+        $projectId = app(ProjectContext::class)->projectId() ?? ($request->string('project_id')->toString() ?: null);
+
+        if ($projectId !== null) {
+            abort_unless(
+                app(ProjectAbilities::class)->allows($request->user(), $projectId, ProjectCapability::LEADS_VIEW),
+                403,
+                'You do not have this permission on this project.',
+            );
+        }
+
+        $to = $request->date('to') ?? Carbon::now();
+        $from = $request->date('from') ?? (clone $to)->subDays(29);
+
+        $scope = app(LeadVisibility::class)->scopeForReader(
+            Lead::query()->when($projectId !== null, static fn ($q) => $q->where('project_id', $projectId)),
+            $request->user(),
+            $projectId,
+        );
+
+        $work = $workspace->summary($scope, $from->startOfDay(), $to->endOfDay());
+
+        /*
+         * The spend from the aggregator the dashboard reads. A second aggregation here would be a
+         * second opinion, and the first time the two disagreed a manager would have no way to tell
+         * which screen was lying.
+         */
+        $spend = $projectId === null
+            ? []
+            : $metrics->forProjects([$projectId])->totals($from->startOfDay(), $to->endOfDay());
+
+        return ApiResponse::success($executive->build($work, $spend), 'Executive operations.');
     }
 }
