@@ -927,7 +927,22 @@ export function CreativesPage() {
                       )}
                     </td>
                     <td className="p-2">
-                      <span className={`rounded px-1.5 py-0.5 text-xs ${FATIGUE_TONE[creative.fatigue.status]}`}>
+                      {/*
+                        INSUFFICIENT-DATA-EXPLAINED-001 — the verdict carries the reason it was
+                        reached, and «insufficient data» carries the reason it was NOT.
+
+                        `CreativeFatigue` has always computed exactly what was missing — fewer than
+                        seven active days, no previous window, too few impressions to read movement —
+                        and returned it as `reason_ar`/`reason_en`. The library dropped it and printed
+                        the bare chip, so the one status that exists to say «we cannot tell you yet»
+                        did not say why, and reads as a data-quality problem the reader should go and
+                        fix. It is usually just a creative that started on Thursday.
+                      */}
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-xs ${FATIGUE_TONE[creative.fatigue.status]}`}
+                        title={(ar ? creative.fatigue.reason_ar : creative.fatigue.reason_en) || undefined}
+                        data-reason={(ar ? creative.fatigue.reason_ar : creative.fatigue.reason_en) || undefined}
+                      >
                         {FATIGUE_LABEL[creative.fatigue.status]?.[ar ? 'ar' : 'en'] ?? creative.fatigue.status}
                       </span>
                     </td>
