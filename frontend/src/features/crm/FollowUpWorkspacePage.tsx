@@ -6,6 +6,7 @@ import { PageIntro } from '@/components/ui/PageIntro'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { Select } from '@/components/ui/Select'
 import { EmptyState } from '@/components/ui/States'
+import { days as countedDays } from '@/lib/counted'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -130,7 +131,8 @@ export function FollowUpWorkspacePage() {
             data-testid="followup-range"
             options={RANGES.map((d) => ({
               value: String(d),
-              label: ar ? `آخر ${d} يومًا` : `Last ${d} days`,
+              // The noun is counted through the shared rule — «آخر 7 أيام» and «آخر 30 يومًا» differ.
+            label: ar ? `آخر ${countedDays(d, 'ar')}` : `Last ${countedDays(d, 'en')}`,
             }))}
             onChange={(e) => setDays(Number(e.target.value))}
           />
