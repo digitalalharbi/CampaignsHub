@@ -775,7 +775,47 @@ function PlatformPaths({
             */}
             {(() => {
               const reading = readings.get(path.path)
-              if (reading === undefined || !('cheapest' in reading) || reading.spread <= 1) return null
+
+              if (reading === undefined) return null
+
+              /*
+               * INSUFFICIENT-DATA-EXPLAINED-001 — the silence says WHICH silence.
+               *
+               * `platformReadings` has always computed why it could not state a range — the path's
+               * platforms are not comparable, or no platform reported the cost this path is judged
+               * on — and this rendered nothing at all. An absent sentence where the other paths have
+               * one reads as a page that failed to load, and the reader goes looking for a sync
+               * problem. Both reasons are ordinary, and both are actionable in completely different
+               * ways.
+               */
+              if (!('cheapest' in reading)) {
+                return (
+                  <p data-testid={`platform-path-${path.path}-silent`} className="mb-2 text-xs text-text-muted">
+                    {reading.silentReason === 'not_comparable'
+                      ? (ar
+                          ? 'منصات هذا المسار غير قابلة للمقارنة على مقياس واحد، فلا يُذكر فارق.'
+                          : 'The platforms on this path are not comparable on one metric, so no spread is stated.')
+                      : (ar
+                          ? 'لم تُبلِّغ أي منصة عن التكلفة التي يُقاس بها هذا المسار في هذه الفترة.'
+                          : 'No platform reported the cost this path is judged on in this window.')}
+                  </p>
+                )
+              }
+
+              /*
+               * A spread of 1× is «they cost the same», which is a real answer and not a silence —
+               * saying it is worth more than the sentence costs, because a reader who sees nothing
+               * assumes the comparison was not made.
+               */
+              if (reading.spread <= 1) {
+                return (
+                  <p data-testid={`platform-path-${path.path}-reading`} className="mb-2 text-xs text-text-secondary">
+                    {ar
+                      ? 'تتقارب تكلفة المنصات على هذا المسار — لا فارق يُذكر.'
+                      : 'The platforms on this path cost about the same — no meaningful spread.'}
+                  </p>
+                )
+              }
 
               return (
                 <p data-testid={`platform-path-${path.path}-reading`} className="mb-2 text-xs text-text-secondary">

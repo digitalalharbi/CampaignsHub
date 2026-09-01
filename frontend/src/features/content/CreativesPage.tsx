@@ -6,6 +6,7 @@ import { CreativeViewer } from './CreativeViewer'
 import { CreativeCompare } from './CreativeCompare'
 import { formatMetric, metricLabel, metricState } from './metrics'
 import { creativeGrainMissing, emptyReason, noDisplayableMetrics, type EmptyReason, type MetricsAvailability } from './availability'
+import { previewShape } from './adPreview'
 import { imageLoading } from './format'
 import { creativeMoney } from './creativeMoney'
 import { VideoPoster } from './VideoPoster'
@@ -75,7 +76,7 @@ import { campaignStatusLabel, marketingPathLabel, objectiveLabel, providerLabel 
 
 const COPY = {
   ar: {
-    title: 'مكتبة الإعلانات',
+    title: 'مكتبة المحتويات',
     subtitle: 'كل إعلان مزامَن — بأرقامه الحقيقية، ومقارنته بمسار هدفه.',
     search: 'ابحث بالاسم أو نص الإعلان…',
     grid: 'شبكة',
@@ -89,7 +90,7 @@ const COPY = {
     ad: 'الإعلان',
     objective: 'الهدف',
     path: 'المسار التسويقي',
-    kind: 'نوع الإعلان',
+    kind: 'نوع المحتوى',
     status: 'الحالة',
     health: 'حالة الإجهاد',
     from: 'من',
@@ -129,7 +130,7 @@ const COPY = {
     name: 'الاسم',
     result: 'النتيجة',
     efficiency: 'الكفاءة',
-    details: 'تفاصيل الإعلان',
+    details: 'تفاصيل المحتوى',
     source: 'المصدر: منصة الإعلان',
     allContent: 'كل الإعلانات',
     /*
@@ -151,8 +152,8 @@ const COPY = {
     manyStatuses: 'حالات',
   },
   en: {
-    title: 'Ads library',
-    subtitle: 'Every synced ad — with its real figures, judged against its own objective.',
+    title: 'Content library',
+    subtitle: 'Every synced piece of content — with its real figures, judged against its own objective.',
     search: 'Search by name or ad copy…',
     grid: 'Grid',
     list: 'List',
@@ -165,7 +166,7 @@ const COPY = {
     ad: 'Ad',
     objective: 'Objective',
     path: 'Marketing path',
-    kind: 'Ad type',
+    kind: 'Content type',
     status: 'Status',
     health: 'Fatigue',
     from: 'From',
@@ -205,7 +206,7 @@ const COPY = {
     name: 'Name',
     result: 'Result',
     efficiency: 'Efficiency',
-    details: 'Ad details',
+    details: 'Content details',
     source: 'Source: ad platform',
     allContent: 'All ads',
     manyClients: 'clients',
@@ -927,7 +928,22 @@ export function CreativesPage() {
                       )}
                     </td>
                     <td className="p-2">
-                      <span className={`rounded px-1.5 py-0.5 text-xs ${FATIGUE_TONE[creative.fatigue.status]}`}>
+                      {/*
+                        INSUFFICIENT-DATA-EXPLAINED-001 — the verdict carries the reason it was
+                        reached, and «insufficient data» carries the reason it was NOT.
+
+                        `CreativeFatigue` has always computed exactly what was missing — fewer than
+                        seven active days, no previous window, too few impressions to read movement —
+                        and returned it as `reason_ar`/`reason_en`. The library dropped it and printed
+                        the bare chip, so the one status that exists to say «we cannot tell you yet»
+                        did not say why, and reads as a data-quality problem the reader should go and
+                        fix. It is usually just a creative that started on Thursday.
+                      */}
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-xs ${FATIGUE_TONE[creative.fatigue.status]}`}
+                        title={(ar ? creative.fatigue.reason_ar : creative.fatigue.reason_en) || undefined}
+                        data-reason={(ar ? creative.fatigue.reason_ar : creative.fatigue.reason_en) || undefined}
+                      >
                         {FATIGUE_LABEL[creative.fatigue.status]?.[ar ? 'ar' : 'en'] ?? creative.fatigue.status}
                       </span>
                     </td>
@@ -1051,7 +1067,20 @@ function CreativeGridCard({
               // exempt: see `imageLoading`, where lazy-loading a `data:` URI stopped it loading at all.
               loading={imageLoading(poster)}
               decoding="async"
-              className="h-full w-full object-cover"
+              /*
+               * CONTENT-PREVIEW-SHAPES-001 — a story is contained, never covered.
+               *
+               * `object-cover` on a 9:16 asset in a 16:9 card keeps the middle third and throws away
+               * the top and the bottom — on a story that is the logo and the call to action. The card
+               * then shows a picture the ad never was, and two creatives compared side by side are
+               * two crops this product invented.
+               */
+              data-shape={previewShape(creative.width, creative.height, creative.aspect_ratio)}
+              className={`h-full w-full ${
+                previewShape(creative.width, creative.height, creative.aspect_ratio) === 'portrait'
+                  ? 'object-contain'
+                  : 'object-cover'
+              }`}
             />
           ) : video ? (
             /*
