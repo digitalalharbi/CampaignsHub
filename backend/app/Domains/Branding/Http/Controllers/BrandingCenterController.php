@@ -44,6 +44,25 @@ final class BrandingCenterController extends Controller
      */
     private function assertScopeReachable(Request $request, string $scope, ?string $scopeId): void
     {
+        /*
+         * BRANDING-HIERARCHY-001 — the platform layer is the PRODUCT's mark, and only its operator
+         * writes it.
+         *
+         * Any tenant holding `branding.manage` could write scope `platform`, and the row was stored
+         * under their tenant — so the scope meant «CampaignsHub's brand» in the documentation and
+         * «mine, invisibly» in the database. Now that the layer genuinely answers for every tenant,
+         * letting a customer write it would put one agency's logo at the bottom of everybody else's
+         * fallback chain.
+         *
+         * 403 rather than 404: the scope's existence is documented, so hiding it would only confuse
+         * the operator who legitimately cannot use it.
+         */
+        if ($scope === 'platform') {
+            abort_unless($request->user()?->is_platform_admin, 403, 'The platform brand is set by CampaignsHub.');
+
+            return;
+        }
+
         if ($scope !== 'client') {
             return;
         }
