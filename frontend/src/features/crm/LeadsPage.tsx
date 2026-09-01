@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { convertLead, listLeads } from './api'
+import { LeadAttributionTrail } from './LeadAttributionTrail'
 import { NewLeadModal } from './NewLeadModal'
 import { sourceLabel, statusLabel, statusTone } from './labels'
 import { LEAD_SOURCES, LEAD_STATUSES, type Lead } from './types'
@@ -9,6 +10,7 @@ import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
+import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
 import { toApiError } from '@/lib/api/client'
 import { useT } from '@/lib/i18n'
@@ -26,6 +28,7 @@ export function LeadsPage() {
   const [source, setSource] = useState('')
   const [uniqueOnly, setUniqueOnly] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
+  const [trail, setTrail] = useState<Lead | null>(null)
 
   const leadsQuery = useQuery({
     queryKey: ['leads', { status, source, uniqueOnly }],
@@ -52,6 +55,68 @@ export function LeadsPage() {
       header: t('source_label'),
       sortable: true,
       render: (r) => sourceLabel(r.source, locale),
+    },
+    {
+      /*
+       * LEAD-SOURCE-ATTRIBUTION-001 — which campaign paid for this row.
+       *
+       * `source` above says «paid», which is the answer that cannot be acted on: the whole reason a
+       * lead-generation client is spending is to learn WHICH ad produced a buyer. The campaign name
+       * as it read at ingestion is shown, because a campaign gets renamed and a lead from last
+       * quarter must still say what it was called then.
+       *
+       * The gap marker is not decoration. It appears only where the platform DOES return a rung and
+       * this lead has not got it — a real defect in our own pipeline, which otherwise stays
+       * invisible behind the same dash as every honest platform limit.
+       */
+      key: 'attribution',
+      header: locale === 'ar' ? 'مصدر الإعلان' : 'Ad source',
+      render: (r) => {
+        const chain = r.attribution
+        if (chain == null) return <span className="text-text-muted">—</span>
+
+        const campaign = chain.rungs.find((rung) => rung.rung === 'campaign')
+        const gaps = chain.rungs.filter((rung) => rung.state === 'missing').length
+
+        return (
+          <button
+            type="button"
+            className="hover:text-accent flex flex-col items-start gap-0.5 text-start"
+            onClick={() => setTrail(r)}
+            data-testid={`lead-source-${r.id}`}
+            data-complete={chain.complete ? 'true' : 'false'}
+          >
+            <span className="truncate">
+              {campaign?.state === 'named'
+                ? (campaign.name ?? campaign.id)
+                : chain.platform.label != null
+                  ? (locale === 'ar' ? chain.platform.label : (chain.platform.label_en ?? chain.platform.label))
+                  : locale === 'ar'
+                    ? chain.route_label
+                    : chain.route_label_en}
+            </span>
+            {gaps > 0 && (
+              /*
+               * Arabic counts its nouns rather than bracketing a plural: one is «مستوى ناقص», two is
+               * a dual, and three or more takes the plural. `${n} مستوى ناقص` reads as broken Arabic
+               * to the readers this product is for, and «level(s)» is the English version of the same
+               * shrug. The digits stay Latin — the language is not the numerals.
+               */
+              <span className="text-warning text-xs" data-testid={`lead-source-gap-${r.id}`}>
+                {locale === 'ar'
+                  ? gaps === 1
+                    ? 'مستوى ناقص'
+                    : gaps === 2
+                      ? 'مستويان ناقصان'
+                      : `${gaps} مستويات ناقصة`
+                  : gaps === 1
+                    ? '1 level missing'
+                    : `${gaps} levels missing`}
+              </span>
+            )}
+          </button>
+        )
+      },
     },
     {
       key: 'status',
@@ -204,6 +269,15 @@ export function LeadsPage() {
       />
 
       <NewLeadModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      <Modal
+        open={trail !== null}
+        onClose={() => setTrail(null)}
+        title={locale === 'ar' ? 'مصدر هذا العميل المحتمل' : 'Where this lead came from'}
+      >
+        {trail?.attribution != null && (
+          <LeadAttributionTrail attribution={trail.attribution} locale={locale} />
+        )}
+      </Modal>
     </section>
   )
 }
