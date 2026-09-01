@@ -184,4 +184,56 @@ describe('a live link and the form it was shared as', () => {
     expect(cell).toHaveAttribute('title', '90,000')
   })
 
+
+  /**
+   * REPORT-DETAIL-PARITY-001 — the rung between the campaign and the ad.
+   *
+   * A «detailed report» that stops at the campaign is a summary with a longer label. The ad set is
+   * where the media buyer's decisions live: an audience, a placement, a budget split.
+   */
+  it('renders the ad-set rung for the detailed form', async () => {
+    vi.mocked(fetchLiveShared).mockResolvedValue({
+      status: 200,
+      envelope: {
+        data: {
+          ...PAYLOAD,
+          ad_sets: [
+            { external_entity_id: 'as-1', name: 'Riyadh 25-44', spend: 2000, impressions: 90_000, clicks: 700, conversions: 12 },
+            { external_entity_id: 'as-2', name: 'Jeddah 18-24', spend: 800, impressions: 40_000, clicks: 300, conversions: 4 },
+          ],
+        },
+      },
+    } as never)
+
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    await screen.findByTestId('live-report')
+
+    const adSets = within(await screen.findByTestId('live-detail-ad-sets'))
+
+    expect(adSets.getByText('Riyadh 25-44')).toBeInTheDocument()
+    expect(adSets.getByText('Jeddah 18-24')).toBeInTheDocument()
+  })
+
+  /**
+   * «We did not ask» and «they did not send» are different sentences, and this is the second.
+   *
+   * A heading over an empty table reads as a section that failed to load, which sends a client to
+   * ask their agency about a sync problem that does not exist.
+   */
+  it('says the platforms reported no ad-set level rather than drawing an empty heading', async () => {
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    await screen.findByTestId('live-report')
+
+    expect(within(await screen.findByTestId('live-detail-ad-sets')).getByText(/reported no ad-set level/))
+      .toBeInTheDocument()
+  })
+
+  /** And the summary form shows none of it — the rung belongs to the detailed product. */
+  it('keeps the ad-set rung out of the dashboard', async () => {
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="executive_summary" />, { locale: 'en' })
+    await screen.findByTestId('live-report')
+
+    expect(screen.queryByTestId('live-detail-ad-sets')).not.toBeInTheDocument()
+  })
+
 })

@@ -6,7 +6,9 @@ namespace App\Domains\Reports\Services;
 
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Services\StoreFunnelService;
+use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Services\DataFreshnessService;
+use App\Domains\Metrics\Services\EntityMetricsAggregator;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Metrics\Services\ReportingCurrency;
@@ -52,6 +54,7 @@ final class LiveReportService
         private readonly TenantContext $tenants,
         private readonly ProjectContext $projects,
         private readonly ReportAds $ads,
+        private readonly EntityMetricsAggregator $entities,
     ) {}
 
     /**
@@ -164,6 +167,22 @@ final class LiveReportService
             'timeseries' => $engine->timeseries($from, $to),
             'platforms' => $engine->byProvider($from, $to),
             'campaigns' => $engine->byCampaign($from, $to),
+            /*
+             * REPORT-DETAIL-PARITY-001 — the rung between the campaign and the ad.
+             *
+             * A «detailed report» that stops at the campaign is a summary with a longer label. The
+             * ad-set grain is where a media buyer's decisions actually live — an audience, a
+             * placement, a budget split — and it has been in `entity_daily_metrics` since
+             * ADSET-METRICS-TRUTH-001 asked every provider for it rather than one.
+             *
+             * Read through the SAME aggregator the operator's drill-down uses, so a client's copy
+             * and the agency's screen cannot disagree about one ad set. Empty for a provider that
+             * reports no ad-set grain, which the detailed view then says rather than drawing a
+             * heading over nothing.
+             */
+            'ad_sets' => $scope['project_id'] === ''
+                ? []
+                : $this->entities->byEntity($scope['project_id'], EntityDailyMetric::AD_SET, $from, $to),
             // The stage list, as every reader of this payload expects. See ReportGenerator for why
             // the aggregator returns the spend alongside it now, and why it is unpacked here.
             'funnel' => ($adFunnel = $engine->funnel($from, $to))['stages'],
