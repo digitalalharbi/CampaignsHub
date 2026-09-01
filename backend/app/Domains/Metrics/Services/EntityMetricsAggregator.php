@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Services;
 
+use App\Domains\Campaigns\Models\ExternalAd;
+use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Metrics\Models\EntityDailyMetric;
@@ -117,12 +119,55 @@ final class EntityMetricsAggregator
 
         $this->applyScope($query, $scope);
 
-        return $query
+        $rows = $query
             ->groupBy('entity_id', 'external_entity_id', 'external_campaign_id', 'external_ad_set_id')
             ->selectRaw(implode(', ', $select))
             ->get()
             ->map(fn ($row): array => $this->shape((array) $row->getAttributes()))
             ->all();
+
+        return $this->named($entityType, $rows);
+    }
+
+    /**
+     * The row's own name and status — REPORT-DETAIL-PARITY-001.
+     *
+     * This belonged to the operator's controller, and the client's shared report called the
+     * aggregator directly. So the agency's drill-down listed «Riyadh 25-45» and the client's copy of
+     * the same table listed twenty-two rows of «—»: the metrics were right, and nobody could tell
+     * which ad set any of them was. The comment in `LiveReportService` promised the two surfaces
+     * could not disagree about one ad set, and they disagreed about the only part a reader uses to
+     * find it.
+     *
+     * It lives here now because a name is a property of the row, not of one caller's response shape.
+     *
+     * Null rather than a placeholder: an entity the structure sweep has since removed is a real
+     * state, and «Unknown ad set» would hide it behind something that looks like data.
+     *
+     * @param  list<array<string,mixed>>  $rows
+     * @return list<array<string,mixed>>
+     */
+    private function named(string $entityType, array $rows): array
+    {
+        $ids = array_values(array_filter(array_column($rows, 'entity_id')));
+
+        if ($ids === []) {
+            return $rows;
+        }
+
+        $named = $entityType === EntityDailyMetric::AD
+            ? ExternalAd::withoutGlobalScopes()->whereIn('id', $ids)
+                ->get(['id', 'name', 'status', 'external_id', 'external_ad_set_id', 'external_campaign_id'])
+            : ExternalAdSet::withoutGlobalScopes()->whereIn('id', $ids)
+                ->get(['id', 'name', 'status', 'external_id', 'external_campaign_id']);
+
+        $byId = $named->keyBy(static fn ($m): string => (string) $m->getKey());
+
+        return array_map(static function (array $row) use ($byId): array {
+            $entity = $byId->get((string) $row['entity_id']);
+
+            return [...$row, 'name' => $entity?->name, 'status' => $entity?->status];
+        }, $rows);
     }
 
     /**

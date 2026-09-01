@@ -198,8 +198,8 @@ describe('a live link and the form it was shared as', () => {
         data: {
           ...PAYLOAD,
           ad_sets: [
-            { external_entity_id: 'as-1', name: 'Riyadh 25-44', spend: 2000, impressions: 90_000, clicks: 700, conversions: 12 },
-            { external_entity_id: 'as-2', name: 'Jeddah 18-24', spend: 800, impressions: 40_000, clicks: 300, conversions: 4 },
+            { entity_id: 'e-1', external_id: 'as-1', name: 'Riyadh 25-44', spend: 2000, impressions: 90_000, clicks: 700, conversions: 12 },
+            { entity_id: 'e-2', external_id: 'as-2', name: 'Jeddah 18-24', spend: 800, impressions: 40_000, clicks: 300, conversions: 4 },
           ],
         },
       },
@@ -212,6 +212,41 @@ describe('a live link and the form it was shared as', () => {
 
     expect(adSets.getByText('Riyadh 25-44')).toBeInTheDocument()
     expect(adSets.getByText('Jeddah 18-24')).toBeInTheDocument()
+  })
+
+  /**
+   * The fixture above was kinder than the server — REPORT-DETAIL-PARITY-001.
+   *
+   * It supplied `name` on every row, so the test passed while production rendered twenty-two ad-set
+   * rows labelled «—». Two independent misses produced that dash: the server sent no name at all
+   * (the naming lived in the operator's controller and this payload comes from the aggregator), and
+   * the fallback here read `external_entity_id`, which is the database COLUMN — the aggregator
+   * shapes it as `external_id`.
+   *
+   * This case uses the shape the aggregator ACTUALLY returns. A fixture more generous than the
+   * server is a test that cannot fail for the reason the product breaks.
+   */
+  it('falls back to the provider id when the ad set itself is gone', async () => {
+    vi.mocked(fetchLiveShared).mockResolvedValue({
+      status: 200,
+      envelope: {
+        data: {
+          ...PAYLOAD,
+          ad_sets: [
+            // Exactly what `EntityMetricsAggregator::shape()` produces for a removed entity.
+            { entity_id: 'e-1', external_id: 'as-9', name: null, spend: 2000, impressions: 90_000, clicks: 700, conversions: 12 },
+          ],
+        },
+      },
+    } as never)
+
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    await screen.findByTestId('live-report')
+
+    const adSets = within(await screen.findByTestId('live-detail-ad-sets'))
+
+    expect(adSets.getByText('as-9')).toBeInTheDocument()
+    expect(adSets.queryByText('—')).not.toBeInTheDocument()
   })
 
   /**
