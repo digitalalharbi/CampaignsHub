@@ -40,6 +40,11 @@ export function LiveDetailTables({
   const ar = locale === 'ar'
   const t = {
     campaigns: ar ? 'كل الحملات' : 'Every campaign',
+    adSets: ar ? 'المجموعات الإعلانية' : 'Ad sets',
+    adSet: ar ? 'المجموعة' : 'Ad set',
+    noAdSets: ar
+      ? 'لم تُبلِّغ منصات هذه الفترة عن مستوى المجموعات الإعلانية.'
+      : 'The platforms in this window reported no ad-set level.',
     platforms: ar ? 'كل المنصات' : 'Every platform',
     campaign: ar ? 'الحملة' : 'Campaign',
     platform: ar ? 'المنصة' : 'Platform',
@@ -123,6 +128,12 @@ export function LiveDetailTables({
     <span key="name" className="font-semibold">{(row.campaign_name as string | null) ?? '—'}</span>
   ))
 
+  const adSets = body((payload.ad_sets ?? []) as Array<Record<string, unknown>>, (row) => (
+    <span key="name" className="font-semibold">
+      {(row.name as string | null) ?? (row.external_entity_id as string | null) ?? '—'}
+    </span>
+  ))
+
   const platforms = body(payload.platforms as Array<Record<string, unknown>>, (row) => (
     <span key="name" className="font-semibold">
       {providerLabel(canonicalPlatform(String(row.provider ?? '')), locale)}
@@ -133,6 +144,23 @@ export function LiveDetailTables({
     <div data-testid="live-detail-tables" className="mt-3 grid gap-3 [&>*]:min-w-0">
       <Section title={t.campaigns} testid="live-detail-campaigns" empty={payload.campaigns.length === 0} none={t.none}>
         <MetricTable head={head(t.campaign)} rows={campaigns.rows} values={campaigns.values} exact={campaigns.exact} initialSort={{ column: 1, dir: 'desc' }} />
+      </Section>
+
+      {/*
+        REPORT-DETAIL-PARITY-001 — the rung a «detailed report» stopping at the campaign leaves out.
+
+        An ad set is where the media buyer's decisions live: an audience, a placement, a budget
+        split. An empty section says the platforms reported no such level rather than showing a
+        heading over nothing — «we did not ask» and «they did not send» are different sentences, and
+        this one is the second.
+      */}
+      <Section
+        title={t.adSets}
+        testid="live-detail-ad-sets"
+        empty={(payload.ad_sets ?? []).length === 0}
+        none={t.noAdSets}
+      >
+        <MetricTable head={head(t.adSet)} rows={adSets.rows} values={adSets.values} exact={adSets.exact} initialSort={{ column: 1, dir: 'desc' }} />
       </Section>
 
       <Section title={t.platforms} testid="live-detail-platforms" empty={payload.platforms.length === 0} none={t.none}>

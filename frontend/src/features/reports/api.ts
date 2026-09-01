@@ -206,6 +206,15 @@ export interface LivePayload {
   platforms: Array<Record<string, unknown> & { provider: string; spend: number | null }>
   campaigns: Array<Record<string, unknown> & { campaign_name: string | null; provider: string | null; spend: number | null }>
   /**
+   * REPORT-DETAIL-PARITY-001 — the rung between the campaign and the ad.
+   *
+   * Present on every live payload and EMPTY for a provider that reports no ad-set grain, which the
+   * detailed view then says rather than drawing a heading over nothing. Read through the same
+   * aggregator the operator's drill-down uses, so a client's copy and the agency's screen cannot
+   * disagree about one ad set.
+   */
+  ad_sets?: Array<Record<string, unknown> & { external_entity_id?: string; spend: number | null }>
+  /**
    * FUNNEL-NULL-001 — `count` is null for a stage no platform reported, and `reported` says so
    * outright. On a client link this matters more than anywhere else: the reader has no other view of
    * their account, so «0 add to cart» beside 176 purchases is a conclusion they cannot check.
