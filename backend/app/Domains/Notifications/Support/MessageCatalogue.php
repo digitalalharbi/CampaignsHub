@@ -156,6 +156,15 @@ final class MessageCatalogue
             'request' => self::event('operations', null, 'RequestNotifier'),
             'journey_transition' => self::event('operations', null, 'RequestJourneyService'),
             'client_needs_attention' => self::event('operations', null, 'ClientManagementService'),
+            /*
+             * LEAD-SLA-NOTIFICATION-001 — a promise to a buyer that has not been kept.
+             *
+             * Email is ON by default, which is deliberate and rare here. The other operations types
+             * describe things that happened inside the product, where the bell finds the reader
+             * eventually. This one describes somebody waiting for a phone call they were sold: the
+             * cost of it arriving late is the client's money, and «eventually» is the failure.
+             */
+            'lead_sla' => self::event('operations', null, 'AlertEvaluator', defaultEmail: true),
 
             // ── المالية ───────────────────────────────────────────────────────────────────────
             'subscription' => self::event('billing', null, 'SubscriptionNotifier', defaultEmail: true),

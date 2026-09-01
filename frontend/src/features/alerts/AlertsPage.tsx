@@ -17,7 +17,7 @@ import { toApiError } from '@/lib/api/client'
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
 const COPY = {
   ar: {
-    title: 'التنبيهات', subtitle: 'راقب المخاطر التشغيلية وتصرّف عليها — الميزانية، النتائج، المزامنة، والتوكنات.',
+    title: 'التنبيهات', subtitle: 'راقب المخاطر التشغيلية وتصرّف عليها — الميزانية، النتائج، المزامنة، التوكنات، ومتابعة العملاء المحتملين.',
     tab_alerts: 'التنبيهات', tab_rules: 'القواعد', tab_prefs: 'التفضيلات', tab_deliveries: 'سجل التسليم',
     all: 'الكل', active: 'نشِطة', snoozed: 'مؤجّلة', resolved: 'مُغلقة', none: 'لا يوجد شيء هنا.',
     no_match: 'لا نتائج تطابق البحث أو الفلاتر.', search_ph: 'ابحث في التنبيهات…',
@@ -38,7 +38,7 @@ const COPY = {
     minutes_60: 'ساعة', minutes_240: '4 ساعات', minutes_1440: 'يوم',
   },
   en: {
-    title: 'Alerts', subtitle: 'Watch and act on operational risk — budget, results, sync, and tokens.',
+    title: 'Alerts', subtitle: 'Watch and act on operational risk — budget, results, sync, tokens, and lead follow-up.',
     tab_alerts: 'Alerts', tab_rules: 'Rules', tab_prefs: 'Preferences', tab_deliveries: 'Delivery log',
     all: 'All', active: 'Active', snoozed: 'Snoozed', resolved: 'Resolved', none: 'Nothing here.',
     no_match: 'No alerts match your search or filters.', search_ph: 'Search alerts…',
@@ -70,6 +70,9 @@ const TYPE_LABEL: Record<AlertType, { ar: string; en: string }> = {
   token_expiry: { ar: 'انتهاء التوكن', en: 'Token expiry' },
   report_failed: { ar: 'فشل التقرير', en: 'Report failed' },
   sla_warning: { ar: 'تحذير SLA', en: 'SLA warning' },
+  lead_unassigned: { ar: 'عميل محتمل بلا مسؤول', en: 'Lead with no owner' },
+  lead_no_contact: { ar: 'لم يُتواصل مع العميل المحتمل', en: 'Lead not contacted' },
+  lead_follow_up_overdue: { ar: 'متابعة متأخرة', en: 'Follow-up overdue' },
 }
 
 const sevClass: Record<AlertEvent['severity'], string> = {
@@ -643,6 +646,15 @@ function parseThreshold(raw: string, type: AlertType): Record<string, number> | 
   if (!raw.trim() || Number.isNaN(n)) return undefined
   if (type === 'token_expiry' || type === 'no_results') return { days: n }
   if (type === 'roas_drop' || type === 'cpa_increase' || type === 'cpl_increase') return { pct: n }
+  /*
+   * LEAD-SLA-NOTIFICATION-001 — the follow-up SLAs are counted in MINUTES.
+   *
+   * Reading the same box as a ratio would have stored `{ratio: 60}` for «within the hour», which the
+   * server reads as no threshold at all and silently falls back to its default — a rule that looks
+   * configured and is not. `lead_follow_up_overdue` takes none: a promised date is late or it is not.
+   */
+  if (type === 'lead_unassigned' || type === 'lead_no_contact') return { minutes: n }
+  if (type === 'lead_follow_up_overdue') return undefined
   return { ratio: n }
 }
 const fmt = (iso: string | null): string => fmtDateTime(iso)

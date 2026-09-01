@@ -7,6 +7,8 @@ namespace App\Domains\Alerts\Services;
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\CRM\Enums\LeadStage;
+use App\Domains\CRM\Models\Lead;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Models\SpendLimit;
@@ -14,8 +16,10 @@ use App\Domains\Metrics\Models\SpendLimitEvent;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Notifications\Services\NotificationDispatcher;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\TenantContext;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -49,6 +53,8 @@ final class AlertEvaluator
     public const PERIODIC = [
         'budget_risk', 'cpa_increase', 'cpl_increase', 'roas_drop',
         'no_results', 'sync_failure', 'token_expiry',
+        // LEAD-SLA-NOTIFICATION-001 — the follow-up promises, swept on the same schedule.
+        'lead_unassigned', 'lead_no_contact', 'lead_follow_up_overdue',
     ];
 
     /** Raised by the thing that failed, not by a sweep — a report failing is an event, not a threshold. */
@@ -77,6 +83,12 @@ final class AlertEvaluator
         'token_expiry' => 'token_expiring',
         'report_failed' => 'report_failed',
         'sla_warning' => 'security',
+        // LEAD-SLA-NOTIFICATION-001 — one notification type for three rules: a reader who wants to
+        // hear about follow-up wants all three, and three switches is a preferences page nobody
+        // finishes reading.
+        'lead_unassigned' => 'lead_sla',
+        'lead_no_contact' => 'lead_sla',
+        'lead_follow_up_overdue' => 'lead_sla',
     ];
 
     public function __construct(
@@ -122,6 +134,21 @@ final class AlertEvaluator
             'roas_drop' => $this->roasDrops($rule, $now),
             'cpa_increase' => $this->costPerIncreases($rule, $now, 'cpa', 'conversions'),
             'cpl_increase' => $this->costPerIncreases($rule, $now, 'cpl', 'leads'),
+            /*
+             * LEAD-SLA-NOTIFICATION-001 — the follow-up promises, on the engine that already exists.
+             *
+             * These are deliberately three types rather than one `sla_warning`, because they are
+             * three different failures with three different people to tell: nobody owns it, the
+             * owner has not tried, and a promise made has passed. One alert saying «SLA breach»
+             * would need the reader to open the product to learn which — and the whole point of an
+             * alert is to save that trip.
+             *
+             * Cooldown, dedup, snooze, channels, tasks and the audit trail are the engine's, not
+             * theirs; a second notification engine is what this requirement explicitly refuses.
+             */
+            'lead_unassigned' => $this->leadsUnassigned($rule, $now),
+            'lead_no_contact' => $this->leadsNotContacted($rule, $now),
+            'lead_follow_up_overdue' => $this->leadFollowUpsOverdue($rule, $now),
             default => $this->unevaluated($rule),
         };
 
@@ -500,6 +527,158 @@ final class AlertEvaluator
     private function totalsFor(string $campaignId, Carbon $from, Carbon $to): array
     {
         return $this->metrics->acrossProjects()->forCampaign($campaignId)->totals($from, $to);
+    }
+
+    /**
+     * Leads nobody owns, past the project's own SLA — LEAD-SLA-NOTIFICATION-001.
+     *
+     * The SLA is `threshold.minutes` on the rule, and the rule already carries `project_id`, so a
+     * client who answers within the hour and a client who answers within the day are two rules
+     * rather than a global constant somebody has to compromise on. Sixty minutes is the default
+     * because an unowned lead is the one failure where every minute is the client's money.
+     *
+     * **One alert per breach, not per lead.** Twenty unassigned leads is one situation and one
+     * person to tell; twenty alerts is an inbox nobody reads and a cooldown that cannot help,
+     * because each lead dedups on its own key. The count is in the message and the names are not —
+     * an alert can reach a channel that is not the product.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function leadsUnassigned(AlertRule $rule, Carbon $now): array
+    {
+        $minutes = max(1, (int) ($rule->threshold['minutes'] ?? 60));
+        $cutoff = $now->copy()->subMinutes($minutes);
+
+        return $this->leadBreach(
+            $rule,
+            fn (Builder $q): Builder => $q
+                ->whereNull('owner_id')
+                ->whereNotNull('received_at')
+                ->where('received_at', '<', $cutoff),
+            'Leads with no owner',
+            fn (int $n): string => $n.' lead(s) have had no owner for more than '.self::minutes($minutes).'.',
+            ['minutes' => $minutes, 'rule' => 'unassigned'],
+        );
+    }
+
+    /**
+     * Owned, and nobody has tried yet.
+     *
+     * `first_attempt_at` and not `first_contact_at`: a call that rang out is work done, and holding
+     * a team to «somebody answered» would page them for the buyer's behaviour rather than their own.
+     * The pair exists precisely so a team cannot look responsive while nobody has dialled, and this
+     * alert is the half that watches the dialling.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function leadsNotContacted(AlertRule $rule, Carbon $now): array
+    {
+        $minutes = max(1, (int) ($rule->threshold['minutes'] ?? 240));
+        $cutoff = $now->copy()->subMinutes($minutes);
+
+        return $this->leadBreach(
+            $rule,
+            fn (Builder $q): Builder => $q
+                ->whereNotNull('owner_id')
+                ->whereNull('first_attempt_at')
+                ->whereNotNull('received_at')
+                ->where('received_at', '<', $cutoff),
+            'Leads nobody has tried',
+            fn (int $n): string => $n.' assigned lead(s) have had no contact attempt in '.self::minutes($minutes).'.',
+            ['minutes' => $minutes, 'rule' => 'no_contact'],
+        );
+    }
+
+    /**
+     * A follow-up somebody promised, and the time has passed.
+     *
+     * No window and no SLA: `next_follow_up_at` is a date a person chose, and it is late or it is
+     * not. A promise made three weeks ago is overdue today, which is why this asks the whole open
+     * pipeline rather than a recent slice — the same rule the follow-up workspace follows, for the
+     * same reason.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function leadFollowUpsOverdue(AlertRule $rule, Carbon $now): array
+    {
+        return $this->leadBreach(
+            $rule,
+            fn (Builder $q): Builder => $q
+                ->whereNotNull('next_follow_up_at')
+                ->where('next_follow_up_at', '<', $now),
+            'Follow-ups past their date',
+            fn (int $n): string => $n.' follow-up(s) are past the date somebody promised.',
+            ['rule' => 'follow_up_overdue'],
+        );
+    }
+
+    /** «1 minute», «60 minutes», «1 hour» — an alert that says «1 minutes» reads as a machine wrote it. */
+    private static function minutes(int $minutes): string
+    {
+        if ($minutes === 1) {
+            return '1 minute';
+        }
+
+        if ($minutes % 60 === 0) {
+            $hours = intdiv($minutes, 60);
+
+            return $hours === 1 ? '1 hour' : $hours.' hours';
+        }
+
+        return $minutes.' minutes';
+    }
+
+    /**
+     * The shared shape of a lead SLA breach: count the open pipeline, per project, and say how many.
+     *
+     * Closed leads are excluded everywhere — won, lost and invalid are decisions already made, and
+     * an alert about them is an overdue list nobody can clear.
+     *
+     * The entity is the PROJECT, so the engine's dedup key is stable across evaluations: the same
+     * situation refreshes one alert rather than opening a new one each sweep as leads come and go.
+     *
+     * @param  callable(Builder): Builder  $narrow
+     * @param  callable(int): string  $message
+     * @param  array<string,mixed>  $context
+     * @return list<array<string,mixed>>
+     */
+    private function leadBreach(AlertRule $rule, callable $narrow, string $title, callable $message, array $context): array
+    {
+        $rows = $narrow(
+            Lead::query()
+                ->withoutGlobalScopes()
+                ->where('tenant_id', $rule->tenant_id)
+                ->when($rule->project_id, fn (Builder $q): Builder => $q->where('project_id', $rule->project_id))
+                ->whereNotIn('status', [LeadStage::Won->value, LeadStage::Lost->value, LeadStage::Invalid->value])
+        )
+            /*
+             * Grouped by project even when the rule already names one, so a tenant-wide rule tells
+             * the reader WHICH client is behind rather than handing them one number across six.
+             */
+            ->selectRaw('project_id, count(*) as total')
+            ->groupBy('project_id')
+            ->pluck('total', 'project_id');
+
+        $out = [];
+
+        foreach ($rows as $projectId => $total) {
+            $n = (int) $total;
+
+            if ($n === 0) {
+                continue;
+            }
+
+            $out[] = [
+                'entity_type' => Project::class,
+                'entity_id' => $projectId === null ? null : (string) $projectId,
+                'project_id' => $projectId === null ? null : (string) $projectId,
+                'title' => $title,
+                'message' => $message($n),
+                'context' => $context + ['count' => $n],
+            ];
+        }
+
+        return $out;
     }
 
     /**
