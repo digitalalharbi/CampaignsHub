@@ -9,6 +9,7 @@ use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportSchedule;
+use App\Domains\Reports\Support\ReportIdentity;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -80,6 +81,15 @@ final class ScheduledReportDispatcher
                     'channel' => 'email',
                     'recipient' => $email,
                     'format' => $format,
+                    /*
+                     * REPORT-TITLE-METADATA-001 — the line the recipient reads first, decided now.
+                     *
+                     * With no mail provider on this install every row waits at
+                     * `awaiting_provider_credentials`, so a subject left to send-time would be chosen
+                     * months later from a report whose name may have changed. Recorded here it is the
+                     * document's own name at the moment the delivery was scheduled.
+                     */
+                    'subject' => ReportIdentity::subject($report, $schedule->locale ?? 'ar'),
                     'audience' => $schedule->audience ?? 'client',
                     // Internal reports never leave the tenant — an external recipient is suppressed. Otherwise
                     // there is no mail provider yet, so the honest state is awaiting_provider_credentials.

@@ -7,6 +7,7 @@ namespace App\Domains\Reports\Models;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 final class ReportExport extends Model
 {
@@ -25,4 +26,19 @@ final class ReportExport extends Model
         'size' => 'integer',
         'is_demo' => 'boolean',
     ];
+
+    /**
+     * The report this file is OF.
+     *
+     * REPORT-TITLE-METADATA-001 — the download names the report rather than the blob on disk, and it
+     * needs the report to do that. `withoutGlobalScopes` is deliberate: an export is fetched on a
+     * download route where the export row itself is the authorisation, and the tenant scope would
+     * silently return null for the very row that was just authorised.
+     *
+     * @return BelongsTo<Report, $this>
+     */
+    public function report(): BelongsTo
+    {
+        return $this->belongsTo(Report::class)->withoutGlobalScopes();
+    }
 }
