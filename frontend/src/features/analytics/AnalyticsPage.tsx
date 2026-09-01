@@ -47,6 +47,7 @@ import { useCampaignOptionSource } from './useCampaignOptionSource'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { Panel, ProvenanceBadge, RateTrend, SERIES, platformColor, tooltipProps } from './components'
 import { BudgetReading } from './BudgetReading'
+import { FamilyDecisionTable } from './FamilyDecisionTable'
 import { PathAnalysis } from './PathAnalysis'
 import { PathTrends } from './PathTrends'
 import { listCreatives, type CreativeCard } from '@/features/content/api'
@@ -2485,6 +2486,28 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                     spend: typeof r.spend === 'number' ? r.spend : 0,
                   }))}
                   ar={ar}
+                />
+
+                {/*
+                  OBJECTIVE-ANALYTICS-DEPTH-001 — the decision surface, inside the family.
+
+                  The card above says how the objective is doing and the bar says where its money
+                  sits. Neither settles the question the tab is opened for: of these eight sales
+                  campaigns, which is worth more money next week. That is a comparison between rows
+                  on a column the reader picks, and a list of totals cannot be one.
+
+                  One table PER family and never one across them — the requirement's central rule,
+                  expressed structurally rather than asserted: there is no all-objectives list here
+                  to sort, so no ranking can be produced whose top row is decided by which objective
+                  happens to make the bigger number.
+                */}
+                <FamilyDecisionTable
+                  family={f.key}
+                  campaigns={f.campaigns as unknown as FamilyRow[]}
+                  kpis={f.kpis}
+                  currency={currency}
+                  locale={ar ? 'ar' : 'en'}
+                  specs={SPECS}
                 />
               </div>
             )
