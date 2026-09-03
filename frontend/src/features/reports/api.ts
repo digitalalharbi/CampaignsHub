@@ -254,11 +254,20 @@ export interface LivePayload {
   /** ATTRIB-VIS-001 — which optional sections this link is allowed to open. */
   sections?: { attribution: boolean }
   store_funnel: StoreFunnelPayload | null
+  /**
+   * CLIENT-DIAGNOSTIC-SEPARATION-001 — what a client is told about a platform, and nothing more.
+   *
+   * `data_as_of` and `last_checked_at` were here and are gone from the server payload: a sync clock
+   * is a fact about our plumbing, and a shared link's JSON is one keystroke away in any browser, so
+   * removing it from the VIEW would not have removed it from the client.
+   *
+   * `awaiting_credentials` survives because the fact underneath is theirs — a total that silently
+   * omits a platform is worse than any diagnostic — but the page states it as «these figures do not
+   * include Snapchat» rather than in our words.
+   */
   freshness: Array<{
     provider: string
-    data_as_of: string | null
-    last_checked_at: string | null
-    /** `awaiting_credentials` is stated, never rendered as a zero — see LiveSharedReport. */
+    name?: string | null
     state: 'synced' | 'awaiting_credentials'
   }>
   available: {

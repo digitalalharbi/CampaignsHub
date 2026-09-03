@@ -1,6 +1,4 @@
 import { useMemo, useState } from 'react'
-import { canonicalPlatform } from '@/lib/platforms'
-import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Image as ImageIcon, LayoutGrid, Lightbulb, Rows3, TrendingDown, TrendingUp, Video } from 'lucide-react'
@@ -75,9 +73,7 @@ const COPY = {
     alerts: 'تنبيهات إجهاد الإعلان',
     insights: 'أبرز التحليلات',
     recommendation: 'الإجراء المقترح',
-    freshness: 'آخر مزامنة',
     quality: 'جودة البيانات',
-    noSync: 'لم تتم مزامنة بعد',
     period: 'الفترة',
     previous: 'الفترة السابقة',
     objective: 'الهدف',
@@ -117,8 +113,6 @@ const COPY = {
     notShown: 'غير معروضة في هذا الرابط',
     byPlatform: 'الأداء حسب المنصة',
     onePlatform: 'هذا الإعلان يعمل على منصة واحدة، فلا توجد مقارنة بين المنصات.',
-    lastSync: 'آخر مزامنة',
-    sourceUpdated: 'آخر تحديث من المصدر',
     previousPeriod: 'الفترة السابقة',
     copy: 'نص الإعلان',
     headlineText: 'العنوان',
@@ -144,9 +138,7 @@ const COPY = {
     alerts: 'Ad fatigue alerts',
     insights: 'Key insights',
     recommendation: 'Recommended action',
-    freshness: 'Last sync',
     quality: 'Data quality',
-    noSync: 'Awaiting sync',
     period: 'Period',
     previous: 'Previous period',
     objective: 'Objective',
@@ -186,8 +178,6 @@ const COPY = {
     notShown: 'Not shown on this link',
     byPlatform: 'By platform',
     onePlatform: 'This ad runs on one platform, so there is no cross-platform comparison.',
-    lastSync: 'Last sync',
-    sourceUpdated: 'Source updated at',
     previousPeriod: 'Previous period',
     copy: 'Ad copy',
     headlineText: 'Headline',
@@ -356,7 +346,15 @@ export function SharedCreativeSection({
             <InsightList insights={data.insights} t={t} ar={ar} permissions={permissions} />
           )}
 
-          <Freshness data={data} t={t} ar={ar} />
+          {/*
+            CLIENT-DIAGNOSTIC-SEPARATION-001 — the sync strip left the client's link.
+
+            It printed our last-sync clock, a sync date per platform, and the raw data-quality map
+            («missing_previews: 3») on the page a client opens to look at their ads. None of the
+            three is a fact about their campaign, none of them can be acted on, and the last was raw
+            database keys. They live in the operator's Data Quality surface, where they are the
+            whole point.
+          */}
         </>
       )}
 
@@ -751,38 +749,6 @@ function InsightList({
   )
 }
 
-function Freshness({ data, t, ar }: { data: { freshness: CreativePulse['freshness'] }; t: Copy; ar: boolean }) {
-  const f = data.freshness
-
-  return (
-    <div className="flex flex-wrap gap-x-5 gap-y-1.5 rounded-xl border border-border bg-surface-secondary px-4 py-3 text-xs text-text-secondary">
-      <span>
-        <span className="text-text-muted">{t.freshness}:</span>{' '}
-        <b className="tnum font-semibold text-text-primary" dir="ltr">
-          {f.last_synced_at ? fmtDateTime(f.last_synced_at) : t.noSync}
-        </b>
-      </span>
-      {f.providers.map((p) => (
-        <span key={p.provider}>
-          <span className="text-text-muted">{providerLabel(canonicalPlatform(p.provider), ar ? 'ar' : 'en')}:</span>{' '}
-          <b className="tnum font-semibold text-text-primary" dir="ltr">
-            {p.last_synced_at ? fmtDate(p.last_synced_at) : t.noSync}
-          </b>
-        </span>
-      ))}
-      <span>
-        <span className="text-text-muted">{t.quality}:</span>{' '}
-        <b className="tnum font-semibold text-text-primary" dir="ltr">
-          {Object.entries(f.quality)
-            .filter(([, v]) => Number(v) > 0)
-            .map(([k, v]) => `${k}: ${v}`)
-            .join(' · ') || '—'}
-        </b>
-      </span>
-    </div>
-  )
-}
-
 /**
  * §15.6 on the client's side — one creative, in depth, inside the link's ceiling.
  *
@@ -901,8 +867,11 @@ function SharedCreativeDetail({
           <Pair k={t.path} v={marketingPathLabel(creative.path, locale)} />
           <Pair k={t.period} v={`${data.period.from} → ${data.period.to}`} />
           <Pair k={t.previousPeriod} v={`${data.previous_period.from} → ${data.previous_period.to}`} />
-          <Pair k={t.lastSync} v={creative.freshness.last_synced_at?.slice(0, 10) ?? t.notProvided} />
-          <Pair k={t.sourceUpdated} v={creative.freshness.source_updated_at?.slice(0, 10) ?? t.notProvided} />
+          {/*
+            Our clock was here too, twice, among the facts of one ad — «آخر مزامنة» and «آخر تحديث
+            من المصدر». Removed for the same reason, and because sitting in a list of campaign facts
+            implied they were campaign facts.
+          */}
         </dl>
       </div>
 

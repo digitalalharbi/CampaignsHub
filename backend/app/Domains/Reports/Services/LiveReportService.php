@@ -504,22 +504,29 @@ final class LiveReportService
 
         $sources = app(DataFreshnessService::class)->sources($tenantId, [$projectId], $providers);
 
-        return array_map(static fn (array $source): array => [
+        /*
+         * CLIENT-DIAGNOSTIC-SEPARATION-001 — the payload carries what a CLIENT can act on.
+         *
+         * This block used to send `data_as_of`, `last_checked_at` and `detailed_state` for every
+         * platform, and the page printed them: «ميتا: 18 أغسطس 23:59» beside «بانتظار بيانات
+         * الاعتماد». Those are facts about our plumbing. A client cannot act on the timestamp, cannot
+         * ask anyone to move it, and «credentials» is a word from our side of the wall.
+         *
+         * **Removed from the payload, not hidden in the view.** A shared link has no session behind
+         * it, and its JSON is one keystroke away in any browser — a diagnostic that is merely
+         * unrendered is still disclosed, and the requirement says so in as many words.
+         *
+         * What SURVIVES is the one fact that is theirs: a platform is not in these figures. A total
+         * that silently omits a platform is worse than any diagnostic, so the flag stays and the
+         * clock goes. `name` stays too — the page needs something to call the platform other than a
+         * database key.
+         */
+        return array_values(array_map(static fn (array $source): array => [
             'kind' => $source['kind'],
             'provider' => $source['provider'],
             'name' => $source['name'],
-            'data_as_of' => $source['data_as_of'],
-            'last_checked_at' => $source['last_checked_at'],
-            /*
-             * Never synced is stated, not implied by a zero.
-             *
-             * A platform we have never successfully read shows the same «0 spend» as a platform that
-             * genuinely spent nothing, and a client cannot tell those apart. This flag is what lets the
-             * page say «awaiting credentials» in the place where the number would otherwise sit.
-             */
             'state' => $source['state'] === 'awaiting_credentials' ? 'awaiting_credentials' : 'synced',
-            'detailed_state' => $source['state'],
-        ], $sources);
+        ], $sources));
     }
 
     private function iso(mixed $value): ?string
