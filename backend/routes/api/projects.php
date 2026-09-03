@@ -59,7 +59,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('dash
 
 // Project-scoped resources (ResolveProject enforces project isolation).
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->prefix('projects/{project}')->name('projects.scoped.')->group(function (): void {
-    Route::get('overview', [ProjectOverviewController::class, 'show'])->name('overview');
+    Route::get('overview', [ProjectOverviewController::class, 'show'])->middleware('project.can:dashboard.view')->name('overview');
 
     // Effective disclaimer/methodology copy for live surfaces (dashboard/analytics/live report).
     Route::get('disclaimer', [DisclaimerController::class, 'resolve'])->name('disclaimer.resolve');
@@ -92,7 +92,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * every number attached. Kept apart from `metrics/funnel`, which is the ad-only funnel over
      * `daily_metrics` and has no notion of an order.
      */
-    Route::get('commerce/funnel', [StoreFunnelController::class, 'show'])->name('commerce.funnel');
+    Route::get('commerce/funnel', [StoreFunnelController::class, 'show'])->middleware('project.can:analytics.view')->name('commerce.funnel');
     // REPORT-OBJECTIVE-001: spend and results split by marketing path, Direct and Blended apart.
     Route::get('metrics/objective-performance', [MetricsController::class, 'objectivePerformance'])->name('metrics.objective');
     /*
@@ -107,8 +107,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('metrics/objective-leaders', [MetricsController::class, 'objectiveLeaders'])->name('metrics.objective-leaders');
     Route::get('metrics/objective-explanations', [MetricsController::class, 'objectiveExplanations'])->name('metrics.objective-explanations');
     Route::get('metrics/objective-trend', [MetricsController::class, 'objectiveTrend'])->name('metrics.objective-trend');
-    Route::get('metrics/budget', [MetricsController::class, 'budget'])->name('metrics.budget');
-    Route::get('metrics/budget-explanation', [MetricsController::class, 'budgetExplanation'])->name('metrics.budget-explanation');
+    Route::get('metrics/budget', [MetricsController::class, 'budget'])->middleware('project.can:budget.view')->name('metrics.budget');
+    Route::get('metrics/budget-explanation', [MetricsController::class, 'budgetExplanation'])->middleware('project.can:budget.view')->name('metrics.budget-explanation');
     /*
      * BUDGET-GOVERNANCE-001 — the workspace's OWN limits, which the two routes above are not.
      *
@@ -128,7 +128,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::post('spend-limits', [SpendLimitController::class, 'store'])->middleware('project.can:budget.manage')->name('spend-limits.store');
     Route::match(['put', 'patch'], 'spend-limits/{spendLimit}', [SpendLimitController::class, 'update'])->middleware('project.can:budget.manage')->name('spend-limits.update');
     Route::delete('spend-limits/{spendLimit}', [SpendLimitController::class, 'destroy'])->middleware('project.can:budget.manage')->name('spend-limits.destroy');
-    Route::get('metrics/budget-accounts', [MetricsController::class, 'budgetAccounts'])->name('metrics.budget-accounts');
+    Route::get('metrics/budget-accounts', [MetricsController::class, 'budgetAccounts'])->middleware('project.can:budget.view')->name('metrics.budget-accounts');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');
     // NORM-001: what was done to the numbers before they were shown — currency, timezone, attribution,
     // source, objective comparability, and the canonical metric catalogue.
@@ -142,11 +142,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * §15 — the creative as a unit of analysis. Declared before the campaign routes so
      * `creatives/compare` is not read as a creative whose id is the word "compare".
      */
-    Route::get('creatives', [CreativeAnalysisController::class, 'index'])->name('creatives.index');
+    Route::get('creatives', [CreativeAnalysisController::class, 'index'])->middleware('project.can:campaigns.view')->name('creatives.index');
     // Before `creatives/{creative}` for the same reason as `compare` — otherwise the dashboard
     // section is looked up as a creative whose id is the word "pulse".
-    Route::get('creatives/pulse', [CreativeAnalysisController::class, 'pulse'])->name('creatives.pulse');
-    Route::post('creatives/compare', [CreativeAnalysisController::class, 'compare'])->name('creatives.compare');
+    Route::get('creatives/pulse', [CreativeAnalysisController::class, 'pulse'])->middleware('project.can:campaigns.view')->name('creatives.pulse');
+    Route::post('creatives/compare', [CreativeAnalysisController::class, 'compare'])->middleware('project.can:campaigns.view')->name('creatives.compare');
     /*
      * The group listing, which this surface was missing while the workspace surface had it.
      *
@@ -154,9 +154,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * a creative whose id is the word «groups» — a 500 with a Postgres uuid-cast error, on a URL the
      * groups page constructs whenever it is opened with a project pinned.
      */
-    Route::get('creatives/groups', [CreativeAnalysisController::class, 'groups'])->name('creatives.groups');
-    Route::get('creatives/groups/{group}', [CreativeAnalysisController::class, 'groupShow'])->name('creatives.groups.show')->whereUuid('group');
-    Route::post('creatives/group', [CreativeAnalysisController::class, 'group'])->name('creatives.group');
+    Route::get('creatives/groups', [CreativeAnalysisController::class, 'groups'])->middleware('project.can:campaigns.manage')->name('creatives.groups');
+    Route::get('creatives/groups/{group}', [CreativeAnalysisController::class, 'groupShow'])->middleware('project.can:campaigns.manage')->name('creatives.groups.show')->whereUuid('group');
+    Route::post('creatives/group', [CreativeAnalysisController::class, 'group'])->middleware('project.can:campaigns.manage')->name('creatives.group');
     /*
      * `whereUuid` on every `{creative}` — the router refuses a malformed id instead of the database.
      *
@@ -165,31 +165,31 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * there is no such creative. 404 is the honest answer, and a constraint gives it without a line
      * of controller code — so a route added below this one later cannot forget the check.
      */
-    Route::get('creatives/{creative}', [CreativeAnalysisController::class, 'show'])->name('creatives.show')->whereUuid('creative');
-    Route::delete('creatives/{creative}/group', [CreativeAnalysisController::class, 'ungroup'])->name('creatives.ungroup')->whereUuid('creative');
+    Route::get('creatives/{creative}', [CreativeAnalysisController::class, 'show'])->middleware('project.can:campaigns.view')->name('creatives.show')->whereUuid('creative');
+    Route::delete('creatives/{creative}/group', [CreativeAnalysisController::class, 'ungroup'])->middleware('project.can:campaigns.manage')->name('creatives.ungroup')->whereUuid('creative');
 
-    Route::get('sync-runs', [SyncRunController::class, 'index'])->name('sync-runs.index');
-    Route::post('sync-runs', [SyncRunController::class, 'store'])->name('sync-runs.store');
+    Route::get('sync-runs', [SyncRunController::class, 'index'])->middleware('project.can:analytics.view')->name('sync-runs.index');
+    Route::post('sync-runs', [SyncRunController::class, 'store'])->middleware('project.can:integrations.manage')->name('sync-runs.store');
 
     // Reports (project-scoped; reports.view / reports.export).
     /*
      * LIVEREP-002 — build a live client link from a choice (client → project → campaigns → platforms
      * → period → metrics), rather than from an already-generated document.
      */
-    Route::get('reports/live/options', [LiveReportBuilderController::class, 'options'])->name('reports.live.options');
-    Route::post('reports/live', [LiveReportBuilderController::class, 'store'])->name('reports.live.store')
-        ->middleware(EnsureWithinPlanLimit::class.':reports_per_month');
-    Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::get('reports/live/options', [LiveReportBuilderController::class, 'options'])->middleware('project.can:reports.view')->name('reports.live.options');
+    Route::post('reports/live', [LiveReportBuilderController::class, 'store'])->middleware('project.can:reports.manage')->name('reports.live.store')
+        ->middleware(['project.can:reports.manage', EnsureWithinPlanLimit::class.':reports_per_month']);
+    Route::get('reports', [ReportController::class, 'index'])->middleware('project.can:reports.view')->name('reports.index');
     // REPORT-SCHEDULING: the HTTP surface the dispatcher engine never had. Declared BEFORE
     // reports/{report} so "schedules" is not swallowed by the {report} wildcard.
-    Route::get('reports/schedules', [ReportScheduleController::class, 'index'])->name('reports.schedules.index');
-    Route::post('reports/schedules', [ReportScheduleController::class, 'store'])->name('reports.schedules.store');
-    Route::match(['put', 'patch'], 'reports/schedules/{schedule}', [ReportScheduleController::class, 'update'])->name('reports.schedules.update');
-    Route::post('reports/schedules/{schedule}/toggle', [ReportScheduleController::class, 'toggle'])->name('reports.schedules.toggle');
-    Route::post('reports/schedules/{schedule}/run', [ReportScheduleController::class, 'runNow'])->name('reports.schedules.run');
-    Route::delete('reports/schedules/{schedule}', [ReportScheduleController::class, 'destroy'])->name('reports.schedules.destroy');
+    Route::get('reports/schedules', [ReportScheduleController::class, 'index'])->middleware('project.can:reports.view')->name('reports.schedules.index');
+    Route::post('reports/schedules', [ReportScheduleController::class, 'store'])->middleware('project.can:reports.manage')->name('reports.schedules.store');
+    Route::match(['put', 'patch'], 'reports/schedules/{schedule}', [ReportScheduleController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.schedules.update');
+    Route::post('reports/schedules/{schedule}/toggle', [ReportScheduleController::class, 'toggle'])->middleware('project.can:reports.manage')->name('reports.schedules.toggle');
+    Route::post('reports/schedules/{schedule}/run', [ReportScheduleController::class, 'runNow'])->middleware('project.can:reports.manage')->name('reports.schedules.run');
+    Route::delete('reports/schedules/{schedule}', [ReportScheduleController::class, 'destroy'])->middleware('project.can:reports.manage')->name('reports.schedules.destroy');
 
-    Route::get('reports/template', [ReportController::class, 'template'])->name('reports.template');
+    Route::get('reports/template', [ReportController::class, 'template'])->middleware('project.can:reports.view')->name('reports.template');
 
     /*
      * §14.5 — what a report covers, and a scope worth using again.
@@ -198,43 +198,58 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * for the same reason `reports/schedules` is: a wildcard segment would otherwise swallow them and
      * the picker would ask for a report whose id is the word "scope".
      */
-    Route::get('reports/scope/options', [ReportScopeController::class, 'options'])->name('reports.scope.options');
-    Route::get('reports/scope-templates', [ReportScopeController::class, 'templates'])->name('reports.scope-templates.index');
-    Route::post('reports/scope-templates', [ReportScopeController::class, 'storeTemplate'])->name('reports.scope-templates.store');
-    Route::match(['put', 'patch'], 'reports/scope-templates/{template}', [ReportScopeController::class, 'updateTemplate'])->name('reports.scope-templates.update');
-    Route::delete('reports/scope-templates/{template}', [ReportScopeController::class, 'destroyTemplate'])->name('reports.scope-templates.destroy');
+    Route::get('reports/scope/options', [ReportScopeController::class, 'options'])->middleware('project.can:reports.view')->name('reports.scope.options');
+    Route::get('reports/scope-templates', [ReportScopeController::class, 'templates'])->middleware('project.can:reports.view')->name('reports.scope-templates.index');
+    Route::post('reports/scope-templates', [ReportScopeController::class, 'storeTemplate'])->middleware('project.can:reports.manage')->name('reports.scope-templates.store');
+    Route::match(['put', 'patch'], 'reports/scope-templates/{template}', [ReportScopeController::class, 'updateTemplate'])->middleware('project.can:reports.manage')->name('reports.scope-templates.update');
+    Route::delete('reports/scope-templates/{template}', [ReportScopeController::class, 'destroyTemplate'])->middleware('project.can:reports.manage')->name('reports.scope-templates.destroy');
     /*
      * Both report creates are capped, and `regenerate` deliberately is not: regenerating writes no
      * new row, so charging a monthly slot for it would bill the customer for the platform's retry.
      */
-    Route::post('reports', [ReportController::class, 'store'])->name('reports.store')
+    Route::post('reports', [ReportController::class, 'store'])->middleware('project.can:reports.manage')->name('reports.store')
         ->middleware(EnsureWithinPlanLimit::class.':reports_per_month');
-    Route::get('reports/{report}', [ReportController::class, 'show'])->name('reports.show');
-    Route::match(['put', 'patch'], 'reports/{report}', [ReportController::class, 'update'])->name('reports.update');
-    Route::post('reports/{report}/regenerate', [ReportController::class, 'regenerate'])->name('reports.regenerate');
-    Route::get('reports/{report}/scope', [ReportScopeController::class, 'show'])->name('reports.scope.show');
-    Route::match(['put', 'patch'], 'reports/{report}/scope', [ReportScopeController::class, 'update'])->name('reports.scope.update');
-    Route::get('reports/{report}/annotations', [ReportAnnotationController::class, 'index'])->name('reports.annotations.index');
-    Route::post('reports/{report}/annotations/{annotation}/status', [ReportAnnotationController::class, 'updateStatus'])->name('reports.annotations.status');
-    Route::get('reports/{report}/validation', [ReportController::class, 'validation'])->name('reports.validation');
-    Route::post('reports/{report}/print-token', [ReportPrintController::class, 'issue'])->name('reports.print-token');
-    Route::post('reports/{report}/export', [ReportController::class, 'export'])->name('reports.export');
-    Route::post('reports/{report}/send', [ReportController::class, 'send'])->name('reports.send');
-    Route::delete('reports/{report}', [ReportController::class, 'destroy'])->name('reports.destroy');
+    Route::get('reports/{report}', [ReportController::class, 'show'])->middleware('project.can:reports.view')->name('reports.show');
+    Route::match(['put', 'patch'], 'reports/{report}', [ReportController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.update');
+    Route::post('reports/{report}/regenerate', [ReportController::class, 'regenerate'])->middleware('project.can:reports.manage')->name('reports.regenerate');
+    Route::get('reports/{report}/scope', [ReportScopeController::class, 'show'])->middleware('project.can:reports.view')->name('reports.scope.show');
+    Route::match(['put', 'patch'], 'reports/{report}/scope', [ReportScopeController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.scope.update');
+    Route::get('reports/{report}/annotations', [ReportAnnotationController::class, 'index'])->middleware('project.can:reports.view')->name('reports.annotations.index');
+    Route::post('reports/{report}/annotations/{annotation}/status', [ReportAnnotationController::class, 'updateStatus'])->middleware('project.can:reports.manage')->name('reports.annotations.status');
+    Route::get('reports/{report}/validation', [ReportController::class, 'validation'])->middleware('project.can:reports.view')->name('reports.validation');
+    Route::post('reports/{report}/print-token', [ReportPrintController::class, 'issue'])->middleware('project.can:reports.manage')->name('reports.print-token');
+    Route::post('reports/{report}/export', [ReportController::class, 'export'])->middleware('project.can:reports.manage')->name('reports.export');
+    Route::post('reports/{report}/send', [ReportController::class, 'send'])->middleware('project.can:reports.manage')->name('reports.send');
+    Route::delete('reports/{report}', [ReportController::class, 'destroy'])->middleware('project.can:reports.manage')->name('reports.destroy');
 
     // Secure client links for a report (reports.share).
-    Route::get('reports/{report}/shares', [ReportShareController::class, 'index'])->name('reports.shares.index');
-    Route::post('reports/{report}/shares', [ReportShareController::class, 'store'])->name('reports.shares.store');
-    Route::post('reports/{report}/shares/{share}/revoke', [ReportShareController::class, 'revoke'])->name('reports.shares.revoke');
-    Route::post('reports/{report}/shares/{share}/renew', [ReportShareController::class, 'renew'])->name('reports.shares.renew');
-    Route::get('reports/{report}/shares/{share}/logs', [ReportShareController::class, 'logs'])->name('reports.shares.logs');
+    Route::get('reports/{report}/shares', [ReportShareController::class, 'index'])->middleware('project.can:reports.view')->name('reports.shares.index');
+    Route::post('reports/{report}/shares', [ReportShareController::class, 'store'])->middleware('project.can:reports.manage')->name('reports.shares.store');
+    Route::post('reports/{report}/shares/{share}/revoke', [ReportShareController::class, 'revoke'])->middleware('project.can:reports.manage')->name('reports.shares.revoke');
+    Route::post('reports/{report}/shares/{share}/renew', [ReportShareController::class, 'renew'])->middleware('project.can:reports.manage')->name('reports.shares.renew');
+    Route::get('reports/{report}/shares/{share}/logs', [ReportShareController::class, 'logs'])->middleware('project.can:reports.view')->name('reports.shares.logs');
 
-    Route::get('team', [ProjectMembershipController::class, 'index'])->name('team.index');
-    Route::post('team', [ProjectMembershipController::class, 'store'])->name('team.store');
-    Route::match(['put', 'patch'], 'team/{membership}', [ProjectMembershipController::class, 'update'])->name('team.update');
-    Route::delete('team/{membership}', [ProjectMembershipController::class, 'destroy'])->name('team.destroy');
+    /*
+     * TEAM-PROJECT-RBAC-001 — who may change WHO ELSE can see this client.
+     *
+     * These four decide a project's membership, which is the control that decides every other
+     * control. They checked the TENANT permissions `users.invite` / `users.update` / `users.remove`
+     * and nothing about the project — so an operator entitled to manage the agency's own staff could
+     * add themselves to any client's project and, from there, read its leads.
+     *
+     * `team.manage` on the project is the narrower question and the right one. The tenant check stays
+     * in the controller: adding a person to a project is still an act of user administration, and
+     * both must hold.
+     *
+     * Reading the roster is `team.manage` too rather than a softer capability. A list of who can see
+     * a client's customers is itself a disclosure about that client's arrangements.
+     */
+    Route::get('team', [ProjectMembershipController::class, 'index'])->middleware('project.can:team.manage')->name('team.index');
+    Route::post('team', [ProjectMembershipController::class, 'store'])->middleware('project.can:team.manage')->name('team.store');
+    Route::match(['put', 'patch'], 'team/{membership}', [ProjectMembershipController::class, 'update'])->middleware('project.can:team.manage')->name('team.update');
+    Route::delete('team/{membership}', [ProjectMembershipController::class, 'destroy'])->middleware('project.can:team.manage')->name('team.destroy');
 
     // Project-scoped views of tasks and notifications — switching projects changes these too.
-    Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
-    Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::get('tasks', [TaskController::class, 'index'])->middleware('project.can:tasks.view')->name('tasks.index');
+    Route::get('notifications', [NotificationController::class, 'index'])->middleware('project.can:dashboard.view')->name('notifications.index');
 });
