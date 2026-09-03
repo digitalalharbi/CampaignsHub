@@ -82,6 +82,29 @@ import { providerLabel } from '@/features/campaigns/labels'
 /** The six platforms this product unifies, in the product's own order (PLATFORM-ORDER-001). */
 const ANALYTICS_PLATFORMS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
 
+/**
+ * CAMPAIGN-OUTCOME-DIMENSION-001 — the actions a campaign can buy, for the filter control.
+ *
+ * The words are the enum's, and the server sends them on every campaign row as `outcome_label`, so
+ * nothing that RENDERS a row needs this map. It exists only because a filter has to offer the
+ * choices before any row has been fetched — and `unknown` is deliberately absent: «show me the
+ * campaigns whose action nobody stated» is a data-quality question, not a comparison, and offering
+ * it here would invite a reader to rank them against each other.
+ */
+const OUTCOME_LABEL: Record<string, { ar: string; en: string }> = {
+  native_lead_form: { ar: 'نموذج داخل المنصة', en: 'Native lead form' },
+  website_lead: { ar: 'نموذج على الموقع', en: 'Website lead' },
+  link_click: { ar: 'نقرة على الرابط', en: 'Link click' },
+  landing_page_visit: { ar: 'زيارة صفحة الهبوط', en: 'Landing page visit' },
+  phone_call: { ar: 'مكالمة هاتفية', en: 'Phone call' },
+  messaging: { ar: 'محادثة (حسب المنصة)', en: 'Messaging (as the platform counts it)' },
+  purchase: { ar: 'شراء', en: 'Purchase' },
+  app_install: { ar: 'تثبيت التطبيق', en: 'App install' },
+  attention: { ar: 'مشاهدة أو تفاعل', en: 'Views and engagement' },
+}
+
+const OUTCOME_KEYS = Object.keys(OUTCOME_LABEL)
+
 /** The objectives with a layout elsewhere in the product — the same six the dashboard offers. */
 import { accounts as countedAccounts, countedAr, countedEn, days as countedDays } from '@/lib/counted'
 import { useUi } from '@/stores/ui'
@@ -209,6 +232,13 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
   const [tab, setTab] = useUrlState('tab', 'performance') as [(typeof TABS)[number]['id'], (v: string) => void]
   const [providers, setProviders] = useUrlList('provider')
   const [campaignIds, setCampaignIds] = useUrlList('campaign')
+  /*
+   * CAMPAIGN-OUTCOME-DIMENSION-001 — the ACTION bought, as its own axis in the URL.
+   *
+   * A list rather than a single choice, because «forms or calls» is a real question and «leads that
+   * were not conversations» is the one an operator asks most.
+   */
+  const [outcomes, setOutcomes] = useUrlList('outcome')
   const [objectiveRaw, setObjective] = useUrlState('objective', 'all')
   const objective = objectiveRaw as CanonicalObjectiveKey | 'all'
 
@@ -251,8 +281,8 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
   const objectiveFilter = useMemo(() => rawObjectivesFor(objective), [objective])
 
   const filters: MetricFilters = useMemo(
-    () => ({ provider: providers, objective: objectiveFilter, campaign: campaignIds }),
-    [providers, objectiveFilter, campaignIds],
+    () => ({ provider: providers, objective: objectiveFilter, campaign: campaignIds, outcome: outcomes }),
+    [providers, objectiveFilter, campaignIds, outcomes],
   )
 
   /*
@@ -282,8 +312,14 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
     if (objective !== 'all') {
       out.push({ key: `objective:${objective}`, axis: ar ? 'الهدف' : 'Objective', label: canonicalObjectiveLabel(objective, ar ? 'ar' : 'en'), onRemove: () => setObjective('all') })
     }
+    outcomes.forEach((v) => out.push({
+      key: `outcome:${v}`,
+      axis: ar ? 'الإجراء' : 'Action',
+      label: OUTCOME_LABEL[v] ? (ar ? OUTCOME_LABEL[v].ar : OUTCOME_LABEL[v].en) : v,
+      onRemove: () => setOutcomes((prev) => prev.filter((x) => x !== v)),
+    }))
     return out
-  }, [providers, campaignIds, campaignSource, objective, ar])
+  }, [providers, campaignIds, campaignSource, objective, outcomes, setOutcomes, ar])
 
   /*
    * ANALYTICS-PROVENANCE-001 — the badge needs the summary, and the summary lives in the tab below.
@@ -379,6 +415,25 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
         />
 
         
+
+        {/*
+          CAMPAIGN-OUTCOME-DIMENSION-001 — «what did it buy», beside «what was it for».
+          Single-select in the bar and a list in the URL: one action is the question people ask, and
+          the chip row is where a second one is removed.
+        */}
+        <FilterSelect
+          label={ar ? 'الإجراء' : 'Action'}
+          value={outcomes[0] ?? 'all'}
+          testid={`${surface}-outcome`}
+          options={[
+            { value: 'all', label: ar ? 'كل الإجراءات' : 'All actions' },
+            ...OUTCOME_KEYS.map((key) => ({
+              value: key,
+              label: ar ? OUTCOME_LABEL[key].ar : OUTCOME_LABEL[key].en,
+            })),
+          ]}
+          onChange={(v) => setOutcomes(v === 'all' ? [] : [v])}
+        />
 
         <FilterSelect
           label={ar ? 'الهدف' : 'Objective'}

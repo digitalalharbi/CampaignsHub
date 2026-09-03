@@ -121,4 +121,116 @@ describe('the decision table inside one objective family', () => {
 
     expect(grid.queryByText('ROAS')).not.toBeInTheDocument()
   })
+
+  /**
+   * CAMPAIGN-OUTCOME-DIMENSION-001 — two actions are two tables, never one ranking.
+   *
+   * All four of these are `leads`. One collects a form inside the platform, one opens a WhatsApp
+   * conversation. Both report «cost per result» and the two costs mean different things: a
+   * conversation is cheap to start and a form is a person's details. Sorted together, the top row is
+   * decided by which action is cheaper to buy, and a media buyer moves money on it.
+   */
+  it('ranks each action on its own, and never across two', () => {
+    const bought = (name: string, outcome: string, spend: number): FamilyRow =>
+      ({ ...converted(name, spend, 10), outcome, campaign_id: name }) as unknown as FamilyRow
+
+    render(
+      <FamilyDecisionTable
+        family="leads"
+        campaigns={[
+          bought('Form A', 'native_lead_form', 900),
+          bought('Form B', 'native_lead_form', 400),
+          bought('Chat A', 'messaging', 700),
+          bought('Chat B', 'messaging', 300),
+        ]}
+        kpis={['spend', 'conversions']}
+        currency="SAR"
+        locale="en"
+        specs={SPECS}
+      />,
+    )
+
+    const tables = screen.getAllByRole('table')
+
+    expect(tables, 'two actions were ranked in one table').toHaveLength(2)
+
+    // And each table holds only its own action's campaigns.
+    const first = within(tables[0]).getAllByRole('row').map((r) => r.textContent ?? '')
+    expect(first.join(' ')).not.toMatch(/Chat/)
+  })
+
+  /**
+   * A campaign with nothing to be compared against is counted out loud, not dropped.
+   *
+   * A table that silently omits rows looks complete and is not — the failure this product keeps
+   * finding in other shapes.
+   */
+  it('says how many campaigns fell outside the comparison', () => {
+    const bought = (name: string, outcome: string): FamilyRow =>
+      ({ ...converted(name, 500, 10), outcome, campaign_id: name }) as unknown as FamilyRow
+
+    render(
+      <FamilyDecisionTable
+        family="leads"
+        campaigns={[
+          bought('Form A', 'native_lead_form'),
+          bought('Form B', 'native_lead_form'),
+          bought('Call', 'phone_call'),
+        ]}
+        kpis={['spend']}
+        currency="SAR"
+        locale="en"
+        specs={SPECS}
+      />,
+    )
+
+    expect(screen.getByTestId('objective-decision-aside-leads')).toHaveTextContent('1 campaign outside')
+  })
+
+  /**
+   * Two campaigns whose action the platform never stated are not thereby the same action.
+   *
+   * `unknown` is a statement that we cannot tell, and two of those together would be a comparison
+   * built on «we do not know» twice — which is the guess this dimension exists to refuse.
+   */
+  it('does not rank two campaigns whose action the platform never stated', () => {
+    const unstated = (name: string): FamilyRow =>
+      ({ ...converted(name, 500, 10), outcome: 'unknown', campaign_id: name }) as unknown as FamilyRow
+
+    render(
+      <FamilyDecisionTable
+        family="leads"
+        campaigns={[unstated('One'), unstated('Two')]}
+        kpis={['spend']}
+        currency="SAR"
+        locale="en"
+        specs={SPECS}
+      />,
+    )
+
+    expect(screen.queryAllByRole('table')).toHaveLength(0)
+    expect(screen.getByTestId('objective-decision-aside-leads')).toHaveTextContent('2 campaigns outside')
+  })
+
+  /**
+   * A payload that does not carry the dimension at all behaves as it always did.
+   *
+   * An ABSENT field is not an «unknown» answer: it is a caller that has not been wired, and treating
+   * it as a refusal would empty every such table and call it honesty.
+   */
+  it('is unchanged for a payload that carries no action at all', () => {
+    render(
+      <FamilyDecisionTable
+        family="sales"
+        campaigns={[converted('Eid', 900, 30), converted('Ramadan', 400, 10)]}
+        kpis={['spend']}
+        currency="SAR"
+        locale="en"
+        specs={SPECS}
+      />,
+    )
+
+    expect(screen.getAllByRole('table')).toHaveLength(1)
+    expect(screen.queryByTestId('objective-decision-aside-sales')).not.toBeInTheDocument()
+  })
 })

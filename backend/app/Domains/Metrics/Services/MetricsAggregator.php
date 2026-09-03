@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Services;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\CampaignOutcome;
 use App\Domains\Campaigns\Enums\CampaignStatus;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
+use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Services\CampaignOutcomeResolver;
 use App\Domains\Campaigns\Services\CreativeFunnel;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Metrics\Coverage\AggregateCoverage;
@@ -186,6 +189,18 @@ final class MetricsAggregator
     /** When set, every aggregation is scoped to campaigns with these objectives (objective-KPI filter). */
     private ?array $objectives = null;
 
+    /**
+     * When set, scoped to campaigns that bought one of these ACTIONS — CAMPAIGN-OUTCOME-DIMENSION-001.
+     *
+     * A separate axis from `objectives` because they answer different questions: the objective is
+     * what the client asked for, the action is what the media buyer chose. «Show me the lead work»
+     * and «show me what actually collected forms» are two filters, and a product with only the first
+     * cannot answer the second at all.
+     *
+     * @var list<string>|null
+     */
+    private ?array $outcomes = null;
+
     /** When set, every aggregation is scoped to these ad accounts (a report scope's account axis). */
     private ?array $accountIds = null;
 
@@ -260,6 +275,22 @@ final class MetricsAggregator
     {
         $clone = clone $this;
         $clone->objectives = $objectives === [] ? null : array_values($objectives);
+
+        return $clone;
+    }
+
+    /**
+     * Return a copy scoped to campaigns that bought these actions — CAMPAIGN-OUTCOME-DIMENSION-001.
+     *
+     * Empty means «no outcome filter», matching every other additive axis here. The fail-closed
+     * spelling for «nothing matches» is written where the filter is applied, not here.
+     *
+     * @param  list<string>  $outcomes
+     */
+    public function forOutcomes(array $outcomes): self
+    {
+        $clone = clone $this;
+        $clone->outcomes = $outcomes === [] ? null : array_values($outcomes);
 
         return $clone;
     }
@@ -407,6 +438,30 @@ final class MetricsAggregator
             $query->whereIn('daily_metrics.unified_campaign_id', function ($sub) {
                 $sub->select('id')->from('unified_campaigns')->whereIn('objective', $this->objectives);
             });
+        }
+
+        /*
+         * The action filter narrows on ids resolved in PHP — CAMPAIGN-OUTCOME-DIMENSION-001.
+         *
+         * The action is not a column: it is read from the provider's own destination inside
+         * `external_campaigns.raw`, which is jsonb spelt differently by every provider. Materialising
+         * it into a column would need a backfill and would go stale the moment a campaign's
+         * destination changed without a resync — so it is resolved from the stored payload and the
+         * matching ids are handed to the query.
+         *
+         * **Fail closed, and it does so on its own.** An empty match renders as `where 0 = 1` —
+         * verified against the builder rather than assumed, because the belief that an empty
+         * `whereIn` widens to every row is common and is the reason sentinel ids get written by
+         * hand. Here it is unnecessary: nothing matching means nothing shown, and
+         * `CampaignOutcomeFilterTest` holds that.
+         */
+        if ($this->outcomes !== null) {
+            $ids = array_keys(array_filter(
+                $this->outcomesByCampaign(),
+                fn (CampaignOutcome $outcome): bool => in_array($outcome->value, $this->outcomes, true),
+            ));
+
+            $query->whereIn('daily_metrics.unified_campaign_id', $ids);
         }
 
         return $query;
@@ -1084,9 +1139,48 @@ final class MetricsAggregator
         return round(($current - $previous) / $previous, 4);
     }
 
+    /**
+     * The action each campaign bought, keyed by unified campaign id — CAMPAIGN-OUTCOME-DIMENSION-001.
+     *
+     * One extra query rather than a join: the evidence lives in `external_campaigns.raw`, which is a
+     * jsonb column this breakdown has no other reason to carry, and a campaign can have several
+     * external campaigns behind it.
+     *
+     * **Disagreement resolves to `Unknown`.** A unified campaign whose Meta half collects a native
+     * form and whose Google half rings a phone did not buy one action, and naming either of them
+     * would put two different costs under one label — the exact averaging this dimension exists to
+     * stop, moved up a level.
+     *
+     * @return array<string, CampaignOutcome>
+     */
+    private function outcomesByCampaign(): array
+    {
+        $resolver = app(CampaignOutcomeResolver::class);
+        $out = [];
+
+        ExternalCampaign::query()
+            ->whereNotNull('unified_campaign_id')
+            ->get(['unified_campaign_id', 'objective', 'raw'])
+            ->each(function (ExternalCampaign $campaign) use ($resolver, &$out): void {
+                $key = (string) $campaign->unified_campaign_id;
+                $raw = is_array($campaign->raw) ? $campaign->raw : [];
+                $outcome = $resolver->resolve(
+                    $campaign->objective === null ? null : (string) $campaign->objective,
+                    $raw,
+                );
+
+                $out[$key] = array_key_exists($key, $out) && $out[$key] !== $outcome
+                    ? CampaignOutcome::Unknown
+                    : $outcome;
+            });
+
+        return $out;
+    }
+
     public function byCampaign(Carbon $from, Carbon $to, ?Carbon $prevFrom = null, ?Carbon $prevTo = null): array
     {
         $reported = $this->reportedKeysByCampaign($from, $to);
+        $outcomes = $this->outcomesByCampaign();
 
         /*
          * CAMPAIGN-INTELLIGENCE-HUB — the previous window is OPTIONAL, and its absence means «no
@@ -1163,6 +1257,29 @@ final class MetricsAggregator
                     ? ObjectiveFamily::Unknown->value
                     : (CampaignObjective::tryFrom((string) $r->objective)?->family() ?? ObjectiveFamily::Unknown)->value,
                 'objective_source' => $r->objective_source,
+                /*
+                 * CAMPAIGN-OUTCOME-DIMENSION-001 — what this campaign BOUGHT, beside what it is for.
+                 *
+                 * The family says «leads»; the outcome says whether that was a native form, a form on
+                 * the advertiser's site, a WhatsApp conversation or a phone call. Four actions, four
+                 * costs, all reported as «cost per result» and none comparable with any other — so a
+                 * surface that ranks on cost has to know which it is looking at.
+                 *
+                 * `unknown` where the provider did not say, which is a real answer:
+                 * `CampaignOutcome::comparableWith()` refuses it against everything, including
+                 * another unknown, so an unread campaign drops out of a comparison rather than
+                 * quietly joining one on a guess.
+                 */
+                'outcome' => ($outcome = $outcomes[(string) $r->campaign_id] ?? CampaignOutcome::Unknown)->value,
+                /*
+                 * The words travel with the value, because they belong to the enum.
+                 *
+                 * Mirroring them in TypeScript would put a second copy of «cost per conversation» a
+                 * commit away from drifting from the first, and the drift would be silent — a column
+                 * header naming an action the row did not buy.
+                 */
+                'outcome_label' => $outcome->label(),
+                'outcome_cost_label' => $outcome->costLabel(),
                 /*
                  * ENTITY-RELEVANCE-ORDERING-001 — two FACTS, not a verdict.
                  *
