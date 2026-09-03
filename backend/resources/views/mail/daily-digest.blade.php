@@ -23,20 +23,29 @@
         <tr>
             <td style="padding:14px 16px;">
                 <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px;">{{ $t['account_total'] }}</div>
+                {{--
+                  EMAIL-DASHBOARD-UX-001 — a KPI card carries its MOVEMENT.
+
+                  Three figures with no comparison told a reader what happened and nothing about
+                  whether it was normal. Each card now shows the change against the previous window
+                  of the same length, coloured by whether it is good news — and shows NO pill where
+                  the previous window was zero, because every rise from nothing is infinite.
+
+                  The cards come from the mailable, so their number varies: revenue is dropped
+                  entirely when nothing reported any, rather than printed as a zero a lead-generation
+                  account would read as a loss.
+                --}}
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
                     <tr>
-                        <td class="ch-kpi" width="33%" style="vertical-align:top;">
-                            <div style="font-size:12px; color:#5b6b68;">{{ $t['spend'] }}</div>
-                            <div style="font-size:20px; font-weight:800; color:#0f172a;" dir="ltr">{{ $totals['spend'] }}</div>
-                        </td>
-                        <td class="ch-kpi" width="33%" style="vertical-align:top;">
-                            <div style="font-size:12px; color:#5b6b68;">{{ $t['results'] }}</div>
-                            <div style="font-size:20px; font-weight:800; color:#0f172a;" dir="ltr">{{ $totals['conversions'] }}</div>
-                        </td>
-                        <td class="ch-kpi" width="33%" style="vertical-align:top;">
-                            <div style="font-size:12px; color:#5b6b68;">{{ $t['projects'] }}</div>
-                            <div style="font-size:20px; font-weight:800; color:#0f172a;" dir="ltr">{{ $totals['projects'] }}</div>
-                        </td>
+                        @foreach ($totals as $card)
+                            <td class="ch-kpi" width="{{ (int) (100 / max(1, count($totals))) }}%" style="vertical-align:top;">
+                                <div style="font-size:12px; color:#5b6b68;">{{ $card['label'] }}</div>
+                                <div style="font-size:20px; font-weight:800; color:#0f172a;" dir="ltr">{{ $card['value'] }}</div>
+                                @if ($card['change'])
+                                    <div style="font-size:11px; font-weight:700; color:{{ $tone[$card['tone']] }};" dir="ltr">{{ $card['change'] }}</div>
+                                @endif
+                            </td>
+                        @endforeach
                     </tr>
                 </table>
                 {{--
@@ -48,6 +57,35 @@
             </td>
         </tr>
     </table>
+
+    {{--
+      EMAIL-DASHBOARD-UX-001 — the two ends, before the middle.
+
+      A person reading on a phone at 8am wants what rose most and what fell most; a list of twelve
+      projects in alphabetical order is a list nobody reads to the bottom. Movement is measured on
+      RESULTS rather than spend, because spending more is not an improvement and a digest that
+      celebrates it rewards the wrong behaviour.
+
+      Absent entirely when there is only one project with a comparison: «best of one» is a ranking of
+      nothing, and printing it as a highlight teaches a reader that the highlights mean nothing.
+    --}}
+    @if (($movement['best'] ?? null) || ($movement['worst'] ?? null))
+        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px;">{{ $t['movement'] }}</div>
+        @if ($movement['best'])
+            <div style="margin-bottom:8px; padding:10px 12px; border-radius:10px; background-color:{{ $toneBg['good'] }};
+                        border-{{ $startSide }}:3px solid {{ $tone['good'] }};">
+                <div style="font-size:13px; font-weight:700; color:#0f172a;">{{ $movement['best']['name'] }} — {{ $t['best_move'] }}</div>
+                <div style="font-size:12px; color:{{ $tone['good'] }};" dir="ltr">{{ $movement['best']['text'] }}</div>
+            </div>
+        @endif
+        @if ($movement['worst'])
+            <div style="margin-bottom:16px; padding:10px 12px; border-radius:10px; background-color:{{ $toneBg['bad'] }};
+                        border-{{ $startSide }}:3px solid {{ $tone['bad'] }};">
+                <div style="font-size:13px; font-weight:700; color:#0f172a;">{{ $movement['worst']['name'] }} — {{ $t['worst_move'] }}</div>
+                <div style="font-size:12px; color:{{ $tone['bad'] }};" dir="ltr">{{ $movement['worst']['text'] }}</div>
+            </div>
+        @endif
+    @endif
 
     @foreach ($projects as $p)
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
