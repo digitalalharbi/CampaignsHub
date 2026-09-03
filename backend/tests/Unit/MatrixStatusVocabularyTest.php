@@ -77,6 +77,12 @@ final class MatrixStatusVocabularyTest extends TestCase
         'EXECUTIVE-OPS-DASHBOARD-001',
         'WHATSAPP-CONVERSATION-SOURCE-001',
         'GOVERNANCE-ANTILOSS-001',
+
+        // §57 — the client-facing presentation reset of 2026-09-01.
+        'CLIENT-FACING-PRESENTATION-001',
+        'CLIENT-DIAGNOSTIC-SEPARATION-001',
+        'TABLE-NUMERIC-ALIGNMENT-001',
+        'EMAIL-DASHBOARD-UX-001',
     ];
 
     public function test_every_row_states_a_canonical_status(): void
