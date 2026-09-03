@@ -15,6 +15,7 @@ use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -164,6 +165,66 @@ final class ReportScopeLifecycleTest extends TestCase
 
         $this->assertArrayHasKey('last_active_on', $rows[(string) $this->ranInJuly->id]);
         $this->assertNull($rows[(string) $this->ranInJuly->id]['last_active_on']);
+    }
+
+    /**
+     * REPORT-CREATION-UX-001 — the form the operator chose reaches the share.
+     *
+     * `ShareService` has stored a form since REPORT-PRODUCT-MODEL-001 and this endpoint never
+     * accepted one, so every live link an operator built came out as whatever the default happened
+     * to be. «The dashboard» and «the dashboard with every campaign and platform beneath it» are two
+     * different documents to send a client, and which one they received was decided by nobody.
+     */
+    public function test_the_live_link_stores_the_form_the_operator_asked_for(): void
+    {
+        $share = $this->createLiveLink(['form' => 'detailed']);
+
+        $this->assertSame('detailed', $share->form);
+    }
+
+    /**
+     * Null still means «whatever the report is».
+     *
+     * That is what every link created before this meant, and reinterpreting them would change what
+     * an existing link shows to a client who already has it.
+     */
+    public function test_a_link_that_names_no_form_keeps_meaning_what_it_meant(): void
+    {
+        $this->assertNull($this->createLiveLink([])->form);
+    }
+
+    /** A form outside the two is refused rather than silently stored. */
+    public function test_a_form_the_product_does_not_have_is_refused(): void
+    {
+        $this->actingAs($this->owner, 'sanctum')
+            ->postJson("/api/v1/projects/{$this->project->id}/reports/live", [
+                'name' => 'X', 'from' => '2026-07-01', 'to' => '2026-07-31', 'form' => 'wall_chart',
+            ])
+            ->assertStatus(422);
+    }
+
+    /** The two switches no control ever sent — revenue, and whether the client may download. */
+    public function test_the_link_carries_the_withholding_and_download_choices(): void
+    {
+        $share = $this->createLiveLink(['hide_revenue' => true, 'allow_download' => true]);
+
+        $this->assertTrue((bool) $share->hide_revenue);
+        $this->assertTrue((bool) $share->allow_download);
+    }
+
+    /** @param array<string,mixed> $over */
+    private function createLiveLink(array $over): ReportShare
+    {
+        $id = $this->actingAs($this->owner, 'sanctum')
+            ->postJson("/api/v1/projects/{$this->project->id}/reports/live", array_merge([
+                'name' => 'Client link',
+                'from' => '2026-07-01',
+                'to' => '2026-07-31',
+            ], $over))
+            ->assertCreated()
+            ->json('data.share_id');
+
+        return ReportShare::withoutGlobalScopes()->findOrFail($id);
     }
 
     /** @return list<array<string,mixed>> */

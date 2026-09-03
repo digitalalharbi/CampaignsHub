@@ -115,4 +115,86 @@ describe('the in-place ad preview', () => {
 
     expect(screen.getByTestId('ad-preview-dialog-details')).toHaveAttribute('href', '/app/content/cr-1')
   })
+
+  /**
+   * CONTENT-DETAIL-MODAL-001 — a film plays, in the library too.
+   *
+   * This dialog drew every ad as a still: a video showed its poster frame with no way to play it,
+   * while the content library and the shared report both played it. Same ad, three surfaces, two
+   * behaviours — and a poster frame of a video is a plausible-looking picture of the wrong thing, so
+   * nothing on screen said which one a reader was looking at.
+   */
+  it('plays a video rather than showing its poster frame', () => {
+    const { container } = renderWithProviders(
+      <AdPreviewDialog
+        creative={creative({ preview: preview({ kind: 'video', video_url: 'https://cdn.example/ad.mp4' }) })}
+        locale="en"
+        onClose={() => {}}
+      />,
+    )
+
+    expect(container.querySelector('video')).toBeInTheDocument()
+    expect(screen.queryByTestId('ad-preview-dialog-poster')).not.toBeInTheDocument()
+  })
+
+  /** A carousel is paged, not reduced to whichever card came first. */
+  it('pages a carousel instead of showing one card of it', () => {
+    renderWithProviders(
+      <AdPreviewDialog
+        creative={creative({
+          preview: preview({
+            kind: 'carousel',
+            cards_reported: true,
+            cards: [
+              { index: 0, kind: 'image', image_url: 'https://cdn.example/1.jpg', video_url: null, thumbnail_url: null, headline: 'One' },
+              { index: 1, kind: 'image', image_url: 'https://cdn.example/2.jpg', video_url: null, thumbnail_url: null, headline: 'Two' },
+            ],
+          } as Partial<CreativePreview>),
+        })}
+        locale="en"
+        onClose={() => {}}
+      />,
+    )
+
+    expect(screen.getByTestId('creative-carousel')).toBeInTheDocument()
+  })
+
+  /** A modal a keyboard cannot leave is a trap, and this one opens from a grid people tab through. */
+  it('closes on Escape', () => {
+    const onClose = vi.fn()
+
+    renderWithProviders(<AdPreviewDialog creative={creative()} locale="en" onClose={onClose} />)
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  /**
+   * What the ad was bought FOR, beside the figures chosen by it.
+   *
+   * `headline_metrics` are picked by the objective, so «CTR 0.4%» read without knowing the ad was
+   * bought for reach is a judgement against a target nobody set.
+   */
+  it('says which objective the ad was bought for, and where it sits', () => {
+    renderWithProviders(
+      <AdPreviewDialog
+        creative={creative({ objective: 'reach', ad_set_id: 'as-9' })}
+        locale="en"
+        onClose={() => {}}
+      />,
+    )
+
+    expect(screen.getByText('Objective')).toBeInTheDocument()
+    expect(screen.getByText('Ad set')).toBeInTheDocument()
+    expect(screen.getByText('as-9')).toBeInTheDocument()
+  })
+
+  /** An objective the campaign never recorded is absent, not «unknown». */
+  it('says nothing about an objective nobody recorded', () => {
+    renderWithProviders(
+      <AdPreviewDialog creative={creative({ objective: null })} locale="en" onClose={() => {}} />,
+    )
+
+    expect(screen.queryByText('Objective')).not.toBeInTheDocument()
+  })
 })
