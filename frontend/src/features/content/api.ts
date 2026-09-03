@@ -40,7 +40,15 @@ export interface CreativeCardSlide {
 export interface CreativePreview {
   /** `available` renders; the other three explain themselves and never fabricate an image. */
   state: 'available' | 'withheld' | 'expired' | 'unavailable'
-  kind: 'image' | 'video' | 'carousel' | 'other'
+  /**
+   * CONTENT-PREVIEW-SHAPES-001 — the shapes a real ad takes, including the two that have no single
+   * asset to show.
+   *
+   * `collection` is a hero over a grid of tiles; `catalog` is composed per product at delivery and
+   * has no fixed creative at all. Both used to arrive as `other` and be rendered as a still or as
+   * «no media», and neither is true of them.
+   */
+  kind: 'image' | 'video' | 'carousel' | 'collection' | 'catalog' | 'other'
   image_url: string | null
   video_url: string | null
   thumbnail_url: string | null
