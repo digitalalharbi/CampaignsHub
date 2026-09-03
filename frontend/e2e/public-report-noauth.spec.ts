@@ -44,7 +44,14 @@ test.describe('a client with a link and no account', () => {
 
       // And it is the REPORT, not a shell: real figures, the platform split, the funnel, the filters.
       await expect(report.locator('.tnum').first()).toContainText(/SAR/)
-      await expect(page.getByTestId('live-freshness')).toBeVisible()
+      /*
+       * `live-freshness` is no longer asserted here — CLIENT-DIAGNOSTIC-SEPARATION-001.
+       *
+       * It used to be the per-platform sync block, always rendered. It is now the sentence naming a
+       * platform missing from the figures, and it is ABSENT when none is — so requiring it here
+       * would be requiring the demo scope to have a broken connection. The range control is what
+       * this case is actually about: the report is interactive without a session.
+       */
       await expect(page.getByTestId('live-range-7')).toBeVisible()
     })
   }
