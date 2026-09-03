@@ -330,7 +330,23 @@ final class CreativePresenter
     {
         $format = strtolower((string) $creative->format);
 
+        /*
+         * CONTENT-PREVIEW-SHAPES-001 — the shapes a real ad actually takes.
+         *
+         * Two more, and both were reading as something they are not. A COLLECTION ad is a hero asset
+         * over a grid of tiles: rendering the hero alone shows a reader one sixth of the ad and calls
+         * it the ad. A CATALOG ad — Meta's dynamic product ads, Snapchat's and TikTok's equivalents —
+         * has no single creative at all: the platform composes one per product at delivery, so there
+         * is nothing to show and «no media» was the wrong sentence, because it implies something is
+         * missing rather than that the shape has no fixed asset.
+         *
+         * Ordered before the generic `image`/`video` contains-checks: a format string like
+         * «collection_video» names a collection whose hero is a film, and the collection is the more
+         * specific truth.
+         */
         return match (true) {
+            str_contains($format, 'collection') => 'collection',
+            str_contains($format, 'catalog') || str_contains($format, 'dynamic_product') || str_contains($format, 'dpa') => 'catalog',
             str_contains($format, 'video') => 'video',
             str_contains($format, 'carousel') => 'carousel',
             str_contains($format, 'image') => 'image',
