@@ -485,8 +485,15 @@ final class CreativeRows
             'providers' => $distinct('provider'),
             'formats' => $distinct('format'),
             'statuses' => $distinct('status'),
-            // The three the UI groups by, in the same vocabulary `CreativePresenter::kind()` uses.
-            'kinds' => ['image', 'video', 'carousel'],
+            /*
+             * The shapes the UI groups by, in the same vocabulary `CreativePresenter::kind()` uses.
+             *
+             * CONTENT-PREVIEW-SHAPES-001 added collection and catalog. Listing them here is not
+             * cosmetic: a filter that cannot name a shape is a filter that hides every ad of it, and
+             * an operator would conclude the account has no collection ads rather than that the
+             * picker has no word for them.
+             */
+            'kinds' => ['image', 'video', 'carousel', 'collection', 'catalog'],
             'campaigns' => $campaigns->map(static fn ($c): array => [
                 'id' => (string) $c->id, 'name' => $c->name, 'objective' => $c->objective,
             ])->all(),
