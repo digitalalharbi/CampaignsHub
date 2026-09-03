@@ -39,13 +39,27 @@ test.describe('a client opens their live report', () => {
     await page.goto(URL)
     await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20000 })
 
-    const before = await page.getByTestId('live-report').locator('.tnum').first().innerText()
+    /*
+     * The KPI block, not «whatever `.tnum` comes first in the document».
+     *
+     * CLIENT-FACING-PRESENTATION-001 moved the objective split above the platform and campaign
+     * charts, and the first `.tnum` on the page moved with it — onto a cost that can legitimately
+     * read the same in both windows, or «—» in both. The test then failed for a layout change while
+     * claiming the filter was dead.
+     *
+     * The claim is «the figures update», so it is asserted on the figures: the executive KPI cards,
+     * which are the headline numbers by definition and are what a reader watches when they change
+     * the period.
+     */
+    const headline = page.getByTestId('live-kpis').locator('.tnum').first()
+
+    const before = await headline.innerText()
     await page.evaluate(() => { (window as unknown as { __kept: string }).__kept = 'survived' })
 
     await page.getByTestId('live-range-7').click()
 
     await expect
-      .poll(async () => page.getByTestId('live-report').locator('.tnum').first().innerText(), { timeout: 20000 })
+      .poll(async () => headline.innerText(), { timeout: 20000 })
       .not.toBe(before)
 
     expect(
@@ -58,12 +72,14 @@ test.describe('a client opens their live report', () => {
     await page.goto(URL)
     await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20000 })
 
-    const all = await page.getByTestId('live-report').locator('.tnum').first().innerText()
+    // The headline figures, for the same reason as the period test above: the composition changed,
+    // and «the first `.tnum` in the document» is not what «the figures» means.
+    const headline = page.getByTestId('live-kpis').locator('.tnum').first()
+
+    const all = await headline.innerText()
     await page.getByTestId('live-platform-meta').click()
 
-    await expect
-      .poll(async () => page.getByTestId('live-report').locator('.tnum').first().innerText(), { timeout: 20000 })
-      .not.toBe(all)
+    await expect.poll(async () => headline.innerText(), { timeout: 20000 }).not.toBe(all)
   })
 
   /**
