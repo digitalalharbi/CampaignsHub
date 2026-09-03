@@ -425,11 +425,25 @@ describe('SharedCreativeSection', () => {
     expect(screen.queryByText('selected')).toBeNull()
   })
 
-  /** The section says when it last synced, so «live» is never inferred from its presence. */
-  it('states its own freshness', async () => {
+  /**
+   * CLIENT-DIAGNOSTIC-SEPARATION-001 — the sync strip is GONE from the client's link.
+   *
+   * This asserted the opposite: that the section states when it last synced. It was a reasonable
+   * rule for an operator surface and the wrong one here — a client reading their own ad report was
+   * shown our sync clock, a sync date per platform, and the raw data-quality map
+   * («missing_previews: 3»). None of the three is a fact about their campaign and none can be acted
+   * on, so the assertion is inverted rather than deleted: the absence is the requirement now.
+   *
+   * What a client MUST still be told — that a platform is missing from their figures — is said on
+   * the live report in their own vocabulary, and `clientVocabulary.test.ts` holds the line.
+   */
+  it('shows the client no sync clock and no data-quality map', async () => {
     render('detailed')
 
-    await screen.findByText('Last sync:')
+    await screen.findByTestId('shared-creative-library')
+
+    expect(screen.queryByText('Last sync:')).toBeNull()
+    expect(screen.queryByText(/missing_previews/)).toBeNull()
   })
 
   /** Arabic renders the Arabic copy and the same structure. */

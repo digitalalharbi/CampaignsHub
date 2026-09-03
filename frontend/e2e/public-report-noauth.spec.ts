@@ -44,7 +44,14 @@ test.describe('a client with a link and no account', () => {
 
       // And it is the REPORT, not a shell: real figures, the platform split, the funnel, the filters.
       await expect(report.locator('.tnum').first()).toContainText(/SAR/)
-      await expect(page.getByTestId('live-freshness')).toBeVisible()
+      /*
+       * `live-freshness` is no longer asserted here — CLIENT-DIAGNOSTIC-SEPARATION-001.
+       *
+       * It used to be the per-platform sync block, always rendered. It is now the sentence naming a
+       * platform missing from the figures, and it is ABSENT when none is — so requiring it here
+       * would be requiring the demo scope to have a broken connection. The range control is what
+       * this case is actually about: the report is interactive without a session.
+       */
       await expect(page.getByTestId('live-range-7')).toBeVisible()
     })
   }
@@ -61,12 +68,18 @@ test.describe('a client with a link and no account', () => {
 
     await context.clearCookies()
 
-    const before = await page.getByTestId('live-report').locator('.tnum').first().innerText()
+    /*
+     * The KPI block rather than «the first `.tnum` anywhere» — same reason as in
+     * `live-shared-report.spec.ts`: the composition changed under
+     * CLIENT-FACING-PRESENTATION-001, and a test whose subject is «the filters still work» should
+     * watch the headline figures rather than whichever number happens to be highest in the document.
+     */
+    const headline = page.getByTestId('live-kpis').locator('.tnum').first()
+
+    const before = await headline.innerText()
     await page.getByTestId('live-range-7').click()
 
-    await expect
-      .poll(async () => page.getByTestId('live-report').locator('.tnum').first().innerText(), { timeout: 20000 })
-      .not.toBe(before)
+    await expect.poll(async () => headline.innerText(), { timeout: 20000 }).not.toBe(before)
 
     await expect(page.locator('body')).not.toHaveText(SESSION_COPY)
   })

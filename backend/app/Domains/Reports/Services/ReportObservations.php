@@ -466,9 +466,20 @@ final class ReportObservations
             'reveals' => [],
             'value' => (string) count($missing),
             'change' => null,
-            'title' => 'مؤشرات لا ترسلها المنصات المرتبطة',
+            /*
+             * CLIENT-DIAGNOSTIC-SEPARATION-001 — said in the reader's terms, not in ours.
+             *
+             * This read «مؤشرات لا ترسلها المنصات المرتبطة» — «the CONNECTED platforms», which is our
+             * word for our plumbing. A client does not know which platforms are «connected»; they
+             * know which platforms they buy on, and this note travels into their report and their
+             * email.
+             *
+             * The fact is unchanged and still worth saying: a blank must not be read as a zero. What
+             * changed is that the sentence is now about their figures rather than about our wiring.
+             */
+            'title' => 'مؤشرات لم تصل لهذه الفترة',
             'detail' => sprintf(
-                'لا تتوفر بيانات %s من المنصات المرتبطة خلال هذه الفترة، ولذلك تظهر بلا قيمة بدلًا من صفر.',
+                'لم تصل بيانات %s خلال هذه الفترة، ولذلك تظهر بلا قيمة بدلًا من صفر — «لم يُبلَّغ عنه» و«صفر» ليسا الشيء نفسه.',
                 $this->arabicList($missing),
             ),
         ]];

@@ -137,11 +137,16 @@ final class DailyDigestMail extends Mailable
                 // and the one that was wrong resolved anyway, through a redirect (MAIL-008).
                 'urls' => MailLinks::footer(),
                 't' => $this->copy($ar),
-                'totals' => [
-                    'spend' => $p->money($this->digest['totals']['spend'] ?? null),
-                    'conversions' => number_format((float) ($this->digest['totals']['conversions'] ?? 0)),
-                    'projects' => (string) ($this->digest['totals']['projects'] ?? 0),
-                ],
+                'totals' => $this->accountCards($p, $ar),
+                /*
+                  EMAIL-DASHBOARD-UX-001 — the two rows a reader acts on, before the project list.
+
+                  The reference standard the owner supplied leads with one green «best improvement»
+                  and one red «sharpest decline», because a person reading on a phone at 8am wants
+                  the two ends and not the middle. A list of twelve projects in alphabetical order is
+                  a list nobody reads to the bottom.
+                */
+                'movement' => $this->movement($p, $ar),
                 'projects' => $this->projects($p, $ar, $app),
                 'slot' => view('mail.daily-digest', [
                     'font' => MailDesign::font($ar),
@@ -149,11 +154,8 @@ final class DailyDigestMail extends Mailable
                     't' => $this->copy($ar),
                     'endSide' => $ar ? 'left' : 'right',
                     'startSide' => $ar ? 'right' : 'left',
-                    'totals' => [
-                        'spend' => $p->money($this->digest['totals']['spend'] ?? null),
-                        'conversions' => number_format((float) ($this->digest['totals']['conversions'] ?? 0)),
-                        'projects' => (string) ($this->digest['totals']['projects'] ?? 0),
-                    ],
+                    'totals' => $this->accountCards($p, $ar),
+                    'movement' => $this->movement($p, $ar),
                     'projects' => $this->projects($p, $ar, $app),
                 ])->render(),
             ],
@@ -243,6 +245,105 @@ final class DailyDigestMail extends Mailable
             'best' => $creatives['best'] ?? null,
             'declining' => array_slice((array) ($creatives['declining'] ?? []), 0, 2),
             'fatigued' => array_slice((array) ($creatives['fatigued'] ?? []), 0, 2),
+        ];
+    }
+
+    /**
+     * The account KPI cards, each with its movement — EMAIL-DASHBOARD-UX-001.
+     *
+     * Four rather than three, and every one of them carries the change against the previous window
+     * of the same length. «41,923 ر.س» tells a reader what was spent and nothing about whether that
+     * is the usual amount; the movement is the half that makes it a fact they can act on.
+     *
+     * Revenue is the fourth card and is DROPPED when nothing reported any — a card reading «0» for a
+     * lead-generation account is a measurement of nothing, and four cards where one is always zero
+     * teaches a reader to read three.
+     *
+     * A movement of null renders as no pill at all: every rise from a zero previous window is
+     * infinite, and «up ∞%» is not a movement anybody set a threshold on.
+     *
+     * @return list<array{label: string, value: string, change: string|null, tone: string}>
+     */
+    private function accountCards(DigestPresenter $p, bool $ar): array
+    {
+        $totals = $this->digest['totals'] ?? [];
+        $change = $totals['change'] ?? [];
+
+        $pill = static function (?float $delta, bool $lowerIsBetter = false): array {
+            if ($delta === null) {
+                return [null, 'neutral'];
+            }
+
+            $arrow = $delta >= 0 ? '▲' : '▼';
+            $good = $lowerIsBetter ? $delta < 0 : $delta > 0;
+
+            return [$arrow.' '.number_format(abs($delta) * 100, 1).'%', abs($delta) < 0.005 ? 'neutral' : ($good ? 'good' : 'bad')];
+        };
+
+        [$spendChange, $spendTone] = $pill($change['spend'] ?? null);
+        [$resultChange, $resultTone] = $pill($change['conversions'] ?? null);
+        [$revenueChange, $revenueTone] = $pill($change['revenue'] ?? null);
+
+        $cards = [
+            ['label' => $ar ? 'الإنفاق' : 'Spend', 'value' => $p->headline($totals['spend'] ?? null), 'change' => $spendChange, 'tone' => $spendTone],
+            ['label' => $ar ? 'النتائج' : 'Results', 'value' => number_format((float) ($totals['conversions'] ?? 0)), 'change' => $resultChange, 'tone' => $resultTone],
+            ['label' => $ar ? 'المشاريع' : 'Projects', 'value' => (string) ($totals['projects'] ?? 0), 'change' => null, 'tone' => 'neutral'],
+        ];
+
+        if ((float) ($totals['revenue'] ?? 0) > 0) {
+            $cards[] = ['label' => $ar ? 'الإيراد' : 'Revenue', 'value' => $p->headline($totals['revenue'] ?? null), 'change' => $revenueChange, 'tone' => $revenueTone];
+        }
+
+        return $cards;
+    }
+
+    /**
+     * The strongest rise and the sharpest fall across the projects — EMAIL-DASHBOARD-UX-001.
+     *
+     * Movement is measured on RESULTS rather than on spend: spending more is not an improvement, and
+     * a digest that celebrates it is one that rewards the wrong behaviour. A project with no
+     * previous figure has no movement, not a movement of zero.
+     *
+     * Both are null when there is only one project with a comparison — «best of one» is a ranking of
+     * nothing, and printing it as a highlight is how a reader learns the highlights mean nothing.
+     *
+     * @return array{best: array{name: string, text: string}|null, worst: array{name: string, text: string}|null}
+     */
+    private function movement(DigestPresenter $p, bool $ar): array
+    {
+        $moved = [];
+
+        foreach ($this->digest['projects'] ?? [] as $block) {
+            $delta = $block['change']['conversions'] ?? null;
+
+            if ($delta === null) {
+                continue;
+            }
+
+            $moved[] = ['name' => (string) ($block['project_name'] ?? ''), 'delta' => (float) $delta];
+        }
+
+        if (count($moved) < 2) {
+            return ['best' => null, 'worst' => null];
+        }
+
+        usort($moved, static fn (array $a, array $b): int => $b['delta'] <=> $a['delta']);
+
+        $say = static fn (array $row): array => [
+            'name' => $row['name'],
+            'text' => ($ar ? 'النتائج ' : 'Results ')
+                .($row['delta'] >= 0 ? '▲ ' : '▼ ')
+                .number_format(abs($row['delta']) * 100, 1).'%',
+        ];
+
+        $best = $moved[0];
+        $worst = $moved[count($moved) - 1];
+
+        return [
+            // Only a real rise is a rise, and only a real fall is a fall. A «best» that went down is
+            // the least bad, and calling it the best is the kind of cheerfulness nobody believes.
+            'best' => $best['delta'] > 0 ? $say($best) : null,
+            'worst' => $worst['delta'] < 0 ? $say($worst) : null,
         ];
     }
 
@@ -389,12 +490,41 @@ final class DailyDigestMail extends Mailable
     }
 
     /** @param  array<string,mixed>  $freshness */
+    /**
+     * How complete the figures are, in the reader's terms — CLIENT-DIAGNOSTIC-SEPARATION-001.
+     *
+     * This printed «آخر مزامنة: 2026-08-18 23:59». A digest goes to whoever subscribed to it,
+     * including a client's own management, and a sync clock is a fact about our plumbing: they
+     * cannot act on it, cannot ask anyone to move it, and cannot tell from it whether the numbers
+     * above are wrong.
+     *
+     * The fact underneath is still theirs and is still said — a platform missing from the figures
+     * is a total that understates — but as a statement about their report rather than about us. An
+     * empty string where everything arrived: a line saying «all sources are current» is one a reader
+     * learns to skip, including on the day it says something else.
+     */
     private function freshness(bool $ar, array $freshness): string
     {
-        $at = $freshness['last_sync_at'] ?? null;
-        $when = $at === null ? ($ar ? 'لم تتم بعد' : 'not yet') : substr((string) $at, 0, 16);
+        $failing = array_values(array_filter(
+            (array) ($freshness['failing'] ?? []),
+            static fn ($row): bool => is_array($row) && ($row['name'] ?? null) !== null,
+        ));
 
-        return ($ar ? 'آخر مزامنة: ' : 'Last sync: ').$when;
+        if ($failing === [] && ! (bool) ($freshness['sync_failed'] ?? false)) {
+            return '';
+        }
+
+        if ($failing === []) {
+            return $ar
+                ? 'بعض المنصات لم تُرسل بيانات هذه الفترة، وقد تكون الأرقام أقل من الواقع.'
+                : 'Some platforms sent no data for this period, so the figures may understate.';
+        }
+
+        $names = implode($ar ? '، ' : ', ', array_map(static fn (array $row): string => (string) $row['name'], $failing));
+
+        return $ar
+            ? "الأرقام لا تشمل: {$names}."
+            : "The figures do not include: {$names}.";
     }
 
     /**
@@ -508,6 +638,9 @@ final class DailyDigestMail extends Mailable
             'fatigued' => 'يحتاج تجديدًا',
             'budget' => 'الميزانية',
             'notes' => 'ما يستحق الانتباه',
+            'movement' => 'أبرز التحرّكات',
+            'best_move' => 'أفضل تحسّن',
+            'worst_move' => 'أكبر تراجع',
             'follow_up' => 'متابعة العملاء المحتملين',
             'by_owner' => 'حسب المسؤول',
             'owner' => 'المسؤول',
@@ -541,6 +674,9 @@ final class DailyDigestMail extends Mailable
             'fatigued' => 'Needs refreshing',
             'budget' => 'Budget',
             'notes' => 'Worth your attention',
+            'movement' => 'Biggest moves',
+            'best_move' => 'best improvement',
+            'worst_move' => 'sharpest decline',
             'follow_up' => 'Lead follow-up',
             'by_owner' => 'By owner',
             'owner' => 'Owner',

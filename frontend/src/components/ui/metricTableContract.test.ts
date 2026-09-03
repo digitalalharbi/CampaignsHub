@@ -14,6 +14,15 @@ import { describe, expect, it } from 'vitest'
  * The worst of them was in the document a CLIENT keeps: the shared creative comparison left-aligned
  * every figure and could not be sorted at all.
  *
+ * ## TABLE-NUMERIC-ALIGNMENT-001 raised the bar this guard holds
+ *
+ * The owner has now reported the same presentation defect five times, and the instruction is that it
+ * is not to be patched a sixth. So two things changed here. The two client-facing report surfaces —
+ * the deck a client reads and the funnel inside their creative detail — came OFF this list, because
+ * the document the client keeps is where the defect was doing its damage. And every remaining
+ * «pending» was replaced with the actual obstacle, because a list of reasons is a plan and a list of
+ * «pending» is a list nobody can act on.
+ *
  * ## Why an exemption list rather than a clean rule
  *
  * Seventeen surfaces cannot be migrated in one change without a rewrite nobody could review. So the
@@ -42,20 +51,18 @@ function withoutComments(source: string): string {
 
 /** Surfaces that still render their own analytical table, and why each is still waiting. */
 const EXEMPT: Record<string, string> = {
-  'src/features/reports/ReportsPage.tsx': 'a list of reports, not an analytical table',
-  'src/features/reports/InteractiveReport.tsx': 'the deck lays out to a fixed slide, and its own layout gate measures it',
-  'src/features/reports/PrintDocument.tsx': 'the printed page has no sort control and cannot scroll sideways',
-  'src/features/reports/SharedCreativeSection.tsx': 'the funnel ladder inside the creative detail; the comparison table is migrated',
-  'src/features/content/CreativesPage.tsx': 'the library grid, pending CONTENT-DETAIL-MODAL-001',
-  'src/features/content/CreativePulseSection.tsx': 'says in its own note that it hand-rolls one; pending',
-  'src/features/content/CreativeGroupsPage.tsx': 'pending',
-  'src/features/content/CreativeDetailPage.tsx': 'pending',
-  'src/features/content/CreativeCompare.tsx': 'pending',
-  'src/features/campaigns/CampaignCommandCenter.tsx': 'pending',
-  'src/features/campaigns/CampaignsPage.tsx': 'pending',
-  'src/features/campaigns/CampaignDepthTabs.tsx': 'pending',
-  'src/features/campaigns/overview/UnifiedCampaignOverview.tsx': 'pending',
-  'src/features/campaigns/CampaignComparison.tsx': 'pending',
+  'src/features/reports/ReportsPage.tsx': 'a list of reports and a share access log — identifiers, times and controls, with nothing a reader compares across rows. Out of scope by KIND, not waiting to be migrated',
+  'src/features/reports/PrintDocument.tsx': 'a printed page has no sort control, no hover and no scroller, and those three are most of what the primitive is. Out of scope by kind',
+  'src/features/content/CreativePulseSection.tsx': 'transposed — metrics down the side, creative type across. The primitive has no shape for that yet; the file already applies the centring rule by hand and says so in its own note',
+  'src/features/content/CreativeCompare.tsx': 'transposed, like the pulse table',
+  'src/features/campaigns/CampaignComparison.tsx': 'transposed, like the pulse table',
+  'src/features/content/CreativesPage.tsx': 'the list view of a grid: selection checkboxes and media previews per row',
+  'src/features/content/CreativeGroupsPage.tsx': 'grouped rows with a media thumbnail column',
+  'src/features/content/CreativeDetailPage.tsx': 'three tables, one of which is a per-day series that wants a chart rather than a migration',
+  'src/features/campaigns/CampaignCommandCenter.tsx': 'inline editing per row — the cells are controls, and the spec API needs an editable kind first',
+  'src/features/campaigns/CampaignsPage.tsx': 'row selection and bulk actions live inside the table',
+  'src/features/campaigns/CampaignDepthTabs.tsx': 'nested expansion rows, which the primitive does not model',
+  'src/features/campaigns/overview/UnifiedCampaignOverview.tsx': 'per-row sparklines and a drag handle',
 }
 
 const handRolled = () =>
@@ -116,5 +123,16 @@ describe('the analytics tabs use the product’s table', () => {
     expect(source).toContain("from '@/components/ui/MetricTable'")
     expect(source).toContain('<MetricTable')
     expect(Object.keys(EXEMPT)).not.toContain(path)
+  })
+
+  /**
+   * The debt is a number, and it is only allowed to fall.
+   *
+   * `has no surface outside the primitive that is not written down` stops the list growing by
+   * accident; this stops it growing on purpose without somebody editing the ceiling and being asked
+   * why.
+   */
+  it('has not grown', () => {
+    expect(Object.keys(EXEMPT).length).toBeLessThanOrEqual(12)
   })
 })

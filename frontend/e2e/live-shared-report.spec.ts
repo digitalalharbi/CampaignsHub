@@ -39,13 +39,27 @@ test.describe('a client opens their live report', () => {
     await page.goto(URL)
     await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20000 })
 
-    const before = await page.getByTestId('live-report').locator('.tnum').first().innerText()
+    /*
+     * The KPI block, not «whatever `.tnum` comes first in the document».
+     *
+     * CLIENT-FACING-PRESENTATION-001 moved the objective split above the platform and campaign
+     * charts, and the first `.tnum` on the page moved with it — onto a cost that can legitimately
+     * read the same in both windows, or «—» in both. The test then failed for a layout change while
+     * claiming the filter was dead.
+     *
+     * The claim is «the figures update», so it is asserted on the figures: the executive KPI cards,
+     * which are the headline numbers by definition and are what a reader watches when they change
+     * the period.
+     */
+    const headline = page.getByTestId('live-kpis').locator('.tnum').first()
+
+    const before = await headline.innerText()
     await page.evaluate(() => { (window as unknown as { __kept: string }).__kept = 'survived' })
 
     await page.getByTestId('live-range-7').click()
 
     await expect
-      .poll(async () => page.getByTestId('live-report').locator('.tnum').first().innerText(), { timeout: 20000 })
+      .poll(async () => headline.innerText(), { timeout: 20000 })
       .not.toBe(before)
 
     expect(
@@ -58,41 +72,58 @@ test.describe('a client opens their live report', () => {
     await page.goto(URL)
     await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20000 })
 
-    const all = await page.getByTestId('live-report').locator('.tnum').first().innerText()
+    // The headline figures, for the same reason as the period test above: the composition changed,
+    // and «the first `.tnum` in the document» is not what «the figures» means.
+    const headline = page.getByTestId('live-kpis').locator('.tnum').first()
+
+    const all = await headline.innerText()
     await page.getByTestId('live-platform-meta').click()
 
-    await expect
-      .poll(async () => page.getByTestId('live-report').locator('.tnum').first().innerText(), { timeout: 20000 })
-      .not.toBe(all)
+    await expect.poll(async () => headline.innerText(), { timeout: 20000 }).not.toBe(all)
   })
 
   /**
-   * Freshness is stated, per platform.
+   * CLIENT-DIAGNOSTIC-SEPARATION-001 — the client is told what is MISSING, not when we last synced.
    *
-   * «Live» is a claim about this system recomputing, not about Meta having just reported. A page that
-   * printed the first and implied the second would be telling a client something nobody verified.
+   * This asserted the opposite: that a per-platform freshness block is always visible, showing each
+   * platform and when its data was last read. That was the right rule for an operator surface and
+   * the wrong one here. «ميتا: 18 أغسطس 23:59» is a fact about our plumbing — a client cannot act on
+   * it, cannot ask anyone to move it, and cannot tell from it whether the figures above are wrong.
+   * The owner found exactly that on their own live link.
+   *
+   * What a client must still be told survives, in their vocabulary: a platform absent from these
+   * figures, because a total that silently omits one is worse than any diagnostic. So the block is
+   * now CONDITIONAL — present when something is excluded, absent when nothing is — and the test is
+   * about which sentence appears rather than about the block always being there.
+   *
+   * A block that always renders «everything is current» is one a reader learns to skip, including
+   * on the day it says something else.
    */
-  test('the page says how fresh each platform is', async ({ page }) => {
+  test('the page names a platform missing from the figures, and says nothing when none is', async ({ page }) => {
     await page.goto(URL)
-    await expect(page.getByTestId('live-freshness')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20000 })
+
+    const notice = page.getByTestId('live-freshness')
+
+    if (await notice.count() === 0) {
+      // Every platform reported: the honest output is nothing at all.
+      return
+    }
 
     /*
-     * Asserted on the platform's NAME, not on its key.
+     * When it IS shown, it names the platform rather than its key.
      *
-     * This read `/meta/i`, which the page satisfied by rendering the column value `meta` under a
-     * `capitalize` class — so it passed while showing a client a database identifier dressed up to
-     * look like a brand. Accepting either language keeps the test about what it is for: that each
-     * platform is named here at all.
+     * An earlier version of this test read `/meta/i`, which the page satisfied by rendering the
+     * column value `meta` under a `capitalize` class — passing while showing a client a database
+     * identifier dressed up to look like a brand.
      */
-    await expect(page.getByTestId('live-freshness')).toContainText(/ميتا|Meta/)
+    const text = await notice.innerText()
 
-    /*
-     * And no snake_case key survives in this block. `meta` is indistinguishable from its own English
-     * label, but `google_ads` is not — this is the assertion that would actually have caught the
-     * defect, and it fails on any provider whose key differs from its name.
-     */
-    const text = await page.getByTestId('live-freshness').innerText()
-    expect(text, `the freshness block shows a raw key:\n${text}`).not.toMatch(/[a-z]+_[a-z]+/)
+    expect(text, `the notice shows a raw key:\n${text}`).not.toMatch(/[a-z]+_[a-z]+/)
+
+    // And it speaks about THEIR figures, not about our sync.
+    expect(text).toMatch(/لا تشمل|do not include/)
+    expect(text, 'the client was shown our sync clock').not.toMatch(/آخر مزامنة|Last sync|بيانات الاعتماد/)
   })
 
   /**

@@ -1,3 +1,4 @@
+import { DataMetricTable } from '@/components/ui/MetricTable'
 import { useMemo, useState } from 'react'
 import { attributionWindow } from './attributionWindow'
 import { ReportAdDetail } from './ReportAdDetail'
@@ -244,6 +245,18 @@ export interface NextStep {
 }
 export interface Meta { reportName: string; clientName?: string; agencyName?: string; platforms: string[]; isDemo?: boolean }
 
+/**
+ * Whether this document is addressed to a CLIENT — CLIENT-DIAGNOSTIC-SEPARATION-001.
+ *
+ * `executive` is a client audience for this purpose: it is the shorter document a client's own
+ * management reads, and nobody in that room can act on a connector state either. `internal` and an
+ * absent audience are the operator's, because an unlabelled report is one somebody generated for
+ * themselves.
+ */
+export function isClientAudience(audience: string | undefined): boolean {
+  return audience === 'client' || audience === 'executive'
+}
+
 /** Single slide renderer shared by the interactive deck AND the print/PDF route — identical output. */
 export function SlideBody({ slide, data, meta }: { slide: Slide; data: ReportData; meta: Meta }) {
   switch (slide.type) {
@@ -260,7 +273,23 @@ export function SlideBody({ slide, data, meta }: { slide: Slide; data: ReportDat
     case 'funnel': return <FunnelSlide data={data} />
     case 'comparison': return <PeriodComparisonSlide data={data} />
     case 'observations': return <ObservationsSlide data={data} />
-    case 'data_quality': return <DataQualitySlide data={data} />
+    /*
+     * CLIENT-DIAGNOSTIC-SEPARATION-001 — the data-quality slide is the OPERATOR's.
+     *
+     * It lists every source, its state, and when we last read it — «تعذّرت المزامنة»، «آخر مزامنة» —
+     * and closes with «مؤشرات لا ترسلها المنصات المرتبطة». That is the sentence the owner found on
+     * their own client link. Every line of it is a fact about our plumbing, and a client can act on
+     * none of it.
+     *
+     * A client audience gets the one thing that IS theirs, in their own words: which metrics are
+     * absent from these figures. `PrintReport` already applied the same rule to the methodology
+     * slide (`payload.audience !== 'client'`), so the concept was here — the deck simply never
+     * consulted it.
+     */
+    case 'data_quality':
+      return isClientAudience(data.audience)
+        ? <MissingMetricsNotice data={data} />
+        : <DataQualitySlide data={data} />
     case 'budget': return <BudgetSlide data={data} />
     case 'next_steps': return <NextStepsSlide data={data} />
     case '__methodology': return <PerformanceNotice data={data.disclaimer} variant="methodology" objective={data.objective} />
@@ -882,24 +911,41 @@ function ComparisonSlide({ data }: { data: ReportData }) {
         <ChartCard title="الإنفاق حسب المنصة"><RankingBarChart data={bars} bars={[{ key: 'spend', name: 'الإنفاق', kind: 'money' }]} colorByPlatform height={240} currency={data.currency} /></ChartCard>
         <ChartCard title="مساهمة الإنفاق"><PlatformDonutChart data={donut} centerLabel="الإجمالي" centerValue={compact(donut.reduce((a, b) => a + b.value, 0))} currency={data.currency} /></ChartCard>
       </div>
+      {/*
+        TABLE-NUMERIC-ALIGNMENT-001 — through the primitive, in a document a client reads.
+
+        Every numeric header and cell here was `text-end`, which under `dir="rtl"` is the LEFT edge
+        of the cell: each figure sat as far from its Arabic heading as the column is wide. Five
+        columns, in the report deck, in front of the client. The primitive centres numerics so the
+        heading and its digits share one alignment in both directions, and it decides the
+        abbreviation, the currency and what a missing figure looks like, so this slide can no longer
+        answer any of those differently from the slide beside it.
+      */}
       <ChartCard title="ترتيب المنصات" className="mt-4">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-sm">
-            <thead><tr className="border-b border-border text-text-muted"><th className="py-2 text-start">المنصة</th><th className="py-2 text-end">الإنفاق</th><th className="py-2 text-end">النتائج</th><th className="py-2 text-end">CPA</th><th className="py-2 text-end">ROAS</th><th className="py-2 text-end">المساهمة</th></tr></thead>
-            <tbody>
-              {data.platforms.map((p, idx) => (
-                <tr key={idx} className="border-b border-border last:border-0">
-                  <td className="py-2"><span className="inline-flex items-center gap-1.5 font-semibold"><span className="h-2.5 w-2.5 rounded-full" style={{ background: platformColor(String(p.provider)) }} />{String(p.provider)}</span></td>
-                  <td className="tnum py-2 text-end">{money(p.spend as number, data.currency)}</td>
-                  <td className="tnum py-2 text-end">{num(p.conversions as number)}</td>
-                  <td className="tnum py-2 text-end">{money(p.cpa as number, data.currency)}</td>
-                  <td className="tnum py-2 text-end font-semibold">{ratio(p.roas as number)}</td>
-                  <td className="tnum py-2 text-end">{percent(p.spend_share as number, 1)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataMetricTable
+          columns={[
+            { key: 'platform', label: 'المنصة', kind: 'text' },
+            { key: 'spend', label: 'الإنفاق', kind: 'money', currency: data.currency },
+            { key: 'conversions', label: 'النتائج', kind: 'number' },
+            { key: 'cpa', label: 'CPA', kind: 'money', currency: data.currency },
+            { key: 'roas', label: 'ROAS', kind: 'ratio' },
+            { key: 'spend_share', label: 'المساهمة', kind: 'percent' },
+          ]}
+          rows={data.platforms.map((p) => ({
+            platform: (
+              <span className="inline-flex items-center gap-1.5 font-semibold">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: platformColor(String(p.provider)) }} />
+                {String(p.provider)}
+              </span>
+            ),
+            spend: p.spend as number,
+            conversions: p.conversions as number,
+            cpa: p.cpa as number,
+            roas: p.roas as number,
+            spend_share: p.spend_share as number,
+          }))}
+          initialSort={{ column: 1, dir: 'desc' }}
+        />
       </ChartCard>
     </div>
   )
@@ -1125,28 +1171,42 @@ function BudgetSlide({ data }: { data: ReportData }) {
       </div>
       {rows.length > 0 && (
         <ChartCard title="سرعة الصرف والتوقعات" subtitle="Pace >1 صرف أسرع من المخطط" className="mt-4">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-sm">
-              <thead><tr className="border-b border-border text-text-muted"><th className="py-2 text-start">الحملة</th><th className="py-2 text-end">الميزانية</th><th className="py-2 text-end">المصروف</th><th className="py-2 text-end">المتبقي</th><th className="py-2 text-end">الاستهلاك</th><th className="py-2 text-end">Pace</th><th className="py-2 text-end">الصرف المتوقع</th></tr></thead>
-              <tbody>
-                {rows.map((r, i) => {
-                  const pace = Number(r.pace ?? 0)
-                  return (
-                    <tr key={i} className="border-b border-border last:border-0">
-                      <td className="py-2 font-semibold text-text-primary">{String(r.campaign_name ?? '—')}</td>
-                      <td className="tnum py-2 text-end">{money(Number(r.budget ?? 0), data.currency)}</td>
-                      {/* PARTIAL-WITHHELD-001 — a null spend/remaining/projected is «no single figure», not «0». */}
-                      <td className="tnum py-2 text-end">{r.spent === null || r.spent === undefined ? '—' : money(Number(r.spent), data.currency)}</td>
-                      <td className="tnum py-2 text-end">{r.remaining === null || r.remaining === undefined ? '—' : money(Number(r.remaining), data.currency)}</td>
-                      <td className="tnum py-2 text-end">{r.consumed_pct !== null && r.consumed_pct !== undefined ? percent(Number(r.consumed_pct), 0) : '—'}</td>
-                      <td className={`tnum py-2 text-end font-semibold ${pace > 1.1 ? 'text-danger' : pace < 0.9 && pace > 0 ? 'text-warning' : 'text-text-primary'}`}>{pace ? pace.toFixed(2) : '—'}</td>
-                      <td className="tnum py-2 text-end">{r.projected_spend === null || r.projected_spend === undefined ? '—' : money(Number(r.projected_spend), data.currency)}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          {/*
+            PARTIAL-WITHHELD-001 is now the primitive's rule, not this table's.
+
+            A null spend, remaining or projected figure is «no single figure», never «0», and every
+            column of every table says that with the same dash. Pace keeps its own colouring because
+            «spending faster than planned» is a judgement this slide makes and no other does.
+          */}
+          <DataMetricTable
+            columns={[
+              { key: 'campaign', label: 'الحملة', kind: 'text' },
+              { key: 'budget', label: 'الميزانية', kind: 'money', currency: data.currency },
+              { key: 'spent', label: 'المصروف', kind: 'money', currency: data.currency },
+              { key: 'remaining', label: 'المتبقي', kind: 'money', currency: data.currency },
+              { key: 'consumed', label: 'الاستهلاك', kind: 'percent', digits: 0 },
+              { key: 'pace', label: 'Pace', kind: 'text' },
+              { key: 'projected', label: 'الصرف المتوقع', kind: 'money', currency: data.currency },
+            ]}
+            rows={rows.map((r) => {
+              const pace = Number(r.pace ?? 0)
+
+              return {
+                campaign: String(r.campaign_name ?? '—'),
+                budget: r.budget as number,
+                spent: r.spent as number,
+                remaining: r.remaining as number,
+                consumed: r.consumed_pct as number,
+                pace: pace ? (
+                  <span className={`tnum font-semibold ${pace > 1.1 ? 'text-danger' : pace < 0.9 ? 'text-warning' : 'text-text-primary'}`}>
+                    {pace.toFixed(2)}
+                  </span>
+                ) : null,
+                projected: r.projected_spend as number,
+              }
+            })}
+            initialSort={{ column: 2, dir: 'desc' }}
+          />
         </ChartCard>
       )}
     </div>
@@ -1170,33 +1230,33 @@ function PeriodComparisonSlide({ data }: { data: ReportData }) {
   return (
     <div>
       <Title sub="الفترة الحالية مقابل الفترة السابقة بنفس الطول">المقارنات والاتجاهات</Title>
-      <div className="overflow-x-auto rounded-2xl border border-border">
-        <table className="w-full min-w-[520px] text-sm">
-          <thead className="bg-surface-secondary text-text-secondary">
-            <tr>
-              <th className="p-2.5 text-start font-semibold">المؤشر</th>
-              <th className="p-2.5 text-start font-semibold">الفترة الحالية</th>
-              <th className="p-2.5 text-start font-semibold">الفترة السابقة</th>
-              <th className="p-2.5 text-start font-semibold">التغير</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.key} className="border-t border-border">
-                <td className="p-2.5 text-text-primary">{r.label}</td>
-                <td className="tnum p-2.5 font-bold text-text-primary">{readingText(r.reading)}</td>
-                {/* «لا مقارنة» is not «0» — an absent previous period has nothing to compare with. */}
-                <td className="tnum p-2.5 text-text-secondary">{r.before.text ?? '—'}</td>
-                <td className="p-2.5">
-                  {r.before.change === null
-                    ? <span className="text-text-muted">—</span>
-                    : <TrendPill delta={r.before.change} invertGood={r.invertGood} />}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/*
+        The opposite alignment defect from the platform table, in the same document.
+
+        Every column here was `text-start`, so the figures hugged the right edge under RTL while the
+        platform slide pushed them to the left — two tables in one report, disagreeing about where a
+        number belongs. The primitive settles it once.
+
+        The readings are already formatted strings (a reading carries its own units and its own
+        refusals), so they travel as text; «لا مقارنة» stays a dash rather than a zero, which is the
+        primitive's rule now.
+      */}
+      <DataMetricTable
+        columns={[
+          { key: 'label', label: 'المؤشر', kind: 'text' },
+          { key: 'now', label: 'الفترة الحالية', kind: 'text' },
+          { key: 'before', label: 'الفترة السابقة', kind: 'text' },
+          { key: 'change', label: 'التغير', kind: 'text' },
+        ]}
+        rows={rows.map((r) => ({
+          label: r.label,
+          now: <span className="tnum font-bold text-text-primary">{readingText(r.reading)}</span>,
+          before: <span className="tnum text-text-secondary">{r.before.text ?? '—'}</span>,
+          change: r.before.change === null
+            ? null
+            : <TrendPill delta={r.before.change} invertGood={r.invertGood} />,
+        }))}
+      />
       <p className="mt-2 text-xs text-text-muted">
         تُقارن الفترة بفترة سابقة مساوية لها في عدد الأيام، وتُترك المقارنة فارغة عند غياب بيانات الفترة السابقة.
       </p>
@@ -1273,6 +1333,35 @@ const FRESHNESS_LABEL: Record<string, { ar: string; tone: string }> = {
  * when something is wrong teaches its reader that its absence means nothing, so the one time it
  * matters they have no baseline to read it against.
  */
+/**
+ * What a CLIENT is told instead — CLIENT-DIAGNOSTIC-SEPARATION-001.
+ *
+ * One fact, in their vocabulary: which figures the platforms did not report for this period, so a
+ * blank in the report is not read as a zero. No source list, no states, no clock, and no
+ * «المنصات المرتبطة» — a client does not know which platforms are «connected», they know which
+ * platforms they buy on.
+ *
+ * Nothing at all when every metric arrived: a slide whose only content is «all good» is a slide that
+ * teaches a reader to skip the section, including on the day it says something.
+ */
+function MissingMetricsNotice({ data }: { data: ReportData }) {
+  const missing = Object.entries(data.reported ?? {})
+    .filter(([, sent]) => !sent)
+    .map(([key]) => SPECS[key]?.label.ar ?? key)
+
+  if (missing.length === 0) return null
+
+  return (
+    <div>
+      <Title sub="ما لم تُبلِّغ عنه المنصات في هذه الفترة">اكتمال الأرقام</Title>
+      <p className="rounded-2xl border border-border bg-surface-secondary p-4 text-sm leading-relaxed text-text-secondary">
+        لم تصل هذه المؤشرات لهذه الفترة: {missing.join('، ')} — تظهر في التقرير بلا قيمة بدلًا من صفر،
+        لأن «لم يُبلَّغ عنه» و«صفر» ليسا الشيء نفسه.
+      </p>
+    </div>
+  )
+}
+
 function DataQualitySlide({ data }: { data: ReportData }) {
   const f = data.freshness
   const state = FRESHNESS_LABEL[f?.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown
@@ -1297,27 +1386,23 @@ function DataQualitySlide({ data }: { data: ReportData }) {
         </div>
       </div>
       {(f?.sources?.length ?? 0) > 0 && (
-        <div className="mt-3 overflow-x-auto rounded-2xl border border-border">
-          <table className="w-full min-w-[420px] text-sm">
-            <thead className="bg-surface-secondary text-text-secondary">
-              <tr>
-                <th className="p-2.5 text-start font-semibold">المصدر</th>
-                <th className="p-2.5 text-start font-semibold">الحالة</th>
-                <th className="p-2.5 text-start font-semibold">آخر مزامنة</th>
-              </tr>
-            </thead>
-            <tbody>
-              {f!.sources!.map((s, i) => (
-                <tr key={`${s.provider}-${i}`} className="border-t border-border">
-                  <td className="p-2.5 text-text-primary">{s.name ?? s.provider}</td>
-                  <td className={`p-2.5 ${(FRESHNESS_LABEL[s.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown).tone}`}>
-                    {(FRESHNESS_LABEL[s.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown).ar}
-                  </td>
-                  <td className="tnum p-2.5 text-text-secondary">{s.last_sync_at ? fmtDateTime(s.last_sync_at) : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-3">
+          <DataMetricTable
+            columns={[
+              { key: 'source', label: 'المصدر', kind: 'text' },
+              { key: 'state', label: 'الحالة', kind: 'text' },
+              { key: 'synced', label: 'آخر مزامنة', kind: 'text' },
+            ]}
+            rows={f!.sources!.map((s) => ({
+              source: s.name ?? s.provider,
+              state: (
+                <span className={(FRESHNESS_LABEL[s.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown).tone}>
+                  {(FRESHNESS_LABEL[s.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown).ar}
+                </span>
+              ),
+              synced: s.last_sync_at ? fmtDateTime(s.last_sync_at) : null,
+            }))}
+          />
         </div>
       )}
       {missing.length > 0 && (

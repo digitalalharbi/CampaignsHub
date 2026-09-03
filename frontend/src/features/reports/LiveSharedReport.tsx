@@ -4,7 +4,6 @@ import { LiveDetailTables } from './LiveDetailTables'
 import { ReportAdDetail } from './ReportAdDetail'
 import { ReportAdsSection, type ReportAd } from './ReportAdsSection'
 import { canonicalPlatform } from '@/lib/platforms'
-import { fmtDateTime } from '@/lib/datetime'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import {
   ChartCard,
@@ -331,106 +330,25 @@ export function LiveSharedReport({
           })}
         </div>
 
-        <div className="mt-3 grid gap-3 lg:grid-cols-3">
-          <ChartCard title={ar ? 'الأداء بمرور الوقت' : 'Performance over time'} className="lg:col-span-2">
-            <MetricLineChart
-              data={payload.timeseries}
-              currency={currency}
-              height={220}
-              series={[
-                // The spend line is drawn only when spend is in the report currency; otherwise it would
-                // label a withheld/partial figure with a currency it is not in.
-                ...(spendChartable ? [{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', color: 'var(--brand-600)', kind: 'money' as const }] : []),
-                { key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' as const },
-                { key: 'conversions', name: ar ? 'النتائج' : 'Results', color: 'var(--purple)', kind: 'num' as const },
-              ]}
-            />
-            {!spendChartable && (
-              <p className="mt-1 text-center text-[11px] text-text-muted">{ar ? 'خط الإنفاق غير معروض: المبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend line hidden: amounts await an exchange rate or span currencies'}</p>
-            )}
-          </ChartCard>
-          <ChartCard title={ar ? 'توزيع الإنفاق' : 'Spend by platform'}>
-            {platformSpendRank === null ? (
-              <p className="flex h-[220px] items-center justify-center text-center text-sm text-text-muted">{ar ? 'توزيع الإنفاق غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة لا تُجمع' : 'Spend share unavailable — amounts await a rate or span currencies'}</p>
-            ) : (
-              <>
-                <PlatformDonutChart
-                  data={payload.platforms.flatMap((p, i) => {
-                    const value = platformSpendRank.values[i]
-                    return value === null ? [] : [{ name: p.provider, value }]
-                  })}
-                  currency={platformSpendRank.currency ?? currency}
-                  height={220}
-                />
-                {platformSpendRank.dropped > 0 && (
-                  <p className="mt-1 text-center text-[11px] text-text-muted">
-                    {ar
-                      ? `${platformSpendRank.dropped} منصة غير مُدرجة: مبالغ بانتظار سعر صرف أو بعملات متعددة`
-                      : `${platformSpendRank.dropped} platform(s) not included: amounts await a rate or span currencies`}
-                  </p>
-                )}
-              </>
-            )}
-          </ChartCard>
-        </div>
-
-        <div className="mt-3 grid gap-3 lg:grid-cols-2">
-          <ChartCard title={ar ? 'الحملات' : 'Campaigns'}>
-            {payload.campaigns.length > 0 && campaignSpendRank === null ? (
-              <p className="py-10 text-center text-sm text-text-muted">{ar ? 'ترتيب الإنفاق غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend ranking unavailable — amounts await a rate or span currencies'}</p>
-            ) : payload.campaigns.length > 0 && campaignSpendRank !== null ? (
-              <>
-                <RankingBarChart
-                  data={topCampaignRows.flatMap((c, i) => {
-                    const spend = campaignSpendRank.values[i]
-                    return spend === null ? [] : [{ name: c.campaign_name ?? '—', provider: c.provider, spend }]
-                  })}
-                  bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]}
-                  horizontal
-                  height={220}
-                  colorByPlatform
-                />
-                {campaignSpendRank.dropped > 0 && (
-                  <p className="mt-1 text-center text-[11px] text-text-muted">
-                    {ar
-                      ? `${countedCampaigns(campaignSpendRank.dropped, 'ar')} غير مُدرجة: مبالغ بانتظار سعر صرف أو بعملات متعددة`
-                      : `${campaignSpendRank.dropped} campaign(s) not included: amounts await a rate or span currencies`}
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className="py-10 text-center text-sm text-text-muted">
-                {ar ? 'لا توجد حملات في هذه الفترة.' : 'No campaigns in this period.'}
-              </p>
-            )}
-          </ChartCard>
-          <ChartCard title={ar ? 'قمع الأداء' : 'Performance funnel'}>
-            <ConversionFunnelChart stages={payload.funnel} currency={currency} ar={ar} />
-            {/* FUNNEL-NULL-001 — said once in a sentence as well as drawn. The client has no second
-                view of their account to check a gap against, so the gap must explain itself. */}
-            {payload.funnel.some((s) => !s.reported) && (
-              <p className="mt-3 text-xs text-text-muted" data-testid="shared-funnel-unreported">
-                {ar
-                  ? `لم ترسل أي منصة هذه المراحل في هذه الفترة: ${payload.funnel.filter((s) => !s.reported).map((s) => s.label).join('، ')}. الفراغ ليس صفرًا.`
-                  : `No platform reported these stages in this period: ${payload.funnel.filter((s) => !s.reported).map((s) => s.label).join(', ')}. A gap is not a zero.`}
-              </p>
-            )}
-          </ChartCard>
-        </div>
-
         {/*
-          * FUNNEL-001 — the store half, shown to the client only when there IS a store.
-          *
-          * Each row carries the system that produced it, exactly as the operator's own analytics tab
-          * does. A client asking «من أين جاء هذا الرقم؟» gets the same answer their agency would.
-          */}
-        {/*
-          OBJECTIVE-ANALYTICS-DEPTH-001 — which campaign inside each path carried it, and which did not.
+          CLIENT-FACING-PRESENTATION-001 — the order IS the requirement.
 
-          The campaign list above is ordered by spend, which answers «where did the money go» and
-          never «which of these worked». One ranked list across a mixed programme answers it wrongly:
-          a brand campaign sits at the bottom of a return table for not producing revenue it was
-          never asked to produce.
+          The client's six questions, in the order they ask them: what was spent, what was
+          achieved, at what cost, what improved or declined, WHERE, and what needs attention. The
+          objective split answers the third and fourth; it used to sit below the platform and
+          campaign charts, which answer the fifth — so a reader met «where» before «at what cost»,
+          and had to scroll past two charts to learn whether the headline cost per order was even
+          the right question.
+
+          It moves directly under the KPI cards, where the figure it corrects is still on screen.
+        */}
+        {/*
+          Ranked INSIDE each path, never across them.
+
+          The campaign list further down is ordered by spend, which answers «where did the money go»
+          and never «which of these worked». One ranked list across a mixed programme answers it
+          wrongly: a brand campaign sits at the bottom of a return table for not producing revenue it
+          was never asked to produce.
         */}
         {(payload.objective_leaders?.paths ?? []).some((p) => p.comparable) && (
           <div data-testid="live-objective-leaders" className="mt-6 rounded-2xl border border-border bg-surface p-4">
@@ -509,6 +427,103 @@ export function LiveSharedReport({
             </div>
           </div>
         )}
+
+        <div className="mt-3 grid gap-3 lg:grid-cols-3" data-testid="live-platforms">
+          <ChartCard title={ar ? 'الأداء بمرور الوقت' : 'Performance over time'} className="lg:col-span-2">
+            <MetricLineChart
+              data={payload.timeseries}
+              currency={currency}
+              height={220}
+              series={[
+                // The spend line is drawn only when spend is in the report currency; otherwise it would
+                // label a withheld/partial figure with a currency it is not in.
+                ...(spendChartable ? [{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', color: 'var(--brand-600)', kind: 'money' as const }] : []),
+                { key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' as const },
+                { key: 'conversions', name: ar ? 'النتائج' : 'Results', color: 'var(--purple)', kind: 'num' as const },
+              ]}
+            />
+            {!spendChartable && (
+              <p className="mt-1 text-center text-[11px] text-text-muted">{ar ? 'خط الإنفاق غير معروض: المبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend line hidden: amounts await an exchange rate or span currencies'}</p>
+            )}
+          </ChartCard>
+          <ChartCard title={ar ? 'توزيع الإنفاق' : 'Spend by platform'}>
+            {platformSpendRank === null ? (
+              <p className="flex h-[220px] items-center justify-center text-center text-sm text-text-muted">{ar ? 'توزيع الإنفاق غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة لا تُجمع' : 'Spend share unavailable — amounts await a rate or span currencies'}</p>
+            ) : (
+              <>
+                <PlatformDonutChart
+                  data={payload.platforms.flatMap((p, i) => {
+                    const value = platformSpendRank.values[i]
+                    return value === null ? [] : [{ name: p.provider, value }]
+                  })}
+                  currency={platformSpendRank.currency ?? currency}
+                  height={220}
+                />
+                {platformSpendRank.dropped > 0 && (
+                  <p className="mt-1 text-center text-[11px] text-text-muted">
+                    {ar
+                      ? `${platformSpendRank.dropped} منصة غير مُدرجة: مبالغ بانتظار سعر صرف أو بعملات متعددة`
+                      : `${platformSpendRank.dropped} platform(s) not included: amounts await a rate or span currencies`}
+                  </p>
+                )}
+              </>
+            )}
+          </ChartCard>
+        </div>
+
+        <div className="mt-3 grid gap-3 lg:grid-cols-2" data-testid="live-campaigns">
+          <ChartCard title={ar ? 'الحملات' : 'Campaigns'}>
+            {payload.campaigns.length > 0 && campaignSpendRank === null ? (
+              <p className="py-10 text-center text-sm text-text-muted">{ar ? 'ترتيب الإنفاق غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend ranking unavailable — amounts await a rate or span currencies'}</p>
+            ) : payload.campaigns.length > 0 && campaignSpendRank !== null ? (
+              <>
+                <RankingBarChart
+                  data={topCampaignRows.flatMap((c, i) => {
+                    const spend = campaignSpendRank.values[i]
+                    return spend === null ? [] : [{ name: c.campaign_name ?? '—', provider: c.provider, spend }]
+                  })}
+                  bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]}
+                  horizontal
+                  height={220}
+                  colorByPlatform
+                />
+                {campaignSpendRank.dropped > 0 && (
+                  <p className="mt-1 text-center text-[11px] text-text-muted">
+                    {ar
+                      ? `${countedCampaigns(campaignSpendRank.dropped, 'ar')} غير مُدرجة: مبالغ بانتظار سعر صرف أو بعملات متعددة`
+                      : `${campaignSpendRank.dropped} campaign(s) not included: amounts await a rate or span currencies`}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="py-10 text-center text-sm text-text-muted">
+                {ar ? 'لا توجد حملات في هذه الفترة.' : 'No campaigns in this period.'}
+              </p>
+            )}
+          </ChartCard>
+          <ChartCard title={ar ? 'قمع الأداء' : 'Performance funnel'}>
+            <ConversionFunnelChart stages={payload.funnel} currency={currency} ar={ar} />
+            {/* FUNNEL-NULL-001 — said once in a sentence as well as drawn. The client has no second
+                view of their account to check a gap against, so the gap must explain itself. */}
+            {payload.funnel.some((s) => !s.reported) && (
+              <p className="mt-3 text-xs text-text-muted" data-testid="shared-funnel-unreported">
+                {ar
+                  ? `لم ترسل أي منصة هذه المراحل في هذه الفترة: ${payload.funnel.filter((s) => !s.reported).map((s) => s.label).join('، ')}. الفراغ ليس صفرًا.`
+                  : `No platform reported these stages in this period: ${payload.funnel.filter((s) => !s.reported).map((s) => s.label).join(', ')}. A gap is not a zero.`}
+              </p>
+            )}
+          </ChartCard>
+        </div>
+
+        {/*
+          * FUNNEL-001 — the store half, shown to the client only when there IS a store.
+          *
+          * Each row carries the system that produced it, exactly as the operator's own analytics tab
+          * does. A client asking «من أين جاء هذا الرقم؟» gets the same answer their agency would.
+          */}
+        {/*
+          OBJECTIVE-ANALYTICS-DEPTH-001 — which campaign inside each path carried it, and which did not.
+
 
         {/*
           REPORT-AD-PREVIEW-001 — the same section as the deck and the PDF, from the same payload key.
@@ -593,11 +608,15 @@ export function LiveSharedReport({
                 </>
               )}
               <span className="tnum">{payload.store_funnel.coverage.orders_in_window}</span>
-              {payload.store_funnel.coverage.store_last_synced_at && (
-                <> · {ar ? 'آخر مزامنة للمتجر' : 'Store last synced'}:{' '}
-                  <span className="tnum">{new Date(payload.store_funnel.coverage.store_last_synced_at).toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB')}</span>
-                </>
-              )}
+              {/*
+                CLIENT-DIAGNOSTIC-SEPARATION-001 — the store's sync clock left this page.
+
+                «Store last synced: 18 Aug 23:59» is a fact about our plumbing. A client reading
+                their own report cannot act on it, cannot ask us to change it, and cannot tell
+                whether it means their orders are wrong. The order COUNT and the timezone stay,
+                because those are facts about their period; the clock is ours and belongs in the
+                operator's Data Quality surface, where it is the whole point.
+              */}
             </p>
           </div>
         )}
@@ -630,41 +649,37 @@ function FreshnessStrip({
   freshness: LivePayload['freshness']
   ar: boolean
 }) {
-  if (freshness.length === 0) return null
-  const waiting = freshness.filter((f) => f.state === 'awaiting_credentials')
+  /*
+   * CLIENT-DIAGNOSTIC-SEPARATION-001 — what a client can act on, and nothing else.
+   *
+   * This printed a sync clock per platform — «ميتا: 18 أغسطس 23:59» — and, for an unconnected one,
+   * «بانتظار بيانات الاعتماد». Both are facts about US. A client cannot act on the timestamp,
+   * cannot ask anyone to change it, and «credentials» is a word from our side of the wall.
+   *
+   * The fact underneath is theirs and must NOT be lost: a total that silently omits a platform is
+   * worse than any diagnostic. So the sentence survives, in their vocabulary — these figures do not
+   * include Snapchat — and everything about our plumbing goes. The platform is NAMED rather than
+   * keyed, because `snapchat` is a database value and «سناب شات» is a platform they buy on.
+   */
+  const excluded = freshness.filter((f) => f.state === 'awaiting_credentials')
+
+  if (excluded.length === 0) return null
+
+  const names = excluded
+    .map((f) => providerLabel(canonicalPlatform(f.provider), ar ? 'ar' : 'en'))
+    .join(ar ? '، ' : ', ')
 
   return (
-    <div data-testid="live-freshness" className="grid gap-2">
-      <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary">
-        {freshness.map((f) => (
-          <span key={f.provider}>
-            {/*
-              LIVELINK-PROVIDER-LABEL-001 — on the page a CLIENT opens.
-              `capitalize` on a raw key made `meta` read as «Meta»; `google_ads` would read
-              «Google_ads». A real label needs no cosmetic help.
-            */}
-            <span className="text-text-muted">{providerLabel(canonicalPlatform(f.provider), ar ? 'ar' : 'en')}:</span>{' '}
-            <b className="font-semibold text-text-primary">
-              {f.data_as_of
-                ? fmtDateTime(f.data_as_of)
-                : ar
-                  ? 'بانتظار بيانات الاعتماد'
-                  : 'Awaiting credentials'}
-            </b>
-          </span>
-        ))}
-      </div>
-
-      {waiting.length > 0 && (
-        <p className="flex items-start gap-1.5 rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-xs text-warning">
-          <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden />
-          <span>
-            {ar
-              ? `لم تُربط بعد: ${waiting.map((f) => f.provider).join('، ')}. الأرقام أعلاه لا تشمل هذه المنصات.`
-              : `Not connected yet: ${waiting.map((f) => f.provider).join(', ')}. The figures above exclude them.`}
-          </span>
-        </p>
-      )}
-    </div>
+    <p
+      data-testid="live-freshness"
+      className="flex items-start gap-1.5 rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-xs text-warning"
+    >
+      <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden />
+      <span>
+        {ar
+          ? `الأرقام في هذا التقرير لا تشمل: ${names}.`
+          : `The figures in this report do not include: ${names}.`}
+      </span>
+    </p>
   )
 }
