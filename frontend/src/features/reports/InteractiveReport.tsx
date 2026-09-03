@@ -245,6 +245,18 @@ export interface NextStep {
 }
 export interface Meta { reportName: string; clientName?: string; agencyName?: string; platforms: string[]; isDemo?: boolean }
 
+/**
+ * Whether this document is addressed to a CLIENT — CLIENT-DIAGNOSTIC-SEPARATION-001.
+ *
+ * `executive` is a client audience for this purpose: it is the shorter document a client's own
+ * management reads, and nobody in that room can act on a connector state either. `internal` and an
+ * absent audience are the operator's, because an unlabelled report is one somebody generated for
+ * themselves.
+ */
+export function isClientAudience(audience: string | undefined): boolean {
+  return audience === 'client' || audience === 'executive'
+}
+
 /** Single slide renderer shared by the interactive deck AND the print/PDF route — identical output. */
 export function SlideBody({ slide, data, meta }: { slide: Slide; data: ReportData; meta: Meta }) {
   switch (slide.type) {
@@ -261,7 +273,23 @@ export function SlideBody({ slide, data, meta }: { slide: Slide; data: ReportDat
     case 'funnel': return <FunnelSlide data={data} />
     case 'comparison': return <PeriodComparisonSlide data={data} />
     case 'observations': return <ObservationsSlide data={data} />
-    case 'data_quality': return <DataQualitySlide data={data} />
+    /*
+     * CLIENT-DIAGNOSTIC-SEPARATION-001 — the data-quality slide is the OPERATOR's.
+     *
+     * It lists every source, its state, and when we last read it — «تعذّرت المزامنة»، «آخر مزامنة» —
+     * and closes with «مؤشرات لا ترسلها المنصات المرتبطة». That is the sentence the owner found on
+     * their own client link. Every line of it is a fact about our plumbing, and a client can act on
+     * none of it.
+     *
+     * A client audience gets the one thing that IS theirs, in their own words: which metrics are
+     * absent from these figures. `PrintReport` already applied the same rule to the methodology
+     * slide (`payload.audience !== 'client'`), so the concept was here — the deck simply never
+     * consulted it.
+     */
+    case 'data_quality':
+      return isClientAudience(data.audience)
+        ? <MissingMetricsNotice data={data} />
+        : <DataQualitySlide data={data} />
     case 'budget': return <BudgetSlide data={data} />
     case 'next_steps': return <NextStepsSlide data={data} />
     case '__methodology': return <PerformanceNotice data={data.disclaimer} variant="methodology" objective={data.objective} />
@@ -1305,6 +1333,35 @@ const FRESHNESS_LABEL: Record<string, { ar: string; tone: string }> = {
  * when something is wrong teaches its reader that its absence means nothing, so the one time it
  * matters they have no baseline to read it against.
  */
+/**
+ * What a CLIENT is told instead — CLIENT-DIAGNOSTIC-SEPARATION-001.
+ *
+ * One fact, in their vocabulary: which figures the platforms did not report for this period, so a
+ * blank in the report is not read as a zero. No source list, no states, no clock, and no
+ * «المنصات المرتبطة» — a client does not know which platforms are «connected», they know which
+ * platforms they buy on.
+ *
+ * Nothing at all when every metric arrived: a slide whose only content is «all good» is a slide that
+ * teaches a reader to skip the section, including on the day it says something.
+ */
+function MissingMetricsNotice({ data }: { data: ReportData }) {
+  const missing = Object.entries(data.reported ?? {})
+    .filter(([, sent]) => !sent)
+    .map(([key]) => SPECS[key]?.label.ar ?? key)
+
+  if (missing.length === 0) return null
+
+  return (
+    <div>
+      <Title sub="ما لم تُبلِّغ عنه المنصات في هذه الفترة">اكتمال الأرقام</Title>
+      <p className="rounded-2xl border border-border bg-surface-secondary p-4 text-sm leading-relaxed text-text-secondary">
+        لم تصل هذه المؤشرات لهذه الفترة: {missing.join('، ')} — تظهر في التقرير بلا قيمة بدلًا من صفر،
+        لأن «لم يُبلَّغ عنه» و«صفر» ليسا الشيء نفسه.
+      </p>
+    </div>
+  )
+}
+
 function DataQualitySlide({ data }: { data: ReportData }) {
   const f = data.freshness
   const state = FRESHNESS_LABEL[f?.state ?? 'unknown'] ?? FRESHNESS_LABEL.unknown

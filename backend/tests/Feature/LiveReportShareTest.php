@@ -222,6 +222,47 @@ final class LiveReportShareTest extends TestCase
     }
 
     /**
+     * CLIENT-DIAGNOSTIC-SEPARATION-001 — the operator's diagnostics are ABSENT from the payload.
+     *
+     * A shared link has no session behind it and its JSON is one keystroke away in any browser, so a
+     * diagnostic that is merely unrendered is still disclosed. The requirement says so in as many
+     * words: hiding the text with CSS or a locale string while the payload still carries it is
+     * explicitly refused.
+     *
+     * What was in here: `data_as_of` and `last_checked_at` per platform — our sync clock, on the
+     * page a client opens to look at their own money — plus `detailed_state`, an internal state
+     * name. This asserts they are gone from the RESPONSE, which is the only place removing them
+     * counts.
+     */
+    public function test_a_live_link_carries_no_sync_clock_for_the_client_to_read(): void
+    {
+        $token = $this->liveLink();
+
+        $payload = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk()->json('data');
+
+        foreach (($payload['freshness'] ?? []) as $source) {
+            foreach (['data_as_of', 'last_checked_at', 'detailed_state'] as $diagnostic) {
+                $this->assertArrayNotHasKey(
+                    $diagnostic,
+                    $source,
+                    "the client's own payload carries our {$diagnostic}",
+                );
+            }
+        }
+
+        /*
+         * And the fact that IS theirs survives.
+         *
+         * A total that silently omits a platform is worse than any diagnostic, so the flag stays —
+         * the page states it as «these figures do not include Snapchat» rather than in our words.
+         */
+        foreach (($payload['freshness'] ?? []) as $source) {
+            $this->assertArrayHasKey('state', $source);
+            $this->assertContains($source['state'], ['synced', 'awaiting_credentials']);
+        }
+    }
+
+    /**
      * REPORT-OBJECTIVE-003/004 — the split the client link needs most, and did not have.
      *
      * `totals` rolls the whole scope together, so its cost per order divides EVERY campaign's spend
