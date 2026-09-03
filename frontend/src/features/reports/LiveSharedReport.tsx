@@ -4,7 +4,6 @@ import { LiveDetailTables } from './LiveDetailTables'
 import { ReportAdDetail } from './ReportAdDetail'
 import { ReportAdsSection, type ReportAd } from './ReportAdsSection'
 import { canonicalPlatform } from '@/lib/platforms'
-import { fmtDateTime } from '@/lib/datetime'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import {
   ChartCard,
@@ -593,11 +592,15 @@ export function LiveSharedReport({
                 </>
               )}
               <span className="tnum">{payload.store_funnel.coverage.orders_in_window}</span>
-              {payload.store_funnel.coverage.store_last_synced_at && (
-                <> · {ar ? 'آخر مزامنة للمتجر' : 'Store last synced'}:{' '}
-                  <span className="tnum">{new Date(payload.store_funnel.coverage.store_last_synced_at).toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB')}</span>
-                </>
-              )}
+              {/*
+                CLIENT-DIAGNOSTIC-SEPARATION-001 — the store's sync clock left this page.
+
+                «Store last synced: 18 Aug 23:59» is a fact about our plumbing. A client reading
+                their own report cannot act on it, cannot ask us to change it, and cannot tell
+                whether it means their orders are wrong. The order COUNT and the timezone stay,
+                because those are facts about their period; the clock is ours and belongs in the
+                operator's Data Quality surface, where it is the whole point.
+              */}
             </p>
           </div>
         )}
@@ -630,41 +633,37 @@ function FreshnessStrip({
   freshness: LivePayload['freshness']
   ar: boolean
 }) {
-  if (freshness.length === 0) return null
-  const waiting = freshness.filter((f) => f.state === 'awaiting_credentials')
+  /*
+   * CLIENT-DIAGNOSTIC-SEPARATION-001 — what a client can act on, and nothing else.
+   *
+   * This printed a sync clock per platform — «ميتا: 18 أغسطس 23:59» — and, for an unconnected one,
+   * «بانتظار بيانات الاعتماد». Both are facts about US. A client cannot act on the timestamp,
+   * cannot ask anyone to change it, and «credentials» is a word from our side of the wall.
+   *
+   * The fact underneath is theirs and must NOT be lost: a total that silently omits a platform is
+   * worse than any diagnostic. So the sentence survives, in their vocabulary — these figures do not
+   * include Snapchat — and everything about our plumbing goes. The platform is NAMED rather than
+   * keyed, because `snapchat` is a database value and «سناب شات» is a platform they buy on.
+   */
+  const excluded = freshness.filter((f) => f.state === 'awaiting_credentials')
+
+  if (excluded.length === 0) return null
+
+  const names = excluded
+    .map((f) => providerLabel(canonicalPlatform(f.provider), ar ? 'ar' : 'en'))
+    .join(ar ? '، ' : ', ')
 
   return (
-    <div data-testid="live-freshness" className="grid gap-2">
-      <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary">
-        {freshness.map((f) => (
-          <span key={f.provider}>
-            {/*
-              LIVELINK-PROVIDER-LABEL-001 — on the page a CLIENT opens.
-              `capitalize` on a raw key made `meta` read as «Meta»; `google_ads` would read
-              «Google_ads». A real label needs no cosmetic help.
-            */}
-            <span className="text-text-muted">{providerLabel(canonicalPlatform(f.provider), ar ? 'ar' : 'en')}:</span>{' '}
-            <b className="font-semibold text-text-primary">
-              {f.data_as_of
-                ? fmtDateTime(f.data_as_of)
-                : ar
-                  ? 'بانتظار بيانات الاعتماد'
-                  : 'Awaiting credentials'}
-            </b>
-          </span>
-        ))}
-      </div>
-
-      {waiting.length > 0 && (
-        <p className="flex items-start gap-1.5 rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-xs text-warning">
-          <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden />
-          <span>
-            {ar
-              ? `لم تُربط بعد: ${waiting.map((f) => f.provider).join('، ')}. الأرقام أعلاه لا تشمل هذه المنصات.`
-              : `Not connected yet: ${waiting.map((f) => f.provider).join(', ')}. The figures above exclude them.`}
-          </span>
-        </p>
-      )}
-    </div>
+    <p
+      data-testid="live-freshness"
+      className="flex items-start gap-1.5 rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-xs text-warning"
+    >
+      <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden />
+      <span>
+        {ar
+          ? `الأرقام في هذا التقرير لا تشمل: ${names}.`
+          : `The figures in this report do not include: ${names}.`}
+      </span>
+    </p>
   )
 }
