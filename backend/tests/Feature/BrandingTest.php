@@ -123,6 +123,48 @@ final class BrandingTest extends TestCase
         $this->assertSame($platformReport->id, $resolved['report_logo']->id);  // client → tenant → platform
     }
 
+    /**
+     * BRANDING-RENDER-EVIDENCE-001 — REMOVING a logo is part of the chain, and was tested nowhere.
+     *
+     * Upload, save and change were covered; remove was not, and it is the operation most likely to
+     * leave a surface broken. A client asset that has been deleted must make the chain fall to the
+     * agency's mark and then to the product's — not to a dangling id, not to an empty slot that
+     * renders as a gap where the mark was.
+     *
+     * The row's own words: «Code containing `logo_url` is not completion.» Neither is an upload test.
+     */
+    public function test_removing_a_logo_falls_back_down_the_chain_rather_than_leaving_a_hole(): void
+    {
+        $clientId = (string) Str::uuid();
+
+        $platform = $this->branding()->storeAsset('platform', null, 'primary_horizontal', 'any', $this->png(800, 240));
+        $tenant = $this->branding()->storeAsset('tenant', null, 'primary_horizontal', 'any', $this->png(800, 240));
+        $client = $this->branding()->storeAsset('client', $clientId, 'primary_horizontal', 'any', $this->png());
+
+        $this->assertSame($client->id, $this->branding()->resolve('client', $clientId, 'any')['primary_horizontal']->id);
+
+        // Remove the client's own mark: the agency's answers.
+        $this->branding()->removeAsset($client);
+        $this->assertSame(
+            $tenant->id,
+            $this->branding()->resolve('client', $clientId, 'any')['primary_horizontal']->id,
+            'removing the client logo left the chain without an answer',
+        );
+
+        // Remove the agency's too: the PRODUCT's answers, which is the last link and must always hold.
+        $this->branding()->removeAsset($tenant);
+        $this->assertSame(
+            $platform->id,
+            $this->branding()->resolve('client', $clientId, 'any')['primary_horizontal']->id,
+            'the product mark is the chain\'s last link and did not answer',
+        );
+
+        // And with every layer gone, the slot is ABSENT rather than present-and-broken: a surface can
+        // fall back to a name, and cannot recover from a url that 404s.
+        $this->branding()->removeAsset($platform);
+        $this->assertArrayNotHasKey('primary_horizontal', $this->branding()->resolve('client', $clientId, 'any'));
+    }
+
     public function test_theme_falls_back_to_any_when_the_requested_theme_is_absent(): void
     {
         $any = $this->branding()->storeAsset('tenant', null, 'square_icon', 'any', $this->png(512, 512));
