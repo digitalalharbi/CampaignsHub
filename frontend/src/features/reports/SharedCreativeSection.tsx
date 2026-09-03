@@ -20,7 +20,7 @@ import { CreativeViewer } from '@/features/content/CreativeViewer'
 import { CreativeVideoPlayer } from '@/features/content/CreativeVideoPlayer'
 import { CreativeCarousel } from '@/features/content/CreativeCarousel'
 import { imageLoading } from '@/features/content/format'
-import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
+import { DataMetricTable, MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { formatMetric, metricLabel, metricState } from '@/features/content/metrics'
 import { formatMoneyReading, readMoney } from '@/lib/money/contract'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
@@ -932,39 +932,43 @@ function SharedCreativeDetail({
 
       <div className="grid gap-2 rounded-xl border border-border bg-surface p-3">
         <h4 className="text-sm font-bold">{t.funnel}</h4>
+        {/*
+          Through the primitive — TABLE-NUMERIC-ALIGNMENT-001.
+
+          Every column was `text-start`, so under RTL the figures hugged the right edge while the
+          report deck's platform table pushed its figures to the left. One client, two documents,
+          two answers to where a number belongs.
+
+          The cost column stays a NODE rather than a money kind, because it has three readings and
+          only one of them is a number: withheld by this link, never reported, or a real figure.
+          Collapsing the first two into the primitive's dash would tell the wrong story — «your
+          agency hid this» and «the platform never sent it» are not the same sentence.
+        */}
         {!funnel || funnel.stages.length === 0 ? (
           <p className="text-xs text-text-secondary">{t.funnelNone}</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[28rem] text-xs">
-              <thead className="bg-surface-secondary text-text-muted">
-                <tr>
-                  <th className="p-2 text-start">{t.stage}</th>
-                  <th className="p-2 text-start">{t.count}</th>
-                  <th className="p-2 text-start">{t.rate}</th>
-                  <th className="p-2 text-start">{t.costPer}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {funnel.stages.map((stage) => (
-                  <tr key={stage.key} className="border-t border-border">
-                    <td className="p-2">{ar ? stage.label_ar : stage.label_en}</td>
-                    <td className="tnum p-2" dir="ltr">{stage.count === null ? t.notProvided : stage.count.toLocaleString('en-US')}</td>
-                    <td className="tnum p-2" dir="ltr">{pct(stage.rate_from_previous)}</td>
-                    <td className="tnum p-2" dir="ltr">
-                      {/* Three sentences kept apart: withheld by this link, never reported, and a
-                          real figure. Collapsing the first two into a dash tells the wrong story. */}
-                      {stage.cost_hidden
-                        ? t.notShown
-                        : stage.cost_per === null
-                          ? t.notProvided
-                          : formatMetric({ kind: 'value', value: stage.cost_per }, 'cpa', locale, currency)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataMetricTable
+            columns={[
+              { key: 'stage', label: t.stage, kind: 'text' },
+              { key: 'count', label: t.count, kind: 'number' },
+              { key: 'rate', label: t.rate, kind: 'text' },
+              { key: 'cost', label: t.costPer, kind: 'text' },
+            ]}
+            rows={funnel.stages.map((stage) => ({
+              stage: ar ? stage.label_ar : stage.label_en,
+              count: stage.count,
+              rate: <span dir="ltr">{pct(stage.rate_from_previous)}</span>,
+              cost: (
+                <span dir="ltr">
+                  {stage.cost_hidden
+                    ? t.notShown
+                    : stage.cost_per === null
+                      ? t.notProvided
+                      : formatMetric({ kind: 'value', value: stage.cost_per }, 'cpa', locale, currency)}
+                </span>
+              ),
+            }))}
+          />
         )}
         {funnel && funnel.missing.length > 0 && (
           <p className="text-[11px] text-text-muted">
