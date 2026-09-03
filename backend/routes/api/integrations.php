@@ -103,28 +103,39 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
         ->middleware('throttle:20,1')->name('accounts.backfill');
 });
 
-// Per-project integrations (ResolveProject enforces project isolation).
+/*
+ * Per-project integrations (ResolveProject enforces project isolation).
+ *
+ * TEAM-PROJECT-RBAC-001 — binding an ad account to a client is one of the most consequential acts in
+ * the product: it decides whose money appears in whose report. It answered to the tenant role, which
+ * every member of the agency holds.
+ *
+ * Writes take `integrations.manage`. The two READS take it as well, and that is deliberate: which ad
+ * accounts a client is bound to, and under whose connection, is a fact about the agency's own
+ * arrangements rather than about the client's performance — a reader who may see the figures is not
+ * thereby entitled to see the plumbing behind them.
+ */
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
     ->prefix('projects/{project}/integrations')
     ->name('projects.integrations.')
     ->group(function (): void {
-        Route::get('/', [ProjectIntegrationController::class, 'index'])->name('index');
+        Route::get('/', [ProjectIntegrationController::class, 'index'])->middleware('project.can:integrations.manage')->name('index');
         // PROJINT-001: the same project's integrations organised by the six real ad platforms.
-        Route::get('platforms', [PlatformOverviewController::class, 'index'])->name('platforms');
+        Route::get('platforms', [PlatformOverviewController::class, 'index'])->middleware('project.can:integrations.manage')->name('platforms');
         // Revoking frees the slot — `usage('connections')` skips revoked and disconnected rows.
-        Route::post('connect', [ProjectIntegrationController::class, 'connect'])->name('connect')
+        Route::post('connect', [ProjectIntegrationController::class, 'connect'])->middleware('project.can:integrations.manage')->name('connect')
             ->middleware(EnsureWithinPlanLimit::class.':connections');
-        Route::post('bindings', [ProjectIntegrationController::class, 'bind'])->name('bind');
+        Route::post('bindings', [ProjectIntegrationController::class, 'bind'])->middleware('project.can:integrations.manage')->name('bind');
         // RUNTIME-100 §10 — a whole selection confirmed as one decision. Declared before `{binding}`
         // would matter if that route were a POST; it is not, but the order documents the intent.
-        Route::post('bindings/batch', [ProjectIntegrationController::class, 'bindBatch'])->name('bind-batch');
+        Route::post('bindings/batch', [ProjectIntegrationController::class, 'bindBatch'])->middleware('project.can:integrations.manage')->name('bind-batch');
         /*
          * INTEGRATION-DATASOURCE-WIZARD-001 §8 — «Manage accounts» saves the DESIRED SET and the
          * server derives the diff. A PUT because it is idempotent: the same set twice is the same
          * decision. It asks for no new authorisation — the token that discovered these accounts is
          * the token that binds them.
          */
-        Route::put('selection', [ProjectIntegrationController::class, 'applySelection'])->name('selection');
-        Route::post('bindings/{binding}/sync', [ProjectIntegrationController::class, 'sync'])->name('sync');
-        Route::delete('bindings/{binding}', [ProjectIntegrationController::class, 'detach'])->name('detach');
+        Route::put('selection', [ProjectIntegrationController::class, 'applySelection'])->middleware('project.can:integrations.manage')->name('selection');
+        Route::post('bindings/{binding}/sync', [ProjectIntegrationController::class, 'sync'])->middleware('project.can:integrations.manage')->name('sync');
+        Route::delete('bindings/{binding}', [ProjectIntegrationController::class, 'detach'])->middleware('project.can:integrations.manage')->name('detach');
     });
