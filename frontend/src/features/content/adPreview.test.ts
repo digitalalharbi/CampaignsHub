@@ -166,4 +166,56 @@ describe('the shape of the asset', () => {
     expect(previewShape(null, null, null)).toBe('unknown')
     expect(previewShape(0, 0, 'square-ish')).toBe('unknown')
   })
+
+  /**
+   * CONTENT-PREVIEW-SHAPES-001 — a catalog ad has no creative, and that is not an absence.
+   *
+   * Meta's dynamic product ads and their equivalents are composed per product at delivery. Nothing
+   * is missing, so «the platform sent no file» is the wrong sentence: it reads as a fault and sends
+   * an operator looking for a sync problem that does not exist. Before this it arrived as `other`
+   * and fell through to exactly that.
+   */
+  it('says a catalog ad has no single file, rather than reporting an absence', () => {
+    const reading = readPreview(
+      { state: 'available', kind: 'catalog', image_url: null, video_url: null, thumbnail_url: null } as never,
+      true,
+    )
+
+    expect(reading.kind).toBe('catalog')
+    expect(posterSource(reading)).toBeNull()
+    expect(absenceLabel(reading, true)).toContain('كتالوج')
+    expect(absenceLabel(reading, true), 'a catalog ad is not a missing file').not.toContain('لم ترسل المنصة ملفًا')
+  })
+
+  /**
+   * A collection's hero is real and is drawn; the tiles beneath it are not one file.
+   *
+   * Showing the hero alone and calling it the ad shows a reader one sixth of it, so the SHAPE
+   * travels with the reading and the surface can say which it is.
+   */
+  it('draws a collection hero and keeps the shape with it', () => {
+    const reading = readPreview(
+      { state: 'available', kind: 'collection', image_url: 'https://cdn.example/hero.jpg', video_url: null, thumbnail_url: null } as never,
+      true,
+    )
+
+    expect(reading.kind).toBe('collection')
+    expect(posterSource(reading)).toBe('https://cdn.example/hero.jpg')
+  })
+
+  /** A collection with no hero is a smaller claim than «nothing arrived». */
+  it('separates a collection with no hero from an ad with no media at all', () => {
+    const noHero = readPreview(
+      { state: 'available', kind: 'collection', image_url: null, video_url: null, thumbnail_url: null } as never,
+      true,
+    )
+    const noMedia = readPreview(
+      { state: 'available', kind: 'image', image_url: null, video_url: null, thumbnail_url: null } as never,
+      true,
+    )
+
+    expect(absenceLabel(noHero, true)).toContain('مجموعة')
+    expect(absenceLabel(noMedia, true)).toContain('لم تُرسل المنصة ملفًا')
+    expect(absenceLabel(noHero, true)).not.toBe(absenceLabel(noMedia, true))
+  })
 })
