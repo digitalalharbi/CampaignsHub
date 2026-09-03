@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativePresenter;
+use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -115,6 +116,66 @@ final class SignedMediaUrlTest extends TestCase
     public function test_an_unsigned_url_is_shown(): void
     {
         $this->assertSame('available', $this->preview('https://cf.snapchat.com/media/plain.jpg')['state']);
+    }
+
+    /**
+     * CONTENT-PREVIEW-SHAPES-001 — the two shapes whose media is not one asset.
+     *
+     * Both used to arrive as `other`. A COLLECTION then rendered as an ordinary still — one sixth of
+     * the ad, presented as the ad — and a CATALOG ad fell through to «the platform sent no file»,
+     * which reads as a fault and sends an operator looking for a sync problem that does not exist:
+     * the platform composes a catalog creative per product at delivery, so there was never a file to
+     * send.
+     *
+     * The format string is what the providers actually return, which is why the check is a
+     * `str_contains` and why «collection_video» has to read as a collection: the collection is the
+     * more specific truth about an ad whose hero happens to be a film.
+     */
+    public function test_a_collection_and_a_catalog_ad_are_named_as_the_shapes_they_are(): void
+    {
+        foreach ([
+            'collection' => 'collection',
+            'collection_video' => 'collection',
+            'catalog' => 'catalog',
+            'dynamic_product_ad' => 'catalog',
+            'dpa' => 'catalog',
+        ] as $format => $expected) {
+            $creative = ExternalCreative::withoutGlobalScopes()->create([
+                'tenant_id' => $this->tenant->id,
+                'project_id' => $this->project->id,
+                'provider' => 'meta',
+                'external_creative_id' => 'cr-'.Str::random(8),
+                'name' => 'A creative',
+                'format' => $format,
+            ]);
+
+            $this->assertSame(
+                $expected,
+                app(CreativePresenter::class)->preview($creative)['kind'],
+                "«{$format}» did not read as a {$expected}",
+            );
+        }
+    }
+
+    /**
+     * And the picker can name them.
+     *
+     * A filter with no word for a shape hides every ad of it, and an operator concludes the account
+     * has no collection ads rather than that the control has no word for them.
+     */
+    public function test_the_shape_filter_offers_every_shape_the_presenter_can_answer(): void
+    {
+        $options = app(CreativeRows::class)->filterOptions(
+            static fn () => ExternalCreative::withoutGlobalScopes()->whereRaw('1 = 0'),
+        );
+
+        foreach (['image', 'video', 'carousel', 'collection', 'catalog'] as $kind) {
+            $this->assertContains(
+                $kind,
+                $options['kinds'],
+                "the picker has no word for «{$kind}», so every ad of that shape is invisible to it",
+            );
+        }
     }
 
     /** @return array<string, mixed> */
