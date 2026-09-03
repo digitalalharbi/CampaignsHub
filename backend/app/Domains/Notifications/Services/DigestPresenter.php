@@ -78,6 +78,26 @@ final class DigestPresenter
         return number_format((float) $value, ((float) $value) === floor((float) $value) ? 0 : 2).' '.$currency;
     }
 
+    /**
+     * A headline total, rounded — EMAIL-DASHBOARD-UX-001.
+     *
+     * «99,092.98 SAR» wrapped onto two lines inside a quarter-width KPI card, which is how a figure
+     * a reader is meant to take in at a glance becomes one they have to reassemble. The 98 halalas
+     * change nothing about a five-figure total and cost the card its legibility.
+     *
+     * Deliberately NOT used for a cost per result: on a figure of 28.17 the fraction IS the figure,
+     * and rounding it to 28 is a different answer to the question the card is asking. This is for
+     * headline sums only, which is why it is a separate method rather than a flag on `money()`.
+     */
+    public function headline(float|int|null $value, string $currency = 'SAR'): string
+    {
+        if ($value === null) {
+            return $this->noData();
+        }
+
+        return number_format(round((float) $value), 0).' '.$currency;
+    }
+
     /** A count, or the honest reason there is not one. */
     public function count(array $totals, array $reported, string $key): string
     {

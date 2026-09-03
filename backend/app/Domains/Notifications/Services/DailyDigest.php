@@ -599,17 +599,49 @@ final class DailyDigest
         $conversions = 0.0;
         $revenue = 0.0;
 
+        $prevSpend = 0.0;
+        $prevConversions = 0.0;
+        $prevRevenue = 0.0;
+
         foreach ($blocks as $block) {
             $spend += (float) ($block['totals']['spend'] ?? 0);
             $conversions += (float) ($block['totals']['conversions'] ?? 0);
             $revenue += (float) ($block['totals']['revenue'] ?? 0);
+
+            $prevSpend += (float) ($block['previous']['spend'] ?? 0);
+            $prevConversions += (float) ($block['previous']['conversions'] ?? 0);
+            $prevRevenue += (float) ($block['previous']['revenue'] ?? 0);
         }
+
+        /*
+         * EMAIL-DASHBOARD-UX-001 — a KPI without its movement is half a fact.
+         *
+         * «41,923 ر.س» tells a reader what was spent and nothing about whether that is the usual
+         * amount. The previous window is the same length and immediately before, so the comparison
+         * is one a person would make themselves.
+         *
+         * Null where the previous window is zero: every rise from nothing is infinite, and «up ∞%»
+         * is not a movement anybody set a threshold on.
+         */
+        $change = static function (float $now, float $before): ?float {
+            return $before <= 0.0 ? null : round(($now - $before) / $before, 4);
+        };
 
         return [
             'projects' => count($blocks),
             'spend' => round($spend, 2),
             'conversions' => round($conversions, 2),
             'revenue' => round($revenue, 2),
+            'previous' => [
+                'spend' => round($prevSpend, 2),
+                'conversions' => round($prevConversions, 2),
+                'revenue' => round($prevRevenue, 2),
+            ],
+            'change' => [
+                'spend' => $change($spend, $prevSpend),
+                'conversions' => $change($conversions, $prevConversions),
+                'revenue' => $change($revenue, $prevRevenue),
+            ],
             /*
              * Deliberately absent: a blended cost per result and a blended return.
              *
