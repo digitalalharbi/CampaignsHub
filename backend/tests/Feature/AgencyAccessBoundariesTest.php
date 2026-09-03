@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Messaging\Models\MessageThread;
+use App\Domains\Projects\Access\ProjectRole;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Tasks\Models\Task;
@@ -172,8 +173,25 @@ final class AgencyAccessBoundariesTest extends TestCase
 
         // `projects.view` WITHOUT `projects.view.all` — the combination the project ceiling applies to.
         $member = $this->operator('scoped@boundary.dev', ['clients.view', 'projects.view', 'tasks.view']);
+
+        /*
+         * TEAM-PROJECT-RBAC-001 — the role is named, and it is the one whose access this asserts.
+         *
+         * This wrote `'member'`, a string `ProjectRole` has never had. It resolved through the legacy
+         * fallback to the VIEWER preset, which deliberately grants dashboard, analytics, campaigns
+         * and reports and NOT tasks: a client viewer is not entitled to the agency's internal work
+         * list, and `client_viewer` maps to that preset for exactly that reason.
+         *
+         * So the route capability was correct and the fixture was asking the wrong person. The
+         * assertion here is about ISOLATION — own project yes, another project no — and the task list
+         * was only ever the surface it used to ask. `marketing_manager` is a role that genuinely has
+         * `tasks.view`, so the isolation claim is now made by somebody who would otherwise be allowed.
+         */
         ProjectMembership::create([
-            'project_id' => $mine->id, 'user_id' => $member->id, 'role' => 'member', 'status' => 'active',
+            'project_id' => $mine->id,
+            'user_id' => $member->id,
+            'role' => ProjectRole::MARKETING_MANAGER,
+            'status' => 'active',
         ]);
 
         $this->actingAs($member, 'sanctum')->getJson("/api/v1/projects/{$mine->id}/tasks")->assertOk();
