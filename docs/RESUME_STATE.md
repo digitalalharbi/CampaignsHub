@@ -1,9 +1,13 @@
-# START HERE — 2026-09-01
+# START HERE — 2026-09-04
 
 Read this file, then `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then `git log origin/main`.
 Operational authority: `Git → REQUIREMENTS_TRACEABILITY_MATRIX.md → RESUME_STATE.md`.
 This file owns **resumability**. The Matrix owns **requirements and status**; do not keep a second
 copy of them here.
+
+**This file had gone stale by sixteen merges** and described #248/#249 as open while main had reached
+#264. A resume document that is wrong is worse than one that is missing, because the next session
+plans from it. Repaired on 2026-09-04 from `git log origin/main`.
 
 **Read this before you trust any row: a status is a claim about the PRODUCT, not about the code.**
 On 2026-08-31 the owner opened the live client report and found four rows that said VERIFIED over
@@ -16,9 +20,9 @@ obligation and is not closed.
 ## 1. Where the tree is
 
 ```
-origin/main = 288e2a54bf3bf3a719063bdf324c723e93351c2a
+origin/main = ff5126e7837c9897f3f07235e75d3c3515e33357   (#264)
 production  = https://campaignshub.io/   (200 after every deploy; the VPS resets hard to origin/main on push)
-open PRs    = #248 live report form  ·  #249 lead identity as a permission  ·  the ledger catch-up
+open PRs    = #265 the client-facing presentation reset (§57)  ·  #266 ad detail parity + report creation UX
 ```
 
 Reference share used for browser acceptance: the live client report the owner opened. **Do not
