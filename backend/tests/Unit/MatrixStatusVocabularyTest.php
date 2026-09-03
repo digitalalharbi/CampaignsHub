@@ -352,6 +352,91 @@ final class MatrixStatusVocabularyTest extends TestCase
      * VERIFIED and the two blocked statuses are exempt — there is nothing remaining, or what remains
      * is stated as the blocker.
      */
+    /**
+     * A VERIFIED row may not still be describing what is left to do — GOVERNANCE-ANTILOSS-001.
+     *
+     * `REPORT-DETAIL-PARITY-001` was marked VERIFIED while its own gap cell said, in as many words,
+     * «Remaining: the ad and content rungs below it, budget, funnel/store and the findings appendix,
+     * and the snapshot form's own parity». One rung of thirteen had landed. The status was flipped by
+     * an append that described the rung, not the requirement.
+     *
+     * That is the most expensive failure this ledger has, because it is invisible: nothing is missing
+     * from the file, the row reads as finished, and the work is silently dropped. So a completed row
+     * has to stop saying «remaining» in the present tense.
+     *
+     * ## What it deliberately allows
+     *
+     * A VERIFIED row may still narrate a remainder that has since been CLOSED — «Remaining: X» is
+     * how this ledger records history, and forbidding the word outright would drive the history out
+     * of the file. Only the LAST such statement counts, because a gap cell is append-only and the
+     * final sentence is the current one: if the row's closing words are about work left to do, the
+     * row is not done.
+     */
+    public function test_a_finished_row_is_not_still_naming_work(): void
+    {
+        $offenders = [];
+
+        foreach (self::tables(file($this->matrixPath())) as $table) {
+            if ($table['status'] === null || $table['gap'] === null) {
+                continue;
+            }
+
+            foreach ($table['rows'] as [, $cells]) {
+                $id = trim($cells[1] ?? '');
+                $status = trim(str_replace('*', '', $cells[$table['status']] ?? ''));
+
+                if (preg_match('/^[A-Z][A-Za-z0-9._-]*$/', $id) !== 1 || $status !== 'VERIFIED') {
+                    continue;
+                }
+
+                $gap = trim($cells[$table['gap']] ?? '');
+
+                /*
+                 * The closing paragraph, not the whole cell.
+                 *
+                 * A gap cell is append-only, so its last statement is the current claim and
+                 * everything before it is history. 900 characters is one appended paragraph in this
+                 * ledger's house style — the first spelling used 320 and missed the very row it was
+                 * written for by about a hundred characters, which is how a guard passes for the
+                 * wrong reason.
+                 */
+                $closing = mb_substr($gap, max(0, mb_strlen($gap) - 900));
+
+                /*
+                 * Four spellings, and the fourth is why this list is not a single regex.
+                 *
+                 * `DASH-010` read VERIFIED while this cell said «E-frontend + F + G remain; verify full
+                 * cross-browser/mobile/RTL-LTR/light-dark at G before VERIFIED». It never used the word
+                 * «Remaining»; it named its own acceptance and said it was unmet. A guard that only knew
+                 * one phrasing let the loudest possible admission through.
+                 */
+                foreach ([
+                    '**Remaining:**',
+                    '**Remaining, ',
+                    'Remaining: the ',
+                    'Remaining, stated',
+                    'before VERIFIED',
+                    ' remain;',
+                    ' remain.',
+                ] as $phrase) {
+                    if (mb_strpos($closing, $phrase) !== false) {
+                        // The id alone: `$line` is the whole row, and a failure message that
+                        // reprints a 4,000-character cell is one nobody reads to the end of.
+                        $offenders[] = $id;
+                        break;
+                    }
+                }
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            "A VERIFIED row ends by naming work that is still to do. Either finish it, or set the\n"
+            ."status back to what is true:\n  ".implode("\n  ", $offenders),
+        );
+    }
+
     public function test_an_unfinished_row_says_what_is_remaining(): void
     {
         $done = ['VERIFIED', 'BLOCKED_EXTERNAL_CREDENTIALS', 'BLOCKED_OPERATIONAL_EVIDENCE'];
