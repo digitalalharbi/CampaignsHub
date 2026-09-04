@@ -96,4 +96,31 @@ describe('a client-facing surface', () => {
       ).toEqual([])
     })
   }
+
+  /**
+   * **One question, asked once.**
+   *
+   * `PrintReport` decided twice, in one file, whether its reader is client-facing — and got two
+   * different answers. The PDF's title withheld `rid`, `checksum` and `data_version` from the
+   * EXECUTIVE file, treating it as a client document; the methodology page printed all three, plus
+   * `daily_metrics` and the attribution window, because it asked only whether the audience was
+   * literally `client`. One document, both statements.
+   *
+   * A predicate that exists twice will eventually disagree with itself, so this pins the direction:
+   * the audience question is `isClientAudience`, and a second copy of it fails here.
+   */
+  it('asks the audience question in one place', () => {
+    const copies = Object.entries(TREE)
+      .filter(([path]) => !/\.test\.tsx?$/.test(path))
+      .filter(([path]) => !path.endsWith('/InteractiveReport.tsx'))
+      .filter(([, source]) => /audience\s*[=!]==\s*'(client|executive)'/.test(withoutComments(source)))
+      .map(([path]) => path)
+
+    expect(
+      copies,
+      'use `isClientAudience` from InteractiveReport — a second copy of this predicate is how one\n'
+      + 'document came to say «client file» in its metadata and print a checksum on its page:\n  '
+      + copies.join('\n  '),
+    ).toEqual([])
+  })
 })
