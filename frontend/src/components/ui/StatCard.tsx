@@ -26,7 +26,7 @@ import { CARD_GAP, CARD_PAD, METRIC_HINT, METRIC_LABEL, METRIC_VALUE_DENSE } fro
  *
  * ## Heights
  *
- * A fixed padding scale and a `min-h` on the value row, so a card with a hint and a card without one
+ * A fixed padding scale and a `min-h` on the value AND hint rows, so a card with a hint and one without
  * are the same height. Cards of different heights in one row read as a layout accident, and an
  * operator scanning a row of them loses the alignment that makes scanning work.
  */
@@ -117,7 +117,14 @@ export function StatCard({
         shape === 'square' ? 'aspect-square justify-between' : ''
       }`}
     >
-      <div className="flex items-center justify-between gap-2">
+      {/*
+        RESERVED, like the value and hint rows below it — a card whose movement pill is absent had a
+        16px label row against a 24px one, and after the hint row was equalised this was the eight
+        pixels still separating «نشطة» from «CPA» at 390 on the campaigns page. A movement pill is
+        present exactly when a comparison window produced one, so on any real KPI row some cards
+        carry it and some do not.
+      */}
+      <div className="flex min-h-6 items-center justify-between gap-2">
         <span className={`flex items-center gap-1.5 text-text-secondary ${METRIC_LABEL}`}>
           {dot && <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[tone]}`} aria-hidden />}
           {label}
@@ -134,7 +141,16 @@ export function StatCard({
         {value}
       </span>
 
-      {hint && <span className={`text-text-muted ${METRIC_HINT}`}>{hint}</span>}
+      {/*
+        RESERVED whether or not it draws — the same rule `MetricStrip` follows for its chart row.
+        `min-h-9` above equalises the VALUE row, which is what the card's own note claimed made a
+        hinted and an unhinted card the same height. It does not: the hint is a second row, and a
+        card carrying one is eighteen pixels taller. At 1440 a taller sibling stretches the shorter
+        one and the difference is invisible; at 390 the same six cards sit in three rows of two, and
+        the campaigns page measured 115, 115 and 100 — a grid whose rhythm breaks on the last row.
+        Empty rather than a non-breaking space, so nothing is announced where there is nothing.
+      */}
+      <span aria-hidden={!hint} className={`min-h-[1.125rem] text-text-muted ${METRIC_HINT}`}>{hint}</span>
 
       {spark}
     </div>
