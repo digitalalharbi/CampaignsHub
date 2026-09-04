@@ -81,6 +81,13 @@ export const TYPE_LABELS: Record<string, Words> = {
   // التقارير
   daily_digest: { ar: 'الملخص اليومي', en: 'Daily summary' },
   weekly_digest: { ar: 'الملخص الأسبوعي', en: 'Weekly summary' },
+  /*
+   * The third rhythm. The backend has dispatched it since EMAIL-INTELLIGENCE-001 and the catalogue
+   * lists it beside the other two; this map did not, so the settings table printed the raw key
+   * «monthly_digest» in a column where every sibling reads as a sentence — a database identifier in
+   * front of a reader, which is the defect the portal audit has an E2E against.
+   */
+  monthly_digest: { ar: 'الملخص الشهري', en: 'Monthly summary' },
   report_ready: { ar: 'تقرير جاهز', en: 'A report is ready' },
   report_failed: { ar: 'تعذّر إنشاء تقرير', en: 'A report could not be built' },
   // التشغيل
@@ -105,6 +112,16 @@ export const TYPE_NOTES: Record<string, Words> = {
     en: 'Yesterday, for every project you can see, at the hour you choose.',
   },
   weekly_digest: { ar: 'ملخص الأسبوع المنتهي، يصل صباح الاثنين.', en: 'The finished week, on Monday morning.' },
+  /*
+   * The month that FINISHED, not the one in progress: the sender reports the previous month, which
+   * is the only arrangement where the figures are complete when they arrive. The day is chosen per
+   * recipient (`digest_monthday`) and does not reach this screen, so it is not stated — a sentence
+   * naming a day this screen cannot know would be a guess printed as a fact.
+   */
+  monthly_digest: {
+    ar: 'ملخص الشهر المنتهي، بعد اكتمال أرقامه.',
+    en: 'The finished month, once its figures are complete.',
+  },
   message: {
     ar: 'يصلك داخل النظام دائمًا. البريد مغلق افتراضيًا لأن رسائل المحادثات كثيرة.',
     en: 'Always reaches the bell. Email is off by default — conversations are frequent.',

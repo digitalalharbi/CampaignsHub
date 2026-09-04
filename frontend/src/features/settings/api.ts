@@ -130,7 +130,13 @@ export interface CatalogueType {
   /** Empty for the digests, which ARE a rhythm. `['immediate']` for events nothing batches. */
   rhythms: Rhythm[]
   /** `daily` or `weekly` when this row is switched through the digest opt-ins instead of `types`. */
-  digest_switch: 'daily' | 'weekly' | null
+  /*
+   * All THREE rhythms. `MessageCatalogue::DIGEST_SWITCH` maps daily, weekly AND monthly, and the
+   * sender has dispatched the monthly since EMAIL-INTELLIGENCE-001 — this type had only two, so the
+   * settings table's cadence column was written as a binary and told every monthly subscriber their
+   * summary arrives «Weekly, Monday morning».
+   */
+  digest_switch: 'daily' | 'weekly' | 'monthly' | null
   sent_by: string
 }
 
