@@ -96,6 +96,7 @@ const COPY = {
     from: 'من',
     to: 'إلى',
     sort: 'الترتيب',
+    sortRelevance: 'ما يعمل الآن',
     sortRecent: 'الأحدث نشاطًا',
     sortSpend: 'الأعلى إنفاقًا',
     sortImpressions: 'الأعلى ظهورًا',
@@ -172,6 +173,7 @@ const COPY = {
     from: 'From',
     to: 'To',
     sort: 'Sort',
+    sortRelevance: 'What is running',
     sortRecent: 'Most recently active',
     sortSpend: 'Highest spend',
     sortImpressions: 'Most impressions',
@@ -336,7 +338,7 @@ export function CreativesPage() {
   const [search, setSearch] = useState(() => initial.current.get('search') ?? '')
   const [from, setFrom] = useState(() => initial.current.get('from') ?? isoDaysAgo(29))
   const [to, setTo] = useState(() => initial.current.get('to') ?? isoDaysAgo(0))
-  const [sort, setSort] = useState(() => initial.current.get('sort') ?? 'recent')
+  const [sort, setSort] = useState(() => initial.current.get('sort') ?? 'relevance')
   const [page, setPage] = useState(1)
   const [axes, setAxes] = useState<Record<string, string[]>>(() => {
     const seeded: Record<string, string[]> = {}
@@ -618,6 +620,15 @@ export function CreativesPage() {
               value={sort}
               testid="content-sort"
               options={[
+                /*
+                 * ENTITY-RELEVANCE-ORDERING-001 — «what is running» leads, and it is the default.
+                 *
+                 * Recency is not relevance: a paused campaign's creative that delivered yesterday
+                 * sorted above a serving creative whose last figure was three days old, so the first
+                 * thing an operator saw was work they could do nothing about. «Most recently active»
+                 * stays on the list, because it is a real question — it is just not the first one.
+                 */
+                { value: 'relevance', label: t.sortRelevance },
                 { value: 'recent', label: t.sortRecent },
                 { value: 'spend', label: t.sortSpend },
                 { value: 'impressions', label: t.sortImpressions },
