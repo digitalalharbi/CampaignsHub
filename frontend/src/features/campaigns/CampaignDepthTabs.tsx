@@ -5,7 +5,7 @@ import type { UnifiedCampaign } from './types'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import type { Range } from '@/features/analytics/api'
-import { money, num } from '@/features/analytics/format'
+import { moneyExact, num } from '@/features/analytics/format'
 import { fmtDateTime } from '@/lib/datetime'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
@@ -135,7 +135,7 @@ export function CampaignEventsTab({ campaign, projectId, range }: { campaign: Un
                       </span>
                     </td>
                     <td className="tnum p-3 text-end font-semibold text-text-primary">{num(e.count)}</td>
-                    <td className="tnum p-3 text-end text-text-secondary">{e.cost_per !== null ? money(e.cost_per, cur) : '—'}</td>
+                    <td className="tnum p-3 text-end text-text-secondary">{e.cost_per !== null ? moneyExact(e.cost_per, cur ?? null) : '—'}</td>
                   </tr>
                 )
               })}

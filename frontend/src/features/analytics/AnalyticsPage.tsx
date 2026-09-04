@@ -1241,7 +1241,7 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
             )}
             <div className="w-40 shrink-0 text-end text-xs text-text-muted">
               {s.step_rate !== null && <span>{ar ? 'انتقال' : 'step'} {percent(s.step_rate, 0)}</span>}
-              {s.cost_per !== null && <span className="ms-2">{ar ? 'تكلفة' : 'cost'} {money(s.cost_per, costCurrency)}</span>}
+              {s.cost_per !== null && <span className="ms-2">{ar ? 'تكلفة' : 'cost'} {moneyExact(s.cost_per, costCurrency ?? null)}</span>}
             </div>
           </div>
         ))}

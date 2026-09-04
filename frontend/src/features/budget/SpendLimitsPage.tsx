@@ -4,7 +4,7 @@ import { days as countedDays } from '@/lib/counted'
 import { Panel } from '@/features/analytics/components'
 import { EmptyState } from '@/components/ui/States'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
-import { money, num, percent } from '@/features/analytics/format'
+import { money, moneyExact, num, percent } from '@/features/analytics/format'
 import { providerLabel } from '@/features/campaigns/labels'
 import { useRemoveSpendLimit, useSpendLimits, type SpendLimitReading } from './spendLimitsApi'
 import { NewSpendLimitDialog } from './NewSpendLimitDialog'
@@ -187,17 +187,20 @@ function LimitCard({
         <StatCard
           label={ar ? 'الحد' : 'Limit'}
           value={money(limit.amount, limit.currency)}
+          exact={moneyExact(limit.amount, limit.currency ?? null)}
           testid={`spend-limit-${limit.id}-amount`}
         />
         <StatCard
           label={ar ? 'المصروف' : 'Consumed'}
           /* Never «0» for a figure nobody could compute — the em dash is the honest answer. */
           value={limit.consumed === null ? '—' : money(limit.consumed, limit.consumed_currency ?? limit.currency)}
+          exact={limit.consumed === null ? undefined : moneyExact(limit.consumed, limit.consumed_currency ?? limit.currency ?? null)}
           testid={`spend-limit-${limit.id}-consumed`}
         />
         <StatCard
           label={ar ? 'المتبقي' : 'Remaining'}
           value={limit.remaining === null ? '—' : money(limit.remaining, limit.currency)}
+          exact={limit.remaining === null ? undefined : moneyExact(limit.remaining, limit.currency ?? null)}
           tone={limit.remaining !== null && limit.remaining < 0 ? 'danger' : 'neutral'}
         />
         <StatCard
