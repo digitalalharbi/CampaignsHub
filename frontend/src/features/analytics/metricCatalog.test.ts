@@ -169,6 +169,15 @@ describe('the exact figure travels with the compact one', () => {
   const read = (key: string, value: number) =>
     readMetric(key, SPECS[key]!, { [key]: value }, undefined, 'SAR')
 
+  /** The same reading, narrowed to the measured case — the only one with text to assert. */
+  const textOf = (key: string, value: number): string => {
+    const r = read(key, value)
+
+    expect(r.kind, `${key} did not read as a measured figure`).toBe('value')
+
+    return (r as { kind: 'value'; text: string }).text
+  }
+
   it('carries the full number when the display abbreviated it', () => {
     expect(read('spend', 4_850_321)).toEqual({ kind: 'value', text: '4.85M SAR', exact: '4,850,321 SAR' })
   })
@@ -178,8 +187,126 @@ describe('the exact figure travels with the compact one', () => {
     expect(read('spend', 940)).toEqual({ kind: 'value', text: '940 SAR' })
   })
 
-  it('attaches nothing to a formatter that does not abbreviate', () => {
-    /* `impressions` prints «1,282,024» in full — a tooltip repeating it would be noise. */
-    expect(read('impressions', 1_282_024)).toEqual({ kind: 'value', text: '1,282,024' })
+  /**
+   * NUMBER-PRESENTATION-001 §58 — a large COUNT abbreviates too, and keeps its digits.
+   *
+   * «1,282,024» in a card sixty pixels wide is eleven characters fighting for room with the label
+   * above it, and the owner's correction names this case exactly: 4,127,676 → 4.13M. Only the
+   * DISPLAY compacts; the full number rides along and the strip hangs it on the value.
+   */
+  it('abbreviates a large count and carries its full figure', () => {
+    expect(read('impressions', 1_282_024)).toEqual({ kind: 'value', text: '1.28M', exact: '1,282,024' })
+    expect(read('clicks', 29_210)).toEqual({ kind: 'value', text: '29.2K', exact: '29,210' })
+  })
+
+  /** Below a thousand there is nothing to abbreviate, so no tooltip repeats what is on screen. */
+  it('attaches nothing to a count that was never abbreviated', () => {
+    expect(read('conversions', 581)).toEqual({ kind: 'value', text: '581' })
+  })
+
+  /**
+   * «Do NOT compact figures where the exact figure itself is the decision-critical value, such as:
+   * CPC / CPL / CPA / ROAS / percentages where precision matters.»
+   *
+   * The owner's rule, and the defect that prompted it: a cost per click of 1.50 printed «2 SAR» on
+   * Analytics — `money()` keeps three significant digits, which is generous for a total and
+   * destructive for a figure whose whole value is in the decimals. Every cost-per metric is read in
+   * full, and a percentage keeps its two places.
+   */
+  it('never abbreviates a cost per result, a return or a rate', () => {
+    // The decimals that carry the decision, kept.
+    expect(textOf('cpc', 1.5)).toBe('1.50 SAR')
+    expect(textOf('cpl', 88.72)).toBe('88.72 SAR')
+    expect(textOf('cpm', 3.03)).toBe('3.03 SAR')
+    expect(textOf('roas', 12.0836)).toBe('12.08×')
+    expect(textOf('ctr', 0.0226)).toBe('2.26%')
+
+    /*
+     * And no K/M/B on any of them, whatever the magnitude. That is the rule the owner stated —
+     * «do not compact» — and it is distinct from rounding: a cost per result above a thousand still
+     * writes its digits out, where `money()` would have abbreviated it to «1.23K SAR».
+     */
+    for (const key of ['cpa', 'cpc', 'cpl', 'cpi', 'cpe', 'cpm']) {
+      expect(textOf(key, 1_234.56), `${key} was abbreviated`).not.toMatch(/[KMB]/)
+      expect(textOf(key, 1_284_000), `${key} was abbreviated`).not.toMatch(/[KMB]/)
+    }
+  })
+})
+
+/**
+ * UX-KPI-PRESENTATION-001 — «المؤشر والرقم والشارت لكل مؤشر».
+ *
+ * Every indicator card is to carry its label, its figure, its movement and the shape of the metric
+ * over the period. The first three were already there; the sparkline is the one the owner asked for,
+ * and the interesting rules are all about when NOT to draw it.
+ *
+ * The series is the page's own — the array it already fetched for the chart under the cards — so a
+ * card's trend cannot disagree with the drawing beneath it.
+ */
+describe('the sparkline on an indicator card', () => {
+  const summary = (over: Record<string, unknown> = {}) => ({
+    current: { spend: 900, clicks: 300, conversions: 12, impressions: 90_000, revenue: 0 },
+    previous: { spend: 800, clicks: 250, conversions: 10, impressions: 80_000, revenue: 0 },
+    delta: { spend: 0.125 },
+    reported: { spend: true, clicks: true, conversions: true, impressions: true, revenue: true },
+    rows_in_scope: true,
+    currency: 'SAR',
+    ...over,
+  }) as never
+
+  const series = (spend: Array<number | null>) =>
+    spend.map((v, i) => ({ date: `2026-08-0${i + 1}`, spend: v, clicks: 10 + i })) as never
+
+  const spendCard = (summaryOver: Record<string, unknown>, points: unknown) =>
+    dashboardMetrics('sales', summary(summaryOver), true, points as never)
+      .primary.concat(dashboardMetrics('sales', summary(summaryOver), true, points as never).secondary)
+      .find((m) => m.key === 'spend')
+
+  it('carries the shape of the metric across the window', () => {
+    expect(spendCard({}, series([100, 300, 200, 400]))?.spark).toEqual([100, 300, 200, 400])
+  })
+
+  /** No series to hand — a card, not a card built from a second source. */
+  it('draws nothing when the page has no series', () => {
+    expect(spendCard({}, undefined)?.spark).toBeUndefined()
+  })
+
+  /**
+   * A metric no platform sent has no shape — UX-METRICS-001.
+   *
+   * The summary's sums coalesce to zero, so an unreported metric and a measured zero are the same
+   * number in the payload. A flat line at the floor under «لم ترسله المنصة» would be a drawing of
+   * an absence, which is the claim that whole requirement exists to prevent.
+   */
+  it('draws nothing for a metric the platform never reported', () => {
+    const card = spendCard({ reported: { spend: false } }, series([100, 300, 200, 400]))
+
+    expect(card?.spark).toBeUndefined()
+  })
+
+  /**
+   * A hole is not a zero — FX-001.
+   *
+   * A withheld money figure comes through as null. Plotting it at the floor would draw a collapse
+   * that did not happen, on exactly the days the product refused to state a number.
+   */
+  it('refuses the line when too much of the window is missing', () => {
+    expect(spendCard({}, series([100, null, null, 400]))?.spark).toBeUndefined()
+  })
+
+  /** …and tolerates a hole it can still describe a shape around. */
+  it('draws the shape it does have when one day is missing', () => {
+    expect(spendCard({}, series([100, 300, null, 400]))?.spark).toEqual([100, 300, 400])
+  })
+
+  /** A flat line is not a trend, and drawing one invites a reader to see movement in it. */
+  it('draws nothing when every day is the same figure', () => {
+    expect(spendCard({}, series([0, 0, 0, 0]))?.spark).toBeUndefined()
+    expect(spendCard({}, series([250, 250, 250]))?.spark).toBeUndefined()
+  })
+
+  /** One point is a dot, not a line. */
+  it('draws nothing for a single day', () => {
+    expect(spendCard({}, series([100]))?.spark).toBeUndefined()
   })
 })
