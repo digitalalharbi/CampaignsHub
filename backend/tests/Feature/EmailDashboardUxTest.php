@@ -176,6 +176,53 @@ final class EmailDashboardUxTest extends TestCase
     }
 
     /**
+     * EMAIL-DASHBOARD-UX-001 — and so does the first sentence.
+     *
+     * The intro was a two-way branch: daily said «yesterday», and everything else said «this week».
+     * So the MONTHLY digest opened «Here is the week» under a header reading «Monthly digest ·
+     * 2026-08-01 → 2026-08-31» — the first sentence contradicting the line directly above it.
+     *
+     * Found by rendering the THIRD rhythm. The first two were right by luck of the branch, which is
+     * exactly why reading two of three missed it, and why this asserts all three.
+     */
+    public function test_the_first_sentence_names_the_window_the_mail_is_about(): void
+    {
+        $cases = [
+            'monthly' => ['ar' => 'هذا الشهر', 'en' => 'the month', 'not_ar' => 'هذا الأسبوع', 'not_en' => 'the week'],
+            'weekly' => ['ar' => 'هذا الأسبوع', 'en' => 'the week', 'not_ar' => 'هذا الشهر', 'not_en' => 'the month'],
+            'daily' => ['ar' => 'أمس', 'en' => 'yesterday', 'not_ar' => 'هذا الأسبوع', 'not_en' => 'the week'],
+        ];
+
+        foreach ($cases as $kind => $expected) {
+            foreach (['ar', 'en'] as $lang) {
+                $html = (new DailyDigestMail($this->digest(), $lang, 'مدير', $kind))->render();
+                $intro = $this->introOf($html);
+
+                $this->assertStringContainsString($expected[$lang], $intro, "the {$kind} intro does not name its own window in {$lang}");
+                $this->assertStringNotContainsString(
+                    $expected[$lang === 'ar' ? 'not_ar' : 'not_en'],
+                    $intro,
+                    "the {$kind} intro names a window it is not about",
+                );
+            }
+        }
+    }
+
+    /**
+     * The intro sentence alone, because the rest of the mail legitimately names other windows.
+     *
+     * A comparison pill says «vs the previous week» wherever the rhythm is; asserting over the whole
+     * document would make this test fail on a sentence that is correct.
+     */
+    private function introOf(string $html): string
+    {
+        $text = strip_tags($html);
+        $start = mb_strpos($text, 'مدير');
+
+        return $start === false ? $text : mb_substr($text, $start, 260);
+    }
+
+    /**
      * EMAIL-DASHBOARD-UX-001 — the footer names the rhythm the reader actually chose.
      *
      * One mailable serves daily, weekly and monthly, and the footer was written once, in the daily's
