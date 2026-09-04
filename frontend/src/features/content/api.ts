@@ -39,7 +39,15 @@ export interface CreativeCardSlide {
 /** What the browser may load for a creative, and why when it may not. */
 export interface CreativePreview {
   /** `available` renders; the other three explain themselves and never fabricate an image. */
-  state: 'available' | 'withheld' | 'expired' | 'unavailable'
+  /**
+   * AD-MEDIA-RECOVERY-001 — `never_fetched` is distinct from `unavailable` on purpose.
+   *
+   * `unavailable` is a fact about the PLATFORM: the ad was fetched and it exposed no asset.
+   * `never_fetched` is a fact about US: the row was derived from ad-level performance and the ad
+   * itself was never requested, so blaming the platform would send an operator to debug an
+   * integration that is working.
+   */
+  state: 'available' | 'withheld' | 'expired' | 'unavailable' | 'never_fetched'
   /**
    * CONTENT-PREVIEW-SHAPES-001 — the shapes a real ad takes, including the two that have no single
    * asset to show.

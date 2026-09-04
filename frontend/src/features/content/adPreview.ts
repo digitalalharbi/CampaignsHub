@@ -21,6 +21,10 @@ import type { CreativePreview } from './api'
  *   3. the thumbnail, which for a video is the poster the platform itself chose;
  *   4. an honest, stated absence.
  *
+ * AD-MEDIA-RECOVERY-001 — and «absence» is not one state. A row DERIVED from ad-level performance
+ * was never fetched as an ad at all, so «this platform does not expose the asset» is a false
+ * accusation against the provider: nobody asked it. `never_fetched` is that case, said as itself.
+ *
  * Nothing below invents a fourth option. There is no placeholder image, no frame derived here, no
  * «similar» asset from the same campaign: a broken image and a fabricated one are the two failures
  * this exists to prevent, and the second is worse because nobody can see it.
@@ -35,7 +39,7 @@ export type PreviewReading =
    * exposing the asset at all; `no_media` is the state the presenter calls «available» while every
    * URL on it is null, which happens when a creative carries only a carousel breakdown.
    */
-  | { kind: 'none'; reason: 'withheld' | 'expired' | 'unavailable' | 'no_media'; note: string | null }
+  | { kind: 'none'; reason: 'withheld' | 'expired' | 'unavailable' | 'never_fetched' | 'no_media'; note: string | null }
   /**
    * CONTENT-PREVIEW-SHAPES-001 — two shapes whose media is not one asset.
    *
@@ -188,7 +192,18 @@ export function absenceLabel(reading: PreviewReading, ar: boolean): string {
   const words: Record<string, [string, string]> = {
     withheld: ['رابط المعاينة من المنصة يحمل بيانات اعتماد، فلا يُعرض.', 'The platform’s preview link carries a credential, so it is not shown.'],
     expired: ['انتهت صلاحية رابط المنصة — يحتاج مزامنة جديدة.', 'The platform link has expired — it needs a fresh sync.'],
-    unavailable: ['لا تتيح هذه المنصة ملف الإعلان.', 'This platform does not expose the ad’s file.'],
+    unavailable: ['جُلب هذا الإعلان من المنصة، ولم تُتِح المنصة ملفه.', 'This ad was fetched from the platform, and the platform exposed no file for it.'],
+    /*
+     * Not the platform's doing — AD-MEDIA-RECOVERY-001.
+     *
+     * The row exists because spend and impressions were attributed to a creative, not because the
+     * creative was fetched. Saying «the platform does not expose it» sends an operator to debug an
+     * integration that is working.
+     */
+    never_fetched: [
+      'هذا الصف مُستنتج من أداء الإعلان، ولم يُجلب الإعلان نفسه من المنصة — فلا يوجد ملف لعرضه.',
+      'This row was derived from ad-level performance; the ad itself was never fetched, so there is no file to show.',
+    ],
     no_media: ['لم تُرسل المنصة ملفًا لهذا الإعلان.', 'The platform sent no file for this ad.'],
   }
 
