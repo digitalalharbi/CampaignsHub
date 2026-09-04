@@ -38,6 +38,23 @@ export const E2E_BACKEND_ENV: Record<string, string> = {
    * in its own unit, not smuggled in beside a database rename.
    */
   APP_ENV: 'local',
+  /*
+   * The explicit opt-in `ConditionalThrottle` requires — and this is the unit the comment above asks
+   * for, kept to one thing.
+   *
+   * The suite drives a whole browser from one IP, and the public report link is rationed at sixty
+   * reads a minute per IP. Two report spec files together spend more than that in a minute, so the
+   * gate produced «تعذّر فتح التقرير — Too many requests» in whichever test happened to land on the
+   * boundary: three different files on three different runs, each looking like an unrelated flake,
+   * each «fixed» by a rerun that only moved which test drew the short straw.
+   *
+   * These are 429s produced by running the tests, not by anything a customer would do. Relaxation is
+   * a positive allow-list — `local` only, and only with this flag — so production and staging refuse
+   * it whatever is set here, and `testing` (PHPUnit) keeps the limits ON, which is where rate-limit
+   * behaviour is actually asserted: `RateLimitProtectionTest` and the public link's own throttle
+   * tests all run there.
+   */
+  E2E_RELAX_RATE_LIMITS: 'true',
   DB_DATABASE: 'mediabuying_e2e',
   APP_URL: E2E_API_TARGET,
   // Sessions, cache and queues all live in Redis and are all keyed by this prefix. Without its own,
