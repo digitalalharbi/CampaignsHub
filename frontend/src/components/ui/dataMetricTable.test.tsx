@@ -20,10 +20,20 @@ const columns: Column[] = [
   { key: 'roas', label: 'ROAS', kind: 'ratio' },
 ]
 
-const cellsOf = (rowIndex: number): string[] =>
-  within(screen.getAllByRole('row')[rowIndex + 1])
-    .getAllByRole('cell')
-    .map((c) => c.textContent ?? '')
+/**
+ * The row's cells INCLUDING its header cell, in column order.
+ *
+ * The first column is a `<th scope="row">`: it labels the row, and a screen reader moving down a
+ * column needs to be told which row a figure belongs to. That makes it a `rowheader` rather than a
+ * `cell`, so a query for cells alone silently drops it and every index after it shifts by one —
+ * which is exactly what happened when the primitive gained the header, and why this helper exists
+ * rather than each test reaching for one role.
+ */
+const cellsOf = (rowIndex: number): string[] => {
+  const row = within(screen.getAllByRole('row')[rowIndex + 1])
+
+  return [...row.queryAllByRole('rowheader'), ...row.getAllByRole('cell')].map((c) => c.textContent ?? '')
+}
 
 describe('a table that owns its own formatting', () => {
   it('prints each kind the one way the product prints it', () => {
@@ -118,7 +128,8 @@ describe('a table that owns its own formatting', () => {
   it('centres every numeric column and starts the text one', () => {
     render(<DataMetricTable columns={columns} rows={[{ name: 'Eid', spend: 1, results: 1, ctr: 0.1, roas: 1 }]} />)
 
-    const cells = screen.getAllByRole('row')[1].querySelectorAll('td')
+    // `th, td` in document order: the first column is the row's header cell — see `cellsOf`.
+    const cells = screen.getAllByRole('row')[1].querySelectorAll('th, td')
 
     expect(cells[0].className).toContain('text-start')
     for (const i of [1, 2, 3, 4]) {
@@ -149,7 +160,7 @@ describe('a table that owns its own formatting', () => {
       />,
     )
 
-    const first = within(screen.getAllByRole('row')[1]).getAllByRole('cell')[0].textContent
+    const first = within(screen.getAllByRole('row')[1]).getByRole('rowheader').textContent
 
     expect(first, 'the row with no CPM was sorted as the cheapest').toBe('C')
   })
@@ -173,7 +184,7 @@ describe('a table that owns its own formatting', () => {
       )
 
       const heads = screen.getAllByRole('columnheader')
-      const cells = screen.getAllByRole('row')[1].querySelectorAll('td')
+      const cells = screen.getAllByRole('row')[1].querySelectorAll('th, td')
 
       for (let i = 1; i < columns.length; i++) {
         const headAlign = heads[i].className.match(/text-(start|center|end)/)?.[1]
