@@ -1,3 +1,4 @@
+import { aspectClass } from '@/features/content/adPreview'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -1007,7 +1008,14 @@ function CreativeTile({
             alt={creative.name}
             // `loading="lazy"` on a data: URI never loads at all — see imageLoading().
             loading={imageLoading(image)}
-            className="aspect-square w-full object-cover"
+            /*
+             * CONTENT-PREVIEW-SHAPES-001 — a story is 9:16 in the client's deck too.
+             *
+             * `aspect-square` cropped a vertical ad through its own subject on the one surface the
+             * client keeps. Where the platform stated no dimensions the square stands, because a
+             * guessed shape is a claim about the ad.
+             */
+            className={`w-full object-cover ${aspectClass(preview.aspect ?? null) ?? 'aspect-square'}`}
           />
         ) : (
           <span className="flex aspect-square w-full items-center justify-center px-2 text-center text-[11px] text-text-muted">
