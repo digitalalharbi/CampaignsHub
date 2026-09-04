@@ -559,7 +559,16 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
    * for. `dashboardMetrics` picks the row the objective is actually judged on, and it is the same
    * function and the same `MetricStrip` the dashboard used, not a second reading of the same totals.
    */
-  const metrics = useMemo(() => dashboardMetrics(objective, s.data, ar), [objective, s.data, ar])
+  /*
+   * UX-KPI-PRESENTATION-001 — «المؤشر والرقم والشارت»: the same series `ts` draws the chart from.
+   *
+   * It is already fetched for the graph further down the page, so each card's sparkline costs no
+   * request and cannot contradict the drawing under it.
+   */
+  const metrics = useMemo(
+    () => dashboardMetrics(objective, s.data, ar, ts.data),
+    [objective, s.data, ar, ts.data],
+  )
 
   /*
    * ANALYTICS-DIFFERENTIATION-001 — the decomposition and the anomaly timeline, in one request.
