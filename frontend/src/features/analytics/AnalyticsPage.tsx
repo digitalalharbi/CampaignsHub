@@ -2870,6 +2870,14 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
 function AccountsTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const a = useAccounts(projectId, range, filters)
+  /*
+   * PLATFORM-DECISION-ANALYTICS-001 — account contribution, the level the platform total hides.
+   *
+   * An agency running two Meta accounts for one client can have a collapse in one exactly offset by a
+   * rise in the other: the platform reports no change, and the thing worth acting on is invisible
+   * until the split goes one level down. This is that level.
+   */
+  const drivers = useDrivers(projectId, range, 'account', 'spend', filters)
   const s = useSummary(projectId, range, filters)
   const currency = s.data?.currency ?? null
   const rows = a.data ?? []
@@ -2920,6 +2928,18 @@ function AccountsTab({ projectId, range, filters }: TabProps) {
   ])
 
   return (
+    <>
+      <ChangeDiagnosis
+        data={drivers.data}
+        currency={currency}
+        loading={drivers.isPending}
+        error={drivers.isError}
+        title={ar ? 'ما الذي تغيّر بين الحسابات' : 'What moved between the accounts'}
+        subtitle={ar
+          ? 'انهيار في حساب يقابله ارتفاع في آخر يجعل المنصة تبدو ثابتة — هنا يظهر.'
+          : 'A collapse in one account offset by a rise in another makes the platform look unchanged — here it shows.'}
+      />
+
     <Panel
       title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'}
       description={ar ? 'الأعلى إنفاقًا أولًا — ويمكن الترتيب بأي عمود' : 'Highest spend first — sortable by any column'}
@@ -2931,5 +2951,6 @@ function AccountsTab({ projectId, range, filters }: TabProps) {
         <MetricTable head={head} rows={cells} values={values} initialSort={{ column: 2, dir: 'desc' }} />
       </div>
     </Panel>
+    </>
   )
 }

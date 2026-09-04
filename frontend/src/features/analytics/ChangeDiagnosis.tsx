@@ -97,6 +97,21 @@ function exactFor(metric: string, currency: string | null): (n: number) => strin
 function driverName(d: DriverRow, by: string, ar: boolean): string {
   if (by === 'provider') return providerLabel(canonicalPlatform(d.key), ar ? 'ar' : 'en')
 
+  /*
+   * An account whose name we no longer hold is named as that — never by its id.
+   *
+   * The rows keep their spend after an account is removed, and the id is a UUID: printing it puts
+   * «7f3f1aa2-2736-5f14-…» in front of a reader, which is the raw-identifier defect the portal audit
+   * has an E2E against. The platform is the part still known, so it is what the label carries.
+   */
+  if (by === 'account' && !d.name) {
+    const platform = d.provider ? providerLabel(canonicalPlatform(d.provider), ar ? 'ar' : 'en') : null
+
+    if (platform) return ar ? `حساب على ${platform} لم يعد اسمه محفوظًا` : `An unnamed account on ${platform}`
+
+    return ar ? 'حساب لم يعد اسمه محفوظًا' : 'An account whose name is no longer held'
+  }
+
   if (by === 'objective') {
     const named = OBJECTIVE_LABEL[d.key]
 
@@ -137,6 +152,7 @@ const metricLabel = (m: string, ar: boolean) => (METRIC_LABEL[m] ? (ar ? METRIC_
  */
 const DIMENSION_PLURAL: Record<string, { ar: string; en: string }> = {
   provider: { ar: 'كل المنصات', en: 'Every platform' },
+  account: { ar: 'كل الحسابات', en: 'Every account' },
   objective: { ar: 'كل الأهداف', en: 'Every objective' },
   campaign: { ar: 'كل الحملات', en: 'Every campaign' },
 }

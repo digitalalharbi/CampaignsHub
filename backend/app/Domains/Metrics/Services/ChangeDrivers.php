@@ -63,15 +63,16 @@ final class ChangeDrivers
     /**
      * One metric's movement, split by the entity that produced it.
      *
-     * `by` is the dimension: `provider` (which platform), `campaign` (which campaign), or `objective`
-     * (what the money was BOUGHT for — the axis a mix shift hides behind).
+     * `by` is the dimension: `provider` (which platform), `account` (which ad account inside it),
+     * `campaign` (which campaign), or `objective` (what the money was BOUGHT for — the axis a mix
+     * shift hides behind).
      * The window and its comparison are given rather than derived, so the caller's «previous period»
      * and this decomposition's cannot disagree about which days they mean.
      *
      * @return array{
      *     metric: string, by: string, decomposable: bool, reason: ?string,
      *     current: float, previous: float, change: float, change_pct: ?float,
-     *     drivers: list<array{key: string, name: ?string, current: float, previous: float, change: float, share: ?float, direction: string}>,
+     *     drivers: list<array{key: string, name: ?string, provider: ?string, current: float, previous: float, change: float, share: ?float, direction: string}>,
      *     unquantifiable: list<string>
      * }
      */
@@ -145,6 +146,8 @@ final class ChangeDrivers
             $drivers[] = [
                 'key' => (string) $key,
                 'name' => $now[$key]['name'] ?? $before[$key]['name'] ?? null,
+                // The platform survives when an account's name does not — see `rowsFor()`.
+                'provider' => $now[$key]['provider'] ?? $before[$key]['provider'] ?? null,
                 'current' => round((float) $c, 2),
                 'previous' => round((float) $p, 2),
                 'change' => round((float) $c - (float) $p, 2),
@@ -245,6 +248,7 @@ final class ChangeDrivers
     {
         $rows = match ($by) {
             'campaign', 'objective' => $this->metrics->byCampaign($from, $to),
+            'account' => $this->metrics->byAccount($from, $to),
             default => $this->metrics->byProvider($from, $to),
         };
 
@@ -284,11 +288,39 @@ final class ChangeDrivers
 
         $out = [];
         foreach ($rows as $row) {
-            $key = (string) ($by === 'campaign' ? ($row['campaign_id'] ?? '') : ($row['provider'] ?? ''));
+            /*
+             * An ACCOUNT is keyed by its own id and NAMED by the account, not the platform.
+             *
+             * «Which platform moved» and «which account inside it moved» are different questions, and
+             * an agency running four Meta accounts for one client can have a fall in one hidden by a
+             * rise in another — the platform total says nothing happened.
+             */
+            $key = (string) match ($by) {
+                'campaign' => $row['campaign_id'] ?? '',
+                'account' => $row['account_id'] ?? '',
+                default => $row['provider'] ?? '',
+            };
+
             if ($key === '') {
                 continue;
             }
-            $row['name'] = $by === 'campaign' ? ($row['campaign_name'] ?? null) : ($row['provider'] ?? null);
+
+            // Carried for the account dimension: the platform survives even when the name does not.
+            $row['provider'] = $row['provider'] ?? null;
+            $row['name'] = match ($by) {
+                'campaign' => $row['campaign_name'] ?? null,
+                /*
+                 * A removed account keeps its spend and loses its name — and a UUID is not a label.
+                 *
+                 * `account_name` is null where the account has been deleted since its rows were
+                 * ingested, or where the rows carry an id no account row matches. Falling back to the
+                 * id put “7f3f1aa2-2736-5f14-…” in front of a reader, which is the raw-identifier
+                 * defect this product has an E2E against. Null travels instead, and the surface says
+                 * what it means in words — with the PLATFORM, which is the part still known.
+                 */
+                'account' => $row['account_name'] ?? null,
+                default => $row['provider'] ?? null,
+            };
             $out[$key] = $row;
         }
 

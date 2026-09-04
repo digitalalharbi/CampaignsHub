@@ -287,7 +287,7 @@ final class MetricsController extends Controller
          * validated against what the services will actually answer rather than passed through: an
          * unknown dimension silently becoming «provider» would answer a question nobody asked.
          */
-        $by = in_array($request->string('by')->toString(), ['provider', 'campaign', 'objective'], true)
+        $by = in_array($request->string('by')->toString(), ['provider', 'account', 'campaign', 'objective'], true)
             ? $request->string('by')->toString()
             : 'provider';
 
