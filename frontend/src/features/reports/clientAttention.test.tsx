@@ -14,8 +14,7 @@ import type { LivePayload } from './api'
  * figure behind it is advice, and advice a client cannot check is advice they are right to ignore.
  */
 const row = (over: Partial<NonNullable<LivePayload['budget']>[number]> = {}) => ({
-  campaign_id: 'c-1',
-  campaign_name: 'Eid',
+  provider: 'meta',
   budget: 10000,
   budget_currency: null,
   spent: 5000,
@@ -30,28 +29,44 @@ const row = (over: Partial<NonNullable<LivePayload['budget']>[number]> = {}) => 
 const payload = (budget: unknown[]): LivePayload => ({ budget } as unknown as LivePayload)
 
 describe('what a client is told needs attention', () => {
-  it('states the budget against the spend, per campaign', () => {
+  it('states the budget against the spend, per platform', () => {
     render(<ClientAttention payload={payload([row()])} currency="SAR" locale="en" />)
 
     const table = screen.getByRole('table')
 
-    expect(table).toHaveTextContent('Eid')
+    expect(table).toHaveTextContent('Meta')
     expect(table).toHaveTextContent('SAR')
   })
 
+  /**
+   * CLIENT-REPORT-ENTITY-BOUNDARY-001 — the block that used to name campaigns names platforms.
+   *
+   * The payload no longer carries a campaign name to print, so this asserts the shape a reader sees:
+   * a «Platform» heading rather than a «Campaign» one, and a value that is the channel. A component
+   * that fell back to printing an id would satisfy the heading and fail this.
+   */
+  it('heads the column with the platform, never the campaign', () => {
+    render(<ClientAttention payload={payload([row()])} currency="SAR" locale="en" />)
+
+    const table = screen.getByRole('table')
+
+    expect(table).toHaveTextContent('Platform')
+    expect(table).not.toHaveTextContent('Campaign')
+  })
+
   /** Ahead of plan is the finding a client can act on before the money is gone. */
-  it('names a campaign spending ahead of its plan', () => {
+  it('names a platform spending ahead of its plan', () => {
     render(
       <ClientAttention payload={payload([row({ spent: 14000, pace: 1.4 })])} currency="SAR" locale="en" />,
     )
 
     const warning = screen.getByTestId('live-attention-warning')
 
-    expect(warning).toHaveTextContent('Eid')
+    expect(warning).toHaveTextContent('Meta')
     expect(warning, 'the finding must carry the figure it came from').toHaveTextContent('1.40')
   })
 
-  it('names a campaign that will not use its budget', () => {
+  it('names a platform that will not use its budget', () => {
     render(
       <ClientAttention payload={payload([row({ spent: 4000, pace: 0.4 })])} currency="SAR" locale="en" />,
     )
@@ -75,17 +90,17 @@ describe('what a client is told needs attention', () => {
   /**
    * **A list that flags everything flags nothing.**
    *
-   * Fifteen campaigns produced fourteen findings on the first build — every small campaign a few
-   * hundred off plan got its own sentence, and the ones that mattered were buried in them. The bar is
-   * the MONEY at stake against the whole plan, not the ratio: a campaign at half its pace on a small
-   * budget is noise beside one at ninety per cent of a large one, and the ratio cannot tell them apart.
+   * Fifteen rows produced fourteen findings on the first build — every small one a few hundred off
+   * plan got its own sentence, and the ones that mattered were buried in them. The bar is the MONEY
+   * at stake against the whole plan, not the ratio: a platform at half its pace on a small budget is
+   * noise beside one at ninety per cent of a large one, and the ratio cannot tell them apart.
    */
-  it('leaves out a campaign whose drift is not worth a decision', () => {
+  it('leaves out a platform whose drift is not worth a decision', () => {
     render(
       <ClientAttention
         payload={payload([
-          row({ campaign_id: 'big', campaign_name: 'Eid', budget: 100000, spent: 40000, pace: 0.4 }),
-          row({ campaign_id: 'small', campaign_name: 'Trial', budget: 900, spent: 300, pace: 0.33 }),
+          row({ provider: 'meta', budget: 100000, spent: 40000, pace: 0.4 }),
+          row({ provider: 'snapchat', budget: 900, spent: 300, pace: 0.33 }),
         ])}
         currency="SAR"
         locale="en"
@@ -94,20 +109,20 @@ describe('what a client is told needs attention', () => {
 
     const findings = screen.getByTestId('live-attention-findings')
 
-    expect(findings).toHaveTextContent('Eid')
-    expect(findings, 'a 600-riyal drift is not a client decision').not.toHaveTextContent('Trial')
+    expect(findings).toHaveTextContent('Meta')
+    expect(findings, 'a 600-riyal drift is not a client decision').not.toHaveTextContent('Snapchat')
   })
 
   /** What does not fit the short list is COUNTED, never dropped silently. */
   it('counts the findings it did not print', () => {
-    const off = Array.from({ length: 8 }, (_, i) =>
-      row({ campaign_id: `c-${i}`, campaign_name: `Campaign ${i}`, budget: 10000, spent: 3000, pace: 0.3 }),
+    const off = ['meta', 'google', 'tiktok', 'snapchat', 'linkedin', 'x', 'pinterest', 'reddit'].map((p) =>
+      row({ provider: p, budget: 10000, spent: 3000, pace: 0.3 }),
     )
 
     render(<ClientAttention payload={payload(off)} currency="SAR" locale="en" />)
 
     expect(screen.getAllByTestId('live-attention-muted')).toHaveLength(5)
-    expect(screen.getByTestId('live-attention-rest')).toHaveTextContent('3 campaigns')
+    expect(screen.getByTestId('live-attention-rest')).toHaveTextContent('3 more')
   })
 
   /** The most money at stake is read FIRST — a client reads the top of a list. */
@@ -115,22 +130,22 @@ describe('what a client is told needs attention', () => {
     render(
       <ClientAttention
         payload={payload([
-          row({ campaign_id: 'a', campaign_name: 'Small', budget: 20000, spent: 8000, pace: 0.4 }),
-          row({ campaign_id: 'b', campaign_name: 'Large', budget: 60000, spent: 10000, pace: 0.17 }),
+          row({ provider: 'snapchat', budget: 20000, spent: 8000, pace: 0.4 }),
+          row({ provider: 'meta', budget: 60000, spent: 10000, pace: 0.17 }),
         ])}
         currency="SAR"
         locale="en"
       />,
     )
 
-    expect(screen.getAllByTestId('live-attention-muted')[0]).toHaveTextContent('Large')
+    expect(screen.getAllByTestId('live-attention-muted')[0]).toHaveTextContent('Meta')
   })
 
   /**
    * **The money contract reaches the findings.**
    *
    * `pace` is null wherever the product refused to compare the money — a withheld spend, a
-   * mixed-currency scope. Producing «this campaign is overspending» from a figure the product would
+   * mixed-currency scope. Producing «this platform is overspending» from a figure the product would
    * not print is the fabrication the contract exists to prevent, and a client has no way to catch it.
    */
   it('produces no finding from money the product would not state', () => {
@@ -180,8 +195,8 @@ describe('what a client is told needs attention', () => {
     render(
       <ClientAttention
         payload={payload([
-          row({ campaign_id: 'c-1', budget_currency: 'SAR' }),
-          row({ campaign_id: 'c-2', campaign_name: 'Ramadan', budget_currency: 'AED' }),
+          row({ provider: 'meta', budget_currency: 'SAR' }),
+          row({ provider: 'snapchat', budget_currency: 'AED' }),
         ])}
         currency="SAR"
         locale="en"
@@ -192,11 +207,11 @@ describe('what a client is told needs attention', () => {
 
     expect(table).not.toHaveTextContent('SAR')
     expect(table).not.toHaveTextContent('AED')
-    expect(table, 'the figures themselves must survive').toHaveTextContent('Ramadan')
+    expect(table, 'the figures themselves must survive').toHaveTextContent('Snapchat')
   })
 
-  /** A campaign with no budget set is not a campaign at 0% of its plan. */
-  it('leaves out a campaign whose budget nobody set', () => {
+  /** A platform with no budget set is not a platform at 0% of its plan. */
+  it('leaves out a platform whose budget nobody set', () => {
     const { container } = render(
       <ClientAttention payload={payload([row({ budget: null })])} currency="SAR" locale="en" />,
     )

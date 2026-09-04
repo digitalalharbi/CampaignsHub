@@ -1,5 +1,5 @@
 import { DataMetricTable } from '@/components/ui/MetricTable'
-import { campaigns as countedCampaigns } from '@/lib/counted'
+import { providerLabel } from '@/features/campaigns/labels'
 import type { LivePayload } from './api'
 import type { Locale } from '@/stores/ui'
 
@@ -13,7 +13,7 @@ import type { Locale } from '@/stores/ui'
  *
  * Three blocks, in the order the requirement names them:
  *
- *   1. **budget status** — plan against spend, per campaign, with pace;
+ *   1. **budget status** — plan against spend, per PLATFORM, with pace;
  *   2. **alerts that need a decision** — derived from that pacing rather than from a second engine,
  *      because a client alert that disagreed with the agency's own budget screen would be worse than
  *      no alert;
@@ -26,6 +26,15 @@ import type { Locale } from '@/stores/ui'
  * could not be compared — a withheld or mixed-currency scope — the row simply does not produce an
  * alert, because «this campaign is overspending» computed from a figure the product refused to state
  * is exactly the fabrication the money contract exists to prevent.
+ *
+ * ## Why the rows are platforms
+ *
+ * They were campaigns, by internal name, until CLIENT-REPORT-ENTITY-BOUNDARY-001: a client link may
+ * state what their money did and not how the agency arranged it. The alert survives the fold — «Meta
+ * is spending ahead of plan» is the same decision as «this campaign is», and it is the decision the
+ * reader can actually take to the person running it. The pace itself is now computed server-side per
+ * platform, and it REFUSES where a platform's spend is not all against a stated plan, so a bucket
+ * that would once have produced a confident ratio out of half a plan produces no finding at all.
  */
 type BudgetRow = NonNullable<LivePayload['budget']>[number]
 
@@ -63,7 +72,7 @@ export function ClientAttention({
 
   if (rows.length === 0) return null
 
-  const name = (r: BudgetRow): string => r.campaign_name ?? (ar ? 'حملة' : 'Campaign')
+  const name = (r: BudgetRow): string => providerLabel(r.provider ?? '', locale)
 
   /*
    * The unit these figures are actually in, read from the rows rather than from the report.
@@ -79,14 +88,14 @@ export function ClientAttention({
   const unit = units.length === 1 ? units[0] : null
 
   /*
-   * A campaign only produces a finding when its pace could actually be computed.
+   * A platform only produces a finding when its pace could actually be computed.
    *
    * `pace` is null wherever the money contract refused to compare — a withheld spend, a
    * mixed-currency scope. Producing «overspending» from a figure the product would not print is the
    * fabrication the contract exists to prevent, and a client has no way to catch it.
    */
   /*
-   * The money each finding is ABOUT — overspend for a campaign running hot, the plan it will not
+   * The money each finding is ABOUT — overspend for a platform running hot, the plan it will not
    * reach for one running cold. It is what ranks the list and what the bar is measured against, so a
    * finding a client reads is always the one with the most of their money behind it.
    */
@@ -107,18 +116,18 @@ export function ClientAttention({
 
   const findings = [
     ...ahead.sort(byStake).map(({ row: r }) => ({
-      key: `ahead-${r.campaign_id}`,
+      key: `ahead-${r.provider}`,
       tone: 'warning' as const,
       text: ar
-        ? `«${name(r)}» تصرف أسرع من الخطة (${(r.pace ?? 0).toFixed(2)}×) — قد تنفد ميزانيتها قبل نهاية الفترة.`
-        : `“${name(r)}” is spending ahead of plan (${(r.pace ?? 0).toFixed(2)}×) — its budget may run out before the period ends.`,
+        ? `الإنفاق على ${name(r)} أسرع من الخطة (${(r.pace ?? 0).toFixed(2)}×) — قد تنفد الميزانية قبل نهاية الفترة.`
+        : `Spending on ${name(r)} is ahead of plan (${(r.pace ?? 0).toFixed(2)}×) — its budget may run out before the period ends.`,
     })),
     ...behind.sort(byStake).map(({ row: r }) => ({
-      key: `behind-${r.campaign_id}`,
+      key: `behind-${r.provider}`,
       tone: 'muted' as const,
       text: ar
-        ? `«${name(r)}» تصرف أبطأ من الخطة (${(r.pace ?? 0).toFixed(2)}×) — قد لا تستهلك ميزانيتها.`
-        : `“${name(r)}” is spending behind plan (${(r.pace ?? 0).toFixed(2)}×) — it may not use its budget.`,
+        ? `الإنفاق على ${name(r)} أبطأ من الخطة (${(r.pace ?? 0).toFixed(2)}×) — قد لا تُستهلك الميزانية.`
+        : `Spending on ${name(r)} is behind plan (${(r.pace ?? 0).toFixed(2)}×) — it may not use its budget.`,
     })),
   ]
 
@@ -131,14 +140,14 @@ export function ClientAttention({
         <h3 className="text-base font-bold text-text-primary">{ar ? 'حالة الميزانية' : 'Budget status'}</h3>
         <DataMetricTable
           columns={[
-            { key: 'campaign', label: ar ? 'الحملة' : 'Campaign', kind: 'text' },
+            { key: 'platform', label: ar ? 'المنصة' : 'Platform', kind: 'text' },
             { key: 'budget', label: ar ? 'الميزانية' : 'Budget', kind: 'money', currency: unit },
             { key: 'spent', label: ar ? 'المصروف' : 'Spent', kind: 'money', currency: unit },
             { key: 'remaining', label: ar ? 'المتبقي' : 'Remaining', kind: 'money', currency: unit },
             { key: 'consumed', label: ar ? 'الاستهلاك' : 'Consumed', kind: 'percent', digits: 0 },
           ]}
           rows={rows.map((r) => ({
-            campaign: name(r),
+            platform: name(r),
             budget: r.budget,
             spent: r.spent,
             remaining: r.remaining,
@@ -159,8 +168,8 @@ export function ClientAttention({
         {findings.length === 0 ? (
           <p className="mt-1 text-sm text-text-secondary" data-testid="live-attention-clear">
             {ar
-              ? 'لا شيء يستدعي قرارًا الآن — كل حملة ضمن خطة إنفاقها.'
-              : 'Nothing needs a decision right now — every campaign is within its spending plan.'}
+              ? 'لا شيء يستدعي قرارًا الآن — كل منصة ضمن خطة إنفاقها.'
+              : 'Nothing needs a decision right now — every platform is within its spending plan.'}
           </p>
         ) : (
           <ul className="mt-2 flex flex-col gap-2">
@@ -180,8 +189,8 @@ export function ClientAttention({
             {rest > 0 && (
               <li className="text-sm text-text-secondary" data-testid="live-attention-rest">
                 {ar
-                  ? `و${countedCampaigns(rest, 'ar')} أخرى خارج خطة إنفاقها — التفصيل في الجدول أعلاه.`
-                  : `And ${countedCampaigns(rest, 'en')} off their spending plan — the detail is in the table above.`}
+                  ? `و${rest} منصة أخرى خارج خطة إنفاقها — التفصيل في الجدول أعلاه.`
+                  : `And ${rest} more off their spending plan — the detail is in the table above.`}
               </li>
             )}
           </ul>

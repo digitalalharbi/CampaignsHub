@@ -13,11 +13,9 @@ import {
   ConversionFunnelChart,
   MetricLineChart,
   PlatformDonutChart,
-  RankingBarChart,
 } from '@/features/analytics/charts'
 import { KpiCard, platformColor } from '@/features/analytics/components'
 import { money, moneyExact, moneyFromTotals, ratio } from '@/features/analytics/format'
-import { campaigns as countedCampaigns } from '@/lib/counted'
 import { formatMoneyReading, moneyState, rankableMoney, readCostPer, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import { fetchLiveShared, type LivePayload } from './api'
 import { useUi } from '@/stores/ui'
@@ -81,8 +79,16 @@ export function LiveSharedReport({
   const ar = locale === 'ar'
 
   const [days, setDays] = useState(30)
+  /*
+   * CLIENT-REPORT-ENTITY-BOUNDARY-001 — platform is the only scope a client narrows by.
+   *
+   * There was a campaign picker beside this one, offering «كل الحملات» over a list of the agency's
+   * own campaign names. The narrowing is still here; what a client narrows BY is the aggregate
+   * channel, which is what they were reading everywhere else on the page anyway. The request still
+   * carries an empty campaign list because the server's ceiling is expressed in campaign ids — the
+   * link's own scope, which the reader neither sets nor sees.
+   */
   const [providers, setProviders] = useState<string[]>([])
-  const [campaigns, setCampaigns] = useState<string[]>([])
   const [payload, setPayload] = useState<LivePayload | null>(null)
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -106,7 +112,7 @@ export function LiveSharedReport({
       from: isoDaysAgo(days),
       to: new Date().toISOString().slice(0, 10),
       providers,
-      campaigns,
+      campaigns: [],
       password,
     })
     if (ticket !== latest.current) return
@@ -117,7 +123,7 @@ export function LiveSharedReport({
       setError(envelope.message ?? (ar ? 'تعذّر تحديث البيانات.' : 'Could not refresh the figures.'))
     }
     setBusy(false)
-  }, [token, days, providers, campaigns, password, ar])
+  }, [token, days, providers, password, ar])
 
   useEffect(() => {
     void load()
@@ -271,8 +277,6 @@ export function LiveSharedReport({
   const spendState = moneyState(t as MoneyTotals, 'spend').state
   const spendChartable = spendState === 'complete_converted' || spendState === 'zero'
   const platformSpendRank = rankableMoney(payload.platforms as MoneyTotals[], 'spend', currency)
-  const topCampaignRows = payload.campaigns.slice(0, 8)
-  const campaignSpendRank = rankableMoney(topCampaignRows as MoneyTotals[], 'spend', currency)
 
   return (
     /*
@@ -326,24 +330,10 @@ export function LiveSharedReport({
                 }`}
                 style={providers.includes(p) ? { background: platformColor(p) } : undefined}
               >
-                {p}
+                {providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}
               </button>
             ))}
           </div>
-        )}
-
-        {payload.available.campaigns.length > 1 && (
-          <select
-            data-testid="live-campaign"
-            value={campaigns[0] ?? ''}
-            onChange={(e) => setCampaigns(e.target.value ? [e.target.value] : [])}
-            className="min-w-0 max-w-[200px] truncate rounded-xl border border-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-text-secondary"
-          >
-            <option value="">{ar ? 'كل الحملات' : 'All campaigns'}</option>
-            {payload.available.campaigns.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
         )}
 
         <button
@@ -410,10 +400,14 @@ export function LiveSharedReport({
         {/*
           Ranked INSIDE each path, never across them.
 
-          The campaign list further down is ordered by spend, which answers «where did the money go»
-          and never «which of these worked». One ranked list across a mixed programme answers it
-          wrongly: a brand campaign sits at the bottom of a return table for not producing revenue it
-          was never asked to produce.
+          The platform split above is ordered by spend, which answers «where did the money go» and
+          never «which of these worked». One ranked list across a mixed programme answers it wrongly:
+          a brand path sits at the bottom of a return table for not producing revenue it was never
+          asked to produce.
+
+          The buckets are PLATFORMS since CLIENT-REPORT-ENTITY-BOUNDARY-001 — they were campaigns, by
+          internal name. «Snapchat costs 43 SAR a sale where Google costs 119» is the same finding a
+          client can act on, and it is one they can take to the person running it.
         */}
         {(payload.objective_leaders?.paths ?? []).some((p) => p.comparable) && (
           <div data-testid="live-objective-leaders" className="mt-6 rounded-2xl border border-border bg-surface p-4">
@@ -427,10 +421,10 @@ export function LiveSharedReport({
                   <div className="font-semibold text-text-primary">{ar ? path.label_ar : path.label_en}</div>
                   <div className="mt-0.5 text-text-secondary">
                     {ar ? 'الأقوى ' : 'Strongest '}
-                    <span className="font-bold text-text-primary">{path.strongest?.name}</span>
+                    <span className="font-bold text-text-primary">{providerLabel(canonicalPlatform(path.strongest?.name ?? ''), ar ? 'ar' : 'en')}</span>
                     {' · '}
                     {ar ? 'الأضعف ' : 'weakest '}
-                    <span className="font-bold text-text-primary">{path.weakest?.name}</span>
+                    <span className="font-bold text-text-primary">{providerLabel(canonicalPlatform(path.weakest?.name ?? ''), ar ? 'ar' : 'en')}</span>
                   </div>
                 </div>
               ))}
@@ -519,7 +513,8 @@ export function LiveSharedReport({
                 <PlatformDonutChart
                   data={payload.platforms.flatMap((p, i) => {
                     const value = platformSpendRank.values[i]
-                    return value === null ? [] : [{ name: p.provider, value }]
+                    // The platform's NAME, not its key: «snapchat» is a database value, «سناب شات» is a platform.
+                    return value === null ? [] : [{ name: providerLabel(canonicalPlatform(p.provider), ar ? 'ar' : 'en'), value }]
                   })}
                   currency={platformSpendRank.currency ?? currency}
                   height={220}
@@ -536,36 +531,14 @@ export function LiveSharedReport({
           </ChartCard>
         </div>
 
-        <div className="mt-3 grid gap-3 lg:grid-cols-2" data-testid="live-campaigns">
-          <ChartCard title={ar ? 'الحملات' : 'Campaigns'}>
-            {payload.campaigns.length > 0 && campaignSpendRank === null ? (
-              <p className="py-10 text-center text-sm text-text-muted">{ar ? 'ترتيب الإنفاق غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend ranking unavailable — amounts await a rate or span currencies'}</p>
-            ) : payload.campaigns.length > 0 && campaignSpendRank !== null ? (
-              <>
-                <RankingBarChart
-                  data={topCampaignRows.flatMap((c, i) => {
-                    const spend = campaignSpendRank.values[i]
-                    return spend === null ? [] : [{ name: c.campaign_name ?? '—', provider: c.provider, spend }]
-                  })}
-                  bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]}
-                  horizontal
-                  height={220}
-                  colorByPlatform
-                />
-                {campaignSpendRank.dropped > 0 && (
-                  <p className="mt-1 text-center text-[11px] text-text-muted">
-                    {ar
-                      ? `${countedCampaigns(campaignSpendRank.dropped, 'ar')} غير مُدرجة: مبالغ بانتظار سعر صرف أو بعملات متعددة`
-                      : `${campaignSpendRank.dropped} campaign(s) not included: amounts await a rate or span currencies`}
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className="py-10 text-center text-sm text-text-muted">
-                {ar ? 'لا توجد حملات في هذه الفترة.' : 'No campaigns in this period.'}
-              </p>
-            )}
-          </ChartCard>
+        {/*
+          CLIENT-REPORT-ENTITY-BOUNDARY-001 — the campaign ranking that stood here is gone.
+
+          It was a bar chart of the top eight campaigns by spend, drawn by internal name. «Where did
+          the money go» is the question it answered, and the donut above answers it by platform; what
+          only the campaign chart could add was the roster, which is the plan rather than the result.
+        */}
+        <div className="mt-3 grid gap-3" data-testid="live-funnel">
           <ChartCard title={ar ? 'قمع الأداء' : 'Performance funnel'}>
             <ConversionFunnelChart stages={payload.funnel} currency={currency} ar={ar} />
             {/* FUNNEL-NULL-001 — said once in a sentence as well as drawn. The client has no second
@@ -586,10 +559,6 @@ export function LiveSharedReport({
           * Each row carries the system that produced it, exactly as the operator's own analytics tab
           * does. A client asking «من أين جاء هذا الرقم؟» gets the same answer their agency would.
           */}
-        {/*
-          OBJECTIVE-ANALYTICS-DEPTH-001 — which campaign inside each path carried it, and which did not.
-
-
         {/*
           REPORT-AD-PREVIEW-001 — the same section as the deck and the PDF, from the same payload key.
         */}

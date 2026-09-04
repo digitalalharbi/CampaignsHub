@@ -25,16 +25,16 @@ const PRODUCTS: Record<`${ReportMode}:${ReportForm}`, { ar: string; en: string }
     en: 'Live dashboard — the figures are computed when you open the page, and you can change the period and platforms.',
   },
   'live:detailed': {
-    ar: 'تقرير مباشر تفصيلي — اللوحة نفسها، ومعها كل حملة ومنصة في الفترة المختارة.',
-    en: 'Live detailed report — the dashboard, and with it every campaign and platform in the chosen period.',
+    ar: 'تقرير مباشر تفصيلي — اللوحة نفسها، ومعها كل منصة وهدف في الفترة المختارة.',
+    en: 'Live detailed report — the dashboard, and with it every platform and objective in the chosen period.',
   },
   'snapshot:executive_summary': {
     ar: 'ملخص تنفيذي — أبرز النتائج والقرارات. التفاصيل الكاملة في التقرير التفصيلي.',
     en: 'Executive summary — the headline results and decisions. Full detail lives in the detailed report.',
   },
   'snapshot:detailed': {
-    ar: 'تقرير تفصيلي — كل المنصات والحملات والإعلانات.',
-    en: 'Detailed report — every platform, campaign and creative.',
+    ar: 'تقرير تفصيلي — كل المنصات والأهداف والمحتوى الأعلى أداءً.',
+    en: 'Detailed report — every platform and objective, and the best-performing content.',
   },
 }
 
