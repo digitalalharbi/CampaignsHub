@@ -110,7 +110,7 @@ export function BrandingCenterPage() {
           {c.scope_id}
           <input value={scopeId} onChange={(e) => setScopeId(e.target.value)} placeholder="—"
             className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary" />
-          <span className="text-[11px] font-normal text-text-tertiary">{c.scope_id_hint}</span>
+          <span className="text-[11px] font-normal text-text-muted">{c.scope_id_hint}</span>
         </label>
       </div>
 
@@ -192,7 +192,7 @@ function KindCard({ c, locale, kind, scope, scopeId, canManage, byKey }: {
           </span>
           <span className="rounded-md bg-surface-hover px-1.5 py-0.5">{c.max_size}: {c.max_2mb}</span>
         </div>
-        <span className="text-[11px] text-text-tertiary">{spec.themed ? c.themed_note : c.single_note}</span>
+        <span className="text-[11px] text-text-muted">{spec.themed ? c.themed_note : c.single_note}</span>
       </div>
       <div className={`grid gap-3 ${themes.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
         {themes.map((theme) => (
@@ -236,10 +236,10 @@ function ThemeSlot({ c, kind, theme, themeLabel, scope, scopeId, canManage, asse
       <div className={`flex aspect-video items-center justify-center overflow-hidden rounded-lg border border-dashed border-border ${theme === 'dark' ? 'bg-[#111]' : 'bg-white'}`}>
         {asset
           ? <img src={asset.url} alt={themeLabel} className="max-h-full max-w-full object-contain p-2" />
-          : <span className="text-[11px] text-text-tertiary">{c.no_asset}</span>}
+          : <span className="text-[11px] text-text-muted">{c.no_asset}</span>}
       </div>
       {asset && (
-        <span className="text-[10px] text-text-tertiary tnum">
+        <span className="text-[10px] text-text-muted tnum">
           {asset.mime.replace('image/', '').toUpperCase()}
           {asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ''}
           {asset.bytes ? ` · ${fmtBytes(asset.bytes)}` : ''}
@@ -356,7 +356,7 @@ function SettingsTab({ c, scope, scopeId, canManage }: {
           />
           {c.white_label}
         </label>
-        <span className="text-[11px] text-text-tertiary">{c.white_label_hint}</span>
+        <span className="text-[11px] text-text-muted">{c.white_label_hint}</span>
       </div>
 
       {saveM.isSuccess && <span className="text-xs font-semibold text-success">{c.saved}</span>}

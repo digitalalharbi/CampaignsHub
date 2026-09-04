@@ -64,7 +64,7 @@ export function JourneyDemoPage() {
         <button type="submit" className="w-fit rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white hover:bg-brand-700">
           {c.load}
         </button>
-        <p className="text-[11px] text-text-tertiary">{c.note}</p>
+        <p className="text-[11px] text-text-muted">{c.note}</p>
       </form>
 
       {loaded ? (

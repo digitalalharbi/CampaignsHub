@@ -171,13 +171,13 @@ export function FilesLibraryPage() {
               </div>
               <div className="flex flex-col gap-1 p-3">
                 <span className="line-clamp-1 text-sm font-semibold text-text-primary" title={f.name}>{f.name}</span>
-                <span className="line-clamp-1 text-[11px] text-text-tertiary">{f.client_name ?? '—'} · {f.related.label ?? srcLabel(f.source)}</span>
+                <span className="line-clamp-1 text-[11px] text-text-muted">{f.client_name ?? '—'} · {f.related.label ?? srcLabel(f.source)}</span>
                 <div className="mt-1 flex items-center justify-between">
                   <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${f.visibility === 'internal' ? 'bg-surface-hover text-text-secondary' : 'bg-info/15 text-info'}`}>
                     {f.visibility === 'internal' ? c.vis_internal : c.vis_client}
                   </span>
                   <span className="flex items-center gap-2">
-                    <span className="tnum text-[11px] text-text-tertiary" dir="ltr">{fmtSize(f.size)}</span>
+                    <span className="tnum text-[11px] text-text-muted" dir="ltr">{fmtSize(f.size)}</span>
                     {f.download_url && (
                       <a href={f.download_url} target="_blank" rel="noopener noreferrer" title={c.download} aria-label={c.download}
                         className="text-text-secondary hover:text-brand-600"><Download size={13} /></a>
@@ -216,7 +216,7 @@ export function FilesLibraryPage() {
                     </span>
                   </td>
                   <td className="tnum p-3 text-end text-text-secondary" dir="ltr">{fmtSize(f.size)}</td>
-                  <td className="tnum p-3 text-text-tertiary" dir="ltr">{fmtDateTime(f.uploaded_at)}</td>
+                  <td className="tnum p-3 text-text-muted" dir="ltr">{fmtDateTime(f.uploaded_at)}</td>
                   <td className="p-3 text-end">
                     {f.download_url ? (
                       <a href={f.download_url} target="_blank" rel="noopener noreferrer" title={c.download} aria-label={c.download}

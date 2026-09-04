@@ -60,7 +60,7 @@ export function DefinitionList({
         <div className="flex flex-col gap-4">
           {groups.map(({ module, items }) => (
             <div key={module} className="flex flex-col gap-1.5">
-              <h3 className="px-1 text-[11px] font-bold uppercase tracking-wide text-text-tertiary">{module}</h3>
+              <h3 className="px-1 text-[11px] font-bold uppercase tracking-wide text-text-muted">{module}</h3>
               <ul className="flex flex-col gap-1">
                 {items.map((d) => {
                   const active = d.key === selectedKey
@@ -82,7 +82,7 @@ export function DefinitionList({
                           </span>
                           {d.is_system && <Badge tone="neutral">{c.system}</Badge>}
                         </div>
-                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-text-tertiary">
+                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-text-muted">
                           <span className="rounded-md bg-surface-hover px-1.5 py-0.5">{scopeLabel(d.scope, c)}</span>
                           <span className="rounded-md bg-surface-hover px-1.5 py-0.5">{fieldTypeLabel(d.field_type, c)}</span>
                           {!d.is_active && <span className="text-warning">{c.inactive}</span>}

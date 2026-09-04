@@ -387,7 +387,7 @@ export function NotificationsTab() {
         </p>
 
         {p.projects.length === 0 ? (
-          <p className="mt-4 rounded-xl bg-surface-subtle px-4 py-6 text-center text-sm text-text-secondary">
+          <p className="mt-4 rounded-xl bg-surface-secondary px-4 py-6 text-center text-sm text-text-secondary">
             {ar ? 'لا توجد مشاريع تصل إليها بعد.' : 'No projects you can reach yet.'}
           </p>
         ) : (

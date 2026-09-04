@@ -156,7 +156,7 @@ export function NotificationRecipients() {
       )}
 
       {rows.length === 0 ? (
-        <p className="mt-6 rounded-xl bg-surface-subtle px-4 py-6 text-center text-sm text-text-secondary">
+        <p className="mt-6 rounded-xl bg-surface-secondary px-4 py-6 text-center text-sm text-text-secondary">
           {ar
             ? 'لا يوجد ترتيب بعد. يتلقى كل عضو ما اشترك فيه بنفسه من صفحة إشعاراته.'
             : 'Nothing arranged yet. Each member still receives whatever they subscribed to themselves.'}

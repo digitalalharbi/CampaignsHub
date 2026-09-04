@@ -150,7 +150,7 @@ function LinkRow({ c, locale, link, canManage, onBrowse }: {
         <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-hover text-text-secondary"><Link2 size={16} /></span>
         <div className="flex flex-col gap-0.5">
           <span className="font-semibold text-text-primary">{link.folder_name}</span>
-          <span className="text-[11px] text-text-tertiary tnum">
+          <span className="text-[11px] text-text-muted tnum">
             {SCOPE_LABEL[link.scope]?.[locale] ?? link.scope} · {link.folder_id}
           </span>
         </div>
@@ -256,7 +256,7 @@ function FilesPanel({ c, link, canManage, onClose }: {
           <CloudOff size={28} className="text-warning" />
           <span className="text-sm font-bold text-text-primary">{c.awaiting_title}</span>
           <p className="max-w-md text-xs text-text-secondary">{c.awaiting_body}</p>
-          <span className="text-[11px] text-text-tertiary tnum">{c.provider}: {result.provider}</span>
+          <span className="text-[11px] text-text-muted tnum">{c.provider}: {result.provider}</span>
         </div>
       ) : result.files.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-text-secondary">{c.no_files}</p>
@@ -290,10 +290,10 @@ function FileCard({ c, file, canManage }: { c: Copy; file: DriveFile; canManage:
       <div className="flex aspect-video items-center justify-center overflow-hidden rounded-lg border border-border bg-surface-hover">
         {file.thumbnail_link
           ? <img src={file.thumbnail_link} alt={file.name} className="h-full w-full object-cover" />
-          : <FileText size={22} className="text-text-tertiary" />}
+          : <FileText size={22} className="text-text-muted" />}
       </div>
       <span className="truncate text-xs font-semibold text-text-primary" title={file.name}>{file.name}</span>
-      <span className="text-[10px] text-text-tertiary tnum">
+      <span className="text-[10px] text-text-muted tnum">
         {(file.mime ?? '—').split('/').pop()}
         {file.size ? ` · ${fmtBytes(file.size)}` : ''}
         {file.modified_time ? ` · ${fmtDate(file.modified_time)}` : ''}
