@@ -46,6 +46,53 @@ final class ThemeTokenCoverageTest extends TestCase
         return (string) file_get_contents($path);
     }
 
+    /**
+     * A BARE shadow utility renders nothing, and the theme's own comment used to recommend one.
+     *
+     * `shadow-small` / `shadow-medium` / `shadow-large` are registered in `@theme` as
+     * `--shadow-small: var(--shadow-small)`, which is self-referential — measured in a browser, a
+     * bare `shadow-small` computes to `box-shadow: none` while the token itself holds a real value.
+     *
+     * Nothing in the product was broken by it: all eighty-eight shadows are written
+     * `shadow-[var(--shadow-small)]`, which reads the token directly. What was broken was the
+     * invitation — `src/index.css` listed `shadow-medium` as an example of a utility that resolves.
+     * This is what stops the next author accepting it.
+     */
+    public function test_no_bare_shadow_utility_is_used(): void
+    {
+        $offenders = [];
+
+        $directory = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator(__DIR__.'/../../../frontend/src')
+        );
+
+        foreach ($directory as $file) {
+            if (! $file->isFile() || ! in_array($file->getExtension(), ['ts', 'tsx'], true)) {
+                continue;
+            }
+
+            /*
+             * Only a bare token NAME is an offence.
+             *
+             * Both working forms read the token directly and are excluded by the lookbehind:
+             * `shadow-[var(--shadow-small)]` in a class list, and `boxShadow: 'var(--shadow-medium)'`
+             * in an inline style — the second is why the lookbehind is `var\(--` rather than
+             * `\[var\(--`, which counted a correct inline style as a violation.
+             */
+            if (preg_match('/(?<!var\(--)\bshadow-(?:small|medium|large)\b/', (string) file_get_contents($file->getPathname())) === 1) {
+                $offenders[] = str_replace(__DIR__.'/../../../frontend/', '', $file->getPathname());
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            "A bare `shadow-small|medium|large` computes to `box-shadow: none` — the theme registers it\n"
+            ."self-referentially. Write `shadow-[var(--shadow-small)]`, which every other shadow in the\n"
+            ."product uses:\n  ".implode("\n  ", $offenders),
+        );
+    }
+
     public function test_every_colour_utility_names_a_token_the_theme_registers(): void
     {
         $theme = $this->frontend('src/index.css');
