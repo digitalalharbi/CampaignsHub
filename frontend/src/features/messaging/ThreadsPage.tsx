@@ -1,3 +1,4 @@
+import { StatCard } from '@/components/ui/StatCard'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -184,17 +185,19 @@ export function ThreadsPage() {
  * "we were not allowed to look".
  */
 function ThreadSummaryCard({ label, value, tone, unknown }: { label: string; value: number; tone: 'brand' | 'warning' | 'success' | 'muted'; unknown?: boolean }) {
-  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', warning: 'bg-warning', success: 'bg-success', muted: 'bg-text-muted' }
+  /*
+   * «We were not allowed to look» keeps its own colour by keeping its own DASH.
+   *
+   * The card's tone tints the figure, and `neutral` is what the primitive gives a dash — so the muted
+   * reading survives the move without this page owning a second palette to say it.
+   */
   return (
-    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
-      <div className="flex items-center gap-1.5">
-        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
-        <span className="text-xs font-semibold text-text-secondary">{label}</span>
-      </div>
-      <span className={`text-2xl font-extrabold tnum ${unknown ? 'text-text-muted' : 'text-text-primary'}`} dir="ltr">
-        {unknown ? '—' : value}
-      </span>
-    </div>
+    <StatCard
+      label={label}
+      value={unknown ? '—' : value}
+      tone={unknown || tone === 'muted' ? 'neutral' : tone}
+      dot
+    />
   )
 }
 
