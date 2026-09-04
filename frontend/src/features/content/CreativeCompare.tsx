@@ -1,7 +1,8 @@
+import { TransposedMetricTable } from '@/components/ui/MetricTable'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, X } from 'lucide-react'
 import { compareCreatives, type CreativeCard } from './api'
-import { formatMetric, metricLabel, metricState } from './metrics'
+import { formatMetric, metricKind, metricLabel, metricState } from './metrics'
 import { imageLoading } from './format'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
@@ -106,60 +107,54 @@ export function CreativeCompare({
       )}
 
       {rows.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[40rem] border-collapse text-sm">
-            <thead>
-              <tr>
-                <th scope="col" className="w-40 p-2 text-start text-xs text-text-secondary">{t.metric}</th>
-                {rows.map((creative) => (
-                  <th key={creative.id} scope="col" className="p-2 text-start align-top">
-                    <div className="space-y-1">
-                      {creative.preview.thumbnail_url ?? creative.preview.image_url ? (
-                        <img
-                          src={(creative.preview.thumbnail_url ?? creative.preview.image_url) as string}
-                          alt={creative.name}
-                          loading={imageLoading(creative.preview.thumbnail_url ?? creative.preview.image_url)}
-                          className="h-20 w-full rounded object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-20 items-center justify-center rounded bg-surface-hover text-[11px] text-text-secondary">
-                          {ar ? creative.preview.note_ar : creative.preview.note_en}
-                        </div>
-                      )}
-                      <p className="text-xs font-medium text-text-primary">{creative.name}</p>
-                      <p className="text-[11px] text-text-secondary">
-                        {providerLabel(creative.provider, locale)}
-                        {creative.objective ? ` · ${objectiveLabel(creative.objective, locale)}` : ''}
-                      </p>
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {metricKeys.map((key) => (
-                <tr key={key} className="border-t border-border">
-                  <th scope="row" className="p-2 text-start text-xs font-medium text-text-secondary">
-                    {metricLabel(key, locale)}
-                  </th>
-                  {rows.map((creative) => {
-                    const isWinner = winners[key] === creative.id
-                    return (
-                      <td
-                        key={creative.id}
-                        className={`p-2 tabular-nums ${isWinner ? 'bg-success/10 font-semibold text-text-primary' : 'text-text-secondary'}`}
-                        dir="ltr"
-                      >
-                        {formatMetric(metricState(creative.metrics, key), key, locale, comparison.data?.currency ?? null)}
-                        {isWinner && <span className="sr-only"> — {t.winner}</span>}
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <TransposedMetricTable
+          columns={rows.map((creative) => ({
+            key: creative.id,
+            header: (
+              <div className="space-y-1">
+                {creative.preview.thumbnail_url ?? creative.preview.image_url ? (
+                  <img
+                    src={(creative.preview.thumbnail_url ?? creative.preview.image_url) as string}
+                    alt={creative.name}
+                    loading={imageLoading(creative.preview.thumbnail_url ?? creative.preview.image_url)}
+                    className="h-20 w-full rounded object-cover"
+                  />
+                ) : (
+                  <div className="flex h-20 items-center justify-center rounded bg-surface-hover text-[11px] text-text-secondary">
+                    {ar ? creative.preview.note_ar : creative.preview.note_en}
+                  </div>
+                )}
+                <p className="text-xs font-medium text-text-primary">{creative.name}</p>
+                <p className="text-[11px] text-text-secondary">
+                  {providerLabel(creative.provider, locale)}
+                  {creative.objective ? ` · ${objectiveLabel(creative.objective, locale)}` : ''}
+                </p>
+              </div>
+            ),
+          }))}
+          rows={metricKeys.map((key) => ({
+            key,
+            label: metricLabel(key, locale),
+            kind: metricKind(key),
+            currency: comparison.data?.currency ?? null,
+            digits: 2,
+            /*
+             * A state that is not a figure stays a SENTENCE and reaches the primitive as a node:
+             * «not provided» and «no data» are two different facts, and the one dash says neither.
+             */
+            values: rows.map((creative) => {
+              const state = metricState(creative.metrics, key)
+
+              return state.kind === 'value'
+                ? state.value
+                : <span>{formatMetric(state, key, locale, comparison.data?.currency ?? null)}</span>
+            }),
+            notes: rows.map((creative) =>
+              winners[key] === creative.id ? <span className="sr-only">{t.winner}</span> : null,
+            ),
+            emphasis: rows.map((creative) => winners[key] === creative.id),
+          }))}
+        />
       )}
     </div>
   )

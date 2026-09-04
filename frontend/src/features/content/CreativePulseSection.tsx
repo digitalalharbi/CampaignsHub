@@ -1,3 +1,4 @@
+import { TransposedMetricTable } from '@/components/ui/MetricTable'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -5,7 +6,7 @@ import { ArrowDownRight, ArrowUpRight, ChevronLeft, ChevronRight, ImageIcon, Pla
 import { CreativeInsightCard } from './CreativeInsightCard'
 import { posterSource, readPreview } from './adPreview'
 import { getCreativePulse, type CreativeMove, type CreativeWinner, type PathComparison, type SpendByKind } from './pulse'
-import { formatMetric, metricLabel, metricState } from './metrics'
+import { formatMetric, metricKind, metricLabel, metricState } from './metrics'
 import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
 import { imageLoading } from './format'
 import {
@@ -934,46 +935,39 @@ function PathTable({ row, t, locale, currency }: { row: PathComparison; t: Copy;
       <h4 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
         {marketingPathLabel(row.path, locale)}
       </h4>
-      <div className="mt-2 overflow-x-auto">
-        <table className="w-full min-w-[22rem] text-sm">
-          <thead>
-            <tr className="text-start text-xs text-text-muted">
-              {/* ANALYTICS-TABLES-001 — the metric NAME stays start-aligned because it is prose; the two
-                  value columns are centred, heading and figure together, so they line up under RTL as well as
-                  LTR. Transposed table (metric per row, creative type per column), so the rule is applied here
-                  rather than by using `MetricTable`. */}
-              <th scope="col" className="py-1 text-start font-medium">{t.metric}</th>
-              <th scope="col" className="py-1 text-center font-medium">{t.image}</th>
-              <th scope="col" className="py-1 text-center font-medium">{t.video}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {row.headline_metrics.map((metric) => {
-              const image = metricState(row.image, metric)
-              const video = metricState(row.video, metric)
-              const comparable = image.kind === 'value' && video.kind === 'value'
-              const imageWins =
-                comparable && (lowerWins.has(metric) ? image.value < video.value : image.value > video.value)
-              const videoWins =
-                comparable && (lowerWins.has(metric) ? video.value < image.value : video.value > image.value)
+      <TransposedMetricTable
+        minWidth="22rem"
+        columns={[{ key: 'image', header: t.image }, { key: 'video', header: t.video }]}
+        rows={row.headline_metrics.map((metric) => {
+          const image = metricState(row.image, metric)
+          const video = metricState(row.video, metric)
+          const comparable = image.kind === 'value' && video.kind === 'value'
+          const better = (a: typeof image, b: typeof video) =>
+            comparable && a.kind === 'value' && b.kind === 'value'
+            && (lowerWins.has(metric) ? a.value < b.value : a.value > b.value)
 
-              return (
-                <tr key={metric} className="border-t border-border">
-                  <th scope="row" className="py-1.5 text-start font-normal text-text-muted">
-                    {metricLabel(metric, locale)}
-                  </th>
-                  <td className={`tnum py-1.5 text-center ${imageWins ? 'font-semibold text-success' : 'text-text'}`}>
-                    {formatMetric(image, metric, locale, currency)}
-                  </td>
-                  <td className={`tnum py-1.5 text-center ${videoWins ? 'font-semibold text-success' : 'text-text'}`}>
-                    {formatMetric(video, metric, locale, currency)}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+          /*
+           * A state that is not a figure stays a SENTENCE, and reaches the primitive as a node.
+           *
+           * «Not provided» and «no data» are two different facts — the platform does not send this
+           * metric, against we have no rows for it in this window — and the primitive's one dash says
+           * neither. A node passes through it untouched, so the distinction the surface makes
+           * survives the migration while the figures converge on the product's notation.
+           */
+          const cell = (state: typeof image) =>
+            state.kind === 'value' ? state.value : <span>{formatMetric(state, metric, locale, currency)}</span>
+
+          return {
+            key: metric,
+            label: metricLabel(metric, locale),
+            kind: metricKind(metric),
+            currency,
+            digits: 2,
+            values: [cell(image), cell(video)],
+            emphasis: [better(image, video), better(video, image)],
+          }
+        })}
+      />
     </div>
   )
 }
