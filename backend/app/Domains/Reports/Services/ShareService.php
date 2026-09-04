@@ -277,14 +277,19 @@ final class ShareService
         }
 
         /*
-         * REPORT-DETAIL-PARITY-001 — `ad_sets` is sanitised with everything else.
+         * REPORT-DETAIL-PARITY-001 — `ad_sets` is sanitised with everything else, and so is `budget`.
+         *
+         * The budget block is built only when `hide_spend` is false, so its money is already the
+         * money the link allows — but it is listed here anyway, because `hide_campaign_names` applies
+         * to it too and a pacing table naming every campaign would undo the renaming done below. A
+         * section is on this list or it is outside the contract; there is no third state.
          *
          * A section added to the payload and not to this list is a section that ignores the link's
          * hide flags: an operator who hid spend would find it again one rung down. The list is
          * enumerated rather than walked precisely so that adding a section is a decision somebody
          * makes here, and this is that decision.
          */
-        foreach (['timeseries', 'platforms', 'campaigns', 'ad_sets'] as $section) {
+        foreach (['timeseries', 'platforms', 'campaigns', 'ad_sets', 'budget'] as $section) {
             if (! empty($payload[$section]) && is_array($payload[$section])) {
                 $payload[$section] = array_map(
                     fn ($row) => is_array($row) ? $strip($row) : $row,
