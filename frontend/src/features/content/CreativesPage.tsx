@@ -6,7 +6,7 @@ import { CreativeViewer } from './CreativeViewer'
 import { CreativeCompare } from './CreativeCompare'
 import { formatMetric, metricLabel, metricState } from './metrics'
 import { creativeGrainMissing, emptyReason, noDisplayableMetrics, type EmptyReason, type MetricsAvailability } from './availability'
-import { previewShape } from './adPreview'
+import { aspectClass, previewShape } from './adPreview'
 import { imageLoading } from './format'
 import { creativeMoney } from './creativeMoney'
 import { VideoPoster } from './VideoPoster'
@@ -1056,7 +1056,16 @@ function CreativeGridCard({
           type="button"
           onClick={onOpen}
           aria-label={`${t.open}: ${creative.name}`}
-          className={showPreviewPanel ? 'block aspect-video w-full bg-surface-hover' : 'block w-full bg-surface-hover'}
+          /*
+           * CONTENT-PREVIEW-SHAPES-001 — the frame is the shape the ad actually is.
+           *
+           * Every card was `aspect-video`, so a story or a reel — 9:16, which is most of what runs on
+           * Snapchat and TikTok — was letterboxed into a third of its own frame, and a reader
+           * comparing two ads was comparing two crops. The provider's dimensions have always been
+           * synced; the preview payload carries them now. Where it says nothing the frame keeps the
+           * shape it has always had, because guessing tall is a claim too.
+           */
+          className={showPreviewPanel ? `block w-full bg-surface-hover ${aspectClass(preview.aspect ?? null) ?? 'aspect-video'}` : 'block w-full bg-surface-hover'}
         >
           {poster ? (
             <img

@@ -183,6 +183,7 @@ final class CreativePresenter
      *     image_url: string|null,
      *     video_url: string|null,
      *     thumbnail_url: string|null,
+     *     aspect: 'vertical'|'square'|'horizontal'|null,
      *     expires_at: string|null,
      *     note_ar: string|null,
      *     note_en: string|null,
@@ -194,6 +195,7 @@ final class CreativePresenter
     public function preview(ExternalCreative $creative): array
     {
         $kind = $this->kind($creative);
+        $aspect = $this->aspect($creative);
 
         $image = $this->safe($creative->asset_url) ?? $this->safe($creative->preview_url);
         $video = $this->safe($creative->video_url);
@@ -205,6 +207,7 @@ final class CreativePresenter
             $blocked => [
                 'state' => 'withheld',
                 'kind' => $kind,
+                'aspect' => $aspect,
                 'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
                 'expires_at' => null,
                 'note_ar' => 'رابط المعاينة من المنصة يحمل بيانات اعتماد، فلا يُعرض.',
@@ -213,6 +216,7 @@ final class CreativePresenter
             $creative->assetExpired() => [
                 'state' => 'expired',
                 'kind' => $kind,
+                'aspect' => $aspect,
                 'image_url' => null, 'video_url' => null,
                 'thumbnail_url' => $thumb,
                 'expires_at' => $creative->asset_expires_at?->toIso8601String(),
@@ -222,6 +226,7 @@ final class CreativePresenter
             $image === null && $video === null && $thumb === null && $creative->cards === null => [
                 'state' => 'unavailable',
                 'kind' => $kind,
+                'aspect' => $aspect,
                 'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
                 'expires_at' => null,
                 'note_ar' => 'لا تتيح هذه المنصة أصل المحتوى.',
@@ -230,6 +235,7 @@ final class CreativePresenter
             default => [
                 'state' => 'available',
                 'kind' => $kind,
+                'aspect' => $aspect,
                 'image_url' => $image,
                 'video_url' => $video,
                 'thumbnail_url' => $thumb,
@@ -324,6 +330,52 @@ final class CreativePresenter
     private function text(mixed $value): ?string
     {
         return is_string($value) && trim($value) !== '' ? trim($value) : null;
+    }
+
+    /**
+     * The SHAPE of the frame this creative fills — CONTENT-PREVIEW-SHAPES-001.
+     *
+     * A story or a reel is 9:16. Shown in the square frame every preview used, it is letterboxed into
+     * a third of the space or cropped through its own subject, and the reader is looking at a
+     * different ad from the one that ran. The columns to answer this have been synced all along —
+     * `width`, `height`, `aspect_ratio` — and no surface could see them, because the preview payload
+     * did not carry the answer.
+     *
+     * Measured before it is parsed: real pixel dimensions are the provider's own measurement, while
+     * `aspect_ratio` is a label somebody wrote. Null when neither is present, which is «the platform
+     * did not say» — a frame then keeps the neutral shape it has always had rather than guessing tall.
+     */
+    private function aspect(ExternalCreative $creative): ?string
+    {
+        $w = (int) ($creative->width ?? 0);
+        $h = (int) ($creative->height ?? 0);
+
+        if ($w > 0 && $h > 0) {
+            return $this->nameRatio($w / $h);
+        }
+
+        $label = trim((string) ($creative->aspect_ratio ?? ''));
+
+        if (preg_match('/^(\d+(?:\.\d+)?)\s*[:x\/]\s*(\d+(?:\.\d+)?)$/i', $label, $m) === 1 && (float) $m[2] > 0) {
+            return $this->nameRatio((float) $m[1] / (float) $m[2]);
+        }
+
+        return null;
+    }
+
+    /**
+     * Where the line between «square» and the two others falls.
+     *
+     * A 15% band, so 4:5 (0.8) reads as vertical — Meta's most common feed portrait, and tall enough
+     * that a square frame crops it — while 1:1 and the small rounding errors either side of it do not.
+     */
+    private function nameRatio(float $ratio): string
+    {
+        return match (true) {
+            $ratio < 0.87 => 'vertical',
+            $ratio > 1.15 => 'horizontal',
+            default => 'square',
+        };
     }
 
     private function kind(ExternalCreative $creative): string

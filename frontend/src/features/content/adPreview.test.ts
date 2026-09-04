@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { absenceLabel, posterSource, previewShape, readPreview } from './adPreview'
+import { absenceLabel, aspectClass, frameAspect, posterSource, previewShape, readPreview } from './adPreview'
 import type { CreativePreview } from './api'
 
 /**
@@ -217,5 +217,40 @@ describe('the shape of the asset', () => {
     expect(absenceLabel(noHero, true)).toContain('مجموعة')
     expect(absenceLabel(noMedia, true)).toContain('لم تُرسل المنصة ملفًا')
     expect(absenceLabel(noHero, true)).not.toBe(absenceLabel(noMedia, true))
+  })
+})
+
+/**
+ * CONTENT-PREVIEW-SHAPES-001 — the shape of the FRAME, which is not the shape of the media.
+ *
+ * A story or a reel is 9:16, and every card drew `aspect-video`: the ad was letterboxed into a third
+ * of its own frame, and a reader comparing two ads was comparing two crops. One mapping, because two
+ * surfaces choosing their own would put the same ad in two different boxes.
+ */
+describe('the frame an ad is drawn in', () => {
+  it('gives a vertical ad a tall frame', () => {
+    expect(aspectClass('vertical')).toBe('aspect-[9/16]')
+  })
+
+  it('gives a horizontal ad a wide one, and a square ad a square', () => {
+    expect(aspectClass('horizontal')).toBe('aspect-video')
+    expect(aspectClass('square')).toBe('aspect-square')
+  })
+
+  /**
+   * «The platform did not say» is not «square».
+   *
+   * Null returns null rather than a class, so the surface keeps whatever frame it already had — a
+   * default here would be this module making a claim about an ad's composition from no evidence, on
+   * every provider that does not report dimensions.
+   */
+  it('states no shape when the platform stated none', () => {
+    expect(aspectClass(null)).toBeNull()
+  })
+
+  it('reads the shape off the preview, and null off nothing at all', () => {
+    expect(frameAspect(preview({ aspect: 'vertical' }))).toBe('vertical')
+    expect(frameAspect(preview())).toBeNull()
+    expect(frameAspect(null)).toBeNull()
   })
 })
