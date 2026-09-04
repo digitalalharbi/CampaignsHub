@@ -99,6 +99,22 @@ const RATE = new Set(['ctr', 'conversion_rate', 'view_rate', 'completion_rate', 
 const MONEY = new Set(['spend', 'revenue', 'cpc', 'cpm', 'cpa', 'aov', 'cost_per_view', 'cost_per_lpv'])
 
 /**
+ * Which of the primitive's kinds a creative metric is — the one place that decides.
+ *
+ * `formatMetric` above answers the same question inline, and it has to keep doing so for the places
+ * that render a metric OUTSIDE a table. What must not happen is a third answer: a table that decided
+ * `cpa` was a plain number would print it without a currency beside one that printed it with, and a
+ * reader comparing the two surfaces has no way to know which is right.
+ */
+export function metricKind(key: string): 'number' | 'money' | 'percent' | 'ratio' {
+  if (RATE.has(key)) return 'percent'
+  if (key === 'roas') return 'ratio'
+  if (MONEY.has(key)) return 'money'
+
+  return 'number'
+}
+
+/**
  * A metric as text — Latin digits in both languages, per the contract.
  *
  * Arabic-Indic digits were tried and abandoned: figures sit beside English metric names, currency

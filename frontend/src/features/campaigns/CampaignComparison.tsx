@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { TransposedMetricTable } from '@/components/ui/MetricTable'
 import { formatMoneyReading, readMoney, resolveMoneySeries } from '@/lib/money/contract'
 import { displaySpend } from '@/features/dashboard/platformMoney'
 import { Link } from 'react-router-dom'
@@ -11,7 +12,7 @@ import { Badge } from '@/components/ui/Badge'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { ChartCard, MetricLineChart } from '@/features/analytics/charts'
 import { platformColor } from '@/features/analytics/components'
-import { compact, money, num, ratio } from '@/features/analytics/format'
+import { compact, money } from '@/features/analytics/format'
 
 const MAX = 5
 
@@ -146,83 +147,81 @@ function ComparisonTable({ rows, locale, mixed, projectId }: {
   const bestCost = best(costs, true)
   const bestRoas = best(roas, false)
 
-  const cell = (isBest: boolean) =>
-    `tnum p-3 text-end ${isBest ? 'font-extrabold text-success' : 'text-text-primary'}`
-
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-small)]">
-      <div className="overflow-x-auto">
-        <table data-testid="compare-table" className="w-full min-w-[640px] text-sm">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="p-3 text-start text-text-muted">المؤشر</th>
-              {rows.map((r) => (
-                <th key={r.campaign_id} className="p-3 text-end">
-                  <Link to={`/campaigns/${projectId}/${r.campaign_id}`} className="font-bold text-text-primary hover:text-brand-600">{r.name}</Link>
-                  <div className="mt-1 flex justify-end gap-1">
-                    {r.status && <Badge tone={campaignStatusTone(r.status)}>{campaignStatusLabel(r.status, locale)}</Badge>}
-                    {r.objective && <Badge tone="neutral">{objectiveLabel(r.objective, locale)}</Badge>}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="border-b border-border">
-              <td className="p-3 text-text-secondary">الإنفاق</td>
-              {rows.map((r, i) => <td key={r.campaign_id} className="tnum p-3 text-end text-text-primary">{formatMoneyReading(spendReadings[i], money)}</td>)}
-            </tr>
-            <tr className="border-b border-border">
-              <td className="p-3 text-text-secondary">النتائج <span className="text-xs text-text-muted">(حسب هدف كل حملة)</span></td>
-              {rows.map((r, i) => {
-                const m = resultModel(r.objective)
-                return (
-                  <td key={r.campaign_id} className={cell(results[i] !== null && results[i] === bestResults)}>
-                    {m ? <>{num(results[i])} <span className="block text-xs font-normal text-text-muted">{m.labelAr}</span></> : <span className="text-text-muted">لا تعريف نتيجة</span>}
-                  </td>
-                )
-              })}
-            </tr>
-            <tr className="border-b border-border">
-              <td className="p-3 text-text-secondary">تكلفة النتيجة</td>
-              {rows.map((r, i) => {
-                const m = resultModel(r.objective)
-                return (
-                  <td key={r.campaign_id} className={cell(costs[i] !== null && costs[i] === bestCost)}>
-                    {m && costs[i] !== null
-                      ? <>{money(costs[i], r.budget_currency ?? 'SAR')} <span className="block text-xs font-normal text-text-muted">{m.costLabelAr}</span></>
-                      : <span className="text-text-muted">—</span>}
-                  </td>
-                )
-              })}
-            </tr>
-            <tr className="border-b border-border">
-              <td className="p-3 text-text-secondary">العائد على الإنفاق</td>
-              {rows.map((r, i) => (
-                <td key={r.campaign_id} className={cell(roas[i] !== null && roas[i] === bestRoas)}>
-                  {roas[i] !== null ? ratio(roas[i]) : <span className="text-text-muted">—</span>}
-                </td>
-              ))}
-            </tr>
-            <tr className="border-b border-border last:border-0">
-              <td className="p-3 text-text-secondary">الظهور / النقرات</td>
-              {rows.map((r) => (
-                <td key={r.campaign_id} className="tnum p-3 text-end text-text-primary">
-                  {compact(Number(r.totals.impressions ?? 0))} <span className="text-text-muted">/</span> {compact(Number(r.totals.clicks ?? 0))}
-                </td>
-              ))}
-            </tr>
-            <tr>
-              <td className="p-3 text-text-secondary">الميزانية المخططة</td>
-              {rows.map((r) => (
-                <td key={r.campaign_id} className="tnum p-3 text-end text-text-primary">
-                  {r.total_budget ? money(r.total_budget, r.budget_currency ?? 'SAR') : <span className="text-text-muted">غير محددة</span>}
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <TransposedMetricTable
+        testId="compare-table"
+        minWidth="640px"
+        columns={rows.map((r) => ({
+          key: r.campaign_id,
+          header: (
+            <>
+              <Link to={`/campaigns/${projectId}/${r.campaign_id}`} className="font-bold text-text-primary hover:text-brand-600">{r.name}</Link>
+              <div className="mt-1 flex justify-center gap-1">
+                {r.status && <Badge tone={campaignStatusTone(r.status)}>{campaignStatusLabel(r.status, locale)}</Badge>}
+                {r.objective && <Badge tone="neutral">{objectiveLabel(r.objective, locale)}</Badge>}
+              </div>
+            </>
+          ),
+        }))}
+        rows={[
+          {
+            key: 'spend',
+            label: 'الإنفاق',
+            kind: 'text' as const,
+            /*
+             * Through the money contract, not the primitive's `money` kind.
+             *
+             * `formatMoneyReading` is what states a WITHHELD amount in the platform's own currency
+             * rather than the project's — the reading carries its own unit, and handing the primitive
+             * a bare number would relabel it with the column's.
+             */
+            values: rows.map((_, i) => <>{formatMoneyReading(spendReadings[i], money)}</>),
+          },
+          {
+            key: 'results',
+            label: <>النتائج <span className="text-xs text-text-muted">(حسب هدف كل حملة)</span></>,
+            kind: 'number' as const,
+            values: rows.map((r, i) => (resultModel(r.objective) ? results[i] : <span className="text-text-muted">لا تعريف نتيجة</span>)),
+            notes: rows.map((r) => resultModel(r.objective)?.labelAr ?? null),
+            emphasis: rows.map((_, i) => results[i] !== null && results[i] === bestResults),
+          },
+          {
+            key: 'cost',
+            label: 'تكلفة النتيجة',
+            kind: 'text' as const,
+            // Per-CAMPAIGN currency: each column is its own budget's unit, which one column kind cannot carry.
+            values: rows.map((r, i) =>
+              resultModel(r.objective) && costs[i] !== null
+                ? <>{money(costs[i], r.budget_currency ?? 'SAR')}</>
+                : null,
+            ),
+            notes: rows.map((r) => resultModel(r.objective)?.costLabelAr ?? null),
+            emphasis: rows.map((_, i) => costs[i] !== null && costs[i] === bestCost),
+          },
+          {
+            key: 'roas',
+            label: 'العائد على الإنفاق',
+            kind: 'ratio' as const,
+            values: roas,
+            emphasis: roas.map((v) => v !== null && v === bestRoas),
+          },
+          {
+            key: 'reach',
+            label: 'الظهور / النقرات',
+            kind: 'text' as const,
+            values: rows.map((r) => (
+              <>{compact(Number(r.totals.impressions ?? 0))} <span className="text-text-muted">/</span> {compact(Number(r.totals.clicks ?? 0))}</>
+            )),
+          },
+          {
+            key: 'budget',
+            label: 'الميزانية المخططة',
+            kind: 'text' as const,
+            values: rows.map((r) => (r.total_budget ? <>{money(r.total_budget, r.budget_currency ?? 'SAR')}</> : null)),
+          },
+        ]}
+      />
       {!mixed && (
         <div className="flex items-center gap-1.5 border-t border-border px-3 py-2 text-xs text-text-muted">
           <Info size={13} /> القيمة <span className="font-bold text-success">الخضراء</span> هي الأفضل بين الحملات المحددة — تظهر فقط عندما تشترك في نفس الهدف.
