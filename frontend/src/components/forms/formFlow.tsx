@@ -42,7 +42,7 @@ export function FormStepper({
                 ? 'bg-primary text-white'
                 : state === 'complete'
                   ? 'bg-primary/15 text-primary'
-                  : 'bg-surface-muted text-text-muted')
+                  : 'bg-surface-secondary text-text-muted')
             }
           >
             {i + 1}
@@ -54,7 +54,7 @@ export function FormStepper({
               <button
                 type="button"
                 onClick={() => onStepClick?.(i)}
-                className="flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-surface-muted"
+                className="flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-surface-secondary"
                 aria-current={state === 'current' ? 'step' : undefined}
               >
                 {badge}

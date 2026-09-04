@@ -286,7 +286,7 @@ export function CampaignSyncLogTab({ campaign, projectId }: { campaign: UnifiedC
                     <summary className="cursor-pointer text-xs text-text-secondary">
                       {ar ? 'تفاصيل تقنية' : 'Technical detail'}
                     </summary>
-                    <p data-testid="sync-log-detail" className="mt-1 rounded-lg bg-surface-muted p-2 text-xs text-text-secondary" dir="ltr">{r.error}</p>
+                    <p data-testid="sync-log-detail" className="mt-1 rounded-lg bg-surface-secondary p-2 text-xs text-text-secondary" dir="ltr">{r.error}</p>
                   </details>
                 )}
               </li>

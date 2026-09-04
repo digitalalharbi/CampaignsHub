@@ -73,13 +73,13 @@ export function JourneyControl({ requestId, currentStage, paymentStatus, onTrans
 
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex flex-col gap-1">
-          <span className="text-[11px] font-semibold text-text-tertiary">{c.current}</span>
+          <span className="text-[11px] font-semibold text-text-muted">{c.current}</span>
           <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-bold ${isOfframp(stage) ? 'bg-danger/15 text-danger' : 'bg-brand-600/15 text-brand-600'}`}>
             {stageLabel(stage, ar)}
           </span>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-[11px] font-semibold text-text-tertiary">{c.payment}</span>
+          <span className="text-[11px] font-semibold text-text-muted">{c.payment}</span>
           <span className="w-fit rounded-full bg-surface-hover px-2.5 py-1 text-xs font-semibold text-text-secondary" dir="ltr">
             {effectivePayment ?? c.none_payment}
           </span>
@@ -91,9 +91,9 @@ export function JourneyControl({ requestId, currentStage, paymentStatus, onTrans
       <div className="flex flex-col gap-2 border-t border-border pt-3">
         <span className="text-xs font-semibold text-text-secondary">{c.next}</span>
         {nexts.length === 0 ? (
-          <p className="text-sm text-text-tertiary">{c.terminal}</p>
+          <p className="text-sm text-text-muted">{c.terminal}</p>
         ) : !canChange ? (
-          <p className="text-xs text-text-tertiary">{c.no_perm}</p>
+          <p className="text-xs text-text-muted">{c.no_perm}</p>
         ) : (
           <>
             <input
@@ -138,7 +138,7 @@ function Timeline({ current, ar, label }: { current: string; ar: boolean; label:
   const offramp = currentIndex < 0
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-[11px] font-semibold text-text-tertiary">{label}</span>
+      <span className="text-[11px] font-semibold text-text-muted">{label}</span>
       <ol className="flex flex-wrap gap-1.5">
         {JOURNEY_TIMELINE.map((s, i) => {
           const done = !offramp && i < currentIndex
@@ -151,7 +151,7 @@ function Timeline({ current, ar, label }: { current: string; ar: boolean; label:
                   ? 'bg-brand-600 text-white'
                   : done
                     ? 'bg-success/15 text-success'
-                    : 'bg-surface-hover text-text-tertiary'
+                    : 'bg-surface-hover text-text-muted'
               }`}
             >
               {isCurrent ? <CircleDot size={11} /> : done ? <Check size={11} /> : null}

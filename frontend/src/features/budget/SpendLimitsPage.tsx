@@ -232,7 +232,7 @@ function LimitCard({
       </p>
 
       {limit.thresholds.length > 0 && (
-        <p className="mt-1 text-[11px] text-text-tertiary" dir="ltr">
+        <p className="mt-1 text-[11px] text-text-muted" dir="ltr">
           {(ar ? 'تنبيه عند: ' : 'Warn at: ') + limit.thresholds.map((t) => `${t}%`).join(' · ')}
         </p>
       )}

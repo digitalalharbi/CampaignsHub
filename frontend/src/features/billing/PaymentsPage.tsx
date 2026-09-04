@@ -39,7 +39,7 @@ export const PAYMENT_STATE: Record<string, { ar: string; en: string; tone: strin
   processing: { ar: 'قيد المعالجة', en: 'Processing', tone: 'bg-info/15 text-info' },
   paid: { ar: 'مدفوعة', en: 'Paid', tone: 'bg-success/15 text-success' },
   failed: { ar: 'فشلت', en: 'Failed', tone: 'bg-danger/15 text-danger' },
-  refunded: { ar: 'مستردّة', en: 'Refunded', tone: 'bg-surface-hover text-text-tertiary' },
+  refunded: { ar: 'مستردّة', en: 'Refunded', tone: 'bg-surface-hover text-text-muted' },
 }
 
 export function paymentStateMeta(state: PaymentDisplayState, ar: boolean) {
@@ -172,7 +172,7 @@ export function PaymentsPage() {
                     <div className="flex flex-col gap-0.5">
                       <span className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{s.invoiceNumber}</span>
                       <span className="tnum text-sm font-bold text-text-primary" dir="ltr">{formatMoney(s.payment.amount, s.payment.currency)}</span>
-                      <span className="text-[11px] text-text-tertiary">{c.provider}: <span dir="ltr">{s.payment.provider}</span></span>
+                      <span className="text-[11px] text-text-muted">{c.provider}: <span dir="ltr">{s.payment.provider}</span></span>
                     </div>
                     <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${meta.tone}`}>{meta.label}</span>
                   </div>
@@ -202,7 +202,7 @@ export function PaymentsPage() {
                             const tMeta = paymentStateMeta(t.state, ar)
                             return (
                               <tr key={t.at + i} className="border-t border-border">
-                                <td className="p-2 tnum text-text-tertiary" dir="ltr">{i + 1}</td>
+                                <td className="p-2 tnum text-text-muted" dir="ltr">{i + 1}</td>
                                 <td className="p-2 tnum text-text-secondary" dir="ltr">{formatDateTime(t.at)}</td>
                                 <td className="p-2"><span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${tMeta.tone}`}>{tMeta.label}</span></td>
                                 <td className="p-2 font-mono text-text-secondary" dir="ltr">{t.session_id ?? '—'}</td>

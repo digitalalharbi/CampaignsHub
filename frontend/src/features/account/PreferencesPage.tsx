@@ -69,7 +69,7 @@ export function PreferencesPage() {
         </div>
       </section>
 
-      <p className="text-xs text-text-tertiary">{c.note}</p>
+      <p className="text-xs text-text-muted">{c.note}</p>
     </div>
   )
 }
