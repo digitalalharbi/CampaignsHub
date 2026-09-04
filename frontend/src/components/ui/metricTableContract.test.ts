@@ -54,7 +54,6 @@ const EXEMPT: Record<string, string> = {
   'src/features/reports/ReportsPage.tsx': 'a list of reports and a share access log — identifiers, times and controls, with nothing a reader compares across rows. Out of scope by KIND, not waiting to be migrated',
   'src/features/reports/PrintDocument.tsx': 'a printed page has no sort control, no hover and no scroller, and those three are most of what the primitive is. Out of scope by kind',
   'src/features/content/CreativesPage.tsx': 'the list view of a grid: selection checkboxes and media previews per row',
-  'src/features/content/CreativeGroupsPage.tsx': 'grouped rows with a media thumbnail column',
   'src/features/content/CreativeDetailPage.tsx': 'three tables, one of which is a per-day series that wants a chart rather than a migration',
   'src/features/campaigns/CampaignCommandCenter.tsx': 'inline editing per row — the cells are controls, and the spec API needs an editable kind first',
   'src/features/campaigns/CampaignsPage.tsx': 'row selection and bulk actions live inside the table',
@@ -88,6 +87,27 @@ describe('the transposed surfaces are consumers', () => {
       expect(withoutComments(source), 'a hand-rolled table came back').not.toMatch(/<table[\s>]/)
     })
   }
+})
+
+/**
+ * TABLE-PRESENTATION-CONTRACT-001 — the groups page is a consumer, and its exemption was never true.
+ *
+ * It was exempt for «grouped rows with a media thumbnail column». The file's one table has no
+ * thumbnail column and never did: it is platform, member count and metrics — plain values, all of
+ * them. The thumbnails in that file are in the member LIST below the table. An exemption whose reason
+ * does not describe the code is worse than none, because it reads as considered.
+ *
+ * Migrating it found something the primitive was missing, which is the other reason exemptions have
+ * to be retired rather than trusted — see `MetricTable`'s row-header note.
+ */
+describe('the groups page reads its numbers through the primitive', () => {
+  it('draws its platform breakdown with the shared table', () => {
+    const source = TREE['/src/features/content/CreativeGroupsPage.tsx'] ?? ''
+
+    expect(source, 'the file moved — this guard is watching nothing').not.toBe('')
+    expect(source).toContain('DataMetricTable')
+    expect(withoutComments(source), 'a hand-rolled table came back').not.toMatch(/<table[\s>]/)
+  })
 })
 
 const handRolled = () =>
