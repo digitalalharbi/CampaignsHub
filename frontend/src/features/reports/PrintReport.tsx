@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { fmtDate } from '@/lib/datetime'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
-import { SlideBody, type Meta, type ReportData, type Slide } from './InteractiveReport'
+import { SlideBody, isClientAudience, type Meta, type ReportData, type Slide } from './InteractiveReport'
 import { PrintDocument } from './PrintDocument'
 import { headerIdentity, type SharedBranding } from './sharedBranding'
 import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
@@ -82,7 +82,7 @@ export function PrintReport() {
     const who = headerIdentity(payload.branding).name
 
     document.title =
-      payload.audience === 'client' || payload.audience === 'executive'
+      isClientAudience(payload.audience)
         ? `${who} — ${payload.currency} Report`
         : `${who} | rid=${payload.report_id} | cs=${payload.checksum ?? ''} | dv=${payload.data_version ?? ''} | cur=${payload.currency}`
   }, [payload])
@@ -145,9 +145,21 @@ export function PrintReport() {
         <section key={s.id} className="report-slide" data-print-page={i + 1} data-slide-type={s.type}>
           <div className="report-slide-inner">
             <SlideBody slide={s} data={d} meta={meta} />
-            {/* Verifiable provenance line on the methodology page — INTERNAL/executive only; a client
-                report keeps checksum/id in PDF metadata, never as visible technical text. */}
-            {s.type === '__methodology' && payload.audience !== 'client' && (
+            {/*
+              Verifiable provenance on the methodology page — INTERNAL only.
+
+              It read `audience !== 'client'`, which put `checksum`, `data_version`, `daily_metrics`
+              and `attribution_window` on the page of the EXECUTIVE file — the one a client's own
+              management reads. Twenty lines above, the same file already treats executive as
+              client-facing and withholds exactly these fields from the PDF's title, so one document
+              was making both statements at once: the metadata said «a client file», the methodology
+              page printed the checksum.
+
+              CLIENT-DIAGNOSTIC-SEPARATION-001 settles it, and both places now ask the SAME question:
+              an audience that is client-facing gets provenance in the PDF's metadata, where an
+              auditor can still find it, and never as visible engineering text.
+            */}
+            {s.type === '__methodology' && !isClientAudience(payload.audience) && (
               <div className="report-provenance" dir="ltr">
                 <bdi>Report {payload.report_id}</bdi> · <bdi>checksum {(payload.checksum ?? '').slice(0, 16)}</bdi> · <bdi>data_version {payload.data_version ?? '—'}</bdi>
                 {' · '}<bdi>{d.data_source ?? 'daily_metrics'}</bdi> · <bdi>{d.attribution_window ?? 'default'}</bdi> · <bdi>{payload.currency}</bdi> · <bdi>{d.timezone ?? 'Asia/Riyadh'}</bdi> · <bdi>{mode}</bdi>

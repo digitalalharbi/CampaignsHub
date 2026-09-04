@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { headerIdentity, type SharedBranding } from './sharedBranding'
+import { isClientAudience } from './InteractiveReport'
 
 /**
  * BRANDING-HIERARCHY-001 in the EXPORTED file's own metadata.
@@ -16,7 +17,15 @@ import { headerIdentity, type SharedBranding } from './sharedBranding'
 const title = (branding: SharedBranding | undefined, audience: string, payload: { currency: string; report_id: string; checksum: string | null; data_version: number | null }) => {
   const who = headerIdentity(branding).name
 
-  return audience === 'client' || audience === 'executive'
+  /*
+   * The PRODUCT's predicate, not a copy of it.
+   *
+   * This test re-stated the audience rule inline, so it could only ever agree with itself: the file
+   * it guards had a second copy of the same rule that answered differently for the executive
+   * audience, and this test passed throughout. A test that re-implements what it is checking is a
+   * test of the test.
+   */
+  return isClientAudience(audience)
     ? `${who} — ${payload.currency} Report`
     : `${who} | rid=${payload.report_id} | cs=${payload.checksum ?? ''} | dv=${payload.data_version ?? ''} | cur=${payload.currency}`
 }
@@ -55,5 +64,21 @@ describe('the name a printed report carries in its metadata', () => {
   /* With nothing resolved, the product's name — never an empty title. */
   it('falls back to the product rather than to an empty title', () => {
     expect(title(undefined, 'client', PAYLOAD)).toBe('CampaignsHub — SAR Report')
+  })
+
+  /**
+   * The METADATA and the PAGE have to agree about who is reading.
+   *
+   * The title withheld `rid`/`checksum`/`data_version` from the executive file — a client document —
+   * while the methodology page printed all three, plus `daily_metrics` and the attribution window,
+   * because it asked only whether the audience was literally `client`. One document, both statements,
+   * and the visible one was the wrong one.
+   */
+  it('withholds the provenance line from every client-facing audience', () => {
+    for (const audience of ['client', 'executive']) {
+      expect(isClientAudience(audience), `${audience} is a client-facing file`).toBe(true)
+    }
+
+    expect(isClientAudience('internal'), 'an internal file stays auditable').toBe(false)
   })
 })
