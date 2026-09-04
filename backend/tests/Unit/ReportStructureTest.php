@@ -50,14 +50,29 @@ final class ReportStructureTest extends TestCase
         return $out;
     }
 
-    public function test_it_lists_the_eight_sections_in_the_order_a_report_is_read(): void
+    public function test_it_lists_the_seven_sections_in_the_order_a_report_is_read(): void
     {
         $sections = (new ReportStructure)->sections($this->snapshot());
 
         $this->assertSame(
-            ['executive_summary', 'performance', 'platforms', 'objectives', 'campaigns', 'ads', 'findings', 'recommendations'],
+            ['executive_summary', 'performance', 'platforms', 'objectives', 'ads', 'findings', 'recommendations'],
             array_column($sections, 'key'),
         );
+    }
+
+    /**
+     * CLIENT-REPORT-ENTITY-BOUNDARY-001 — «الحملات» is not a section of a client report.
+     *
+     * The outline is what the printed document numbers its headings from, so a `campaigns` entry
+     * surviving here would put «3. Campaigns» over a gap in a client's PDF — the section that no
+     * renderer draws any more. The snapshot below still CARRIES a roster, because every report
+     * generated before this requirement does.
+     */
+    public function test_no_campaign_section_is_offered_even_when_the_snapshot_carries_a_roster(): void
+    {
+        $sections = (new ReportStructure)->sections($this->snapshot());
+
+        $this->assertArrayNotHasKey('campaigns', $this->keyed($sections));
     }
 
     /**

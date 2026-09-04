@@ -207,11 +207,11 @@ final class DigestPresenter
                 'tone' => 'warn',
                 'text' => $this->ar()
                     ? ($ahead
-                        ? "«{$first['campaign']}» تستهلك الميزانية أسرع من المخطط ({$first['pace']}×) — راجعها قبل نهاية اليوم."
-                        : "«{$first['campaign']}» متأخرة عن خطة الإنفاق ({$first['pace']}×) — قد لا تستهلك ميزانيتها.")
+                        ? "الإنفاق على {$first['campaign']} أسرع من المخطط ({$first['pace']}×) — راجعه قبل نهاية اليوم."
+                        : "الإنفاق على {$first['campaign']} متأخر عن الخطة ({$first['pace']}×) — قد لا تُستهلك الميزانية.")
                     : ($ahead
-                        ? "“{$first['campaign']}” is spending ahead of plan ({$first['pace']}×) — worth a look today."
-                        : "“{$first['campaign']}” is behind its spend plan ({$first['pace']}×) and may not use its budget."),
+                        ? "Spending on {$first['campaign']} is ahead of plan ({$first['pace']}×) — worth a look today."
+                        : "Spending on {$first['campaign']} is behind plan ({$first['pace']}×) and may not use its budget."),
             ];
         }
 

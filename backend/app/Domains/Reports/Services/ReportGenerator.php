@@ -145,8 +145,30 @@ final class ReportGenerator
             'platform_series' => $agg->timeseriesByProvider($from, $to),
             'platforms' => $platforms,
             'best' => $this->leaders($lens, $platforms, $campaigns, $report->currency),
-            'campaigns' => $campaigns,
-            'top_creatives' => $topCreatives,
+            /*
+             * CLIENT-REPORT-ENTITY-BOUNDARY-001 — empty, and computed all the same.
+             *
+             * `$campaigns` is still read above, because the findings, the recommendations and the
+             * platform rankings are all derived from it. What does not travel is the ROSTER: this is
+             * the document a client keeps, and it is about what their money did rather than how the
+             * agency arranged it. Emptying the key rather than dropping it keeps every reader — the
+             * deck, the PDF, the spreadsheet, an old stored report — working.
+             */
+            'campaigns' => [],
+            /*
+             * CLIENT-REPORT-ENTITY-BOUNDARY-001 — empty while the ranking is CAMPAIGN-level.
+             *
+             * `creative_level` below has honestly said `campaign` since this key was written: these
+             * rows are campaigns, ranked, and the deck drew them under «أفضل الإعلانات». That is a
+             * campaign roster wearing the word «ads», and it is the leak the owner actually saw.
+             *
+             * The real ad-level section is `ads` — `creative_daily_metrics` per creative, with the
+             * media that ran — and a client MAY have that: the picture and its performance, under
+             * «المحتوى الأعلى أداءً», with no campaign name or hierarchy attached. So the answer is
+             * not to invent a label for the campaign ranking; it is to let the ad section be the ad
+             * section, and stop shipping the roster beside it.
+             */
+            'top_creatives' => [],
             /*
              * REPORT-AD-PREVIEW-001 — the ads themselves, with the picture that ran.
              *
@@ -174,7 +196,7 @@ final class ReportGenerator
              * the reading and the grid cannot disagree about which ad is ahead.
              */
             'ads_reading' => (new AdsExplanation)->explain($ads['ads'], $ads['worst'], $objective),
-            'worst_creatives' => $worstCreatives,
+            'worst_creatives' => [],
             'creative_level' => 'campaign', // ad-level arrives once connectors provide it
             'platform_notes' => $this->platformNotes($lens, $platforms, $report->currency),
             /*
@@ -189,7 +211,9 @@ final class ReportGenerator
              */
             'funnel' => ($adFunnel = $agg->funnel($from, $to))['stages'],
             'funnel_spend' => $adFunnel['spend'],
-            'budget' => $agg->budgetPacing($from, $to, Carbon::today()),
+            // Per PLATFORM, not per campaign — CLIENT-REPORT-ENTITY-BOUNDARY-001. The block answers
+            // «is anything about to run out?», which survives the fold; the campaign plan does not.
+            'budget' => $agg->budgetPacingByProvider($from, $to, Carbon::today()),
             /*
              * Spend and results split by marketing path, with Direct and Blended apart
              * (REPORT-OBJECTIVE-001/003).
@@ -203,7 +227,7 @@ final class ReportGenerator
              * Built from the same `daily_metrics` the rest of the snapshot comes from — not a second
              * source — so the report's Direct CPA and the dashboard's agree by construction.
              */
-            'objective_performance' => $scope->objectivePerformance()->build($from, $to),
+            'objective_performance' => ClientEntityBoundary::objectivePerformance($scope->objectivePerformance()->build($from, $to)),
             /*
              * The same split for the PREVIOUS window — §14.7's comparison, done honestly.
              *
@@ -213,7 +237,7 @@ final class ReportGenerator
              * exists to prevent, and a client reading «75 vs 87» would have seen an improvement that
              * is partly an artefact of which campaigns each figure counted.
              */
-            'objective_performance_previous' => $scope->objectivePerformance()->build($prevFrom, $prevTo),
+            'objective_performance_previous' => ClientEntityBoundary::objectivePerformance($scope->objectivePerformance()->build($prevFrom, $prevTo)),
             'summary' => $this->executiveSummary($lens, $totals, $delta, $platforms, $campaigns, $report->currency),
             /*
              * The professional analysis — §14.7.
@@ -398,7 +422,15 @@ final class ReportGenerator
             'basis' => ['key' => $metric['key'], 'label_ar' => $metric['label_ar']],
             'platform' => $leader['provider'] ?? null,
             'platform_value' => $leader ? $lens->formatRanking((float) $leader[$metric['key']], $currency) : null,
-            'campaign' => $campaigns[0]['campaign_name'] ?? null,
+            /*
+             * Null since CLIENT-REPORT-ENTITY-BOUNDARY-001, and kept so older readers still parse.
+             *
+             * It named the highest-spending campaign. «Best» beside a campaign name is the single
+             * most quotable line in a client document and the one thing in it that is purely internal
+             * — a name the client never chose, for a container they do not manage. The platform
+             * leaders beside it answer the same question on an axis that is theirs.
+             */
+            'campaign' => null,
             'platform_by_roas' => $lens->judgesOnRevenue()
                 ? (collect($platforms)->filter(fn ($p) => $p['roas'] !== null)->sortByDesc('roas')->first()['provider'] ?? null)
                 : null,
@@ -490,11 +522,20 @@ final class ReportGenerator
          * money does — and flagging it critical would fill a brand report with alarms about it
          * working as intended.
          */
+        /*
+         * CLIENT-REPORT-ENTITY-BOUNDARY-001 — the sum and where it sat, rather than the name.
+         *
+         * This read «حملة «X» تنفق دون تحويلات». It is the most actionable line in the document and
+         * it was also a campaign name, so the fix could not be to delete the sentence: the money is
+         * still being spent. It states the total and the platforms it is on — both true, both the
+         * client's to act on — and never claims the platform as a whole is failing.
+         */
         if ($lens->judgesOnCostPerResult()) {
-            $burner = collect($campaigns)->first(fn ($c) => ($c['spend'] ?? 0) > 3000 && ($c['conversions'] ?? 0) < 2);
-            if ($burner) {
-                $out[] = ['severity' => 'critical', 'title' => "حملة «{$burner['campaign_name']}» تنفق دون تحويلات", 'platform' => $burner['provider'] ?? null,
-                    'kpi' => 'الإنفاق', 'value' => number_format((float) $burner['spend']).' '.$currency, 'detail' => 'مرشحة للإيقاف أو مراجعة التتبع.'];
+            $burning = ClientEntityBoundary::spendWithoutResults($campaigns);
+            if ($burning !== null) {
+                $where = implode('، ', array_map(ProviderDisplayName::short(...), $burning['providers']));
+                $out[] = ['severity' => 'critical', 'title' => 'إنفاق دون تحويلات على '.$where, 'platform' => $burning['providers'][0] ?? null,
+                    'kpi' => 'الإنفاق', 'value' => number_format($burning['spend']).' '.$currency, 'detail' => 'يستدعي المراجعة: إمّا إيقاف ما لا يُنتج أو التحقق من التتبع.'];
             }
         }
 
@@ -540,14 +581,21 @@ final class ReportGenerator
         }
 
         if ($lens->judgesOnCostPerResult()) {
-            $burner = collect($campaigns)->first(fn ($c) => ($c['spend'] ?? 0) > 3000 && ($c['conversions'] ?? 0) < 2);
-            if ($burner) {
-                $out[] = ['severity' => 'critical', 'title' => "إيقاف مؤقت ومراجعة «{$burner['campaign_name']}»", 'platform' => $burner['provider'] ?? null,
-                    'action' => 'pause', 'detail' => 'إنفاق دون تحويلات — تحقق من التتبع قبل الاستمرار.', 'kpi' => 'الإنفاق'];
+            // The same finding as above, put as an action — CLIENT-REPORT-ENTITY-BOUNDARY-001.
+            $burning = ClientEntityBoundary::spendWithoutResults($campaigns);
+            if ($burning !== null) {
+                $where = implode('، ', array_map(ProviderDisplayName::short(...), $burning['providers']));
+                $out[] = ['severity' => 'critical', 'title' => 'مراجعة الإنفاق غير المُنتج على '.$where, 'platform' => $burning['providers'][0] ?? null,
+                    'action' => 'pause', 'detail' => number_format($burning['spend']).' '.$currency.' دون تحويلات — تحقق من التتبع قبل الاستمرار.', 'kpi' => 'الإنفاق'];
             }
-            $topConv = collect($campaigns)->sortByDesc('conversions')->first();
+            /*
+             * «Expand what works» named the top-converting CAMPAIGN. The platform carrying the most
+             * results is the same recommendation on an axis a client reads everywhere else, and the
+             * ads section beside it is where «what worked» is shown as the work itself.
+             */
+            $topConv = collect($platforms)->sortByDesc('conversions')->first();
             if ($topConv && ($topConv['conversions'] ?? 0) > 0) {
-                $out[] = ['severity' => 'positive', 'title' => "توسيع ما ينجح في «{$topConv['campaign_name']}»", 'platform' => $topConv['provider'] ?? null,
+                $out[] = ['severity' => 'positive', 'title' => 'توسيع ما ينجح على '.ProviderDisplayName::short($topConv['provider']), 'platform' => $topConv['provider'] ?? null,
                     'action' => 'expand', 'detail' => 'أعلى نتائج — كرّر الزوايا الرابحة على جماهير مشابهة.', 'kpi' => 'النتائج'];
             }
         }
@@ -653,9 +701,14 @@ final class ReportGenerator
         }
 
         if ($lens->judgesOnCostPerResult()) {
-            $burner = collect($campaigns)->first(fn ($c) => ($c['spend'] ?? 0) > 3000 && ($c['conversions'] ?? 0) < 2);
-            if ($burner) {
-                $out[] = sprintf('تنبيه: حملة «%s» تنفق دون تحويلات تُذكر — يُنصح بمراجعتها.', $burner['campaign_name'] ?? '—');
+            $burning = ClientEntityBoundary::spendWithoutResults($campaigns);
+            if ($burning !== null) {
+                $out[] = sprintf(
+                    'تنبيه: %s %s من الإنفاق على %s لم تُنتج تحويلات تُذكر — يُنصح بمراجعتها.',
+                    number_format($burning['spend']),
+                    $currency,
+                    implode('، ', array_map(ProviderDisplayName::short(...), $burning['providers'])),
+                );
             }
         }
 

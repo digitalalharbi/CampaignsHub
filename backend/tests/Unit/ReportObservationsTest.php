@@ -139,31 +139,39 @@ final class ReportObservationsTest extends TestCase
         $this->assertStringContainsString('6 مرات', $reported[0]['detail']);
     }
 
-    /** A campaign with no budget has no plan to deviate from. */
-    public function test_a_campaign_without_a_budget_is_never_accused_of_overspending(): void
+    /** A platform with no budget has no plan to deviate from. */
+    public function test_a_platform_without_a_budget_is_never_accused_of_overspending(): void
     {
         $notes = $this->build([
             'budget' => [
-                ['campaign_id' => 'a', 'campaign_name' => 'بلا ميزانية', 'budget' => 0, 'spent' => 9000, 'pace' => 4.0],
+                ['provider' => 'meta', 'budget' => 0, 'spent' => 9000, 'pace' => 4.0],
             ],
         ]);
 
         $this->assertSame([], $notes);
     }
 
-    /** Real over-pacing is critical, and names the money. */
+    /**
+     * Real over-pacing is critical, and names the money.
+     *
+     * The row is a PLATFORM since CLIENT-REPORT-ENTITY-BOUNDARY-001 — it was a campaign, by internal
+     * name, in a document written for the client. «الإنفاق على ميتا يستهلك الميزانية أسرع من الخطة»
+     * is the same decision, said on the axis a client is allowed to be told about, and the figures
+     * behind it are untouched.
+     */
     public function test_overspending_against_a_real_budget_is_critical(): void
     {
         $notes = $this->build([
             'budget' => [
-                ['campaign_id' => 'a', 'campaign_name' => 'حملة الصيف', 'budget' => 10000.0, 'spent' => 8000.0, 'pace' => 1.6],
+                ['provider' => 'meta', 'budget' => 10000.0, 'spent' => 8000.0, 'pace' => 1.6],
             ],
         ]);
 
         $this->assertSame('budget_pace', $notes[0]['kind']);
         $this->assertSame('critical', $notes[0]['severity']);
-        $this->assertStringContainsString('حملة الصيف', $notes[0]['title']);
+        $this->assertStringContainsString('ميتا', $notes[0]['title']);
         $this->assertStringContainsString('8,000.00 SAR', $notes[0]['detail']);
+        $this->assertSame('platform', $notes[0]['scope']['type'], 'the observation still scoped itself to a campaign');
     }
 
     /**
@@ -254,7 +262,7 @@ final class ReportObservationsTest extends TestCase
         $notes = $this->build([
             'kpis' => ['roas' => 4.0, 'ctr' => 0.02],
             'delta' => ['roas' => 0.4, 'ctr' => -0.3],
-            'budget' => [['campaign_id' => 'a', 'campaign_name' => 'ح', 'budget' => 1000.0, 'spent' => 900.0, 'pace' => 1.9]],
+            'budget' => [['provider' => 'meta', 'budget' => 1000.0, 'spent' => 900.0, 'pace' => 1.9]],
         ]);
 
         $rank = ['critical' => 0, 'warning' => 1, 'positive' => 2, 'info' => 3];
@@ -278,7 +286,7 @@ final class ReportObservationsTest extends TestCase
             'kpis' => ['roas' => 4.0, 'ctr' => 0.02, 'frequency' => 6.0],
             'delta' => ['roas' => 0.4, 'ctr' => -0.3],
             'reported' => ['reach' => true],
-            'budget' => [['campaign_id' => 'a', 'campaign_name' => 'ح', 'budget' => 1000.0, 'spent' => 900.0, 'pace' => 1.9]],
+            'budget' => [['provider' => 'meta', 'budget' => 1000.0, 'spent' => 900.0, 'pace' => 1.9]],
             'platforms' => [
                 ['provider' => 'meta', 'spend' => 5000, 'roas' => 8.0],
                 ['provider' => 'tiktok', 'spend' => 5000, 'roas' => 2.0],

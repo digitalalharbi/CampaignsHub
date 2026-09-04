@@ -111,7 +111,8 @@ describe('the executive slide', () => {
     render(<SlideBody slide={slide} data={brand} meta={meta} />)
 
     expect(screen.getByText('أفضل منصة (تكلفة الألف ظهور)')).toBeInTheDocument()
-    expect(screen.getByText('snapchat')).toBeInTheDocument()
+    // The platform's NAME, not its key: «snapchat» is a database value in a document a client keeps.
+    expect(screen.getByText('سناب شات')).toBeInTheDocument()
     expect(screen.getByText('2.50 SAR')).toBeInTheDocument()
   })
 
@@ -348,15 +349,24 @@ describe('creative analysis by objective', () => {
     expect(readings.find((r) => r.key === 'cpm')!.reading).toEqual({ kind: 'value', text: '12 SAR' })
   })
 
-  it('renders the brand report’s creative card without a ROAS chip', () => {
+  /**
+   * The «top creatives» slide shows ADS — CLIENT-REPORT-ENTITY-BOUNDARY-001.
+   *
+   * It used to read `top_creatives`, whose rows are CAMPAIGNS (`creative_level` said so in the
+   * payload the whole time), and print their names three medals deep under a heading promising the
+   * client's best ads. It renders the real ad-level section now, so this asserts the ad — and that
+   * a legacy snapshot's campaign roster, still sitting in `top_creatives`, does not reach the page.
+   */
+  it('renders the brand report’s ad card from the ads, not from the campaign roster', () => {
     const withCreatives = {
       ...brand,
+      ads: [{ id: 'a1', provider: 'meta', name: 'فيلم الوعي', objective: 'awareness', reach: 900000, cpm: 4, impressions: 6_000_000, engagements: 12000, reason: 'أعلى مدى بأقل CPM.' }],
       top_creatives: [{ provider: 'meta', campaign_name: 'حملة الوعي', reach: 900000, cpm: 4, impressions: 6_000_000, engagements: 12000, reason: 'أعلى مدى بأقل CPM.' }],
     }
-    render(<SlideBody slide={{ id: 'c', type: 'top_creatives', platform: 'meta', order: 1, visible: true }} data={withCreatives} meta={meta} />)
+    const { container } = render(<SlideBody slide={{ id: 'c', type: 'top_creatives', platform: 'meta', order: 1, visible: true }} data={withCreatives} meta={meta} />)
 
-    expect(screen.getByText('حملة الوعي')).toBeInTheDocument()
-    expect(screen.getByText('الوصول')).toBeInTheDocument()
+    expect(screen.getByText('فيلم الوعي')).toBeInTheDocument()
+    expect(container.textContent, 'the campaign roster reached a client slide').not.toContain('حملة الوعي')
     expect(screen.queryByText('ROAS')).not.toBeInTheDocument()
     expect(screen.queryByText('CPA')).not.toBeInTheDocument()
   })

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Integrations\Catalogue\ProviderDisplayName;
 use App\Support\AdPlatforms;
 
 /**
@@ -333,16 +334,26 @@ final class ReportObservations
         return $out;
     }
 
-    /** Money going out faster or slower than the plan it was given. */
+    /**
+     * Money going out faster or slower than the plan it was given.
+     *
+     * Per PLATFORM since CLIENT-REPORT-ENTITY-BOUNDARY-001 — the rows it reads are the folded ones,
+     * and «ميتا تستهلك الميزانية أسرع من الخطة» is the same decision as the campaign sentence it
+     * replaces, on an axis a client may actually be told about. `pace` is already null wherever the
+     * fold refused to compare, so a bucket whose spend is not all against a stated plan is silent
+     * here rather than confidently wrong.
+     */
     private function budgetPace(array $data, string $currency): array
     {
         $out = [];
         foreach ($data['budget'] ?? [] as $row) {
             $pace = $row['pace'] ?? null;
-            // A campaign with no budget set has no plan to deviate from — silence, not a warning.
+            // A platform with no budget set has no plan to deviate from — silence, not a warning.
             if ($pace === null || (float) ($row['budget'] ?? 0) <= 0) {
                 continue;
             }
+
+            $platform = ProviderDisplayName::short((string) ($row['provider'] ?? ''));
 
             $fast = (float) $pace >= self::PACE_FAST;
             $slow = (float) $pace <= self::PACE_SLOW;
@@ -351,16 +362,16 @@ final class ReportObservations
             }
 
             $out[] = [
-                'id' => 'budget:'.$row['campaign_id'],
+                'id' => 'budget:'.($row['provider'] ?? ''),
                 'kind' => 'budget_pace',
                 'severity' => $fast ? 'critical' : 'info',
-                'scope' => ['type' => 'campaign', 'name' => $row['campaign_name']],
+                'scope' => ['type' => 'platform', 'name' => $platform],
                 'metric' => 'pace',
                 // The sentence names the money spent and the budget it came from.
                 'reveals' => ['spend'],
                 'value' => number_format((float) $pace, 2).'×',
                 'change' => null,
-                'title' => sprintf('حملة «%s» تستهلك الميزانية %s الخطة', $row['campaign_name'], $fast ? 'أسرع من' : 'أبطأ من'),
+                'title' => sprintf('الإنفاق على %s يستهلك الميزانية %s الخطة', $platform, $fast ? 'أسرع من' : 'أبطأ من'),
                 'detail' => sprintf(
                     'صُرف %s %s من أصل %s %s، أي %s من الإنفاق المتوقع حتى الآن.',
                     number_format((float) $row['spent'], 2),

@@ -34,7 +34,6 @@ const ad = (over: Partial<ReportAd> = {}): ReportAd => ({
   id: 'a1',
   name: 'Eid film',
   provider: 'meta',
-  campaign_name: 'Eid sales',
   objective: 'sales',
   preview: preview(),
   spend: 3000,
@@ -56,7 +55,8 @@ describe('the ads section of a report', () => {
     expect(screen.getByText('Eid film')).toBeInTheDocument()
     // `image_url` is the file; the thumbnail is the fallback — the library's own rule, unchanged here.
     expect(screen.getByTestId('report-ad-poster-0')).toHaveAttribute('src', 'https://cdn/ad.jpg')
-    expect(screen.getByText(/Eid sales/)).toBeInTheDocument()
+    // The platform and the objective place it. NOT the campaign — CLIENT-REPORT-ENTITY-BOUNDARY-001.
+    expect(screen.getByText(/Meta/)).toBeInTheDocument()
     // The ranker's own sentence travels with the ad — «best» is stated, not implied by position.
     expect(screen.getByText(/Highest return on spend/)).toBeInTheDocument()
   })

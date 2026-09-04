@@ -32,7 +32,6 @@ type OutlineSection = {
 type AdRow = {
   name?: string | null
   provider?: string | null
-  campaign_name?: string | null
   spend?: number | null
   conversions?: number | null
   preview?: unknown
@@ -140,6 +139,30 @@ export function PrintDocument({
   ])
 
   /*
+   * CLIENT-REPORT-ENTITY-BOUNDARY-001 — the depth that replaces the roster, in the printed document.
+   *
+   * The outline has listed an «objectives» section since REPORT-ANALYTICAL-DEPTH-001 and this
+   * document never drew one: the PDF numbered a heading it did not print. It mattered less while a
+   * campaign table sat below it. With that gone, the objective split is what carries the answer to
+   * «what was the money bought for, and what did that cost» — and it is the axis a client's spend is
+   * actually judged on, so it belongs in the copy they keep.
+   *
+   * Only the paths money was spent on: a path at zero is an absence, not a row of zeroes. The cost
+   * per result is stated only where the path was bought for a result — an awareness path prints «—»
+   * rather than being ranked on a sales metric it was never asked about.
+   */
+  const objectiveRows = ((data.objective_performance as { paths?: Row[] } | undefined)?.paths ?? [])
+    .filter((p) => Number(p.spend ?? 0) > 0)
+    .map((p: Row) => [
+      String(p.label_en ?? p.path ?? '—'),
+      money(Number(p.spend ?? 0), currency),
+      nfmt(Number(p.impressions ?? 0)),
+      nfmt(Number(p.clicks ?? 0)),
+      nfmt(Number(p.orders ?? 0)),
+      p.result_metrics_apply && p.cpa != null ? money(Number(p.cpa), currency) : '—',
+    ])
+
+  /*
     The same rows the interactive deck shows, read the same way: `available` is the only state that
     carries a picture, and the other three carry their own sentence rather than an empty frame.
   */
@@ -152,7 +175,6 @@ export function PrintDocument({
       absence: preview?.note_en ?? PRINT_ABSENCE[preview?.state ?? 'unavailable'] ?? PRINT_ABSENCE.unavailable,
       name: String(ad.name ?? '—'),
       provider: String(ad.provider ?? '—'),
-      campaign: String(ad.campaign_name ?? '—'),
       spend: ad.spend === null || ad.spend === undefined ? '—' : money(Number(ad.spend), currency),
       results: ad.conversions === null || ad.conversions === undefined ? '—' : nfmt(Number(ad.conversions)),
     }
@@ -160,17 +182,10 @@ export function PrintDocument({
 
   const adsAbsence = PRINT_ADS_ABSENT[String(data.ads_absent_reason ?? 'no_ads_to_show')] ?? PRINT_ADS_ABSENT.no_ads_to_show
 
-  const campaignRows = (data.campaigns ?? []).map((c: Row) => [
-    String(c.name ?? c.client_display_name ?? '—'),
-    String(c.platform ?? '—'),
-    String(c.status ?? '—'),
-    money(Number(c.spend ?? 0), currency),
-    nfmt(Number(c.results ?? 0)),
-    c.cpa == null ? '—' : money(Number(c.cpa), currency),
-  ])
-
+  // Keyed by PLATFORM since CLIENT-REPORT-ENTITY-BOUNDARY-001; an old snapshot's per-campaign rows
+  // never arrive here, because `ClientReportView` empties them rather than printing them anonymous.
   const budgetRows = (data.budget ?? []).map((b: Row) => [
-    String(b.name ?? b.platform ?? '—'),
+    String(b.provider ?? '—'),
     money(Number(b.budget ?? 0), currency),
     money(Number(b.spend ?? 0), currency),
     money(Number(b.budget ?? 0) - Number(b.spend ?? 0), currency),
@@ -254,15 +269,25 @@ export function PrintDocument({
       )}
       <Absent sectionKey="platforms" fallback="No platform reported figures in this window." />
 
-      {/* Campaigns — the multi-page table */}
-      {section('campaigns')?.present !== false && (
+      {/* Breakdown by objective — the same spend, divided by what it was bought for. */}
+      {section('objectives')?.present !== false && objectiveRows.length > 0 && (
         <section className="doc-section">
-          <h2>{heading('campaigns', 'Campaigns')}</h2>
-          <Table head={['Campaign', 'Platform', 'Status', 'Spend', 'Results', 'CPA']} rows={campaignRows} />
+          <h2>{heading('objectives', 'Breakdown by Objective')}</h2>
+          <Table
+            head={['Objective', 'Spend', 'Impressions', 'Clicks', 'Results', 'Cost per result']}
+            rows={objectiveRows}
+          />
         </section>
       )}
-      <Absent sectionKey="campaigns" fallback="No campaign spent in this window." />
+      <Absent sectionKey="objectives" fallback="Nothing was spent on any objective in this window." />
 
+      {/*
+        CLIENT-REPORT-ENTITY-BOUNDARY-001 — the campaign table is gone from the printed document.
+
+        It listed every campaign by internal name, with its status, across as many pages as it took —
+        in the PDF a client forwards. The platform table above and the objective figures below carry
+        what the money did; the roster carried how it was arranged, which is ours.
+      */}
       {/* Budget */}
       {budgetRows.length > 0 && (
         <section className="doc-section">
@@ -286,7 +311,8 @@ export function PrintDocument({
           <h2>{heading('ads', 'Ads')}</h2>
           <table className="doc-table doc-ads">
             <thead>
-              <tr><th>Preview</th><th>Ad</th><th>Platform</th><th>Campaign</th><th>Spend</th><th>Results</th></tr>
+              {/* No «Campaign» column — CLIENT-REPORT-ENTITY-BOUNDARY-001. */}
+              <tr><th>Preview</th><th>Ad</th><th>Platform</th><th>Spend</th><th>Results</th></tr>
             </thead>
             <tbody>
               {adRows.map((ad, i) => (
@@ -316,7 +342,6 @@ export function PrintDocument({
                   </td>
                   <td>{ad.name}</td>
                   <td>{ad.provider}</td>
-                  <td>{ad.campaign}</td>
                   <td>{ad.spend}</td>
                   <td>{ad.results}</td>
                 </tr>

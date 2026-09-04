@@ -33,7 +33,6 @@ const ad = (over: Partial<ReportAd> = {}): ReportAd => ({
   id: 'a1',
   name: 'Eid film',
   provider: 'meta',
-  campaign_name: 'Eid sales',
   objective: 'sales',
   preview: preview(),
   spend: 3000,
@@ -166,6 +165,13 @@ describe('opening an ad from a report', () => {
 
     const text = screen.getByTestId('report-ad-detail').textContent ?? ''
     expect(text).not.toContain('a1')
-    expect(text).toContain('Eid sales')
+    expect(text).toContain('Eid film')
+    /*
+     * CLIENT-REPORT-ENTITY-BOUNDARY-001 — and not the campaign it sat in.
+     *
+     * The card that opens this dialog stopped printing it; a detail view that put it back would be
+     * the same leak one click deeper, which is exactly where nobody looks for it.
+     */
+    expect(text).not.toContain('Eid sales')
   })
 })

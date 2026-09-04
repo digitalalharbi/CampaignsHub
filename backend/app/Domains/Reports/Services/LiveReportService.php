@@ -254,7 +254,7 @@ final class LiveReportService
              * split would eventually disagree with the document it accompanies about what a sale
              * cost, and the client holds both.
              */
-            'objective_performance' => $this->withoutCampaignIdentity((new ObjectivePerformance(
+            'objective_performance' => ClientEntityBoundary::objectivePerformance((new ObjectivePerformance(
                 projectIds: $scope['project_id'] === '' ? null : [$scope['project_id']],
                 campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : ($scope['campaign_ids'] ?: null),
                 providers: $applied['providers'] !== [] ? $applied['providers'] : ($scope['providers'] ?: null),
@@ -342,51 +342,6 @@ final class LiveReportService
      *
      * @return array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}
      */
-    /**
-     * The objective split, with the campaign plan taken out of it — CLIENT-REPORT-ENTITY-BOUNDARY-001.
-     *
-     * `ObjectivePerformance` is the SAME service the operator's analytics tab calls, and there the
-     * campaign lists are the point: an operator reading «the sales figure excludes 4,127 SAR» needs
-     * to know which campaigns that was in order to act on it. A client does not act on it — they are
-     * owed the figure, not the roster — and the roster is the campaign plan written out: name,
-     * objective, and what each one cost.
-     *
-     * So the boundary is drawn HERE, at the client payload, rather than inside the shared service,
-     * because the operator's screen must keep what this removes.
-     *
-     * What replaces it is the part a client can actually use: the spend that was left out of the
-     * direct figure, and WHY it was — «not a sales objective» explains the gap between the programme's
-     * total and the sales figure without naming a single campaign. Removing the arrays and putting
-     * nothing back would leave the two numbers disagreeing on the page with no account of it.
-     */
-    private function withoutCampaignIdentity(array $objective): array
-    {
-        foreach ($objective['paths'] ?? [] as $i => $path) {
-            // The path's own totals already carry its spend and results; the roster was the detail.
-            $objective['paths'][$i]['campaigns'] = [];
-        }
-
-        $excluded = $objective['direct']['excluded_campaigns'] ?? [];
-
-        /*
-         * `direct.spend` is already the included spend, so the included roster needed no replacement.
-         * The EXCLUDED one did: it is the whole account of why the sales figure is smaller than the
-         * programme's total, and that account is a sum and a reason, not a list of names.
-         */
-        $objective['direct']['included_campaigns'] = [];
-        $objective['direct']['excluded_campaigns'] = [];
-        $objective['direct']['excluded_spend'] = round(
-            array_sum(array_map(fn ($c) => (float) ($c['spend'] ?? 0), $excluded)),
-            2,
-        );
-        $objective['direct']['excluded_reasons'] = array_values(array_unique(array_map(
-            fn ($c) => (string) ($c['reason'] ?? ''),
-            $excluded,
-        )));
-
-        return $objective;
-    }
-
     private function ceiling(ReportShare $share): array
     {
         $scope = $share->scope ?? [];

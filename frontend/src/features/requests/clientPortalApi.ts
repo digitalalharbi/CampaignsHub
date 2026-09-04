@@ -39,7 +39,8 @@ export interface PortalRequestDetail extends PortalRequestCard {
   timeline: { type: string; status: string | null; message: string | null; at: string | null }[]
   comments: { author: string; body: string; at: string | null }[]
   files: { id: number; name: string; size: number }[]
-  result: { converted: boolean; project_name: string | null; campaign_name: string | null; campaign_status: string | null } | null
+  /** CLIENT-REPORT-ENTITY-BOUNDARY-001 — the project, never the campaign it was filed under. */
+  result: { converted: boolean; project_name: string | null } | null
   notifications: { event: string; channel: string; status: string; at: string | null }[]
 }
 
