@@ -97,7 +97,25 @@ function exactFor(metric: string, currency: string | null): (n: number) => strin
 function driverName(d: DriverRow, by: string, ar: boolean): string {
   if (by === 'provider') return providerLabel(canonicalPlatform(d.key), ar ? 'ar' : 'en')
 
+  if (by === 'objective') {
+    const named = OBJECTIVE_LABEL[d.key]
+
+    return named ? (ar ? named.ar : named.en) : d.key
+  }
+
   return d.name ?? (ar ? 'غير معروف' : 'Unknown')
+}
+
+/** The objective families, named — a driver keyed «awareness» must not read as a database value. */
+const OBJECTIVE_LABEL: Record<string, { ar: string; en: string }> = {
+  awareness: { ar: 'الوعي', en: 'Awareness' },
+  traffic: { ar: 'الزيارات', en: 'Traffic' },
+  engagement: { ar: 'التفاعل', en: 'Engagement' },
+  leads: { ar: 'العملاء المحتملون', en: 'Leads' },
+  sales: { ar: 'المبيعات', en: 'Sales' },
+  app_promotion: { ar: 'الترويج للتطبيق', en: 'App promotion' },
+  video: { ar: 'مشاهدات الفيديو', en: 'Video views' },
+  other: { ar: 'أهداف أخرى', en: 'Other objectives' },
 }
 
 const METRIC_LABEL: Record<string, { ar: string; en: string }> = {
@@ -109,6 +127,25 @@ const METRIC_LABEL: Record<string, { ar: string; en: string }> = {
 }
 
 const metricLabel = (m: string, ar: boolean) => (METRIC_LABEL[m] ? (ar ? METRIC_LABEL[m].ar : METRIC_LABEL[m].en) : m)
+
+/**
+ * What the things being compared ARE, in the plural — «every platform», «every objective».
+ *
+ * The card that reports «nothing moved against the account» has to name what it counted, and it is
+ * rendered on more than one dimension now: the same component said «every platform moved the same
+ * way» underneath a decomposition BY OBJECTIVE, which is a sentence about the wrong axis.
+ */
+const DIMENSION_PLURAL: Record<string, { ar: string; en: string }> = {
+  provider: { ar: 'كل المنصات', en: 'Every platform' },
+  objective: { ar: 'كل الأهداف', en: 'Every objective' },
+  campaign: { ar: 'كل الحملات', en: 'Every campaign' },
+}
+
+const everythingMovedTogether = (by: string, ar: boolean): string => {
+  const d = DIMENSION_PLURAL[by] ?? DIMENSION_PLURAL.provider
+
+  return ar ? `${d.ar} تتحرّك في الاتجاه نفسه.` : `${d.en} moved the same way.`
+}
 
 /** A card that says why it is empty instead of being empty. */
 function Declined({ text, testid }: { text: string; testid: string }) {
@@ -225,11 +262,16 @@ export function ChangeDiagnosis({
   currency,
   loading,
   error,
+  title,
+  subtitle,
 }: {
   data: DriversPayload | undefined
   currency: string | null
   loading?: boolean
   error?: boolean
+  /** The question this instance answers — «who moved it» by platform, by objective, by campaign. */
+  title?: string
+  subtitle?: string
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
 
@@ -301,7 +343,7 @@ export function ChangeDiagnosis({
       <div className="rounded-2xl border border-border bg-surface p-4 lg:col-span-2">
         <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
           <h3 className="text-base font-bold text-text-primary">
-            {ar ? 'ما الذي تغيّر — ومن حرّكه' : 'What changed — and who moved it'}
+            {title ?? (ar ? 'ما الذي تغيّر — ومن حرّكه' : 'What changed — and who moved it')}
           </h3>
           <span className="text-xs text-text-muted">
             {ar ? 'مقابل ' : 'vs '}
@@ -317,6 +359,8 @@ export function ChangeDiagnosis({
           the money contract exists to prevent, arriving from a fallback rather than from a sum. A
           refusal stands alone.
         */}
+        {subtitle !== undefined && <p className="mb-2 text-xs text-text-muted">{subtitle}</p>}
+
         {rows.length > 0 && (
           <p className="mb-3 text-sm text-text-secondary">
             {metricLabel(lead.metric, ar)}{' '}
@@ -358,9 +402,7 @@ export function ChangeDiagnosis({
           note={
             against
               ? `${against.direction === 'up' ? '+' : '−'}${fmt(Math.abs(against.change))}`
-              : ar
-                ? 'كل المنصات تتحرّك في الاتجاه نفسه.'
-                : 'Every platform moved the same way.'
+              : everythingMovedTogether(lead.by, ar)
           }
         />
 

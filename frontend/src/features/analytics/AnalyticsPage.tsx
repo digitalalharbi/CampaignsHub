@@ -2434,6 +2434,9 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
 }
 
 function ObjectiveTab({ projectId, range, filters }: TabProps) {
+  /* The same decomposition the overview uses, on the axis this tab is about — see the note below. */
+  const drivers = useDrivers(projectId, range, 'objective', 'spend', filters)
+
   const ar = useAr()
   const c = useCampaigns(projectId, range, filters)
   const s = useSummary(projectId, range, filters)
@@ -2487,6 +2490,26 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
 
   return (
     <div className="space-y-4">
+      {/*
+        ANALYTICS-DIFFERENTIATION-001 — the objective decomposition, ABOVE the per-family breakdown.
+
+        The panel below answers «how did each objective do», which is a report. This answers «what
+        moved between them», which is a diagnosis — and it is the one axis a platform split cannot
+        show: an account can spend exactly the same on exactly the same platforms and return less
+        because the money moved from sales to awareness. Every platform looks unchanged; the whole
+        answer is in what the money was BOUGHT for.
+      */}
+      <ChangeDiagnosis
+        data={drivers.data}
+        currency={currency}
+        loading={drivers.isPending}
+        error={drivers.isError}
+        title={ar ? 'ما الذي تغيّر بين الأهداف' : 'What moved between the objectives'}
+        subtitle={ar
+          ? 'تحوّل المزيج: أين ذهبت الميزانية بين ما اشتُريت من أجله — وهو ما لا يظهر في تفصيل المنصات.'
+          : 'The mix shift: where the budget moved between what it was bought for — which a platform split cannot show.'}
+      />
+
       <Panel
         title={ar ? 'الأداء حسب الهدف' : 'Performance by objective'}
         description={ar
