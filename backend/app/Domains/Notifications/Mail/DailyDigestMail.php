@@ -644,9 +644,20 @@ final class DailyDigestMail extends Mailable
     {
         return $ar ? [
             'greeting' => "صباح الخير، {$this->recipientName}",
-            'intro' => $this->kind !== 'daily'
-                ? 'هذا ما حدث هذا الأسبوع عبر مشاريعك — والقرارات التي تستحق وقتك.'
-                : 'هذا ما حدث أمس عبر مشاريعك — والقرارات التي تستحق وقتك اليوم.',
+            /*
+             * The window this mail is ABOUT, named — the footer's defect one line higher up.
+             *
+             * This was a two-way branch: daily said «أمس», and everything else said «هذا الأسبوع».
+             * So the MONTHLY digest opened «هذا ما حدث هذا الأسبوع» under a header reading
+             * «الملخص الشهري · 2026-08-01 → 2026-08-31» — the first sentence contradicting the line
+             * above it. Found by rendering the third rhythm; the first two happened to be right,
+             * which is why reading only them missed it.
+             */
+            'intro' => match ($this->kind) {
+                'monthly' => 'هذا ما حدث هذا الشهر عبر مشاريعك — والقرارات التي تستحق وقتك.',
+                'weekly' => 'هذا ما حدث هذا الأسبوع عبر مشاريعك — والقرارات التي تستحق وقتك.',
+                default => 'هذا ما حدث أمس عبر مشاريعك — والقرارات التي تستحق وقتك اليوم.',
+            },
             'account_total' => 'إجمالي الحساب',
             'spend' => 'الإنفاق',
             'results' => 'النتائج',
@@ -680,9 +691,11 @@ final class DailyDigestMail extends Mailable
             'security' => 'الأمان',
         ] : [
             'greeting' => "Good morning, {$this->recipientName}",
-            'intro' => $this->kind !== 'daily'
-                ? 'Here is the week across your projects — and what is worth your time.'
-                : 'Here is what happened yesterday across your projects — and what is worth your time today.',
+            'intro' => match ($this->kind) {
+                'monthly' => 'Here is the month across your projects — and what is worth your time.',
+                'weekly' => 'Here is the week across your projects — and what is worth your time.',
+                default => 'Here is what happened yesterday across your projects — and what is worth your time today.',
+            },
             'account_total' => 'Account total',
             'spend' => 'Spend',
             'results' => 'Results',
