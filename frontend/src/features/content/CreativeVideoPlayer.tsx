@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Maximize2, Pause, Play, Volume2, VolumeX } from 'lucide-react'
+import { aspectClass } from './adPreview'
 import { formatClock } from './format'
 import { useUi } from '@/stores/ui'
 
@@ -59,12 +60,26 @@ export function CreativeVideoPlayer({
   src,
   poster,
   durationHint,
+  aspect = null,
   className = '',
 }: {
   src: string
   poster?: string | null
   /** The platform's own reported duration, shown before the file has loaded its metadata. */
   durationHint?: number | null
+  /**
+   * CONTENT-PREVIEW-SHAPES-001 — the frame the ad actually ran in.
+   *
+   * The player was `aspect-video` for everything. A 9:16 story — the shape most of this product's
+   * video is bought in — was therefore drawn in a landscape box: measured on a live story creative,
+   * 768×432 for an asset the API reports as `vertical`, so the film the client paid for appeared as
+   * a letterboxed sliver with black either side. The poster beside it had been reading the shape
+   * from `aspectClass()` all along; the player simply never asked.
+   *
+   * Null keeps the old landscape frame, which is the right default for an unknown shape and for
+   * every caller that has nothing better to say.
+   */
+  aspect?: 'vertical' | 'square' | 'horizontal' | null
   className?: string
 }) {
   const { locale } = useUi()
@@ -182,7 +197,18 @@ export function CreativeVideoPlayer({
         // at the size a thumb actually is, and fullscreen on iOS is only reliable through them.
         controls={armed}
         controlsList="nodownload"
-        className="aspect-video w-full bg-black"
+        /*
+         * A vertical film is capped by the VIEWPORT, the way the still beside it already was.
+         *
+         * Honouring 9:16 at full width made the frame taller than the window: 768px wide came out
+         * 1,365px tall on the detail page, so the reader met a black column and had to scroll to
+         * find the controls. The image branch had solved this with `max-h-[60vh]`; the player had
+         * no cap because a landscape frame never needed one. Height leads for a vertical asset and
+         * the aspect ratio computes the width, which keeps the shape exact while it fits.
+         */
+        className={`bg-black ${aspectClass(aspect) ?? 'aspect-video'} ${
+          aspect === 'vertical' ? 'mx-auto max-h-[70vh] w-auto' : 'w-full'
+        }`}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)}

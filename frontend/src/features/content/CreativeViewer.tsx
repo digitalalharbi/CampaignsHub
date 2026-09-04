@@ -226,6 +226,8 @@ export function CreativeViewer({
               src={preview.video_url}
               poster={preview.thumbnail_url}
               durationHint={creative.duration_seconds}
+              // The shape the ad ran in — a story is 9:16, not a letterboxed landscape frame.
+              aspect={preview.aspect ?? null}
               className="w-full max-w-4xl"
             />
           ) : showing === 'image' && preview.image_url ? (

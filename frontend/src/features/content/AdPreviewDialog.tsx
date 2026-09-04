@@ -121,7 +121,7 @@ export function AdPreviewDialog({
         </div>
 
         {reading.kind === 'video' ? (
-          <CreativeVideoPlayer src={reading.src} poster={reading.poster} />
+          <CreativeVideoPlayer src={reading.src} poster={reading.poster} aspect={creative.preview?.aspect ?? null} />
         ) : (
           <AdPoster
             preview={creative.preview}
