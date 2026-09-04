@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { clientKpiKeys } from './clientKpis'
+import { ClientAttention } from './ClientAttention'
 import { LiveDetailTables } from './LiveDetailTables'
 import { ReportAdDetail } from './ReportAdDetail'
 import { ReportAdsSection, type ReportAd } from './ReportAdsSection'
@@ -589,6 +590,13 @@ export function LiveSharedReport({
           block closes, and `liveReportForm.test.tsx` is what stops the two drifting apart again.
         */}
         {form === 'detailed' && <LiveDetailTables payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />}
+
+        {/*
+          CLIENT-FACING-PRESENTATION-001 — the last three blocks, and the only ones a client ACTS on.
+          Budget status, then what needs a decision, then nothing else: the composition ends where
+          the reader's work begins.
+        */}
+        <ClientAttention payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />
 
         {payload.store_funnel && (
           <div data-testid="shared-store-funnel" className="rounded-2xl border border-border bg-surface p-4">
