@@ -1,3 +1,4 @@
+import { StatCard } from '@/components/ui/StatCard'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, BellRing, CheckCircle2, Clock, ListChecks, Plus, Settings2, Truck } from 'lucide-react'
@@ -342,18 +343,17 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
 }
 
 function SummaryCard({ label, value, hint, tone, testid }: { label: string; value: number; hint?: string; tone: 'brand' | 'danger' | 'warning' | 'success'; testid?: string }) {
-  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', danger: 'bg-danger', warning: 'bg-warning', success: 'bg-success' }
   return (
     // The testid names the CARD. Its label is a word the severity filter also uses, so a test that
     // reaches for the text finds two nodes and cannot say which number it just read.
-    <div data-testid={testid ? `alert-summary-${testid}` : undefined} className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
-      <div className="flex items-center gap-1.5">
-        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
-        <span className="text-xs font-semibold text-text-secondary">{label}</span>
-      </div>
-      <span className="text-2xl font-extrabold tnum text-text-primary">{value}</span>
-      {hint && <span className="text-[11px] text-text-tertiary">{hint}</span>}
-    </div>
+    <StatCard
+      testid={testid ? `alert-summary-${testid}` : undefined}
+      label={label}
+      value={value}
+      hint={hint}
+      tone={tone}
+      dot
+    />
   )
 }
 

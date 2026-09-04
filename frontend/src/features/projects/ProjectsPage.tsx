@@ -1,3 +1,4 @@
+import { StatCard } from '@/components/ui/StatCard'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
@@ -341,14 +342,7 @@ export function ProjectsPage() {
 }
 
 function ProjSummaryCard({ label, value, tone }: { label: string; value: number; tone: 'brand' | 'success' | 'warning' | 'muted' }) {
-  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', success: 'bg-success', warning: 'bg-warning', muted: 'bg-text-muted' }
   return (
-    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
-      <div className="flex items-center gap-1.5">
-        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
-        <span className="text-xs font-semibold text-text-secondary">{label}</span>
-      </div>
-      <span className="text-2xl font-extrabold tnum text-text-primary" dir="ltr">{value}</span>
-    </div>
+    <StatCard label={label} value={value} tone={tone === 'muted' ? 'neutral' : tone} dot />
   )
 }
