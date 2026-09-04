@@ -1125,11 +1125,31 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
 function CampaignsTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const c = useCampaigns(projectId, range, filters)
+  const s = useSummary(projectId, range, filters)
+  /*
+   * ANALYTICS-DIFFERENTIATION-001 — campaign distribution as a DIAGNOSIS.
+   *
+   * The table below ranks campaigns by what they did, which a reader can already see. This says which
+   * of them moved the account and by how much — the distribution of the CHANGE rather than of the
+   * totals, which is the difference between «Eid is the biggest» and «Eid is why the month fell».
+   */
+  const drivers = useDrivers(projectId, range, 'campaign', 'spend', filters)
   const rows = c.data ?? []
   const best = rows[0]
   const worst = [...rows].filter((r) => r.spend > 0).sort((a, b) => (a.roas ?? 0) - (b.roas ?? 0))[0]
   return (
     <div className="space-y-4">
+      <ChangeDiagnosis
+        data={drivers.data}
+        currency={s.data?.currency ?? null}
+        loading={drivers.isPending}
+        error={drivers.isError}
+        title={ar ? 'أي الحملات حرّكت الحساب' : 'Which campaigns moved the account'}
+        subtitle={ar
+          ? 'توزيع التغيّر، لا توزيع الإجماليات — أكبر حملة ليست بالضرورة سبب ما حدث.'
+          : 'The distribution of the CHANGE, not of the totals — the biggest campaign is not necessarily why the month moved.'}
+      />
+
       <div className="grid gap-3 sm:grid-cols-2">
         <Panel title={ar ? 'أفضل حملة (ROAS)' : 'Best campaign (ROAS)'} loading={c.isLoading} error={c.isError}>
           {best && (
