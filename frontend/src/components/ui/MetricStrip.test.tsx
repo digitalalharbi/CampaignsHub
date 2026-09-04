@@ -221,3 +221,70 @@ describe('the value is placed by the reader’s direction, not by its own', () =
     expect(value.className).toContain('text-start')
   })
 })
+
+/**
+ * UX-KPI-PRESENTATION-001 — «توسيط وتوازي»: the cards in a row are one height.
+ *
+ * They were, at 1440, and only there. At 390 the same ten cards measured 83, 122, 129 and 145
+ * pixels: a label wrapping to two lines made its card taller, an absence rendered six pixels taller
+ * than a figure, and a metric with no sparkline had nothing filling the space its neighbours used.
+ *
+ * jsdom lays nothing out, so these assert the STRUCTURE that produces the alignment rather than the
+ * pixels — the three reserved rows, in a card that fills its grid cell. The measurement itself was
+ * taken in a real browser at 390 and 1440, where every card now reports one height.
+ */
+describe('every card in a row is the same height', () => {
+  const cardFor = (over: Partial<MetricItem>) => {
+    const { container } = render(<MetricStrip id="s" ar={false} primary={[item(over)]} />)
+
+    return container.querySelector(`[data-testid="metric-${over.key ?? 'spend'}"]`)!
+  }
+
+  it('fills its cell rather than sizing to its own content', () => {
+    expect(cardFor({}).className).toContain('h-full')
+  })
+
+  /** A label that wraps is a taller card, and it takes its whole grid row with it. */
+  it('reserves two lines for the label and draws no more', () => {
+    const card = cardFor({ label: 'Landing page views on the destination site' })
+
+    expect(card.firstElementChild?.className).toMatch(/min-h-\[2\.75rem\]/)
+    expect(card.querySelector('.line-clamp-2')).not.toBeNull()
+  })
+
+  /**
+   * The figure row is the same height whether it holds a figure or an absence.
+   *
+   * «Not provided» rendered taller than «48.4K SAR», so a card with an absence in it stood above its
+   * neighbours — the absence was visible in the LAYOUT before it was read, which is the opposite of
+   * what UX-METRICS-001 asks of it.
+   */
+  it('gives a figure and an absence the same row', () => {
+    for (const reading of [
+      { kind: 'value', text: '48.4K SAR' } as const,
+      { kind: 'not_provided' } as const,
+      { kind: 'no_data' } as const,
+    ]) {
+      const rows = [...cardFor({ reading }).children]
+
+      expect(rows.some((r) => /min-h-\[1\.75rem\]/.test(r.className)), reading.kind).toBe(true)
+    }
+  })
+
+  /**
+   * The chart row is reserved whether or not there is a line to draw.
+   *
+   * Otherwise a metric the platform never sent has no sparkline and sits shorter than the ones that
+   * do — and `mt-auto` is what keeps the value on one baseline across the row rather than floating
+   * up inside the cards that have no chart.
+   */
+  it('reserves the chart row even with nothing to plot', () => {
+    for (const spark of [undefined, [1, 5, 3]]) {
+      const rows = [...cardFor({ spark }).children]
+      const chart = rows.at(-1)!
+
+      expect(chart.className).toContain('mt-auto')
+      expect(chart.className).toContain('h-8')
+    }
+  })
+})
