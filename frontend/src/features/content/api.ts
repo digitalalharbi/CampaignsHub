@@ -286,6 +286,63 @@ export const listCreatives = (query: LibraryQuery, projectId?: string | null) =>
   )
 
 /**
+ * ANALYTICS-DIFFERENTIATION-001 — the content READING that sits above the ranked table.
+ *
+ * The table answers «which ad won». This answers «what kind of content earns its money here», which
+ * is the only content question whose answer transfers to the next brief.
+ *
+ * `refusal` is the load-bearing field: this block declines rather than inventing a comparison, and
+ * every one of its reasons is a true statement about the account — one format ran, one asset cannot
+ * speak for a category, no metric was reported by both sides.
+ */
+export interface FormatRow {
+  format: string
+  value: number
+  /** Null where the money contract withheld the figure — never read as zero. */
+  spend: number | null
+  creatives: number
+}
+
+export interface ContentIntelligence {
+  metric: string | null
+  lower_is_better: boolean
+  objective: string | null
+  formats: FormatRow[]
+  best: string | null
+  worst: string | null
+  /** Null when any format withheld its spend: a share over an incomplete total overstates itself. */
+  share_of_spend_not_on_the_leading_format: number | null
+  /** WHICH silence left it absent — «nobody reports spend here» is not «a format withheld it». */
+  why_no_spend_share: string | null
+  too_few_to_speak_for_their_format: { format: string; creatives: number }[]
+  refusal: string | null
+}
+
+export interface ContentIntelligencePayload {
+  period: { from: string; to: string }
+  /** How many creatives the reading actually spans — the whole filtered set, never one page. */
+  creatives_read: number
+  currency: string | null
+  by_format: ContentIntelligence
+}
+
+/**
+ * `objective` chooses which metric the comparison is DECIDED on — it does not narrow the set.
+ *
+ * It is singular, and deliberately not the plural `objectives` the library filters by: a verdict has
+ * one metric, so it is sent only when the reader has pinned exactly one objective. With several
+ * selected there is no single campaign purpose to judge against, and the server falls back to the
+ * metrics true of every campaign whatever it was bought to do.
+ */
+export const contentIntelligence = (
+  query: LibraryQuery & { objective?: string },
+  projectId: string,
+) =>
+  getData<ContentIntelligencePayload>(
+    `/projects/${projectId}/creatives/content-intelligence${libraryQueryString(query)}`,
+  )
+
+/**
  * §15.6 — one stage of a creative's funnel, as the platform reported it.
  *
  * A stage the provider never sent is NOT in `stages`; it is named in `missing` instead. So this list
