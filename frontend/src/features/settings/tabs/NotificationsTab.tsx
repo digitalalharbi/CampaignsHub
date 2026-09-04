@@ -204,9 +204,19 @@ export function NotificationsTab() {
                             />
                           </td>
                           <td className="p-2 text-[13px] text-text-muted">
+                            {/*
+                              Three rhythms, not two. This was `daily ? … : weekly`, so the MONTHLY
+                              row — which the sender has dispatched since EMAIL-INTELLIGENCE-001 —
+                              announced «Weekly, Monday morning»: a false statement about when a
+                              reader's mail arrives, printed on the screen they opened to find out.
+                              The monthly day is chosen per recipient and does not reach this screen,
+                              so it is not named; what is stated is what is true of every recipient.
+                            */}
                             {digest === 'daily'
                               ? (ar ? `يوميًا، الساعة ${p.digest_hour}:00` : `Daily, at ${p.digest_hour}:00`)
-                              : (ar ? 'أسبوعيًا، صباح الاثنين' : 'Weekly, Monday morning')}
+                              : digest === 'monthly'
+                                ? (ar ? 'شهريًا، عن الشهر المنتهي' : 'Monthly, for the finished month')
+                                : (ar ? 'أسبوعيًا، صباح الاثنين' : 'Weekly, Monday morning')}
                           </td>
                         </>
                       ) : (
