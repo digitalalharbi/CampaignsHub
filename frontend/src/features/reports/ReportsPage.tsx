@@ -1,3 +1,4 @@
+import { StatCard } from '@/components/ui/StatCard'
 import { useMemo, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
@@ -216,10 +217,7 @@ export function ReportsPage() {
           [ar ? 'قيد المعالجة' : 'Processing', s?.processing],
           [ar ? 'فاشلة' : 'Failed', s?.failed],
         ].map(([label, v]) => (
-          <div key={label as string} className="rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-small)]">
-            <div className="text-sm text-text-secondary">{label as string}</div>
-            <div className="tnum mt-1 text-2xl font-extrabold text-text-primary">{v ?? '—'}</div>
-          </div>
+          <StatCard key={label as string} label={label as string} value={v ?? '—'} />
         ))}
       </div>
 

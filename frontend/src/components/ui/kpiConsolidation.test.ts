@@ -20,7 +20,18 @@ const TREE: Record<string, string> = import.meta.glob('/src/**/*.tsx', {
 
 /** Files allowed to draw their own, each for a stated reason. */
 const EXEMPT = {
-  'src/features/reports/': 'the report deck is a designed document with its own scale — a client sees it as a PDF, not as the app',
+  /*
+   * The DECK, not the folder.
+   *
+   * This read `src/features/reports/` — every file under it — and the reason given was true of two of
+   * them: a printed deck is a designed document with its own type scale, which a client sees as a PDF
+   * rather than as the app. `ReportsPage` is not that. It is the ordinary in-app list of reports, it
+   * drew four hand-rolled summary cards, and a folder-wide exemption written for the deck is what let
+   * it. An exemption belongs to the files its reason is about.
+   */
+  'src/features/reports/PrintDocument.tsx': 'the printed deck is a designed document with its own scale — a client sees it as a PDF, not as the app',
+  'src/features/reports/PrintReport.tsx': 'the print route, for the same reason',
+  'src/features/reports/InteractiveReport.tsx': 'the deck on screen, which must match the printed one exactly',
   'src/components/ui/StatCard.tsx': 'the shared card itself',
   'src/components/ui/MetricStrip.tsx': 'the strip, which is the shared card in its multi-metric form',
 }
@@ -51,7 +62,18 @@ describe('no surface draws its own KPI card', () => {
       .filter(([, source]) => {
         // The shape of the thing: a rounded card, a tabular figure at KPI weight, in one element.
         const drawsCard = /rounded-2xl[^"'`]*bg-surface/.test(source)
-        const drawsFigure = /tnum[^"'`]*text-(2xl|3xl|\[2[0-9]px\])[^"'`]*font-extrabold/.test(source)
+        /*
+         * ORDER-INDEPENDENT, because Tailwind classes have none.
+         *
+         * This required `tnum` to come BEFORE the size in the same class string, and five surfaces
+         * wrote `text-2xl font-extrabold tnum` — the same card, the classes in the other order, and
+         * the guard walked past every one of them while its migration list sat empty, which read as
+         * «all twelve are done». An empty list is only a guard if the scan that fills it can see.
+         */
+        const classes = source.match(/class(Name)?=\{?[`"'][^`"']*[`"']/g) ?? []
+        const drawsFigure = classes.some((c) =>
+          /\btnum\b/.test(c) && /text-(2xl|3xl|\[2[0-9]px\])/.test(c) && /font-extrabold/.test(c),
+        )
         /*
          * The import is NOT an escape.
          *
