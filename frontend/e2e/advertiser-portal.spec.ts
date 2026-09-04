@@ -106,6 +106,20 @@ test.describe('the advertiser portal', () => {
 
     const roas = page.getByTestId('metric-roas')
 
+    /*
+     * FILTER-LOCALE-EMPTY-STATE-OBS — say WHICH arm the strip took when the card is missing.
+     *
+     * This assertion has failed three times in the gate, always deep into a long run and never in
+     * isolation, and «element(s) not found» cannot tell a failed request from one still in flight
+     * from a scope with no rows. The strip carries `data-strip-state`; reading it into the failure
+     * message means the next sighting arrives with the fact instead of needing a fourth reproduction.
+     */
+    await expect(async () => {
+      const state = await page.getByTestId('dashboard-metrics').getAttribute('data-strip-state')
+
+      expect(await roas.count(), `the ROAS card is absent and the strip is in «${state}»`).toBeGreaterThan(0)
+    }).toPass({ timeout: 20000 })
+
     await expect(roas).toContainText('العائد على الإنفاق', { timeout: 20000 })
 
     await toggleLanguage(page)
