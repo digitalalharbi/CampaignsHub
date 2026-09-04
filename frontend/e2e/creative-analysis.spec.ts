@@ -377,3 +377,91 @@ test.describe('what a client link shows', () => {
     await expect(page.getByTestId('shared-creative-section')).toHaveCount(0)
   })
 })
+
+/**
+ * AD-MEDIA-RECOVERY-001 — the media must actually DECODE, not merely be requested.
+ *
+ * ## Why this test exists, and why nothing else caught it
+ *
+ * The owner reported that video, story and carousel previews «still do not actually appear». Every
+ * layer said otherwise: the payload carried a `video_url`, the aspect ratio was right, the player
+ * component existed, the unit tests passed. What none of them checked is the one thing that matters
+ * — whether a browser can open the file.
+ *
+ * It could not. The asset is stored as a PATH so it survives a port and a host, and in production the
+ * SPA and the API share an origin so the path resolves to Laravel's `public/`. In development they do
+ * not: the browser asked Vite for the file and Vite answered with the SPA shell — HTTP 200,
+ * `text/html`, three kilobytes — and the player died with `DEMUXER_ERROR_COULD_NOT_OPEN` against a
+ * document pretending to be a video. Every layer reported success and the user saw a dead player.
+ *
+ * So this asserts the browser's own verdict: `readyState` reaching HAVE_ENOUGH_DATA, real pixel
+ * dimensions, and no `MediaError`. A `src` that 404s, returns HTML, or returns a corrupt file all
+ * fail it, and none of them can be faked by a payload assertion.
+ */
+test.describe('the media a reader can actually play', () => {
+  // The library belongs to the agency tenant; without this the API answers as nobody and the seeded
+  // project «is missing», which is how the first run of this block failed.
+  test.use({ storageState: AUTH.owner })
+
+  test('a video creative plays, with real dimensions and no media error', async ({ page, request }) => {
+    const projectId = await seededProject(request, STORE_PROJECT)
+    await selectProject(page, projectId)
+
+    const videos = await creativesOfKind(request, 'video')
+    const playable = videos.find((c) => (c as Row & { preview?: { video_url?: string | null } }).preview?.video_url)
+
+    /*
+     * Skipped where the seed holds no playable film, and it SAYS so rather than passing quietly —
+     * a green test that asserted nothing is how this defect survived in the first place.
+     */
+    test.skip(!playable, `no seeded creative carries a video_url (of ${videos.length} video creatives)`)
+
+    await page.goto(`/agency/content/${playable!.id}`)
+
+    const video = page.locator('video')
+    await expect(video, 'the detail page rendered no player').toBeVisible({ timeout: 30000 })
+
+    // The source attaches on play — a grid of autoplaying films would cost a phone tens of megabytes.
+    await page.getByRole('button', { name: /play|تشغيل/i }).first().click()
+
+    await expect
+      .poll(async () => video.evaluate((v: HTMLVideoElement) => v.readyState), { timeout: 20000 })
+      .toBeGreaterThanOrEqual(3)
+
+    const verdict = await video.evaluate((v: HTMLVideoElement) => ({
+      error: v.error?.code ?? null,
+      width: v.videoWidth,
+      height: v.videoHeight,
+      duration: Number.isFinite(v.duration) ? v.duration : 0,
+    }))
+
+    expect(verdict.error, 'the browser could not decode the media').toBeNull()
+    expect(verdict.width, 'the video decoded to no width — it is not a video').toBeGreaterThan(0)
+    expect(verdict.height).toBeGreaterThan(0)
+    expect(verdict.duration).toBeGreaterThan(0)
+  })
+
+  /*
+   * The carousel's navigation is asserted by «pages through its cards by button and by keyboard»
+   * above — on the card COUNTER («Card 2 of 4»), which is what a reader actually sees, and including
+   * the keyboard path. A second version here reading `aria-current` off the dots tested the same
+   * behaviour through a weaker signal, so it is not repeated: two tests of one claim disagree the
+   * first time the markup changes, and the weaker one is the one that lies.
+   */
+
+  /**
+   * A row nobody fetched does not blame the platform — AD-MEDIA-RECOVERY-001.
+   *
+   * The library said «This platform does not expose the creative's asset» over cards marked «Demo»,
+   * which sends an operator to debug an integration that is working perfectly.
+   */
+  test('no card accuses a platform of withholding an asset nobody asked it for', async ({ page, request }) => {
+    await openLibrary(page, request)
+
+    await expect(cards(page).first()).toBeVisible({ timeout: 30000 })
+
+    const body = await page.locator('body').innerText()
+
+    expect(body, 'a derived row still blames the platform').not.toMatch(/does not expose the creative|لا تتيح هذه المنصة أصل المحتوى/i)
+  })
+})

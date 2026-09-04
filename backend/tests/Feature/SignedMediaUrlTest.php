@@ -254,6 +254,101 @@ final class SignedMediaUrlTest extends TestCase
     }
 
     /** @return array<string, mixed> */
+    /**
+     * AD-MEDIA-RECOVERY-001 — our OWN asset travels as a path, and must survive the guard.
+     *
+     * The demo video was stored as an absolute URL built from `APP_URL` at seed time, so the row held
+     * «http://127.0.0.1:8000/demo/creative-sample.mp4» permanently and the film played only while
+     * something happened to be listening on that port. Storing the path is the fix, and the guard has
+     * to let a path through or the fix silently becomes «unavailable» on every demo video.
+     */
+    public function test_our_own_asset_may_be_stored_as_a_path(): void
+    {
+        $out = $this->preview('/demo/creative-sample.mp4', video: true);
+
+        $this->assertSame('available', $out['state']);
+        $this->assertSame('/demo/creative-sample.mp4', $out['video_url']);
+    }
+
+    /**
+     * …and a PROTOCOL-RELATIVE url is not ours, however much it looks like a path.
+     *
+     * «//evil.example/x.jpg» begins with a slash and points at another origin entirely, which is the
+     * whole reason the scheme check exists. The path rule must not become a hole in it.
+     */
+    public function test_a_protocol_relative_url_is_not_treated_as_our_own(): void
+    {
+        $out = $this->preview('//cdn.example.com/media/x.jpg');
+
+        /*
+         * Asserted on the URL rather than the state name: what matters is that nothing renders it.
+         * The presenter classifies a refused-but-present url as `withheld` — «we hold one and decline
+         * to hand it over» — which is the honest label for this and for a credentialled link alike.
+         */
+        $this->assertNotSame('available', $out['state']);
+        $this->assertNull($out['image_url']);
+        $this->assertNull($out['video_url']);
+        $this->assertNull($out['thumbnail_url']);
+    }
+
+    /** A non-http scheme is still refused — the path rule widened one case, not the guard. */
+    public function test_a_foreign_scheme_is_still_refused(): void
+    {
+        foreach (['javascript:alert(1)', 'file:///etc/passwd', 'data:text/html,<script>x</script>'] as $url) {
+            $out = $this->preview($url);
+
+            $this->assertNotSame('available', $out['state'], $url);
+            $this->assertNull($out['image_url'], $url);
+            $this->assertNull($out['video_url'], $url);
+        }
+    }
+
+    /**
+     * AD-MEDIA-RECOVERY-001 — «never fetched» is not «the platform refused».
+     *
+     * A row DERIVED from ad-level performance was never requested from the provider, so the old
+     * «this platform does not expose the creative's asset» was a false accusation. The owner met it
+     * on the content library, on cards marked «Demo», and it sends an operator to debug a working
+     * integration.
+     */
+    public function test_a_derived_row_does_not_blame_the_platform_for_its_missing_asset(): void
+    {
+        $creative = ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'provider' => 'google',
+            'external_creative_id' => 'cr-'.Str::random(8),
+            'name' => 'Derived',
+            'format' => 'video',
+            'source_type' => 'estimated',
+        ]);
+
+        $out = app(CreativePresenter::class)->preview($creative);
+
+        $this->assertSame('never_fetched', $out['state']);
+        $this->assertStringContainsString('never fetched', (string) $out['note_en']);
+        $this->assertStringNotContainsString('does not expose', (string) $out['note_en']);
+    }
+
+    /** A FETCHED ad with no asset still says so — the platform genuinely gave nothing. */
+    public function test_a_fetched_ad_with_no_asset_still_names_the_platform(): void
+    {
+        $creative = ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'provider' => 'google',
+            'external_creative_id' => 'cr-'.Str::random(8),
+            'name' => 'Fetched',
+            'format' => 'image',
+            'source_type' => 'api',
+        ]);
+
+        $out = app(CreativePresenter::class)->preview($creative);
+
+        $this->assertSame('unavailable', $out['state']);
+        $this->assertStringContainsString('fetched from the platform', (string) $out['note_en']);
+    }
+
     private function preview(string $url, bool $video = false): array
     {
         $creative = ExternalCreative::withoutGlobalScopes()->create([
