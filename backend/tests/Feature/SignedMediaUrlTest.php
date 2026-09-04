@@ -158,6 +158,81 @@ final class SignedMediaUrlTest extends TestCase
     }
 
     /**
+     * CONTENT-PREVIEW-SHAPES-001 — the SHAPE of the frame, which the preview could not see.
+     *
+     * A story or a reel is 9:16. Shown in the square frame every preview used, it is letterboxed into
+     * a third of the space or cropped through its own subject, and the reader is comparing a different
+     * ad from the one that ran. The columns to answer this have been synced all along — `width`,
+     * `height`, `aspect_ratio` — and the preview payload never carried the answer, so no surface could
+     * act on it.
+     */
+    public function test_the_preview_states_the_shape_of_its_frame(): void
+    {
+        $cases = [
+            // Real pixels first: the provider's own measurement beats a label somebody wrote.
+            ['w' => 1080, 'h' => 1920, 'label' => null, 'expected' => 'vertical'],
+            ['w' => 1080, 'h' => 1080, 'label' => null, 'expected' => 'square'],
+            ['w' => 1920, 'h' => 1080, 'label' => null, 'expected' => 'horizontal'],
+            // 4:5 is Meta's most common feed portrait, and tall enough that a square frame crops it.
+            ['w' => 1080, 'h' => 1350, 'label' => null, 'expected' => 'vertical'],
+            // No pixels: the label is parsed rather than ignored.
+            ['w' => null, 'h' => null, 'label' => '9:16', 'expected' => 'vertical'],
+            ['w' => null, 'h' => null, 'label' => '1:1', 'expected' => 'square'],
+            // Neither: «the platform did not say», which is not «tall».
+            ['w' => null, 'h' => null, 'label' => null, 'expected' => null],
+            ['w' => null, 'h' => null, 'label' => 'portrait', 'expected' => null],
+        ];
+
+        foreach ($cases as $case) {
+            $creative = ExternalCreative::withoutGlobalScopes()->create([
+                'tenant_id' => $this->tenant->id,
+                'project_id' => $this->project->id,
+                'provider' => 'meta',
+                'external_creative_id' => 'cr-'.Str::random(8),
+                'name' => 'A creative',
+                'format' => 'image',
+                'asset_url' => 'https://cdn.example.com/a.jpg',
+                'width' => $case['w'],
+                'height' => $case['h'],
+                'aspect_ratio' => $case['label'],
+            ]);
+
+            $this->assertSame(
+                $case['expected'],
+                app(CreativePresenter::class)->preview($creative)['aspect'],
+                sprintf('%sx%s / «%s» did not read as %s', $case['w'] ?? '—', $case['h'] ?? '—', $case['label'] ?? '—', $case['expected'] ?? 'unstated'),
+            );
+        }
+    }
+
+    /**
+     * A story that could not be fetched is still a story.
+     *
+     * The frame it would have filled is still tall, and a withheld or expired preview that dropped the
+     * shape would collapse into the square placeholder every other absence uses — so the one state
+     * where the reader has NOTHING to look at is the state that most needs to say what shape is missing.
+     */
+    public function test_a_withheld_preview_still_states_its_shape(): void
+    {
+        $creative = ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'provider' => 'snapchat',
+            'external_creative_id' => 'cr-'.Str::random(8),
+            'name' => 'A story',
+            'format' => 'video',
+            'asset_url' => 'https://cf.snapchat.com/media/me.jpg?access_token=SECRET-VALUE',
+            'width' => 1080,
+            'height' => 1920,
+        ]);
+
+        $preview = app(CreativePresenter::class)->preview($creative);
+
+        $this->assertSame('withheld', $preview['state']);
+        $this->assertSame('vertical', $preview['aspect']);
+    }
+
+    /**
      * And the picker can name them.
      *
      * A filter with no word for a shape hides every ad of it, and an operator concludes the account
