@@ -14,6 +14,8 @@ use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Models\MetricDefinition;
 use App\Domains\Metrics\Services\AttributionTransparency;
 use App\Domains\Metrics\Services\BudgetExplanation;
+use App\Domains\Metrics\Services\ChangeDrivers;
+use App\Domains\Metrics\Services\ChangeTimeline;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\EntityMetricsAggregator;
 use App\Domains\Metrics\Services\MetricsAggregator;
@@ -254,6 +256,58 @@ final class MetricsController extends Controller
         [$from, $to] = $this->range($request);
 
         return ApiResponse::success($this->scoped($request)->timeseries($from, $to), 'Metrics time series.', meta: $this->meta($from, $to));
+    }
+
+    /**
+     * ANALYTICS-DIFFERENTIATION-001 — «what changed, and who moved it», in one answer.
+     *
+     * Analytics is not the dashboard over a longer window; it is the surface that answers WHY. Both
+     * halves of that live here because they share the window and its comparison, and a driver list
+     * computed against a different «previous period» than the timeline beside it would be two
+     * diagnoses of one account.
+     *
+     * The comparison window is the SAME LENGTH immediately before this one, and it is derived here
+     * rather than accepted from the caller: a client that could choose its own baseline could choose
+     * one that makes any period look like an improvement.
+     */
+    public function drivers(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        $days = (int) max(1, $from->diffInDays($to) + 1);
+        $prevTo = $from->copy()->subDay()->startOfDay();
+        $prevFrom = $prevTo->copy()->subDays($days - 1)->startOfDay();
+
+        $scoped = $this->scoped($request);
+        $drivers = new ChangeDrivers($scoped);
+
+        /*
+         * `by` is the reader's drill level, and `metric` what they are asking about. Both are
+         * validated against what the services will actually answer rather than passed through: an
+         * unknown dimension silently becoming «provider» would answer a question nobody asked.
+         */
+        $by = in_array($request->string('by')->toString(), ['provider', 'campaign'], true)
+            ? $request->string('by')->toString()
+            : 'provider';
+
+        $metric = $request->filled('metric') ? $request->string('metric')->toString() : 'spend';
+
+        return ApiResponse::success([
+            'window' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => $days],
+            'previous' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()],
+            'drivers' => $drivers->forMetric($metric, $by, $from, $to, $prevFrom, $prevTo),
+            /*
+             * The other additive headline metrics, so the surface can lead with the one that MOVED
+             * most rather than with whichever the reader happened to select. Ratios are absent by
+             * construction — see `ChangeDrivers` on why a contribution to CPA has no referent.
+             */
+            'also' => array_values(array_filter(array_map(
+                fn (string $m) => $m === $metric ? null : $drivers->forMetric($m, $by, $from, $to, $prevFrom, $prevTo),
+                ['spend', 'conversions', 'clicks', 'impressions', 'revenue'],
+            ))),
+            'timeline' => (new ChangeTimeline($scoped))->build($from, $to),
+        ], 'What changed, and which entity moved it.', meta: $this->meta($from, $to));
     }
 
     public function platforms(Request $request): JsonResponse
