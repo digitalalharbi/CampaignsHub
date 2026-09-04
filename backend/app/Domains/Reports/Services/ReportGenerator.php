@@ -697,7 +697,10 @@ final class ReportGenerator
         $rated = collect($platforms)->filter(fn ($p) => ($p[$metric['key']] ?? null) !== null && (float) ($p['spend'] ?? 0) > 0);
         if ($rated->isNotEmpty()) {
             $best = ($metric['lower_is_better'] ? $rated->sortBy($metric['key']) : $rated->sortByDesc($metric['key']))->first();
-            $out[] = sprintf('أفضل %s على منصة %s (%s).', $metric['label_ar'], $best['provider'], $lens->formatRanking((float) $best[$metric['key']], $currency));
+            // The platform's NAME. Every other sentence in this file already goes through the
+            // catalogue; this one printed the raw key — «أفضل نسبة النقر على منصة google» — in the
+            // executive summary, which is the paragraph most likely to be quoted back to somebody.
+            $out[] = sprintf('أفضل %s على منصة %s (%s).', $metric['label_ar'], ProviderDisplayName::short((string) $best['provider']), $lens->formatRanking((float) $best[$metric['key']], $currency));
         }
 
         if ($lens->judgesOnCostPerResult()) {
