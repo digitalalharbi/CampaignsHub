@@ -257,7 +257,17 @@ export function DashboardPage() {
 
   const commerce = summary.data?.commerce ?? null
   const points = series.data ?? []
-  const metrics = useMemo(() => dashboardMetrics(objective, summary.data, ar), [objective, summary.data, ar])
+  /*
+   * UX-KPI-PRESENTATION-001 — the cards take their shape from the SAME series the chart below draws.
+   *
+   * `useTimeseries` is already fetched for that chart, so the sparkline costs no request and cannot
+   * disagree with it. A card whose trend told a different story than the graph beneath it would be
+   * two readings of one period with nothing to say which is right.
+   */
+  const metrics = useMemo(
+    () => dashboardMetrics(objective, summary.data, ar, series.data),
+    [objective, summary.data, ar, series.data],
+  )
 
   const alerts = useMemo(() => {
     const out: { kind: 'sync' | 'budget' | 'performance'; text: string }[] = []
