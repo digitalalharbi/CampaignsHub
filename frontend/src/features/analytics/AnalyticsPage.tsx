@@ -1125,11 +1125,31 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
 function CampaignsTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const c = useCampaigns(projectId, range, filters)
+  const s = useSummary(projectId, range, filters)
+  /*
+   * ANALYTICS-DIFFERENTIATION-001 — campaign distribution as a DIAGNOSIS.
+   *
+   * The table below ranks campaigns by what they did, which a reader can already see. This says which
+   * of them moved the account and by how much — the distribution of the CHANGE rather than of the
+   * totals, which is the difference between «Eid is the biggest» and «Eid is why the month fell».
+   */
+  const drivers = useDrivers(projectId, range, 'campaign', 'spend', filters)
   const rows = c.data ?? []
   const best = rows[0]
   const worst = [...rows].filter((r) => r.spend > 0).sort((a, b) => (a.roas ?? 0) - (b.roas ?? 0))[0]
   return (
     <div className="space-y-4">
+      <ChangeDiagnosis
+        data={drivers.data}
+        currency={s.data?.currency ?? null}
+        loading={drivers.isPending}
+        error={drivers.isError}
+        title={ar ? 'أي الحملات حرّكت الحساب' : 'Which campaigns moved the account'}
+        subtitle={ar
+          ? 'توزيع التغيّر، لا توزيع الإجماليات — أكبر حملة ليست بالضرورة سبب ما حدث.'
+          : 'The distribution of the CHANGE, not of the totals — the biggest campaign is not necessarily why the month moved.'}
+      />
+
       <div className="grid gap-3 sm:grid-cols-2">
         <Panel title={ar ? 'أفضل حملة (ROAS)' : 'Best campaign (ROAS)'} loading={c.isLoading} error={c.isError}>
           {best && (
@@ -1241,7 +1261,7 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
             )}
             <div className="w-40 shrink-0 text-end text-xs text-text-muted">
               {s.step_rate !== null && <span>{ar ? 'انتقال' : 'step'} {percent(s.step_rate, 0)}</span>}
-              {s.cost_per !== null && <span className="ms-2">{ar ? 'تكلفة' : 'cost'} {money(s.cost_per, costCurrency)}</span>}
+              {s.cost_per !== null && <span className="ms-2">{ar ? 'تكلفة' : 'cost'} {moneyExact(s.cost_per, costCurrency ?? null)}</span>}
             </div>
           </div>
         ))}
@@ -2434,6 +2454,9 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
 }
 
 function ObjectiveTab({ projectId, range, filters }: TabProps) {
+  /* The same decomposition the overview uses, on the axis this tab is about — see the note below. */
+  const drivers = useDrivers(projectId, range, 'objective', 'spend', filters)
+
   const ar = useAr()
   const c = useCampaigns(projectId, range, filters)
   const s = useSummary(projectId, range, filters)
@@ -2487,6 +2510,26 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
 
   return (
     <div className="space-y-4">
+      {/*
+        ANALYTICS-DIFFERENTIATION-001 — the objective decomposition, ABOVE the per-family breakdown.
+
+        The panel below answers «how did each objective do», which is a report. This answers «what
+        moved between them», which is a diagnosis — and it is the one axis a platform split cannot
+        show: an account can spend exactly the same on exactly the same platforms and return less
+        because the money moved from sales to awareness. Every platform looks unchanged; the whole
+        answer is in what the money was BOUGHT for.
+      */}
+      <ChangeDiagnosis
+        data={drivers.data}
+        currency={currency}
+        loading={drivers.isPending}
+        error={drivers.isError}
+        title={ar ? 'ما الذي تغيّر بين الأهداف' : 'What moved between the objectives'}
+        subtitle={ar
+          ? 'تحوّل المزيج: أين ذهبت الميزانية بين ما اشتُريت من أجله — وهو ما لا يظهر في تفصيل المنصات.'
+          : 'The mix shift: where the budget moved between what it was bought for — which a platform split cannot show.'}
+      />
+
       <Panel
         title={ar ? 'الأداء حسب الهدف' : 'Performance by objective'}
         description={ar
@@ -2847,6 +2890,14 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
 function AccountsTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const a = useAccounts(projectId, range, filters)
+  /*
+   * PLATFORM-DECISION-ANALYTICS-001 — account contribution, the level the platform total hides.
+   *
+   * An agency running two Meta accounts for one client can have a collapse in one exactly offset by a
+   * rise in the other: the platform reports no change, and the thing worth acting on is invisible
+   * until the split goes one level down. This is that level.
+   */
+  const drivers = useDrivers(projectId, range, 'account', 'spend', filters)
   const s = useSummary(projectId, range, filters)
   const currency = s.data?.currency ?? null
   const rows = a.data ?? []
@@ -2897,6 +2948,18 @@ function AccountsTab({ projectId, range, filters }: TabProps) {
   ])
 
   return (
+    <>
+      <ChangeDiagnosis
+        data={drivers.data}
+        currency={currency}
+        loading={drivers.isPending}
+        error={drivers.isError}
+        title={ar ? 'ما الذي تغيّر بين الحسابات' : 'What moved between the accounts'}
+        subtitle={ar
+          ? 'انهيار في حساب يقابله ارتفاع في آخر يجعل المنصة تبدو ثابتة — هنا يظهر.'
+          : 'A collapse in one account offset by a rise in another makes the platform look unchanged — here it shows.'}
+      />
+
     <Panel
       title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'}
       description={ar ? 'الأعلى إنفاقًا أولًا — ويمكن الترتيب بأي عمود' : 'Highest spend first — sortable by any column'}
@@ -2908,5 +2971,6 @@ function AccountsTab({ projectId, range, filters }: TabProps) {
         <MetricTable head={head} rows={cells} values={values} initialSort={{ column: 2, dir: 'desc' }} />
       </div>
     </Panel>
+    </>
   )
 }

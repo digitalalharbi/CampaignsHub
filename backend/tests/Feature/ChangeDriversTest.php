@@ -186,6 +186,83 @@ final class ChangeDriversTest extends TestCase
         }
     }
 
+    /**
+     * The dimension a platform split cannot answer — ANALYTICS-DIFFERENTIATION-001.
+     *
+     * «The account spent the same and returned less» is usually a MIX shift: money moving from one
+     * objective to another. Every platform can look unchanged while the answer sits in what the money
+     * was BOUGHT for, and no amount of per-platform detail shows it.
+     */
+    public function test_it_decomposes_by_what_the_money_was_bought_for(): void
+    {
+        $awareness = UnifiedCampaign::create([
+            'project_id' => $this->project->id, 'name' => 'Brand', 'status' => 'active', 'objective' => 'awareness',
+        ]);
+        $sales = UnifiedCampaign::create([
+            'project_id' => $this->project->id, 'name' => 'Sales', 'status' => 'active', 'objective' => 'sales',
+        ]);
+
+        // The account's spend is flat at 4,000 — and half of it moved from sales to awareness.
+        $this->metric($sales, 'meta', 'spend', 3000, '2026-07-03');
+        $this->metric($awareness, 'meta', 'spend', 1000, '2026-07-03');
+        $this->metric($sales, 'meta', 'spend', 1000, '2026-07-10');
+        $this->metric($awareness, 'meta', 'spend', 3000, '2026-07-10');
+
+        $out = $this->drivers('spend', 'objective');
+
+        $this->assertSame(0.0, $out['change'], 'the account total did not hold still — the fixture is wrong');
+
+        $byKey = array_column($out['drivers'], null, 'key');
+
+        $this->assertSame(2000.0, $byKey['awareness']['change']);
+        $this->assertSame(-2000.0, $byKey['sales']['change']);
+
+        /*
+         * And the platform split has NO MOVEMENT to report, which is the entire point.
+         *
+         * Meta is still listed — it spent in both windows, and a platform that held steady while the
+         * mix shifted underneath it is context worth having. What it does not have is a change: a
+         * reader looking only at platforms would conclude nothing happened, and 2,000 SAR moved from
+         * sales to awareness.
+         */
+        $byProvider = $this->drivers('spend', 'provider');
+
+        foreach ($byProvider['drivers'] as $d) {
+            $this->assertSame(0.0, $d['change'], 'the platform split invented a movement');
+        }
+    }
+
+    /**
+     * PLATFORM-DECISION-ANALYTICS-001 — account contribution, which the platform total hides.
+     *
+     * An agency running two Meta accounts for one client can have a collapse in one exactly offset by
+     * a rise in the other. The platform reports no change, and the thing worth acting on is invisible
+     * until the split goes one level down.
+     */
+    public function test_it_decomposes_by_ad_account(): void
+    {
+        $a = $this->campaign('A');
+        $b = $this->campaign('B');
+        $accountA = (string) Str::uuid();
+        $accountB = (string) Str::uuid();
+
+        foreach ([['2026-07-03', 3000, 1000], ['2026-07-10', 1000, 3000]] as [$date, $spendA, $spendB]) {
+            $this->metric($a, 'meta', 'spend', (float) $spendA, $date, ['external_account_id' => $accountA]);
+            $this->metric($b, 'meta', 'spend', (float) $spendB, $date, ['external_account_id' => $accountB]);
+        }
+
+        $byAccount = $this->drivers('spend', 'account');
+        $changes = array_column($byAccount['drivers'], 'change', 'key');
+
+        $this->assertSame(-2000.0, $changes[$accountA] ?? null);
+        $this->assertSame(2000.0, $changes[$accountB] ?? null);
+
+        // …and the platform above them reports no movement, which is the point.
+        foreach ($this->drivers('spend', 'provider')['drivers'] as $d) {
+            $this->assertSame(0.0, $d['change'], 'the platform split invented a movement');
+        }
+    }
+
     // ---- the change timeline ------------------------------------------------------------------
 
     /** @param list<float> $daily one value per day, starting 2026-07-01 */

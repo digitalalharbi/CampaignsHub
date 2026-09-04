@@ -223,14 +223,38 @@ final class CreativePresenter
                 'note_ar' => 'انتهت صلاحية رابط المنصة — يحتاج مزامنة جديدة.',
                 'note_en' => 'The platform link has expired — it needs a fresh sync.',
             ],
+            /*
+             * AD-MEDIA-RECOVERY-001 — «never fetched» is not «the platform refused».
+             *
+             * Every asset-less creative said «This platform does not expose the creative's asset»,
+             * and for most of them that sentence was a false accusation. A row whose `source_type` is
+             * `estimated` was DERIVED from ad-level performance — the product inferred that a
+             * creative existed because spend and impressions were attributed to one — and no request
+             * for its asset was ever made. Blaming Google for an asset nobody asked Google for tells
+             * the reader the integration is failing when it is not, and hides the real reason, which
+             * is that this row is an inference rather than a fetched ad.
+             *
+             * The owner met this on the content library: cards reading «Video · Hero Video · Demo ·
+             * Google Ads» above «This platform does not expose the creative's asset».
+             */
+            $image === null && $video === null && $thumb === null && $creative->cards === null
+                && $creative->source_type === 'estimated' => [
+                    'state' => 'never_fetched',
+                    'kind' => $kind,
+                    'aspect' => $aspect,
+                    'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
+                    'expires_at' => null,
+                    'note_ar' => 'هذا الصف مُستنتج من أداء الإعلان، ولم يُجلب الإعلان نفسه من المنصة — فلا يوجد أصل لعرضه.',
+                    'note_en' => 'This row was derived from ad-level performance; the ad itself was never fetched from the platform, so there is no asset to show.',
+                ],
             $image === null && $video === null && $thumb === null && $creative->cards === null => [
                 'state' => 'unavailable',
                 'kind' => $kind,
                 'aspect' => $aspect,
                 'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
                 'expires_at' => null,
-                'note_ar' => 'لا تتيح هذه المنصة أصل المحتوى.',
-                'note_en' => 'This platform does not expose the creative’s asset.',
+                'note_ar' => 'جُلب هذا الإعلان من المنصة، ولم تُتِح المنصة أصل المحتوى.',
+                'note_en' => 'This ad was fetched from the platform, and the platform exposed no asset for it.',
             ],
             default => [
                 'state' => 'available',
@@ -450,6 +474,22 @@ final class CreativePresenter
          * rendered somewhere other than an `<img>`.
          */
         if (str_starts_with(strtolower($url), 'data:image/')) {
+            return $url;
+        }
+
+        /*
+         * A ROOT-RELATIVE path is ours, and it is the only portable way to store our own asset.
+         *
+         * AD-MEDIA-RECOVERY-001: the demo video was stored as an absolute URL built from `APP_URL` at
+         * SEED time — «http://127.0.0.1:8000/demo/creative-sample.mp4». It plays only while a server
+         * happens to be listening on that exact port, so every demo video died the moment the app ran
+         * anywhere else, which is most of the time. A path resolves against whatever origin serves
+         * the page and survives a port, a host and a deploy.
+         *
+         * `//host/path` is deliberately excluded: it looks relative and is protocol-relative, which
+         * points at another origin entirely — exactly what the scheme check below exists to stop.
+         */
+        if (str_starts_with($url, '/') && ! str_starts_with($url, '//')) {
             return $url;
         }
 

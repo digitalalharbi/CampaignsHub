@@ -17,7 +17,7 @@ import {
   YAxis,
 } from 'recharts'
 import { platformColor, tooltipProps } from './components'
-import { compact, money, num, percent, ratio } from './format'
+import { compact, money, moneyExact, num, percent, ratio } from './format'
 import { funnelStageLabel } from './metricLabels'
 import { useUi } from '@/stores/ui'
 
@@ -253,7 +253,7 @@ export function ConversionFunnelChart({ stages, currency = 'SAR', ar = false }: 
             )}
             <div className="w-36 shrink-0 text-end text-xs text-text-muted">
               {s.step_rate !== null && <span className="tnum">{percent(s.step_rate, 0)}</span>}
-              {s.cost_per !== null && <span className="tnum ms-2">{money(s.cost_per, currency)}</span>}
+              {s.cost_per !== null && <span className="tnum ms-2">{moneyExact(s.cost_per, currency ?? null)}</span>}
             </div>
           </div>
         )
