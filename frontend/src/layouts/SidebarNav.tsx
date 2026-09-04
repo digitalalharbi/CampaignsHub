@@ -33,6 +33,15 @@ export interface NavLeaf {
   icon: LucideIcon
   /** The account-entitlement key. A leaf shows only when the workspace is entitled to it. */
   ent?: string
+  /**
+   * The PROJECT capability this destination needs — TEAM-PROJECT-RBAC-001.
+   *
+   * A leaf naming one is not offered to somebody who does not hold it in the current project. This is
+   * not the enforcement: the route states the same capability and the server refuses without it. It
+   * is what stops the rail offering a door that answers 403, which reads as a broken product rather
+   * than as a boundary.
+   */
+  cap?: string
   end?: boolean
 }
 
