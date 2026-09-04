@@ -351,4 +351,103 @@ final class ChangeDriversTest extends TestCase
         $this->assertSame('no_entity_reported_this_metric', $out['reason']);
         $this->assertSame([], $out['drivers']);
     }
+
+    /**
+     * ANALYTICS-DIFFERENTIATION-001 — the ad-set grain, which a campaign total hides.
+     *
+     * A campaign whose spend held steady while one ad set doubled and another stopped looks, at the
+     * campaign grain, like a week in which nothing happened. This is the level an operator can
+     * actually act on, and the last dimension the decomposition was missing.
+     */
+    public function test_it_decomposes_a_change_across_ad_sets(): void
+    {
+        $rows = static fn (float $a, float $b): array => [
+            ['entity_id' => 'as-1', 'name' => 'Riyadh — broad', 'spend' => $a, 'spend_withheld_rows' => 0, 'spend_original' => $a, 'money_original_currencies' => 1, 'money_original_currency' => 'SAR'],
+            ['entity_id' => 'as-2', 'name' => 'Jeddah — lookalike', 'spend' => $b, 'spend_withheld_rows' => 0, 'spend_original' => $b, 'money_original_currencies' => 1, 'money_original_currency' => 'SAR'],
+        ];
+
+        $drivers = new ChangeDrivers(
+            app(MetricsAggregator::class)->forProjects([$this->project->id]),
+            static fn ($from, $to): array => $from->toDateString() === '2026-08-01' ? $rows(1000, 1000) : $rows(2000, 0),
+        );
+
+        $out = $drivers->forMetric(
+            'spend', 'ad_set',
+            Carbon::parse('2026-08-08'), Carbon::parse('2026-08-14'),
+            Carbon::parse('2026-08-01'), Carbon::parse('2026-08-07'),
+        );
+
+        $this->assertNull($out['reason']);
+
+        $byName = [];
+        foreach ($out['drivers'] as $d) {
+            $byName[$d['name']] = $d;
+        }
+
+        // The campaign total did not move at all; underneath it, two ad sets moved 1,000 each.
+        $this->assertSame(0.0, round($out['change'], 6));
+        $this->assertSame(1000.0, round($byName['Riyadh — broad']['change'], 6));
+        $this->assertSame(-1000.0, round($byName['Jeddah — lookalike']['change'], 6));
+
+        // Share is of GROSS movement, which is the only reading that survives a net of zero.
+        $this->assertEqualsWithDelta(0.5, $byName['Riyadh — broad']['share'], 0.001);
+    }
+
+    /**
+     * With no ad-set source the dimension REFUSES rather than answering about providers.
+     *
+     * A dimension that silently falls back answers a question nobody asked, and the reader cannot
+     * tell — the figures are real, they are simply about something else.
+     *
+     * PROVIDER ROWS ARE SEEDED HERE ON PURPOSE. The first version of this test asserted an empty
+     * result against an empty database, so a fallback produced the same empty answer and the test
+     * passed while the defect was present — verified by injecting exactly that fallback. The rows
+     * below are what a fallback would return, which is what makes the refusal observable.
+     */
+    public function test_the_ad_set_dimension_refuses_when_no_source_was_supplied(): void
+    {
+        $campaign = $this->campaign('Has provider rows');
+        $this->metric($campaign, 'meta', 'spend', 1000, '2026-08-03');
+        $this->metric($campaign, 'meta', 'spend', 4000, '2026-08-10');
+
+        // The same aggregator DOES answer for providers — so an empty ad-set answer is a refusal.
+        $bySomethingElse = (new ChangeDrivers(app(MetricsAggregator::class)->forProjects([$this->project->id])))->forMetric(
+            'spend', 'provider',
+            Carbon::parse('2026-08-08'), Carbon::parse('2026-08-14'),
+            Carbon::parse('2026-08-01'), Carbon::parse('2026-08-07'),
+        );
+        $this->assertNotSame([], $bySomethingElse['drivers'], 'the fixture proves nothing: providers answered nothing either');
+
+        $out = (new ChangeDrivers(app(MetricsAggregator::class)->forProjects([$this->project->id])))->forMetric(
+            'spend', 'ad_set',
+            Carbon::parse('2026-08-08'), Carbon::parse('2026-08-14'),
+            Carbon::parse('2026-08-01'), Carbon::parse('2026-08-07'),
+        );
+
+        $this->assertSame([], $out['drivers'], 'the ad-set dimension answered with another dimension’s rows');
+        $this->assertSame('no_entity_reported_this_metric', $out['reason']);
+    }
+
+    /** An ad set whose name has gone keeps its figures and loses its label — never a UUID. */
+    public function test_an_ad_set_without_a_name_is_never_labelled_with_its_id(): void
+    {
+        $rows = static fn (float $v): array => [
+            ['entity_id' => '7f3f1aa2-2736-5f14-9c1e-000000000001', 'name' => null, 'spend' => $v, 'spend_withheld_rows' => 0, 'spend_original' => $v, 'money_original_currencies' => 1, 'money_original_currency' => 'SAR'],
+        ];
+
+        $out = (new ChangeDrivers(
+            app(MetricsAggregator::class)->forProjects([$this->project->id]),
+            static fn ($from, $to): array => $from->toDateString() === '2026-08-01' ? $rows(500) : $rows(900),
+        ))->forMetric(
+            'spend', 'ad_set',
+            Carbon::parse('2026-08-08'), Carbon::parse('2026-08-14'),
+            Carbon::parse('2026-08-01'), Carbon::parse('2026-08-07'),
+        );
+
+        $this->assertNotSame([], $out['drivers']);
+        foreach ($out['drivers'] as $d) {
+            $this->assertNull($d['name'], 'an ad set was labelled with its own id');
+            $this->assertStringNotContainsString('7f3f1aa2', (string) ($d['name'] ?? ''));
+        }
+    }
 }

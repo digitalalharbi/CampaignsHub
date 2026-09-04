@@ -2266,6 +2266,13 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
     : (ar ? 'الإعلانات' : 'Ads')
 
   /*
+   * Same window, same filters as the table below — the diagnosis and its evidence must not be able
+   * to disagree about the account they are both describing. Requested only at the ad-set level:
+   * `enabled` rather than a conditional hook, because a hook cannot be called conditionally.
+   */
+  const adSetDrivers = useDrivers(level === 'ad_set' ? projectId : null, range, 'ad_set', 'spend', filters)
+
+  /*
    * ANALYTICS-TABLES-001 — the canonical table, for the same reasons as the Accounts tab.
    *
    * Hand-rolled, numeric columns `text-start` (so the figures and their headings sit against
@@ -2409,6 +2416,20 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
   return (
     <div className="space-y-4">
       <DrillCrumbs path={path} level={level} ar={ar} onUpTo={(lvl) => go(drillUpTo(path, lvl), lvl)} />
+      {/*
+        ANALYTICS-DIFFERENTIATION-001 — the ad-set grain a campaign total hides.
+        A campaign whose spend held steady while one ad set doubled and another stopped looks, one
+        level up, like a week in which nothing happened. Only on the ad-set tab: there is no
+        decomposition of an AD by ad, and this component asks «which of the things underneath moved».
+      */}
+      {level === 'ad_set' && (
+        <ChangeDiagnosis
+          data={adSetDrivers.data}
+          currency={currency}
+          loading={adSetDrivers.isPending}
+          error={adSetDrivers.isError}
+        />
+      )}
       <Panel
         title={heading}
         description={ar ? 'الأعلى إنفاقًا أولًا — ويمكن الترتيب بأي عمود' : 'Highest spend first — sortable by any column'}

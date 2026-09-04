@@ -52,7 +52,25 @@ final class ChangeDrivers
         'video_views', 'video_completions', 'add_to_cart', 'checkout',
     ];
 
-    public function __construct(private readonly MetricsAggregator $metrics) {}
+    public function __construct(
+        private readonly MetricsAggregator $metrics,
+        /**
+         * Ad-set rows for a window — supplied, not fetched.
+         *
+         * Every other dimension comes off `MetricsAggregator`, which is already scoped to the
+         * caller's reach. Ad sets live in `entity_daily_metrics` behind an aggregator that takes a
+         * PROJECT id, and this class deliberately knows nothing about projects or requests: giving
+         * it one so it could build the query itself would put the scope decision in the arithmetic,
+         * which is where a widened ceiling hides best. The controller, which already resolved the
+         * project and checked the permission, hands over a closure `(from, to) => rows` instead.
+         *
+         * Null where the caller cannot supply them, and then the dimension refuses rather than
+         * quietly answering about providers instead.
+         *
+         * @var null|(callable(Carbon, Carbon): list<array<string, mixed>>)
+         */
+        private $adSetRows = null,
+    ) {}
 
     /** Whether a decomposition of this metric would mean anything at all. */
     public static function decomposable(string $metric): bool
@@ -246,6 +264,10 @@ final class ChangeDrivers
      */
     private function rowsFor(string $by, Carbon $from, Carbon $to): array
     {
+        if ($by === 'ad_set') {
+            return $this->adSetRowsFor($from, $to);
+        }
+
         $rows = match ($by) {
             'campaign', 'objective' => $this->metrics->byCampaign($from, $to),
             'account' => $this->metrics->byAccount($from, $to),
@@ -321,6 +343,41 @@ final class ChangeDrivers
                 'account' => $row['account_name'] ?? null,
                 default => $row['provider'] ?? null,
             };
+            $out[$key] = $row;
+        }
+
+        return $out;
+    }
+
+    /**
+     * The ad sets, keyed by their own id and named by their own name.
+     *
+     * This is the level a campaign total hides, and the one an operator can actually act on: a
+     * campaign whose spend held steady while one ad set doubled and another stopped looks, at the
+     * campaign grain, like a week where nothing happened.
+     *
+     * An ad set whose name has gone keeps its figures and loses its label — the same rule the
+     * account dimension follows, and for the same reason: a UUID is not a name, so null travels and
+     * the surface says what it means in words.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function adSetRowsFor(Carbon $from, Carbon $to): array
+    {
+        if ($this->adSetRows === null) {
+            return [];
+        }
+
+        $out = [];
+
+        foreach (($this->adSetRows)($from, $to) as $row) {
+            $key = (string) ($row['entity_id'] ?? '');
+
+            if ($key === '') {
+                continue;
+            }
+
+            $row['name'] = $row['name'] ?? null;
             $out[$key] = $row;
         }
 
