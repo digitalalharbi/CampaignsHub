@@ -15,6 +15,7 @@ use App\Domains\Reports\Services\SharedCreativeView;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\ReportIdentity;
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\ConditionalThrottle;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -441,8 +442,30 @@ final class PublicReportController extends Controller
         return $file;
     }
 
+    /**
+     * Sixty reads a minute per IP, through the product's ONE relaxation switch.
+     *
+     * The limit itself is unchanged and stays fully enforced in production, staging and `testing`.
+     * What changes is that this limiter is no longer the one that ignores
+     * {@see ConditionalThrottle::relaxationAllowed()} — every other limiter in the product goes
+     * through the middleware that consults it, and this one was hand-rolled here and did not.
+     *
+     * That mattered in exactly one place, and it cost real time: the gate drives a whole browser
+     * suite from a single IP, and two report spec files together spend more than sixty requests in a
+     * minute. The failure surfaces as «تعذّر فتح التقرير — Too many requests» in whichever test
+     * happens to land on the boundary, so it reads as three unrelated flakes in three different
+     * files, and a rerun «fixes» it by shifting which test draws the short straw.
+     *
+     * `relaxationAllowed()` is a positive allow-list: `local` ONLY, and only with an explicit opt-in
+     * flag. Production and staging refuse it whatever the environment says, and `testing` keeps the
+     * limits on so this behaviour stays testable — which is what the tests below rely on.
+     */
     private function throttle(Request $request): void
     {
+        if (ConditionalThrottle::relaxationAllowed()) {
+            return;
+        }
+
         $key = 'share:'.$request->ip();
         abort_if(RateLimiter::tooManyAttempts($key, 60), 429, 'Too many requests.');
         RateLimiter::hit($key, 60);
@@ -460,6 +483,10 @@ final class PublicReportController extends Controller
      */
     private function throttleBranding(Request $request): void
     {
+        if (ConditionalThrottle::relaxationAllowed()) {
+            return;
+        }
+
         $key = 'share-branding:'.$request->ip();
         abort_if(RateLimiter::tooManyAttempts($key, 120), 429, 'Too many requests.');
         RateLimiter::hit($key, 60);
