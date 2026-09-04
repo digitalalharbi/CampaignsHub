@@ -272,7 +272,7 @@ export function SubscriptionsPage() {
           <section className="flex flex-col gap-3">
             <h2 className="text-sm font-bold text-text-primary">{c.catalogue}</h2>
             {changeM.isError && <span className="text-xs font-semibold text-danger">{toApiError(changeM.error).message}</span>}
-            {!canManage && <p className="text-xs text-text-tertiary">{c.manage_note}</p>}
+            {!canManage && <p className="text-xs text-text-muted">{c.manage_note}</p>}
             <div className="grid gap-3 md:grid-cols-3">
               {plans.map((plan) => (
                 <PlanCard
@@ -350,7 +350,7 @@ function RenewalCard({
           </button>
           {/* Said before they click, not after: «remove card» and «cancel my subscription» are easy
               to confuse, and only one of them is what this button does. */}
-          <p className="text-xs text-text-tertiary">{c.remove_card_note}</p>
+          <p className="text-xs text-text-muted">{c.remove_card_note}</p>
         </div>
       )}
     </div>

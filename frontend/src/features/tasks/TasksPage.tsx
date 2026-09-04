@@ -46,10 +46,10 @@ const STATUS_META: Record<string, { ar: string; en: string; tone: string }> = {
   blocked: { ar: 'متوقفة', en: 'Blocked', tone: 'bg-danger/15 text-danger' },
   review: { ar: 'مراجعة', en: 'Review', tone: 'bg-info/15 text-info' },
   completed: { ar: 'مكتملة', en: 'Completed', tone: 'bg-success/15 text-success' },
-  cancelled: { ar: 'ملغاة', en: 'Cancelled', tone: 'bg-surface-hover text-text-tertiary' },
+  cancelled: { ar: 'ملغاة', en: 'Cancelled', tone: 'bg-surface-hover text-text-muted' },
 }
 const PRIORITY_META: Record<string, { ar: string; en: string; tone: string }> = {
-  low: { ar: 'منخفضة', en: 'Low', tone: 'text-text-tertiary' },
+  low: { ar: 'منخفضة', en: 'Low', tone: 'text-text-muted' },
   normal: { ar: 'عادية', en: 'Normal', tone: 'text-text-secondary' },
   medium: { ar: 'متوسطة', en: 'Medium', tone: 'text-info' }, // legacy value written by some services
   high: { ar: 'عالية', en: 'High', tone: 'text-warning' },
@@ -281,7 +281,7 @@ function TaskRow({ task, c, ar, canUpdate, onStatus, onOpen }: { task: Task; c: 
     <li className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-1 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={onOpen} className={`text-start font-semibold hover:text-brand-600 ${done ? 'text-text-tertiary line-through' : 'text-text-primary'}`}>{task.title}</button>
+          <button onClick={onOpen} className={`text-start font-semibold hover:text-brand-600 ${done ? 'text-text-muted line-through' : 'text-text-primary'}`}>{task.title}</button>
           <span className={`text-[11px] font-bold ${pr?.tone ?? 'text-text-secondary'}`}>● {priorityLabel(task.priority, ar)}</span>
           {task.is_overdue ? (
             <span className="inline-flex items-center gap-1 rounded-md bg-danger/10 px-1.5 py-0.5 text-[11px] font-semibold text-danger">
@@ -290,7 +290,7 @@ function TaskRow({ task, c, ar, canUpdate, onStatus, onOpen }: { task: Task; c: 
           ) : null}
         </div>
         {task.description ? <p className="line-clamp-1 text-sm text-text-secondary">{task.description}</p> : null}
-        {task.due_date ? <span className="text-[11px] text-text-tertiary">{c.due}: <span className="tnum" dir="ltr">{fmtDate(task.due_date)}</span></span> : null}
+        {task.due_date ? <span className="text-[11px] text-text-muted">{c.due}: <span className="tnum" dir="ltr">{fmtDate(task.due_date)}</span></span> : null}
       </div>
       <div className="flex items-center gap-2">
         <StatusBadge status={task.status} ar={ar} />
@@ -322,16 +322,16 @@ function BoardView({ tasks, ar, canUpdate, onStatus }: { tasks: Task[]; ar: bool
           <div key={col} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface-secondary/40 p-3">
             <div className="flex items-center justify-between">
               <StatusBadge status={col} ar={ar} />
-              <span className="tnum text-xs font-bold text-text-tertiary" dir="ltr">{items.length}</span>
+              <span className="tnum text-xs font-bold text-text-muted" dir="ltr">{items.length}</span>
             </div>
             {items.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-border p-4 text-center text-[11px] text-text-tertiary">—</p>
+              <p className="rounded-lg border border-dashed border-border p-4 text-center text-[11px] text-text-muted">—</p>
             ) : items.map((t) => (
               <div key={t.id} className="flex flex-col gap-1 rounded-xl border border-border bg-surface p-3">
-                <span className={`text-sm font-semibold ${t.status === 'completed' ? 'text-text-tertiary line-through' : 'text-text-primary'}`}>{t.title}</span>
+                <span className={`text-sm font-semibold ${t.status === 'completed' ? 'text-text-muted line-through' : 'text-text-primary'}`}>{t.title}</span>
                 <div className="flex items-center justify-between">
                   <span className={`text-[11px] font-bold ${PRIORITY_META[t.priority]?.tone ?? 'text-text-secondary'}`}>● {priorityLabel(t.priority, ar)}</span>
-                  {t.due_date ? <span className={`text-[11px] tnum ${t.is_overdue ? 'text-danger' : 'text-text-tertiary'}`} dir="ltr">{fmtDate(t.due_date)}</span> : null}
+                  {t.due_date ? <span className={`text-[11px] tnum ${t.is_overdue ? 'text-danger' : 'text-text-muted'}`} dir="ltr">{fmtDate(t.due_date)}</span> : null}
                 </div>
                 {canUpdate ? (
                   <select value={t.status} onChange={(e) => onStatus(t.id, e.target.value)}

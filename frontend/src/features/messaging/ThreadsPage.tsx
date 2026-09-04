@@ -219,7 +219,7 @@ function ThreadRow({ thread, c, active, onClick }: { thread: MessageThread; c: C
           <span className="tnum shrink-0 rounded-full bg-brand-600 px-1.5 py-0.5 text-[10px] font-bold text-white" dir="ltr">{unread}</span>
         ) : null}
       </div>
-      <span className="text-[11px] text-text-tertiary">{c.last_activity}: <span className="tnum" dir="ltr">{formatDateTime(thread.last_message_at)}</span></span>
+      <span className="text-[11px] text-text-muted">{c.last_activity}: <span className="tnum" dir="ltr">{formatDateTime(thread.last_message_at)}</span></span>
     </button>
   )
 }
@@ -256,7 +256,7 @@ function ThreadDetailPanel({
       <div className="flex items-start justify-between gap-3 border-b border-border pb-3">
         <div className="flex flex-col gap-1">
           <h2 className="font-extrabold text-text-primary">{thread.subject}</h2>
-          <span className="text-[11px] text-text-tertiary">{c.last_activity}: <span className="tnum" dir="ltr">{formatDateTime(thread.last_message_at)}</span></span>
+          <span className="text-[11px] text-text-muted">{c.last_activity}: <span className="tnum" dir="ltr">{formatDateTime(thread.last_message_at)}</span></span>
           {/* Context linkage — jump to the entities this conversation is about. */}
           {(thread.client_workspace_id || thread.request_id || thread.project_id) && (
             <div className="mt-1 flex flex-wrap gap-1.5">
@@ -304,7 +304,7 @@ function ThreadDetailPanel({
             <div key={m.id} className={`flex flex-col gap-1 rounded-xl p-3 ${m.author_type === 'team' ? 'bg-brand-600/10' : 'bg-surface-hover'}`}>
               <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-text-secondary">
                 <span>{authorLabel(m.author_type)}</span>
-                <span className="tnum text-text-tertiary" dir="ltr">{formatDateTime(m.created_at)}</span>
+                <span className="tnum text-text-muted" dir="ltr">{formatDateTime(m.created_at)}</span>
               </div>
               <p className="whitespace-pre-wrap text-sm text-text-primary">{m.body}</p>
             </div>

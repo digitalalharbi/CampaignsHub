@@ -35,7 +35,7 @@ export function PersonalNotificationsPage() {
 
       <NotificationsTab />
 
-      <p className="text-xs text-text-tertiary">
+      <p className="text-xs text-text-muted">
         {ar
           ? 'التسليم صادق: لا تُسجَّل رسالة كـ«مُرسلة» قبل ربط مزوّد حقيقي.'
           : 'Honest delivery: nothing is logged as “sent” before a real provider is wired.'}

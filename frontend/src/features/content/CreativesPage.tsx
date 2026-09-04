@@ -1321,7 +1321,7 @@ function EmptyReasonPanel({ reason }: { reason: EmptyReason }) {
       className={`rounded-md px-2 py-1.5 text-xs ${
         reason.tone === 'warning'
           ? 'bg-warning/10 text-warning'
-          : 'bg-surface-muted text-text-secondary'
+          : 'bg-surface-secondary text-text-secondary'
       }`}
       data-testid={`creative-empty-${reason.kind}`}
     >

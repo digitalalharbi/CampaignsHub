@@ -44,7 +44,7 @@ export function TabMessages({ clientId }: { clientId: string }) {
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${t.status === 'open' ? 'bg-info/15 text-info' : 'bg-surface-hover text-text-secondary'}`}>
                 {t.status === 'open' ? (ar ? 'مفتوحة' : 'Open') : (ar ? 'مغلقة' : 'Closed')}
               </span>
-              <span className="tnum text-[11px] text-text-tertiary" dir="ltr">{formatDateTime(t.last_message_at)}</span>
+              <span className="tnum text-[11px] text-text-muted" dir="ltr">{formatDateTime(t.last_message_at)}</span>
             </span>
           </Link>
         </li>
