@@ -159,6 +159,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // Before `creatives/{creative}` for the same reason as `compare` — otherwise the dashboard
     // section is looked up as a creative whose id is the word "pulse".
     Route::get('creatives/pulse', [CreativeAnalysisController::class, 'pulse'])->middleware('project.can:campaigns.view')->name('creatives.pulse');
+    // Before `creatives/{creative}` for the same reason as `pulse` — an unmatched word under
+    // `creatives/` otherwise reaches Eloquent and comes back 500 «invalid uuid».
+    Route::get('creatives/content-intelligence', [CreativeAnalysisController::class, 'contentIntelligence'])->middleware('project.can:campaigns.view')->name('creatives.content-intelligence');
     Route::post('creatives/compare', [CreativeAnalysisController::class, 'compare'])->middleware('project.can:campaigns.view')->name('creatives.compare');
     /*
      * The group listing, which this surface was missing while the workspace surface had it.

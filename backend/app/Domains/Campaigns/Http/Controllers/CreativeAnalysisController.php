@@ -18,6 +18,7 @@ use App\Domains\Campaigns\Services\CreativeMetricsAvailability;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativePulse;
 use App\Domains\Campaigns\Services\CreativeRows;
+use App\Domains\Metrics\Services\ContentIntelligence;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -133,6 +134,65 @@ final class CreativeAnalysisController extends Controller
             'metrics_availability' => app(CreativeMetricsAvailability::class)->forCreatives($creatives),
             'filters' => $this->filterOptions($request, $project),
         ], 'Creative library.');
+    }
+
+    /**
+     * ANALYTICS-DIFFERENTIATION-001 — «what kind of content earns its money here», not «which ad won».
+     *
+     * ## Why this is not part of `index()`
+     *
+     * The library is PAGED. A format comparison computed from a page is a comparison of twenty-four
+     * assets that happen to sort highest, presented as a statement about the account — and it would
+     * change every time the reader turned a page, which is the signature of a figure that is not
+     * measuring what it claims to. This reads the whole filtered set, deliberately, and says so in
+     * `creatives_read`.
+     *
+     * The scope is the SAME reach, the SAME filters and the SAME window as `index()`, for the reason
+     * given on `pulse()`: a reading built on its own query is one that can contradict the table it
+     * sits above.
+     *
+     * Only `id` and `format` are drawn from the creatives table — the reading needs no name, no
+     * media and no preview, and this is the surface where the set is deliberately unbounded.
+     */
+    public function contentIntelligence(Request $request, ?string $project = null): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
+
+        [$from, $to] = $this->window($request);
+
+        $query = ExternalCreative::query();
+
+        if ($project !== null) {
+            $query->where('project_id', $project);
+        }
+
+        $this->applyReach($query, $request);
+        $this->applyFilters($query, $request);
+
+        // Read ONCE: `reachCurrency` takes the same models, so a second `get()` here would walk the
+        // whole filtered set twice to learn something the first pass already carries.
+        $models = $query->get(['id', 'format', 'project_id']);
+
+        $creatives = $models
+            ->map(static fn ($c): array => ['id' => (string) $c->id, 'format' => $c->format])
+            ->all();
+
+        $figures = $this->metrics->forCreatives(array_column($creatives, 'id'), $from, $to);
+
+        /*
+         * `objective` chooses the metric the comparison is DECIDED on. It must never narrow the set:
+         * `applyFilters` forwards the PLURAL `objectives`, and this singular is deliberately absent
+         * from that list — adding it there would filter the creatives down to one objective and then
+         * announce that objective's format as the winner, which is a tautology.
+         */
+        $objective = $request->string('objective')->toString() ?: null;
+
+        return ApiResponse::success([
+            'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            'creatives_read' => count($creatives),
+            'currency' => $this->reachCurrency($models),
+            'by_format' => app(ContentIntelligence::class)->byFormat($creatives, $figures, $objective),
+        ], 'Content intelligence.');
     }
 
     /**
