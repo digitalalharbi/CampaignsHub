@@ -53,9 +53,6 @@ function withoutComments(source: string): string {
 const EXEMPT: Record<string, string> = {
   'src/features/reports/ReportsPage.tsx': 'a list of reports and a share access log — identifiers, times and controls, with nothing a reader compares across rows. Out of scope by KIND, not waiting to be migrated',
   'src/features/reports/PrintDocument.tsx': 'a printed page has no sort control, no hover and no scroller, and those three are most of what the primitive is. Out of scope by kind',
-  'src/features/content/CreativePulseSection.tsx': 'transposed — metrics down the side, creative type across. The primitive has no shape for that yet; the file already applies the centring rule by hand and says so in its own note',
-  'src/features/content/CreativeCompare.tsx': 'transposed, like the pulse table',
-  'src/features/campaigns/CampaignComparison.tsx': 'transposed, like the pulse table',
   'src/features/content/CreativesPage.tsx': 'the list view of a grid: selection checkboxes and media previews per row',
   'src/features/content/CreativeGroupsPage.tsx': 'grouped rows with a media thumbnail column',
   'src/features/content/CreativeDetailPage.tsx': 'three tables, one of which is a per-day series that wants a chart rather than a migration',
@@ -64,6 +61,34 @@ const EXEMPT: Record<string, string> = {
   'src/features/campaigns/CampaignDepthTabs.tsx': 'nested expansion rows, which the primitive does not model',
   'src/features/campaigns/overview/UnifiedCampaignOverview.tsx': 'per-row sparklines and a drag handle',
 }
+
+/**
+ * TABLE-NUMERIC-ALIGNMENT-001 — the transposed shape is the primitive's now, and three exemptions are gone.
+ *
+ * They were exempt for one reason — «the primitive has no shape for that yet» — and an obstacle in the
+ * PRIMITIVE is the kind an exemption list is supposed to retire rather than record forever. Each of the
+ * three had made its own alignment decision in the meantime: the pulse table centred its figures, the
+ * campaign comparison ended them, and the creative comparison started them behind a hard `dir="ltr"`
+ * per cell. Three tables, three answers, one product.
+ *
+ * This pins the direction the way the store tab's test does: a later change that hand-rolls one of them
+ * again has to delete this test to do it.
+ */
+describe('the transposed surfaces are consumers', () => {
+  for (const path of [
+    '/src/features/content/CreativePulseSection.tsx',
+    '/src/features/content/CreativeCompare.tsx',
+    '/src/features/campaigns/CampaignComparison.tsx',
+  ]) {
+    it(`${path} reads its numbers through the primitive`, () => {
+      const source = TREE[path] ?? ''
+
+      expect(source, 'the file is not in the tree — has it moved?').not.toBe('')
+      expect(source).toContain('TransposedMetricTable')
+      expect(withoutComments(source), 'a hand-rolled table came back').not.toMatch(/<table[\s>]/)
+    })
+  }
+})
 
 const handRolled = () =>
   Object.entries(TREE)

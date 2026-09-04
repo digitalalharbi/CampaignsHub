@@ -314,3 +314,106 @@ export function MetricTable({
     </div>
   )
 }
+
+/**
+ * The TRANSPOSED shape — metrics down the side, subjects across the top.
+ *
+ * Three surfaces read this way (creative pulse, creative comparison, campaign comparison) and all
+ * three hand-rolled it, because the primitive had no shape for it. Each then made its own alignment
+ * decision: the pulse table centres its figures, the campaign comparison ends them, and the creative
+ * comparison starts them with a hard `dir="ltr"` per cell. Three tables, three answers, one product —
+ * which is the page-specific formatting the contract exists to abolish.
+ *
+ * Only the ORIENTATION differs. Every cell still goes through the same `render()` the upright table
+ * uses, so a missing figure is the same dash, a currency prints the same way, a compact count carries
+ * the same exact-value tooltip, and the kind is declared once per ROW rather than per column.
+ *
+ * ## What it deliberately does not do
+ *
+ * No sorting. Sorting a transposed table would reorder the METRICS, which is not a question anybody
+ * asks — the rows are a fixed reading order chosen by the surface, and «sort by value» has no meaning
+ * when each row is a different unit.
+ */
+export interface TransposedColumn {
+  key: string
+  /** Arbitrary: these headers carry thumbnails, links and badges on the surfaces that use them. */
+  header: ReactNode
+}
+
+export interface TransposedRow {
+  key: string
+  /** Prose — the metric's name. Start-aligned, because it is read rather than compared. */
+  label: ReactNode
+  kind: ColumnKind
+  currency?: string | null
+  digits?: number
+  values: Array<number | string | null | undefined | ReactNode>
+  /** A sub-label under a figure — «per lead», «orders» — one per column, or absent. */
+  notes?: Array<ReactNode>
+  /** Which cell in this row, if any, is the best reading. The surface decides what «best» means. */
+  emphasis?: Array<boolean>
+}
+
+export function TransposedMetricTable({
+  columns,
+  rows,
+  minWidth = '40rem',
+  testId,
+}: {
+  columns: TransposedColumn[]
+  rows: TransposedRow[]
+  minWidth?: string
+  testId?: string
+}) {
+  return (
+    <div className="min-w-0 max-w-full overflow-x-auto">
+      <table className="w-full text-sm" style={{ minWidth }} data-testid={testId}>
+        <thead>
+          <tr className="border-b border-border">
+            <th scope="col" className="p-2 text-start text-xs font-medium text-text-secondary">
+              {/* The corner cell names the side axis, and every surface calls it the same thing. */}
+            </th>
+            {columns.map((column) => (
+              /*
+               * Centred, like the figures beneath it. A header that ends while its column centres is
+               * the drift this contract exists to prevent, and it is invisible in one direction.
+               */
+              <th key={column.key} scope="col" className="p-2 text-center align-bottom">
+                {column.header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key} className="border-t border-border">
+              <th scope="row" className="p-2 text-start text-xs font-medium text-text-secondary">
+                {row.label}
+              </th>
+              {columns.map((column, i) => {
+                const out = render(
+                  { key: column.key, label: '', kind: row.kind, currency: row.currency, digits: row.digits },
+                  row.values[i],
+                )
+                const best = row.emphasis?.[i] === true
+
+                return (
+                  <td
+                    key={column.key}
+                    title={out.exact ?? undefined}
+                    className={`tnum p-2 text-center ${best ? 'font-semibold text-success' : 'text-text-primary'}`}
+                  >
+                    {out.cell}
+                    {row.notes?.[i] ? (
+                      <span className="block text-xs font-normal text-text-muted">{row.notes[i]}</span>
+                    ) : null}
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
