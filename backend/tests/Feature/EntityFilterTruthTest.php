@@ -198,6 +198,84 @@ final class EntityFilterTruthTest extends TestCase
         $this->assertSame([], $scope['unapplied']);
     }
 
+    /**
+     * ANALYTICS-FILTER-TRUTH-001 — the axes narrow; the PROJECT is not an axis.
+     *
+     * Every test above proves a filter can make this endpoint answer with less. This one proves what
+     * no filter can make it answer with: another project's rows, in this tenant, whose ad-set ids the
+     * caller knows and names as the parent it wants to drill into.
+     *
+     * The parent filter is the dangerous one. It is the only input that carries an ID the caller
+     * chose, and `byEntity` applies it as `whereIn(external_campaign_id, …)` — so an id belonging to a
+     * neighbouring project reaches the same column as a legitimate one. What keeps it honest is the
+     * project predicate ABOVE it, and a predicate is only load-bearing while something fails when it
+     * is removed. Nothing did.
+     *
+     * A shared tenant is deliberate: two projects of one agency is the arrangement where a leak is
+     * both most likely and least visible, because every row passes the tenant check.
+     */
+    public function test_another_projects_rows_never_answer_however_they_are_asked_for(): void
+    {
+        // Its own workspace, as a second client of this agency actually has.
+        $theirs = ClientWorkspace::create([
+            'tenant_id' => $this->tenant->getKey(), 'name' => 'Neighbour', 'slug' => 'n-'.uniqid(),
+            'mode' => 'managed', 'status' => 'active',
+        ]);
+        $other = Project::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(),
+            'client_workspace_id' => $theirs->getKey(),
+            'name' => 'A neighbouring client',
+            'status' => 'active',
+        ]);
+
+        $unified = UnifiedCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'project_id' => $other->getKey(),
+            'name' => 'Their campaign', 'status' => 'active', 'objective' => 'sales',
+        ]);
+        $external = ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'project_id' => $other->getKey(),
+            'external_account_id' => $this->account->getKey(),
+            'unified_campaign_id' => $unified->getKey(),
+            'provider' => 'snapchat', 'external_id' => 'cmp-theirs', 'name' => 'cmp-theirs',
+            'status' => 'active', 'objective' => 'sales',
+        ]);
+        $squad = ExternalAdSet::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'project_id' => $other->getKey(),
+            'external_campaign_id' => $external->getKey(), 'provider' => 'snapchat',
+            'external_id' => 'sq-theirs', 'name' => 'THEIR SQUAD', 'status' => 'active',
+        ]);
+
+        $model = new EntityDailyMetric;
+        $model->forceFill([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $other->getKey(),
+            'provider' => 'snapchat',
+            'entity_type' => EntityDailyMetric::AD_SET,
+            'entity_id' => $squad->getKey(),
+            'external_entity_id' => $squad->external_id,
+            'external_campaign_id' => $external->getKey(),
+            'metric_date' => '2026-08-01',
+            'attribution_window' => 'default',
+            'is_demo' => false,
+            'impressions' => 999999,
+        ])->save();
+
+        // Unfiltered: the neighbour is simply not in the answer.
+        $this->assertNotContains('THEIR SQUAD', $this->names());
+
+        // Named as the parent to drill into — the one input that carries a caller-chosen id.
+        $this->assertSame([], $this->names(['parent' => (string) $external->getKey()]));
+
+        // And named through every axis at once, in case one of them widens what the others narrowed.
+        $this->assertSame([], $this->names([
+            'parent' => (string) $external->getKey(),
+            'campaign' => (string) $unified->getKey(),
+            'objective' => 'sales',
+            'provider' => 'snapchat',
+        ]));
+    }
+
     // ---- fixtures --------------------------------------------------------------------------------
 
     private function unified(string $name, string $objective): UnifiedCampaign
