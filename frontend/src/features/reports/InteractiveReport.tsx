@@ -1073,7 +1073,7 @@ function ObjectiveSplitSlide({ data }: { data: ReportData }) {
           <p className="mt-0.5 text-[11px] text-text-secondary">حملات المبيعات وحدها. هذا هو الرقم الذي يُقاس عليه القرار.</p>
           <div className="mt-3 grid grid-cols-3 gap-2">
             <Highlight label="الإنفاق" value={money(op.direct.spend, c)} />
-            <Highlight label="CPA" value={money(op.direct.cpa, c)} />
+            <Highlight label="CPA" value={moneyExact(op.direct.cpa, c ?? null)} />
             <Highlight label="ROAS" value={ratio(op.direct.roas)} />
           </div>
           <p className="tnum mt-2 text-[11px] text-text-muted" dir="ltr">{op.direct.formula.cpa}</p>
@@ -1104,9 +1104,9 @@ function ObjectiveSplitSlide({ data }: { data: ReportData }) {
             <div className="tnum mt-1 text-lg font-extrabold text-text-primary">{money(p.spend, c)}</div>
             <div className="mt-1 space-y-0.5 text-[11px] text-text-muted">
               {p.path === 'awareness' && <div>CPM {p.cpm === null ? '—' : p.cpm}</div>}
-              {p.path === 'traffic' && <div>CPC {money(p.cpc, c)}</div>}
+              {p.path === 'traffic' && <div>CPC {moneyExact(p.cpc, c ?? null)}</div>}
               {p.result_metrics_apply
-                ? <div>CPA {money(p.cpa, c)} · ROAS {ratio(p.roas)}</div>
+                ? <div>CPA {moneyExact(p.cpa, c ?? null)} · ROAS {ratio(p.roas)}</div>
                 : <div>لا تنطبق تكلفة الطلب على هذا المسار</div>}
               {/*
                 How many, never which — CLIENT-REPORT-ENTITY-BOUNDARY-001.
@@ -1187,14 +1187,14 @@ function FunnelSlide({ data }: { data: ReportData }) {
               <div className="rounded-2xl border border-border bg-[var(--warning-background)] p-4">
                 <div className="mb-1 flex items-center gap-1.5 text-sm font-bold text-warning"><TriangleAlert size={15} /> أكبر تسرّب</div>
                 <div className="font-semibold text-text-primary">{worst.label}</div>
-                <div className="tnum mt-0.5 text-sm text-text-secondary">تسرّب {percent(worst.drop ?? 0, 0)} · تكلفة {money(worst.cost_per, data.currency)}</div>
+                <div className="tnum mt-0.5 text-sm text-text-secondary">تسرّب {percent(worst.drop ?? 0, 0)} · تكلفة {moneyExact(worst.cost_per, data.currency)}</div>
               </div>
             )}
             <div className="rounded-2xl border border-border bg-surface-secondary p-4">
               <div className="mb-1 text-sm font-bold text-text-primary">تكلفة كل مرحلة</div>
               <div className="space-y-1 text-xs">
                 {stages.filter((s) => s.cost_per !== null).slice(-4).map((s) => (
-                  <div key={s.label} className="flex justify-between"><span className="text-text-secondary">{s.label}</span><span className="tnum font-semibold">{money(s.cost_per, data.currency)}</span></div>
+                  <div key={s.label} className="flex justify-between"><span className="text-text-secondary">{s.label}</span><span className="tnum font-semibold">{moneyExact(s.cost_per, data.currency)}</span></div>
                 ))}
               </div>
             </div>
