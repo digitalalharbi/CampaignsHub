@@ -111,6 +111,62 @@ final class NotificationRecipientsTest extends TestCase
         );
     }
 
+    /**
+     * CLIENT-DIAGNOSTIC-SEPARATION-001 — «our sync failed» reaches somebody who can fix it.
+     *
+     * An integrations alert says one thing: a source stopped feeding, and the figures may be short
+     * because of it. The only action it implies is reconnecting that source. A recipient who cannot
+     * manage the connection is being told our machinery is broken, in our words, and left to forward
+     * it — which is the operator diagnostic landing in a client's inbox that the separation exists to
+     * prevent. Arranged deliberately by a manager or not: the arrangement is a request, and the
+     * capability is the grant.
+     *
+     * The category is the axis, not the person's job title: a BUDGET alert asks for a budget
+     * decision, and a client's own management is exactly who should get that one. Both are asserted
+     * here, because a rule that silenced everything would pass the first assertion alone.
+     */
+    public function test_an_integrations_alert_goes_only_to_somebody_who_can_act_on_it(): void
+    {
+        $this->arrange($this->scoped, $this->alpha->id);
+
+        $this->assertSame(
+            ['scoped@rec.test'],
+            $this->audience($this->alpha->id, 'budget'),
+            'a budget decision belongs to the person watching the budget',
+        );
+
+        $this->assertSame(
+            [],
+            $this->audience($this->alpha->id, 'integrations'),
+            'somebody who cannot reconnect the source was told the source failed',
+        );
+    }
+
+    /** …and the operator who CAN reconnect it is still told, or the rule would just be silence. */
+    public function test_an_operator_who_can_manage_integrations_still_receives_it(): void
+    {
+        $this->arrange($this->owner, $this->alpha->id);
+
+        $this->assertContains(
+            'owner@rec.test',
+            $this->audience($this->alpha->id, 'integrations'),
+        );
+    }
+
+    /** The management screen says WHY, or a manager arranges somebody and watches nothing happen. */
+    public function test_the_screen_states_why_an_integrations_alert_will_not_be_sent(): void
+    {
+        $verdict = app(NotificationAudience::class)->explain(
+            $this->scoped,
+            (string) $this->tenant->id,
+            (string) $this->alpha->id,
+            'integrations',
+        );
+
+        $this->assertFalse($verdict['eligible']);
+        $this->assertSame('cannot_act_on_integrations', $verdict['reason']);
+    }
+
     /** The ordinary case, so the rest of the file is testing a working feature rather than a broken one. */
     public function test_somebody_arranged_for_a_project_they_can_reach_is_told(): void
     {
