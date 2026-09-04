@@ -19,6 +19,7 @@ import { useUi } from '@/stores/ui'
 import { AgencyScopeSwitcher } from '@/features/agency/AgencyScopeSwitcher'
 import { SidebarNav } from './SidebarNav'
 import { agencyNavGroups } from './agencyNav'
+import { useProjectCapabilities } from '@/features/projects/capabilities'
 import { PortalFrame } from './PortalFrame'
 import type { MobileTab } from './MobileTabBar'
 import { moreGroupsFrom } from './mobileTabs'
@@ -57,12 +58,28 @@ const AGENCY_TABS: MobileTab[] = [
  * it is the axis everything else hangs off.
  */
 function NavItems({ ar, collapsed, onNavigate }: { ar: boolean; collapsed?: boolean; onNavigate?: () => void }) {
+  /*
+   * TEAM-PROJECT-RBAC-001 — the rail stops offering doors that answer 403.
+   *
+   * A media buyer on a client's project was shown «Team & permissions», clicked it, and was refused.
+   * That reads as a broken product rather than as a boundary, and it teaches a reader to distrust the
+   * whole rail — the one thing a rail cannot afford.
+   *
+   * This is NOT the enforcement and must never be mistaken for it: the routes state the same
+   * capabilities and the server refuses without them. `can()` fails OPEN — while the answer is
+   * loading, with no project chosen, or if the request fails, every link is offered — because the
+   * server fails closed, so the worst case here is the 403 that happens today, while failing closed
+   * would empty somebody's rail on a slow network and look like an outage.
+   */
+  const { can } = useProjectCapabilities()
+
   return (
     <SidebarNav
       groups={agencyNavGroups}
       ar={ar}
       collapsed={collapsed}
       onNavigate={onNavigate}
+      allow={(leaf) => can(leaf.cap)}
       label={ar ? 'أقسام الوكالة' : 'Agency sections'}
       storageKey="nav.collapsed.agency"
     />
