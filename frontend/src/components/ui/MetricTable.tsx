@@ -287,10 +287,28 @@ export function MetricTable({
             <tr key={rowIndex} className="border-b border-border last:border-0 hover:bg-surface-secondary">
               {rows[rowIndex].map((cell, j) => {
                 const full = exact?.[rowIndex]?.[j] ?? null
+                /*
+                 * The first column LABELS its row, and a screen reader needs to be told so.
+                 *
+                 * Every hand-rolled table this primitive replaces wrote `<th scope="row">` for the
+                 * name — the platform, the campaign, the ad set — and rendering it as a plain cell
+                 * takes that away: a reader moving down a column hears the figures with nothing
+                 * saying which row they belong to. Caught by a migration whose own test asked for the
+                 * `rowheader` role and did not find one, which is the only way this surfaces — it
+                 * looks identical on screen.
+                 *
+                 * The first column only, because that is what «labels the row» means here: the
+                 * upright tables all put the name first, and a second header cell would make the row
+                 * ambiguous rather than clearer. And only when the row HAS other cells — a
+                 * single-column table has nothing for its one cell to label, and marking it a header
+                 * would announce a relationship that does not exist.
+                 */
+                const Cell = j === 0 && rows[rowIndex].length > 1 ? 'th' : 'td'
 
                 return (
-                  <td
+                  <Cell
                     key={j}
+                    scope={j === 0 ? 'row' : undefined}
                     /*
                      * `title`, and a dotted underline so it is discoverable.
                      *
@@ -300,11 +318,11 @@ export function MetricTable({
                      * still reads as «there is more here».
                      */
                     title={full ?? undefined}
-                    className={`py-2.5 ${j === 0 ? 'text-start' : 'tnum text-center'}`
+                    className={`py-2.5 ${j === 0 ? 'text-start font-normal' : 'tnum text-center'}`
                       + (full === null ? '' : ' cursor-help underline decoration-dotted underline-offset-4')}
                   >
                     {cell}
-                  </td>
+                  </Cell>
                 )
               })}
             </tr>

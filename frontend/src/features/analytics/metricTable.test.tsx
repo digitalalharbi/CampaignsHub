@@ -29,14 +29,27 @@ const VALUES = [
   ['TikTok', 100, 4.0],
 ]
 
-const names = () => screen.getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell')[0].textContent)
+/**
+ * The first column is a `<th scope="row">` — it labels the row, so its role is `rowheader`.
+ *
+ * A query for cells alone silently drops it and shifts every index after it, which is what happened
+ * when the primitive gained the header cell. Reading the name from the role it actually has says what
+ * the column IS rather than where it sits.
+ */
+const names = () => screen.getAllByRole('row').slice(1).map((r) => within(r).getByRole('rowheader').textContent)
+
+/** Header cell plus data cells, in document order — see `names` for why both roles are needed. */
+const cellsIn = (row: HTMLElement): HTMLElement[] => [
+  ...within(row).queryAllByRole('rowheader'),
+  ...within(row).getAllByRole('cell'),
+] as HTMLElement[]
 
 describe('the analytics table', () => {
   it('centres numeric columns in the header and the body alike', () => {
     render(<MetricTable head={HEAD} rows={ROWS} />)
 
     const heads = screen.getAllByRole('columnheader')
-    const cells = within(screen.getAllByRole('row')[1]).getAllByRole('cell')
+    const cells = cellsIn(screen.getAllByRole('row')[1])
 
     // The first column is the label and stays start-aligned; the figures are centred.
     expect(heads[0].className).toContain('text-start')

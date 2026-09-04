@@ -1,8 +1,9 @@
+import { DataMetricTable, type Row } from '@/components/ui/MetricTable'
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft, Layers, Unlink } from 'lucide-react'
-import { formatMetric, metricLabel, metricState } from './metrics'
+import { formatMetric, metricKind, metricLabel, metricState } from './metrics'
 import { imageLoading } from './format'
 import {
   getCreativeGroup,
@@ -528,44 +529,39 @@ function PlatformTable({
   const keys = group.headline_metrics.length > 0 ? group.headline_metrics : ['spend', 'impressions', 'clicks']
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[32rem] text-start text-sm">
-        <thead>
-          <tr className="border-b border-border text-xs text-text-secondary">
-            {/* ANALYTICS-TABLES-001 — platform is prose and stays start-aligned; every count and metric
-                column is centred, heading and figure together, so a figure sits under its own heading in
-                both writing directions. */}
-            <th scope="col" className="p-2 text-start font-medium">
-              {t.platform}
-            </th>
-            <th scope="col" className="p-2 text-center font-medium">
-              {t.members}
-            </th>
-            {keys.map((key) => (
-              <th key={key} scope="col" className="p-2 text-center font-medium">
-                {metricLabel(key, locale)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {group.by_platform.map((line) => (
-            <tr key={line.provider} className="border-b border-border/60 last:border-0">
-              <th scope="row" className="p-2 text-start font-medium text-text-primary">
-                {providerLabel(line.provider, locale)}
-              </th>
-              <td className="tnum p-2 text-center text-text-secondary" dir="ltr">
-                {line.creative_count}
-              </td>
-              {keys.map((key) => (
-                <td key={key} className="tnum p-2 text-center text-text-primary" dir="ltr">
-                  {formatMetric(metricState(line.metrics as CreativeMetrics | null, key), key, locale, group.currency)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataMetricTable
+      columns={[
+        { key: 'platform', label: t.platform, kind: 'text' },
+        { key: 'members', label: t.members, kind: 'number' },
+        ...keys.map((key) => ({
+          key,
+          label: metricLabel(key, locale),
+          kind: metricKind(key),
+          currency: group.currency,
+          digits: 2,
+        })),
+      ]}
+      rows={group.by_platform.map((line) => {
+        const row: Row = {
+          platform: providerLabel(line.provider, locale),
+          members: line.creative_count,
+        }
+
+        for (const key of keys) {
+          /*
+           * A state that is not a figure stays a SENTENCE and reaches the primitive as a node — the
+           * same rule the transposed tables follow. «Not provided» and «no data» are two different
+           * facts, and the one dash the primitive prints says neither.
+           */
+          const state = metricState(line.metrics as CreativeMetrics | null, key)
+
+          row[key] = state.kind === 'value'
+            ? state.value
+            : <span>{formatMetric(state, key, locale, group.currency)}</span>
+        }
+
+        return row
+      })}
+    />
   )
 }
