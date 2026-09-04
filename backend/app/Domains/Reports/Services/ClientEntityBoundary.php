@@ -43,7 +43,17 @@ final class ClientEntityBoundary
     public static function objectivePerformance(array $objective): array
     {
         foreach ($objective['paths'] ?? [] as $i => $path) {
-            // The path's own totals already carry its spend and its results; the roster was detail.
+            /*
+             * The roster goes; how MANY stays.
+             *
+             * A count is not an identity — it names nothing and reveals no arrangement beyond «this
+             * path's budget is split three ways», which the digest email has always told a client
+             * and which is a fact about scale rather than about our filing. Keeping it is also what
+             * stops two client surfaces stating different things about one period: the email says
+             * «3 حملة» on the awareness path, and a report that silently dropped the line would
+             * disagree with it in front of the same reader.
+             */
+            $objective['paths'][$i]['campaigns_count'] = count($path['campaigns'] ?? []);
             $objective['paths'][$i]['campaigns'] = [];
         }
 

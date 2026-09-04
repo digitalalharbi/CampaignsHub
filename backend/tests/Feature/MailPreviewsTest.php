@@ -90,6 +90,101 @@ final class MailPreviewsTest extends TestCase
         $this->assertStringNotContainsString('تتابع هذه المشاريع', $files['alerts-one.ar.html']);
     }
 
+    /**
+     * DIGEST-PORTFOLIO-SCOPE-001 — the digest preview is a PORTFOLIO, because the digest is.
+     *
+     * The owner judged the product's daily and weekly summaries by this preview and read «المشاريع
+     * 1»: the fixture carried a single project. `DigestScope` has always resolved every authorised
+     * project and `buildRange()` has always composed a block for each — so the engine was right and
+     * the one surface anybody reviews it on said otherwise, which is indistinguishable from the
+     * engine being wrong.
+     *
+     * Three projects, and deliberately unalike: a sales store, a lead-generation client and a brand
+     * campaign. The third is the one that matters — it has no orders at all, so a preview containing
+     * it is a preview that would EXPOSE a portfolio-wide cost per result if one were ever added.
+     */
+    public function test_the_digest_preview_covers_a_portfolio_rather_than_one_project(): void
+    {
+        $files = $this->render();
+
+        foreach (['digest-daily.ar.html', 'digest-weekly.ar.html'] as $file) {
+            $html = $files[$file];
+
+            foreach (['متجر تجريبي', 'عيادات النخبة', 'إطلاق العلامة'] as $project) {
+                $this->assertStringContainsString($project, $html, "{$file} left out «{$project}»");
+            }
+
+            /*
+             * On the TEXT, not the markup: the label and its figure sit in separate table cells, so
+             * a pattern over the HTML would be asserting the template's table structure rather than
+             * what the reader sees. An email client shows them side by side; so does this.
+             */
+            $text = (string) preg_replace('/\s+/u', ' ', (string) strip_tags($html));
+
+            $this->assertMatchesRegularExpression('/المشاريع 3|3 المشاريع/u', $text, "{$file} counted its projects wrongly");
+        }
+    }
+
+    /**
+     * …and the objectives stay apart inside it.
+     *
+     * «Do NOT aggregate incomparable ROAS/CPA/CPL across different objectives or currencies.» The
+     * brand project reports no orders, so a portfolio-wide cost per result would be this project's
+     * spend divided by another client's orders. The account header carries spend, results and
+     * revenue — all sums of the same thing — and no ratio at all.
+     */
+    public function test_the_portfolio_header_states_no_blended_cost_per_result(): void
+    {
+        $html = $this->render()['digest-weekly.ar.html'];
+
+        /*
+         * Asserted on the RENDERED email rather than the fixture: the template composes the account
+         * header, so a blended ratio could be introduced there without the payload ever carrying one.
+         * «تكلفة النتيجة» is legitimate INSIDE a project block, so the header is isolated first — it
+         * ends where the first project's section begins.
+         */
+        $text = (string) preg_replace('/\s+/u', ' ', (string) strip_tags($html));
+
+        $firstProject = mb_strpos($text, 'متجر تجريبي');
+        $this->assertIsInt($firstProject);
+        $header = mb_substr($text, 0, $firstProject);
+
+        /*
+         * The header says «تكلفة النتيجة» exactly once, and as an EXPLANATION rather than a figure:
+         * «لا تُجمَع تكلفة النتيجة ولا العائد عبر المشاريع — ذلك يقسم أموال عميل على نتائج عميل آخر.»
+         * So the assertion is about the arithmetic, not the words — no number may follow the phrase.
+         */
+        $this->assertStringContainsString('لا تُجمَع تكلفة النتيجة ولا العائد عبر المشاريع', $header,
+            'the header stopped explaining why it carries no blended ratio');
+        $this->assertDoesNotMatchRegularExpression('/تكلفة النتيجة[^ا-ي]{0,12}[0-9]/u', $header,
+            'the portfolio header printed a blended cost per result');
+        $this->assertDoesNotMatchRegularExpression('/(ROAS|العائد على الإنفاق)[^ا-ي]{0,12}[0-9]/u', $header,
+            'the portfolio header printed a blended return');
+
+        // …and it does state the sums that ARE comparable across projects.
+        $this->assertStringContainsString('41,833', $header);
+        $this->assertStringContainsString('401', $header);
+    }
+
+    /**
+     * The inbox snippet follows the rhythm — the line a reader sees BEFORE opening.
+     *
+     * The preheader said «ملخص أمس» on every digest, weekly and monthly included. It is the text an
+     * email client shows beside the subject in the list, so a monthly summary announced itself as
+     * yesterday's in the one place the reader cannot read further to correct.
+     */
+    public function test_the_inbox_snippet_names_the_period_it_covers(): void
+    {
+        $files = $this->render();
+
+        $this->assertStringContainsString('ملخص الأسبوع', $files['digest-weekly.ar.html']);
+        $this->assertStringNotContainsString('ملخص أمس', $files['digest-weekly.ar.html']);
+        $this->assertStringContainsString('The week across your projects', $files['digest-weekly.en.html']);
+
+        // And a daily one still says yesterday, which is what it is.
+        $this->assertStringContainsString('ملخص أمس', $files['digest-daily.ar.html']);
+    }
+
     /** A preview that rendered a blank shell would pass every other assertion here. */
     public function test_no_preview_is_an_empty_shell(): void
     {
