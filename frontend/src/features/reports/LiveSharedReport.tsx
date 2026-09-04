@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
+import { clientKpiKeys } from './clientKpis'
 import { LiveDetailTables } from './LiveDetailTables'
 import { ReportAdDetail } from './ReportAdDetail'
 import { ReportAdsSection, type ReportAd } from './ReportAdsSection'
@@ -176,10 +177,48 @@ export function LiveSharedReport({
     revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, p) => moneyFromTotals(t as MoneyTotals, 'revenue', ar, p.currency).text },
     roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => { const r = readRoas(t as MoneyTotals, ar); return ratio(r.value) } },
     cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (t, p, fmt) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cpa', 'conversions', p.currency, ar), (v) => fmt(v)) },
+    /*
+     * The rest of what a marketing path is judged on — ANALYTICS-OBJECTIVE-SYSTEM-001.
+     *
+     * `objective_performance` names these per path (`headline_metrics`), and the client block could
+     * render none of them: an awareness report is judged on reach, frequency and CPM, and the block
+     * offered impressions and add-to-cart. Every cost-per goes through the money contract, exactly as
+     * `cpa` does — a rate whose numerator is partly withheld is «—», never the converted subset.
+     */
+    reach: { ar: 'الوصول', en: 'Reach', format: (t, _p, _m, count) => count(t.reach) },
+    frequency: { ar: 'التكرار', en: 'Frequency', format: (t) => (t.frequency === null || t.frequency === undefined ? '—' : ratio(t.frequency)) },
+    cpm: { ar: 'تكلفة الألف ظهور', en: 'CPM', invertGood: true, format: (t, p, fmt) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cpm', (Number(t.impressions ?? 0)) / 1000, p.currency, ar), (v) => fmt(v)) },
+    cpc: { ar: 'تكلفة النقرة', en: 'CPC', invertGood: true, format: (t, p, fmt) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cpc', 'clicks', p.currency, ar), (v) => fmt(v)) },
+    leads: { ar: 'العملاء المحتملون', en: 'Leads', spark: true, format: (t, _p, _m, count) => count(t.leads) },
+    cpl: { ar: 'تكلفة العميل المحتمل', en: 'CPL', invertGood: true, format: (t, p, fmt) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cpl', 'leads', p.currency, ar), (v) => fmt(v)) },
+    installs: { ar: 'التثبيتات', en: 'Installs', format: (t, _p, _m, count) => count(t.installs) },
+    cpi: { ar: 'تكلفة التثبيت', en: 'CPI', invertGood: true, format: (t, p, fmt) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cpi', 'installs', p.currency, ar), (v) => fmt(v)) },
+    engagements: { ar: 'التفاعلات', en: 'Engagements', format: (t, _p, _m, count) => count(t.engagements) },
+    cpe: { ar: 'تكلفة التفاعل', en: 'CPE', invertGood: true, format: (t, p, fmt) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cpe', 'engagements', p.currency, ar), (v) => fmt(v)) },
+    landing_page_views: { ar: 'زيارات الصفحة', en: 'Landing page views', format: (t, _p, _m, count) => count(t.landing_page_views) },
+    cost_per_lpv: { ar: 'تكلفة الزيارة', en: 'Cost per visit', invertGood: true, format: (t, p, fmt) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cost_per_lpv', 'landing_page_views', p.currency, ar), (v) => fmt(v)) },
+    conversion_rate: { ar: 'معدل التحويل', en: 'Conversion rate', format: (t) => (t.conversion_rate === null || t.conversion_rate === undefined ? '—' : `${(t.conversion_rate * 100).toFixed(2)}%`) },
+    /*
+     * Average order value is deliberately NOT here yet.
+     *
+     * Its numerator is REVENUE, and every money reading on this block runs through `readCostPer`,
+     * which is built around SPEND: a withheld amount falls back to spend ÷ denominator, so an AOV
+     * routed through it would state the average order as a figure derived from what we PAID. The card
+     * needs a revenue-numerator reading of its own, and inventing one here — on the page a client
+     * cannot cross-check — is the fabrication the money contract exists to prevent.
+     */
   }
 
-  const DEFAULT_METRICS = ['spend', 'impressions', 'clicks', 'conversions', 'add_to_cart', 'purchases', 'revenue', 'roas']
-  const visibleMetrics = (payload?.metrics?.length ?? 0) > 0 ? payload!.metrics : DEFAULT_METRICS
+  /*
+   * Which cards this report shows — decided by what it is ABOUT, not by a fixed list.
+   *
+   * See `clientKpis.ts`: the block printed «Results 581» beside «Purchases 581» and never once showed
+   * what a result cost, on a link whose own hard rule names the cost per result first.
+   */
+  const visibleMetrics = clientKpiKeys(
+    { metrics: payload?.metrics, objective_performance: payload?.objective_performance, totals: payload?.totals },
+    new Set(Object.keys(METRIC_META)),
+  )
 
   if (!payload && busy) {
     return <p className="py-20 text-center text-text-secondary">{ar ? 'جارٍ التحميل…' : 'Loading…'}</p>
