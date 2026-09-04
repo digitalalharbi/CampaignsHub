@@ -262,11 +262,26 @@ final class MailGallery
     {
         return [
             'sendable' => true,
-            'date' => '2026-08-06',
-            'to_date' => $weekly ? '2026-08-06' : '2026-08-06',
+            /*
+             * `date` is the window's START, which is what `DailyDigest::build()` returns — so the weekly
+             * preview spans a WEEK. It read «2026-08-06 → 2026-08-06»: a seven-day digest whose header
+             * named one day, on the surface a human reviews these emails on.
+             */
+            'date' => $weekly ? '2026-07-31' : '2026-08-06',
+            'to_date' => '2026-08-06',
             'days' => $weekly ? 7 : 1,
-            'previous_date' => $weekly ? '2026-07-30' : '2026-08-05',
-            'totals' => ['spend' => 23333.18, 'conversions' => 263, 'revenue' => 96500.0, 'projects' => 1],
+            'previous_date' => $weekly ? '2026-07-24' : '2026-08-05',
+            /*
+             * The account roll-up as `DailyDigest::rollUp()` actually returns it — with `previous` and
+             * `change`, so the KPI cards carry their movement pills in the preview too. Without them the
+             * one surface a human REVIEWS these emails on showed a flat account header that the real
+             * email never sends, and a reviewer cannot notice a defect in something they are not shown.
+             */
+            'totals' => [
+                'spend' => 23333.18, 'conversions' => 263, 'revenue' => 96500.0, 'projects' => 1,
+                'previous' => ['spend' => 21000.0, 'conversions' => 300, 'revenue' => 92000.0],
+                'change' => ['spend' => 0.1111, 'conversions' => -0.1233, 'revenue' => 0.0489],
+            ],
             'projects' => [[
                 'project_id' => '00000000-0000-0000-0000-000000000001',
                 'project_name' => 'متجر تجريبي — Demo',

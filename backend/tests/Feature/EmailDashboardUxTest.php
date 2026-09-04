@@ -174,4 +174,35 @@ final class EmailDashboardUxTest extends TestCase
             }
         }
     }
+
+    /**
+     * EMAIL-DASHBOARD-UX-001 — the footer names the rhythm the reader actually chose.
+     *
+     * One mailable serves daily, weekly and monthly, and the footer was written once, in the daily's
+     * words: every weekly and monthly digest told its reader they had chosen the DAILY one. It is the
+     * line that says why this arrived and how to stop it, so a reader who set up a weekly summary was
+     * being contradicted about their own preference at the bottom of an email full of figures — and
+     * pointed at a setting they do not hold.
+     */
+    public function test_the_footer_names_the_rhythm_the_reader_chose(): void
+    {
+        $cases = [
+            'weekly' => ['ar' => 'الملخص الأسبوعي', 'en' => 'weekly digest', 'not_ar' => 'اخترت الملخص اليومي', 'not_en' => 'chose the daily digest'],
+            'monthly' => ['ar' => 'الملخص الشهري', 'en' => 'monthly digest', 'not_ar' => 'اخترت الملخص اليومي', 'not_en' => 'chose the daily digest'],
+            'daily' => ['ar' => 'الملخص اليومي', 'en' => 'daily digest', 'not_ar' => 'اخترت الملخص الأسبوعي', 'not_en' => 'chose the weekly digest'],
+        ];
+
+        foreach ($cases as $kind => $expected) {
+            foreach (['ar', 'en'] as $lang) {
+                $html = (new DailyDigestMail($this->digest(), $lang, 'مدير', $kind))->render();
+
+                $this->assertStringContainsString($expected[$lang], $html, "the {$kind} digest never named itself in {$lang}");
+                $this->assertStringNotContainsString(
+                    $expected[$lang === 'ar' ? 'not_ar' : 'not_en'],
+                    $html,
+                    "the {$kind} digest told its reader they had chosen a different rhythm",
+                );
+            }
+        }
+    }
 }

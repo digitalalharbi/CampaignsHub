@@ -162,6 +162,27 @@ final class DailyDigestMail extends Mailable
         );
     }
 
+    /**
+     * What this reader actually subscribed to — «the daily digest», «the weekly digest», «the monthly».
+     *
+     * The footer told every reader they had chosen the DAILY digest, in an email that might be their
+     * weekly or monthly one. It is one line at the bottom, and it is the line that says why this
+     * arrived and how to stop it — so a reader who set up a weekly summary and is told they asked for
+     * a daily one has been given a reason to distrust the figures above it, and no way to act on the
+     * preference they actually hold.
+     *
+     * One mailable serves three rhythms {@see self::$kind}, which is why this was possible at all: the
+     * copy array is built once and knew nothing about the rhythm the header already names.
+     */
+    private function rhythmName(bool $ar): string
+    {
+        return match ($this->kind) {
+            'weekly' => $ar ? 'الملخص الأسبوعي' : 'weekly digest',
+            'monthly' => $ar ? 'الملخص الشهري' : 'monthly digest',
+            default => $ar ? 'الملخص اليومي' : 'daily digest',
+        };
+    }
+
     /** «الملخص اليومي · 2026-08-06», «Weekly digest · 2026-08-01 → 2026-08-07», or the month. */
     private function headerNote(bool $ar): string
     {
@@ -652,7 +673,7 @@ final class DailyDigestMail extends Mailable
             'best' => 'الأفضل',
             'worst' => 'الأضعف',
             'open_dashboard' => 'افتح لوحة التحكم',
-            'footer_note' => 'تصلك هذه الرسالة لأنك اخترت الملخص اليومي. يمكنك تغيير المشاريع أو التوقيت أو إيقافها من تفضيلات الإشعارات.',
+            'footer_note' => 'تصلك هذه الرسالة لأنك اخترت '.$this->rhythmName(true).'. يمكنك تغيير المشاريع أو التوقيت أو إيقافها من تفضيلات الإشعارات.',
             'manage_preferences' => 'تفضيلات الإشعارات',
             'privacy' => 'الخصوصية',
             'terms' => 'الشروط',
@@ -688,7 +709,7 @@ final class DailyDigestMail extends Mailable
             'best' => 'Best',
             'worst' => 'Weakest',
             'open_dashboard' => 'Open the dashboard',
-            'footer_note' => 'You are receiving this because you chose the daily digest. Change the projects, the time, or turn it off in your notification preferences.',
+            'footer_note' => 'You are receiving this because you chose the '.$this->rhythmName(false).'. Change the projects, the time, or turn it off in your notification preferences.',
             'manage_preferences' => 'Notification preferences',
             'privacy' => 'Privacy',
             'terms' => 'Terms',
