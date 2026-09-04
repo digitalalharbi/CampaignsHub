@@ -9,6 +9,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Session\Middleware\StartSession;
 use Tests\Concerns\AppliesToRegister;
 use Tests\TestCase;
 
@@ -182,5 +183,69 @@ final class AuthTest extends TestCase
             ->assertOk();
 
         $this->assertNull($user->refresh()->remember_token);
+    }
+
+    /**
+     * AUTH-NONSTATEFUL-ORIGIN — an origin that cannot hold a session is refused, not a 500.
+     *
+     * Reproduced deliberately against a local server: the same credentials answered 200 from a
+     * listed origin and 500 from an unlisted one, with `local.ERROR: Session store not set on
+     * request` in the log. Sanctum treats an unlisted Origin as non-stateful, so the session
+     * middleware never runs and `session()->regenerate()` throws instead of the request being
+     * refused.
+     *
+     * `withoutMiddleware(StartSession::class)` is how that state is reached in a test: it produces
+     * exactly the request the controller met — one with no session store — without depending on the
+     * suite's Sanctum configuration, which a test that set an Origin would.
+     */
+    public function test_a_request_that_cannot_hold_a_session_is_refused_rather_than_crashing(): void
+    {
+        $tenant = Tenant::create(['name' => 'NS', 'slug' => 'ns', 'status' => 'active']);
+        $user = User::create(['name' => 'Nas', 'email' => 'nas@t.test', 'password' => 'secret123']);
+        $this->grantMembership($user, $tenant);
+
+        $this->withoutMiddleware(StartSession::class)
+            ->postJson('/api/v1/auth/login', ['email' => 'nas@t.test', 'password' => 'secret123'])
+            ->assertStatus(403);
+    }
+
+    /**
+     * And it says nothing about the credentials, because it has not looked at them.
+     *
+     * The refusal runs BEFORE the password is checked: hashing for an origin that can never be
+     * answered would make this path measurably slower for a real account than for an unknown one —
+     * a timing oracle handed to exactly the caller who should have been turned away at the door.
+     */
+    public function test_the_refusal_does_not_reveal_whether_the_account_exists(): void
+    {
+        $tenant = Tenant::create(['name' => 'NS2', 'slug' => 'ns2', 'status' => 'active']);
+        $user = User::create(['name' => 'Real', 'email' => 'real@t.test', 'password' => 'secret123']);
+        $this->grantMembership($user, $tenant);
+
+        $real = $this->withoutMiddleware(StartSession::class)
+            ->postJson('/api/v1/auth/login', ['email' => 'real@t.test', 'password' => 'secret123']);
+
+        $unknown = $this->withoutMiddleware(StartSession::class)
+            ->postJson('/api/v1/auth/login', ['email' => 'nobody@t.test', 'password' => 'whatever']);
+
+        $real->assertStatus(403);
+        $unknown->assertStatus(403);
+        $this->assertSame(
+            $unknown->json('message'),
+            $real->json('message'),
+            'the refusal told a caller whether the account exists',
+        );
+    }
+
+    /** And a listed origin still signs in — the guard refuses the unlisted case only. */
+    public function test_a_stateful_origin_still_signs_in(): void
+    {
+        $tenant = Tenant::create(['name' => 'ST', 'slug' => 'st', 'status' => 'active']);
+        $user = User::create(['name' => 'Sta', 'email' => 'sta@t.test', 'password' => 'secret123']);
+        $this->grantMembership($user, $tenant);
+
+        $this->withHeaders($this->spaHeaders)
+            ->postJson('/api/v1/auth/login', ['email' => 'sta@t.test', 'password' => 'secret123'])
+            ->assertOk();
     }
 }

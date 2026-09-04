@@ -64,6 +64,8 @@ final class AuthController extends Controller
 
     public function login(LoginRequest $request): JsonResponse
     {
+        $this->assertCanOpenASession($request);
+
         /** @var User|null $user */
         $user = User::where('email', $request->string('email'))->first();
 
@@ -81,6 +83,33 @@ final class AuthController extends Controller
         return ApiResponse::success(
             ['user' => new UserResource($user)],
             __('auth.signed_in'),
+        );
+    }
+
+    /**
+     * AUTH-NONSTATEFUL-ORIGIN — an origin that cannot hold a session is REFUSED, not a 500.
+     *
+     * Sanctum treats an Origin outside `SANCTUM_STATEFUL_DOMAINS` as non-stateful, so the session
+     * middleware never runs; the `session()->regenerate()` below then threw «Session store not set
+     * on request» and the caller got a 500. Reproduced deliberately against a local server: the same
+     * credentials answered 200 from a listed origin and 500 from an unlisted one.
+     *
+     * A 500 is the wrong answer to a request that should be refused. It says the server broke rather
+     * than «not from here», it writes a stack trace for every attempt — so any client on an unlisted
+     * origin, a second front end or a staging host mid-cutover, can fill the log in a loop — and it
+     * tells an prober that something unusual happened here rather than nothing.
+     *
+     * FIRST, before the password is checked. Refusing after would do the hashing work for an origin
+     * that can never be answered, and would make this path measurably slower for a real account than
+     * for an unknown one — a timing oracle handed to exactly the caller who should have been turned
+     * away at the door. It also says nothing about the credentials, because it has not looked.
+     */
+    private function assertCanOpenASession(Request $request): void
+    {
+        abort_if(
+            ! $request->hasSession(),
+            403,
+            'This origin cannot open a session. Sign in from an address this installation serves.',
         );
     }
 
