@@ -93,16 +93,34 @@ export function PrintDocument({
   reportName,
   currency,
   clientName,
+  identity,
 }: {
   data: ReportData
   reportName: string
   currency: string
   clientName?: string
+  /**
+   * BRANDING-RENDER-EVIDENCE-001 — whose report this is, resolved by `headerIdentity()`.
+   *
+   * The cover printed the word «CampaignsHub», hard-coded, on every document PDF ever generated —
+   * so an agency's white-labelled client report announced the product across the top of the first
+   * page. The payload has carried the resolved identity all along and `PrintReport` was already
+   * using it for the PDF's metadata title and for the slide deck; the document layout was simply
+   * never given it. That is the row's own warning made real: code containing `logo_url` is not the
+   * same thing as a logo rendering.
+   *
+   * Optional, and falling back to the product's name, because `headerIdentity()` ends the
+   * client → agency → CampaignsHub chain there — this is the last link of that chain, not a second
+   * default competing with it.
+   */
+  identity?: { name: string; logoUrl: string | null; by: string | null }
 }) {
   useEffect(() => {
     document.documentElement.setAttribute('dir', 'ltr')
     document.documentElement.setAttribute('lang', 'en')
-    document.title = `CampaignsHub — ${currency} Report`
+    // The file's own title — «CampaignsHub» here put the product in the title bar and beside the
+    // attachment in a mail client, on a report an agency sends to its own client under its own name.
+    document.title = `${identity?.name ?? 'CampaignsHub'} — ${currency} Report`
     const w = window as Window & {
       __REPORT_DATA_READY__?: boolean; __REPORT_CHARTS_READY__?: boolean
       __REPORT_IMAGES_READY__?: boolean; __REPORT_LAYOUT__?: unknown
@@ -238,7 +256,20 @@ export function PrintDocument({
 
       {/* Title block */}
       <header className="doc-cover">
-        <div className="doc-brand">CampaignsHub</div>
+        {/*
+          The mark where there is one, the name where there is not — never both, and never an
+          `<img src="">`, which re-requests the page in some browsers and draws a broken icon in
+          others. On a client's report a broken icon reads as «the report failed», which is worse
+          than showing no mark at all.
+        */}
+        {identity?.logoUrl
+          ? <img src={identity.logoUrl} alt={identity.name} className="doc-logo" data-testid="print-document-logo" />
+          : <div className="doc-brand" data-testid="print-document-brand">{identity?.name ?? 'CampaignsHub'}</div>}
+        {/*
+          The agency is named secondarily, never in place of the client — the same rule the shared
+          link follows, so a reader moving between the link and its PDF meets one hierarchy.
+        */}
+        {identity?.by && <div className="doc-by" data-testid="print-document-by">by {identity.by}</div>}
         <h1>{reportName}</h1>
         <div className="doc-sub">{clientName ?? 'Client Report'}</div>
         <dl className="doc-facts">
@@ -402,6 +433,9 @@ const DOC_CSS = `
   font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0, "dlig" 0; }
 .doc-cover { padding-bottom: 18pt; margin-bottom: 18pt; border-bottom: 2px solid #2563eb; }
 .doc-brand { font-weight: 700; color: #2563eb; letter-spacing: .04em; text-transform: uppercase; font-size: 10pt; }
+/* Bounded, so a tall or very wide upload cannot push the title off the cover page. */
+.doc-logo { max-height: 40px; max-width: 200px; object-fit: contain; display: block; }
+.doc-by { font-size: 8pt; color: #6b7280; letter-spacing: .02em; margin-top: 2px; }
 .doc-cover h1 { font-size: 22pt; font-weight: 700; margin: 6pt 0 2pt; }
 .doc-sub { color: #555; font-size: 12pt; }
 .doc-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 4pt 24pt; margin-top: 14pt; }

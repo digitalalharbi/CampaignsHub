@@ -126,6 +126,9 @@ export function PrintReport() {
         data={payload.data}
         reportName={payload.name}
         currency={payload.currency}
+        // The same resolved identity this file already uses for the PDF's metadata and for the
+        // slide deck. The document layout was the one surface never given it.
+        identity={headerIdentity(payload.branding)}
       />
     )
   }
