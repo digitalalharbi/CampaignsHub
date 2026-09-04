@@ -30,6 +30,7 @@ import {
   useObjectiveTrend,
   usePlatformObjectives,
   usePlatforms,
+  useDrivers,
   useSummary,
   useTimeseries,
   type EntityRow,
@@ -63,6 +64,7 @@ const MONEY_KPIS = new Set(['spend', 'revenue'])
 import { SavedViewsBar } from '@/features/dashboard/SavedViewsBar'
 import { useSavedViews, type SavedView } from '@/features/dashboard/savedViews'
 import { MetricStrip } from '@/components/ui/MetricStrip'
+import { ChangeDiagnosis } from './ChangeDiagnosis'
 import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCampaignOverview'
 import { useOverviewVm } from '@/features/campaigns/overview/useOverviewVm'
 import { SPECS, dashboardMetrics, layoutFor } from './metricCatalog'
@@ -560,6 +562,16 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
   const metrics = useMemo(() => dashboardMetrics(objective, s.data, ar), [objective, s.data, ar])
 
   /*
+   * ANALYTICS-DIFFERENTIATION-001 — the decomposition and the anomaly timeline, in one request.
+   *
+   * Both halves share the window AND its comparison, which is why they arrive together: two requests
+   * could not be made to agree about which days «the previous period» meant, and a driver list
+   * measured against a different baseline than the timeline beside it would be two diagnoses of one
+   * account.
+   */
+  const drivers = useDrivers(projectId, range, 'provider', 'spend', filters)
+
+  /*
    * With no comparison window, a delta is not «unchanged» — it does not exist. `undefined` removes
    * the pill; `null` would still render the «— —» this is here to remove.
    */
@@ -597,6 +609,26 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
             : `The previous period (${s.data.previous_range.from} → ${s.data.previous_range.to}) holds no data, so there is nothing for this one to be measured against.`}
         </p>
       )}
+      {/*
+        ANALYTICS-DIFFERENTIATION-001 — the diagnosis LEADS, and the figures follow it.
+
+        This is the ordering decision the whole requirement turns on. The dashboard already answers
+        «what is happening», and a reader who opens Analytics has seen it — they are here because they
+        want to know WHY. Putting the KPI row first and the diagnosis below it would make this page
+        the dashboard with more scrolling, which is exactly what «explicitly refused: the same cards
+        with a longer date range» names.
+
+        So «what changed and who moved it» is the first thing on the page. The strip stays beneath it
+        as the evidence the diagnosis is drawn from — the same totals, in the same window, so the two
+        cannot disagree about the account they are both describing.
+      */}
+      <ChangeDiagnosis
+        data={drivers.data}
+        currency={reportingCurrency}
+        loading={drivers.isPending}
+        error={drivers.isError}
+      />
+
       <MetricStrip
         id="dashboard"
         ar={ar}

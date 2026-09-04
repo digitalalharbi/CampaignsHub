@@ -660,6 +660,69 @@ export const useEntities = (
     enabled: Boolean(p),
   })
 
+/**
+ * ANALYTICS-DIFFERENTIATION-001 — «what changed, and which entity moved it».
+ *
+ * The one request behind the Analytics diagnosis. Both halves — the per-entity decomposition and the
+ * timeline of days that departed from their own baseline — come back together because they share the
+ * window and its comparison, and two requests could not be made to agree about which days «previous»
+ * meant.
+ */
+export interface DriverRow {
+  key: string
+  name: string | null
+  current: number
+  previous: number
+  change: number
+  /** This entity's share of the total DISTANCE travelled, not of the net — null when nothing moved. */
+  share: number | null
+  direction: 'up' | 'down'
+}
+export interface Decomposition {
+  metric: string
+  by: string
+  /** False for every ratio: one campaign's CPA and another's do not add to the account's. */
+  decomposable: boolean
+  /** Why there is nothing to show, when there is nothing — never an empty list on its own. */
+  reason: string | null
+  current: number
+  previous: number
+  change: number
+  change_pct: number | null
+  drivers: DriverRow[]
+  /** Entities whose figure the money contract refused to state — named, never counted as zero. */
+  unquantifiable: string[]
+}
+export interface TimelinePoint {
+  date: string
+  metric: string
+  value: number
+  baseline: number
+  deviation: number
+  direction: 'up' | 'down'
+}
+export interface DriversPayload {
+  window: { from: string; to: string; days: number }
+  previous: { from: string; to: string }
+  drivers: Decomposition
+  /** The other additive metrics, so the surface can lead with the one that MOVED rather than a default. */
+  also: Decomposition[]
+  timeline: { points: TimelinePoint[]; reason: string | null; days: number }
+}
+
+export const useDrivers = (
+  p: string | null,
+  r: Range,
+  by: 'provider' | 'campaign' = 'provider',
+  metric = 'spend',
+  f?: MetricFilters,
+) =>
+  useQuery({
+    queryKey: ['metrics', 'drivers', p, r.from, r.to, by, metric, ...filterKeyParts(f)],
+    queryFn: () => getData<DriversPayload>(`${base(p!)}/drivers?${q(r)}${qf(f)}&by=${by}&metric=${metric}`),
+    enabled: Boolean(p),
+  })
+
 export const useSummary = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Summary>('summary', p, r, 'summary', f)
 export const useTimeseries = (p: string | null, r: Range, f?: MetricFilters) => useMetric<TimePoint[]>('timeseries', p, r, 'timeseries', f)
 export const usePlatforms = (p: string | null, r: Range, f?: MetricFilters) => useMetric<PlatformRow[]>('platforms', p, r, 'platforms', f)

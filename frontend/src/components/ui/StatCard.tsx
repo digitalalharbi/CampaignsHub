@@ -59,6 +59,7 @@ export function StatCard({
   dot = false,
   trailing,
   spark,
+  shape = 'auto',
   testid,
 }: {
   /**
@@ -93,12 +94,28 @@ export function StatCard({
    * the drift was the cost.
    */
   spark?: ReactNode
+  /**
+   * The card's proportions — ANALYTICS-DIFFERENTIATION-001.
+   *
+   * `auto` is the KPI row's card: as tall as its contents, sitting in a row of its equals. `square`
+   * is the analytical grid's focused signal — one figure, one meaning, in a tile that reads as a unit
+   * beside a wide comparison rather than as one more entry in a row of six.
+   *
+   * It is a prop rather than a second component on purpose. The product has ONE card: the label
+   * scale, the value's direction handling, the exact-figure title and the tone palette are decided
+   * here and nowhere else, and a surface that wanted a different SHAPE was previously a surface that
+   * hand-built a whole card to get one. What Analytics may choose is its grid; what it may not
+   * choose is what a labelled figure looks like.
+   */
+  shape?: 'auto' | 'square'
   testid?: string
 }) {
   return (
     <div
       data-testid={testid}
-      className={`flex flex-col gap-1.5 rounded-2xl border border-border bg-surface ${CARD_PAD} shadow-[var(--shadow-small)]`}
+      className={`flex flex-col gap-1.5 rounded-2xl border border-border bg-surface ${CARD_PAD} shadow-[var(--shadow-small)] ${
+        shape === 'square' ? 'aspect-square justify-between' : ''
+      }`}
     >
       <div className="flex items-center justify-between gap-2">
         <span className={`flex items-center gap-1.5 text-text-secondary ${METRIC_LABEL}`}>
