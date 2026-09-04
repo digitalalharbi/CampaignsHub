@@ -173,3 +173,59 @@ describe('one KPI set, both directions', () => {
     }
   })
 })
+
+/**
+ * UX-KPI-PRESENTATION-001 §58 — every row of this card is reserved, so every card is one height.
+ *
+ * The card's own note claimed the `min-h` on the value row made a hinted and an unhinted card the
+ * same height. It did not: the hint is a SECOND row and the movement pill sits in a THIRD, so a card
+ * carrying either stood taller than one that did not. At 1440 a taller sibling stretches the shorter
+ * one and it is invisible; measured at 390 on the campaigns page, the same six cards came back 115,
+ * 115, 115, 115, 100, 100 — a grid whose rhythm broke on its last row.
+ *
+ * Asserted on the classes rather than on measurements, for the reason `MetricStrip.test.tsx` gives:
+ * jsdom performs no layout, so the reservation is the only thing a unit test can actually see. The
+ * measurement that found this lives in a browser.
+ */
+describe('a card is the same height whether or not it carries a hint or a pill', () => {
+  const cardOf = (props: Parameters<typeof StatCard>[0]) => {
+    const { container } = renderWithProviders(<StatCard {...props} />, { locale: 'en' })
+
+    return container.querySelector('div[class*=rounded-2xl]') as HTMLElement
+  }
+
+  it('reserves the label row, so a card without a movement pill matches one with', () => {
+    const withPill = cardOf({ label: 'CPA', value: '33 SAR', trailing: <span>2%</span> })
+    const without = cardOf({ label: 'Budget', value: '250K SAR' })
+
+    expect(withPill.firstElementChild?.className).toMatch(/min-h-6/)
+    expect(without.firstElementChild?.className).toMatch(/min-h-6/)
+  })
+
+  it('reserves the hint row, so a card without a hint matches one with', () => {
+    const hinted = cardOf({ label: 'Active', value: '2', hint: '3 in total' })
+    const bare = cardOf({ label: 'ROAS', value: '11.03×' })
+
+    const hintRow = (card: HTMLElement) => [...card.children].find((c) => /min-h-\[1\.125rem\]/.test(c.className))
+
+    expect(hintRow(hinted), 'the hinted card lost its reserved row').toBeTruthy()
+    expect(hintRow(bare), 'a card without a hint reserved nothing, so it stands shorter').toBeTruthy()
+  })
+
+  /** An empty reserved row announces nothing — it is spacing, not content. */
+  it('does not announce the reserved hint row when there is no hint', () => {
+    const bare = cardOf({ label: 'ROAS', value: '11.03×' })
+    const row = [...bare.children].find((c) => /min-h-\[1\.125rem\]/.test(c.className))
+
+    expect(row?.getAttribute('aria-hidden')).toBe('true')
+    expect(row?.textContent).toBe('')
+  })
+
+  it('still announces the hint when there is one', () => {
+    const hinted = cardOf({ label: 'Active', value: '2', hint: '3 in total' })
+    const row = [...hinted.children].find((c) => /min-h-\[1\.125rem\]/.test(c.className))
+
+    expect(row?.getAttribute('aria-hidden')).not.toBe('true')
+    expect(row?.textContent).toBe('3 in total')
+  })
+})
