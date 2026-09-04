@@ -152,9 +152,16 @@ final class DemoCreativeAnalysisSeeder extends Seeder
                      * install. Deliberately dull: it is scaffolding for the player, not content, and
                      * nobody should mistake it for a real ad.
                      */
-                    'video_url' => str_contains((string) $case['format'], 'video')
-                        ? rtrim((string) config('app.url'), '/').self::SAMPLE_VIDEO
-                        : null,
+                    /*
+                     * Stored as a PATH, never as an absolute URL — AD-MEDIA-RECOVERY-001.
+                     *
+                     * This was `config('app.url').SAMPLE_VIDEO`, resolved at SEED time, so the row
+                     * held «http://127.0.0.1:8000/demo/creative-sample.mp4» forever after. The video
+                     * then played only while something happened to be listening on that exact port:
+                     * change the port, run a second lane, or open the app from any other origin and
+                     * every demo video was dead. A path resolves against whoever serves the page.
+                     */
+                    'video_url' => str_contains((string) $case['format'], 'video') ? self::SAMPLE_VIDEO : null,
                     'first_seen_at' => $today->copy()->subDays($case['age']),
                     'last_active_at' => $today->copy()->subDays($case['idle'] ?? 0),
                     'source_updated_at' => $today->copy()->subDay(),

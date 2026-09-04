@@ -54,16 +54,34 @@ describe('the fallback order', () => {
   })
 })
 
-describe('the four silences, told apart', () => {
+describe('the silences, told apart', () => {
   it.each([
     ['withheld' as const, 'The platform’s preview link carries a credential'],
     ['expired' as const, 'The platform link has expired'],
-    ['unavailable' as const, 'This platform does not expose'],
+    // Fetched, and the platform had nothing to give — a fact ABOUT the platform.
+    ['unavailable' as const, 'This ad was fetched from the platform'],
+    /*
+     * AD-MEDIA-RECOVERY-001 — and this one is not about the platform at all.
+     *
+     * A row derived from ad-level performance was never fetched as an ad, so «this platform does not
+     * expose the asset» is a false accusation: nobody asked it. The owner met the old wording on the
+     * content library — «Video · Hero Video · Demo · Google Ads» above «This platform does not expose
+     * the creative's asset» — and went looking for a broken integration that was working.
+     */
+    ['never_fetched' as const, 'derived from ad-level performance'],
   ])('%s says what happened', (state, expected) => {
     const reading = readPreview(preview({ state }), false)
 
     expect(reading.kind).toBe('none')
     expect(absenceLabel(reading, false)).toContain(expected)
+  })
+
+  /** The two absences must not be confusable: only one of them blames the provider. */
+  it('never blames the platform for an ad nobody fetched', () => {
+    const derived = absenceLabel(readPreview(preview({ state: 'never_fetched' }), false), false)
+
+    expect(derived).not.toMatch(/platform does not expose|platform exposed no/i)
+    expect(absenceLabel(readPreview(preview({ state: 'never_fetched' }), true), true)).toContain('لم يُجلب الإعلان نفسه')
   })
 
   /** «Available» with every URL null is its own state — a carousel whose cards are the only media. */
