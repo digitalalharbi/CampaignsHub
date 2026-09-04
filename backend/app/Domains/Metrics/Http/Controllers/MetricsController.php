@@ -280,14 +280,26 @@ final class MetricsController extends Controller
         $prevFrom = $prevTo->copy()->subDays($days - 1)->startOfDay();
 
         $scoped = $this->scoped($request);
-        $drivers = new ChangeDrivers($scoped);
+
+        /*
+         * Ad sets are the one dimension `MetricsAggregator` cannot answer: they live in
+         * `entity_daily_metrics` behind an aggregator that takes a project. The closure is built
+         * HERE, where the project is already resolved and the permission already checked, and is
+         * null when no project is in hand — so the ad-set dimension refuses rather than silently
+         * answering about providers instead.
+         */
+        $projectId = app(ProjectContext::class)->projectId();
+        $adSetRows = $projectId === null ? null : static fn (Carbon $f, Carbon $t): array => app(EntityMetricsAggregator::class)
+            ->byEntity((string) $projectId, EntityDailyMetric::AD_SET, $f, $t);
+
+        $drivers = new ChangeDrivers($scoped, $adSetRows);
 
         /*
          * `by` is the reader's drill level, and `metric` what they are asking about. Both are
          * validated against what the services will actually answer rather than passed through: an
          * unknown dimension silently becoming «provider» would answer a question nobody asked.
          */
-        $by = in_array($request->string('by')->toString(), ['provider', 'account', 'campaign', 'objective'], true)
+        $by = in_array($request->string('by')->toString(), ['provider', 'account', 'campaign', 'objective', 'ad_set'], true)
             ? $request->string('by')->toString()
             : 'provider';
 

@@ -44,9 +44,18 @@ const REASON: Record<string, { ar: string; en: string }> = {
     ar: 'لا توجد فترة سابقة تُقاس عليها هذه الفترة، فلا يوجد تغيّر ليُفسَّر.',
     en: 'There is no previous period for this one to be measured against, so there is no change to explain.',
   },
+  /*
+   * Named by the DIMENSION, not by «platform».
+   *
+   * This sentence is rendered under a decomposition by account, by campaign, by objective and by ad
+   * set as well, and it said «no platform reported this metric» under all of them — a statement
+   * about the wrong axis, on the one card whose whole job is to explain an absence. The same defect
+   * `everythingMovedTogether` was already fixed for; this string was missed because it is keyed by
+   * the server's reason rather than by the axis.
+   */
   no_entity_reported_this_metric: {
-    ar: 'لم تُبلِّغ أي منصة عن هذا المؤشر في الفترتين.',
-    en: 'No platform reported this metric in either period.',
+    ar: 'لم يُبلِّغ أي {{axis}} عن هذا المؤشر في الفترتين.',
+    en: 'No {{axis}} reported this metric in either period.',
   },
   no_day_departed_from_its_own_baseline: {
     ar: 'لم يخرج أي يوم عن سلوك الفترة نفسها — لا يوجد ما يستدعي التحقيق.',
@@ -58,11 +67,25 @@ const REASON: Record<string, { ar: string; en: string }> = {
   },
 }
 
-function reasonText(reason: string | null, ar: boolean): string | null {
+function reasonText(reason: string | null, ar: boolean, by?: string): string | null {
   if (reason === null) return null
   const r = REASON[reason]
 
-  return r ? (ar ? r.ar : r.en) : reason
+  if (!r) return reason
+
+  const text = ar ? r.ar : r.en
+  const axis = DIMENSION_SINGULAR[by ?? 'provider'] ?? DIMENSION_SINGULAR.provider
+
+  return text.replace('{{axis}}', ar ? axis.ar : axis.en)
+}
+
+/** What ONE of the things being compared is — the singular of `DIMENSION_PLURAL`. */
+const DIMENSION_SINGULAR: Record<string, { ar: string; en: string }> = {
+  provider: { ar: 'منصة', en: 'platform' },
+  account: { ar: 'حساب', en: 'account' },
+  campaign: { ar: 'حملة', en: 'campaign' },
+  objective: { ar: 'هدف', en: 'objective' },
+  ad_set: { ar: 'مجموعة إعلانية', en: 'ad set' },
 }
 
 /**
@@ -112,6 +135,15 @@ function driverName(d: DriverRow, by: string, ar: boolean): string {
     return ar ? 'حساب لم يعد اسمه محفوظًا' : 'An account whose name is no longer held'
   }
 
+  /*
+   * An ad set whose name we no longer hold is named as that — never by its id, for the same reason
+   * the account dimension gives: the rows keep their spend after the ad set is removed, and a UUID
+   * in front of a reader is the raw-identifier defect the portal audit has an E2E against.
+   */
+  if (by === 'ad_set' && !d.name) {
+    return ar ? 'مجموعة إعلانية لم يعد اسمها محفوظًا' : 'An ad set whose name is no longer held'
+  }
+
   if (by === 'objective') {
     const named = OBJECTIVE_LABEL[d.key]
 
@@ -155,6 +187,7 @@ const DIMENSION_PLURAL: Record<string, { ar: string; en: string }> = {
   account: { ar: 'كل الحسابات', en: 'Every account' },
   objective: { ar: 'كل الأهداف', en: 'Every objective' },
   campaign: { ar: 'كل الحملات', en: 'Every campaign' },
+  ad_set: { ar: 'كل المجموعات الإعلانية', en: 'Every ad set' },
 }
 
 const everythingMovedTogether = (by: string, ar: boolean): string => {
@@ -183,7 +216,7 @@ function Decomposed({ d, currency }: { d: Decomposition; currency: string | null
   const ar = useUi((s) => s.locale) === 'ar'
   const fmt = formatFor(d.metric, currency)
   const exact = exactFor(d.metric, currency)
-  const declined = reasonText(d.reason, ar)
+  const declined = reasonText(d.reason, ar, d.by)
 
   if (declined !== null) return <Declined text={declined} testid={`drivers-declined-${d.metric}`} />
 

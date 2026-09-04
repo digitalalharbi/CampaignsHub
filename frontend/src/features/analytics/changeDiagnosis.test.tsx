@@ -200,3 +200,55 @@ describe('the change diagnosis', () => {
     expect(screen.getByTestId('timeline-declined')).toHaveTextContent(/لم يخرج أي يوم/)
   })
 })
+
+/**
+ * ANALYTICS-DIFFERENTIATION-001 — the refusal names the axis it is actually about.
+ *
+ * «No platform reported this metric» was printed under a decomposition by ad set, by campaign, by
+ * account and by objective as well: a statement about the wrong axis, on the one card whose entire
+ * job is to explain an absence. Found by opening the ad-set tab, not by reading the file — the
+ * string is keyed by the server's reason, so nothing tied it to the dimension.
+ */
+describe('a refusal names the dimension it refused about', () => {
+  const declining = (by: string) => ({
+    window: { from: '2026-08-06', to: '2026-09-04', days: 30 },
+    previous: { from: '2026-07-07', to: '2026-08-05' },
+    drivers: {
+      metric: 'spend', by, decomposable: true, reason: 'no_entity_reported_this_metric',
+      current: 0, previous: 0, change: 0, change_pct: null, drivers: [], unquantifiable: [],
+    },
+    also: [],
+    timeline: { points: [], reason: null, days: 30 },
+  })
+
+  it('says «ad set» under a decomposition by ad set', () => {
+    renderWithProviders(
+      <ChangeDiagnosis data={declining('ad_set') as never} currency="SAR" loading={false} error={false} />,
+      { locale: 'en' },
+    )
+
+    const note = screen.getByTestId('drivers-declined-spend')
+    expect(note).toHaveTextContent(/No ad set reported this metric/)
+    expect(note).not.toHaveTextContent(/platform/)
+  })
+
+  it('still says «platform» under a decomposition by platform', () => {
+    renderWithProviders(
+      <ChangeDiagnosis data={declining('provider') as never} currency="SAR" loading={false} error={false} />,
+      { locale: 'en' },
+    )
+
+    expect(screen.getByTestId('drivers-declined-spend')).toHaveTextContent(/No platform reported this metric/)
+  })
+
+  it('names the axis in Arabic too, without leaving the placeholder behind', () => {
+    renderWithProviders(
+      <ChangeDiagnosis data={declining('campaign') as never} currency="SAR" loading={false} error={false} />,
+      { locale: 'ar' },
+    )
+
+    const note = screen.getByTestId('drivers-declined-spend')
+    expect(note).toHaveTextContent(/حملة/)
+    expect(note).not.toHaveTextContent(/\{\{axis\}\}/)
+  })
+})
