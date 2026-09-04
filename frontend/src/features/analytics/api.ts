@@ -1,6 +1,6 @@
 import type { BudgetExplanationPayload } from './BudgetReading'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { getData } from '@/lib/api/client'
+import { getEnvelope, getData } from '@/lib/api/client'
 import type { FilterScope } from './filterScope'
 
 /** KPI bundle returned by every aggregation (base sums + derived ratios; nulls when undefined). */
@@ -795,7 +795,31 @@ export interface PlatformObjectives {
 export const usePlatformObjectives = (p: string | null, r: Range, f?: MetricFilters) =>
   useMetric<PlatformObjectives>('platform-objectives', p, r, 'platform-objectives', f)
 
-export const useFreshness = (p: string | null, r: Range, f?: MetricFilters) => useMetric<FreshnessRow[]>('freshness', p, r, 'freshness', f)
+/**
+ * ANALYTICS-FILTER-TRUTH-001 — freshness answers for the WHOLE project, and says so.
+ *
+ * This endpoint declines the platform axis deliberately: a sync state narrowed to the chips would
+ * describe the filter rather than the source, and «no data» about a platform you filtered out reads
+ * as an outage. It ships `filter_scope` in its meta so the panel can say «across the project»
+ * instead of implying a narrowing that never happened — and the hook threw the meta away, so the
+ * panel could not say it. The chips stayed lit above a table that had ignored them.
+ *
+ * The envelope, then, rather than the rows alone. `scope` is undefined for an install answering
+ * from before this shipped, which reads exactly as it did.
+ */
+export const useFreshness = (p: string | null, r: Range, f?: MetricFilters) =>
+  useQuery({
+    queryKey: ['metrics', 'freshness', p, r.from, r.to, ...filterKeyParts(f)],
+    queryFn: async () => {
+      const envelope = await getEnvelope<FreshnessRow[]>(`${base(p!)}/freshness?${q(r)}${qf(f)}`)
+
+      return {
+        rows: envelope.data ?? [],
+        scope: (envelope.meta as { filter_scope?: FilterScope } | null)?.filter_scope,
+      }
+    },
+    enabled: Boolean(p),
+  })
 export const useNormalization = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Normalization>('normalization', p, r, 'normalization', f)
 export const useAttribution = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Attribution>('attribution', p, r, 'attribution', f)
 

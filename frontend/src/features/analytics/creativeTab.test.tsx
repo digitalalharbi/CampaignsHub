@@ -7,6 +7,7 @@ import { useProject } from '@/stores/project'
 vi.mock('@/lib/api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api/client')>()),
   getData: vi.fn(),
+  getEnvelope: vi.fn(),
 }))
 
 import { getData } from '@/lib/api/client'

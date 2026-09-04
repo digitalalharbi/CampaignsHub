@@ -577,7 +577,7 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
   const vm = useOverviewVm({
     campaigns: campaigns.data,
     platforms: platformRows.data,
-    freshness: freshness.data,
+    freshness: freshness.data?.rows,
     budget: budget.data,
     currency: reportingCurrency,
     source: s.data?.provenance?.source,
@@ -989,7 +989,7 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
       */}
       <PlatformPaths
         data={byPath.data}
-        freshness={freshness.data ?? []}
+        freshness={freshness.data?.rows ?? []}
         currency={summary.data?.currency ?? null}
         loading={byPath.isLoading}
         error={byPath.isError}
@@ -1416,7 +1416,7 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
 export function QualityTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const f = useFreshness(projectId, range, filters)
-  const rows = f.data ?? []
+  const rows = f.data?.rows ?? []
   /*
    * DATA-QUALITY-OPERATOR-UX-001 · CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — the OTHER half of this tab.
    *
@@ -1465,6 +1465,16 @@ export function QualityTab({ projectId, range, filters }: TabProps) {
       {!f.isLoading && rows.length > 0 && <WindowConfidenceLine c={confidence} windowDays={windowDays} ar={ar} />}
       <QualityFindings findings={findings} ar={ar} loading={f.isLoading} />
       <AttributionFindings findings={attributionNotes} ar={ar} loading={attribution.isLoading} />
+      {/*
+        ANALYTICS-FILTER-TRUTH-001 — the chips are lit and this panel ignored them, on purpose.
+
+        Freshness answers for the whole project deliberately: a sync state narrowed to the platform
+        chips would describe the FILTER rather than the source, and «no data» about a platform the
+        reader filtered out reads as an outage. The endpoint has always declined that axis and always
+        said so in its meta; the hook threw the meta away, so the panel could not pass it on — and a
+        reader looking at one platform's chip above a table covering four had no way to know.
+      */}
+      <ScopeNote scope={f.data?.scope} testid="freshness-scope" />
       <Panel title={ar ? 'جودة البيانات والإسناد' : 'Data quality & attribution'} description={ar ? 'آخر مزامنة، حداثة البيانات، والأيام الناقصة لكل منصة' : 'Last sync, how fresh the data is, and the missing days per platform'} loading={f.isLoading} error={f.isError} empty={!f.isLoading && rows.length === 0}>
       <MetricTable
         head={ar ? ['المنصة', 'آخر تاريخ', 'آخر مزامنة', 'أيام ببيانات', 'أيام ناقصة', 'الحالة'] : ['Platform', 'Latest date', 'Last sync', 'Days with data', 'Missing days', 'Status']}
