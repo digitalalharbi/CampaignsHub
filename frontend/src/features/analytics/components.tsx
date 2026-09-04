@@ -1,3 +1,4 @@
+import { StatCard } from '@/components/ui/StatCard'
 import type { ReactNode } from 'react'
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
@@ -49,6 +50,24 @@ export function TrendPill({ delta, invertGood = false }: { delta: number | null 
   )
 }
 
+/**
+ * UX-KPI-PRESENTATION-001 — the last card that drew itself.
+ *
+ * This was the third implementation of a labelled figure, and the widest-travelled: Analytics, the
+ * dashboard strip and the client's own shared link all render it. It agreed with `StatCard` on the
+ * idea and on nothing else — `p-4` against `p-4 sm:p-5`, a `text-sm` label against the product's
+ * `text-[13px] font-semibold`, its own value class against `METRIC_VALUE_DENSE` — so a reader moving
+ * from a client link to the campaign command centre met two designs of one object, and a row drawn by
+ * both did not line up.
+ *
+ * The command centre's own `KpiCard` had already been reduced to a wrapper over `StatCard`, spark and
+ * all. This is the same reduction. What is kept is what only this surface has: the trend pill, and a
+ * sparkline drawn from a series the card is handed rather than one it fetches.
+ *
+ * Nothing about the DIRECTION rule changes, and that is the point of moving: `StatCard` marks the
+ * value `dir="ltr"` itself, so «48.4K USD» cannot be reordered into «USD 48.4K» by an Arabic layout —
+ * a rule this card was relying on a global stylesheet to apply on its behalf.
+ */
 export function KpiCard({
   label,
   value,
@@ -67,17 +86,11 @@ export function KpiCard({
   accent?: string
 }) {
   return (
-    <div className="group relative flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-small)] transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-medium)]">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-text-secondary" title={hint}>
-          {label}
-        </span>
-        {delta !== undefined && <TrendPill delta={delta} invertGood={invertGood} />}
-      </div>
-      <div className="tnum text-[length:var(--text-kpi)] font-extrabold leading-none tracking-tight text-text-primary">
-        {value}
-      </div>
-      {spark && spark.length > 1 && (
+    <StatCard
+      label={<span title={hint}>{label}</span>}
+      value={value}
+      trailing={delta !== undefined ? <TrendPill delta={delta} invertGood={invertGood} /> : undefined}
+      spark={spark && spark.length > 1 ? (
         <div className="h-9 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={spark.map((v, i) => ({ i, v }))} margin={{ top: 4, bottom: 0, left: 0, right: 0 }}>
@@ -91,8 +104,8 @@ export function KpiCard({
             </AreaChart>
           </ResponsiveContainer>
         </div>
-      )}
-    </div>
+      ) : undefined}
+    />
   )
 }
 
