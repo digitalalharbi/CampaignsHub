@@ -1287,7 +1287,19 @@ final class ClientPortalController
         return $req;
     }
 
-    /** @return array<string,mixed>|null resulting project/campaign after conversion (client-safe) */
+    /**
+     * What became of a request, in terms the person who made it can use.
+     *
+     * CLIENT-REPORT-ENTITY-BOUNDARY-001 — this carried the campaign's internal name and its
+     * campaign-management status («Meta — Lead Gen (burner)», «paused») into the client portal. The
+     * name is the agency's own container, and the status is a state the client neither sets nor
+     * acts on: seeing «paused» there invites a question the portal cannot answer.
+     *
+     * The PROJECT is theirs and stays. «Your request is now in delivery, under Nakheel — Sales» is
+     * the whole answer the screen was for.
+     *
+     * @return array<string,mixed>|null the resulting project after conversion, or null
+     */
     private function conversionResult(ExternalRequest $req): ?array
     {
         $row = DB::table('request_conversions')
@@ -1296,13 +1308,10 @@ final class ClientPortalController
             return null;
         }
         $project = $row->project_id ? DB::table('projects')->where('id', $row->project_id)->value('name') : null;
-        $campaign = $row->campaign_id ? DB::table('unified_campaigns')->where('id', $row->campaign_id)->first(['name', 'status']) : null;
 
         return [
             'converted' => true,
             'project_name' => $project,
-            'campaign_name' => $campaign->name ?? null,
-            'campaign_status' => $campaign->status ?? null,
         ];
     }
 

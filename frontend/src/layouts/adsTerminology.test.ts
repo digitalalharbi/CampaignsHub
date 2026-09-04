@@ -123,8 +123,16 @@ describe('CONTENT-TERMINOLOGY-001 — the library surfaces', () => {
  */
 describe('ADS-TERMINOLOGY-001 — the advertising surfaces keep «الإعلانات»', () => {
   const SAYS_ADS: [string, string[]][] = [
-    ['src/features/reports/ReportAdsSection.tsx', ['الإعلانات الأعلى أداءً', 'Top performing ads']],
-    ['src/features/reports/InteractiveReport.tsx', ['أفضل الإعلانات', 'أضعف الإعلانات']],
+    /*
+     * «الأضعف» moved into `ReportAdsSection` — CLIENT-REPORT-ENTITY-BOUNDARY-001.
+     *
+     * The deck had its own «أضعف الإعلانات» grid, and what it ranked were CAMPAIGNS: `top_creatives`
+     * and `worst_creatives` are campaign rows, as `creative_level` said all along. Both slides now
+     * render the real ad section, which states the strongest and the weakest ad in its own reading —
+     * so the vocabulary is still asserted, at the one place that now owns it.
+     */
+    ['src/features/reports/ReportAdsSection.tsx', ['الإعلانات الأعلى أداءً', 'Top performing ads', 'الأضعف ']],
+    ['src/features/reports/InteractiveReport.tsx', ['أفضل الإعلانات']],
     /*
      * The report label moved to `reportProduct.ts` with REPORT-PRODUCT-MODEL-001 — it is chosen by
      * mode AND form now and lives with the other three. The guard follows the copy rather than the

@@ -91,8 +91,9 @@ export function ReportAdDetail({
   add(ar ? 'العائد على الإنفاق' : 'ROAS', ad.roas && ad.roas > 0 ? `${ad.roas.toFixed(2)}×` : null)
 
   const facts = [
+    // CLIENT-REPORT-ENTITY-BOUNDARY-001 — the campaign name is gone from here too; the card that
+    // opens this dialog no longer shows it, and a detail view that added it back would be the leak.
     ad.provider ? providerLabel(ad.provider, locale) : null,
-    ad.campaign_name ?? null,
     ad.objective ? objectiveLabel(ad.objective, locale) : null,
   ].filter(Boolean)
 

@@ -18,6 +18,7 @@ use App\Domains\Reports\Services\ReportObjectiveLens;
 use App\Domains\Reports\Services\ReportObservations;
 use App\Domains\Reports\Services\ReportTemplateEngine;
 use App\Models\User;
+use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 
 /**
@@ -267,7 +268,8 @@ final class DailyDigest
          * a brand project's digest is not scored on a cost per order it never tried to produce.
          */
         $lens = ReportObjectiveLens::infer($campaigns);
-        $budget = $scoped->budgetPacing($from, $to, $to);
+        // Per PLATFORM — CLIENT-REPORT-ENTITY-BOUNDARY-001. A digest lands in a client's inbox.
+        $budget = $scoped->budgetPacingByProvider($from, $to, $to);
         $funnel = $scoped->funnel($from, $to);
         $freshness = $this->freshnessFor($projectId, $from, $to);
 
@@ -281,8 +283,20 @@ final class DailyDigest
             'paths' => $this->byPath($campaigns),
             'best_platform' => $this->pick($platforms, 'provider', best: true),
             'worst_platform' => $this->pick($platforms, 'provider', best: false),
-            'best_campaign' => $this->pick($campaigns, 'campaign_name', best: true),
-            'worst_campaign' => $this->pick($campaigns, 'campaign_name', best: false),
+            /*
+             * CLIENT-REPORT-ENTITY-BOUNDARY-001 — no campaign is named in a digest.
+             *
+             * These picked the best and worst CAMPAIGN by the objective's own metric and the mail
+             * printed the name — «Meta — Retargeting · 4,300 SAR · cost/result 61» — in an email a
+             * merchant reads. `best_platform` and `worst_platform` above answer the same question on
+             * the axis a client may be told about, and the mailer already falls back to them.
+             *
+             * `$campaigns` is still read: it is what `ReportObjectiveLens::infer()` classifies the
+             * project by, and what `byPath()` divides. The classification is ours; the roster is not
+             * the reader's business.
+             */
+            'best_campaign' => null,
+            'worst_campaign' => null,
             'budget' => $this->budgetAttention($budget),
             // The funnel STAGES only — `funnel()` returns its own spend beside them and the email has
             // no room for a second spend figure it would then have to reconcile.
@@ -539,7 +553,9 @@ final class DailyDigest
             }
 
             $out[] = [
-                'campaign' => (string) ($row['campaign_name'] ?? '—'),
+                // The bucket is a PLATFORM now; the key keeps its name so every reader still parses.
+                'campaign' => AdPlatforms::name((string) ($row['provider'] ?? ''), 'ar'),
+                'provider' => (string) ($row['provider'] ?? ''),
                 'pace' => round((float) $pace, 2),
                 'spent' => $row['spent'] ?? null,
                 'budget' => $row['budget'] ?? null,

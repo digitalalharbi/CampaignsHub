@@ -75,7 +75,6 @@ final class ReportAds
             'name' => $row['name'],
             'provider' => $row['provider'],
             'campaign_id' => $row['campaign_id'] ?? null,
-            'campaign_name' => $row['campaign_name'] ?? null,
             'objective' => $row['objective'] ?? null,
             'preview' => $row['preview'],
             'format' => $row['format'] ?? null,
