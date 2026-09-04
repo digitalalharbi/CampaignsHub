@@ -50,6 +50,12 @@ export function AttributionPanel({
   const ar = locale === 'ar'
   const platforms = data?.platform_reported?.platforms ?? []
   const store = data?.store_confirmed
+
+  /*
+   * Only platforms with BOTH figures. A comparison needs two measured sides; a platform whose store
+   * side is null was never checked against a shop, and that is not a zero.
+   */
+  const comparable = platforms.filter((p) => p.store_confirmed_orders !== null)
   const dedup = data?.dedup
 
   return (
@@ -95,6 +101,52 @@ export function AttributionPanel({
             connected sorts LAST rather than as a zero difference — «nobody checked» is not «the shop
             saw none», and that distinction is the entire point of this panel.
           */}
+          {/*
+            VISUAL-FIRST-001 — «ATTRIBUTION → platform-reported vs store-confirmed visual comparison.»
+
+            The panel's whole subject is a DISAGREEMENT between two numbers, and a disagreement is
+            the thing a paired bar shows and a table row does not: side by side on one scale, the gap
+            IS the finding, and the platform overclaiming most is the longest overhang rather than
+            the largest cell in a column somebody has to sort.
+
+            Drawn ONLY for platforms where both sides were actually measured. With no store connected
+            there is no second number, and a bar pair with one side missing would read as «the shop
+            saw none» — the exact confusion this panel exists to prevent. Those platforms keep their
+            table row and their «no store connected» state, and the comparison simply says nothing
+            about them.
+          */}
+          {comparable.length > 0 && (
+            <div className="mt-3 space-y-2" data-testid="attribution-comparison">
+              {comparable.map((p) => {
+                const ceiling = Math.max(p.platform_reported_orders, p.store_confirmed_orders ?? 0) || 1
+                return (
+                  <div key={p.provider} className="flex items-center gap-2" data-testid={`attribution-compare-${p.provider}`}>
+                    <span className="w-24 shrink-0 truncate text-xs text-text-secondary">{providerLabel(p.provider, locale)}</span>
+                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+                      <span className="flex items-center gap-2">
+                        <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-secondary">
+                          <span className="block h-full rounded-full bg-brand-500" style={{ width: `${(p.platform_reported_orders / ceiling) * 100}%` }} />
+                        </span>
+                        <span className="tnum w-16 shrink-0 text-end text-[11px] text-text-secondary" dir="ltr">{num(p.platform_reported_orders)}</span>
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-secondary">
+                          <span className="block h-full rounded-full bg-text-muted" style={{ width: `${((p.store_confirmed_orders ?? 0) / ceiling) * 100}%` }} />
+                        </span>
+                        <span className="tnum w-16 shrink-0 text-end text-[11px] text-text-secondary" dir="ltr">{num(p.store_confirmed_orders ?? 0)}</span>
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+              <p className="text-[11px] text-text-muted">
+                {ar
+                  ? 'الأعلى: ما أبلغت به المنصة · الأدنى: ما أكّده المتجر'
+                  : 'Upper: platform-reported · lower: store-confirmed'}
+              </p>
+            </div>
+          )}
+
           {platforms.length > 0 && (
             <div className="mt-3">
               <MetricTable

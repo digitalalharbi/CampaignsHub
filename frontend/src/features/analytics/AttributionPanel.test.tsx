@@ -351,3 +351,72 @@ describe('the overlap between platforms', () => {
     expect(screen.getByTestId('attribution-total-withheld')).toHaveTextContent('no unified platform total')
   })
 })
+
+/**
+ * VISUAL-FIRST-001 — «ATTRIBUTION → platform-reported vs store-confirmed visual comparison.»
+ *
+ * The panel's subject is a DISAGREEMENT between two numbers, and a paired bar shows a disagreement
+ * where a table row does not: on one scale, the gap is the finding.
+ *
+ * The load-bearing rule is which platforms it draws. A platform with no store connected has one
+ * measured side, and a bar pair with the second at zero says «the shop saw none» — the exact
+ * confusion this panel exists to prevent, drawn instead of written.
+ */
+describe('the platform-reported vs store-confirmed comparison', () => {
+  /** One platform, measured on the platform side only — the «no store connected» case. */
+  const noStore = () => {
+    const base = payload()
+    return {
+      ...base,
+      platform_reported: {
+        ...base.platform_reported,
+        platforms: [claim({ store_confirmed_orders: null, store_confirmed_revenue: null, difference: null, ratio: null })],
+      },
+    }
+  }
+
+  it('draws a pair for a platform measured on both sides', () => {
+    renderWithProviders(<AttributionPanel data={payload()} loading={false} error={false} locale="en" />, { locale: 'en' })
+
+    const pair = screen.getByTestId('attribution-compare-meta')
+    expect(pair).toHaveTextContent('40')
+    expect(pair).toHaveTextContent('25')
+  })
+
+  it('says which bar is which, once, rather than labelling every row', () => {
+    renderWithProviders(<AttributionPanel data={payload()} loading={false} error={false} locale="en" />, { locale: 'en' })
+
+    expect(screen.getByTestId('attribution-comparison')).toHaveTextContent(/Upper: platform-reported/)
+  })
+
+  /** No store connected is not a store that confirmed nothing. */
+  it('draws no pair for a platform the store never checked', () => {
+    renderWithProviders(
+      <AttributionPanel
+        data={noStore()}
+        loading={false}
+        error={false}
+        locale="en"
+      />,
+      { locale: 'en' },
+    )
+
+    expect(screen.queryByTestId('attribution-comparison')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('attribution-compare-meta')).not.toBeInTheDocument()
+  })
+
+  /** And the row itself survives — the platform is still listed, with its own honest state. */
+  it('still lists that platform in the table', () => {
+    renderWithProviders(
+      <AttributionPanel
+        data={noStore()}
+        loading={false}
+        error={false}
+        locale="en"
+      />,
+      { locale: 'en' },
+    )
+
+    expect(screen.getByTestId('attribution')).toHaveTextContent('Meta')
+  })
+})
