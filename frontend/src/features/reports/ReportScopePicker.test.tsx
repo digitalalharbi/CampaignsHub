@@ -44,7 +44,7 @@ describe('ReportScopePicker', () => {
       limit: 500,
       truncated: { campaigns: true, ad_sets: false, ads: false, creatives: false },
     })
-    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} />, { locale: 'en' })
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
 
     const note = await screen.findByTestId('scope-truncated-Campaigns')
     expect(note).toHaveTextContent('Showing 500 only')
@@ -58,7 +58,7 @@ describe('ReportScopePicker', () => {
       limit: 500,
       truncated: { campaigns: false, ad_sets: false, ads: false, creatives: false },
     })
-    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} />, { locale: 'en' })
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
 
     await screen.findByText('Campaigns')
     expect(screen.queryByTestId('scope-truncated-Campaigns')).not.toBeInTheDocument()
@@ -71,7 +71,7 @@ describe('ReportScopePicker', () => {
    */
   it('does not invent a completeness claim the server never made', async () => {
     vi.mocked(scopeOptions).mockResolvedValue(OPTIONS)
-    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} />, { locale: 'en' })
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
 
     await screen.findByText('Campaigns')
     expect(screen.queryByTestId('scope-truncated-Campaigns')).not.toBeInTheDocument()
@@ -83,7 +83,7 @@ describe('ReportScopePicker', () => {
       limit: 500,
       truncated: { campaigns: true, ad_sets: false, ads: false, creatives: false },
     })
-    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} />, { locale: 'ar' })
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'ar' })
 
     const note = await screen.findByTestId('scope-truncated-الحملات')
     expect(note).toHaveTextContent('يُعرض 500 فقط')
@@ -91,7 +91,7 @@ describe('ReportScopePicker', () => {
   })
 
   it('offers every axis the project has data for', async () => {
-    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} />, { locale: 'en' })
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
 
     expect(await screen.findByText('Platforms')).toBeInTheDocument()
     expect(screen.getByText('Ad accounts')).toBeInTheDocument()
@@ -108,7 +108,7 @@ describe('ReportScopePicker', () => {
    * silently would have a reader believe a campaign's spend was one ad set's.
    */
   it('warns that ad sets and ads do not narrow the figures the way they look like they do', async () => {
-    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} />, { locale: 'en' })
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
 
     expect(await screen.findByText(/No metrics are stored at this level/)).toBeInTheDocument()
     expect(screen.getByText(/Narrows the ad section only/)).toBeInTheDocument()
@@ -164,7 +164,7 @@ describe('ReportScopePicker', () => {
 
   /** Nothing chosen is nothing to save — a template of «the whole project» is not a scope. */
   it('will not save a template when no axis is bound', async () => {
-    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} />, { locale: 'en' })
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />, { locale: 'en' })
 
     fireEvent.change(await screen.findByTestId('scope-template-name'), { target: { value: 'Everything' } })
 

@@ -471,7 +471,7 @@ export interface ScopeTemplate {
 export const scopeOptions = (p: string) => getData<ScopeOptions>(`${base(p)}/scope/options`)
 
 export const getReportScope = (p: string, id: string) =>
-  getData<{ scope: ReportScopeShape; explain: ScopeExplain[]; bound_axes: string[] }>(`${base(p)}/${id}/scope`)
+  getData<{ scope: ReportScopeShape; explain: ScopeExplain[]; bound_axes: string[]; audience: string | null }>(`${base(p)}/${id}/scope`)
 
 /** Edits the scope ON the report and regenerates it — the same id, so a link already sent keeps working. */
 export const updateReportScope = (p: string, id: string, scope: ReportScopeShape) =>
