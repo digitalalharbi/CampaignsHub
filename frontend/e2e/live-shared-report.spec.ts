@@ -176,6 +176,67 @@ test.describe('the link cannot be talked into showing more', () => {
   })
 })
 
+/**
+ * CLIENT-FACING-PRESENTATION-001 — the last block of the composition, in a real browser.
+ *
+ * The unit tests hold the derivation against fixtures. What they cannot hold is the claim this
+ * requirement is actually about: that a NUMBER SITS UNDER ITS OWN HEADER, in a real layout engine, in
+ * both writing directions. Every drift this requirement exists to fix was invisible to jsdom — a
+ * `text-end` on a numeric column reads as the LEFT edge under RTL, and a test asserting the class
+ * would have passed on the broken build.
+ *
+ * ## One page load, deliberately
+ *
+ * The public link is rationed at sixty requests a minute per IP, and every test in this file spends
+ * from that one bucket — three more page loads here took the FILE over it, and the failure surfaced
+ * as «تعذّر فتح التقرير — Too many requests» in a neighbouring spec rather than in this one. So the
+ * second direction is measured by flipping `dir` on the live document instead of reloading: the claim
+ * is about the writing direction, not about the language, and a real engine relays out for it.
+ */
+test.describe('what the report says needs attention', () => {
+  test('the budget figures sit under their own headers, in both directions', async ({ page }) => {
+    await page.goto(URL)
+
+    const attention = page.getByTestId('live-attention')
+    await expect(attention, 'the budget block never rendered').toBeVisible({ timeout: 20000 })
+
+    const table = attention.locator('table').first()
+    const drift = () =>
+      table.evaluate((el) => {
+        const heads = [...el.querySelectorAll('thead th')]
+        const cells = [...(el.querySelector('tbody tr')?.children ?? [])]
+
+        return heads.map((th, i) => {
+          const a = th.getBoundingClientRect()
+          const b = cells[i].getBoundingClientRect()
+
+          return Math.abs((a.left + a.right) / 2 - (b.left + b.right) / 2)
+        })
+      })
+
+    const rtl = await drift()
+    expect(rtl.length, 'the table rendered no columns').toBeGreaterThan(3)
+    // A column whose header centre is more than a pixel off its cell's is a column that drifted.
+    expect(Math.max(...rtl), 'rtl: a value is not under its header').toBeLessThanOrEqual(1)
+
+    await page.evaluate(() => document.documentElement.setAttribute('dir', 'ltr'))
+    const ltr = await drift()
+    expect(Math.max(...ltr), 'ltr: a value is not under its header').toBeLessThanOrEqual(1)
+
+    /*
+     * «Nothing needs you» is a RESULT, and the section says it rather than rendering empty. The
+     * seeded pacing decides which branch runs, so the invariant is asserted rather than the branch: a
+     * reader always leaves this block knowing whether anything is off plan.
+     */
+    const said = await page.getByTestId('live-attention-findings').evaluate((el) => ({
+      clear: !!el.querySelector('[data-testid="live-attention-clear"]'),
+      items: el.querySelectorAll('[data-testid^="live-attention-"]').length,
+    }))
+
+    expect(said.clear || said.items > 0, 'the section rendered with nothing to say').toBe(true)
+  })
+})
+
 /** The client is on a phone more often than not, and in whichever language and theme they arrived in. */
 test.describe('the live report holds together on a phone', () => {
   for (const locale of ['ar', 'en'] as const) {
