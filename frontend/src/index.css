@@ -2,7 +2,14 @@
 @import './styles/tokens.css';
 
 /* Map design tokens into Tailwind's theme so utilities (bg-surface, text-text-muted,
-   text-base, font-heading, rounded-lg, shadow-medium…) resolve to our tokens. */
+   text-base, font-heading, rounded-lg…) resolve to our tokens.
+
+   `shadow-medium` was in that list and does NOT resolve: a bare `shadow-small` /
+   `shadow-medium` / `shadow-large` utility computes to `box-shadow: none`, measured in a
+   browser. Every shadow in the product is written `shadow-[var(--shadow-small)]`, which
+   reads the token directly and works — 88 of them, and not one bare use, so nothing was
+   broken by this. What was broken is the sentence: it invited the next author to write the
+   form that renders nothing. `ThemeTokenCoverageTest` now refuses that form. */
 @theme {
   /* Color */
   --color-background: var(--background);
