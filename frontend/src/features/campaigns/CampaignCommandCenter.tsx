@@ -33,7 +33,7 @@ import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, Platfo
  * The ratio goes in raw. If a figure ever arrives already scaled to 0–100, convert it at the source
  * rather than reintroducing a second multiplication here.
  */
-import { compact, money, moneyFromTotals, num, percent, ratio, rowCostPer, rowMoney, rowRoas, trend } from '@/features/analytics/format'
+import { compact, money, moneyExact, moneyFromTotals, num, percent, ratio, rowCostPer, rowMoney, rowRoas, trend } from '@/features/analytics/format'
 import { rankableMoney, readRoas, resolveMoneySeries, spendComparableAmount, type MoneyTotals } from '@/lib/money/contract'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
@@ -440,7 +440,7 @@ export function CampaignFunnelTab({ campaign, projectId, range }: { campaign: Un
             {s.reported ? (
               <div className="flex justify-between text-[11px] text-text-muted">
                 <span>تحويل {s.step_rate != null ? percent(s.step_rate, 0) : '—'}</span>
-                <span>تكلفة {s.cost_per != null ? money(s.cost_per, cur) : '—'}</span>
+                <span>تكلفة {s.cost_per != null ? moneyExact(s.cost_per, cur ?? null) : '—'}</span>
               </div>
             ) : (
               <div className="text-[11px] text-text-muted">لم ترسل المنصة هذه المرحلة</div>
@@ -598,11 +598,18 @@ export function CampaignPlatformsTab({
  * card, it is a second reading of the same importance — which is the confusion the shared card
  * exists to remove. It takes the shared label size so it reads as part of the same system.
  */
-function MiniStat({ label, value }: { label: string; value: string }) {
+/**
+ * NUMBER-PRESENTATION-001 §58 — the full figure travels with the abbreviated one.
+ *
+ * `money()` keeps three significant digits, which is right for a total in a small tile and destroys a
+ * cost per result: 1.50 printed «2». Callers pass a cost-per through `moneyExact` for that reason;
+ * this adds the other half of the rule, so a compacted total can still be read in full.
+ */
+function MiniStat({ label, value, exact }: { label: string; value: string; exact?: string }) {
   return (
     <div className="rounded-lg bg-surface-secondary p-2">
       <div className="text-[11px] font-semibold leading-tight text-text-muted">{label}</div>
-      <div className="tnum text-sm font-bold text-text-primary" dir="ltr">{value}</div>
+      <div className="tnum text-sm font-bold text-text-primary" dir="ltr" title={exact}>{value}</div>
     </div>
   )
 }
@@ -848,10 +855,11 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
               </div>
               <div className="flex items-center gap-2 text-[11px] text-text-muted">{providerLabel(c.provider, locale)} · {c.format}{c.is_demo && <span className="rounded bg-warning/15 px-1 text-warning">Demo</span>}</div>
               <div className="grid grid-cols-3 gap-1.5 text-center">
-                <MiniStat label="الإنفاق" value={money(c.metrics.spend, cur)} />
+                <MiniStat label="الإنفاق" value={money(c.metrics.spend, cur)} exact={moneyExact(c.metrics.spend, cur ?? null)} />
                 <MiniStat label="النتائج" value={num(c.metrics.conversions)} />
                 <MiniStat label="ROAS" value={ratio(c.metrics.roas)} />
-                <MiniStat label="CPA" value={money(c.metrics.cpa, cur)} />
+                {/* Never compacted — a cost per result's decimals are the decision. */}
+                <MiniStat label="CPA" value={moneyExact(c.metrics.cpa, cur ?? null)} />
                 <MiniStat label="CTR" value={percent(c.metrics.ctr ?? 0)} />
                 <MiniStat label="مشاهدة" value={c.metrics.view_rate != null ? percent(c.metrics.view_rate, 0) : '—'} />
               </div>
@@ -876,7 +884,7 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
                   <td className="p-2 text-text-muted">{providerLabel(c.provider, locale)}</td>
                   <td className="tnum p-2">{money(c.metrics.spend, cur)}</td>
                   <td className="tnum p-2">{num(c.metrics.conversions)}</td>
-                  <td className="tnum p-2">{money(c.metrics.cpa, cur)}</td>
+                  <td className="tnum p-2">{moneyExact(c.metrics.cpa, cur ?? null)}</td>
                   <td className="tnum p-2">{ratio(c.metrics.roas)}</td>
                   <td className="tnum p-2">{percent(c.metrics.ctr ?? 0)}</td>
                   <td className="p-2"><span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${cls(c.classification).tone}`}>{cls(c.classification).label}</span></td>
@@ -950,9 +958,9 @@ function AdPreviewPanel({
         </dl>
 
         <div className="mt-3 grid grid-cols-3 gap-1.5 text-center">
-          <MiniStat label={ar ? 'الإنفاق' : 'Spend'} value={money(creative.metrics.spend, currency)} />
+          <MiniStat label={ar ? 'الإنفاق' : 'Spend'} value={money(creative.metrics.spend, currency)} exact={moneyExact(creative.metrics.spend, currency ?? null)} />
           <MiniStat label={ar ? 'النتائج' : 'Results'} value={num(creative.metrics.conversions)} />
-          <MiniStat label="CPA" value={money(creative.metrics.cpa, currency)} />
+          <MiniStat label="CPA" value={moneyExact(creative.metrics.cpa, currency ?? null)} />
         </div>
 
         <p className="mt-3 text-[11px] text-text-muted">{creative.ranking_reason}</p>

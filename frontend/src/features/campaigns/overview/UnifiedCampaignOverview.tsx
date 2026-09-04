@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { fmtDateTime } from '@/lib/datetime'
 import { AlertTriangle } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
-import { money, num, ratio } from '@/features/analytics/format'
+import { money, moneyExact, num, ratio } from '@/features/analytics/format'
 
 /**
  * UnifiedCampaignOverview — the ONE campaign command-center view, rendered from a props view-model so the
@@ -314,7 +314,7 @@ export function UnifiedCampaignOverview({
                     </td>
                     <td className={`tnum py-1.5 text-end ${c.sub}`}>{money(cp.spend, currency)}</td>
                     <td className={`tnum py-1.5 text-end ${c.sub}`}>{num(cp.results)}</td>
-                    <td className={`tnum py-1.5 text-end ${c.sub}`}>{cp.cpa === null ? '—' : money(cp.cpa, currency)}</td>
+                    <td className={`tnum py-1.5 text-end ${c.sub}`}>{cp.cpa === null ? '—' : moneyExact(cp.cpa, currency ?? null)}</td>
                     <td className={`tnum py-1.5 text-end font-semibold ${c.value}`}>{cp.roas === null ? '—' : ratio(cp.roas)}</td>
                   </tr>
                 ))}

@@ -2,13 +2,39 @@ import { useQuery } from '@tanstack/react-query'
 import { StatCard } from '@/components/ui/StatCard'
 import { AlertTriangle, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import { getClientAnalytics, type ClientAnalytics } from './api'
-import { ratio } from '@/features/analytics/format'
+import { compact, money, moneyExact, num as fullNumber, ratio } from '@/features/analytics/format'
 import { useT } from '@/lib/i18n'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
 
+/**
+ * NUMBER-PRESENTATION-001 §58 — this surface had its own formatter, and it followed neither rule.
+ *
+ * Counts printed in full («1,425,443» in a card sixty pixels wide) and money printed in full beside
+ * them, with no way to reach either figure's exact form because there was nothing to reach — the
+ * display WAS the record. The canonical formatters are used now: a large figure abbreviates and
+ * carries its full form on the value's own title, and a cost-per keeps its decimals.
+ */
 const num = (v: number | null | undefined, digits = 0): string =>
   v === null || v === undefined ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: digits })
+
+/** A count, abbreviated for the card with its full figure one hover away. */
+const counted = (v: number | null | undefined): { value: string; exact?: string } => {
+  if (v === null || v === undefined) return { value: '—' }
+  const shown = compact(v)
+  const full = fullNumber(v)
+
+  return shown === full ? { value: shown } : { value: shown, exact: full }
+}
+
+/** A money total, same rule. A cost-per does NOT come through here — its decimals are the decision. */
+const cash = (v: number | null | undefined, currency: string | null): { value: string; exact?: string } => {
+  if (v === null || v === undefined) return { value: '—' }
+  const shown = money(v, currency ?? undefined)
+  const full = moneyExact(v, currency ?? null)
+
+  return shown === full ? { value: shown } : { value: shown, exact: full }
+}
 const pct = (v: number | null | undefined): string => (v === null || v === undefined ? '—' : `${(v * 100).toLocaleString('en-US', { maximumFractionDigits: 1 })}%`)
 
 function DeltaBadge({ v }: { v: number | null | undefined }) {
@@ -18,8 +44,8 @@ function DeltaBadge({ v }: { v: number | null | undefined }) {
 }
 
 /** UX-KPI-PRESENTATION-001 — the shared card; `muted` is gone with the second background it named. */
-function Kpi({ label, value, delta }: { label: string; value: string; delta?: number | null; muted?: boolean }) {
-  return <StatCard label={label} value={value} trailing={<DeltaBadge v={delta} />} />
+function Kpi({ label, value, exact, delta }: { label: string; value: string; exact?: string; delta?: number | null; muted?: boolean }) {
+  return <StatCard label={label} value={value} exact={exact} trailing={<DeltaBadge v={delta} />} />
 }
 
 function FreshnessBanner({ a, t }: { a: ClientAnalytics; t: ReturnType<typeof useT> }) {
@@ -70,9 +96,9 @@ export function TabAnalytics({ clientId }: { clientId: string }) {
         <>
           <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">{t('an_mixed_currency_note')}</p>
           <div className="grid grid-cols-3 gap-3">
-            <Kpi label={t('an_impressions')} value={num(a.counts?.impressions)} />
-            <Kpi label={t('an_clicks')} value={num(a.counts?.clicks)} />
-            <Kpi label={t('an_results')} value={num(a.counts?.conversions)} />
+            <Kpi label={t('an_impressions')} {...counted(a.counts?.impressions)} />
+            <Kpi label={t('an_clicks')} {...counted(a.counts?.clicks)} />
+            <Kpi label={t('an_results')} {...counted(a.counts?.conversions)} />
           </div>
           <div>
             <h3 className="mb-2 text-sm font-bold text-text-primary">{t('an_projects')}</h3>
@@ -91,9 +117,9 @@ export function TabAnalytics({ clientId }: { clientId: string }) {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Kpi label={`${t('an_spend')}${cur}`} value={num(a.totals.spend, 2)} delta={a.delta?.spend} />
-            <Kpi label={t('an_results')} value={num(a.totals.conversions)} delta={a.delta?.conversions} />
-            <Kpi label={`${t('an_revenue')}${cur}`} value={num(a.totals.revenue, 2)} delta={a.delta?.revenue} />
+            <Kpi label={`${t('an_spend')}${cur}`} {...cash(a.totals.spend, a.currency ?? null)} delta={a.delta?.spend} />
+            <Kpi label={t('an_results')} {...counted(a.totals.conversions)} delta={a.delta?.conversions} />
+            <Kpi label={`${t('an_revenue')}${cur}`} {...cash(a.totals.revenue, a.currency ?? null)} delta={a.delta?.revenue} />
             <Kpi label={t('an_roas')} value={ratio(a.totals.roas)} delta={a.delta?.roas} muted={!a.roas_is_primary} />
             <Kpi label={`${t('an_cpa')}${cur}`} value={num(a.totals.cpa, 2)} delta={a.delta?.cpa} />
             <Kpi label={t('an_ctr')} value={pct(a.totals.ctr)} delta={a.delta?.ctr} />

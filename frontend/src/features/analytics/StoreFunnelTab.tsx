@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, HelpCircle, Store, TrendingDown } from 'lucide-react'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { Panel } from './components'
-import { money, num, ratio } from './format'
+import { money, moneyExact, num, ratio } from './format'
 import { getData } from '@/lib/api/client'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState, Skeleton } from '@/components/ui/States'
@@ -259,7 +259,7 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
         <Metric label={ar ? 'العائد على الإنفاق' : 'ROAS'} value={derived.roas === null ? null : ratio(derived.roas)} hint={ar ? 'على الإيراد الصافي بعد الاسترداد' : 'On net revenue, after refunds'} />
         <Metric label={ar ? 'ROAS المُسند' : 'Attributed ROAS'} value={derived.attributed_roas === null ? null : ratio(derived.attributed_roas)} hint={ar ? 'الطلبات التي أمكن ربطها بحملة فقط' : 'Only orders traceable to a campaign'} />
         <Metric label={ar ? 'متوسط قيمة الطلب' : 'AOV'} value={derived.aov === null ? null : money(derived.aov, cur)} />
-        <Metric label={ar ? 'تكلفة الطلب' : 'CPA'} value={derived.cpa === null ? null : money(derived.cpa, cur)} hint={ar ? 'الإنفاق ÷ الطلبات' : 'Spend ÷ orders'} />
+        <Metric label={ar ? 'تكلفة الطلب' : 'CPA'} value={derived.cpa === null ? null : moneyExact(derived.cpa, cur ?? null)} hint={ar ? 'الإنفاق ÷ الطلبات' : 'Spend ÷ orders'} />
         <Metric
           label={ar ? 'تكلفة اكتساب العميل' : 'CAC'}
           value={derived.cac === null ? null : money(derived.cac, cur)}
