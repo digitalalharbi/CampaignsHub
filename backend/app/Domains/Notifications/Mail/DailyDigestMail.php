@@ -129,9 +129,21 @@ final class DailyDigestMail extends Mailable
                 'brand' => $this->brandName(),
                 'year' => date('Y'),
                 'subject' => $this->envelope()->subject,
-                'preheader' => $ar
-                    ? 'ملخص أمس عبر مشاريعك ومنصاتك.'
-                    : 'Yesterday across your projects and platforms.',
+                /*
+                 * The preheader follows the RHYTHM, like the intro under it.
+                 *
+                 * It said «ملخص أمس» / «Yesterday» on every digest, including the weekly and the
+                 * monthly — and this is the line an inbox shows in the LIST, beside the subject,
+                 * before anybody opens anything. A monthly summary whose inbox snippet says
+                 * «yesterday» is wrong in the one place the reader sees first and the only place
+                 * they cannot correct by reading further. Same defect as the intro, one line lower
+                 * and more visible.
+                 */
+                'preheader' => match ($this->kind) {
+                    'monthly' => $ar ? 'ملخص الشهر عبر مشاريعك ومنصاتك.' : 'The month across your projects and platforms.',
+                    'weekly' => $ar ? 'ملخص الأسبوع عبر مشاريعك ومنصاتك.' : 'The week across your projects and platforms.',
+                    default => $ar ? 'ملخص أمس عبر مشاريعك ومنصاتك.' : 'Yesterday across your projects and platforms.',
+                },
                 'headerNote' => $this->headerNote($ar),
                 // One place, because the two mailables already disagreed about the unsubscribe —
                 // and the one that was wrong resolved anyway, through a redirect (MAIL-008).

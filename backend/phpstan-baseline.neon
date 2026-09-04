@@ -393,12 +393,6 @@ parameters:
 			path: app/Domains/Reports/Services/SharedCreativeView.php
 
 		-
-			message: '#^Parameter \#1 \$creative of method App\\Domains\\Reports\\Services\\SharedCreativeView\:\:byCampaign\(\) expects App\\Domains\\Campaigns\\Models\\ExternalCreative, Illuminate\\Database\\Eloquent\\Model given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Domains/Reports/Services/SharedCreativeView.php
-
-		-
 			message: '#^Parameter \#2 \$creative of method App\\Domains\\Reports\\Services\\SharedCreativeView\:\:byPlatform\(\) expects App\\Domains\\Campaigns\\Models\\ExternalCreative, Illuminate\\Database\\Eloquent\\Model given\.$#'
 			identifier: argument.type
 			count: 1

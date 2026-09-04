@@ -97,12 +97,18 @@ final class ReportShareTest extends TestCase
     }
 
     /**
-     * An internal marker in a campaign name must not reach a client through a NOTE.
+     * A campaign name must not reach a client through a NOTE — CLIENT-REPORT-ENTITY-BOUNDARY-001.
      *
-     * Every other surface that prints a campaign name goes through `clientName`. The observations
-     * were prose the sanitiser did not know about.
+     * This asserted that «(burner)» was STRIPPED and «Meta — Lead Gen» survived, which was the old
+     * rule: sanitise the name and print it. The owner's correction is that the name was never the
+     * problem — the container is, and removing the embarrassing half of a label does not change
+     * whose label it is.
+     *
+     * The note is prose written down by an earlier release, so it cannot be re-attributed to a
+     * platform: the figures behind it are per-campaign. It is dropped, and a report generated today
+     * states the same finding by platform and keeps it.
      */
-    public function test_an_internal_campaign_name_is_cleaned_inside_a_note(): void
+    public function test_a_note_that_names_a_campaign_does_not_reach_a_client(): void
     {
         $this->report->forceFill(['data' => $this->report->data + ['observations' => [
             ['id' => 'a', 'kind' => 'budget_pace', 'severity' => 'critical', 'reveals' => [],
@@ -114,12 +120,11 @@ final class ReportShareTest extends TestCase
         [, $raw] = app(ShareService::class)->create($this->report, [], null);
         $notes = $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk()->json('data.data.observations');
 
-        $encoded = json_encode($notes, JSON_UNESCAPED_UNICODE);
-        // The MARKER goes; the name it was attached to is legitimate and stays, which is what
-        // `clientName` has always done everywhere else a campaign is printed.
+        $encoded = json_encode($notes, JSON_UNESCAPED_UNICODE) ?: '';
+
+        $this->assertSame([], $notes, 'a campaign-scoped note reached a client');
         $this->assertStringNotContainsString('burner', $encoded);
-        $this->assertStringContainsString('Meta — Lead Gen', $encoded);
-        $this->assertSame('Meta — Lead Gen', $notes[0]['scope']['name']);
+        $this->assertStringNotContainsString('Lead Gen', $encoded);
     }
 
     public function test_only_token_hash_is_stored(): void

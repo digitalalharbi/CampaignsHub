@@ -89,9 +89,15 @@ final class ReportAdsSectionTest extends TestCase
         $ad = array_column($data['ads'], null, 'name')['Eid film'];
         $this->assertSame('available', $ad['preview']['state']);
         $this->assertSame('https://cdn/eid.jpg', $ad['preview']['thumbnail_url']);
-        // The metadata a reader needs to place it, beside the picture.
+        /*
+         * The metadata a CLIENT may use to place it — CLIENT-REPORT-ENTITY-BOUNDARY-001.
+         *
+         * The campaign an ad sat in was here and is gone: the ad's own name and its platform say
+         * what it is, and the container is the agency's filing. This section is shared with the live
+         * link and the printed document, so it was the same leak in three places.
+         */
         $this->assertSame('meta', $ad['provider']);
-        $this->assertSame('Eid sales', $ad['campaign_name']);
+        $this->assertArrayNotHasKey('campaign_name', $ad);
         $this->assertEqualsWithDelta(3_000.0, $ad['spend'], 0.01);
     }
 
@@ -168,7 +174,9 @@ final class ReportAdsSectionTest extends TestCase
         $outline = $this->generate()['outline'];
 
         $this->assertSame(
-            ['executive_summary', 'performance', 'platforms', 'objectives', 'campaigns', 'ads', 'findings', 'recommendations'],
+            // No «campaigns» — CLIENT-REPORT-ENTITY-BOUNDARY-001. The objective split before it says
+            // what the money was bought for; the ads after it show the work that did the buying.
+            ['executive_summary', 'performance', 'platforms', 'objectives', 'ads', 'findings', 'recommendations'],
             array_column($outline, 'key'),
         );
 

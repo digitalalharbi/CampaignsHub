@@ -5,6 +5,7 @@ import { ReportAdDetail } from './ReportAdDetail'
 import { ReportAdsSection, type AdGroup, type AdsReading, type ReportAd } from './ReportAdsSection'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
+import { campaigns as countedCampaigns } from '@/lib/counted'
 import { fmtDateTime } from '@/lib/datetime'
 import { ArrowRight, ChevronLeft, ChevronRight, CircleCheck, Image as ImageIcon, Info, LayoutGrid, OctagonAlert, Rows, TriangleAlert, Trophy } from 'lucide-react'
 import {
@@ -192,7 +193,9 @@ export interface ObjectivePath {
   roas: number | null
   /** False on the paths that were never meant to sell — their CPA and ROAS are null, not zero. */
   result_metrics_apply: boolean
+  /** Emptied for a client — CLIENT-REPORT-ENTITY-BOUNDARY-001. `campaigns_count` survives it. */
   campaigns: Array<{ id: string; name: string; objective: string; objective_label_ar: string; spend: number }>
+  campaigns_count?: number
 }
 export interface ObjectivePerformance {
   paths: ObjectivePath[]
@@ -1105,7 +1108,14 @@ function ObjectiveSplitSlide({ data }: { data: ReportData }) {
               {p.result_metrics_apply
                 ? <div>CPA {money(p.cpa, c)} · ROAS {ratio(p.roas)}</div>
                 : <div>لا تنطبق تكلفة الطلب على هذا المسار</div>}
-              {/* The campaign count stood here — a fact about the plan, not about the result. */}
+              {/*
+                How many, never which — CLIENT-REPORT-ENTITY-BOUNDARY-001.
+
+                A count names nothing, and the digest email has always told a client «3 حملة» on a
+                path. Dropping it here would have left two client surfaces disagreeing about one
+                period in front of the same reader.
+              */}
+              <div>{countedCampaigns(p.campaigns_count ?? p.campaigns.length, 'ar')}</div>
             </div>
           </div>
         ))}

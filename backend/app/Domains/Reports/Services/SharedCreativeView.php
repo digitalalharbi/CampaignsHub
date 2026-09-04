@@ -201,7 +201,16 @@ final class SharedCreativeView
             'funnel' => $this->redactFunnel($this->funnel->build($current), $visibility),
             'trend' => $this->trend($id, $from, $to, $visibility),
             'by_platform' => $this->byPlatform($share, $model, $from, $to, $visibility),
-            'by_campaign' => $this->byCampaign($model, $from, $to, $visibility),
+            /*
+             * CLIENT-REPORT-ENTITY-BOUNDARY-001 — «how this creative did in each campaign» is gone.
+             *
+             * The block was a campaign roster with figures beside it: every campaign that ran this
+             * ad, by internal name and id, on the link an agency sends a merchant. Unlike the tables
+             * elsewhere it cannot be folded to platforms — a creative belongs to one provider, so a
+             * platform split of it is one row — and there is no client question the roster answered
+             * that the creative's own totals above do not.
+             */
+            'by_campaign' => [],
             /*
              * REPORT-OBJECTIVE-005 — where every one of these figures came from.
              *
@@ -469,6 +478,21 @@ final class SharedCreativeView
      */
     public function redactRow(array $row, CreativeVisibility $visibility): array
     {
+        /*
+         * CLIENT-REPORT-ENTITY-BOUNDARY-001 — the campaign a creative sat in does not travel.
+         *
+         * Every creative row that reaches a shared link passes through here — the library, the
+         * detail, the movement cards, the alerts — which is why the removal is here and not at each
+         * of those call sites. `CreativePresenter` puts the campaign on the row because the OPERATOR's
+         * own creative screens need it, and the objective it carries is what decides the headline
+         * metrics this creative is judged on. The objective is a fact about the work; the name and
+         * the id are the agency's filing.
+         *
+         * Removed rather than blanked, for the reason the visibility rules give below: a key present
+         * and empty tells a reader that a value exists and is being kept from them.
+         */
+        unset($row['campaign_name'], $row['campaign_id'], $row['ad_set_name'], $row['ad_set_id']);
+
         foreach ($visibility->hiddenMetrics() as $metric) {
             if (isset($row['metrics']) && is_array($row['metrics'])) {
                 unset($row['metrics'][$metric], $row['metrics']['reported'][$metric]);
@@ -855,45 +879,6 @@ final class SharedCreativeView
                 'metrics' => $metrics,
                 'source' => 'platform_reported',
             ];
-        })->values()->all();
-    }
-
-    /**
-     * How this creative did in each campaign that ran it, within the link's own campaign ceiling.
-     *
-     * @return list<array<string, mixed>>
-     */
-    private function byCampaign(ExternalCreative $creative, Carbon $from, Carbon $to, CreativeVisibility $visibility): array
-    {
-        $rows = DB::table('creative_daily_metrics')
-            ->where('creative_id', $creative->getKey())
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
-            ->groupBy('campaign_id')
-            ->select('campaign_id')
-            ->selectRaw('SUM(spend) spend, SUM(impressions) impressions, SUM(clicks) clicks, SUM(conversions) conversions, SUM(revenue) revenue')
-            ->get();
-
-        $names = UnifiedCampaign::query()
-            ->whereIn('id', $rows->pluck('campaign_id')->filter()->all())
-            ->pluck('name', 'id');
-
-        return $rows->map(static function ($r) use ($names, $visibility): array {
-            $row = [
-                'campaign_id' => $r->campaign_id === null ? null : (string) $r->campaign_id,
-                'campaign_name' => $r->campaign_id === null ? null : ($names[$r->campaign_id] ?? null),
-                'impressions' => (float) $r->impressions,
-                'clicks' => (float) $r->clicks,
-                'conversions' => (float) $r->conversions,
-            ];
-
-            if ($visibility->spend) {
-                $row['spend'] = (float) $r->spend;
-            }
-            if ($visibility->revenue) {
-                $row['revenue'] = (float) $r->revenue;
-            }
-
-            return $row;
         })->values()->all();
     }
 }
