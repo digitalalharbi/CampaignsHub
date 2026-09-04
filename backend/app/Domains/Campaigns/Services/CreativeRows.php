@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Support\Relevance;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
 use Closure;
@@ -275,6 +276,42 @@ final class CreativeRows
 
         return match ($sort) {
             'name' => $query->orderBy('name')->orderBy('id'),
+            /*
+             * ENTITY-RELEVANCE-ORDERING-001 — what is running, then what spent most, then a key that
+             * cannot move.
+             *
+             * The library's default was `last_active_at DESC`, which is recency and not relevance:
+             * a paused campaign's creative that delivered yesterday sorted above a serving creative
+             * whose last figure was three days old, so the first thing an operator saw was work they
+             * could do nothing about. This is the same three-state reading the campaigns workspace
+             * uses, expressed in SQL because this listing is paged by the database — ordering one page
+             * in the browser would reorder that page and misstate the listing.
+             *
+             * The two constants come from `Relevance`, which a guard holds equal to the TypeScript
+             * rule. The spend tiebreak reuses the metric join above rather than a second query, and
+             * the id is last for the reason every ordering here ends with it: ties repeat and skip
+             * rows across pages.
+             */
+            'relevance' => $query
+                ->leftJoinSub(
+                    DB::table('creative_daily_metrics')
+                        ->select('creative_id')
+                        ->selectRaw('SUM(spend) AS sort_total')
+                        ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+                        ->groupBy('creative_id'),
+                    'sorted',
+                    'sorted.creative_id',
+                    '=',
+                    'external_creatives.id',
+                )
+                ->select('external_creatives.*')
+                ->orderByRaw(
+                    'CASE WHEN external_creatives.status IN ('.implode(', ', array_fill(0, count(Relevance::NOT_RUNNING), '?')).') THEN 2'
+                    .' WHEN external_creatives.last_active_at >= ? THEN 0 ELSE 1 END',
+                    [...Relevance::NOT_RUNNING, $to->copy()->subDays(Relevance::SERVING_WITHIN_DAYS)->toDateString()],
+                )
+                ->orderByRaw('sorted.sort_total DESC NULLS LAST')
+                ->orderBy('external_creatives.id'),
             'oldest' => $query->orderBy('first_seen_at')->orderBy('id'),
             /*
              * SNAP-CREATIVE-METRICS-LIVE-001 — NULLS LAST, and it is not a refinement.
@@ -485,8 +522,15 @@ final class CreativeRows
             'providers' => $distinct('provider'),
             'formats' => $distinct('format'),
             'statuses' => $distinct('status'),
-            // The three the UI groups by, in the same vocabulary `CreativePresenter::kind()` uses.
-            'kinds' => ['image', 'video', 'carousel'],
+            /*
+             * The shapes the UI groups by, in the same vocabulary `CreativePresenter::kind()` uses.
+             *
+             * CONTENT-PREVIEW-SHAPES-001 added collection and catalog. Listing them here is not
+             * cosmetic: a filter that cannot name a shape is a filter that hides every ad of it, and
+             * an operator would conclude the account has no collection ads rather than that the
+             * picker has no word for them.
+             */
+            'kinds' => ['image', 'video', 'carousel', 'collection', 'catalog'],
             'campaigns' => $campaigns->map(static fn ($c): array => [
                 'id' => (string) $c->id, 'name' => $c->name, 'objective' => $c->objective,
             ])->all(),

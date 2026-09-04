@@ -1,3 +1,4 @@
+import { StatCard } from '@/components/ui/StatCard'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, FileText, Plus, Search, X } from 'lucide-react'
@@ -388,17 +389,9 @@ export function TaxTreatmentChip({ treatment, ar }: { treatment: string | null; 
   )
 }
 
+/** UX-KPI-PRESENTATION-001 — the product's card, with this page's tone on its dot. */
 function QuoteSummaryCard({ label, value, tone }: { label: string; value: number; tone: 'brand' | 'success' | 'info' | 'muted' }) {
-  const dot: Record<typeof tone, string> = { brand: 'bg-brand-500', success: 'bg-success', info: 'bg-info', muted: 'bg-text-muted' }
-  return (
-    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
-      <div className="flex items-center gap-1.5">
-        <span className={`h-2 w-2 rounded-full ${dot[tone]}`} aria-hidden />
-        <span className="text-xs font-semibold text-text-secondary">{label}</span>
-      </div>
-      <span className="text-2xl font-extrabold tnum text-text-primary" dir="ltr">{value}</span>
-    </div>
-  )
+  return <StatCard label={label} value={value} tone={tone === 'muted' ? 'neutral' : tone} dot />
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

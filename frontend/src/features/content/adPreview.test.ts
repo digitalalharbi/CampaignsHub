@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { absenceLabel, posterSource, previewShape, readPreview } from './adPreview'
+import { absenceLabel, aspectClass, frameAspect, posterSource, previewShape, readPreview } from './adPreview'
 import type { CreativePreview } from './api'
 
 /**
@@ -165,5 +165,92 @@ describe('the shape of the asset', () => {
   it('does not guess when the platform reported nothing', () => {
     expect(previewShape(null, null, null)).toBe('unknown')
     expect(previewShape(0, 0, 'square-ish')).toBe('unknown')
+  })
+
+  /**
+   * CONTENT-PREVIEW-SHAPES-001 — a catalog ad has no creative, and that is not an absence.
+   *
+   * Meta's dynamic product ads and their equivalents are composed per product at delivery. Nothing
+   * is missing, so «the platform sent no file» is the wrong sentence: it reads as a fault and sends
+   * an operator looking for a sync problem that does not exist. Before this it arrived as `other`
+   * and fell through to exactly that.
+   */
+  it('says a catalog ad has no single file, rather than reporting an absence', () => {
+    const reading = readPreview(
+      { state: 'available', kind: 'catalog', image_url: null, video_url: null, thumbnail_url: null } as never,
+      true,
+    )
+
+    expect(reading.kind).toBe('catalog')
+    expect(posterSource(reading)).toBeNull()
+    expect(absenceLabel(reading, true)).toContain('كتالوج')
+    expect(absenceLabel(reading, true), 'a catalog ad is not a missing file').not.toContain('لم ترسل المنصة ملفًا')
+  })
+
+  /**
+   * A collection's hero is real and is drawn; the tiles beneath it are not one file.
+   *
+   * Showing the hero alone and calling it the ad shows a reader one sixth of it, so the SHAPE
+   * travels with the reading and the surface can say which it is.
+   */
+  it('draws a collection hero and keeps the shape with it', () => {
+    const reading = readPreview(
+      { state: 'available', kind: 'collection', image_url: 'https://cdn.example/hero.jpg', video_url: null, thumbnail_url: null } as never,
+      true,
+    )
+
+    expect(reading.kind).toBe('collection')
+    expect(posterSource(reading)).toBe('https://cdn.example/hero.jpg')
+  })
+
+  /** A collection with no hero is a smaller claim than «nothing arrived». */
+  it('separates a collection with no hero from an ad with no media at all', () => {
+    const noHero = readPreview(
+      { state: 'available', kind: 'collection', image_url: null, video_url: null, thumbnail_url: null } as never,
+      true,
+    )
+    const noMedia = readPreview(
+      { state: 'available', kind: 'image', image_url: null, video_url: null, thumbnail_url: null } as never,
+      true,
+    )
+
+    expect(absenceLabel(noHero, true)).toContain('مجموعة')
+    expect(absenceLabel(noMedia, true)).toContain('لم تُرسل المنصة ملفًا')
+    expect(absenceLabel(noHero, true)).not.toBe(absenceLabel(noMedia, true))
+  })
+})
+
+/**
+ * CONTENT-PREVIEW-SHAPES-001 — the shape of the FRAME, which is not the shape of the media.
+ *
+ * A story or a reel is 9:16, and every card drew `aspect-video`: the ad was letterboxed into a third
+ * of its own frame, and a reader comparing two ads was comparing two crops. One mapping, because two
+ * surfaces choosing their own would put the same ad in two different boxes.
+ */
+describe('the frame an ad is drawn in', () => {
+  it('gives a vertical ad a tall frame', () => {
+    expect(aspectClass('vertical')).toBe('aspect-[9/16]')
+  })
+
+  it('gives a horizontal ad a wide one, and a square ad a square', () => {
+    expect(aspectClass('horizontal')).toBe('aspect-video')
+    expect(aspectClass('square')).toBe('aspect-square')
+  })
+
+  /**
+   * «The platform did not say» is not «square».
+   *
+   * Null returns null rather than a class, so the surface keeps whatever frame it already had — a
+   * default here would be this module making a claim about an ad's composition from no evidence, on
+   * every provider that does not report dimensions.
+   */
+  it('states no shape when the platform stated none', () => {
+    expect(aspectClass(null)).toBeNull()
+  })
+
+  it('reads the shape off the preview, and null off nothing at all', () => {
+    expect(frameAspect(preview({ aspect: 'vertical' }))).toBe('vertical')
+    expect(frameAspect(preview())).toBeNull()
+    expect(frameAspect(null)).toBeNull()
   })
 })

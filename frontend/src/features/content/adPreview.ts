@@ -36,6 +36,40 @@ export type PreviewReading =
    * URL on it is null, which happens when a creative carries only a carousel breakdown.
    */
   | { kind: 'none'; reason: 'withheld' | 'expired' | 'unavailable' | 'no_media'; note: string | null }
+  /**
+   * CONTENT-PREVIEW-SHAPES-001 — two shapes whose media is not one asset.
+   *
+   * A COLLECTION is a hero over a grid of tiles. The hero renders — it is a real frame the reader
+   * should see — but showing it alone and calling it the ad is showing one sixth of it, so the
+   * reading carries the shape as well and the surface says which it is.
+   *
+   * A CATALOG ad has no fixed creative at all: the platform composes one per product at delivery.
+   * That is NOT an absence — nothing is missing, and «no media» would send an operator looking for
+   * a sync fault that does not exist.
+   */
+  | { kind: 'collection'; src: string | null; note: null }
+  | { kind: 'catalog'; note: null }
+
+/**
+ * The frame's shape, for a surface that draws a box before it knows what goes in it.
+ *
+ * Read from the reading rather than from the preview, so every caller answers it the same way — and
+ * `null` stays a real answer: «the platform did not say» is not «square», and a surface that
+ * defaulted would be making a claim about the ad's composition from nothing.
+ */
+export function frameAspect(preview: CreativePreview | null | undefined): 'vertical' | 'square' | 'horizontal' | null {
+  return preview?.aspect ?? null
+}
+
+/**
+ * The Tailwind aspect class for a frame, or null to keep whatever the surface already had.
+ *
+ * One mapping, because two surfaces choosing their own would put the same story ad in two different
+ * boxes — and the reader comparing them across pages would be comparing crops rather than ads.
+ */
+export function aspectClass(aspect: 'vertical' | 'square' | 'horizontal' | null): string | null {
+  return aspect === 'vertical' ? 'aspect-[9/16]' : aspect === 'horizontal' ? 'aspect-video' : aspect === 'square' ? 'aspect-square' : null
+}
 
 export function readPreview(preview: CreativePreview | null | undefined, ar: boolean): PreviewReading {
   const note = (p: CreativePreview) => (ar ? p.note_ar : p.note_en) ?? null
@@ -56,6 +90,20 @@ export function readPreview(preview: CreativePreview | null | undefined, ar: boo
    * IMAGE would be the honest fallback for the picture and a lie about the ad: a reader deciding
    * between a still and a film needs to know which one ran.
    */
+  /*
+   * The two shapes without one asset, decided BEFORE the image path.
+   *
+   * A collection's hero would otherwise read as an ordinary still and a catalog ad — which has no
+   * asset by design — would fall through to `no_media`, which reads as a fault.
+   */
+  if (preview.kind === 'catalog') {
+    return { kind: 'catalog', note: null }
+  }
+
+  if (preview.kind === 'collection') {
+    return { kind: 'collection', src: preview.image_url ?? preview.thumbnail_url ?? null, note: null }
+  }
+
   if (preview.kind === 'video' && preview.video_url) {
     return { kind: 'video', src: preview.video_url, poster: preview.thumbnail_url ?? preview.image_url, note: null }
   }
@@ -67,7 +115,15 @@ export function readPreview(preview: CreativePreview | null | undefined, ar: boo
 
 /** The still to draw for a reading — a video's poster, an image's file, or nothing. */
 export function posterSource(reading: PreviewReading): string | null {
-  return reading.kind === 'image' ? reading.src : reading.kind === 'video' ? reading.poster : null
+  // A collection's HERO is a real frame and is drawn; the tiles beneath it are the part a still
+  // cannot carry, which is why the surface also says what shape it is looking at.
+  return reading.kind === 'image'
+    ? reading.src
+    : reading.kind === 'video'
+      ? reading.poster
+      : reading.kind === 'collection'
+        ? reading.src
+        : null
 }
 
 /**
@@ -95,6 +151,31 @@ export function absenceLabel(reading: PreviewReading, ar: boolean): string {
     return ar
       ? 'فيديو — لم ترسل المنصة صورة غلاف له. افتح الإعلان لتشغيله.'
       : 'A video — the platform sent no cover frame for it. Open the ad to play it.'
+  }
+
+  /*
+   * CONTENT-PREVIEW-SHAPES-001 — a catalog ad has no creative, and that is not an absence.
+   *
+   * The platform composes one per product at delivery, so there is nothing to have sent. «The
+   * platform sent no file» would read as a fault and send an operator looking for a sync problem
+   * that does not exist.
+   */
+  if (reading.kind === 'catalog') {
+    return ar
+      ? 'إعلان كتالوج — تُركّب المنصة صورته لكل منتج عند العرض، فلا يوجد ملف واحد له.'
+      : 'A catalog ad — the platform composes its image per product at delivery, so it has no single file.'
+  }
+
+  /*
+   * A collection with no hero: the shape is known and the frame is not.
+   *
+   * Different from `no_media`, which says nothing arrived at all — here the ad's SHAPE is a hero
+   * over tiles and only the hero is missing, which is a smaller and more specific claim.
+   */
+  if (reading.kind === 'collection' && reading.src === null) {
+    return ar
+      ? 'إعلان مجموعة — لم ترسل المنصة صورة الغلاف. البلاطات تحتها ليست ملفًا واحدًا.'
+      : 'A collection ad — the platform sent no hero frame. The tiles beneath it are not one file.'
   }
 
   if (reading.kind !== 'none') {

@@ -40,7 +40,28 @@ export interface CreativeCardSlide {
 export interface CreativePreview {
   /** `available` renders; the other three explain themselves and never fabricate an image. */
   state: 'available' | 'withheld' | 'expired' | 'unavailable'
-  kind: 'image' | 'video' | 'carousel' | 'other'
+  /**
+   * CONTENT-PREVIEW-SHAPES-001 — the shapes a real ad takes, including the two that have no single
+   * asset to show.
+   *
+   * `collection` is a hero over a grid of tiles; `catalog` is composed per product at delivery and
+   * has no fixed creative at all. Both used to arrive as `other` and be rendered as a still or as
+   * «no media», and neither is true of them.
+   */
+  kind: 'image' | 'video' | 'carousel' | 'collection' | 'catalog' | 'other'
+  /**
+   * The SHAPE of the frame this ad fills, measured from the provider's own dimensions.
+   *
+   * A story or a reel is 9:16, and shown in a square frame it is letterboxed into a third of the
+   * space or cropped through its own subject — the reader is comparing a different ad from the one
+   * that ran. Null is «the platform did not say», which is not «tall»: a frame with no answer keeps
+   * the neutral shape it has always had rather than guessing.
+   *
+   * Optional, and it means the same thing as null. A browser can be a version ahead of the server it
+   * is talking to, and «this build's payload has no aspect field» is the same fact as «the platform
+   * did not say» — both leave the frame neutral, and neither is a reason to fail a render.
+   */
+  aspect?: 'vertical' | 'square' | 'horizontal' | null
   image_url: string | null
   video_url: string | null
   thumbnail_url: string | null
