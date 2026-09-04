@@ -35,7 +35,7 @@ export interface RelevanceRow {
  * send an operator to fix something that is working. Three days is the point past which silence stops
  * being lag and starts being a fact about the campaign.
  */
-const SERVING_WITHIN_DAYS = 3
+export const SERVING_WITHIN_DAYS = 3
 
 const DAY = 86_400_000
 
@@ -50,7 +50,15 @@ const DAY = 86_400_000
  *
  * `unknown` is absent for a different reason — see below.
  */
-const NOT_RUNNING = new Set(['paused', 'completed', 'archived'])
+/**
+ * Exported so the SERVER's copy can be held equal to it — see `relevanceDefinition.test.ts`.
+ *
+ * A paged listing has to express this order in SQL, and a SQL order needs these values. Exporting
+ * them is what keeps that from becoming a second definition.
+ */
+export const NOT_RUNNING_STATUSES = ['paused', 'completed', 'archived'] as const
+
+const NOT_RUNNING = new Set<string>(NOT_RUNNING_STATUSES)
 
 /**
  * The two facts the rule actually reads.
