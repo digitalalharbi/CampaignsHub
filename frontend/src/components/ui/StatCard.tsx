@@ -117,7 +117,7 @@ export function StatCard({
         {value}
       </span>
 
-      {hint && <span className={`text-text-tertiary ${METRIC_HINT}`}>{hint}</span>}
+      {hint && <span className={`text-text-muted ${METRIC_HINT}`}>{hint}</span>}
 
       {spark}
     </div>

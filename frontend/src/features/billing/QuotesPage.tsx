@@ -47,7 +47,7 @@ export const QUOTE_STATUS: Record<string, { ar: string; en: string; tone: string
   sent: { ar: 'مُرسل', en: 'Sent', tone: 'bg-info/15 text-info' },
   approved: { ar: 'معتمد', en: 'Approved', tone: 'bg-success/15 text-success' },
   rejected: { ar: 'مرفوض', en: 'Rejected', tone: 'bg-danger/15 text-danger' },
-  expired: { ar: 'منتهٍ', en: 'Expired', tone: 'bg-surface-hover text-text-tertiary' },
+  expired: { ar: 'منتهٍ', en: 'Expired', tone: 'bg-surface-hover text-text-muted' },
 }
 
 export function quoteStatusMeta(status: string, ar: boolean) {
@@ -171,7 +171,7 @@ export function QuotesPage() {
                     <span className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{quote.number}</span>
                     <span className="tnum text-lg font-extrabold text-text-primary" dir="ltr">{formatMoney(quote.total, quote.currency)}</span>
                     <TaxTreatmentChip treatment={quote.tax_treatment} ar={ar} />
-                    <span className="text-[11px] text-text-tertiary">{c.created_at}: <span className="tnum">{formatDate(quote.created_at)}</span></span>
+                    <span className="text-[11px] text-text-muted">{c.created_at}: <span className="tnum">{formatDate(quote.created_at)}</span></span>
                   </div>
                   <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${status.tone}`}>{status.label}</span>
                 </button>
@@ -284,7 +284,7 @@ function CreateQuoteForm({ c, ar, onCreated, embedded }: { c: Copy; ar: boolean;
           ))}
         </select>
         {/* Full treatment name — the extra detail, shown quietly under the compact selector. */}
-        <span className="mt-1 text-[11px] text-text-tertiary">{taxTreatmentLabel(form.tax_treatment, ar)}</span>
+        <span className="mt-1 text-[11px] text-text-muted">{taxTreatmentLabel(form.tax_treatment, ar)}</span>
       </Field>
       <div className="flex flex-col gap-1 rounded-lg bg-surface-hover px-3 py-2 text-sm">
         <div className="flex items-center justify-between text-text-secondary">
@@ -361,10 +361,10 @@ function QuoteDrawer({
             ) : null}
             {/* Reject has no staff endpoint — shown for reference only (a client-portal action). */}
             <button disabled title={c.reject_ref}
-              className="flex cursor-not-allowed items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-tertiary opacity-60">
+              className="flex cursor-not-allowed items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-muted opacity-60">
               <X size={15} /> {c.reject}
             </button>
-            <span className="text-[11px] text-text-tertiary">{c.reject_ref}</span>
+            <span className="text-[11px] text-text-muted">{c.reject_ref}</span>
           </div>
         )}
       </div>

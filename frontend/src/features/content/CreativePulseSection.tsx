@@ -686,7 +686,7 @@ function Poster({ creative, label }: { creative: CreativeCard; label: string }) 
 
   if (!src) {
     return (
-      <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-center text-[10px] leading-tight text-text-muted">
+      <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-surface-secondary text-center text-[10px] leading-tight text-text-muted">
         {label}
       </span>
     )
@@ -894,14 +894,14 @@ function SpendSplit({ rows, currency, t, ar, drill }: { rows: SpendByKind[]; cur
       <ul className="mt-3 flex flex-col gap-3">
         {rows.map((row) => (
           <li key={row.kind}>
-            <Link to={drill({ kinds: [row.kind] })} className="block rounded-xl p-1 transition-colors hover:bg-surface-muted">
+            <Link to={drill({ kinds: [row.kind] })} className="block rounded-xl p-1 transition-colors hover:bg-surface-secondary">
               <div className="flex items-center justify-between gap-2 text-sm">
                 <span className="text-text">{KIND_LABEL(row.kind, t)}</span>
                 <span className="text-text-muted">
                   {money(row, currency, ar)} · {row.share === null ? '—' : percent(row.share)}
                 </span>
               </div>
-              <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-surface-muted">
+              <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-surface-secondary">
                 <div
                   className="h-full rounded-full bg-brand-500"
                   style={{ width: `${Math.round((row.share ?? 0) * 100)}%` }}

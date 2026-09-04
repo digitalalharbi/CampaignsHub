@@ -34,8 +34,8 @@ export const INVOICE_STATUS: Record<string, { ar: string; en: string; tone: stri
   issued: { ar: 'صادرة', en: 'Issued', tone: 'bg-info/15 text-info' },
   partially_paid: { ar: 'مدفوعة جزئياً', en: 'Partially paid', tone: 'bg-warning/15 text-warning' },
   paid: { ar: 'مدفوعة', en: 'Paid', tone: 'bg-success/15 text-success' },
-  void: { ar: 'ملغاة', en: 'Void', tone: 'bg-surface-hover text-text-tertiary' },
-  refunded: { ar: 'مستردّة', en: 'Refunded', tone: 'bg-surface-hover text-text-tertiary' },
+  void: { ar: 'ملغاة', en: 'Void', tone: 'bg-surface-hover text-text-muted' },
+  refunded: { ar: 'مستردّة', en: 'Refunded', tone: 'bg-surface-hover text-text-muted' },
 }
 
 export function invoiceStatusMeta(status: string, ar: boolean) {
@@ -139,7 +139,7 @@ export function InvoicesPage() {
                     <td className="p-3 tnum text-text-primary" dir="ltr">{formatMoney(inv.total, inv.currency)}</td>
                     <td className="p-3 tnum text-text-secondary" dir="ltr">{formatMoney(inv.amount_paid, inv.currency)}</td>
                     <td className="p-3 tnum text-text-primary" dir="ltr">{formatMoney(outstanding, inv.currency)}</td>
-                    <td className="p-3 tnum text-xs text-text-tertiary" dir="ltr">{formatDate(inv.due_date)}</td>
+                    <td className="p-3 tnum text-xs text-text-muted" dir="ltr">{formatDate(inv.due_date)}</td>
                     <td className="p-3 text-xs">{isPayable(inv) ? <span className="text-brand-600">•</span> : null}</td>
                   </tr>
                 )

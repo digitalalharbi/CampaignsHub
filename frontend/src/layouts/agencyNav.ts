@@ -32,6 +32,16 @@ import type { NavGroup } from './SidebarNav'
  * Two levels, never three. A group of one renders as a plain link (see `SidebarNav`), so «الرئيسية»
  * is a single entry rather than a disclosure triangle over one item.
  *
+ * ## Three leaves state a project capability — TEAM-PROJECT-RBAC-001
+ *
+ * Reports, platform connections and the team screen are the three whose routes refuse somebody
+ * without the matching capability in the project they are looking at. A rail that offers them anyway
+ * sends a media buyer to a 403, which reads as a broken product rather than as a boundary.
+ *
+ * The other leaves state none, and that is a decision rather than an omission: every reader who can
+ * reach a project can read its dashboard, its campaigns and its content, so a capability on those
+ * would be a filter that never filters. A leaf gains one when its route gains one.
+ *
  * `agencyNavLeafPaths` is exported so a test can assert every destination survived the regrouping.
  */
 export const agencyNavGroups: readonly NavGroup[] = [
@@ -85,7 +95,7 @@ export const agencyNavGroups: readonly NavGroup[] = [
        * missing, so the reader running media for five clients had no page to open.
        */
       { to: '/agency/analytics', ar: 'التحليلات', en: 'Analytics', icon: TrendingUp },
-      { to: '/agency/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3 },
+      { to: '/agency/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, cap: 'reports.view' },
       { to: '/agency/files', ar: 'الملفات', en: 'Files', icon: FolderOpen },
     ],
   },
@@ -119,8 +129,8 @@ export const agencyNavGroups: readonly NavGroup[] = [
        * The page itself was reachable only under `/app` until now, so an agency operator had nowhere
        * to press connect at all — the API had always allowed them.
        */
-      { to: '/agency/integrations', ar: 'ربط المنصات', en: 'Platform connections', icon: Plug },
-      { to: '/agency/team', ar: 'الفريق والصلاحيات', en: 'Team & permissions', icon: Users },
+      { to: '/agency/integrations', ar: 'ربط المنصات', en: 'Platform connections', icon: Plug, cap: 'integrations.manage' },
+      { to: '/agency/team', ar: 'الفريق والصلاحيات', en: 'Team & permissions', icon: Users, cap: 'team.manage' },
       { to: '/agency/settings', ar: 'إعدادات الوكالة', en: 'Agency settings', icon: Settings },
     ],
   },

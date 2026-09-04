@@ -86,7 +86,7 @@ export function TeamNotifications() {
       )}
 
       {people.length === 0 ? (
-        <p className="mt-6 rounded-xl bg-surface-subtle px-4 py-6 text-center text-sm text-text-secondary">
+        <p className="mt-6 rounded-xl bg-surface-secondary px-4 py-6 text-center text-sm text-text-secondary">
           {ar ? 'لا يوجد أعضاء تشترك معهم في مشروع.' : 'Nobody here shares a project with you.'}
         </p>
       ) : (

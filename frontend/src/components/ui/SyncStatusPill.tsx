@@ -16,7 +16,7 @@ export function SyncStatusPill({ status, ar }: { status: string | null | undefin
     danger: 'bg-[var(--negative-background)] text-danger',
     success: 'bg-[var(--positive-background)] text-success',
     warning: 'bg-[var(--warning-background)] text-warning',
-    neutral: 'bg-surface-muted text-text-secondary',
+    neutral: 'bg-surface-secondary text-text-secondary',
   }
 
   return (

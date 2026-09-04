@@ -313,7 +313,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
                   </div>
                   <p className="text-sm text-text-secondary">{messageFor(e, locale)}</p>
                   <ContextChips e={e} c={c} />
-                  <span className="text-[11px] text-text-tertiary">{c.triggered}: {fmt(e.last_triggered_at)}</span>
+                  <span className="text-[11px] text-text-muted">{c.triggered}: {fmt(e.last_triggered_at)}</span>
                 </div>
               </div>
               {filter !== 'resolved' && (
@@ -458,7 +458,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
                   {TYPE_LABEL[r.type as AlertType]?.[locale] ?? r.type} · {c.severity}: {sevLabel(r.severity, c)} · {c.cooldown}: {r.cooldown_minutes}
                   {r.threshold ? ` · ${c.threshold}: ${Object.entries(r.threshold).map(([k, v]) => `${k}=${v}`).join(', ')}` : ''}
                 </span>
-                <span className="text-[11px] text-text-tertiary">{(r.channels ?? []).join(' · ')}{r.create_task ? ` · ${c.create_task_toggle}` : ''}</span>
+                <span className="text-[11px] text-text-muted">{(r.channels ?? []).join(' · ')}{r.create_task ? ` · ${c.create_task_toggle}` : ''}</span>
               </div>
               <span className={`h-2 w-2 rounded-full ${r.active ? 'bg-success' : 'bg-border'}`} aria-hidden />
             </div>
@@ -491,7 +491,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
           {c.threshold}
           <input value={thresholdRaw} onChange={(e) => setThresholdRaw(e.target.value)} placeholder="0.9"
             className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary" />
-          <span className="text-[11px] font-normal text-text-tertiary">{c.threshold_hint}</span>
+          <span className="text-[11px] font-normal text-text-muted">{c.threshold_hint}</span>
         </label>
         <label className="flex flex-col gap-1 text-xs font-semibold text-text-secondary">
           {c.cooldown}
@@ -604,7 +604,7 @@ function DeliveriesTab({ c }: { c: Copy }) {
                 <td className="p-2.5 text-text-primary">{r.title || r.type}</td>
                 <td className="p-2.5 text-text-secondary">{r.channel === 'email' ? c.ch_email : c.ch_in_app}</td>
                 <td className="p-2.5"><DeliveryStatus status={r.status} c={c} /></td>
-                <td className="p-2.5 text-xs text-text-tertiary">{fmt(r.created_at)}</td>
+                <td className="p-2.5 text-xs text-text-muted">{fmt(r.created_at)}</td>
               </tr>
             ))}
             {rows.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-text-secondary">{c.none}</td></tr>}

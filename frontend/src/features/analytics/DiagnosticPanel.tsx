@@ -145,7 +145,7 @@ export function DiagnosticPanel({
   if (loading || totals === undefined || reported === undefined) {
     return (
       <Panel title={title} loading>
-        <div className="h-20 animate-pulse rounded-xl bg-surface-muted" data-testid="diagnostic-loading" />
+        <div className="h-20 animate-pulse rounded-xl bg-surface-secondary" data-testid="diagnostic-loading" />
       </Panel>
     )
   }
@@ -246,7 +246,7 @@ function Finding({ finding, ar }: { finding: DiagnosticFinding; ar: boolean }) {
   const copy = COPY[finding.code]
 
   return (
-    <li className="flex gap-3 rounded-xl border border-border bg-surface-muted/40 p-3" data-testid={`diagnostic-finding-${finding.code}`}>
+    <li className="flex gap-3 rounded-xl border border-border bg-surface-secondary/40 p-3" data-testid={`diagnostic-finding-${finding.code}`}>
       <AlertTriangle size={18} className="mt-0.5 shrink-0 text-warning" />
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">

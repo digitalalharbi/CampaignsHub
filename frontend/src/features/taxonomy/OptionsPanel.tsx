@@ -118,7 +118,7 @@ export function OptionsPanel({ definition }: { definition: TaxonomyDefinition })
           <h2 className="truncate text-lg font-bold text-text-primary">
             {locale === 'ar' ? definition.label_ar : definition.label_en}
           </h2>
-          <p className="text-xs text-text-tertiary" dir="ltr">{definition.key}</p>
+          <p className="text-xs text-text-muted" dir="ltr">{definition.key}</p>
         </div>
         {perms.canCreate && definition.allows_custom_options && (
           <Button size="sm" onClick={() => setCreateOpen(true)}>
@@ -271,7 +271,7 @@ function OptionRow({
           {opt.is_system && <Badge tone="neutral">{c.system}</Badge>}
           {!opt.is_active && <Badge tone="warning">{c.inactive}</Badge>}
         </div>
-        <span className="text-xs text-text-tertiary" dir="ltr">
+        <span className="text-xs text-text-muted" dir="ltr">
           {opt.label_en} · {c.usage}: <span className="tnum">{usage}</span>
         </span>
       </div>
@@ -361,7 +361,7 @@ function RowMenu({
           {perms.canMerge && item(c.merge, <GitMerge size={14} />, onMerge)}
           {perms.canMerge && item(c.reassign, <Shuffle size={14} />, onReassign)}
           {opt.is_system && (
-            <span className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-text-tertiary">
+            <span className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-text-muted">
               <Ban size={12} /> {c.systemLockRow}
             </span>
           )}

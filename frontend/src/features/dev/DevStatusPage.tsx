@@ -61,7 +61,7 @@ export function DevStatusPage() {
     <div className="mx-auto flex max-w-2xl flex-col gap-5 p-6" dir="ltr">
       <header className="flex items-baseline justify-between">
         <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">Dev Environment Status</h1>
-        <span className="text-xs text-text-tertiary">{at && `updated ${at}`}</span>
+        <span className="text-xs text-text-muted">{at && `updated ${at}`}</span>
       </header>
       {err && <p className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">dev status unavailable: {err}</p>}
       {!data && !err && <p className="text-sm text-text-secondary">…</p>}

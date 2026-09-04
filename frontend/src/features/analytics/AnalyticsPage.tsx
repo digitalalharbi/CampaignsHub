@@ -954,7 +954,7 @@ function PlatformPaths({
           Said on the page, not only in the payload. It is the sentence a «best platform» card would
           have to contradict in order to exist.
         */}
-        <p data-testid="platform-paths-cross" className="text-[11px] text-text-tertiary">
+        <p data-testid="platform-paths-cross" className="text-[11px] text-text-muted">
           {ar ? data?.cross_path_reason_ar : data?.cross_path_reason_en}
         </p>
       </div>

@@ -1201,7 +1201,7 @@ function ReportCards({
             </span>
           </div>
           <span className="text-[11px] text-text-muted">{typeLabel(r.type)}</span>
-          <span className="tnum text-[11px] text-text-tertiary" dir="ltr">
+          <span className="tnum text-[11px] text-text-muted" dir="ltr">
             {r.period.from ?? '…'} → {r.period.to ?? '…'}
           </span>
         </button>

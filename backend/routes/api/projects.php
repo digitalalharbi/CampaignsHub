@@ -10,6 +10,7 @@ use App\Domains\Metrics\Http\Controllers\SavedDashboardViewController;
 use App\Domains\Metrics\Http\Controllers\SpendLimitController;
 use App\Domains\Metrics\Http\Controllers\SyncRunController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
+use App\Domains\Projects\Http\Controllers\ProjectCapabilityController;
 use App\Domains\Projects\Http\Controllers\ProjectController;
 use App\Domains\Projects\Http\Controllers\ProjectMembershipController;
 use App\Domains\Projects\Http\Controllers\ProjectOverviewController;
@@ -60,6 +61,17 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('dash
 // Project-scoped resources (ResolveProject enforces project isolation).
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->prefix('projects/{project}')->name('projects.scoped.')->group(function (): void {
     Route::get('overview', [ProjectOverviewController::class, 'show'])->middleware('project.can:dashboard.view')->name('overview');
+
+    /*
+     * TEAM-PROJECT-RBAC-001 — the capability set, for drawing the rail and nothing else.
+     *
+     * Deliberately NOT behind a `project.can:` of its own: every capability it could require is one
+     * this endpoint exists to report on, so gating it would make the rail undrawable for exactly the
+     * people whose rail differs. The `project` middleware above has already established that this
+     * person may reach the project, and the answer is about themselves — it names no other member and
+     * no other project.
+     */
+    Route::get('capabilities', [ProjectCapabilityController::class, 'index'])->name('capabilities');
 
     // Effective disclaimer/methodology copy for live surfaces (dashboard/analytics/live report).
     Route::get('disclaimer', [DisclaimerController::class, 'resolve'])->name('disclaimer.resolve');

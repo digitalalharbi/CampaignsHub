@@ -98,7 +98,7 @@ export function MergeReassignDialog({ open, mode, source, candidates, onClose, o
         <div className="flex items-center gap-2 rounded-lg bg-surface-hover px-3 py-2 text-sm">
           <span className="font-semibold text-text-secondary">{c.usageSummary}</span>
           <span className="tnum font-bold text-text-primary">{usageQ.isLoading ? '…' : count}</span>
-          <span className="text-text-tertiary">{c.usageCount}</span>
+          <span className="text-text-muted">{c.usageCount}</span>
         </div>
 
         {targets.length === 0 ? (

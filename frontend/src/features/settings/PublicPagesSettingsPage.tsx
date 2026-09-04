@@ -171,7 +171,7 @@ export function PublicPagesSettingsPage() {
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{key}</span>
                     {s.enabled === false && (
-                      <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-text-tertiary">{c.hidden}</span>
+                      <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-text-muted">{c.hidden}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -228,7 +228,7 @@ export function PublicPagesSettingsPage() {
             <div className="flex flex-col gap-3">
               {orderedSections(draft).filter(([, s]) => s.enabled !== false).map(([key, s]) => (
                 <div key={key} className="rounded-xl border border-border p-3">
-                  <span className="font-mono text-[10px] text-text-tertiary" dir="ltr">{key}</span>
+                  <span className="font-mono text-[10px] text-text-muted" dir="ltr">{key}</span>
                   {s.eyebrow ? <div className="text-[11px] font-semibold text-brand-600">{String(s.eyebrow)}</div> : null}
                   {s.title ? <div className="text-base font-bold text-text-primary">{String(s.title)}</div> : null}
                   {s.subtitle ? <div className="text-sm text-text-secondary">{String(s.subtitle)}</div> : null}
