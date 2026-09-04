@@ -65,7 +65,16 @@ async function numericColumns(page: Page): Promise<Column[]> {
           head: (th as HTMLElement).innerText.trim().slice(0, 24),
           cell: text.slice(0, 16),
           drift: Math.abs((a.left + a.right) / 2 - (b.left + b.right) / 2),
-          tabular: getComputedStyle(cell).fontVariantNumeric.includes('tabular'),
+          /*
+           * Read from whichever element actually CARRIES the numerals.
+           *
+           * `font-variant-numeric` inherits downwards, so a `.tnum` on the `<td>` reaches its text —
+           * but most cells here put the class on an inner `<span>`, and reading the `<td>` alone
+           * reports «normal» for a column that is perfectly tabular. That is a false accusation
+           * against the product, and this sweep exists to make true ones.
+           */
+          tabular: [cell, ...cell.querySelectorAll('*')].some((el) =>
+            getComputedStyle(el as Element).fontVariantNumeric.includes('tabular')),
           table: ti,
         })
       })
@@ -86,6 +95,16 @@ const TAB_IDS = ['platforms', 'accounts', 'campaigns', 'ad_sets', 'budget', 'obj
 
 for (const locale of ['en', 'ar'] as const) {
   test(`every numeric column on Analytics lines up with its header — ${locale}`, async ({ page, request }) => {
+    /*
+     * Seven tabs, each a navigation and a settle, in ONE test — well past the 30s default.
+     *
+     * The first version left the default and put a 40s expectation inside it, which can never
+     * succeed: the test is killed ten seconds before its own assertion is allowed to give up. It
+     * failed on firefox, which is slower to paint the first tab, and the report said «heading not
+     * found» — a sentence about the product for what was entirely a fault in this file.
+     */
+    test.setTimeout(180_000)
+
     const projectId = await seededProject(request, STORE_PROJECT)
     await selectProject(page, projectId)
 
@@ -102,7 +121,7 @@ for (const locale of ['en', 'ar'] as const) {
 
     for (const id of TAB_IDS) {
       await page.goto(`/agency/analytics?tab=${id}`)
-      await expect(page.getByRole('heading', { name: /Analytics|التحليلات/ })).toBeVisible({ timeout: 40000 })
+      await expect(page.getByRole('heading', { name: /Analytics|التحليلات/ })).toBeVisible({ timeout: 30000 })
 
       // The table arrives with its own request; an empty tab is a legitimate state, handled below.
       await page.waitForTimeout(3000)
