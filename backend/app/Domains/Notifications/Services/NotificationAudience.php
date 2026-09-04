@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\Projects\Access\ProjectAbilities;
+use App\Domains\Projects\Access\ProjectCapability;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -42,7 +44,16 @@ final class NotificationAudience
     public function __construct(
         private readonly DigestScope $scope,
         private readonly NotificationChoices $choices,
+        private readonly ProjectAbilities $abilities,
     ) {}
+
+    /**
+     * The category whose messages are about OUR plumbing — CLIENT-DIAGNOSTIC-SEPARATION-001.
+     *
+     * «Snapchat's last sync failed», «the token expires on Tuesday». Every one of them asks for an
+     * action that only somebody who can manage the connection can take.
+     */
+    private const OPERATOR_CATEGORY = 'integrations';
 
     /**
      * The people who should be told about `$projectId`, in `$category`.
@@ -68,6 +79,9 @@ final class NotificationAudience
                 continue;
             }
             if (! $this->wantsCategory($user, $tenantId, $category)) {
+                continue;
+            }
+            if (! $this->mayBeToldAboutOurPlumbing($user, $projectId, $category)) {
                 continue;
             }
 
@@ -97,6 +111,9 @@ final class NotificationAudience
         if (! $this->wantsCategory($user, $tenantId, $category)) {
             return ['eligible' => false, 'reason' => 'switched_off_by_recipient'];
         }
+        if (! $this->mayBeToldAboutOurPlumbing($user, $projectId, $category)) {
+            return ['eligible' => false, 'reason' => 'cannot_act_on_integrations'];
+        }
 
         return ['eligible' => true, 'reason' => null];
     }
@@ -118,6 +135,32 @@ final class NotificationAudience
             $categories,
             fn (string $category): bool => $this->wantsCategory($user, $tenantId, $category),
         ));
+    }
+
+    /**
+     * An integrations alert goes to somebody who can DO something about it.
+     *
+     * «Snapchat's last sync failed — some figures may be incomplete» is a statement about our
+     * plumbing, and the only action it implies is reconnecting the source. A recipient without
+     * `integrations.manage` on the project cannot take it: they are told our machinery is broken, in
+     * our words, and left to forward it to somebody else — which is the operator diagnostic reaching a
+     * client's inbox that CLIENT-DIAGNOSTIC-SEPARATION-001 exists to stop.
+     *
+     * The test is the CAPABILITY rather than the role name, deliberately. `client_viewer` and the
+     * internal `content` role both resolve to the same preset, so «is this person a client» cannot be
+     * answered from a role name — while «can this person reconnect the source» is exactly the question
+     * the message raises, and the RBAC engine already answers it.
+     *
+     * Every other category is unaffected: a budget alert asks for a budget decision, and a client's
+     * management is entitled to that one.
+     */
+    private function mayBeToldAboutOurPlumbing(User $user, string $projectId, string $category): bool
+    {
+        if ($category !== self::OPERATOR_CATEGORY) {
+            return true;
+        }
+
+        return $this->abilities->allows($user, $projectId, ProjectCapability::INTEGRATIONS_MANAGE);
     }
 
     /**
