@@ -129,6 +129,30 @@ describe('the change diagnosis', () => {
   })
 
   /**
+   * The «nothing moved against it» card names the axis it counted.
+   *
+   * The same component renders on more than one dimension now, and it said «every PLATFORM moved the
+   * same way» underneath a decomposition by OBJECTIVE — a sentence about the wrong thing, on the one
+   * card whose whole job is to say what it looked at.
+   */
+  it('names the dimension it compared when nothing moved against the account', () => {
+    const allUp = decomposition({
+      by: 'objective',
+      drivers: [
+        { key: 'sales', name: 'sales', current: 30, previous: 24, change: 6, share: 0.6, direction: 'up' },
+        { key: 'leads', name: 'leads', current: 18, previous: 14, change: 4, share: 0.4, direction: 'up' },
+      ],
+    })
+
+    render(payload({ drivers: allUp }))
+
+    expect(screen.getByTestId('signal-against')).toHaveTextContent('Every objective moved the same way')
+    expect(screen.getByTestId('signal-against')).not.toHaveTextContent(/platform/i)
+    // …and the drivers are named as objectives rather than by their database key.
+    expect(screen.getByTestId('drivers-spend')).toHaveTextContent('Sales')
+  })
+
+  /**
    * A withheld platform is NAMED, never counted as zero — FX-001.
    *
    * Silently excluding it would hand its share of the movement to whichever platform happened to be

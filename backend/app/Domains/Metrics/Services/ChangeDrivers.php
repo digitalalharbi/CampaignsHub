@@ -63,7 +63,8 @@ final class ChangeDrivers
     /**
      * One metric's movement, split by the entity that produced it.
      *
-     * `by` is the dimension: `provider` (which platform), `campaign` (which campaign) or `ad_set`.
+     * `by` is the dimension: `provider` (which platform), `campaign` (which campaign), or `objective`
+     * (what the money was BOUGHT for — the axis a mix shift hides behind).
      * The window and its comparison are given rather than derived, so the caller's «previous period»
      * and this decomposition's cannot disagree about which days they mean.
      *
@@ -243,9 +244,43 @@ final class ChangeDrivers
     private function rowsFor(string $by, Carbon $from, Carbon $to): array
     {
         $rows = match ($by) {
-            'campaign' => $this->metrics->byCampaign($from, $to),
+            'campaign', 'objective' => $this->metrics->byCampaign($from, $to),
             default => $this->metrics->byProvider($from, $to),
         };
+
+        /*
+         * The OBJECTIVE dimension is a fold of the campaign rows, not a query of its own.
+         *
+         * `byCampaign()` already carries each campaign's objective, and folding here rather than
+         * grouping in SQL keeps one arithmetic: the objective decomposition and the campaign table a
+         * reader opens next are the same numbers added up differently. It is also the dimension that
+         * answers the question a platform split cannot — «the account spent the same and returned
+         * less» is usually a MIX shift, money moving from one objective to another, and no amount of
+         * per-platform detail shows it.
+         */
+        if ($by === 'objective') {
+            $folded = [];
+
+            foreach ($rows as $row) {
+                $key = (string) ($row['objective'] ?? '');
+                if ($key === '') {
+                    continue;
+                }
+
+                $bucket = $folded[$key] ?? ['name' => $key];
+
+                foreach ($row as $field => $value) {
+                    if (! is_numeric($value)) {
+                        continue;
+                    }
+                    $bucket[$field] = (float) ($bucket[$field] ?? 0) + (float) $value;
+                }
+
+                $folded[$key] = $bucket;
+            }
+
+            return $folded;
+        }
 
         $out = [];
         foreach ($rows as $row) {

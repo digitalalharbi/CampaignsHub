@@ -713,7 +713,7 @@ export interface DriversPayload {
 export const useDrivers = (
   p: string | null,
   r: Range,
-  by: 'provider' | 'campaign' = 'provider',
+  by: 'provider' | 'campaign' | 'objective' = 'provider',
   metric = 'spend',
   f?: MetricFilters,
 ) =>
