@@ -333,9 +333,21 @@ export function MetricStrip({
    * request gave no standing to make. `QueryFailure` owns the four arms (refusal, expired session,
    * missing record, dead server) so this surface cannot drift into a fifth.
    */
+  /*
+   * FILTER-LOCALE-EMPTY-STATE-OBS — which of the four arms ran, said in the DOM.
+   *
+   * This strip has failed intermittently in the gate for three runs: `metric-roas` is absent within
+   * twenty seconds of choosing an objective, deep into a long run, never in isolation. Four arms can
+   * produce «the card is not there» — a failed request, a request still in flight, a scope with no
+   * rows, or a layout that never listed it — and a screenshot separates none of them. `data-strip-state`
+   * puts the answer in the page snapshot every failure already attaches.
+   *
+   * Diagnostic, not behaviour: no test asserts it and nothing renders differently for it. It exists so
+   * the NEXT sighting arrives with the one fact that would otherwise need a fourth reproduction.
+   */
   if (error !== undefined && error !== null) {
     return (
-      <section data-testid={`${id}-metrics`} className="space-y-2">
+      <section data-testid={`${id}-metrics`} data-strip-state="error" className="space-y-2">
         <QueryFailure
           error={error}
           ar={ar}
@@ -353,7 +365,7 @@ export function MetricStrip({
    */
   if (loading) {
     return (
-      <section data-testid={`${id}-metrics`} className="space-y-2">
+      <section data-testid={`${id}-metrics`} data-strip-state="loading" className="space-y-2">
         <div
           data-testid={`${id}-metrics-loading`}
           aria-busy="true"
@@ -381,7 +393,7 @@ export function MetricStrip({
    */
   if (hasRows === false) {
     return (
-      <section data-testid={`${id}-metrics`} className="space-y-2">
+      <section data-testid={`${id}-metrics`} data-strip-state="empty-scope" className="space-y-2">
         {(comparisonLabel || note) && (
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-text-secondary">
             {comparisonLabel && <span data-testid={`${id}-metrics-comparison`}>{comparisonLabel}</span>}
@@ -406,7 +418,7 @@ export function MetricStrip({
   }
 
   return (
-    <section data-testid={`${id}-metrics`} className="space-y-3">
+    <section data-testid={`${id}-metrics`} data-strip-state="rows" className="space-y-3">
       {(comparisonLabel || note) && (
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-text-secondary">
           {comparisonLabel && (
