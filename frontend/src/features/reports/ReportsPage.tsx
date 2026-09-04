@@ -596,7 +596,12 @@ function ScopeEditor({
         <Skeleton className="h-48 w-full" />
       ) : (
         <div className="space-y-4">
-          <ReportScopePicker projectId={projectId} value={value} onChange={setScope} />
+          {/*
+            The report's OWN audience, from the scope endpoint — a client report must not name
+            campaigns, ad sets, ads or ad accounts, and an internal one keeps every one of them. The
+            editor is opened by id alone, so without this it offered the whole hierarchy to both.
+          */}
+          <ReportScopePicker projectId={projectId} value={value} onChange={setScope} audience={current.data?.audience ?? 'client'} />
           <p className="text-[11px] text-text-muted">
             {ar
               ? 'الحفظ يعيد توليد هذا التقرير نفسه — الرابط المُرسَل للعميل يبقى كما هو ويعرض النطاق الجديد.'
@@ -754,7 +759,11 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
           <Field label={ar ? 'إلى' : 'To'} htmlFor="rb-to"><DateField id="rb-to" value={to} onChange={setTo} /></Field>
         </div>
         <div className="border-t border-border pt-4">
-          <ReportScopePicker projectId={projectId} value={scope} onChange={setScope} />
+          {/*
+            The audience decides what the picker may name — see `ReportScopePicker`. It sits directly
+            above this control, so changing it re-shapes the axes underneath immediately.
+          */}
+          <ReportScopePicker projectId={projectId} value={scope} onChange={setScope} audience={audience ?? 'client'} />
         </div>
       </div>
     </Modal>

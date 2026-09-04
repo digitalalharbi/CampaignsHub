@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { isClientAudience } from './InteractiveReport'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, Info, Trash2 } from 'lucide-react'
 import {
@@ -101,14 +102,42 @@ export function ReportScopePicker({
   projectId,
   value,
   onChange,
+  audience,
 }: {
   projectId: string
   value: ReportScopeShape
   onChange: (next: ReportScopeShape) => void
+  /**
+   * CLIENT-REPORT-AUDIENCE — who the report is FOR, which decides what may be named in it.
+   *
+   * «اسم واختيار الحملة احذفه من التقارير … ممكن استبداله باختيار المنصات». The builder offered
+   * every internal entity by name — ad accounts, campaigns, ad sets, ads, creatives — with a
+   * select-all across them, on the screen that produces a client's report. A campaign called
+   * «Meta — Prospecting Broad KSA 3.2» is the agency's own working vocabulary, not something a
+   * client should read, and the requirement is explicit that a client report may name platforms as
+   * aggregate channels and must not name the hierarchy underneath.
+   *
+   * INTERNAL audiences keep the whole hierarchy. That is the other half of the requirement and it
+   * is not a courtesy: a media buyer scoping an internal report to two ad sets is doing the job the
+   * hierarchy exists for, and removing it globally would break the operator surface to fix the
+   * client one.
+   *
+   * Undefined is treated as CLIENT — the builder's own default, and the safer direction to be wrong
+   * in: an operator who cannot narrow by campaign asks why, while a client who reads one never knows
+   * it happened.
+   */
+  audience?: string
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const t = ar ? COPY.ar : COPY.en
   const qc = useQueryClient()
+
+  /*
+   * Named-entity axes are the ones that print an internal name. Platforms, marketing paths,
+   * objectives and metrics are not: a platform is the channel a client already knows they bought,
+   * and a path or an objective describes what the money was for rather than what it was called.
+   */
+  const namesInternalEntities = !isClientAudience(audience ?? 'client')
 
   const options = useQuery({ queryKey: ['report-scope-options', projectId], queryFn: () => scopeOptions(projectId), retry: false })
   const templates = useQuery({ queryKey: ['report-scope-templates', projectId], queryFn: () => listScopeTemplates(projectId), retry: false })
@@ -180,16 +209,16 @@ export function ReportScopePicker({
         t={t}
       />
 
-      <Chips
+      {namesInternalEntities && <Chips
         label={t.accounts}
         items={o.accounts.map((a) => ({ id: a.id, label: `${a.name} · ${a.provider}` }))}
         selected={value.account_ids ?? []}
         onToggle={(id) => toggle('account_ids', id)}
         ar={ar}
         t={t}
-      />
+      />}
 
-      <Chips
+      {namesInternalEntities && <Chips
         label={t.campaigns}
         truncated={o.truncated?.campaigns}
         limit={o.limit}
@@ -198,7 +227,7 @@ export function ReportScopePicker({
         onToggle={(id) => toggle('campaign_ids', id)}
         ar={ar}
         t={t}
-      />
+      />}
 
       <Chips
         label={t.paths}
@@ -218,7 +247,7 @@ export function ReportScopePicker({
         t={t}
       />
 
-      {o.ad_sets.length > 0 && (
+      {namesInternalEntities && o.ad_sets.length > 0 && (
         <Chips
           label={t.adSets}
         truncated={o.truncated?.ad_sets}
@@ -232,7 +261,7 @@ export function ReportScopePicker({
         />
       )}
 
-      {o.ads.length > 0 && (
+      {namesInternalEntities && o.ads.length > 0 && (
         <Chips
           label={t.ads}
         truncated={o.truncated?.ads}
@@ -246,7 +275,7 @@ export function ReportScopePicker({
         />
       )}
 
-      {o.creatives.length > 0 && (
+      {namesInternalEntities && o.creatives.length > 0 && (
         <Chips
           label={t.creatives}
         truncated={o.truncated?.creatives}
