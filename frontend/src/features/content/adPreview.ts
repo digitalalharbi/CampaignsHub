@@ -50,6 +50,27 @@ export type PreviewReading =
   | { kind: 'collection'; src: string | null; note: null }
   | { kind: 'catalog'; note: null }
 
+/**
+ * The frame's shape, for a surface that draws a box before it knows what goes in it.
+ *
+ * Read from the reading rather than from the preview, so every caller answers it the same way — and
+ * `null` stays a real answer: «the platform did not say» is not «square», and a surface that
+ * defaulted would be making a claim about the ad's composition from nothing.
+ */
+export function frameAspect(preview: CreativePreview | null | undefined): 'vertical' | 'square' | 'horizontal' | null {
+  return preview?.aspect ?? null
+}
+
+/**
+ * The Tailwind aspect class for a frame, or null to keep whatever the surface already had.
+ *
+ * One mapping, because two surfaces choosing their own would put the same story ad in two different
+ * boxes — and the reader comparing them across pages would be comparing crops rather than ads.
+ */
+export function aspectClass(aspect: 'vertical' | 'square' | 'horizontal' | null): string | null {
+  return aspect === 'vertical' ? 'aspect-[9/16]' : aspect === 'horizontal' ? 'aspect-video' : aspect === 'square' ? 'aspect-square' : null
+}
+
 export function readPreview(preview: CreativePreview | null | undefined, ar: boolean): PreviewReading {
   const note = (p: CreativePreview) => (ar ? p.note_ar : p.note_en) ?? null
 
