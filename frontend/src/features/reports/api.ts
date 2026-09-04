@@ -204,7 +204,14 @@ export interface LivePayload {
   deltas: Record<string, number | null>
   timeseries: Array<Record<string, unknown>>
   platforms: Array<Record<string, unknown> & { provider: string; spend: number | null }>
-  campaigns: Array<Record<string, unknown> & { campaign_name: string | null; provider: string | null; spend: number | null }>
+  /**
+   * CLIENT-REPORT-ENTITY-BOUNDARY-001 — always empty on a client payload, and typed that way.
+   *
+   * The server stopped sending the campaign breakdown to a shared link, and the type follows it so a
+   * future consumer cannot quietly read a campaign name back out of a key that no longer holds one.
+   * The operator's own drill-down reads `EntityPayload` below, which keeps the whole hierarchy.
+   */
+  campaigns: []
   /**
    * REPORT-DETAIL-PARITY-001 — the rung between the campaign and the ad.
    *
@@ -262,10 +269,13 @@ export interface LivePayload {
    *
    * `pace` is spend against plan for the elapsed fraction of the period — above 1 is ahead of plan.
    * Null wherever the money could not be compared, which is the money contract's own refusal.
+   *
+   * One row per PLATFORM since CLIENT-REPORT-ENTITY-BOUNDARY-001. It was one per campaign, by
+   * internal name. `pacing_basis` carries why a ratio is absent when it is — a platform whose spend
+   * is not all against a stated plan refuses the ratio rather than pacing the budgeted part of it.
    */
   budget?: Array<{
-    campaign_id: string
-    campaign_name: string | null
+    provider: string
     budget: number | null
     /** The unit the two figures are in — stated per row, never assumed from the report. */
     budget_currency: string | null
@@ -275,6 +285,8 @@ export interface LivePayload {
     consumed_pct: number | null
     pace: number | null
     projected_spend: number | null
+    spend_withheld?: boolean
+    pacing_basis?: string
   }>
   /**
    * CLIENT-DIAGNOSTIC-SEPARATION-001 — what a client is told about a platform, and nothing more.
@@ -294,7 +306,8 @@ export interface LivePayload {
   }>
   available: {
     providers: string[]
-    campaigns: Array<{ id: string; name: string }>
+    /** Empty on a client payload — the picker it filled offered «كل الحملات» over internal names. */
+    campaigns: []
     earliest: string
     latest: string
   }
