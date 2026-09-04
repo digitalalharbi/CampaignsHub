@@ -6,7 +6,9 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
@@ -17,6 +19,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -97,12 +100,18 @@ final class ReportShareTest extends TestCase
     }
 
     /**
-     * An internal marker in a campaign name must not reach a client through a NOTE.
+     * A campaign name must not reach a client through a NOTE — CLIENT-REPORT-ENTITY-BOUNDARY-001.
      *
-     * Every other surface that prints a campaign name goes through `clientName`. The observations
-     * were prose the sanitiser did not know about.
+     * This asserted that «(burner)» was STRIPPED and «Meta — Lead Gen» survived, which was the old
+     * rule: sanitise the name and print it. The owner's correction is that the name was never the
+     * problem — the container is, and removing the embarrassing half of a label does not change
+     * whose label it is.
+     *
+     * The note is prose written down by an earlier release, so it cannot be re-attributed to a
+     * platform: the figures behind it are per-campaign. It is dropped, and a report generated today
+     * states the same finding by platform and keeps it.
      */
-    public function test_an_internal_campaign_name_is_cleaned_inside_a_note(): void
+    public function test_a_note_that_names_a_campaign_does_not_reach_a_client(): void
     {
         $this->report->forceFill(['data' => $this->report->data + ['observations' => [
             ['id' => 'a', 'kind' => 'budget_pace', 'severity' => 'critical', 'reveals' => [],
@@ -114,12 +123,11 @@ final class ReportShareTest extends TestCase
         [, $raw] = app(ShareService::class)->create($this->report, [], null);
         $notes = $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk()->json('data.data.observations');
 
-        $encoded = json_encode($notes, JSON_UNESCAPED_UNICODE);
-        // The MARKER goes; the name it was attached to is legitimate and stays, which is what
-        // `clientName` has always done everywhere else a campaign is printed.
+        $encoded = json_encode($notes, JSON_UNESCAPED_UNICODE) ?: '';
+
+        $this->assertSame([], $notes, 'a campaign-scoped note reached a client');
         $this->assertStringNotContainsString('burner', $encoded);
-        $this->assertStringContainsString('Meta — Lead Gen', $encoded);
-        $this->assertSame('Meta — Lead Gen', $notes[0]['scope']['name']);
+        $this->assertStringNotContainsString('Lead Gen', $encoded);
     }
 
     public function test_only_token_hash_is_stored(): void
@@ -161,6 +169,58 @@ final class ReportShareTest extends TestCase
         [$share2, $raw2] = app(ShareService::class)->create($this->report, [], null);
         $share2->update(['revoked_at' => Carbon::now()]);
         $this->getJson("/api/v1/reports/shared/{$raw2}")->assertStatus(404);
+    }
+
+    /**
+     * A share's CEILING comes from the metrics, never from the report's own payload.
+     *
+     * `campaignsOf()` read `data['campaigns']` — a rendering of the document — and used it to decide
+     * what the link may reach. CLIENT-REPORT-ENTITY-BOUNDARY-001 emptied that list, because a client
+     * report carries no campaign roster, and the ceiling silently became «no campaigns». The
+     * aggregator reads an empty campaign filter as its fail-closed «match nothing», so every share
+     * created from a project-level report would have opened on a page of zeros.
+     *
+     * Four E2E specs on the live link went red at once and no unit test did, because each half was
+     * correct on its own: the report was right to stop printing the roster, and `forCampaigns([])`
+     * was right to fail closed. What was wrong was deriving an AUTHORISATION fact from a
+     * PRESENTATION one. This test is that seam, held.
+     */
+    public function test_a_new_share_reaches_the_campaigns_that_spent_even_though_the_report_names_none(): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+
+        $campaign = UnifiedCampaign::create([
+            'project_id' => $this->report->project_id, 'name' => 'Eid', 'status' => 'active',
+        ]);
+        DailyMetric::create([
+            'id' => (string) Str::uuid(),
+            'project_id' => $this->report->project_id,
+            'external_account_id' => (string) Str::uuid(),
+            'external_campaign_id' => (string) Str::uuid(),
+            'unified_campaign_id' => $campaign->id,
+            'provider' => 'meta',
+            'metric_key' => 'spend',
+            'metric_date' => Carbon::today()->toDateString(),
+            'value' => 100,
+        ]);
+        app(TenantContext::class)->forget();
+
+        // The report itself names no campaign — that is the boundary working, not a gap in the data.
+        $this->assertSame([], $this->report->data['campaigns'] ?? []);
+
+        // A LIVE link, because only a live one carries a scope — a snapshot has its figures already.
+        $this->actingAs($this->owner, 'sanctum')
+            ->postJson("/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares", ['mode' => 'live'])
+            ->assertCreated();
+
+        $share = ReportShare::withoutGlobalScopes()->latest('id')->first();
+
+        $this->assertNotNull($share);
+        $this->assertSame(
+            [(string) $campaign->id],
+            $share->scope['campaign_ids'] ?? [],
+            'the link was created unable to reach any campaign — every figure on it would read zero',
+        );
     }
 
     public function test_share_requires_permission(): void

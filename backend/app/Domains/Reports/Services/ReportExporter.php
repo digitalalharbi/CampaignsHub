@@ -171,10 +171,48 @@ final class ReportExporter
         foreach (($data['platforms'] ?? []) as $p) {
             $put([$p['provider'] ?? '', $p['spend'] ?? '', $p['revenue'] ?? '', $p['conversions'] ?? '', $p['roas'] ?? '', $p['cpa'] ?? '', $p['ctr'] ?? '', $p['spend_share'] ?? '']);
         }
-        $put([]);
-        $put(['Campaigns', 'platform', 'spend', 'revenue', 'conversions', 'roas', 'cpa']);
-        foreach (($data['campaigns'] ?? []) as $c) {
-            $put([$c['campaign_name'] ?? '—', $c['provider'] ?? '', $c['spend'] ?? '', $c['revenue'] ?? '', $c['conversions'] ?? '', $c['roas'] ?? '', $c['cpa'] ?? '']);
+        /*
+         * The objective split — the same spend, divided by what it was bought for.
+         *
+         * It is in every audience's sheet because it is the axis the money is judged on, and since
+         * CLIENT-REPORT-ENTITY-BOUNDARY-001 it is what a client's export carries INSTEAD of the
+         * campaign roster. Paths with no spend are skipped: a row of zeroes for a path nobody bought
+         * is a line a reader has to rule out by hand.
+         */
+        $paths = array_filter(
+            $data['objective_performance']['paths'] ?? [],
+            fn ($p) => (float) ($p['spend'] ?? 0) > 0,
+        );
+        if ($paths !== []) {
+            $put([]);
+            $put(['Objectives', 'spend', 'impressions', 'clicks', 'results', 'cost per result']);
+            foreach ($paths as $p) {
+                $put([
+                    $p['label_en'] ?? $p['path'] ?? '',
+                    $p['spend'] ?? '',
+                    $p['impressions'] ?? '',
+                    $p['clicks'] ?? '',
+                    $p['orders'] ?? '',
+                    // A path never bought for a result has no cost per one — empty, not zero.
+                    ($p['result_metrics_apply'] ?? false) ? ($p['cpa'] ?? '') : '',
+                ]);
+            }
+        }
+
+        /*
+         * The campaign roster, for the audiences that still have one.
+         *
+         * `ClientReportView` empties this for a client and an executive export, so the section is
+         * written only when there is something in it — an INTERNAL export keeps the whole hierarchy,
+         * and a client's sheet does not print a heading over nothing, which reads as data that
+         * failed to load rather than as a boundary being kept.
+         */
+        if (! empty($data['campaigns'])) {
+            $put([]);
+            $put(['Campaigns', 'platform', 'spend', 'revenue', 'conversions', 'roas', 'cpa']);
+            foreach ($data['campaigns'] as $c) {
+                $put([$c['campaign_name'] ?? '—', $c['provider'] ?? '', $c['spend'] ?? '', $c['revenue'] ?? '', $c['conversions'] ?? '', $c['roas'] ?? '', $c['cpa'] ?? '']);
+            }
         }
         /*
          * §15.12 — the creative rows, and ONLY when the link put them in `$data`.
@@ -246,13 +284,38 @@ final class ReportExporter
             $row++;
         }
 
-        $cs = $book->createSheet();
-        $cs->setTitle('Campaigns');
-        $cs->fromArray(['Campaign', 'Platform', 'Spend', 'Revenue', 'Conversions', 'ROAS', 'CPA'], null, 'A1');
-        $row = 2;
-        foreach (($data['campaigns'] ?? []) as $c) {
-            $cs->fromArray([$c['campaign_name'] ?? '—', $c['provider'] ?? '', $c['spend'] ?? null, $c['revenue'] ?? null, $c['conversions'] ?? null, $c['roas'] ?? null, $c['cpa'] ?? null], null, "A{$row}");
-            $row++;
+        // The objective split — what the money was bought for, and what that cost. Every audience.
+        $this->xlsxSheet($book, 'Objectives', ['Objective', 'Spend', 'Impressions', 'Clicks', 'Results', 'Cost per result'], array_map(
+            fn ($p) => [
+                $p['label_en'] ?? $p['path'] ?? '',
+                $p['spend'] ?? null,
+                $p['impressions'] ?? null,
+                $p['clicks'] ?? null,
+                $p['orders'] ?? null,
+                ($p['result_metrics_apply'] ?? false) ? ($p['cpa'] ?? null) : null,
+            ],
+            array_filter(
+                $data['objective_performance']['paths'] ?? [],
+                fn ($p) => (float) ($p['spend'] ?? 0) > 0,
+            ),
+        ));
+
+        /*
+         * A Campaigns sheet only where there are campaigns — CLIENT-REPORT-ENTITY-BOUNDARY-001.
+         *
+         * `ClientReportView` empties the roster for a client and an executive workbook, and an empty
+         * sheet named «Campaigns» is worse than none: a reader opens it, finds one header row, and
+         * concludes the export failed. An INTERNAL workbook still gets the whole hierarchy.
+         */
+        if (! empty($data['campaigns'])) {
+            $cs = $book->createSheet();
+            $cs->setTitle('Campaigns');
+            $cs->fromArray(['Campaign', 'Platform', 'Spend', 'Revenue', 'Conversions', 'ROAS', 'CPA'], null, 'A1');
+            $row = 2;
+            foreach ($data['campaigns'] as $c) {
+                $cs->fromArray([$c['campaign_name'] ?? '—', $c['provider'] ?? '', $c['spend'] ?? null, $c['revenue'] ?? null, $c['conversions'] ?? null, $c['roas'] ?? null, $c['cpa'] ?? null], null, "A{$row}");
+                $row++;
+            }
         }
 
         // Audience-specific sheets — CREATED per audience, never created-then-hidden. Client shows only
@@ -293,8 +356,9 @@ final class ReportExporter
             ));
         }
         if (! empty($data['budget'])) {
-            $add('Budget', ['Campaign', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Pace'], array_map(
-                fn ($b) => [$b['campaign_name'] ?? '', $b['budget'] ?? null, $b['spent'] ?? null, $b['remaining'] ?? null, $b['consumed_pct'] ?? null, $b['pace'] ?? null],
+            // Per PLATFORM since CLIENT-REPORT-ENTITY-BOUNDARY-001; `provider` is what the rows carry.
+            $add('Budget', ['Platform', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Pace'], array_map(
+                fn ($b) => [$b['provider'] ?? '', $b['budget'] ?? null, $b['spent'] ?? null, $b['remaining'] ?? null, $b['consumed_pct'] ?? null, $b['pace'] ?? null],
                 $data['budget'],
             ));
         }

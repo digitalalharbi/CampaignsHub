@@ -15,6 +15,7 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /** Manage secure client links for a report (create/list/revoke + access logs). Requires reports.share. */
 final class ReportShareController extends Controller
@@ -248,19 +249,52 @@ final class ReportShareController extends Controller
         ];
     }
 
-    /** The campaigns this report covers: its own if it is campaign-scoped, else those in its data. */
+    /**
+     * The campaigns this report covers — its own if it is campaign-scoped, else the ones that SPENT.
+     *
+     * ## Why this reads the metrics and not the report's own payload
+     *
+     * It read `data['campaigns']`, and that list is a rendering of the document rather than a fact
+     * about what the link may reach. CLIENT-REPORT-ENTITY-BOUNDARY-001 emptied it — a client report
+     * does not carry the campaign roster — and this method quietly became «no campaigns», which
+     * `MetricsAggregator::forCampaigns([])` reads as its fail-closed «match nothing». Every share
+     * built from a project-level report would have opened on a page of zeros.
+     *
+     * The coupling was the defect, not the emptying. A share's ceiling is an AUTHORISATION fact: it
+     * decides what a link may reach, and it must be derived from what exists in the period rather
+     * than from what one document chose to print about it. Reading the metrics answers the same
+     * question the old list answered — «which campaigns are in this report's scope and window» —
+     * from the source both were derived from.
+     *
+     * The E2E gate is what caught it: four specs on the live link went to zero at once, and no unit
+     * test could have, because each half was correct on its own.
+     */
     private function campaignsOf(Report $model): array
     {
         if ($model->campaign_id !== null) {
             return [(string) $model->campaign_id];
         }
 
-        $rows = (array) (($model->data ?? [])['campaigns'] ?? []);
+        $projectId = (string) ($model->project_id ?? '');
+        if ($projectId === '') {
+            return [];
+        }
 
-        return array_values(array_unique(array_filter(array_map(
-            static fn ($row) => is_array($row) ? ($row['campaign_id'] ?? null) : null,
-            $rows,
-        ))));
+        return DB::table('daily_metrics')
+            ->where('project_id', $projectId)
+            ->whereNotNull('unified_campaign_id')
+            ->when(
+                $model->period_start !== null && $model->period_end !== null,
+                fn ($q) => $q->whereBetween('metric_date', [
+                    $model->period_start->toDateString(),
+                    $model->period_end->toDateString(),
+                ]),
+            )
+            ->distinct()
+            ->pluck('unified_campaign_id')
+            ->map(static fn ($id): string => (string) $id)
+            ->values()
+            ->all();
     }
 
     /** The platforms this report already reports on — the honest default ceiling. */

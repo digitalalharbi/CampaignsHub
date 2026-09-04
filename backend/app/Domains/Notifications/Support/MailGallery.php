@@ -278,9 +278,23 @@ final class MailGallery
              * email never sends, and a reviewer cannot notice a defect in something they are not shown.
              */
             'totals' => [
-                'spend' => 23333.18, 'conversions' => 263, 'revenue' => 96500.0, 'projects' => 1,
-                'previous' => ['spend' => 21000.0, 'conversions' => 300, 'revenue' => 92000.0],
-                'change' => ['spend' => 0.1111, 'conversions' => -0.1233, 'revenue' => 0.0489],
+                /*
+                 * DIGEST-PORTFOLIO-SCOPE-001 — the preview is a PORTFOLIO, because the product is.
+                 *
+                 * This fixture carried one project and a header reading «المشاريع 1», and it is the
+                 * surface the owner reviews these emails on. `DigestScope` has always resolved every
+                 * authorised project and `buildRange()` has always composed a block for each — but a
+                 * preview that shows one teaches its reviewer that the product sends one, and that is
+                 * what it taught.
+                 *
+                 * Three projects, deliberately unalike: a sales store, a lead-generation client and a
+                 * brand campaign. The third is why the roll-up below carries no blended cost per
+                 * result — an awareness project has no orders to divide the portfolio's spend by, and
+                 * a preview showing one would be previewing an arithmetic accident.
+                 */
+                'spend' => 41833.18, 'conversions' => 401, 'revenue' => 96500.0, 'projects' => 3,
+                'previous' => ['spend' => 36600.0, 'conversions' => 448, 'revenue' => 92000.0],
+                'change' => ['spend' => 0.143, 'conversions' => -0.1049, 'revenue' => 0.0489],
             ],
             'projects' => [[
                 'project_id' => '00000000-0000-0000-0000-000000000001',
@@ -313,7 +327,7 @@ final class MailGallery
                 'worst_platform' => ['label' => 'google', 'spend' => 9119.63, 'cpa' => 140.3],
                 'best_campaign' => null,
                 'worst_campaign' => null,
-                'budget' => [['campaign' => 'حملة الصيف', 'pace' => 1.67, 'spent' => 8000.0, 'budget' => 10000.0, 'direction' => 'ahead']],
+                'budget' => [['campaign' => 'ميتا', 'provider' => 'meta', 'pace' => 1.67, 'spent' => 8000.0, 'budget' => 10000.0, 'direction' => 'ahead']],
                 'funnel' => [
                     ['stage' => 'impressions', 'label' => 'Impressions', 'count' => 695281, 'step_rate' => null],
                     ['stage' => 'clicks', 'label' => 'Clicks', 'count' => 15619, 'step_rate' => 0.0225],
@@ -330,9 +344,9 @@ final class MailGallery
                 'observations' => [
                     [
                         'id' => 'a', 'kind' => 'budget_pace', 'severity' => 'critical', 'reveals' => ['spend'],
-                        'title' => 'حملة «الصيف» تستهلك الميزانية أسرع من الخطة',
+                        'title' => 'الإنفاق على ميتا يستهلك الميزانية أسرع من الخطة',
                         'detail' => 'صُرف 8,000.00 SAR من أصل 10,000.00 SAR، أي 167% من الإنفاق المتوقع حتى الآن.',
-                        'scope' => ['type' => 'campaign', 'name' => 'الصيف'],
+                        'scope' => ['type' => 'platform', 'name' => 'ميتا'],
                     ],
                     [
                         'id' => 'b', 'kind' => 'rising_cost', 'severity' => 'warning', 'reveals' => ['spend'],
@@ -341,6 +355,91 @@ final class MailGallery
                         'scope' => ['type' => 'period', 'name' => null],
                     ],
                 ],
+                'freshness' => ['state' => 'fresh', 'last_sync_at' => '2026-08-07T05:00:00Z', 'missing_days' => 0, 'sync_failed' => false, 'failing' => []],
+            ], [
+                /*
+                 * A LEAD-GENERATION project, whose result is a lead and whose cost is a cost per lead.
+                 *
+                 * Second on purpose: the block above is a sales project, and a reviewer looking at two
+                 * different objectives in one email is looking at the thing this product is for. A
+                 * preview of three sales projects would prove nothing the first one did not.
+                 */
+                'project_id' => '00000000-0000-0000-0000-000000000002',
+                'project_name' => 'عيادات النخبة — Leads',
+                'objective' => 'leads',
+                'metric_set' => ['spend', 'conversions', 'cpa'],
+                'totals' => [
+                    'spend' => 12500.0, 'conversions' => 138, 'cpa' => 90.58, 'revenue' => 0.0,
+                    'impressions' => 402113, 'clicks' => 9044, 'ctr' => 0.0225, 'reach' => 160000, 'video_views' => 0,
+                ],
+                'previous' => ['spend' => 11600.0, 'conversions' => 148, 'cpa' => 78.38, 'revenue' => 0.0],
+                // No revenue, and the email must say «لم تُرسله المنصة» rather than «0».
+                'reported' => [
+                    'spend' => true, 'conversions' => true, 'revenue' => false, 'impressions' => true,
+                    'clicks' => true, 'reach' => true, 'video_views' => false,
+                ],
+                'change' => ['spend' => 0.078, 'conversions' => -0.068, 'cpa' => 0.156, 'revenue' => null],
+                'paths' => [
+                    'traffic' => ['spend' => 3100.0, 'campaigns' => 2, 'conversions' => 0, 'revenue' => 0, 'cost_per_result' => null, 'roas' => null],
+                    'conversion' => ['spend' => 9400.0, 'campaigns' => 3, 'conversions' => 138, 'revenue' => 0, 'cost_per_result' => 68.12, 'roas' => null],
+                ],
+                'best_platform' => ['label' => 'meta', 'spend' => 6100.0, 'cpa' => 71.76],
+                'worst_platform' => ['label' => 'tiktok', 'spend' => 2400.0, 'cpa' => 240.0],
+                'best_campaign' => null,
+                'worst_campaign' => null,
+                'budget' => [['campaign' => 'تيك توك', 'provider' => 'tiktok', 'pace' => 0.44, 'spent' => 2400.0, 'budget' => 9000.0, 'direction' => 'behind']],
+                'funnel' => [],
+                'creatives' => null,
+                'observations' => [
+                    [
+                        'id' => 'c', 'kind' => 'budget_pace', 'severity' => 'info', 'reveals' => ['spend'],
+                        'title' => 'الإنفاق على تيك توك يستهلك الميزانية أبطأ من الخطة',
+                        'detail' => 'صُرف 2,400.00 SAR من أصل 9,000.00 SAR، أي 44% من الإنفاق المتوقع حتى الآن.',
+                        'scope' => ['type' => 'platform', 'name' => 'تيك توك'],
+                    ],
+                ],
+                'follow_up' => ['received' => 138, 'contacted' => 96, 'overdue' => 11, 'converted' => 24],
+                'freshness' => ['state' => 'fresh', 'last_sync_at' => '2026-08-07T05:00:00Z', 'missing_days' => 0, 'sync_failed' => false, 'failing' => []],
+            ], [
+                /*
+                 * A BRAND project — the one that proves the portfolio roll-up refuses a blended ratio.
+                 *
+                 * It has no orders and no revenue, because awareness money was never asked to produce
+                 * any. Its cards are reach and cost per thousand, its cost per result is null rather
+                 * than zero, and the account header above states no portfolio-wide cost per result at
+                 * all: dividing this project's spend by the store's orders is the exact arithmetic
+                 * «Do NOT aggregate incomparable ROAS/CPA/CPL» forbids.
+                 */
+                'project_id' => '00000000-0000-0000-0000-000000000003',
+                'project_name' => 'إطلاق العلامة — Brand',
+                'objective' => 'awareness',
+                'metric_set' => ['spend', 'impressions', 'reach', 'cpm'],
+                'totals' => [
+                    'spend' => 6000.0, 'conversions' => 0, 'cpa' => null, 'revenue' => 0.0,
+                    'impressions' => 1980400, 'clicks' => 8800, 'ctr' => 0.0044, 'reach' => 940000,
+                    'cpm' => 3.03, 'video_views' => 412000,
+                ],
+                'previous' => ['spend' => 4000.0, 'conversions' => 0, 'cpa' => null, 'revenue' => 0.0],
+                'reported' => [
+                    'spend' => true, 'conversions' => false, 'revenue' => false, 'impressions' => true,
+                    'clicks' => true, 'reach' => true, 'video_views' => true,
+                ],
+                'change' => ['spend' => 0.5, 'conversions' => null, 'cpa' => null, 'revenue' => null],
+                'paths' => [
+                    'awareness' => ['spend' => 6000.0, 'campaigns' => 3, 'conversions' => 0, 'revenue' => 0, 'cost_per_result' => null, 'roas' => null],
+                ],
+                'best_platform' => ['label' => 'tiktok', 'spend' => 3400.0, 'cpa' => null],
+                'worst_platform' => ['label' => 'x', 'spend' => 900.0, 'cpa' => null],
+                'best_campaign' => null,
+                'worst_campaign' => null,
+                'budget' => [],
+                'funnel' => [],
+                'creatives' => [
+                    'best' => ['name' => 'Launch Film 30s', 'provider' => 'tiktok', 'reason' => 'أعلى مدى بأقل تكلفة ألف ظهور'],
+                    'declining' => [],
+                    'fatigued' => [],
+                ],
+                'observations' => [],
                 'freshness' => ['state' => 'fresh', 'last_sync_at' => '2026-08-07T05:00:00Z', 'missing_days' => 0, 'sync_failed' => false, 'failing' => []],
             ]],
         ];

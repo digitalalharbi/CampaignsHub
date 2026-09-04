@@ -63,6 +63,29 @@ final class DigestMailRenderTest extends TestCase
     }
 
     /**
+     * CLIENT-REPORT-ENTITY-BOUNDARY-001 — a digest names platforms, never campaigns.
+     *
+     * The budget-attention line read «“Meta — Retargeting” is spending ahead of plan», and the
+     * best/worst pair printed the campaign the objective's own metric ranked first. An email is the
+     * surface where this matters most: it is forwarded, it is read on a phone with no context, and
+     * the reader cannot check anything in it. The pacing rows are platform buckets now, so the
+     * sentence is the same decision said on the axis a client may be told about.
+     */
+    public function test_a_digest_never_names_a_campaign(): void
+    {
+        $html = $this->html('ar', ['projects' => [array_merge($this->digest()['projects'][0], [
+            'budget' => [[
+                'campaign' => 'ميتا', 'provider' => 'meta',
+                'pace' => 1.8, 'spent' => 9000.0, 'budget' => 10000.0, 'direction' => 'ahead',
+            ]],
+        ])]]);
+
+        $this->assertStringContainsString('ميتا', $html, 'the pacing line lost its platform as well as its campaign');
+        $this->assertStringNotContainsString('حملة «', $html);
+        $this->assertStringNotContainsString('Retargeting', $html);
+    }
+
+    /**
      * The rule, in the place it is most dangerous: an inbox.
      *
      * `reach` is `0.0` in the payload because the sums coalesce, and `reported.reach` is false
@@ -202,7 +225,9 @@ final class DigestMailRenderTest extends TestCase
         $this->assertStringContainsString('Bundle Carousel', $html);
 
         $this->assertStringContainsString('ما يستحق الانتباه', $html);
-        $this->assertStringContainsString('تستهلك الميزانية أسرع من الخطة', $html);
+        // Platform-scoped wording — CLIENT-REPORT-ENTITY-BOUNDARY-001: «الإنفاق على ميتا يستهلك…».
+        $this->assertStringContainsString('يستهلك الميزانية أسرع من الخطة', $html);
+        $this->assertStringContainsString('ميتا', $html);
     }
 
     /** A stage nobody reported is absent — a bar of length nothing reads as «everybody left here». */
@@ -324,12 +349,13 @@ final class DigestMailRenderTest extends TestCase
             'declining' => [['name' => 'Static Offer', 'provider' => 'meta', 'reason' => null]],
             'fatigued' => [],
         ];
+        // Platform-scoped since CLIENT-REPORT-ENTITY-BOUNDARY-001 — a digest lands in a client's inbox.
         $base['projects'][0]['observations'] = [
             [
                 'id' => 'b', 'kind' => 'budget_pace', 'severity' => 'critical', 'reveals' => ['spend'],
-                'title' => 'حملة «الصيف» تستهلك الميزانية أسرع من الخطة',
+                'title' => 'الإنفاق على ميتا يستهلك الميزانية أسرع من الخطة',
                 'detail' => 'صُرف 8,000.00 SAR من أصل 10,000.00 SAR.',
-                'scope' => ['type' => 'campaign', 'name' => 'الصيف'],
+                'scope' => ['type' => 'platform', 'name' => 'ميتا'],
             ],
         ];
 

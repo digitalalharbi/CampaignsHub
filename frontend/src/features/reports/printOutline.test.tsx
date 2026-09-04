@@ -28,14 +28,25 @@ const base = {
   kpis: { spend: 1000, revenue: 4000 },
   summary: ['A good month.'],
   platforms: [{ platform: 'meta', spend: 1000, revenue: 4000, results: 20, roas: 4 }],
-  campaigns: [{ name: 'Eid', platform: 'meta', status: 'active', spend: 1000, results: 20, cpa: 50 }],
+  /*
+   * CLIENT-REPORT-ENTITY-BOUNDARY-001 — the campaign section is not a section any more.
+   *
+   * `objectives` takes its place in the fixtures below: it is where the outline's fifth entry went,
+   * it is a section this document actually draws, and the numbering claims are about what is
+   * PRINTED, so they need a real one to count.
+   */
+  objective_performance: {
+    paths: [{ path: 'conversion', label_ar: 'التحويل', label_en: 'Conversion & sales', spend: 1000, orders: 20, cpa: 50, roas: 4, result_metrics_apply: true, campaigns: [] }],
+    direct: { spend: 1000, orders: 20, revenue: 4000, cpa: 50, roas: 4, formula: { cpa: '', roas: '' }, included_campaigns: [], excluded_campaigns: [] },
+    blended: { spend: 1000, orders: 20, revenue: 4000, blended_cpa: 50, blended_roas: 4, formula: { blended_cpa: '', blended_roas: '' }, includes_non_sales_spend: 0 },
+  },
   recommendations: [],
 }
 
 const outline = (over: Record<string, unknown>[] = []) => [
   { key: 'executive_summary', title_ar: 'الملخّص', title_en: 'Executive summary', present: true, absent_reason: null },
   { key: 'platforms', title_ar: 'المنصات', title_en: 'Platform breakdown', present: true, absent_reason: null },
-  { key: 'campaigns', title_ar: 'الحملات', title_en: 'Campaigns', present: true, absent_reason: null },
+  { key: 'objectives', title_ar: 'الأهداف', title_en: 'Breakdown by objective', present: true, absent_reason: null },
   ...over,
 ]
 
@@ -45,7 +56,7 @@ describe('the printed document’s sections', () => {
 
     expect(screen.getByText('1. Executive summary')).toBeInTheDocument()
     expect(screen.getByText('2. Platform breakdown')).toBeInTheDocument()
-    expect(screen.getByText('3. Campaigns')).toBeInTheDocument()
+    expect(screen.getByText('3. Breakdown by objective')).toBeInTheDocument()
   })
 
   /**
@@ -70,8 +81,8 @@ describe('the printed document’s sections', () => {
 
     expect(screen.getByText('No platform reported figures in this window.')).toBeInTheDocument()
     expect(screen.queryByText('2. Platform breakdown')).not.toBeInTheDocument()
-    // Campaigns is the second thing actually printed, so it is numbered 2.
-    expect(screen.getByText('2. Campaigns')).toBeInTheDocument()
+    // The objective split is the second thing actually printed, so it is numbered 2.
+    expect(screen.getByText('2. Breakdown by objective')).toBeInTheDocument()
   })
 
   /** A snapshot written before the outline existed still prints, with its old headings. */
@@ -79,6 +90,27 @@ describe('the printed document’s sections', () => {
     render(<PrintDocument data={base as never} currency="SAR" reportName="R" clientName="C" />)
 
     expect(screen.getByText('Executive Summary')).toBeInTheDocument()
-    expect(screen.getByText('Campaigns')).toBeInTheDocument()
+    expect(screen.getByText('Platform Performance')).toBeInTheDocument()
+  })
+
+  /**
+   * CLIENT-REPORT-ENTITY-BOUNDARY-001 — no printed document has a campaign section, outline or not.
+   *
+   * The fallback path matters as much as the outline one: every snapshot generated before this
+   * requirement still carries `campaigns`, and it is still printed through this component when a
+   * client opens an old PDF. Neither route may draw the roster.
+   */
+  it('prints no campaign section, even from a snapshot that still carries one', () => {
+    const legacy = {
+      ...base,
+      campaigns: [{ name: 'Eid — burner', platform: 'meta', status: 'active', spend: 1000, results: 20, cpa: 50 }],
+    }
+
+    const { container } = render(
+      <PrintDocument data={legacy as never} currency="SAR" reportName="R" clientName="C" />,
+    )
+
+    expect(container.textContent).not.toContain('Eid')
+    expect(screen.queryByText('Campaigns')).not.toBeInTheDocument()
   })
 })

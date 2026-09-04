@@ -280,6 +280,52 @@ final class ReportObjectiveLayoutTest extends TestCase
         $this->assertNull($shared->json('data.data.best.platform_by_roas'));
     }
 
+    /**
+     * CLIENT-REPORT-ENTITY-BOUNDARY-001 — a generated report is a document a CLIENT holds.
+     *
+     * Every form of it — the executive summary, the detailed report, the PDF, the shared link, the
+     * spreadsheet — is written once and sent to the person paying. So the campaign roster may not be
+     * in the stored payload at all: hiding it in one renderer leaves it in the other four, and the
+     * JSON behind a shared report is one keystroke away in any browser.
+     *
+     * The names below are distinctive on purpose. A `campaigns` key that has merely been emptied
+     * would pass a structural check while the observations, the recommendations, the summary
+     * sentences and the «best» block still quoted the same names in prose — which is exactly where
+     * they were found.
+     */
+    public function test_a_generated_report_names_no_campaign_anywhere_in_its_payload(): void
+    {
+        $this->seedCampaign('Zephyr Prospecting — burner', CampaignObjective::Sales, $this->meta, spend: 9_000, impressions: 400_000, clicks: 900, orders: 0);
+        $this->seedCampaign('Zephyr Retargeting — winner', CampaignObjective::Sales, $this->meta, spend: 4_000, impressions: 200_000, clicks: 800, orders: 60, revenue: 90_000);
+
+        $data = $this->generate();
+
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE) ?: '';
+
+        $this->assertStringNotContainsString('Zephyr Prospecting', $json, 'a campaign name reached the client document');
+        $this->assertStringNotContainsString('Zephyr Retargeting', $json);
+        $this->assertStringNotContainsString('Zephyr', $json);
+    }
+
+    /**
+     * …and the findings the roster used to carry survive the removal.
+     *
+     * «Spend that produced nothing» is the most actionable thing in the document, and deleting the
+     * sentence along with the name would have been the easy way to make the test above pass. It says
+     * the sum and the platform instead — both true, both a client's to act on.
+     */
+    public function test_the_findings_survive_without_the_names(): void
+    {
+        $this->seedCampaign('Zephyr Prospecting — burner', CampaignObjective::Sales, $this->meta, spend: 9_000, impressions: 400_000, clicks: 900, orders: 0);
+        $this->seedCampaign('Zephyr Retargeting — winner', CampaignObjective::Sales, $this->meta, spend: 4_000, impressions: 200_000, clicks: 800, orders: 60, revenue: 90_000);
+
+        $data = $this->generate();
+
+        $prose = json_encode([$data['observations'] ?? [], $data['recommendations'] ?? [], $data['executive_summary'] ?? []], JSON_UNESCAPED_UNICODE) ?: '';
+
+        $this->assertStringContainsString('9,000', $prose, 'the spend that produced nothing was not stated');
+    }
+
     /** The lens is a pure classifier — worth pinning without a database behind it. */
     public function test_a_campaign_that_spent_nothing_does_not_relabel_the_period(): void
     {

@@ -18,9 +18,9 @@ import { fetchLiveShared } from './api'
  * a different order is one they have to read rather than scan, however correct every figure on it is.
  *
  * The defect this pins: the objective split — which answers «at what cost, really» by separating
- * direct from blended — sat BELOW the platform and campaign charts, which answer «where». So a reader
- * met «where» before «at what cost», and had to scroll past two charts to learn whether the headline
- * cost per order was even the right question to have asked.
+ * direct from blended — sat BELOW the charts answering «where». So a reader met «where» before «at
+ * what cost», and had to scroll past two charts to learn whether the headline cost per order was
+ * even the right question to have asked.
  *
  * Asserted as document order rather than by counting pixels: `compareDocumentPosition` is what
  * «above» means in a document that reflows on a phone.
@@ -70,19 +70,24 @@ describe('the order a client reads a live report in', () => {
     const kpis = await screen.findByTestId('live-kpis')
     const objective = await screen.findByTestId('live-objective-split')
     const platforms = await screen.findByTestId('live-platforms')
-    const campaigns = await screen.findByTestId('live-campaigns')
+    /*
+     * The campaign ranking that used to close this order is gone — CLIENT-REPORT-ENTITY-BOUNDARY-001.
+     * The funnel is what follows «where» now, and it answers «where did it stop», which is the same
+     * place in a client's reading and a question about their own customers rather than our campaigns.
+     */
+    const funnel = await screen.findByTestId('live-funnel')
 
     // DOCUMENT_POSITION_FOLLOWING === 4: the second argument comes after the first.
     expect(positionOf(kpis, objective) & 4, 'the objective split must follow the KPI cards').toBeTruthy()
     expect(positionOf(objective, platforms) & 4, 'platforms must follow the objective split').toBeTruthy()
-    expect(positionOf(platforms, campaigns) & 4, 'campaigns must follow platforms').toBeTruthy()
+    expect(positionOf(platforms, funnel) & 4, 'the funnel must follow platforms').toBeTruthy()
   })
 
   /**
    * The first screen is the summary, and the detail is not on it.
    *
-   * Progressive disclosure is the requirement's word: the executive form carries no per-campaign,
-   * per-platform, per-ad-set tables at all. A reader who wants them opens the detailed link.
+   * Progressive disclosure is the requirement's word: the executive form carries no per-platform or
+   * per-objective tables at all. A reader who wants them opens the detailed link.
    */
   it('keeps the detail off the summary form', async () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="executive_summary" />, { locale: 'en' })

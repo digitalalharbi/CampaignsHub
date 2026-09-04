@@ -92,8 +92,12 @@ export function ClientRequestDetailPage() {
           <div className="mt-4 rounded-xl border border-success/30 bg-success/5 p-4">
             <div className="flex items-center gap-1.5 text-sm font-bold text-success"><Sparkles size={15} /> {ar ? 'تم تحويل طلبك إلى تنفيذ' : 'Your request is now in delivery'}</div>
             <div className="mt-1 text-sm text-text-secondary">
-              {d.result.project_name && <span>{ar ? 'المشروع' : 'Project'}: <b className="text-text-primary">{d.result.project_name}</b>. </span>}
-              {d.result.campaign_name && <span>{ar ? 'الحملة' : 'Campaign'}: <b className="text-text-primary">{d.result.campaign_name}</b> ({d.result.campaign_status}).</span>}
+              {/*
+                CLIENT-REPORT-ENTITY-BOUNDARY-001 — «الحملة: Meta — Lead Gen (burner) (paused)» stood
+                here. The campaign is the agency's container and its status is a state the client
+                neither sets nor acts on. The project is theirs, and it is the whole answer.
+              */}
+              {d.result.project_name && <span>{ar ? 'المشروع' : 'Project'}: <b className="text-text-primary">{d.result.project_name}</b>.</span>}
             </div>
           </div>
         )}

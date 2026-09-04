@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { clientKpiKeys } from './clientKpis'
 import { ClientAttention } from './ClientAttention'
+import { readMetricValue, type MetricValue } from '@/lib/metricValue'
 import { LiveDetailTables } from './LiveDetailTables'
 import { ReportAdDetail } from './ReportAdDetail'
 import { ReportAdsSection, type ReportAd } from './ReportAdsSection'
@@ -12,11 +13,9 @@ import {
   ConversionFunnelChart,
   MetricLineChart,
   PlatformDonutChart,
-  RankingBarChart,
 } from '@/features/analytics/charts'
 import { KpiCard, platformColor } from '@/features/analytics/components'
-import { money, moneyFromTotals, ratio } from '@/features/analytics/format'
-import { campaigns as countedCampaigns } from '@/lib/counted'
+import { money, moneyExact, moneyFromTotals, ratio } from '@/features/analytics/format'
 import { formatMoneyReading, moneyState, rankableMoney, readCostPer, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import { fetchLiveShared, type LivePayload } from './api'
 import { useUi } from '@/stores/ui'
@@ -80,8 +79,16 @@ export function LiveSharedReport({
   const ar = locale === 'ar'
 
   const [days, setDays] = useState(30)
+  /*
+   * CLIENT-REPORT-ENTITY-BOUNDARY-001 — platform is the only scope a client narrows by.
+   *
+   * There was a campaign picker beside this one, offering «كل الحملات» over a list of the agency's
+   * own campaign names. The narrowing is still here; what a client narrows BY is the aggregate
+   * channel, which is what they were reading everywhere else on the page anyway. The request still
+   * carries an empty campaign list because the server's ceiling is expressed in campaign ids — the
+   * link's own scope, which the reader neither sets nor sees.
+   */
   const [providers, setProviders] = useState<string[]>([])
-  const [campaigns, setCampaigns] = useState<string[]>([])
   const [payload, setPayload] = useState<LivePayload | null>(null)
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -105,7 +112,7 @@ export function LiveSharedReport({
       from: isoDaysAgo(days),
       to: new Date().toISOString().slice(0, 10),
       providers,
-      campaigns,
+      campaigns: [],
       password,
     })
     if (ticket !== latest.current) return
@@ -116,7 +123,7 @@ export function LiveSharedReport({
       setError(envelope.message ?? (ar ? 'تعذّر تحديث البيانات.' : 'Could not refresh the figures.'))
     }
     setBusy(false)
-  }, [token, days, providers, campaigns, password, ar])
+  }, [token, days, providers, password, ar])
 
   useEffect(() => {
     void load()
@@ -142,8 +149,27 @@ export function LiveSharedReport({
    * currencies — «USD» spelled out is the one form that cannot be misread.
    */
   const asMoney = useMemo(() => (v: number | null | undefined) => money(v, currency || null), [currency])
-  const count = (v: number | null | undefined) =>
-    v === null || v === undefined ? '—' : new Intl.NumberFormat('en-US').format(Math.round(v))
+  /*
+   * A cost-per is stated EXACTLY — §58, and found by reading the page rather than the code.
+   *
+   * Every cost-per here went through `asMoney`, which compacts: a CPC of about one and a half dollars
+   * printed «2 USD» on a client's link. On a total the fraction is noise; on a cost-per it IS the
+   * figure, and «2» instead of «1.50» is a different decision about the same campaign.
+   */
+  const asExactMoney = useMemo(() => (v: number | null | undefined) => moneyExact(v, currency || null), [currency])
+  /*
+   * A count, through the product's one value law — §58.
+   *
+   * This formatted every count in full: the owner's screenshot shows «29,210», «4,127,676» and
+   * «1,723,184» beside «5.54K USD» in one row of six cards. Three notations for one idea, on the page
+   * a client reads, and the client has to decide for themselves whether four million one hundred
+   * twenty-seven thousand is a lot. A figure read for SCALE is read faster compact, and the exact one
+   * stays a hover away rather than being lost.
+   */
+  const count = (v: number | null | undefined) => readMetricValue('number', v)
+
+  /** A reading that is already final — money through the contract, a percentage, a ratio. */
+  const plain = (text: string): MetricValue => ({ text, exact: null, value: null })
 
   /*
    * How each chosen metric is rendered.
@@ -161,23 +187,23 @@ export function LiveSharedReport({
       t: Record<string, number | null>,
       p: LivePayload,
       money: (v: number | null | undefined) => string,
-      count: (v: number | null | undefined) => string,
-    ) => string
+      count: (v: number | null | undefined) => MetricValue,
+    ) => MetricValue
   }> = {
     // PARTIAL-WITHHELD-001 — a client link is the one place the reader has no other view, so money
     // goes through the contract: partial/mixed ⇒ «—», withheld ⇒ the original in its own currency,
     // never the coalesced 0 or the converted subset.
-    spend: { ar: 'الإنفاق', en: 'Spend', invertGood: true, spark: true, format: (t, p) => moneyFromTotals(t as MoneyTotals, 'spend', ar, p.currency).text },
+    spend: { ar: 'الإنفاق', en: 'Spend', invertGood: true, spark: true, format: (t, p) => plain(moneyFromTotals(t as MoneyTotals, 'spend', ar, p.currency).text) },
     impressions: { ar: 'الظهور', en: 'Impressions', spark: true, format: (t, _p, _m, count) => count(t.impressions) },
     clicks: { ar: 'النقرات', en: 'Clicks', spark: true, format: (t, _p, _m, count) => count(t.clicks) },
-    ctr: { ar: 'نسبة النقر', en: 'CTR', format: (t) => (t.ctr === null || t.ctr === undefined ? '—' : `${(t.ctr * 100).toFixed(2)}%`) },
+    ctr: { ar: 'نسبة النقر', en: 'CTR', format: (t) => plain(t.ctr === null || t.ctr === undefined ? '—' : `${(t.ctr * 100).toFixed(2)}%`) },
     conversions: { ar: 'النتائج', en: 'Results', spark: true, format: (t, _p, _m, count) => count(t.conversions) },
     // Add-to-cart is a funnel stage rather than a total, so it is read from where it actually lives.
     add_to_cart: { ar: 'الإضافات للسلة', en: 'Add to cart', format: (_t, p, _m, count) => count(p.funnel.find((f) => f.stage === 'add_to_cart')?.count) },
     purchases: { ar: 'المشتريات', en: 'Purchases', format: (t, _p, _m, count) => count(t.purchases) },
-    revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, p) => moneyFromTotals(t as MoneyTotals, 'revenue', ar, p.currency).text },
-    roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => { const r = readRoas(t as MoneyTotals, ar); return ratio(r.value) } },
-    cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (t, p, fmt) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cpa', 'conversions', p.currency, ar), (v) => fmt(v)) },
+    revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, p) => plain(moneyFromTotals(t as MoneyTotals, 'revenue', ar, p.currency).text) },
+    roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => { const r = readRoas(t as MoneyTotals, ar); return plain(ratio(r.value)) } },
+    cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpa', 'conversions', p.currency, ar), (v) => asExactMoney(v))) },
     /*
      * The rest of what a marketing path is judged on — ANALYTICS-OBJECTIVE-SYSTEM-001.
      *
@@ -187,18 +213,18 @@ export function LiveSharedReport({
      * `cpa` does — a rate whose numerator is partly withheld is «—», never the converted subset.
      */
     reach: { ar: 'الوصول', en: 'Reach', format: (t, _p, _m, count) => count(t.reach) },
-    frequency: { ar: 'التكرار', en: 'Frequency', format: (t) => (t.frequency === null || t.frequency === undefined ? '—' : ratio(t.frequency)) },
-    cpm: { ar: 'تكلفة الألف ظهور', en: 'CPM', invertGood: true, format: (t, p, fmt) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cpm', (Number(t.impressions ?? 0)) / 1000, p.currency, ar), (v) => fmt(v)) },
-    cpc: { ar: 'تكلفة النقرة', en: 'CPC', invertGood: true, format: (t, p, fmt) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cpc', 'clicks', p.currency, ar), (v) => fmt(v)) },
+    frequency: { ar: 'التكرار', en: 'Frequency', format: (t) => plain(t.frequency === null || t.frequency === undefined ? '—' : ratio(t.frequency)) },
+    cpm: { ar: 'تكلفة الألف ظهور', en: 'CPM', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpm', (Number(t.impressions ?? 0)) / 1000, p.currency, ar), (v) => asExactMoney(v))) },
+    cpc: { ar: 'تكلفة النقرة', en: 'CPC', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpc', 'clicks', p.currency, ar), (v) => asExactMoney(v))) },
     leads: { ar: 'العملاء المحتملون', en: 'Leads', spark: true, format: (t, _p, _m, count) => count(t.leads) },
-    cpl: { ar: 'تكلفة العميل المحتمل', en: 'CPL', invertGood: true, format: (t, p, fmt) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cpl', 'leads', p.currency, ar), (v) => fmt(v)) },
+    cpl: { ar: 'تكلفة العميل المحتمل', en: 'CPL', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpl', 'leads', p.currency, ar), (v) => asExactMoney(v))) },
     installs: { ar: 'التثبيتات', en: 'Installs', format: (t, _p, _m, count) => count(t.installs) },
-    cpi: { ar: 'تكلفة التثبيت', en: 'CPI', invertGood: true, format: (t, p, fmt) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cpi', 'installs', p.currency, ar), (v) => fmt(v)) },
+    cpi: { ar: 'تكلفة التثبيت', en: 'CPI', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpi', 'installs', p.currency, ar), (v) => asExactMoney(v))) },
     engagements: { ar: 'التفاعلات', en: 'Engagements', format: (t, _p, _m, count) => count(t.engagements) },
-    cpe: { ar: 'تكلفة التفاعل', en: 'CPE', invertGood: true, format: (t, p, fmt) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cpe', 'engagements', p.currency, ar), (v) => fmt(v)) },
+    cpe: { ar: 'تكلفة التفاعل', en: 'CPE', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpe', 'engagements', p.currency, ar), (v) => asExactMoney(v))) },
     landing_page_views: { ar: 'زيارات الصفحة', en: 'Landing page views', format: (t, _p, _m, count) => count(t.landing_page_views) },
-    cost_per_lpv: { ar: 'تكلفة الزيارة', en: 'Cost per visit', invertGood: true, format: (t, p, fmt) => formatMoneyReading(readCostPer(t as MoneyTotals, 'cost_per_lpv', 'landing_page_views', p.currency, ar), (v) => fmt(v)) },
-    conversion_rate: { ar: 'معدل التحويل', en: 'Conversion rate', format: (t) => (t.conversion_rate === null || t.conversion_rate === undefined ? '—' : `${(t.conversion_rate * 100).toFixed(2)}%`) },
+    cost_per_lpv: { ar: 'تكلفة الزيارة', en: 'Cost per visit', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cost_per_lpv', 'landing_page_views', p.currency, ar), (v) => asExactMoney(v))) },
+    conversion_rate: { ar: 'معدل التحويل', en: 'Conversion rate', format: (t) => plain(t.conversion_rate === null || t.conversion_rate === undefined ? '—' : `${(t.conversion_rate * 100).toFixed(2)}%`) },
     /*
      * Average order value is deliberately NOT here yet.
      *
@@ -251,8 +277,6 @@ export function LiveSharedReport({
   const spendState = moneyState(t as MoneyTotals, 'spend').state
   const spendChartable = spendState === 'complete_converted' || spendState === 'zero'
   const platformSpendRank = rankableMoney(payload.platforms as MoneyTotals[], 'spend', currency)
-  const topCampaignRows = payload.campaigns.slice(0, 8)
-  const campaignSpendRank = rankableMoney(topCampaignRows as MoneyTotals[], 'spend', currency)
 
   return (
     /*
@@ -306,24 +330,10 @@ export function LiveSharedReport({
                 }`}
                 style={providers.includes(p) ? { background: platformColor(p) } : undefined}
               >
-                {p}
+                {providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}
               </button>
             ))}
           </div>
-        )}
-
-        {payload.available.campaigns.length > 1 && (
-          <select
-            data-testid="live-campaign"
-            value={campaigns[0] ?? ''}
-            onChange={(e) => setCampaigns(e.target.value ? [e.target.value] : [])}
-            className="min-w-0 max-w-[200px] truncate rounded-xl border border-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-text-secondary"
-          >
-            <option value="">{ar ? 'كل الحملات' : 'All campaigns'}</option>
-            {payload.available.campaigns.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
         )}
 
         <button
@@ -357,11 +367,16 @@ export function LiveSharedReport({
           {visibleMetrics.map((key) => {
             const meta = METRIC_META[key]
             if (!meta) return null
+
+            const read = meta.format(t, payload, asMoney, count)
+
             return (
               <KpiCard
                 key={key}
                 label={ar ? meta.ar : meta.en}
-                value={meta.format(t, payload, asMoney, count)}
+                value={read.text}
+                /* The un-abbreviated figure, one hover away — and absent where compacting changed nothing. */
+                exact={read.exact ?? undefined}
                 delta={d[key]}
                 invertGood={meta.invertGood}
                 spark={meta.spark ? series(key) : undefined}
@@ -385,10 +400,14 @@ export function LiveSharedReport({
         {/*
           Ranked INSIDE each path, never across them.
 
-          The campaign list further down is ordered by spend, which answers «where did the money go»
-          and never «which of these worked». One ranked list across a mixed programme answers it
-          wrongly: a brand campaign sits at the bottom of a return table for not producing revenue it
-          was never asked to produce.
+          The platform split above is ordered by spend, which answers «where did the money go» and
+          never «which of these worked». One ranked list across a mixed programme answers it wrongly:
+          a brand path sits at the bottom of a return table for not producing revenue it was never
+          asked to produce.
+
+          The buckets are PLATFORMS since CLIENT-REPORT-ENTITY-BOUNDARY-001 — they were campaigns, by
+          internal name. «Snapchat costs 43 SAR a sale where Google costs 119» is the same finding a
+          client can act on, and it is one they can take to the person running it.
         */}
         {(payload.objective_leaders?.paths ?? []).some((p) => p.comparable) && (
           <div data-testid="live-objective-leaders" className="mt-6 rounded-2xl border border-border bg-surface p-4">
@@ -402,10 +421,10 @@ export function LiveSharedReport({
                   <div className="font-semibold text-text-primary">{ar ? path.label_ar : path.label_en}</div>
                   <div className="mt-0.5 text-text-secondary">
                     {ar ? 'الأقوى ' : 'Strongest '}
-                    <span className="font-bold text-text-primary">{path.strongest?.name}</span>
+                    <span className="font-bold text-text-primary">{providerLabel(canonicalPlatform(path.strongest?.name ?? ''), ar ? 'ar' : 'en')}</span>
                     {' · '}
                     {ar ? 'الأضعف ' : 'weakest '}
-                    <span className="font-bold text-text-primary">{path.weakest?.name}</span>
+                    <span className="font-bold text-text-primary">{providerLabel(canonicalPlatform(path.weakest?.name ?? ''), ar ? 'ar' : 'en')}</span>
                   </div>
                 </div>
               ))}
@@ -494,7 +513,8 @@ export function LiveSharedReport({
                 <PlatformDonutChart
                   data={payload.platforms.flatMap((p, i) => {
                     const value = platformSpendRank.values[i]
-                    return value === null ? [] : [{ name: p.provider, value }]
+                    // The platform's NAME, not its key: «snapchat» is a database value, «سناب شات» is a platform.
+                    return value === null ? [] : [{ name: providerLabel(canonicalPlatform(p.provider), ar ? 'ar' : 'en'), value }]
                   })}
                   currency={platformSpendRank.currency ?? currency}
                   height={220}
@@ -511,36 +531,14 @@ export function LiveSharedReport({
           </ChartCard>
         </div>
 
-        <div className="mt-3 grid gap-3 lg:grid-cols-2" data-testid="live-campaigns">
-          <ChartCard title={ar ? 'الحملات' : 'Campaigns'}>
-            {payload.campaigns.length > 0 && campaignSpendRank === null ? (
-              <p className="py-10 text-center text-sm text-text-muted">{ar ? 'ترتيب الإنفاق غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend ranking unavailable — amounts await a rate or span currencies'}</p>
-            ) : payload.campaigns.length > 0 && campaignSpendRank !== null ? (
-              <>
-                <RankingBarChart
-                  data={topCampaignRows.flatMap((c, i) => {
-                    const spend = campaignSpendRank.values[i]
-                    return spend === null ? [] : [{ name: c.campaign_name ?? '—', provider: c.provider, spend }]
-                  })}
-                  bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]}
-                  horizontal
-                  height={220}
-                  colorByPlatform
-                />
-                {campaignSpendRank.dropped > 0 && (
-                  <p className="mt-1 text-center text-[11px] text-text-muted">
-                    {ar
-                      ? `${countedCampaigns(campaignSpendRank.dropped, 'ar')} غير مُدرجة: مبالغ بانتظار سعر صرف أو بعملات متعددة`
-                      : `${campaignSpendRank.dropped} campaign(s) not included: amounts await a rate or span currencies`}
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className="py-10 text-center text-sm text-text-muted">
-                {ar ? 'لا توجد حملات في هذه الفترة.' : 'No campaigns in this period.'}
-              </p>
-            )}
-          </ChartCard>
+        {/*
+          CLIENT-REPORT-ENTITY-BOUNDARY-001 — the campaign ranking that stood here is gone.
+
+          It was a bar chart of the top eight campaigns by spend, drawn by internal name. «Where did
+          the money go» is the question it answered, and the donut above answers it by platform; what
+          only the campaign chart could add was the roster, which is the plan rather than the result.
+        */}
+        <div className="mt-3 grid gap-3" data-testid="live-funnel">
           <ChartCard title={ar ? 'قمع الأداء' : 'Performance funnel'}>
             <ConversionFunnelChart stages={payload.funnel} currency={currency} ar={ar} />
             {/* FUNNEL-NULL-001 — said once in a sentence as well as drawn. The client has no second
@@ -561,10 +559,6 @@ export function LiveSharedReport({
           * Each row carries the system that produced it, exactly as the operator's own analytics tab
           * does. A client asking «من أين جاء هذا الرقم؟» gets the same answer their agency would.
           */}
-        {/*
-          OBJECTIVE-ANALYTICS-DEPTH-001 — which campaign inside each path carried it, and which did not.
-
-
         {/*
           REPORT-AD-PREVIEW-001 — the same section as the deck and the PDF, from the same payload key.
         */}

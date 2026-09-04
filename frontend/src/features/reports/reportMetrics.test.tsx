@@ -111,7 +111,8 @@ describe('the executive slide', () => {
     render(<SlideBody slide={slide} data={brand} meta={meta} />)
 
     expect(screen.getByText('أفضل منصة (تكلفة الألف ظهور)')).toBeInTheDocument()
-    expect(screen.getByText('snapchat')).toBeInTheDocument()
+    // The platform's NAME, not its key: «snapchat» is a database value in a document a client keeps.
+    expect(screen.getByText('سناب شات')).toBeInTheDocument()
     expect(screen.getByText('2.50 SAR')).toBeInTheDocument()
   })
 
@@ -125,16 +126,46 @@ describe('the executive slide', () => {
   })
 
   /**
-   * The selectable strip under the cards is what a PDF reader extracts, so a zero printed there is
-   * the most durable form of the claim.
+   * The exact figure is selectable text, which is what a PDF reader extracts — so a figure printed
+   * there is the most durable form of the claim, and a figure for a metric nobody reported would be
+   * the most durable form of a false one.
+   *
+   * It now lives under the headline it makes exact rather than in a strip below the grid, so the
+   * assertion reads every card's exact line instead of one shared row. What it checks is unchanged:
+   * a metric this account never bought has no exact figure anywhere on the slide.
    */
-  it('never writes an unreported metric into the exact-figures strip', () => {
+  it('never writes an unreported metric as an exact figure', () => {
     const { container } = render(<SlideBody slide={slide} data={brand} meta={meta} />)
-    const exact = container.querySelector('[data-exact]')!
+    const exact = [...container.querySelectorAll('[data-exact]')].map((n) => n.textContent ?? '')
 
-    expect(exact.textContent).toContain('الإنفاق')
-    expect(exact.textContent).not.toContain('مشاهدات الفيديو')
-    expect(exact.textContent).not.toContain('الإيرادات')
+    expect(exact.length, 'the cards carry no exact-figure row at all').toBeGreaterThan(0)
+
+    // An exact row either states a figure or says nothing: a "—" here repeats the headline's own
+    // «nothing was reported» in smaller type, which is a row that costs a glance and carries nothing.
+    for (const line of exact) {
+      const text = line.trim()
+
+      if (text !== '') expect(text, 'an exact row that states no figure').toMatch(/\d/)
+      expect(text, 'a dash is not an exact figure').not.toBe('—')
+    }
+
+    /*
+     * The card for a metric the platform never sent NAMES it and says so — «مشاهدات الفيديو / لم
+     * ترسله المنصة» is the honest statement, and the old strip could not make it because a strip has
+     * no room for a sentence. What must not happen is a precise FIGURE for it: that is the durable,
+     * selectable form of a number nobody measured.
+     */
+    const unreported = [...container.querySelectorAll('[data-exact]')]
+      .map((n) => n.parentElement?.textContent ?? '')
+      .find((card) => card.includes('مشاهدات الفيديو'))
+
+    expect(unreported, 'the unreported card is not on the slide at all').toBeDefined()
+    expect(unreported).toContain('لم ترسله المنصة')
+
+    const card = [...container.querySelectorAll('[data-exact]')]
+      .find((n) => (n.parentElement?.textContent ?? '').includes('مشاهدات الفيديو'))
+
+    expect(card?.textContent?.trim(), 'an exact figure was written for a metric nobody reported').toBe('')
   })
 })
 
@@ -318,16 +349,64 @@ describe('creative analysis by objective', () => {
     expect(readings.find((r) => r.key === 'cpm')!.reading).toEqual({ kind: 'value', text: '12 SAR' })
   })
 
-  it('renders the brand report’s creative card without a ROAS chip', () => {
+  /**
+   * The «top creatives» slide shows ADS — CLIENT-REPORT-ENTITY-BOUNDARY-001.
+   *
+   * It used to read `top_creatives`, whose rows are CAMPAIGNS (`creative_level` said so in the
+   * payload the whole time), and print their names three medals deep under a heading promising the
+   * client's best ads. It renders the real ad-level section now, so this asserts the ad — and that
+   * a legacy snapshot's campaign roster, still sitting in `top_creatives`, does not reach the page.
+   */
+  it('renders the brand report’s ad card from the ads, not from the campaign roster', () => {
     const withCreatives = {
       ...brand,
+      ads: [{ id: 'a1', provider: 'meta', name: 'فيلم الوعي', objective: 'awareness', reach: 900000, cpm: 4, impressions: 6_000_000, engagements: 12000, reason: 'أعلى مدى بأقل CPM.' }],
       top_creatives: [{ provider: 'meta', campaign_name: 'حملة الوعي', reach: 900000, cpm: 4, impressions: 6_000_000, engagements: 12000, reason: 'أعلى مدى بأقل CPM.' }],
     }
-    render(<SlideBody slide={{ id: 'c', type: 'top_creatives', platform: 'meta', order: 1, visible: true }} data={withCreatives} meta={meta} />)
+    const { container } = render(<SlideBody slide={{ id: 'c', type: 'top_creatives', platform: 'meta', order: 1, visible: true }} data={withCreatives} meta={meta} />)
 
-    expect(screen.getByText('حملة الوعي')).toBeInTheDocument()
-    expect(screen.getByText('الوصول')).toBeInTheDocument()
+    expect(screen.getByText('فيلم الوعي')).toBeInTheDocument()
+    expect(container.textContent, 'the campaign roster reached a client slide').not.toContain('حملة الوعي')
     expect(screen.queryByText('ROAS')).not.toBeInTheDocument()
     expect(screen.queryByText('CPA')).not.toBeInTheDocument()
+  })
+})
+
+
+/**
+ * «توحيد المؤشرات بالنظام البطاقات» — one metric, one card, and a row that reads as a row.
+ *
+ * jsdom does not lay anything out, so these assert the STRUCTURE that produces the alignment rather
+ * than the pixels: the card is a full-height column and its chart row is pushed to the bottom edge.
+ * Without both, a card with a note stands taller than its neighbour and the six sparklines float at
+ * six different heights — which is the thing the owner asked to be fixed, and the thing a class that
+ * silently stops applying would bring back. The measured proof is in the browser: at 1440 all six
+ * cards report height 126, bottom 1337, and their chart rows all start at 1294.
+ */
+describe('the executive cards line up', () => {
+  // The same slide the file already builds — see the top of this file.
+  it('gives every card a full-height column with its chart on the bottom edge', () => {
+    const { container } = render(<SlideBody slide={slide} data={brand} meta={meta} />)
+    const cards = [...container.querySelectorAll('[data-exact]')].map((n) => n.parentElement!)
+
+    expect(cards.length, 'the executive slide drew no cards').toBeGreaterThan(3)
+
+    for (const card of cards) {
+      expect(card.className, 'a card that is not a full-height column cannot share a row').toContain('h-full')
+      expect(card.className).toContain('flex-col')
+
+      const foot = card.lastElementChild!
+
+      expect(foot.className, 'the chart row must be pushed to the bottom, or the baselines drift').toContain('mt-auto')
+    }
+  })
+
+  /** The figures live in the cards, not in a second list underneath them. */
+  it('states each exact figure inside its own card', () => {
+    const { container } = render(<SlideBody slide={slide} data={brand} meta={meta} />)
+
+    for (const row of container.querySelectorAll('[data-exact]')) {
+      expect(row.parentElement?.className, 'an exact figure outside a card is the strip coming back').toContain('rounded-2xl')
+    }
   })
 })

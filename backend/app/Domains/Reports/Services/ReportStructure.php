@@ -38,19 +38,24 @@ namespace App\Domains\Reports\Services;
 final class ReportStructure
 {
     /**
-     * The eight sections, in the order a report is read.
+     * The seven sections, in the order a report is read.
      *
      * Fixed order, because the sequence is itself an argument: what happened, then how it performed
-     * overall, then where it happened, then what it was bought for, then which campaigns and ads
-     * carried it, and only then what to do about it. A findings section read before the evidence is
-     * an opinion; read after it, it is a conclusion.
+     * overall, then where it happened, then what it was bought for, then the ads that carried it,
+     * and only then what to do about it. A findings section read before the evidence is an opinion;
+     * read after it, it is a conclusion.
+     *
+     * «الحملات» was the fifth and is gone — CLIENT-REPORT-ENTITY-BOUNDARY-001. A report is written
+     * for the person paying, and the campaign is the agency's own container: the objectives section
+     * before it says what the money was bought for, and the ads section after it shows the work that
+     * did the buying. Neither needs the roster in between. An outline that still listed it would
+     * number a section no renderer draws, which is how a PDF ends up with «3. Campaigns» over a gap.
      */
     private const ORDER = [
         'executive_summary',
         'performance',
         'platforms',
         'objectives',
-        'campaigns',
         'ads',
         'findings',
         'recommendations',
@@ -61,7 +66,6 @@ final class ReportStructure
         'performance' => ['ar' => 'الأداء العام', 'en' => 'Overall performance'],
         'platforms' => ['ar' => 'تفصيل المنصات', 'en' => 'Platform breakdown'],
         'objectives' => ['ar' => 'التفصيل حسب الهدف', 'en' => 'Breakdown by objective'],
-        'campaigns' => ['ar' => 'الحملات', 'en' => 'Campaigns'],
         'ads' => ['ar' => 'الإعلانات والمواد', 'en' => 'Ads and media'],
         'findings' => ['ar' => 'النتائج', 'en' => 'Findings'],
         'recommendations' => ['ar' => 'التوصيات', 'en' => 'Recommendations'],
@@ -102,7 +106,6 @@ final class ReportStructure
             'platforms' => $has('platforms'),
             // `objective_performance` is the block; its `paths` list is what makes it worth showing.
             'objectives' => ($data['objective_performance']['paths'] ?? []) !== [],
-            'campaigns' => $has('campaigns'),
             'ads' => $has('ads'),
             /*
              * Findings and recommendations are LAST and are absent when nothing is supported.
@@ -120,7 +123,6 @@ final class ReportStructure
             'performance' => 'no_figures_in_this_window',
             'platforms' => 'no_platform_reported_in_this_window',
             'objectives' => 'no_objective_split_available',
-            'campaigns' => 'no_campaign_spent_in_this_window',
             // The ads section states its OWN reason — «no creative in the window» and «no metric
             // ranks ads honestly for this objective» are different facts, and only the section that
             // built the list knows which applies.
@@ -139,7 +141,6 @@ final class ReportStructure
             'performance' => ['spend', 'impressions', 'clicks', 'ctr', 'results'],
             'platforms' => ['spend', 'results', 'share'],
             'objectives' => ['spend', 'results', 'cost_per_result'],
-            'campaigns' => ['spend', 'results'],
             'ads' => ['impressions', 'clicks', 'ctr'],
             'findings' => [],
             'recommendations' => [],
@@ -149,7 +150,6 @@ final class ReportStructure
             'performance' => 'the summary states the headline; this section is the same figures over the whole period, with the components the headline hides',
             'platforms' => 'the same spend, divided by where it went',
             'objectives' => 'the same spend, divided by what it was bought for — and its cost per result is DIRECT rather than the blended one above',
-            'campaigns' => 'the same spend, divided by the campaign that decided it',
             'ads' => 'delivery figures beneath the campaigns, never money — an ad’s share of a campaign’s spend is not a figure any platform reports',
         ];
 

@@ -8,6 +8,16 @@ namespace App\Domains\Reports\Services;
  * Guards a CLIENT-facing report body against leaking internal/technical content: UUIDs, checksums,
  * request/queue/sync internals, draft (unapproved) recommendations, and internal campaign markers.
  * Used as a test assertion and a runtime guard before a client link/PDF is served.
+ *
+ * ## The structural half — CLIENT-REPORT-ENTITY-BOUNDARY-001
+ *
+ * The patterns below can only catch text that LOOKS internal. A campaign called «White Friday» looks
+ * like nothing at all, and it is still the agency's own container. So identity is checked by SHAPE:
+ * a client body may not carry a campaign or ad-set key, whatever the value in it reads like.
+ *
+ * {@see ClientReportView} removes those keys before this runs, which makes a violation here a report
+ * on the REMOVER — a path that reached a client without passing through it, or a key nobody thought
+ * of. That is exactly what a guard downstream of a fix is for.
  */
 final class ClientReportContentValidator
 {
@@ -38,6 +48,11 @@ final class ClientReportContentValidator
     {
         $violations = [];
 
+        // A campaign-management entity, by shape rather than by what its name happens to read like.
+        foreach (self::entityViolations($clientData) as $violation) {
+            $violations[] = $violation;
+        }
+
         // Any unapproved recommendation is itself a violation for a client report.
         foreach ($clientData['recommendations'] ?? [] as $r) {
             if (($r['status'] ?? 'draft') !== 'approved') {
@@ -55,6 +70,47 @@ final class ClientReportContentValidator
         }
 
         return $violations;
+    }
+
+    /**
+     * The keys that carry campaign-management identity, wherever they sit.
+     *
+     * Walked rather than checked at the top level: `objective_performance.paths[].campaigns[]` and
+     * `direct.excluded_campaigns[]` are three levels down, and both carried names and primary keys
+     * to a client until this requirement. A guard that only looked at `data.campaigns` would have
+     * called that payload clean.
+     *
+     * @param  array<string,mixed>  $clientData
+     * @return list<array{code:string, match:string, path:string}>
+     */
+    private static function entityViolations(array $clientData): array
+    {
+        /** @var list<array{code:string, match:string, path:string}> $found */
+        $found = [];
+
+        $walk = function (mixed $node, string $path) use (&$walk, &$found): void {
+            if (! is_array($node)) {
+                return;
+            }
+
+            foreach (['campaign_name', 'campaign_id', 'ad_set_name', 'ad_set_id', 'external_entity_id'] as $key) {
+                if (array_key_exists($key, $node) && $node[$key] !== null && $node[$key] !== []) {
+                    $found[] = [
+                        'code' => 'campaign_management_entity',
+                        'match' => $key,
+                        'path' => $path === '' ? $key : $path.'.'.$key,
+                    ];
+                }
+            }
+
+            foreach ($node as $k => $v) {
+                $walk($v, $path === '' ? (string) $k : $path.'.'.$k);
+            }
+        };
+
+        $walk($clientData, '');
+
+        return $found;
     }
 
     public function passes(array $clientData): bool

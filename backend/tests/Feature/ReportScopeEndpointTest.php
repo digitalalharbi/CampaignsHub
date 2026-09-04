@@ -331,9 +331,20 @@ final class ReportScopeEndpointTest extends TestCase
         $providers = array_column($narrowed['platforms'], 'provider');
         $this->assertSame(['meta'], $providers);
 
-        // 3. The campaign list.
-        $this->assertCount(1, $narrowed['campaigns']);
-        $this->assertSame('Sales', $narrowed['campaigns'][0]['campaign_name']);
+        /*
+         * 3. The objective split — where the narrowing used to be checked on the campaign list.
+         *
+         * CLIENT-REPORT-ENTITY-BOUNDARY-001 emptied `campaigns` in the stored document, so the
+         * roster can no longer be the witness that a scope narrowed. The path totals are a better
+         * one anyway: they prove the excluded campaign's spend left the ARITHMETIC, which is what
+         * this test is actually about, rather than proving a name left a list.
+         */
+        $spentPaths = array_values(array_filter(
+            $narrowed['objective_performance']['paths'],
+            fn ($p) => $p['spend'] > 0,
+        ));
+        $this->assertCount(1, $spentPaths, 'the excluded campaign’s path still carried spend');
+        $this->assertEqualsWithDelta(1000.0, $spentPaths[0]['spend'], 0.01);
 
         // 4. The funnel, and the spend it divides by.
         $this->assertEqualsWithDelta(1000.0, $narrowed['funnel_spend'], 0.01);

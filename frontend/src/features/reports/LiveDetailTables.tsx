@@ -1,8 +1,8 @@
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
-import { compact, moneyFromTotals } from '@/features/analytics/format'
-import type { MoneyTotals } from '@/lib/money/contract'
+import { compact, money, moneyFromTotals } from '@/features/analytics/format'
+import { formatMoneyReading, readCostPer, type MoneyTotals } from '@/lib/money/contract'
 import type { LivePayload } from './api'
 import type { Locale } from '@/stores/ui'
 
@@ -13,15 +13,27 @@ import type { Locale } from '@/stores/ui'
  * ## The defect
  *
  * A live link whose form is `detailed` rendered the dashboard: a spend chart, a platform donut and
- * a top-EIGHT campaign bar. Above it the page printed «تقرير تفصيلي — كل المنصات والحملات
- * والإعلانات». A client who counted the bars found eight campaigns where the sentence promised all
- * of them, and no way to see the ninth. The label was not wrong about what the product can do; it
- * was wrong about what that page was.
+ * a top-EIGHT bar. Above it the page printed a sentence promising the whole window. A client who
+ * counted the bars found eight rows where the sentence promised all of them, and no way to see the
+ * ninth. The label was not wrong about what the product can do; it was wrong about what that page
+ * was.
  *
- * So the detailed form gets what the sentence says: every campaign and every platform in the chosen
- * window, as tables, ordered by whatever column the reader picks.
+ * So the detailed form gets what the sentence says: the whole window, as tables, ordered by whatever
+ * column the reader picks.
  *
- * ## Every campaign, and no invented figure
+ * ## What «detailed» means, after CLIENT-REPORT-ENTITY-BOUNDARY-001
+ *
+ * It used to mean a campaign table and an ad-set table — the agency's own campaign names, and below
+ * them the targeting plan («توسيع الجمهور», «إعادة الاستهداف») one rung down. That is not depth about
+ * the client's advertising; it is the internal arrangement of it, and the owner asked for it out:
+ * «اسم واختيار الحملة احذفه من التقارير».
+ *
+ * Detail is now depth on the axes a client reads: every PLATFORM, and every OBJECTIVE with the cost
+ * per result each one is actually judged on. A reader learns more from «التحويل والمبيعات: 42,000
+ * SAR, 180 طلبًا, 233 SAR للطلب» than from a list of campaign names, and it is theirs to act on.
+ * The operator's own drill-down keeps Campaign → Ad Set → Ad → Content, untouched.
+ *
+ * ## No invented figure
  *
  * The rows are the live payload's own, unsliced — the dashboard's top-eight is a chart's ceiling and
  * has no business here. Money goes through the same contract as the rest of the page: a figure whose
@@ -39,20 +51,19 @@ export function LiveDetailTables({
 }) {
   const ar = locale === 'ar'
   const t = {
-    campaigns: ar ? 'كل الحملات' : 'Every campaign',
-    adSets: ar ? 'المجموعات الإعلانية' : 'Ad sets',
-    adSet: ar ? 'المجموعة' : 'Ad set',
-    noAdSets: ar
-      ? 'لم تُبلِّغ منصات هذه الفترة عن مستوى المجموعات الإعلانية.'
-      : 'The platforms in this window reported no ad-set level.',
     platforms: ar ? 'كل المنصات' : 'Every platform',
-    campaign: ar ? 'الحملة' : 'Campaign',
+    objectives: ar ? 'كل هدف' : 'Every objective',
     platform: ar ? 'المنصة' : 'Platform',
+    objective: ar ? 'الهدف' : 'Objective',
     spend: ar ? 'الإنفاق' : 'Spend',
     impressions: ar ? 'الظهور' : 'Impressions',
     clicks: ar ? 'النقرات' : 'Clicks',
     results: ar ? 'النتائج' : 'Results',
+    costPerResult: ar ? 'تكلفة النتيجة' : 'Cost per result',
     none: ar ? 'لا توجد صفوف في هذه الفترة.' : 'No rows in this period.',
+    noObjectives: ar
+      ? 'لم يُنفَق على أي هدف في هذه الفترة.'
+      : 'Nothing was spent on any objective in this window.',
   }
 
   const numberOf = (row: Record<string, unknown>, key: string): number | null => {
@@ -102,7 +113,7 @@ export function LiveDetailTables({
      * order the table by a figure the reader cannot see.
      */
     values: rows.map((row): SortValues => [
-      String(row.campaign_name ?? row.provider ?? ''),
+      String(row.provider ?? row.path ?? ''),
       spendValue(row),
       numberOf(row, 'impressions'),
       numberOf(row, 'clicks'),
@@ -124,58 +135,76 @@ export function LiveDetailTables({
 
   const head = (first: string) => [first, t.spend, t.impressions, t.clicks, t.results]
 
-  const campaigns = body(payload.campaigns as Array<Record<string, unknown>>, (row) => (
-    <span key="name" className="font-semibold">{(row.campaign_name as string | null) ?? '—'}</span>
-  ))
-
-  /*
-   * REPORT-DETAIL-PARITY-001 — the ad set says which ad set it is.
-   *
-   * Production showed twenty-two rows of «—»: the server sent no `name` (the naming lived in the
-   * operator's controller, and this payload comes from the aggregator directly), and the fallback
-   * read `external_entity_id`, which is the COLUMN name — the aggregator shapes it as `external_id`.
-   * Two independent misses in one cell, and the visible result of either is the same dash.
-   *
-   * The provider id is a poor label and a real one; it stays as the last resort, above a dash, for
-   * a row whose ad set the structure sweep has since removed.
-   */
-  const adSets = body((payload.ad_sets ?? []) as Array<Record<string, unknown>>, (row) => (
-    <span key="name" className="font-semibold">
-      {(row.name as string | null) ?? (row.external_id as string | null) ?? '—'}
-    </span>
-  ))
-
   const platforms = body(payload.platforms as Array<Record<string, unknown>>, (row) => (
     <span key="name" className="font-semibold">
       {providerLabel(canonicalPlatform(String(row.provider ?? '')), locale)}
     </span>
   ))
 
+  /* Only the paths money was actually spent on: a path at zero is not a finding, it is an absence. */
+  const objectiveRows = (payload.objective_performance?.paths ?? []).filter((p) => p.spend > 0)
+
+  const objectives = (() => {
+    /*
+     * A path's result is its ORDERS — the payload names it that, and `body()` reads `conversions`.
+     * Mapping it here rather than teaching `body()` a second key keeps one shape flowing through it.
+     */
+    const asRows = objectiveRows.map((p) => ({ ...p, conversions: p.orders }))
+    const base = body(asRows as unknown as Array<Record<string, unknown>>, (row) => (
+      <span key="name" className="font-semibold">{ar ? String(row.label_ar) : String(row.label_en)}</span>
+    ))
+
+    /*
+     * The sixth column, appended rather than folded into `body()`: a platform has no cost per result
+     * to state, because a platform is not bought for one thing. A path is — and only a path that was
+     * bought for a result at all, which `result_metrics_apply` is the payload's own flag for. «—» in
+     * this cell is the report declining to rank an awareness path on a sales metric, not a gap.
+     */
+    const costPer = (row: (typeof objectiveRows)[number]) =>
+      row.result_metrics_apply
+        ? formatMoneyReading(readCostPer(row as unknown as MoneyTotals, 'cpa', 'orders', currency, ar), money)
+        : '\u2014'
+
+    return {
+      rows: base.rows.map((cells, i) => [
+        ...cells,
+        <span key="cost" dir="ltr">{costPer(objectiveRows[i])}</span>,
+      ]),
+      values: base.values.map((v, i): SortValues => [
+        ...v,
+        objectiveRows[i].result_metrics_apply ? objectiveRows[i].cpa : null,
+      ]),
+      exact: base.exact.map((e) => [...e, null]),
+    }
+  })()
+
   return (
     <div data-testid="live-detail-tables" className="mt-3 grid gap-3 [&>*]:min-w-0">
-      <Section title={t.campaigns} testid="live-detail-campaigns" empty={payload.campaigns.length === 0} none={t.none}>
-        <MetricTable head={head(t.campaign)} rows={campaigns.rows} values={campaigns.values} exact={campaigns.exact} initialSort={{ column: 1, dir: 'desc' }} />
+      <Section title={t.platforms} testid="live-detail-platforms" empty={payload.platforms.length === 0} none={t.none}>
+        <MetricTable head={head(t.platform)} rows={platforms.rows} values={platforms.values} exact={platforms.exact} initialSort={{ column: 1, dir: 'desc' }} />
       </Section>
 
       {/*
-        REPORT-DETAIL-PARITY-001 — the rung a «detailed report» stopping at the campaign leaves out.
+        REPORT-OBJECTIVE-003/004 in the detailed form — the axis a client's money is actually judged on.
 
-        An ad set is where the media buyer's decisions live: an audience, a placement, a budget
-        split. An empty section says the platforms reported no such level rather than showing a
-        heading over nothing — «we did not ask» and «they did not send» are different sentences, and
-        this one is the second.
+        A platform table answers «where did it go». This answers «what was it bought for, and what did
+        that cost» — and the cost per result is the PATH's own, so an awareness path is never given a
+        cost per order it was never asked to produce. `result_metrics_apply` is the payload's own flag
+        for that, and a «—» here is the report declining to rank a brand campaign on a sales metric.
       */}
       <Section
-        title={t.adSets}
-        testid="live-detail-ad-sets"
-        empty={(payload.ad_sets ?? []).length === 0}
-        none={t.noAdSets}
+        title={t.objectives}
+        testid="live-detail-objectives"
+        empty={objectiveRows.length === 0}
+        none={t.noObjectives}
       >
-        <MetricTable head={head(t.adSet)} rows={adSets.rows} values={adSets.values} exact={adSets.exact} initialSort={{ column: 1, dir: 'desc' }} />
-      </Section>
-
-      <Section title={t.platforms} testid="live-detail-platforms" empty={payload.platforms.length === 0} none={t.none}>
-        <MetricTable head={head(t.platform)} rows={platforms.rows} values={platforms.values} exact={platforms.exact} initialSort={{ column: 1, dir: 'desc' }} />
+        <MetricTable
+          head={[t.objective, t.spend, t.impressions, t.clicks, t.results, t.costPerResult]}
+          rows={objectives.rows}
+          values={objectives.values}
+          exact={objectives.exact}
+          initialSort={{ column: 1, dir: 'desc' }}
+        />
       </Section>
     </div>
   )

@@ -31,7 +31,6 @@ export type ReportAd = {
   id?: string
   name?: string | null
   provider?: string | null
-  campaign_name?: string | null
   objective?: string | null
   preview?: CreativePreview | null
   spend?: number | null
@@ -252,8 +251,16 @@ function AdCard({
         </div>
         <div className="truncate text-[11px] text-text-muted">
           {[
+            /*
+             * CLIENT-REPORT-ENTITY-BOUNDARY-001 — the platform and the objective, never the campaign.
+             *
+             * This line read «ميتا · Meta — White Friday (seasonal) · مبيعات» under every ad, on the
+             * one section a client is entitled to: the work itself, with the picture that ran. The
+             * ad's own name and the objective say what it is; the campaign it sat in is the agency's
+             * filing system, and this section is shared with the live link and the printed document,
+             * so it was the same leak in three places.
+             */
             ad.provider ? providerLabel(ad.provider, locale) : null,
-            ad.campaign_name ?? null,
             ad.objective ? objectiveLabel(ad.objective, locale) : null,
           ].filter(Boolean).join(' · ')}
         </div>
