@@ -51,6 +51,20 @@ export default defineConfig({
        */
       '/api': { target: API_TARGET, changeOrigin: true },
       '/sanctum': { target: API_TARGET, changeOrigin: true },
+      /*
+       * AD-MEDIA-RECOVERY-001 — the app's OWN media, served by the app.
+       *
+       * A creative asset we host is stored as a path so it survives a port, a host and a deploy
+       * (`AD-MEDIA-RECOVERY-001` in `CreativePresenter::safe()`). In production the SPA and the API
+       * share an origin and the path resolves to Laravel's `public/`. In development they do not, so
+       * without this the browser asked VITE for the file, Vite answered with the SPA shell — 200,
+       * `text/html`, three kilobytes — and the player failed with `DEMUXER_ERROR_COULD_NOT_OPEN`
+       * against a document pretending to be a video.
+       *
+       * That is the worst shape of this bug: every layer reports success and the user sees a dead
+       * player, which is why it survived unit tests that assert the payload and the markup.
+       */
+      '/demo': { target: API_TARGET, changeOrigin: true },
     },
   },
   test: {

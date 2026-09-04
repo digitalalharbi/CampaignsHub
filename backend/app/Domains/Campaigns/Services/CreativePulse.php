@@ -638,6 +638,10 @@ final class CreativePulse
         $providers = [];
         $quality = [
             'previews_withheld' => 0, 'previews_expired' => 0, 'previews_unavailable' => 0,
+            // AD-MEDIA-RECOVERY-001 — counted apart from `unavailable`: an inference nobody fetched
+            // is a different operational fact from an ad the platform refused an asset for, and an
+            // operator reading «40 previews unavailable» would go looking for a broken integration.
+            'previews_never_fetched' => 0,
             'without_metrics' => 0, 'insufficient_data' => 0, 'never_synced' => 0,
         ];
 
@@ -667,6 +671,7 @@ final class CreativePulse
                 'withheld' => $quality['previews_withheld']++,
                 'expired' => $quality['previews_expired']++,
                 'unavailable' => $quality['previews_unavailable']++,
+                'never_fetched' => $quality['previews_never_fetched']++,
                 default => null,
             };
 
