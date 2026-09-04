@@ -619,25 +619,6 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
             : `The previous period (${s.data.previous_range.from} → ${s.data.previous_range.to}) holds no data, so there is nothing for this one to be measured against.`}
         </p>
       )}
-      {/*
-        ANALYTICS-DIFFERENTIATION-001 — the diagnosis LEADS, and the figures follow it.
-
-        This is the ordering decision the whole requirement turns on. The dashboard already answers
-        «what is happening», and a reader who opens Analytics has seen it — they are here because they
-        want to know WHY. Putting the KPI row first and the diagnosis below it would make this page
-        the dashboard with more scrolling, which is exactly what «explicitly refused: the same cards
-        with a longer date range» names.
-
-        So «what changed and who moved it» is the first thing on the page. The strip stays beneath it
-        as the evidence the diagnosis is drawn from — the same totals, in the same window, so the two
-        cannot disagree about the account they are both describing.
-      */}
-      <ChangeDiagnosis
-        data={drivers.data}
-        currency={reportingCurrency}
-        loading={drivers.isPending}
-        error={drivers.isError}
-      />
 
       <MetricStrip
         id="dashboard"
@@ -655,6 +636,29 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
         loading={s.isPending}
         error={s.isError ? s.error : undefined}
         onRetry={() => void s.refetch()}
+      />
+
+      {/*
+        DASHBOARD-HIERARCHY — the diagnosis sits BELOW the KPI row, and the note here used to argue
+        the opposite.
+
+        It reasoned that a reader who opens Analytics has already seen «what is happening», so
+        leading with «what changed and who moved it» was the point of the page. The owner's
+        correction overrides that: «never insert diagnostic cards, change-driver cards,
+        recommendation cards, alerts or explanatory cards ABOVE the primary KPI row — the first thing
+        the user sees must remain the campaign performance indicators.»
+
+        Analytics stays materially different from the Dashboard, but through what the requirement
+        actually asks for — a mixed analytical grid, chart types chosen per question, decomposition,
+        distribution and evidence — rather than by pushing the figures down the page. The strip is
+        the same totals in the same window as the diagnosis beneath it, so the two still cannot
+        disagree about the account they describe.
+      */}
+      <ChangeDiagnosis
+        data={drivers.data}
+        currency={reportingCurrency}
+        loading={drivers.isPending}
+        error={drivers.isError}
       />
       {/*
        * ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — directly beneath the figures that raise the question.

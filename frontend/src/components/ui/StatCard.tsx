@@ -50,6 +50,14 @@ const VALUE_TONE: Record<StatTone, string> = {
   danger: 'text-danger',
 }
 
+/**
+ * The sparkline row's height, reserved whether or not a chart draws in it.
+ *
+ * `h-9` matches what the spark itself renders at, so a card that HAS one is unchanged and a card
+ * that cannot have one stops standing shorter than its neighbours.
+ */
+const SPARK_ROW = 'h-9 w-full'
+
 export function StatCard({
   label,
   value,
@@ -113,7 +121,7 @@ export function StatCard({
   return (
     <div
       data-testid={testid}
-      className={`flex flex-col gap-1.5 rounded-2xl border border-border bg-surface ${CARD_PAD} shadow-[var(--shadow-small)] ${
+      className={`flex h-full flex-col gap-1.5 rounded-2xl border border-border bg-surface ${CARD_PAD} shadow-[var(--shadow-small)] ${
         shape === 'square' ? 'aspect-square justify-between' : ''
       }`}
     >
@@ -152,7 +160,17 @@ export function StatCard({
       */}
       <span aria-hidden={!hint} className={`min-h-[1.125rem] text-text-muted ${METRIC_HINT}`}>{hint}</span>
 
-      {spark}
+      {/*
+        RESERVED, and the last of the four rows to be — measured on PRODUCTION after the other three
+        were fixed: the shared report's six KPI cards stood at 174, 174, 174, 174, 132, 132, because
+        the top row's metrics had a sparkline and the bottom row's did not. A sparkline is present
+        exactly when a metric has a valid series behind it, so on any real KPI row some cards carry
+        one and some cannot — which makes this the row most likely to differ, not the least.
+
+        `MetricStrip` has reserved its chart row from the start. This card did not, and that is the
+        whole difference between the two components' geometry.
+      */}
+      <div className={`mt-auto ${SPARK_ROW}`} aria-hidden={!spark}>{spark}</div>
     </div>
   )
 }
