@@ -95,6 +95,49 @@ final class LiveReportShareTest extends TestCase
     }
 
     /** @param array<string, mixed> $scope */
+    /**
+     * CLIENT-REPORT-ENTITY-BOUNDARY-001 — a shared link carries performance, never the campaign plan.
+     *
+     * The owner reported it from the page — «اسم واختيار الحملة احذفه من التقارير» — and the payload
+     * was worse than the page: `campaigns` sent every campaign's internal name, `ad_sets` sent the
+     * audience configuration in plain words («توسيع الجمهور», «إعادة الاستهداف»), and
+     * `available.campaigns` sent names AND primary keys to fill a picker. A reader holding the link
+     * could read all of it out of the JSON whatever the page chose to draw, which is why this asserts
+     * the RESPONSE and not the markup.
+     *
+     * What replaces it is already in the same payload: platforms and objective performance answer
+     * «where did my money go and what did it do» without naming anything internal.
+     */
+    public function test_a_client_link_never_carries_a_campaign_or_ad_set_name(): void
+    {
+        $token = $this->liveLink();
+
+        $body = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk()->json('data');
+
+        $this->assertSame([], $body['campaigns'], 'the campaign breakdown names the agency’s own campaigns');
+        $this->assertSame([], $body['ad_sets'], 'the ad-set breakdown is the targeting plan');
+        $this->assertSame([], $body['available']['campaigns'], 'the picker published names and ids');
+
+        // Belt and braces: the names must not survive anywhere else in the response either.
+        $json = json_encode($body, JSON_UNESCAPED_UNICODE) ?: '';
+
+        $this->assertStringNotContainsString('Shared campaign', $json);
+        $this->assertStringNotContainsString('Not shared', $json);
+        $this->assertStringNotContainsString((string) $this->shared->id, $json, 'an internal id reached the client');
+    }
+
+    /** …and the platform breakdown, which is what a client may see, is still there. */
+    public function test_a_client_link_still_answers_where_the_money_went(): void
+    {
+        $token = $this->liveLink();
+
+        $body = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk()->json('data');
+
+        $this->assertArrayHasKey('platforms', $body);
+        $this->assertArrayHasKey('objective_performance', $body);
+        $this->assertNotSame([], $body['available']['providers'], 'the platform picker replaces the campaign one');
+    }
+
     private function liveLink(array $scope = []): string
     {
         [, $raw] = app(ShareService::class)->create($this->report, [

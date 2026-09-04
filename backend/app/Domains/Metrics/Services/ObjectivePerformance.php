@@ -297,19 +297,35 @@ final class ObjectivePerformance
      *
      * @return array<string,mixed>
      */
-    public function leadersByPath(Carbon $from, Carbon $to): array
+    /**
+     * @param  'campaign'|'provider'  $by  which entity the two ends of each path name
+     */
+    public function leadersByPath(Carbon $from, Carbon $to, string $by = 'campaign'): array
     {
         /** @var array<string, array<string, array<string, float|int|string|null>>> $byPath */
         $byPath = [];
 
         foreach ($this->rows($from, $to) as $row) {
             $objective = CampaignObjective::tryFrom((string) $row->objective) ?? CampaignObjective::Other;
-            $id = (string) $row->unified_campaign_id;
+            /*
+             * CLIENT-REPORT-ENTITY-BOUNDARY-001 — what the two ends of a path are ALLOWED to name.
+             *
+             * An operator asks «which campaign worked», and the campaign is the thing they can act
+             * on. A client's report may not carry a campaign's internal name at all, so the same
+             * question is answered one rung up: which PLATFORM worked, on this path, on this path's
+             * own metric. Nothing else about the calculation changes — the same rows, the same
+             * per-path metric, the same refusal to compare across paths — only what a bucket is.
+             *
+             * The grouping is a parameter rather than two methods because the ranking rules are the
+             * product's answer to «what does better mean here», and a second copy of them would drift
+             * into a second answer.
+             */
+            $id = $by === 'provider' ? (string) $row->provider : (string) $row->unified_campaign_id;
             $bucket = &$byPath[$objective->path()->value][$id];
 
             $bucket ??= [
                 'id' => $id,
-                'name' => (string) $row->name,
+                'name' => $by === 'provider' ? (string) $row->provider : (string) $row->name,
                 'objective' => $objective->value,
                 'spend' => 0.0, 'impressions' => 0.0, 'clicks' => 0.0,
                 'landing_page_views' => 0.0, 'orders' => 0.0, 'revenue' => 0.0,

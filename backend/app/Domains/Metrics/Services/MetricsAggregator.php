@@ -1779,6 +1779,186 @@ final class MetricsAggregator
         return $rows;
     }
 
+    /**
+     * The same pacing, folded to one row per PLATFORM — CLIENT-REPORT-ENTITY-BOUNDARY-001.
+     *
+     * A client link stated pacing per campaign, which meant the block that answers «is anything about
+     * to run out?» could only answer it by naming the agency's own campaigns. The question survives
+     * the fold; the campaign plan does not. Platform is the aggregate channel a client already reads
+     * everywhere else on the page, so the row keeps its meaning without acquiring a new vocabulary.
+     *
+     * It folds `budgetPacing()`'s OWN rows rather than re-deriving them, so the operator's pacing
+     * screen and the client's can never be computed from different sets and disagree about one period.
+     *
+     * ## Where the platform comes from
+     *
+     * A budget belongs to a unified campaign, and a unified campaign has no platform — its spend does.
+     * So the split is read from the metric rows, and a campaign whose spend landed on more than one
+     * platform has a plan that cannot be divided between them: its budget is left out and every bucket
+     * it touched says `campaign_spans_platforms` instead of pacing against a plan it only partly holds.
+     *
+     * ## Why a bucket refuses rather than pacing what it can
+     *
+     * Pace is spend ÷ the plan for that spend. Summing budgets and dividing the platform's whole spend
+     * by the result is only that ratio when EVERY campaign that spent has a budget in the same unit.
+     * Where one does not — nobody set a budget, it is stated in another currency, or the spend itself
+     * is withheld — the sum is a denominator missing part of its numerator, and a bucket reading
+     * «0.6×» would look comfortably under plan while the unbudgeted half runs. So the ratios are null
+     * and `pacing_basis` names which of those it was, exactly as the per-campaign row does. `budget`
+     * and `spent` still travel: they are true sums, and the reader can see them.
+     */
+    public function budgetPacingByProvider(Carbon $from, Carbon $to, Carbon $today): array
+    {
+        $periodDays = max(1, $from->diffInDays($to) + 1);
+        $elapsedDays = max(1, $from->diffInDays($today->min($to)) + 1);
+        $elapsedFraction = min(1.0, $elapsedDays / $periodDays);
+
+        /** @var array<string, list<string>> $platformsOf campaign id => the platforms its spend landed on */
+        $platformsOf = [];
+        /** @var array<string, array<string, float>> $splitSpend campaign id => platform => its spend there */
+        $splitSpend = [];
+        $spendRows = $this->base($from, $to)
+            ->select('unified_campaign_id', 'provider')
+            ->selectRaw("COALESCE(SUM(value) FILTER (WHERE metric_key = 'spend'), 0) AS spent")
+            ->where('metric_key', 'spend')
+            ->groupBy('unified_campaign_id', 'provider')
+            ->get();
+
+        foreach ($spendRows as $row) {
+            $campaign = (string) ($row->unified_campaign_id ?? '');
+            $provider = (string) ($row->provider ?? '');
+            if ($campaign === '' || $provider === '') {
+                continue;
+            }
+            $platformsOf[$campaign][] = $provider;
+            $splitSpend[$campaign][$provider] = (float) ($row->spent ?? 0);
+        }
+        $platformsOf = array_map(fn ($p) => array_values(array_unique($p)), $platformsOf);
+
+        $buckets = [];
+
+        foreach ($this->budgetPacing($from, $to, $today) as $row) {
+            $platforms = $platformsOf[(string) $row['campaign_id']] ?? [];
+            $divisible = count($platforms) === 1;
+
+            foreach ($platforms as $provider) {
+                $bucket = $buckets[$provider] ?? [
+                    'provider' => $provider,
+                    'budget' => 0.0,
+                    'budget_currency' => null,
+                    'spent' => 0.0,
+                    'spent_currency' => null,
+                    'spend_withheld' => false,
+                    'refusal' => null,
+                ];
+
+                if (! $divisible) {
+                    // One plan, two platforms, no rule for splitting it. Say so rather than halving it.
+                    $bucket['refusal'] ??= 'campaign_spans_platforms';
+                } else {
+                    $bucket['budget'] += (float) ($row['budget'] ?? 0);
+                    $bucket['budget_currency'] = $this->agreedUnit(
+                        $bucket['budget_currency'],
+                        (float) ($row['budget'] ?? 0) > 0 ? $row['budget_currency'] : null,
+                        $bucket['refusal'],
+                    );
+                }
+
+                $bucket['spent_currency'] = $this->agreedUnit(
+                    $bucket['spent_currency'],
+                    $row['spent'] !== null ? $row['spent_currency'] : null,
+                    $bucket['refusal'],
+                );
+
+                if ($row['spent'] === null) {
+                    // No single spend figure for this campaign — `partial`, `mixed_currency`, and so on.
+                    $bucket['refusal'] ??= (string) ($row['spend_state'] ?? 'partial');
+                    $bucket['spent'] = null;
+                } elseif ($bucket['spent'] !== null) {
+                    /*
+                     * A campaign that spans platforms is only in this bucket at all for its spend, and
+                     * its spend is already split by the query above — so the split figure is added,
+                     * never the campaign's whole total, which would be counted once per platform.
+                     */
+                    $bucket['spent'] += $divisible
+                        ? (float) $row['spent']
+                        : ($splitSpend[(string) $row['campaign_id']][$provider] ?? 0.0);
+                }
+
+                $bucket['spend_withheld'] = $bucket['spend_withheld'] || (bool) ($row['spend_withheld'] ?? false);
+
+                // Spend with no plan behind it. Nothing for the bucket to pace against.
+                if ($divisible && (float) ($row['budget'] ?? 0) <= 0 && (float) ($row['spent'] ?? 0) > 0) {
+                    $bucket['refusal'] ??= 'no_budget';
+                }
+                if (($row['pacing_basis'] ?? '') === 'currency_mismatch') {
+                    $bucket['refusal'] ??= 'currency_mismatch';
+                }
+
+                $buckets[$provider] = $bucket;
+            }
+        }
+
+        $rows = [];
+        foreach ($buckets as $bucket) {
+            $budget = round((float) $bucket['budget'], 2);
+            $spent = $bucket['spent'] === null ? null : round((float) $bucket['spent'], 2);
+
+            $comparable = $bucket['refusal'] === null
+                && $spent !== null
+                && $budget > 0
+                && is_string($bucket['budget_currency'])
+                && is_string($bucket['spent_currency'])
+                && strcasecmp($bucket['budget_currency'], $bucket['spent_currency']) === 0;
+
+            $expected = $budget * $elapsedFraction;
+
+            $rows[] = [
+                'provider' => $bucket['provider'],
+                'budget' => $budget,
+                'budget_currency' => $bucket['budget_currency'],
+                'spent' => $spent,
+                'spent_currency' => $bucket['spent_currency'],
+                'spend_withheld' => $bucket['spend_withheld'],
+                'remaining' => $comparable ? round($budget - $spent, 2) : null,
+                'consumed_pct' => $comparable ? round($spent / $budget, 4) : null,
+                'pace' => $comparable && $expected > 0 ? round($spent / $expected, 3) : null,
+                'projected_spend' => $spent !== null && $elapsedFraction > 0
+                    ? round($spent / $elapsedFraction, 2)
+                    : $spent,
+                'pacing_basis' => $comparable
+                    ? 'comparable'
+                    : ($bucket['refusal'] ?? ($budget > 0 ? 'currency_mismatch' : 'no_budget')),
+            ];
+        }
+
+        usort($rows, fn ($a, $b) => ($b['spent'] ?? 0) <=> ($a['spent'] ?? 0));
+
+        return $rows;
+    }
+
+    /**
+     * The unit a bucket is denominated in — or a mismatch, recorded on the bucket.
+     *
+     * The first stated unit sets it. A second, different one is not converted here: conversion is the
+     * money contract's job upstream, and a helper that quietly picked one would state a sum in a
+     * currency half of it is not in.
+     */
+    private function agreedUnit(?string $held, ?string $stated, ?string &$refusal): ?string
+    {
+        if (! is_string($stated) || $stated === '') {
+            return $held;
+        }
+        if ($held === null) {
+            return $stated;
+        }
+        if (strcasecmp($held, $stated) !== 0) {
+            $refusal ??= 'currency_mismatch';
+        }
+
+        return $held;
+    }
+
     /** Adds ROAS/CPA/CTR/CPC/CPM to a row of base sums. */
     private function withDerived(array $row): array
     {

@@ -4,11 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
-use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Services\StoreFunnelService;
-use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Services\DataFreshnessService;
-use App\Domains\Metrics\Services\EntityMetricsAggregator;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Metrics\Services\ReportingCurrency;
@@ -54,7 +51,6 @@ final class LiveReportService
         private readonly TenantContext $tenants,
         private readonly ProjectContext $projects,
         private readonly ReportAds $ads,
-        private readonly EntityMetricsAggregator $entities,
     ) {}
 
     /**
@@ -166,7 +162,26 @@ final class LiveReportService
             'deltas' => $this->deltas($totals, $previous),
             'timeseries' => $engine->timeseries($from, $to),
             'platforms' => $engine->byProvider($from, $to),
-            'campaigns' => $engine->byCampaign($from, $to),
+            /*
+             * CLIENT-REPORT-ENTITY-BOUNDARY-001 — a shared link carries PERFORMANCE, not the campaign
+             * plan that produced it.
+             *
+             * `campaigns` sent every campaign's internal name to a client's browser — «Google Search
+             * — Brand», «Meta — White Friday (seasonal)» — and `ad_sets` sent the audience
+             * configuration in plain words: «توسيع الجمهور», «إعادة الاستهداف». That is the targeting
+             * strategy, which is the agency's work rather than the client's report, and it was in the
+             * JSON as well as on the page: a reader with the link could read it out of the response
+             * whatever the page chose to draw.
+             *
+             * The question a campaign table answered for a client — «where did my money go, and what
+             * did it do» — is answered by `platforms` and by `objective_performance`, both of which
+             * are already here and neither of which names an internal entity. A DETAILED report means
+             * more analytical depth, not more of the agency's own vocabulary.
+             *
+             * The operator's own screens do not come through this service: `MetricsController` still
+             * serves the full campaign → ad set → ad hierarchy to anybody who signs in.
+             */
+            'campaigns' => [],
             /*
              * REPORT-DETAIL-PARITY-001 — the rung between the campaign and the ad.
              *
@@ -180,15 +195,18 @@ final class LiveReportService
              * reports no ad-set grain, which the detailed view then says rather than drawing a
              * heading over nothing.
              */
-            'ad_sets' => $scope['project_id'] === ''
-                ? []
-                : $this->entities->byEntity($scope['project_id'], EntityDailyMetric::AD_SET, $from, $to),
+            /*
+             * The ad-set rung, withheld from a client link for the same reason and by name: an ad
+             * set IS the targeting decision, and «إعادة الاستهداف» tells a merchant how their budget
+             * is being segmented rather than what it achieved.
+             */
+            'ad_sets' => [],
             // The stage list, as every reader of this payload expects. See ReportGenerator for why
             // the aggregator returns the spend alongside it now, and why it is unpacked here.
             'funnel' => ($adFunnel = $engine->funnel($from, $to))['stages'],
             'funnel_spend' => $adFunnel['spend'],
             /*
-             * Budget against spend, per campaign — the block the composition calls «budget status».
+             * Budget against spend, per PLATFORM — the block the composition calls «budget status».
              *
              * A client link stated what was spent and never what was PLANNED, so the one question a
              * reader can act on before the period ends — «is anything about to run out?» — had no
@@ -200,7 +218,7 @@ final class LiveReportService
              * see, so a pacing table beside a hidden spend column hands back the figure the operator
              * chose to withhold.
              */
-            'budget' => $share->hide_spend ? [] : $engine->budgetPacing($from, $to, Carbon::now()),
+            'budget' => $share->hide_spend ? [] : $engine->budgetPacingByProvider($from, $to, Carbon::now()),
             /*
              * FUNNEL-001 in a client link — the same section the operator reads, for the same project.
              *
@@ -236,11 +254,11 @@ final class LiveReportService
              * split would eventually disagree with the document it accompanies about what a sale
              * cost, and the client holds both.
              */
-            'objective_performance' => (new ObjectivePerformance(
+            'objective_performance' => $this->withoutCampaignIdentity((new ObjectivePerformance(
                 projectIds: $scope['project_id'] === '' ? null : [$scope['project_id']],
                 campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : ($scope['campaign_ids'] ?: null),
                 providers: $applied['providers'] !== [] ? $applied['providers'] : ($scope['providers'] ?: null),
-            ))->build($from, $to),
+            ))->build($from, $to)),
             /*
              * OBJECTIVE-ANALYTICS-DEPTH-001 — the strongest and weakest campaign INSIDE each path.
              *
@@ -254,7 +272,7 @@ final class LiveReportService
                 projectIds: $scope['project_id'] === '' ? null : [$scope['project_id']],
                 campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : ($scope['campaign_ids'] ?: null),
                 providers: $applied['providers'] !== [] ? $applied['providers'] : ($scope['providers'] ?: null),
-            ))->leadersByPath($from, $to),
+            ))->leadersByPath($from, $to, by: 'provider'),
             /*
              * ATTRIB-VIS-001 — the link says which optional sections it is allowed to open.
              *
@@ -280,7 +298,20 @@ final class LiveReportService
             )),
             'available' => [
                 'providers' => $scope['providers'],
-                'campaigns' => $this->campaignChoices($scope['campaign_ids']),
+                /*
+                 * The campaign PICKER is gone from a client link — the owner's own report of it:
+                 * «اسم واختيار الحملة احذفه من التقارير… ممكن استبداله باختيار المنصات».
+                 *
+                 * It listed every campaign by internal name AND by id, so the control that let a
+                 * client narrow their report was also the one that published the agency's naming and
+                 * its primary keys. The platform picker above answers the same need — «show me
+                 * Snapchat only» — in a vocabulary that is the client's as much as ours.
+                 *
+                 * The key stays, empty, because a link built before this shipped has a page that
+                 * reads it: an absent key would be a crash where an empty list is a control that
+                 * simply does not appear.
+                 */
+                'campaigns' => [],
                 'earliest' => $scope['earliest'],
                 'latest' => $scope['latest'],
             ],
@@ -311,6 +342,51 @@ final class LiveReportService
      *
      * @return array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}
      */
+    /**
+     * The objective split, with the campaign plan taken out of it — CLIENT-REPORT-ENTITY-BOUNDARY-001.
+     *
+     * `ObjectivePerformance` is the SAME service the operator's analytics tab calls, and there the
+     * campaign lists are the point: an operator reading «the sales figure excludes 4,127 SAR» needs
+     * to know which campaigns that was in order to act on it. A client does not act on it — they are
+     * owed the figure, not the roster — and the roster is the campaign plan written out: name,
+     * objective, and what each one cost.
+     *
+     * So the boundary is drawn HERE, at the client payload, rather than inside the shared service,
+     * because the operator's screen must keep what this removes.
+     *
+     * What replaces it is the part a client can actually use: the spend that was left out of the
+     * direct figure, and WHY it was — «not a sales objective» explains the gap between the programme's
+     * total and the sales figure without naming a single campaign. Removing the arrays and putting
+     * nothing back would leave the two numbers disagreeing on the page with no account of it.
+     */
+    private function withoutCampaignIdentity(array $objective): array
+    {
+        foreach ($objective['paths'] ?? [] as $i => $path) {
+            // The path's own totals already carry its spend and results; the roster was the detail.
+            $objective['paths'][$i]['campaigns'] = [];
+        }
+
+        $excluded = $objective['direct']['excluded_campaigns'] ?? [];
+
+        /*
+         * `direct.spend` is already the included spend, so the included roster needed no replacement.
+         * The EXCLUDED one did: it is the whole account of why the sales figure is smaller than the
+         * programme's total, and that account is a sum and a reason, not a list of names.
+         */
+        $objective['direct']['included_campaigns'] = [];
+        $objective['direct']['excluded_campaigns'] = [];
+        $objective['direct']['excluded_spend'] = round(
+            array_sum(array_map(fn ($c) => (float) ($c['spend'] ?? 0), $excluded)),
+            2,
+        );
+        $objective['direct']['excluded_reasons'] = array_values(array_unique(array_map(
+            fn ($c) => (string) ($c['reason'] ?? ''),
+            $excluded,
+        )));
+
+        return $objective;
+    }
+
     private function ceiling(ReportShare $share): array
     {
         $scope = $share->scope ?? [];
@@ -546,31 +622,5 @@ final class LiveReportService
     private function iso(mixed $value): ?string
     {
         return $value === null ? null : Carbon::parse((string) $value)->toIso8601String();
-    }
-
-    /**
-     * The campaigns the link may show, by name, so the client's filter reads as names rather than ids.
-     *
-     * `client_display_name` wins over `name` where one is set: the internal name is often an operator's
-     * shorthand («KSA-Q3-retarget-v2»), and this list is read by the client.
-     *
-     * @param  list<string>  $ids
-     * @return list<array{id: string, name: string}>
-     */
-    private function campaignChoices(array $ids): array
-    {
-        if ($ids === []) {
-            return [];
-        }
-
-        return UnifiedCampaign::query()
-            ->whereIn('id', $ids)
-            ->orderBy('name')
-            ->get(['id', 'name', 'client_display_name'])
-            ->map(fn (UnifiedCampaign $c): array => [
-                'id' => (string) $c->id,
-                'name' => (string) ($c->client_display_name ?: $c->name),
-            ])
-            ->all();
     }
 }
