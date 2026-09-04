@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { compact, money, moneyExact, num, percent, ratio } from '@/features/analytics/format'
+import { readMetricValue } from '@/lib/metricValue'
 import { orderRows } from '@/lib/tableSort'
 
 /**
@@ -51,7 +51,7 @@ import { orderRows } from '@/lib/tableSort'
  * table that describes numbers well and cannot show anything else. A surface may mix them: declare
  * the numeric columns, and pass a node for the one that is a control.
  */
-export type ColumnKind = 'text' | 'number' | 'money' | 'percent' | 'ratio'
+export type ColumnKind = 'text' | 'number' | 'money' | 'cost' | 'percent' | 'ratio'
 
 export interface Column {
   /** The key this column reads from each row. */
@@ -102,54 +102,29 @@ export type SortValues = Array<number | string | null>
  * The three have to be decided together or they disagree: a cell that prints «1.2M», sorts by the
  * string «1.2M» and reveals nothing is three separate defects wearing one number.
  */
+/**
+ * One cell, through the product's one value law — {@see readMetricValue}.
+ *
+ * The law used to live HERE, which made it reachable only by rendering a table. The KPI cards took a
+ * pre-formatted string from whichever surface built them and each surface chose its own notation, so
+ * a card and a table cell of the same metric could disagree — and did. Moving the law out and calling
+ * it from both is what makes them agree by construction.
+ *
+ * A node is still shown as given: a cell that is genuinely a control is not a figure.
+ */
 function render(column: Column, raw: unknown): { cell: ReactNode; value: number | string | null; exact: string | null } {
   if (raw !== null && raw !== undefined && typeof raw !== 'number' && typeof raw !== 'string') {
-    // A node: shown as given, never compared, never abbreviated.
     return { cell: raw as ReactNode, value: null, exact: null }
   }
 
-  if (column.kind === 'text') {
-    const text = raw === null || raw === undefined || raw === '' ? '—' : String(raw)
+  const read = readMetricValue(column.kind, raw, { currency: column.currency, digits: column.digits })
 
-    return { cell: text, value: text === '—' ? null : text, exact: null }
+  return {
+    cell: read.text,
+    // Text sorts as text; a figure sorts as its number, and a missing one sorts as an absence.
+    value: column.kind === 'text' ? (read.text === '—' ? null : read.text) : read.value,
+    exact: read.exact,
   }
-
-  const n = typeof raw === 'number' ? raw : raw === null || raw === undefined || raw === '' ? null : Number(raw)
-
-  /*
-   * A missing figure is «—» in every column of every table.
-   *
-   * Not «0», and not an empty cell. Zero is a measurement — «this campaign spent nothing» — and a
-   * blank reads as a rendering fault. The dash is the only one of the three that says «nobody
-   * reported this», and it has to be the same dash everywhere or a reader learns three meanings.
-   */
-  if (n === null || Number.isNaN(n)) {
-    return { cell: '—', value: null, exact: null }
-  }
-
-  if (column.kind === 'money') {
-    const currency = column.currency ?? null
-
-    return { cell: money(n, currency), value: n, exact: moneyExact(n, currency) }
-  }
-
-  if (column.kind === 'percent') {
-    return { cell: percent(n, column.digits ?? 1), value: n, exact: null }
-  }
-
-  if (column.kind === 'ratio') {
-    return { cell: ratio(n), value: n, exact: null }
-  }
-
-  /*
-   * A count. Compact on screen with the exact figure one hover away — but only where the two
-   * actually differ, because a tooltip repeating what is already on screen teaches a reader to stop
-   * looking at them.
-   */
-  const shown = compact(n)
-  const full = num(n)
-
-  return { cell: shown, value: n, exact: shown === full ? null : full }
 }
 
 /**

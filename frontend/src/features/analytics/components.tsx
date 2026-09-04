@@ -71,6 +71,7 @@ export function TrendPill({ delta, invertGood = false }: { delta: number | null 
 export function KpiCard({
   label,
   value,
+  exact,
   delta,
   invertGood = false,
   spark,
@@ -79,6 +80,8 @@ export function KpiCard({
 }: {
   label: string
   value: string
+  /** The un-abbreviated figure behind a compacted one — NUMBER-PRESENTATION-001 §58. */
+  exact?: string
   delta?: number | null
   invertGood?: boolean
   spark?: number[]
@@ -89,6 +92,7 @@ export function KpiCard({
     <StatCard
       label={<span title={hint}>{label}</span>}
       value={value}
+      exact={exact}
       trailing={delta !== undefined ? <TrendPill delta={delta} invertGood={invertGood} /> : undefined}
       spark={spark && spark.length > 1 ? (
         <div className="h-9 w-full">
