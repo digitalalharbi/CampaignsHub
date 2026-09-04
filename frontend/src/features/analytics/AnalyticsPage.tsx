@@ -51,7 +51,7 @@ import { BudgetReading } from './BudgetReading'
 import { FamilyDecisionTable } from './FamilyDecisionTable'
 import { PathAnalysis } from './PathAnalysis'
 import { PathTrends } from './PathTrends'
-import { listCreatives, type CreativeCard } from '@/features/content/api'
+import { contentIntelligence, listCreatives, type CreativeCard } from '@/features/content/api'
 import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
 import { plotSeries } from './timeseriesMoney'
@@ -65,6 +65,7 @@ import { SavedViewsBar } from '@/features/dashboard/SavedViewsBar'
 import { useSavedViews, type SavedView } from '@/features/dashboard/savedViews'
 import { MetricStrip } from '@/components/ui/MetricStrip'
 import { ChangeDiagnosis } from './ChangeDiagnosis'
+import { ContentReading } from './ContentReading'
 import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCampaignOverview'
 import { useOverviewVm } from '@/features/campaigns/overview/useOverviewVm'
 import { SPECS, dashboardMetrics, layoutFor } from './metricCatalog'
@@ -2265,6 +2266,13 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
     : (ar ? 'الإعلانات' : 'Ads')
 
   /*
+   * Same window, same filters as the table below — the diagnosis and its evidence must not be able
+   * to disagree about the account they are both describing. Requested only at the ad-set level:
+   * `enabled` rather than a conditional hook, because a hook cannot be called conditionally.
+   */
+  const adSetDrivers = useDrivers(level === 'ad_set' ? projectId : null, range, 'ad_set', 'spend', filters)
+
+  /*
    * ANALYTICS-TABLES-001 — the canonical table, for the same reasons as the Accounts tab.
    *
    * Hand-rolled, numeric columns `text-start` (so the figures and their headings sit against
@@ -2408,6 +2416,20 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
   return (
     <div className="space-y-4">
       <DrillCrumbs path={path} level={level} ar={ar} onUpTo={(lvl) => go(drillUpTo(path, lvl), lvl)} />
+      {/*
+        ANALYTICS-DIFFERENTIATION-001 — the ad-set grain a campaign total hides.
+        A campaign whose spend held steady while one ad set doubled and another stopped looks, one
+        level up, like a week in which nothing happened. Only on the ad-set tab: there is no
+        decomposition of an AD by ad, and this component asks «which of the things underneath moved».
+      */}
+      {level === 'ad_set' && (
+        <ChangeDiagnosis
+          data={adSetDrivers.data}
+          currency={currency}
+          loading={adSetDrivers.isPending}
+          error={adSetDrivers.isError}
+        />
+      )}
       <Panel
         title={heading}
         description={ar ? 'الأعلى إنفاقًا أولًا — ويمكن الترتيب بأي عمود' : 'Highest spend first — sortable by any column'}
@@ -2808,12 +2830,50 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
   const rows = q.data?.creatives ?? []
   const currency = q.data?.currency ?? null
 
+  /*
+   * ANALYTICS-DIFFERENTIATION-001 — the READING above the ranked table.
+   *
+   * Same reach, same filters, same window as the table below it, for the reason `pulse` states: a
+   * reading built on its own query is one that can contradict the table it sits above. It is a
+   * SEPARATE request rather than a field on the library page because the library is paged, and a
+   * format comparison computed from twenty-four rows would change every time the reader turned a
+   * page — the signature of a figure that is not measuring what it claims to.
+   */
+  const intelligence = useQuery({
+    queryKey: [
+      'analytics', 'content-intelligence', projectId, range.from, range.to,
+      filters.provider, filters.campaign, filters.objective,
+      scope.ad_ids?.join(',') ?? '', scope.ad_set_ids?.join(',') ?? '',
+    ],
+    queryFn: () => contentIntelligence(
+      {
+        from: range.from,
+        to: range.to,
+        providers: filters.provider?.length ? filters.provider : undefined,
+        campaign_ids: filters.campaign?.length ? filters.campaign : undefined,
+        // ONE objective or none: a verdict has one metric, and picking arbitrarily from several
+        // would judge every format by a purpose most of them were not bought for.
+        objective: filters.objective?.length === 1 ? filters.objective[0] : undefined,
+        ...scope,
+      },
+      projectId!,
+    ),
+    enabled: Boolean(projectId),
+  })
+
   return (
     <div className="space-y-4">
       <DrillCrumbs path={path} level="creative" ar={ar} onUpTo={(lvl) => write({
         drill: { value: encodePath(drillUpTo(path, lvl)), fallback: '' },
         tab: { value: TAB_FOR[lvl], fallback: 'performance' },
       })} />
+      {!intelligence.isLoading && (
+        <ContentReading
+          data={intelligence.data?.by_format}
+          currency={intelligence.data?.currency ?? currency}
+          creativesRead={intelligence.data?.creatives_read ?? 0}
+        />
+      )}
       <Panel
         title={ar ? 'أداء الإعلانات' : 'Ad performance'}
         description={ar ? 'من بيانات الإعلان نفسه — لا تُنسب أرقام الحملة إلى إعلان' : 'From ad-level data — campaign figures are never attributed to a ad'}

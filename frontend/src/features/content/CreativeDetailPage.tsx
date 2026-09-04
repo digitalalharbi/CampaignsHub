@@ -383,6 +383,8 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
               key={creative.id}
               src={preview.video_url}
               poster={preview.thumbnail_url}
+              // The shape the ad ran in — a story is 9:16, not a letterboxed landscape frame.
+              aspect={preview.aspect ?? null}
               durationHint={creative.duration_seconds}
               className="w-full max-w-3xl"
             />

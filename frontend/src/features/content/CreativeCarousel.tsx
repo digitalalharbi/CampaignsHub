@@ -157,6 +157,12 @@ export function CreativeCarousel({
                     key={`card-${current.index}`}
                     src={current.video_url}
                     poster={current.thumbnail_url ?? current.image_url}
+                    /*
+                     * A carousel CARD carries no shape of its own — the platform reports one aspect
+                     * for the ad, and every card is cropped to it — so the ad's is passed down
+                     * rather than a second shape being invented per card.
+                     */
+                    aspect={preview.aspect ?? null}
                   />
                 ) : current.image_url || current.thumbnail_url ? (
                   <img

@@ -284,6 +284,16 @@ final class ReportScopeController extends Controller
             'scope' => $scope->toArray(),
             'explain' => $scope->explain(),
             'bound_axes' => $scope->boundAxes(),
+            /*
+             * WHO the report is for — the scope editor cannot decide what it may name without it.
+             *
+             * A client report must not name campaigns, ad sets, ads or ad accounts, and an internal
+             * one must keep every one of them. The editor is opened by report id alone, so it had no
+             * way to tell the two apart and offered the whole hierarchy to both. Answered here rather
+             * than threaded through the list, because the report row is the truth about its own
+             * audience and the list is only a view of it.
+             */
+            'audience' => $model->audience,
         ], 'Report scope.');
     }
 
