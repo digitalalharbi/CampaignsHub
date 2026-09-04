@@ -255,6 +255,28 @@ export interface LivePayload {
   sections?: { attribution: boolean }
   store_funnel: StoreFunnelPayload | null
   /**
+   * CLIENT-FACING-PRESENTATION-001 — «what needs attention», which the link never carried.
+   *
+   * Empty when the operator hid spend from this link: a budget block with no money in it is a row of
+   * dashes that still tells a reader a figure exists and is being kept from them.
+   *
+   * `pace` is spend against plan for the elapsed fraction of the period — above 1 is ahead of plan.
+   * Null wherever the money could not be compared, which is the money contract's own refusal.
+   */
+  budget?: Array<{
+    campaign_id: string
+    campaign_name: string | null
+    budget: number | null
+    /** The unit the two figures are in — stated per row, never assumed from the report. */
+    budget_currency: string | null
+    spent: number | null
+    spent_currency: string | null
+    remaining: number | null
+    consumed_pct: number | null
+    pace: number | null
+    projected_spend: number | null
+  }>
+  /**
    * CLIENT-DIAGNOSTIC-SEPARATION-001 — what a client is told about a platform, and nothing more.
    *
    * `data_as_of` and `last_checked_at` were here and are gone from the server payload: a sync clock

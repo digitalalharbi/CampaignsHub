@@ -176,6 +176,63 @@ test.describe('the link cannot be talked into showing more', () => {
   })
 })
 
+/**
+ * CLIENT-FACING-PRESENTATION-001 — the last block of the composition, in a real browser.
+ *
+ * The unit tests hold the derivation against fixtures. What they cannot hold is the one claim this
+ * requirement is actually about: that a NUMBER SITS UNDER ITS OWN HEADER, in a real layout engine, in
+ * both writing directions. Every drift this requirement exists to fix was invisible to jsdom — an
+ * `text-end` on a numeric column reads as the left edge under RTL, and a test asserting the class
+ * would have passed on the broken build.
+ */
+test.describe('what the report says needs attention', () => {
+  for (const locale of ['ar', 'en'] as const) {
+    test(`${locale}: the budget figures sit under their own headers`, async ({ page }) => {
+      await page.addInitScript((l) => window.localStorage.setItem('campaign-hub-locale', l), locale)
+      await page.goto(URL)
+
+      const attention = page.getByTestId('live-attention')
+      await expect(attention, 'the budget block never rendered').toBeVisible({ timeout: 20000 })
+
+      const drift = await attention.locator('table').first().evaluate((table) => {
+        const heads = [...table.querySelectorAll('thead th')]
+        const cells = [...(table.querySelector('tbody tr')?.children ?? [])]
+
+        return heads.map((th, i) => {
+          const a = th.getBoundingClientRect()
+          const b = cells[i].getBoundingClientRect()
+
+          return Math.abs((a.left + a.right) / 2 - (b.left + b.right) / 2)
+        })
+      })
+
+      expect(drift.length, 'the table rendered no columns').toBeGreaterThan(3)
+      // A column whose header centre is more than a pixel off its cell's is a column that drifted.
+      expect(Math.max(...drift), `${locale}: a value is not under its header`).toBeLessThanOrEqual(1)
+    })
+  }
+
+  /**
+   * «Nothing needs you» is a RESULT, and the section says it rather than rendering empty.
+   *
+   * The seeded pacing decides which branch runs, so the invariant is asserted rather than the branch:
+   * a reader always leaves this block knowing whether anything is off plan.
+   */
+  test('the block always answers, whether or not anything is off plan', async ({ page }) => {
+    await page.goto(URL)
+
+    const findings = page.getByTestId('live-attention-findings')
+    await expect(findings).toBeVisible({ timeout: 20000 })
+
+    const said = await findings.evaluate((el) => ({
+      clear: !!el.querySelector('[data-testid="live-attention-clear"]'),
+      items: el.querySelectorAll('[data-testid^="live-attention-"]').length,
+    }))
+
+    expect(said.clear || said.items > 0, 'the section rendered with nothing to say').toBe(true)
+  })
+})
+
 /** The client is on a phone more often than not, and in whichever language and theme they arrived in. */
 test.describe('the live report holds together on a phone', () => {
   for (const locale of ['ar', 'en'] as const) {

@@ -188,6 +188,20 @@ final class LiveReportService
             'funnel' => ($adFunnel = $engine->funnel($from, $to))['stages'],
             'funnel_spend' => $adFunnel['spend'],
             /*
+             * Budget against spend, per campaign — the block the composition calls «budget status».
+             *
+             * A client link stated what was spent and never what was PLANNED, so the one question a
+             * reader can act on before the period ends — «is anything about to run out?» — had no
+             * answer on the page. It is the same pacing the operator reads, from the same aggregator,
+             * for the same reason the funnel is: a link that paced its own way would be a second
+             * answer to a question the client is going to ask somebody.
+             *
+             * Withheld where the link hides spend. Pacing IS spend divided by a budget the reader can
+             * see, so a pacing table beside a hidden spend column hands back the figure the operator
+             * chose to withhold.
+             */
+            'budget' => $share->hide_spend ? [] : $engine->budgetPacing($from, $to, Carbon::now()),
+            /*
              * FUNNEL-001 in a client link — the same section the operator reads, for the same project.
              *
              * Built by the SAME service the analytics tab calls, deliberately: a client link that
