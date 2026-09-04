@@ -1,7 +1,7 @@
 import { formatMoneyReading, readCostPer, readMoney, readRoas } from '@/lib/money/contract'
 import type { MetricItem, MetricReading } from '@/components/ui/MetricStrip'
-import type { MetricTotals, Summary } from '@/features/analytics/api'
-import { money, moneyExact, num, percent, ratio } from '@/features/analytics/format'
+import type { MetricTotals, Summary, TimePoint } from '@/features/analytics/api'
+import { compact, money, moneyExact, num, percent, ratio } from '@/features/analytics/format'
 
 /**
  * Which metrics lead, for the money this campaign is — UX-DASH-001, and §14.6's rule applied.
@@ -54,7 +54,18 @@ type Fmt = (n: number, currency?: string | null) => string
  * formatted by `num` or `percent` already prints every digit and has nothing to reveal. Adding a
  * metric never means remembering to add it here too.
  */
-const EXACT_OF = new Map<Fmt, Fmt>([[money, moneyExact]])
+/**
+ * The full figure behind an abbreviated one — NUMBER-PRESENTATION-001.
+ *
+ * A display formatter on the left, the formatter that writes the same number out in full on the
+ * right. `valueReading` only attaches the exact form when the two actually differ, so a card whose
+ * value was never abbreviated carries no tooltip that repeats what is already on screen.
+ */
+const EXACT_OF = new Map<Fmt, Fmt>([
+  [money, moneyExact],
+  // «1.43M» is what fits a card; «1,425,443» is what a reader comparing two of them needs.
+  [compact, num],
+])
 
 /** A measured figure, plus the full version of it when the display abbreviated it. */
 function valueReading(spec: Spec, n: number, currency: string | null): { kind: 'value'; text: string; exact?: string } {
@@ -96,12 +107,12 @@ export const SPECS: Record<string, Spec> = {
   },
   impressions: {
     label: { ar: 'الظهور', en: 'Impressions' },
-    format: num,
+    format: compact,
     hint: { ar: 'عدد مرات عرض الإعلان — قد يُعرض على الشخص نفسه أكثر من مرة.', en: 'How many times the ad was shown — the same person can be counted more than once.' },
   },
   reach: {
     label: { ar: 'الوصول', en: 'Reach' },
-    format: num,
+    format: compact,
     hint: { ar: 'عدد الأشخاص المختلفين الذين رأوا الإعلان مرة واحدة على الأقل.', en: 'How many different people saw the ad at least once.' },
   },
   frequency: {
@@ -113,14 +124,14 @@ export const SPECS: Record<string, Spec> = {
   },
   cpm: {
     label: { ar: 'تكلفة الألف ظهور', en: 'Cost per 1,000 impressions' },
-    format: money,
+    format: moneyExact,
     derived: true,
     invertGood: true,
     hint: { ar: 'تكلفة كل ألف ظهور — سعر الوصول إلى الجمهور.', en: 'The cost of a thousand impressions — the price of reaching an audience.' },
   },
   clicks: {
     label: { ar: 'النقرات', en: 'Clicks' },
-    format: num,
+    format: compact,
     hint: { ar: 'عدد النقرات على الإعلان.', en: 'How many times the ad was clicked.' },
   },
   ctr: {
@@ -131,24 +142,24 @@ export const SPECS: Record<string, Spec> = {
   },
   cpc: {
     label: { ar: 'تكلفة النقرة', en: 'Cost per click' },
-    format: money,
+    format: moneyExact,
     derived: true,
     invertGood: true,
     hint: { ar: 'تكلفة النقرة الواحدة = الإنفاق ÷ النقرات.', en: 'What one click costs — spend ÷ clicks.' },
   },
   landing_page_views: {
     label: { ar: 'زيارات صفحة الهبوط', en: 'Landing page views' },
-    format: num,
+    format: compact,
     hint: { ar: 'من نقر ووصل فعلًا إلى الصفحة — أقل من النقرات دائمًا.', en: 'Clicks that actually arrived on the page — always fewer than clicks.' },
   },
   video_views: {
     label: { ar: 'مشاهدات الفيديو', en: 'Video views' },
-    format: num,
+    format: compact,
     hint: { ar: 'عدد مرات بدء مشاهدة الفيديو، بحسب تعريف كل منصة.', en: 'How many times the video started playing, by each platform’s own definition.' },
   },
   video_completions: {
     label: { ar: 'مشاهدات مكتملة', en: 'Completed views' },
-    format: num,
+    format: compact,
     hint: { ar: 'من شاهد الفيديو حتى نهايته.', en: 'People who watched the video to the end.' },
   },
   video_completion_rate: {
@@ -159,7 +170,7 @@ export const SPECS: Record<string, Spec> = {
   },
   engagements: {
     label: { ar: 'التفاعل', en: 'Engagement' },
-    format: num,
+    format: compact,
     hint: { ar: 'إعجاب، تعليق، مشاركة، حفظ — كما تحسبها المنصة.', en: 'Likes, comments, shares and saves, as the platform counts them.' },
   },
   engagement_rate: {
@@ -170,31 +181,31 @@ export const SPECS: Record<string, Spec> = {
   },
   cpe: {
     label: { ar: 'تكلفة التفاعل', en: 'Cost per engagement' },
-    format: money,
+    format: moneyExact,
     derived: true,
     invertGood: true,
     hint: { ar: 'تكلفة التفاعل الواحد.', en: 'What one engagement costs.' },
   },
   leads: {
     label: { ar: 'العملاء المحتملون', en: 'Leads' },
-    format: num,
+    format: compact,
     hint: { ar: 'من ترك بياناته — ليس عميلًا مؤكدًا ولا عملية بيع.', en: 'People who left their details — not a confirmed customer, and not a sale.' },
   },
   qualified_leads: {
     label: { ar: 'المؤهلون', en: 'Qualified leads' },
-    format: num,
+    format: compact,
     hint: { ar: 'العملاء المحتملون الذين اجتازوا تأهيل فريقك.', en: 'Leads your team has qualified.' },
   },
   cpl: {
     label: { ar: 'تكلفة العميل المحتمل', en: 'Cost per lead' },
-    format: money,
+    format: moneyExact,
     derived: true,
     invertGood: true,
     hint: { ar: 'تكلفة العميل المحتمل الواحد.', en: 'What one lead costs.' },
   },
   conversions: {
     label: { ar: 'النتائج', en: 'Results' },
-    format: num,
+    format: compact,
     hint: {
       ar: 'مجموع ما أبلغت به كل منصة عن الحدث الذي حُسّنت له الحملة — وليس عدد طلبات فريدة.',
       en: 'The sum of what each platform reported for the event its campaign optimised for — not a count of unique orders.',
@@ -208,17 +219,17 @@ export const SPECS: Record<string, Spec> = {
   },
   add_to_cart: {
     label: { ar: 'الإضافة للسلة', en: 'Add to cart' },
-    format: num,
+    format: compact,
     hint: { ar: 'عدد مرات إضافة منتج إلى السلة بعد الإعلان.', en: 'How many times a product was added to a basket after the ad.' },
   },
   checkout: {
     label: { ar: 'بدء الدفع', en: 'Checkout started' },
-    format: num,
+    format: compact,
     hint: { ar: 'من بدأ خطوة الدفع — ليس طلبًا مكتملًا.', en: 'People who began checkout — not a completed order.' },
   },
   purchases: {
     label: { ar: 'الطلبات', en: 'Orders' },
-    format: num,
+    format: compact,
     hint: { ar: 'عمليات الشراء التي أبلغت بها المنصات — لا سجل المتجر.', en: 'Purchases the platforms reported — not the store’s own ledger.' },
   },
   revenue: {
@@ -228,7 +239,7 @@ export const SPECS: Record<string, Spec> = {
   },
   cpa: {
     label: { ar: 'تكلفة النتيجة', en: 'Cost per result' },
-    format: money,
+    format: moneyExact,
     derived: true,
     invertGood: true,
     hint: { ar: 'الإنفاق ÷ النتائج، لهذا الهدف وحده.', en: 'Spend ÷ results, for this objective alone.' },
@@ -247,24 +258,24 @@ export const SPECS: Record<string, Spec> = {
   },
   installs: {
     label: { ar: 'التحميلات', en: 'Installs' },
-    format: num,
+    format: compact,
     hint: { ar: 'عدد مرات تثبيت التطبيق المنسوبة للحملة.', en: 'App installs attributed to the campaign.' },
   },
   cpi: {
     label: { ar: 'تكلفة التحميل', en: 'Cost per install' },
-    format: money,
+    format: moneyExact,
     derived: true,
     invertGood: true,
     hint: { ar: 'تكلفة التثبيت الواحد.', en: 'What one install costs.' },
   },
   registrations: {
     label: { ar: 'التسجيلات', en: 'Registrations' },
-    format: num,
+    format: compact,
     hint: { ar: 'من أنشأ حسابًا بعد التثبيت.', en: 'People who created an account after installing.' },
   },
   in_app_events: {
     label: { ar: 'أحداث داخل التطبيق', en: 'In-app events' },
-    format: num,
+    format: compact,
     hint: { ar: 'الأحداث التي عرّفتها داخل التطبيق وأبلغت بها المنصة.', en: 'Events you defined inside the app that the platform reported.' },
   },
 }
@@ -556,10 +567,68 @@ const COST_PER_DENOMINATOR: Record<string, string | ((t: Record<string, number |
   cpm: (t) => Number((t as Record<string, number | null> | undefined)?.impressions ?? 0) / 1000,
 }
 
+/**
+ * The shape of a metric over the period, for the card's own sparkline — UX-KPI-PRESENTATION-001.
+ *
+ * ## Why the series comes from the caller
+ *
+ * The owner's correction asks every indicator card to carry «المؤشر والرقم والشارت». The figures on
+ * these cards come from the summary endpoint, which returns totals and a comparison and no shape at
+ * all — so the shape has to come from the timeseries the page ALREADY fetches for its line chart.
+ * Deriving it here from that same array is what keeps one answer to one question: a card whose trend
+ * disagreed with the chart under it would be two readings of one period, and the reader has no way
+ * to tell which is right.
+ *
+ * ## What is deliberately NOT drawn
+ *
+ * A metric the platform never reported. `reported[key] === false` means nothing was ever sent, and
+ * the summary's zeros are the coalesce rather than a measurement — a flat line at zero under «لم
+ * ترسله المنصة» is a drawing of an absence, which is exactly the claim UX-METRICS-001 exists to
+ * stop. `MetricStrip` also refuses to draw a spark on a missing reading, so this is the second of
+ * two guards rather than the only one.
+ *
+ * A day whose value is null is a hole, not a zero: a withheld money figure (FX-001) or a ratio with
+ * no denominator. Rather than plot it as the floor, the series is refused when more than a third of
+ * the window is missing — below that the remaining points still describe the shape honestly, and a
+ * sparkline is a shape rather than a set of readings.
+ */
+function sparkFor(
+  key: string,
+  series: readonly TimePoint[] | undefined,
+  reported: Record<string, boolean> | undefined,
+): number[] | undefined {
+  if (series === undefined || series.length < 2) return undefined
+
+  // Never a line for something nobody sent — see the note above.
+  if (reported?.[key] === false) return undefined
+
+  const points = series.map((row) => {
+    const v = (row as unknown as Record<string, unknown>)[key]
+
+    return typeof v === 'number' && Number.isFinite(v) ? v : null
+  })
+
+  const present = points.filter((v): v is number => v !== null)
+  if (present.length < 2 || present.length < Math.ceil(points.length * (2 / 3))) return undefined
+
+  /*
+   * A flat line is not a trend, and drawing one invites a reader to see movement in it. A series
+   * whose every point is identical — commonly a metric that is zero all period — carries no shape.
+   */
+  if (present.every((v) => v === present[0])) return undefined
+
+  return present
+}
+
 export function dashboardMetrics(
   objective: string,
   summary: Summary | undefined,
   ar: boolean,
+  /**
+   * The daily rows the page draws its own chart from, in order. Optional: a surface with no series
+   * to hand gets cards without sparklines rather than cards built from a second source.
+   */
+  series?: readonly TimePoint[],
 ): { primary: MetricItem[]; secondary: MetricItem[] } {
   const layout = layoutFor(objective, summary?.objective_families_in_scope)
 
@@ -592,6 +661,8 @@ export function dashboardMetrics(
           // The first card is what this objective is judged on — unless that is spend, which is
           // what the objective COST rather than what it achieved.
           lead: lead && index === 0 && key !== 'spend',
+          // «المؤشر والرقم والشارت» — the shape of this metric across the same window the page charts.
+          spark: sparkFor(key, series, summary?.reported),
         }
       })
 

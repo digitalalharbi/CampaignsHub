@@ -197,15 +197,42 @@ export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
     <div
       data-testid={`metric-${item.key}`}
       data-state={item.reading.kind}
-      className={`flex flex-col gap-1.5 rounded-2xl border bg-surface ${CARD_PAD_DENSE} ${
+      /*
+       * UX-KPI-PRESENTATION-001 — «توسيط وتوازي»: every card in the row is the same height.
+       *
+       * They were, at 1440, and only there. At 390 the same ten cards measured 83, 122, 129 and 145
+       * pixels: a label that wraps to two lines makes its card taller, and a card whose metric has no
+       * figure has no sparkline to fill the space where the others carry one. A row of cards at four
+       * heights reads as a layout accident, and the mis-alignment is worst on the screen with the
+       * least room to absorb it.
+       *
+       * `h-full` inside a grid that stretches its items, and the three rows below each hold their
+       * own floor: the label reserves two lines, the value reserves its line whatever state it is
+       * in, and the chart row is pushed to the bottom edge and reserved whether or not it draws. The
+       * result is that a card's height depends on the ROW, not on how long its own label happens to
+       * be in the reader's language.
+       */
+      className={`flex h-full flex-col gap-1.5 rounded-2xl border bg-surface ${CARD_PAD_DENSE} ${
         item.lead
           ? 'border-brand-500/50 ring-1 ring-brand-500/20 shadow-[var(--shadow-small)]'
           : 'border-border'
       }`}
     >
-      <div className="flex items-start justify-between gap-1">
-        <span className={`inline-flex items-center gap-1 text-text-secondary ${METRIC_LABEL}`}>
-          {item.label}
+      <div className="flex min-h-[2.75rem] items-start justify-between gap-1">
+        {/*
+          Two lines reserved and at most two lines drawn.
+
+          «زيارات صفحة الهبوط» wraps where «الإنفاق» does not, and a floor alone only fixes the short
+          ones — the long one still grew past it and took its whole grid row with it. The clamp is
+          what makes the reservation a CEILING as well, so the row's height stops depending on which
+          language the reader chose. The full label is on the element's own title for the case where
+          two lines are not enough.
+        */}
+        <span
+          className={`inline-flex items-start gap-1 text-text-secondary ${METRIC_LABEL}`}
+          title={typeof item.label === 'string' ? item.label : undefined}
+        >
+          <span className="line-clamp-2">{item.label}</span>
           {item.hint && <InfoHint text={item.hint} label={`${t('definition', ar)}: ${item.label}`} />}
         </span>
         {/*
@@ -217,6 +244,14 @@ export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
         )}
       </div>
 
+      {/*
+        One row for the figure, whatever state it is in.
+
+        A measured value renders at 24px and «لم ترسله المنصة» at 30px, so a card with an absence in
+        it stood taller than its neighbours — the absence was visible in the LAYOUT before it was
+        read, which is the opposite of what UX-METRICS-001 wants from it.
+      */}
+      <div className="flex min-h-[1.75rem] flex-col justify-center">
       {item.reading.kind === 'value' ? (
         <span
           dir="ltr"
@@ -251,14 +286,21 @@ export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
           </span>
         </span>
       ) : (
-        <span className="inline-flex items-center gap-1 py-1 text-sm font-semibold text-text-muted">
+        <span className="inline-flex items-center gap-1 text-sm font-semibold text-text-muted">
           {missingText}
           <InfoHint text={missingHint} label={missingText} />
         </span>
       )}
+      </div>
 
-      {!missing && item.spark && item.spark.length > 1 && (
-        <div className="h-8 w-full">
+      {/*
+        The chart row is reserved whether or not there is a line to draw — see the note on the card.
+
+        `mt-auto` pushes it to the bottom edge, so the value sits at the same baseline in every card
+        of the row rather than floating up in the ones that have no chart.
+      */}
+      <div className="mt-auto h-8 w-full pt-1">
+        {!missing && item.spark && item.spark.length > 1 && (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={item.spark.map((v, i) => ({ i, v }))} margin={{ top: 4, bottom: 0, left: 0, right: 0 }}>
               <defs>
@@ -277,8 +319,8 @@ export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
               />
             </AreaChart>
           </ResponsiveContainer>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

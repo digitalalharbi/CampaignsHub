@@ -233,8 +233,13 @@ describe('the period comparison', () => {
     const before = previousReading(cpa, split)
 
     expect(cpa.substituted).toBe(true)
-    // The cell is formatted like the card it sits under — the precision lives in the exact strip.
-    expect(before.text).toBe('80 SAR')
+    /*
+     * The cell is formatted like the card it sits under, and that card stopped rounding — NUMBER-
+     * PRESENTATION-001 §58: «Do NOT compact figures where the exact figure itself is the decision-
+     * critical value, such as CPC / CPL / CPA / ROAS». It read «80 SAR» for 80.21, which is the same
+     * shape of loss as the «2 SAR» this rule was written about.
+     */
+    expect(before.text).toBe('80.21 SAR')
     /*
      * The change is the discriminator, and it is why this test exists. Direct against Direct is
      * 74.54 ÷ 80.21 — a 7% improvement. Against the blended 87.42 it would read as 15%, and half of
@@ -262,8 +267,10 @@ describe('the period comparison', () => {
     render(<SlideBody slide={{ id: 'comparison', type: 'comparison', order: 1, visible: true }} data={split} meta={meta} />)
 
     expect(screen.getByText('المقارنات والاتجاهات')).toBeInTheDocument()
-    expect(screen.getByText('80 SAR')).toBeInTheDocument()
+    // A cost per result carries its decimals — NUMBER-PRESENTATION-001 §58.
+    expect(screen.getByText('80.21 SAR')).toBeInTheDocument()
     // The blended previous figure must not appear anywhere in the table.
+    expect(screen.queryByText('87.42 SAR')).not.toBeInTheDocument()
     expect(screen.queryByText('87 SAR')).not.toBeInTheDocument()
     expect(screen.getByText('11.28×')).toBeInTheDocument()
   })
