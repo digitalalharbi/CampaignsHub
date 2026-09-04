@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import {
   Bar,
@@ -1249,7 +1249,40 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
     <Panel title={ar ? 'قمع التحويل' : 'Conversion funnel'} description={ar ? 'الظهور ← النقرة ← صفحة الهبوط ← السلة ← الدفع ← الشراء' : 'Impression → Click → Landing → Add to cart → Checkout → Purchase'} loading={f.isLoading} error={f.isError} empty={!f.isLoading && rows.length === 0}>
       <div className="space-y-3">
         {rows.map((s, i) => (
-          <div key={s.stage} className="flex items-center gap-3" data-testid={`ad-funnel-stage-${s.stage}`}>
+          <Fragment key={s.stage}>
+          {/*
+            FUNNEL-ANALYTICAL-PATTERN-001 / VISUAL-FIRST-001 — «a measurable stage funnel with LOSS
+            between stages».
+
+            The bars were proportional and the drop was a caption on the right reading «step 2%». A
+            funnel is opened to answer one question — where are people lost — and that question was
+            answered by a number the reader had to convert into a subtraction themselves.
+
+            The loss now sits BETWEEN the two stages it happened between, which is the only place it
+            means anything, and it names the count as well as the share: «2%» is a rate, «−1,940,581»
+            is what actually left. Drawn only between two stages the platform REPORTED — a gap that
+            spans an unreported stage says so, because a loss attributed to the wrong step sends an
+            operator to fix a page that was never the problem.
+          */}
+          {lossBefore(rows, i) && (
+            <div className="flex items-center gap-3" data-testid={`ad-funnel-loss-${s.stage}`}>
+              <span className="w-32 shrink-0" />
+              <div className="flex flex-1 items-center gap-2">
+                <span className="h-px flex-1 bg-border" />
+                <span className="tnum whitespace-nowrap text-[11px] font-semibold text-warning" dir="ltr">
+                  −{num(lossBefore(rows, i)!.lost)}
+                  {lossBefore(rows, i)!.share !== null && ` (${percent(lossBefore(rows, i)!.share!, 0)})`}
+                </span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+              <span className="w-40 shrink-0 text-end text-[11px] text-text-muted">
+                {lossBefore(rows, i)!.spans
+                  ? (ar ? 'عبر مرحلة لم تُبلَّغ' : 'across an unreported stage')
+                  : (ar ? 'الفاقد هنا' : 'lost here')}
+              </span>
+            </div>
+          )}
+          <div className="flex items-center gap-3" data-testid={`ad-funnel-stage-${s.stage}`}>
             <span className="w-32 shrink-0 text-sm font-medium text-text-secondary">{funnelStageLabel(s.stage, s.label, ar)}</span>
             {s.count !== null ? (
               <div className="h-10 flex-1 overflow-hidden rounded-xl bg-surface-secondary">
@@ -1270,6 +1303,7 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
               {s.cost_per !== null && <span className="ms-2">{ar ? 'تكلفة' : 'cost'} {moneyExact(s.cost_per, costCurrency ?? null)}</span>}
             </div>
           </div>
+          </Fragment>
         ))}
       </div>
       {unreported.length > 0 && (
@@ -1283,6 +1317,41 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
       )}
     </Panel>
   )
+}
+
+/**
+ * The loss between this stage and the previous REPORTED one, or null when there is none to state.
+ *
+ * Null in three different situations, and conflating them is how a funnel starts lying: this is the
+ * first measured stage and nothing preceded it; this stage was not reported, so nothing is known
+ * about what reached it; or the count went UP, which is real on a funnel whose stages come from
+ * different attribution windows and is not a «negative loss».
+ *
+ * `spans` says the gap crossed a stage the platform never reported — the loss is then between two
+ * stages that are not adjacent in the funnel, and calling it the drop-off of one step would send an
+ * operator to fix a page that was never the problem.
+ */
+export function lossBefore(
+  rows: Array<{ stage: string; count: number | null; reported?: boolean }>,
+  index: number,
+): { lost: number; share: number | null; spans: boolean } | null {
+  const here = rows[index]
+  if (!here || here.count === null) return null
+
+  let previous: { count: number | null } | null = null
+  let skipped = false
+
+  for (let i = index - 1; i >= 0; i--) {
+    if (rows[i].count !== null) { previous = rows[i]; break }
+    skipped = true
+  }
+
+  if (previous?.count == null) return null
+
+  const lost = previous.count - here.count
+  if (lost <= 0) return null
+
+  return { lost, share: previous.count > 0 ? lost / previous.count : null, spans: skipped }
 }
 
 /**
