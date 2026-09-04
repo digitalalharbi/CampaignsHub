@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import { METRIC_LABEL } from '@/styles/scale'
 import type { Locale } from '@/stores/ui'
 
@@ -51,9 +53,18 @@ const EVIDENCE: Record<string, { ar: string; en: string }> = {
 
 export function BudgetReading({ reading, locale }: { reading: BudgetExplanationPayload | undefined; locale: Locale }) {
   const ar = locale === 'ar'
+  // Before the early return: a hook cannot be called conditionally.
+  const [open, setOpen] = useState(false)
   if (reading === undefined) return null
 
   const pace = (n: number) => `${n.toFixed(2)}×`
+
+  /*
+   * The shared scale for both bars. At least 1.2 so on-pace sits inside the track even when every
+   * line is behind — otherwise the reference tick lands at the far edge and the bars read as though
+   * the slower line were nearly on target.
+   */
+  const paceCeiling = Math.max(1.2, reading.signal?.fastest.value ?? 0, reading.signal?.slowest.value ?? 0)
 
   return (
     <div data-testid="budget-reading" className="rounded-xl border border-border bg-surface-secondary/40 p-3.5">
@@ -65,43 +76,86 @@ export function BudgetReading({ reading, locale }: { reading: BudgetExplanationP
         </p>
       ) : (
         <div className="flex flex-col gap-2">
-          <div>
-            <span className={`block text-text-secondary ${METRIC_LABEL}`}>{ar ? 'الإشارة' : 'Signal'}</span>
-            <p className="mt-0.5 text-sm text-text-primary">
-              {ar ? 'الأسرع' : 'Fastest'}{' '}
-              <span className="font-bold">{reading.signal.fastest.campaign}</span>{' '}
-              <span dir="ltr" className="tnum">{pace(reading.signal.fastest.value)}</span>
-              {' · '}
-              {ar ? 'الأبطأ' : 'slowest'}{' '}
-              <span className="font-bold">{reading.signal.slowest.campaign}</span>{' '}
-              <span dir="ltr" className="tnum">{pace(reading.signal.slowest.value)}</span>
-            </p>
+          {/*
+            VISUAL-FIRST-001 — «BUDGET → consumed / remaining / pacing / projection visual.»
+
+            This was a SENTENCE: «Fastest <name> 0.22× · slowest <name> 0.10×», followed by a context
+            line, an explanation paragraph, an evidence line and an action — five stacked runs of
+            text for one comparison between two numbers on one scale.
+
+            Pace is a ratio against 1.00×, which is exactly what a bar with a reference line says at
+            a glance and a sentence cannot: whether a line is ahead or behind, and by how far. Both
+            bars share one scale, so the DISTANCE between them is the finding. The reference tick is
+            drawn at on-pace, because 0.22× means nothing without knowing what «right» looks like.
+          */}
+          <span className={`block text-text-secondary ${METRIC_LABEL}`}>{ar ? 'سرعة الصرف' : 'Spend pace'}</span>
+
+          <div className="flex flex-col gap-1.5" data-testid="budget-pace-bars">
+            {[
+              { key: 'fastest', row: reading.signal.fastest, tone: 'bg-warning' },
+              { key: 'slowest', row: reading.signal.slowest, tone: 'bg-brand-500' },
+            ].map(({ key, row, tone }) => (
+              <div key={key} className="flex items-center gap-2" data-testid={`budget-pace-${key}`}>
+                <span className="min-w-0 flex-1 truncate text-xs text-text-secondary" title={row.campaign}>{row.campaign}</span>
+                <span className="relative h-2 w-32 shrink-0 overflow-hidden rounded-full bg-surface sm:w-44">
+                  <span
+                    className={`block h-full rounded-full ${tone}`}
+                    style={{ width: `${Math.min(100, Math.max(2, (row.value / paceCeiling) * 100))}%` }}
+                  />
+                  {/* On pace. The one mark that makes every other position readable. */}
+                  <span
+                    aria-hidden
+                    className="absolute inset-y-0 w-px bg-text-muted"
+                    style={{ insetInlineStart: `${(1 / paceCeiling) * 100}%` }}
+                  />
+                </span>
+                <span dir="ltr" className="tnum w-14 shrink-0 text-end text-xs font-semibold text-text-primary">{pace(row.value)}</span>
+              </div>
+            ))}
           </div>
 
-          {reading.context && (
-            <p className="text-xs text-text-secondary">
-              {ar
-                ? `على ${reading.context.lines} خط ميزانية، بين ${reading.context.from} و${reading.context.to}.`
-                : `Across ${reading.context.lines} budget lines, ${reading.context.from} to ${reading.context.to}.`}
-            </p>
-          )}
-
-          {reading.explanation && (
-            <p className="text-xs leading-relaxed text-text-secondary">{ar ? reading.explanation.ar : reading.explanation.en}</p>
-          )}
-
-          {reading.evidence.length > 0 && (
-            <p className="text-[11px] text-text-muted">
-              {ar ? 'مبنيّة على: ' : 'Read from: '}
-              {reading.evidence.map((key) => (ar ? EVIDENCE[key]?.ar ?? key : EVIDENCE[key]?.en ?? key)).join(' · ')}
-            </p>
-          )}
+          <p className="text-[11px] text-text-muted">
+            {ar ? 'الخط الرأسي = على السرعة المخطّطة (1.00×)' : 'The tick marks on-pace (1.00×)'}
+          </p>
 
           {reading.action && (
             <p data-testid="budget-reading-action" className="text-sm font-medium text-text-primary">
               {ar ? reading.action.ar : reading.action.en}
             </p>
           )}
+
+          {/*
+            Context, reasoning and provenance move behind a disclosure. They are what a reader opens
+            after deciding the signal matters; printing them first is what made the block a wall.
+          */}
+          {open && (
+            <div className="space-y-1 border-t border-border pt-2">
+              {reading.context && (
+                <p className="text-xs text-text-secondary">
+                  {ar
+                    ? `على ${reading.context.lines} خط ميزانية، بين ${reading.context.from} و${reading.context.to}.`
+                    : `Across ${reading.context.lines} budget lines, ${reading.context.from} to ${reading.context.to}.`}
+                </p>
+              )}
+              {reading.explanation && (
+                <p className="text-xs leading-relaxed text-text-secondary">{ar ? reading.explanation.ar : reading.explanation.en}</p>
+              )}
+              {reading.evidence.length > 0 && (
+                <p className="text-[11px] text-text-muted">
+                  {ar ? 'مبنيّة على: ' : 'Read from: '}
+                  {reading.evidence.map((key) => (ar ? EVIDENCE[key]?.ar ?? key : EVIDENCE[key]?.en ?? key)).join(' · ')}
+                </p>
+              )}
+            </div>
+          )}
+
+          <button
+            onClick={() => setOpen((v) => !v)}
+            data-testid="budget-reading-toggle"
+            className="inline-flex w-fit items-center gap-1 text-xs font-semibold text-brand-600 hover:underline"
+          >
+            {open ? (ar ? 'إخفاء' : 'Hide') : (ar ? 'كيف حُسبت' : 'How this was read')}
+          </button>
         </div>
       )}
 

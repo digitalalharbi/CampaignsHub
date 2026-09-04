@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { BudgetReading, type BudgetExplanationPayload } from './BudgetReading'
 import { renderWithProviders } from '@/test/utils'
 
@@ -29,11 +29,22 @@ describe('the budget reading', () => {
   it('names both ends of the range and what it was read from', () => {
     renderWithProviders(<BudgetReading reading={reading()} locale="en" />, { locale: 'en' })
 
-    expect(screen.getByTestId('budget-reading')).toHaveTextContent('Eid push')
-    expect(screen.getByTestId('budget-reading')).toHaveTextContent('1.62×')
-    expect(screen.getByTestId('budget-reading')).toHaveTextContent('Always-on')
-    expect(screen.getByTestId('budget-reading')).toHaveTextContent(/Read from/)
+    /*
+     * VISUAL-FIRST-001 — both ends are still named and still measured; they are BARS now.
+     *
+     * The pace comparison was a sentence («Fastest X 1.62× · slowest Y 0.41×») followed by context,
+     * an explanation and a provenance line. Pace is a ratio against 1.00×, which a bar with an
+     * on-pace tick states at a glance, so the two ends are drawn on one scale and the provenance
+     * moved behind a disclosure. This test still proves both ends and the provenance are reachable —
+     * which is what it was always about — rather than that they were all printed at once.
+     */
+    expect(screen.getByTestId('budget-pace-fastest')).toHaveTextContent('Eid push')
+    expect(screen.getByTestId('budget-pace-fastest')).toHaveTextContent('1.62×')
+    expect(screen.getByTestId('budget-pace-slowest')).toHaveTextContent('Always-on')
     expect(screen.getByTestId('budget-reading-action')).toHaveTextContent(/Check «Eid push»/)
+
+    fireEvent.click(screen.getByTestId('budget-reading-toggle'))
+    expect(screen.getByTestId('budget-reading')).toHaveTextContent(/Read from/)
   })
 
   /** No signal, no action — the reason takes its place rather than the product inventing one. */

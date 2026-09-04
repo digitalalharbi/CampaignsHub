@@ -64,6 +64,7 @@ const MONEY_KPIS = new Set(['spend', 'revenue'])
 import { SavedViewsBar } from '@/features/dashboard/SavedViewsBar'
 import { useSavedViews, type SavedView } from '@/features/dashboard/savedViews'
 import { MetricStrip } from '@/components/ui/MetricStrip'
+import { Explainer } from '@/components/ui/Explainer'
 import { ChangeDiagnosis } from './ChangeDiagnosis'
 import { ContentReading } from './ContentReading'
 import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCampaignOverview'
@@ -1572,7 +1573,16 @@ export function QualityTab({ projectId, range, filters }: TabProps) {
         /* Most missing days first: the platform with the biggest hole is the reason to open this. */
         initialSort={{ column: 4, dir: 'desc' }}
       />
-      <p className="mt-3 text-xs text-text-muted">{ar ? 'لا يتم جمع Reach عبر المنصات كوصول فريد — يُعرض لكل منصة على حدة.' : 'Reach is not summed across platforms as unique reach — it is shown per platform.'}</p>
+      {/*
+        A definition, not a finding — disclosed rather than printed under every render of this panel.
+        It matters the first time a reader wonders why the platform reaches do not add up, and costs
+        them a line every time after.
+      */}
+      <Explainer className="mt-3" testid="reach-note" label={ar ? 'كيف يُقرأ الوصول' : 'How reach is counted'}>
+        {ar
+          ? 'لا يتم جمع Reach عبر المنصات كوصول فريد — يُعرض لكل منصة على حدة.'
+          : 'Reach is not summed across platforms as unique reach — it is shown per platform.'}
+      </Explainer>
       </Panel>
       <NormalizationPanel projectId={projectId} range={range} filters={filters} />
       {/*
@@ -1708,22 +1718,23 @@ function AttributionFindings({
   )
 }
 
+/** Who can actually clear a finding — hoisted so the row component below shares one definition. */
+const OWNER: Record<QualityFinding['owner'], { ar: string; en: string }> = {
+  system: { ar: 'النظام — تلقائيًا', en: 'The system, on its own' },
+  operator: { ar: 'أنت — خطوة واحدة', en: 'You — one step' },
+  credentials: { ar: 'يحتاج بيانات اعتماد', en: 'Needs credentials' },
+  provider: { ar: 'يحتاج فحصًا على المنصة', en: 'Needs a look on the platform' },
+}
+
+const TONE: Record<QualityFinding['severity'], string> = {
+  critical: 'border-danger/40 bg-danger/5',
+  attention: 'border-warning/40 bg-warning/5',
+  watch: 'border-border bg-surface-secondary',
+}
+
 function QualityFindings({ findings, ar, loading }: { findings: QualityFinding[]; ar: boolean; loading: boolean }) {
   if (loading) {
     return null
-  }
-
-  const OWNER: Record<QualityFinding['owner'], { ar: string; en: string }> = {
-    system: { ar: 'النظام — تلقائيًا', en: 'The system, on its own' },
-    operator: { ar: 'أنت — خطوة واحدة', en: 'You — one step' },
-    credentials: { ar: 'يحتاج بيانات اعتماد', en: 'Needs credentials' },
-    provider: { ar: 'يحتاج فحصًا على المنصة', en: 'Needs a look on the platform' },
-  }
-
-  const TONE: Record<QualityFinding['severity'], string> = {
-    critical: 'border-danger/40 bg-danger/5',
-    attention: 'border-warning/40 bg-warning/5',
-    watch: 'border-border bg-surface-secondary',
   }
 
   if (findings.length === 0) {
@@ -1743,25 +1754,88 @@ function QualityFindings({ findings, ar, loading }: { findings: QualityFinding[]
   return (
     <ul data-testid="quality-findings" className="mb-4 flex flex-col gap-2">
       {findings.map((finding) => (
-        <li key={finding.key} data-testid={`quality-finding-${finding.provider}`} className={`rounded-xl border p-3.5 ${TONE[finding.severity]}`}>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-bold text-text-primary">{finding.name ?? finding.provider}</span>
-            <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
-              {ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en}
-            </span>
-            {finding.coverage !== null && (
-              <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] text-text-muted" dir="ltr">
-                {ar ? 'التغطية' : 'Coverage'} {Math.round(finding.coverage * 100)}%
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-sm text-text-primary">{ar ? finding.what.ar : finding.what.en}</p>
-          <p className="mt-0.5 text-xs text-text-secondary">{ar ? finding.affects.ar : finding.affects.en}</p>
-          <p className="mt-0.5 text-xs text-text-muted">{ar ? finding.check.ar : finding.check.en}</p>
-        </li>
+        <QualityFindingRow key={finding.key} finding={finding} ar={ar} />
       ))}
     </ul>
   )
+}
+
+/**
+ * VISUAL-FIRST-001 — a data-quality finding leads with COVERAGE, not with three paragraphs.
+ *
+ * «DATA QUALITY → compact status/coverage visual with detailed diagnostics progressively disclosed.»
+ *
+ * The row stacked `what`, `affects` and `check` as three sentences under a text pill reading
+ * «Coverage 43%». Measured across the analytics tabs, this was the most prose-dense surface in the
+ * product: six separate runs of fourteen words or more on one screen, and the number a reader
+ * actually scans for — how much of the window this source covered — was a caption among them.
+ *
+ * Coverage is now a BAR, because coverage is a proportion and a proportion is the one thing a bar
+ * says faster than a sentence: four sources at 43%, 100%, 12% and 90% are comparable at a glance and
+ * are not comparable as four paragraphs. The bar carries the finding's own severity tone, so «how
+ * much» and «how bad» are read together.
+ *
+ * `what` stays visible — one sentence, which is what the requirement allows. `affects` and `check`
+ * are the deeper diagnosis and move behind a disclosure: they are what a reader opens AFTER deciding
+ * this source is worth their attention, and printing them first is what made the decision slow.
+ */
+function QualityFindingRow({ finding, ar }: { finding: QualityFinding; ar: boolean }) {
+  const [open, setOpen] = useState(false)
+  const pct = finding.coverage === null ? null : Math.round(finding.coverage * 100)
+
+  return (
+    <li data-testid={`quality-finding-${finding.provider}`} className={`rounded-xl border p-3.5 ${TONE[finding.severity]}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-bold text-text-primary">{finding.name ?? finding.provider}</span>
+        <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+          {ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en}
+        </span>
+      </div>
+
+      {/*
+        The coverage bar. Absent — not drawn at zero — when the finding carries no coverage figure:
+        an empty bar reads as «this source covered none of the window», which is a different and
+        much worse claim than «coverage was not measured for this finding».
+      */}
+      {pct !== null && (
+        <div className="mt-2 flex items-center gap-2" data-testid={`quality-coverage-${finding.provider}`}>
+          <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface">
+            <span
+              className={`block h-full rounded-full ${COVERAGE_FILL[finding.severity]}`}
+              style={{ width: `${Math.max(2, pct)}%` }}
+            />
+          </span>
+          <span className="tnum w-24 shrink-0 text-end text-[11px] font-semibold text-text-secondary" dir="ltr">
+            {ar ? `التغطية ${pct}%` : `${pct}% covered`}
+          </span>
+        </div>
+      )}
+
+      <p className="mt-2 text-sm text-text-primary">{ar ? finding.what.ar : finding.what.en}</p>
+
+      {open && (
+        <div className="mt-2 space-y-1 border-t border-border pt-2">
+          <p className="text-xs text-text-secondary">{ar ? finding.affects.ar : finding.affects.en}</p>
+          <p className="text-xs text-text-muted">{ar ? finding.check.ar : finding.check.en}</p>
+        </div>
+      )}
+
+      <button
+        onClick={() => setOpen((v) => !v)}
+        data-testid={`quality-finding-toggle-${finding.provider}`}
+        className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:underline"
+      >
+        {open ? (ar ? 'إخفاء التفاصيل' : 'Hide details') : (ar ? 'ما الذي يتأثر' : 'What this affects')}
+      </button>
+    </li>
+  )
+}
+
+/** The bar's fill, by the finding's own severity — «how much» and «how bad», read together. */
+const COVERAGE_FILL: Record<QualityFinding['severity'], string> = {
+  critical: 'bg-danger',
+  attention: 'bg-warning',
+  watch: 'bg-brand-500',
 }
 
 function AttributionSection({ projectId, range, filters }: TabProps) {
