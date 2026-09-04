@@ -61,6 +61,19 @@ final class ProjectRouteCapabilityCoverageTest extends TestCase
         'api.v1.projects.clone',
         'api.v1.projects.pause',
         'api.v1.projects.resume',
+
+        /*
+         * The capability SET itself — the endpoint a rail reads to decide what to draw.
+         *
+         * Every capability it could be gated on is one it exists to report on, so gating it would
+         * make the rail undrawable for exactly the people whose rail differs from everybody else's.
+         * The `project` middleware has already established that the reader may reach the project, and
+         * the answer is about themselves: it names no other member and no other project.
+         *
+         * This is not a hole in the wall. Nothing is authorised by it — every route it describes
+         * states and enforces its own capability, and none of them consults this.
+         */
+        'api.v1.projects.scoped.capabilities',
     ];
 
     /** Route-name prefixes whose controllers hold a narrower check than a middleware could. */
