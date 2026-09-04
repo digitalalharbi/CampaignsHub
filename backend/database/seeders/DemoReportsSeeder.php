@@ -15,6 +15,7 @@ use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Demo reports on the demo analytics project. Completed reports carry a REAL generated snapshot from
@@ -104,10 +105,23 @@ final class DemoReportsSeeder extends Seeder
             return;
         }
 
-        $campaigns = array_values(array_filter(array_map(
-            static fn ($row) => is_array($row) ? ($row['campaign_id'] ?? null) : null,
-            (array) (($report->data ?? [])['campaigns'] ?? []),
-        )));
+        /*
+         * The link's ceiling comes from the METRICS, exactly as `ReportShareController` builds it.
+         *
+         * This read `$report->data['campaigns']`, and that list is empty on every report generated
+         * under CLIENT-REPORT-ENTITY-BOUNDARY-001 — a client report carries no campaign roster. The
+         * seeded share's ceiling became «no campaigns», which the aggregator fails closed on, and
+         * the demo live link opened on a page of zeros. A ceiling is an authorisation fact; deriving
+         * it from a document's rendering was the coupling that broke.
+         */
+        $campaigns = DB::table('daily_metrics')
+            ->where('project_id', $project->id)
+            ->whereNotNull('unified_campaign_id')
+            ->distinct()
+            ->pluck('unified_campaign_id')
+            ->map(static fn ($id): string => (string) $id)
+            ->values()
+            ->all();
         $providers = array_values(array_unique(array_filter(array_map(
             static fn ($row) => is_array($row) ? ($row['provider'] ?? null) : null,
             (array) (($report->data ?? [])['platforms'] ?? []),
