@@ -1,0 +1,277 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Feature;
+
+use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\Services\ChangeDrivers;
+use App\Domains\Metrics\Services\ChangeTimeline;
+use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Models\Project;
+use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Models\Tenant;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
+use Tests\TestCase;
+
+/**
+ * ANALYTICS-DIFFERENTIATION-001 — «why», and the refusals that keep it honest.
+ *
+ * The dashboard says spend rose 14%. That is a fact nobody can act on: the rise is the sum of every
+ * platform underneath, some up, some down, and the ones that matter are usually not the biggest. So
+ * Analytics decomposes the movement — and most of what this file asserts is when it DECLINES to,
+ * because a diagnostic surface that always produces a finding teaches its reader to ignore it.
+ */
+final class ChangeDriversTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private Project $project;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $tenant = Tenant::create(['name' => 'A', 'slug' => 'cd-a', 'status' => 'active']);
+        app(TenantContext::class)->setTenantId($tenant->id);
+        $ws = ClientWorkspace::create(['name' => 'C', 'slug' => 'cd-c', 'mode' => 'managed']);
+        $this->project = Project::create(['client_workspace_id' => $ws->id, 'name' => 'P', 'status' => 'active']);
+        app(ProjectContext::class)->setProjectId($this->project->id);
+    }
+
+    private function campaign(string $name): UnifiedCampaign
+    {
+        return UnifiedCampaign::create(['project_id' => $this->project->id, 'name' => $name, 'status' => 'active']);
+    }
+
+    private function metric(UnifiedCampaign $c, string $provider, string $key, ?float $value, string $date, array $over = []): void
+    {
+        DailyMetric::create([
+            'id' => (string) Str::uuid(),
+            'project_id' => $this->project->id,
+            'external_account_id' => (string) Str::uuid(),
+            'external_campaign_id' => (string) Str::uuid(),
+            'unified_campaign_id' => $c->id,
+            'provider' => $provider,
+            'metric_key' => $key,
+            'metric_date' => $date,
+            'value' => $value,
+            ...$over,
+        ]);
+    }
+
+    private function drivers(string $metric = 'spend', string $by = 'provider'): array
+    {
+        return (new ChangeDrivers(app(MetricsAggregator::class)->forProjects([$this->project->id])))
+            ->forMetric(
+                $metric, $by,
+                Carbon::parse('2026-07-08'), Carbon::parse('2026-07-14'),
+                Carbon::parse('2026-07-01'), Carbon::parse('2026-07-07'),
+            );
+    }
+
+    /** The whole point: the account moved, and this says which platform moved it. */
+    public function test_it_names_the_platform_that_moved_the_account(): void
+    {
+        $meta = $this->campaign('M');
+        $google = $this->campaign('G');
+
+        // Meta doubles; Google slips a little. The net is up, and Meta is why.
+        $this->metric($meta, 'meta', 'spend', 1000, '2026-07-03');
+        $this->metric($meta, 'meta', 'spend', 3000, '2026-07-10');
+        $this->metric($google, 'google', 'spend', 2000, '2026-07-03');
+        $this->metric($google, 'google', 'spend', 1800, '2026-07-10');
+
+        $out = $this->drivers();
+
+        $this->assertTrue($out['decomposable']);
+        $this->assertNull($out['reason']);
+        $this->assertSame(1800.0, $out['change'], 'the account movement is the sum of its parts');
+
+        $this->assertSame('meta', $out['drivers'][0]['key'], 'the biggest mover is not first');
+        $this->assertSame(2000.0, $out['drivers'][0]['change']);
+        $this->assertSame('up', $out['drivers'][0]['direction']);
+
+        $this->assertSame('google', $out['drivers'][1]['key']);
+        $this->assertSame(-200.0, $out['drivers'][1]['change']);
+        $this->assertSame('down', $out['drivers'][1]['direction']);
+    }
+
+    /**
+     * Share is of the GROSS movement, and the arithmetic is why.
+     *
+     * Dividing by the NET change is the obvious choice and it produces nonsense: with one platform up
+     * 2,000 and another down 200, the net is 1,800 and Meta's «share» becomes 111%. The reader's
+     * question is «how much of what happened was this one», and what happened is the distance
+     * travelled — 2,200 — of which Meta is 91%.
+     */
+    public function test_a_share_is_of_the_distance_travelled_not_the_net(): void
+    {
+        $this->metric($this->campaign('M'), 'meta', 'spend', 1000, '2026-07-03');
+        $this->metric($this->campaign('M2'), 'meta', 'spend', 3000, '2026-07-10');
+        $this->metric($this->campaign('G'), 'google', 'spend', 2000, '2026-07-03');
+        $this->metric($this->campaign('G2'), 'google', 'spend', 1800, '2026-07-10');
+
+        $shares = array_column($this->drivers()['drivers'], 'share');
+
+        foreach ($shares as $share) {
+            $this->assertLessThanOrEqual(1.0, $share, 'a contribution exceeded the whole movement');
+        }
+        $this->assertEqualsWithDelta(0.909, $shares[0], 0.01);
+        $this->assertEqualsWithDelta(1.0, array_sum($shares), 0.001);
+    }
+
+    /**
+     * **A ratio has no parts that add to it.**
+     *
+     * One campaign's CPA and another's do not sum to the account's, so a «contribution to CPA» is a
+     * number with no referent. It is the single most tempting wrong answer in this whole feature —
+     * the arithmetic runs happily and produces something that looks like an insight — so it is
+     * refused in one place rather than avoided at each call site.
+     */
+    public function test_it_refuses_to_decompose_a_ratio(): void
+    {
+        $this->metric($this->campaign('M'), 'meta', 'spend', 1000, '2026-07-10');
+
+        foreach (['cpa', 'roas', 'ctr', 'cpc', 'conversion_rate'] as $ratio) {
+            $out = $this->drivers($ratio);
+
+            $this->assertFalse($out['decomposable'], "{$ratio} was decomposed");
+            $this->assertSame('metric_is_not_additive', $out['reason']);
+            $this->assertSame([], $out['drivers']);
+        }
+    }
+
+    /** A first period has nothing to have moved from, and a driver against zero is just a ranking. */
+    public function test_it_declines_without_a_previous_window(): void
+    {
+        $this->metric($this->campaign('M'), 'meta', 'spend', 1000, '2026-07-10');
+
+        $out = (new ChangeDrivers(app(MetricsAggregator::class)->forProjects([$this->project->id])))
+            ->forMetric('spend', 'provider', Carbon::parse('2026-07-08'), Carbon::parse('2026-07-14'), null, null);
+
+        $this->assertTrue($out['decomposable'], 'spend is decomposable — the WINDOW is what is missing');
+        $this->assertSame('no_previous_period', $out['reason']);
+        $this->assertSame([], $out['drivers']);
+    }
+
+    /**
+     * A withheld figure is unquantifiable, not zero — FX-001.
+     *
+     * A platform whose spend awaits an exchange rate did not contribute nothing to the account's
+     * movement. Counting it as zero would hand its share to whichever platform happened to be
+     * measurable, which is a false attribution rather than a missing one.
+     */
+    public function test_a_withheld_platform_is_named_rather_than_counted_as_zero(): void
+    {
+        $this->metric($this->campaign('M'), 'meta', 'spend', 1000, '2026-07-03');
+        $this->metric($this->campaign('M2'), 'meta', 'spend', 3000, '2026-07-10');
+
+        // Snapchat reported 500 USD and no rate exists to convert it — `value` null, original kept.
+        $snap = $this->campaign('S');
+        $this->metric($snap, 'snapchat', 'spend', null, '2026-07-03', ['original_amount' => 500, 'original_currency' => 'USD']);
+        $this->metric($snap, 'snapchat', 'spend', null, '2026-07-10', ['original_amount' => 900, 'original_currency' => 'USD']);
+
+        $out = $this->drivers();
+
+        $this->assertContains('snapchat', $out['unquantifiable']);
+        $this->assertNotContains('snapchat', array_column($out['drivers'], 'key'), 'a withheld platform was ranked');
+        foreach ($out['drivers'] as $d) {
+            $this->assertNotSame(0.0, $d['change'], 'a withheld figure was counted as no movement');
+        }
+    }
+
+    // ---- the change timeline ------------------------------------------------------------------
+
+    /** @param list<float> $daily one value per day, starting 2026-07-01 */
+    private function series(array $daily): array
+    {
+        $c = $this->campaign('T');
+        foreach ($daily as $i => $v) {
+            $this->metric($c, 'meta', 'spend', $v, Carbon::parse('2026-07-01')->addDays($i)->toDateString());
+        }
+
+        return (new ChangeTimeline(app(MetricsAggregator::class)->forProjects([$this->project->id])))
+            ->build(Carbon::parse('2026-07-01'), Carbon::parse('2026-07-01')->addDays(count($daily) - 1), ['spend']);
+    }
+
+    /**
+     * The day worth asking about, named — and measured against what came BEFORE it.
+     *
+     * A trailing baseline is the only one a reader could have acted on. «This day was unusual given
+     * the fortnight before it» is a sentence about their campaign; «unusual given the whole month,
+     * including the days after» is hindsight dressed as a signal.
+     */
+    public function test_it_names_the_day_that_departed_from_its_own_baseline(): void
+    {
+        $out = $this->series([100, 102, 98, 101, 99, 100, 103, 900, 101, 99]);
+
+        $this->assertNull($out['reason']);
+        $this->assertCount(1, $out['points'], 'a steady series produced more than the one spike in it');
+        $this->assertSame('2026-07-08', $out['points'][0]['date']);
+        $this->assertSame(900.0, $out['points'][0]['value']);
+        $this->assertSame('up', $out['points'][0]['direction']);
+        $this->assertGreaterThan(3.5, abs($out['points'][0]['deviation']));
+    }
+
+    /**
+     * **A flat series has no scale to be unusual against.**
+     *
+     * Every day identical means a MAD of zero, and dividing by it would make any departure infinite —
+     * so an account that spent exactly the same every day would report its first different day as an
+     * extreme anomaly. That is arithmetic, not a finding.
+     */
+    public function test_a_series_that_never_varied_reports_nothing(): void
+    {
+        $this->assertSame([], $this->series([100, 100, 100, 100, 100, 100, 100, 100])['points']);
+    }
+
+    /**
+     * …and the day AFTER a flat run is not an anomaly for being one riyal different.
+     *
+     * This is the case that proves the guard rather than merely surviving it. With no scale to
+     * measure against, any departure divides by zero — so a single riyal above a week of identical
+     * days would be reported as an extreme finding. The series below is flat and then moves by 1%,
+     * which is nothing; a threshold applied to a zero baseline would call it everything.
+     */
+    public function test_a_trivial_move_after_a_flat_run_is_not_an_anomaly(): void
+    {
+        $out = $this->series([100, 100, 100, 100, 100, 100, 101, 100]);
+
+        $this->assertSame([], $out['points'], 'a 1% move was reported as a departure');
+        $this->assertSame('no_day_departed_from_its_own_baseline', $out['reason']);
+    }
+
+    /** Too few days to have a baseline at all — said, rather than guessed at. */
+    public function test_a_window_too_short_declines(): void
+    {
+        $out = $this->series([100, 120, 90]);
+
+        $this->assertSame([], $out['points']);
+        $this->assertSame('window_too_short_to_have_a_baseline', $out['reason']);
+    }
+
+    /** An ordinary series is not an anomaly, however much it moves around. */
+    public function test_normal_variation_is_not_a_finding(): void
+    {
+        $out = $this->series([100, 130, 90, 115, 95, 120, 105, 110, 98, 125]);
+
+        $this->assertSame([], $out['points'], 'ordinary variation was reported as notable');
+    }
+
+    /** Nothing reported the metric at all — an absence, said as one. */
+    public function test_it_says_when_no_entity_reported_the_metric(): void
+    {
+        $this->metric($this->campaign('M'), 'meta', 'clicks', 30, '2026-07-10');
+
+        $out = $this->drivers('purchases');
+
+        $this->assertSame('no_entity_reported_this_metric', $out['reason']);
+        $this->assertSame([], $out['drivers']);
+    }
+}
