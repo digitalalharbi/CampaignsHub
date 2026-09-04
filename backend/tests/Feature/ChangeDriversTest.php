@@ -232,6 +232,37 @@ final class ChangeDriversTest extends TestCase
         }
     }
 
+    /**
+     * PLATFORM-DECISION-ANALYTICS-001 — account contribution, which the platform total hides.
+     *
+     * An agency running two Meta accounts for one client can have a collapse in one exactly offset by
+     * a rise in the other. The platform reports no change, and the thing worth acting on is invisible
+     * until the split goes one level down.
+     */
+    public function test_it_decomposes_by_ad_account(): void
+    {
+        $a = $this->campaign('A');
+        $b = $this->campaign('B');
+        $accountA = (string) Str::uuid();
+        $accountB = (string) Str::uuid();
+
+        foreach ([['2026-07-03', 3000, 1000], ['2026-07-10', 1000, 3000]] as [$date, $spendA, $spendB]) {
+            $this->metric($a, 'meta', 'spend', (float) $spendA, $date, ['external_account_id' => $accountA]);
+            $this->metric($b, 'meta', 'spend', (float) $spendB, $date, ['external_account_id' => $accountB]);
+        }
+
+        $byAccount = $this->drivers('spend', 'account');
+        $changes = array_column($byAccount['drivers'], 'change', 'key');
+
+        $this->assertSame(-2000.0, $changes[$accountA] ?? null);
+        $this->assertSame(2000.0, $changes[$accountB] ?? null);
+
+        // …and the platform above them reports no movement, which is the point.
+        foreach ($this->drivers('spend', 'provider')['drivers'] as $d) {
+            $this->assertSame(0.0, $d['change'], 'the platform split invented a movement');
+        }
+    }
+
     // ---- the change timeline ------------------------------------------------------------------
 
     /** @param list<float> $daily one value per day, starting 2026-07-01 */

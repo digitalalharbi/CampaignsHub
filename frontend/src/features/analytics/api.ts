@@ -671,6 +671,8 @@ export const useEntities = (
 export interface DriverRow {
   key: string
   name: string | null
+  /** The platform this driver sits on — the part still known when an account has lost its name. */
+  provider?: string | null
   current: number
   previous: number
   change: number
@@ -713,7 +715,7 @@ export interface DriversPayload {
 export const useDrivers = (
   p: string | null,
   r: Range,
-  by: 'provider' | 'campaign' | 'objective' = 'provider',
+  by: 'provider' | 'account' | 'campaign' | 'objective' = 'provider',
   metric = 'spend',
   f?: MetricFilters,
 ) =>
