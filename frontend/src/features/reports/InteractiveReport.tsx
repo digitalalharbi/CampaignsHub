@@ -372,19 +372,72 @@ function Title({ platform, children, sub }: { platform?: string; children: React
   )
 }
 
+/**
+ * One metric, whole: its name, its figure, the exact figure behind it, and its own line.
+ *
+ * ## Why every part is in the card and nothing is beside it
+ *
+ * The exact figures used to sit in a strip UNDER the grid — six labels and six numbers in a row of
+ * small grey text, repeating what the cards had just said. A reader who wanted the precise spend had
+ * to find «الإنفاق» in that line and trust that the number after it belonged to the card three
+ * columns away. Two places for one figure is one place too many, and the second place is the one
+ * nobody designed.
+ *
+ * It is under its own headline now. Nothing is lost that the strip provided: it is the same
+ * selectable text carrying the same `data-exact` mark, so a PDF still extracts it — it simply sits
+ * with the number it makes exact.
+ *
+ * ## Why the parts are in fixed slots
+ *
+ * Every card holds the same four rows whether or not it has content for them, so a row of six reads
+ * as a row: the labels line up, the figures line up, and the sparklines sit on one baseline. Without
+ * that, a card with a note is taller than its neighbour and the grid steps up and down across the
+ * page — which is what «توازي» asks for and what a variable-height stack cannot give.
+ */
 function Kpi({ label, value, exact, note, delta, invert, spark, accent }: { label: string; value: string; exact?: string; note?: string | null; delta?: number | null; invert?: boolean; spark?: number[]; accent?: string }) {
   return (
-    <div className="rounded-2xl border border-border bg-surface-secondary p-3">
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-text-secondary">{label}</span>
+    <div className="flex h-full flex-col rounded-2xl border border-border bg-surface-secondary p-3">
+      <div className="flex min-h-[20px] items-center justify-between gap-2">
+        <span className="truncate text-sm text-text-secondary" title={label}>{label}</span>
         {delta !== undefined && <TrendPill delta={delta} invertGood={invert} />}
       </div>
-      <div className="tnum mt-1 text-[24px] font-extrabold leading-none tracking-tight text-text-primary">{value}</div>
-      {/* Exact value under the (possibly compact) headline, so the precise figure is always in the PDF. */}
-      {exact && exact !== value && <div className="tnum mt-0.5 text-[11px] text-text-muted" data-exact>{exact}</div>}
+
+      {/*
+        The figure, on one line and never wrapped.
+        A KPI that breaks across two lines drops the card below its neighbours and takes the row's
+        alignment with it — and a number split over two lines is harder to read than a smaller one.
+      */}
+      <div className="tnum mt-1 truncate text-[24px] font-extrabold leading-none tracking-tight text-text-primary" title={value}>
+        {value}
+      </div>
+
+      {/*
+        The exact figure, under the headline it makes exact — see the note above for why it is not in
+        a strip. `min-h` rather than a conditional row, so a card without one is the same height as a
+        card with one.
+      */}
+      <div className="tnum mt-1 min-h-[14px] text-[11px] leading-tight text-text-muted" data-exact>
+        {/*
+          Shown only when there IS something more exact to say.
+          A dash here would be the card's second «nothing was reported» under a headline that already
+          says it, and a repeat of the headline would be the same figure twice in two sizes — both
+          add a row that carries no information and cost the reader a glance.
+        */}
+        {exact && exact !== value && exact !== '—' ? exact : ''}
+      </div>
+
       {/* Why a figure is not in the project's currency — the reader of a report has no other screen. */}
       {note && <div className="mt-0.5 text-[11px] leading-tight text-text-muted">{note}</div>}
-      {spark && spark.length > 1 && <div className="mt-1"><KpiSparkline points={spark} color={accent} height={22} /></div>}
+
+      {/*
+        The line sits on the bottom edge of every card — `mt-auto` — so six sparklines share one
+        baseline however much text is above them.
+      */}
+      <div className="mt-auto pt-2">
+        {spark && spark.length > 1
+          ? <KpiSparkline points={spark} color={accent} height={22} />
+          : <div className="h-[22px]" aria-hidden />}
+      </div>
     </div>
   )
 }
@@ -536,7 +589,6 @@ function RecommendationsSlide({ data }: { data: ReportData }) {
 }
 
 function ExecutiveSlide({ data }: { data: ReportData }) {
-  const k = data.kpis
   const donut = data.platforms.map((p) => ({ name: String(p.provider), value: Number(p.spend ?? 0) }))
   const totalSpend = donut.reduce((a, b) => a + b.value, 0)
   /*
@@ -551,12 +603,18 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
   return (
     <div>
       <Title sub="نظرة سريعة على أداء الحملة خلال الفترة">الملخص التنفيذي</Title>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      {/*
+        `items-stretch` is what makes the row a row: every card fills the tallest cell, and `Kpi`
+        pins its sparkline to the bottom, so the six lines share one baseline instead of floating at
+        six different heights.
+      */}
+      <div className="grid grid-cols-2 items-stretch gap-3 md:grid-cols-3 xl:grid-cols-6">
         {cards.map((m) => (
           <Kpi
             key={m.key}
             label={m.label}
             value={readingText(m.reading)}
+            exact={exactOf(m, data)}
             note={readingNote(m.reading)}
             delta={m.reading.kind === 'withheld' ? undefined : (m.delta ?? undefined)}
             invert={m.invertGood}
@@ -564,20 +622,6 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
             accent={ACCENTS[m.key] ?? 'var(--brand-600)'}
           />
         ))}
-      </div>
-      {/*
-        Exact figures (compact strip) so precise values are always in the report + PDF-extractable.
-
-        It follows the same cards: it used to name spend, revenue, results and CPA outright, so a
-        brand report printed «الإيرادات 0» and «النتائج 0» in text a PDF reader can select — the
-        clearest possible statement of a number that was never being measured. Spend is pinned
-        because it is the one figure that means the same thing on every report.
-      */}
-      <div className="tnum mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-muted" data-exact>
-        <span>الإنفاق {moneyExact(k.spend, data.currency)}</span>
-        {cards
-          .filter((m) => m.key !== 'spend' && m.reading.kind === 'value')
-          .map((m) => <span key={m.key}>{m.label} {exactOf(m, data)}</span>)}
       </div>
       {/*
         The trend follows the objective too.
