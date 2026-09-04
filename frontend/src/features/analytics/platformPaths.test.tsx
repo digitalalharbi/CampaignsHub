@@ -7,9 +7,10 @@ import { useProject } from '@/stores/project'
 vi.mock('@/lib/api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api/client')>()),
   getData: vi.fn(),
+  getEnvelope: vi.fn(),
 }))
 
-import { getData } from '@/lib/api/client'
+import { getData, getEnvelope } from '@/lib/api/client'
 
 /**
  * PLATFORM-DECISION-ANALYTICS-001 — «which platform is contributing most to THIS objective».
@@ -143,13 +144,21 @@ describe('platform contribution, inside each path', () => {
    * tab to find out means they will read the ranking instead. So the gap is stated here.
    */
   it('marks a platform whose window is incomplete, where the comparison is made', async () => {
+    // Freshness reads the ENVELOPE — its `meta.filter_scope` is what tells the panel it covers the project.
+    vi.mocked(getEnvelope).mockImplementation((url: string) =>
+      (url.includes('freshness')
+        ? {
+            data: [
+              { kind: 'ad_platform', provider: 'tiktok', account_id: 'a1', name: 'TikTok', latest_metric_date: '2026-08-27', data_freshness_at: null, days_with_data: 27, missing_days: 3, last_sync_status: 'fresh', last_sync_at: null, last_sync_error: null },
+            ],
+            meta: { filter_scope: { applied: [], unapplied: ['provider'] } },
+            message: null,
+            success: true,
+          }
+        : { data: null, meta: null, message: null, success: true }) as never,
+    )
     vi.mocked(getData).mockImplementation((url: string) => {
       if (url.includes('platform-objectives')) return PATHS as never
-      if (url.includes('freshness')) {
-        return [
-          { kind: 'ad_platform', provider: 'tiktok', account_id: 'a1', name: 'TikTok', latest_metric_date: '2026-08-27', data_freshness_at: null, days_with_data: 27, missing_days: 3, last_sync_status: 'fresh', last_sync_at: null, last_sync_error: null },
-        ] as never
-      }
       if (url.includes('disclaimer')) return null as never
       if (url.includes('/summary')) return { current: {}, previous: {}, delta: {}, currency: 'SAR' } as never
       return [] as never

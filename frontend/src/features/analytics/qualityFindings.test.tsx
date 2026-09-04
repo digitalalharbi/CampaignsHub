@@ -7,9 +7,10 @@ import { useProject } from '@/stores/project'
 vi.mock('@/lib/api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api/client')>()),
   getData: vi.fn(),
+  getEnvelope: vi.fn(),
 }))
 
-import { getData } from '@/lib/api/client'
+import { getData, getEnvelope } from '@/lib/api/client'
 
 /**
  * DATA-QUALITY-OPERATOR-UX-001 — asserted on the RENDERED tab, not on the helper alone.
@@ -28,6 +29,18 @@ const FRESHNESS = [
 ]
 
 function route(rows: unknown[]) {
+  /*
+   * Freshness reads the ENVELOPE, not the data alone — ANALYTICS-FILTER-TRUTH-001.
+   *
+   * The endpoint declines the platform axis on purpose and says so in `meta.filter_scope`, which the
+   * panel now passes on to the reader. `meta` is where that answer lives, so the hook has to see the
+   * whole envelope, and so does this fixture.
+   */
+  vi.mocked(getEnvelope).mockImplementation((url: string) =>
+    (url.includes('freshness')
+      ? { data: rows, meta: { filter_scope: { applied: [], unapplied: ['provider'] } }, message: null, success: true }
+      : { data: null, meta: null, message: null, success: true }) as never,
+  )
   vi.mocked(getData).mockImplementation((url: string) => {
     if (url.includes('freshness')) return rows as never
     if (url.includes('disclaimer')) return null as never
@@ -108,5 +121,23 @@ describe('the data quality tab answers the operator’s questions', () => {
 
     expect(await screen.findByTestId('quality-findings-clear')).toHaveTextContent('nothing here needs your attention')
     expect(screen.queryByTestId('quality-findings')).toBeNull()
+  })
+
+  /**
+   * ANALYTICS-FILTER-TRUTH-001 — the chips are lit and this panel ignores them, on purpose and out loud.
+   *
+   * Freshness answers for the whole project deliberately: a sync state narrowed to the platform chips
+   * would describe the FILTER rather than the source, and «no data» about a platform the reader
+   * filtered out reads as an outage. The endpoint always declined that axis and always said so in its
+   * meta — and the hook threw the meta away, so the panel could not pass it on. A reader with one
+   * platform's chip lit sat above a table covering four, with nothing on screen to say which it was.
+   */
+  it('says the panel covers the whole project when an axis was declined', async () => {
+    route(FRESHNESS)
+
+    renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('tab', { name: /Data quality/i }))
+
+    expect(await screen.findByTestId('freshness-scope')).toHaveTextContent(/whole project/i)
   })
 })

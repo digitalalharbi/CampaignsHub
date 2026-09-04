@@ -261,7 +261,7 @@ export function DashboardPage() {
 
   const alerts = useMemo(() => {
     const out: { kind: 'sync' | 'budget' | 'performance'; text: string }[] = []
-    freshness.data?.forEach((f) => {
+    freshness.data?.rows.forEach((f) => {
       const who = f.name ?? providerName(f.provider)
       if (f.last_sync_status === 'failed') out.push({ kind: 'sync', text: ar ? `فشل مزامنة ${who} — يتطلب إعادة ربط` : `${who} sync failed — needs reconnecting` })
     })
@@ -274,7 +274,7 @@ export function DashboardPage() {
     return out.slice(0, 4)
   }, [freshness.data, budget.data, campaigns.data, ar])
 
-  const lastSync = freshness.data?.map((f) => f.last_sync_at).filter(Boolean).sort().at(-1)
+  const lastSync = freshness.data?.rows.map((f) => f.last_sync_at).filter(Boolean).sort().at(-1)
 
   /*
    * The shared command-centre view model — comparisons, top campaigns, attention and alerts.

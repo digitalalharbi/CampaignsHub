@@ -189,7 +189,8 @@ describe('the dashboard store strip', () => {
       latest_metric_date: null, data_freshness_at: null, days_with_data: null, missing_days: null,
       last_sync_status: 'failed', last_sync_at: null, last_sync_error: 'boom',
     }
-    vi.mocked(useFreshness).mockReturnValue({ data: [row], isLoading: false, isError: false } as never)
+    // `useFreshness` now yields the envelope's two halves: the rows, and the scope the endpoint declined.
+    vi.mocked(useFreshness).mockReturnValue({ data: { rows: [row], scope: undefined }, isLoading: false, isError: false } as never)
 
     renderWithProviders(<DashboardPage />, { locale: 'ar' })
 
