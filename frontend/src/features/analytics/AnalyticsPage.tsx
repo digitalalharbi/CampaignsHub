@@ -1295,14 +1295,20 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
             spans an unreported stage says so, because a loss attributed to the wrong step sends an
             operator to fix a page that was never the problem.
 
-            The label column and the caption are DROPPED on a phone rather than shrunk. The first
-            version copied the stage row's geometry — a 128px label gutter and a 160px caption —
-            around a figure that cannot wrap («−1,940,581 (98%)» is `whitespace-nowrap` by
-            necessity): a 415px minimum on a 375px screen, and the whole document scrolled sideways.
-            Caught by the responsive sweep on all three browsers, on the one route this component
-            also serves as the dashboard. At phone width the loss keeps the connector that ties it to
-            the stages either side and the figure itself, and the caption rides at the end of the
-            same line instead of holding its own column.
+            The label column and the caption are DROPPED on a phone rather than shrunk — and this is
+            a layout choice, NOT a fix for an overflow.
+
+            It was first written as one, on the arithmetic that a 128px gutter and a 160px caption
+            around a figure that cannot wrap could not fit 375px. Measured afterwards with the fixed
+            widths restored, on the project whose funnel actually produces loss rows: the row came
+            back 301px wide inside a 375px viewport with the document not scrolling at all. The
+            overflow that prompted the change was `h-full` on `StatCard`, isolated separately, and
+            this row was never part of it.
+
+            The behaviour is kept because it is better use of a phone's width — a 288px gutter and
+            caption around a 90px figure spends most of the line on furniture — but the reason is
+            legibility, not a defect, and recording it as a defect would leave a false claim in the
+            file for the next reader to inherit.
           */}
           {lossBefore(rows, i) && (
             <div className="flex items-center gap-2 sm:gap-3" data-testid={`ad-funnel-loss-${s.stage}`}>
