@@ -118,6 +118,52 @@ describe('the primary KPI region is the first analytical block on the page', () 
     }
   })
 
+  /**
+   * And on the Overview itself, EVERY drawing comes before the first block of reasoning.
+   *
+   * «قوم بازالة البيانات هذه من لوحة التحكم نظرة عامة او اجعلها اخر نظرة عامة بالاسفل لان بالاساس
+   * بالنظام الشارت والرسوم التفاعلية.» Moving the diagnosis below the KPI row was not enough: the
+   * curve, the three rate trends and the platform split all still sat underneath it, so the reader
+   * met a paragraph of reasoning before the drawings the product is built on.
+   *
+   * The rule this encodes is the ORDER of the Overview — figures, then everything that draws, then
+   * the reading of why — so it is checked as «the last drawing precedes the first reasoning block»
+   * rather than as a fixed list of positions. Inserting a new chart is free; inserting it below the
+   * diagnosis is what fails.
+   */
+  it('the Overview draws everything it draws before it explains anything', () => {
+    const entry = Object.entries(SOURCES).find(([path]) => path.endsWith('/AnalyticsPage.tsx'))
+    expect(entry, 'AnalyticsPage.tsx was not found').toBeTruthy()
+
+    const whole = bodyOf(entry![1])
+    const start = whole.indexOf('function PerformanceTab(')
+    expect(start, 'PerformanceTab was not found — the guard would pass having read nothing').toBeGreaterThan(-1)
+
+    const next = whole.indexOf('\nfunction ', start + 10)
+    const body = whole.slice(start, next === -1 ? undefined : next)
+
+    /* What the reader came for: the strip, the curve, the rate trends, the platform split. */
+    const DRAWS = ['<MetricStrip', '<Panel', '<RateTrend', '<UnifiedCampaignOverview']
+    /* What is read afterwards, not instead. */
+    const EXPLAINS = ['<DiagnosticPanel', '<ChangeDiagnosis']
+
+    const lastDrawing = DRAWS.map((tag) => {
+      const at = body.lastIndexOf(tag)
+      expect(at, `the Overview renders no ${tag} — this guard is measuring the wrong thing`).toBeGreaterThan(-1)
+      return { tag, at }
+    }).reduce((a, b) => (b.at > a.at ? b : a))
+
+    for (const tag of EXPLAINS) {
+      const at = body.indexOf(tag)
+      expect(at, `the Overview renders no ${tag} — this guard is measuring the wrong thing`).toBeGreaterThan(-1)
+
+      expect(
+        at,
+        `the Overview renders ${tag} before ${lastDrawing.tag} — the reader meets the reasoning before the picture`,
+      ).toBeGreaterThan(lastDrawing.at)
+    }
+  })
+
   /** The guard must have read real files, not an empty glob. */
   it('read the source it claims to guard', () => {
     expect(Object.keys(SOURCES).length).toBeGreaterThan(20)
