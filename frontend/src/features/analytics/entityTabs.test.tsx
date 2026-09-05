@@ -81,9 +81,22 @@ describe('the ad set analysis tab', () => {
     await openAdSets()
 
     expect(await screen.findByText('Riyadh · 18-34')).toBeInTheDocument()
-    expect(screen.getByText('90,000')).toBeInTheDocument()
+
+    /*
+     * NUMBER-PRESENTATION-001 — «لم يتم تقريب الارقام 1k, 3M, 54.5K وهكذا في الجداول».
+     *
+     * These read «90,000» and «45,000» until the entity tables were routed through the product's
+     * value law. Abbreviated is only half the contract, so the exact figure is asserted too: a cell
+     * that says «90K» and cannot say which 90 thousand is a number nobody can audit.
+     */
+    const impressions = screen.getByText('90K')
+    expect(impressions).toBeInTheDocument()
+    expect(impressions.closest('td')).toHaveAttribute('title', '90,000')
+
     // Reach is reported by the provider and never approximated from impressions.
-    expect(screen.getByText('45,000')).toBeInTheDocument()
+    const reach = screen.getByText('45K')
+    expect(reach).toBeInTheDocument()
+    expect(reach.closest('td')).toHaveAttribute('title', '45,000')
   })
 
   /**

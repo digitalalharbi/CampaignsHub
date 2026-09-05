@@ -7,7 +7,6 @@ import {
   Cell,
   Legend,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -32,7 +31,6 @@ import {
   usePlatforms,
   useDrivers,
   useSummary,
-  useTimeseries,
   type EntityRow,
   type MetricFilters,
 } from './hooks'
@@ -46,7 +44,7 @@ import { scopeNote, type FilterScope } from './filterScope'
 import { CAMPAIGN_RELEVANCE_ORDER, orderByRelevanceWith, relevanceOf } from '@/features/campaigns/campaignRelevance'
 import { useCampaignOptionSource } from './useCampaignOptionSource'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
-import { Panel, ProvenanceBadge, RateTrend, SERIES, platformColor, tooltipProps } from './components'
+import { Panel, ProvenanceBadge, SERIES, platformColor, tooltipProps } from './components'
 import { BudgetReading } from './BudgetReading'
 import { FamilyDecisionTable } from './FamilyDecisionTable'
 import { PathAnalysis } from './PathAnalysis'
@@ -54,7 +52,7 @@ import { PathTrends } from './PathTrends'
 import { contentIntelligence, listCreatives, type CreativeCard } from '@/features/content/api'
 import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
-import { plotSeries } from './timeseriesMoney'
+import { AnalyticsOverview, DashboardOverview, useOverviewData } from './OverviewCompositions'
 import { useUrlList, useUrlNumber, useUrlState, useUrlWriter } from './filterUrlState'
 import { familyMoney, familyTotal, type FamilyRow, familySpend } from './familyTotals'
 import { readCostPer, readMoney, readRoas } from '@/lib/money/contract'
@@ -63,14 +61,11 @@ import { readCostPer, readMoney, readRoas } from '@/lib/money/contract'
 const MONEY_KPIS = new Set(['spend', 'revenue'])
 import { SavedViewsBar } from '@/features/dashboard/SavedViewsBar'
 import { useSavedViews, type SavedView } from '@/features/dashboard/savedViews'
-import { MetricStrip } from '@/components/ui/MetricStrip'
 import { Explainer } from '@/components/ui/Explainer'
 import { ChangeDiagnosis } from './ChangeDiagnosis'
 import { ContentReading } from './ContentReading'
 import { DistributionBars } from './DistributionBars'
-import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCampaignOverview'
-import { useOverviewVm } from '@/features/campaigns/overview/useOverviewVm'
-import { SPECS, dashboardMetrics, layoutFor } from './metricCatalog'
+import { SPECS, layoutFor } from './metricCatalog'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro } from '@/components/ui/PageIntro'
@@ -85,7 +80,15 @@ import {
 import { providerLabel } from '@/features/campaigns/labels'
 
 /** The six platforms this product unifies, in the product's own order (PLATFORM-ORDER-001). */
-const ANALYTICS_PLATFORMS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
+/**
+ * The platforms the filter offers, in the shared order.
+ *
+ * Exported because `lib/platforms.test.ts` pins this literal against `PLATFORM_ORDER` — the list is
+ * what drifted historically, and asserting it through the rendered control does not work: the
+ * filter folds by default (SIMPLIFY-001), so a check that reads the page finds no platform names at
+ * all and passes for the wrong reason.
+ */
+export const ANALYTICS_PLATFORMS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
 
 /**
  * CAMPAIGN-OUTCOME-DIMENSION-001 — the actions a campaign can buy, for the filter control.
@@ -112,6 +115,7 @@ const OUTCOME_KEYS = Object.keys(OUTCOME_LABEL)
 
 /** The objectives with a layout elsewhere in the product — the same six the dashboard offers. */
 import { accounts as countedAccounts, countedAr, countedEn, days as countedDays } from '@/lib/counted'
+import { readMetricValue } from '@/lib/metricValue'
 import { useUi } from '@/stores/ui'
 import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
 import { useProject } from '@/stores/project'
@@ -119,7 +123,6 @@ import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { useQuery } from '@tanstack/react-query'
 import { StoreFunnelTab } from './StoreFunnelTab'
 import { AttributionPanel } from './AttributionPanel'
-import { DiagnosticPanel } from './DiagnosticPanel'
 import { AdPoster } from '@/features/content/AdPoster'
 import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
 import {
@@ -224,7 +227,14 @@ const useAr = () => useUi((u) => u.locale) === 'ar'
  * prefixed id keeps that contract literal instead of renaming assertions to follow an implementation
  * detail.
  */
-export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics' | 'dashboard' } = {}) {
+/**
+ * The two routes this page serves. `AnalyticsPage` is one shell — filters, period, project picker,
+ * tab bar — and the surface decides the COMPOSITION of the overview tab beneath it, not a second
+ * copy of any of that.
+ */
+export type Surface = 'analytics' | 'dashboard'
+
+export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } = {}) {
   const ar = useAr()
   const { currentProjectId, setCurrentProjectId } = useProject()
   /*
@@ -491,7 +501,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
         ))}
       </div>
 
-      {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} />}
+      {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />}
       {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'accounts' && <AccountsTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />}
@@ -511,8 +521,11 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: 'analytics'
 
 type TabProps = { projectId: string | null; range: { from: string; to: string }; filters: MetricFilters }
 
-/** The overview tab also needs the objective, because its KPI row is chosen BY the objective. */
-type OverviewTabProps = TabProps & { objective: string }
+/**
+ * The overview tab also needs the objective, because its KPI row is chosen BY the objective — and
+ * the SURFACE, because the Dashboard and Analytics compose the same data into different pages.
+ */
+type OverviewTabProps = TabProps & { objective: string; surface: Surface }
 
 /*
  * The store tab takes no filters, and that is the same rule the dashboard's store strip follows:
@@ -520,262 +533,22 @@ type OverviewTabProps = TabProps & { objective: string }
  * at all, so «Meta's share of the shop's revenue» is not a quantity that exists.
  */
 
-function PerformanceTab({ projectId, range, filters, objective }: OverviewTabProps) {
-  const ar = useAr()
-  const s = useSummary(projectId, range, filters)
-  const ts = useTimeseries(projectId, range, filters)
-  const campaigns = useCampaigns(projectId, range, filters)
-  const platformRows = usePlatforms(projectId, range, filters)
-  const freshness = useFreshness(projectId, range, filters)
-  const budget = useBudget(projectId, range, filters)
+/**
+ * SURFACE-COMPOSITION-001 — the overview tab is a surface router, not a page.
+ *
+ * `/app/dashboard` and `/app/analytics` mount this same component, so whatever order this tab was
+ * given, BOTH surfaces got it — which is how #289's Dashboard hierarchy silently became the
+ * Analytics hierarchy too, and why ANALYTICS-DIFFERENTIATION-001 was violated by a change that
+ * satisfied the Dashboard requirement exactly.
+ *
+ * The engines stay shared and there is still exactly one set of queries: `useOverviewData` issues
+ * them once, and both compositions read the same derivations, the same `MetricStrip`, the same
+ * `ChangeDiagnosis` and the same palette. Only the information architecture forks.
+ */
+function PerformanceTab({ projectId, range, filters, objective, surface }: OverviewTabProps) {
+  const data = useOverviewData({ projectId, range, filters, objective })
 
-  const reportingCurrency = s.data?.currency ?? null
-  const points = ts.data ?? []
-
-  /*
-   * ANALYTICS-TRUTH-002 — the charts read the same source the cards read.
-   *
-   * `points` carries the aggregator's coalesced zeros. Everything plotted below comes from this
-   * reading instead, so a line and the card above it cannot disagree about the same window.
-   */
-  const series = plotSeries(points, reportingCurrency, ar)
-  const chartCurrency = series.currency ?? reportingCurrency ?? 'SAR'
-
-  /*
-   * ANALYTICS-COMPARE-001 — six mute dashes were the page's way of saying «there is no yesterday».
-   *
-   * Production holds 15 days of rows and offers a 30-day range, so the entire comparison window sits
-   * before the first row that exists. Every delta divided by zero and came back null, and each card
-   * printed «— —» beneath a heading promising a comparison — indistinguishable from a month that did
-   * not move. When the comparison window is empty the pills are not rendered at all and the page
-   * says why once, above the strip.
-   */
-  const comparable = s.data?.previous_rows_in_scope !== false
-
-
-  /*
-   * ANALYTICS-AS-DASHBOARD-001 — the headline row is chosen BY the objective.
-   *
-   * Six fixed cards — spend, revenue, ROAS, results, CPA, CTR — answer a sales campaign well and an
-   * awareness campaign not at all: they report a return on ad spend for a campaign that was never
-   * bought to return anything, and never mention reach or frequency, which is what it WAS bought
-   * for. `dashboardMetrics` picks the row the objective is actually judged on, and it is the same
-   * function and the same `MetricStrip` the dashboard used, not a second reading of the same totals.
-   */
-  /*
-   * UX-KPI-PRESENTATION-001 — «المؤشر والرقم والشارت»: the same series `ts` draws the chart from.
-   *
-   * It is already fetched for the graph further down the page, so each card's sparkline costs no
-   * request and cannot contradict the drawing under it.
-   */
-  const metrics = useMemo(
-    () => dashboardMetrics(objective, s.data, ar, ts.data),
-    [objective, s.data, ar, ts.data],
-  )
-
-  /*
-   * ANALYTICS-DIFFERENTIATION-001 — the decomposition and the anomaly timeline, in one request.
-   *
-   * Both halves share the window AND its comparison, which is why they arrive together: two requests
-   * could not be made to agree about which days «the previous period» meant, and a driver list
-   * measured against a different baseline than the timeline beside it would be two diagnoses of one
-   * account.
-   */
-  const drivers = useDrivers(projectId, range, 'provider', 'spend', filters)
-
-  /*
-   * With no comparison window, a delta is not «unchanged» — it does not exist. `undefined` removes
-   * the pill; `null` would still render the «— —» this is here to remove.
-   */
-  const strip = useMemo(
-    () =>
-      comparable
-        ? metrics
-        : {
-            primary: metrics.primary.map((m) => ({ ...m, delta: undefined })),
-            secondary: metrics.secondary.map((m) => ({ ...m, delta: undefined })),
-          },
-    [metrics, comparable],
-  )
-
-  const vm = useOverviewVm({
-    campaigns: campaigns.data,
-    platforms: platformRows.data,
-    freshness: freshness.data?.rows,
-    budget: budget.data,
-    currency: reportingCurrency,
-    source: s.data?.provenance?.source,
-    ar,
-  })
-
-  return (
-    <div className="space-y-4">
-      {!comparable && s.data && (
-        <p
-          data-testid="no-comparison-period"
-          className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary"
-        >
-          <span className="font-semibold text-text-primary">{ar ? 'لا توجد مقارنة: ' : 'No comparison: '}</span>
-          {ar
-            ? `الفترة السابقة (${s.data.previous_range.from} → ${s.data.previous_range.to}) لا تحتوي أي بيانات، فلا يوجد شيء تُقاس عليه هذه الفترة.`
-            : `The previous period (${s.data.previous_range.from} → ${s.data.previous_range.to}) holds no data, so there is nothing for this one to be measured against.`}
-        </p>
-      )}
-
-      <MetricStrip
-        id="dashboard"
-        ar={ar}
-        primary={strip.primary}
-        secondary={strip.secondary}
-        hasRows={s.data === undefined ? undefined : s.data.rows_in_scope}
-        /*
-          METRICS-REQUEST-STATE-001 — and a request that failed or has not answered says so.
-
-          `data` is undefined for a failure and for a load alike, so without these the row rendered with
-          nothing to read and every card printed «لا توجد بيانات» — a confident statement about this
-          account's advertising, made by a request that never came back.
-        */
-        loading={s.isPending}
-        error={s.isError ? s.error : undefined}
-        onRetry={() => void s.refetch()}
-      />
-
-      {/*
-       * ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — directly beneath the figures that raise the question.
-       *
-       * The strip above says WHAT happened. This says where along the journey it went wrong, reading
-       * the same `useSummary` entry the strip read — the same totals and the same `reported` map, so
-       * the two cannot disagree about the account they are both describing. The request state is
-       * forwarded rather than re-derived for the same reason.
-       */}
-      <DiagnosticPanel
-        objective={objective}
-        totals={s.data?.current as Record<string, number | null | undefined> | undefined}
-        reported={s.data?.reported}
-        rowsInScope={s.data?.rows_in_scope}
-        loading={s.isPending}
-        error={s.isError ? s.error : undefined}
-        onRetry={() => void s.refetch()}
-        ar={ar}
-      />
-      {/* The comparisons, the details and the alerts — «أ», shared with the marketing preview. */}
-      <UnifiedCampaignOverview vm={vm} lang={ar ? 'ar' : 'en'} />
-      {/*
-       * REPORT-OBJECTIVE-005 — «النتائج» above is the SUM of what each platform claimed.
-       *
-       * One sale clicked from two platforms is reported in full by both, and there is no shared key
-       * that would prove they are the same sale — so the figure is not a count of unique orders, and
-       * it must not be read as one. The sentence comes from the API rather than being written here, so
-       * the dashboard, the report and the client's link cannot end up saying different things about
-       * the same number. Shown only when more than one platform contributed: a single platform cannot
-       * overlap with itself, and a warning about an impossible risk trains readers to ignore warnings.
-       */}
-      {s.data?.conversions_basis.may_double_count && (
-        <p
-          data-testid="conversions-basis"
-          className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary"
-        >
-          <span className="font-semibold text-text-primary">{ar ? '«النتائج»: ' : 'Results: '}</span>
-          {ar ? s.data.conversions_basis.note_ar : s.data.conversions_basis.note_en}
-        </p>
-      )}
-      {/*
-        ANALYTICS-TRUTH-002 — the chart the KPI strip contradicted.
-
-        It plotted `dataKey="spend"` off the raw row and withdrew both money lines whenever the
-        window's money was withheld, leaving a single «النتائج» line under a title naming three. The
-        money was never missing — it was unconverted, and the card above already stated it. Both
-        lines are drawn from the same reading, in whatever currency that reading is honestly in, and
-        the axis says which.
-      */}
-      <Panel
-        title={ar ? 'الإنفاق والنتائج والإيرادات' : 'Spend, results and revenue'}
-        description={
-          series.basis === 'original'
-            ? ar
-              ? `المال معروض بعملة المنصة (${series.currency}) — ${series.note ?? ''}`
-              : `Money shown in the platform's own currency (${series.currency}) — ${series.note ?? ''}`
-            : ar
-              ? 'الاتجاه اليومي للإنفاق والإيرادات والنتائج'
-              : 'Spend, revenue and results, day by day'
-        }
-        loading={ts.isLoading}
-        error={ts.isError}
-        empty={!ts.isLoading && series.rows.length === 0}
-      >
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={series.rows} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-              <XAxis dataKey="date" tick={axis} tickFormatter={(v) => String(v).slice(5)} minTickGap={24} />
-              {/*
-                Money and counts are different units, so they get different axes. Drawing 4,787 USD
-                and 218 results against one scale flattens the smaller series onto the floor — which
-                is the shape the old chart had even before the money went missing.
-              */}
-              <YAxis yAxisId="money" tick={axis} tickFormatter={(v) => compact(Number(v))} width={52} />
-              <YAxis yAxisId="count" orientation={ar ? 'left' : 'right'} tick={axis} tickFormatter={(v) => compact(Number(v))} width={44} />
-              <Tooltip
-                {...tooltipProps}
-                formatter={(v: number, name: string) =>
-                  name === (ar ? 'النتائج' : 'Results') ? num(v) : money(v, chartCurrency)
-                }
-              />
-              <Legend wrapperStyle={{ fontSize: 13 }} />
-              {series.hasMoney && series.basis !== 'mixed' && (
-                <Line yAxisId="money" name={ar ? 'الإنفاق' : 'Spend'} type="monotone" dataKey="spend" stroke={SERIES.spend} strokeWidth={2} dot={false} connectNulls />
-              )}
-              {series.hasMoney && series.basis !== 'mixed' && (
-                <Line yAxisId="money" name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} connectNulls />
-              )}
-              <Line yAxisId="count" name={ar ? 'النتائج' : 'Results'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        {series.basis === 'mixed' && (
-          <p data-testid="series-currency-mixed" className="mt-2 text-xs text-text-secondary">{series.note}</p>
-        )}
-      </Panel>
-
-      {/*
-        DASHBOARD-HIERARCHY — the diagnosis sits BELOW the KPI row, and the note here used to argue
-        the opposite.
-
-        It reasoned that a reader who opens Analytics has already seen «what is happening», so
-        leading with «what changed and who moved it» was the point of the page. The owner's
-        correction overrides that: «never insert diagnostic cards, change-driver cards,
-        recommendation cards, alerts or explanatory cards ABOVE the primary KPI row — the first thing
-        the user sees must remain the campaign performance indicators.»
-
-        Analytics stays materially different from the Dashboard, but through what the requirement
-        actually asks for — a mixed analytical grid, chart types chosen per question, decomposition,
-        distribution and evidence — rather than by pushing the figures down the page. The strip is
-        the same totals in the same window as the diagnosis beneath it, so the two still cannot
-        disagree about the account they describe.
-      */}
-      <ChangeDiagnosis
-        data={drivers.data}
-        currency={reportingCurrency}
-        loading={drivers.isPending}
-        error={drivers.isError}
-        // The same series the graph below this block draws, so a marked day sits on the curve the
-        // reader is already looking at rather than on a second one fetched for the purpose.
-        series={points}
-      />
-      {/*
-        Three metrics, three units — «3.20x», «21.96 USD» and «0.72%» share no axis. On one scale the
-        two small numbers lie flat on the floor and the chart says nothing, which is what shipped:
-        a single line at zero under a title naming three metrics, one of which was never plotted.
-
-        Each gets its own panel and its own scale, so each is readable.
-      */}
-      <div className="grid gap-3 lg:grid-cols-3">
-        <RateTrend title="ROAS" data={series.rows} dataKey="roas" color={SERIES.revenue} loading={ts.isLoading} error={ts.isError} format={(v: number) => ratio(v)} />
-        <RateTrend title="CPA" data={series.rows} dataKey="cpa" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => money(v, chartCurrency)} />
-        <RateTrend title="CTR" data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} />
-      </div>
-    </div>
-  )
+  return surface === 'dashboard' ? <DashboardOverview {...data} /> : <AnalyticsOverview {...data} />
 }
 
 
@@ -1156,7 +929,24 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
   const worst = [...rows].filter((r) => r.spend > 0).sort((a, b) => (a.roas ?? 0) - (b.roas ?? 0))[0]
   return (
     <div className="space-y-4">
-            {/*
+      {/*
+        DASHBOARD-HIERARCHY — above the table, on every tab that is not «نظرة عامة».
+
+        «هذي تكون اعلى كل تصنيف في لوحة التحكم والتحليلات باستثناء على نظرة عامة تكون بمكانها الحالي
+        بالاسفل.» The decomposition leads each drill-down tab: a reader who opened it is asking which
+        of these moved the account, and the table below is what they check the answer against. On
+        «نظرة عامة» it keeps the position it has, at the bottom — that surface answers «ماذا يحدث»
+        and the figures lead it.
+      */}
+      <ChangeDiagnosis
+        data={drivers.data}
+        currency={s.data?.currency ?? null}
+        loading={drivers.isPending}
+        error={drivers.isError}
+        title={ar ? 'أي الحملات حرّكت الحساب' : 'Which campaigns moved the account'}
+      />
+
+      {/*
         VISUAL-FIRST-001 / clause D — «CAMPAIGN DISTRIBUTION → contribution/distribution bars».
 
         The block above decomposes what MOVED. This shows where the money SITS, which is a different
@@ -1232,13 +1022,6 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
         />
       </Panel>
 
-      <ChangeDiagnosis
-        data={drivers.data}
-        currency={s.data?.currency ?? null}
-        loading={drivers.isPending}
-        error={drivers.isError}
-        title={ar ? 'أي الحملات حرّكت الحساب' : 'Which campaigns moved the account'}
-      />
     </div>
   )
 }
@@ -2260,6 +2043,31 @@ function metricOrDash(value: number | null | undefined, digits = 0): string {
     : '—'
 }
 
+/**
+ * NUMBER-PRESENTATION-001 — a count in a table is abbreviated, and its exact value is reachable.
+ *
+ * «لم يتم تقريب الارقام 1k, 3M, 54.5K وهكذا في الجداول في المجموعات الاعلانية والاعلانات.»
+ *
+ * These columns printed `toLocaleString` straight — «1,284,663» in a cell sized for four glyphs, on
+ * the two widest tables in the product, while every other analytical surface abbreviated the same
+ * metric. Nobody chose that: the entity tables build their own cells and so never passed through the
+ * value law the rest of the product reads counts by.
+ *
+ * They pass through it now. `readMetricValue('number', …)` is the SAME function `DataMetricTable`
+ * calls, so «1.28M» here and «1.28M» on a KPI card agree by construction rather than by both
+ * happening to call `compact`. The exact figure travels with the cell as its `title`, which is the
+ * contract that lets a table abbreviate at all — an abbreviated number with no way back to the
+ * original is a number the reader cannot audit.
+ *
+ * `digits` is still honoured for frequency, which is «2.4 times», not a count to abbreviate: the law
+ * abbreviates only when there is a magnitude worth abbreviating, and 2.4 is not one.
+ */
+function countCell(value: number | null | undefined): { text: string; exact: string | null } {
+  const read = readMetricValue('number', value ?? null)
+
+  return { text: read.text, exact: read.exact }
+}
+
 /** A rate, or «—». Same rule: an unavailable ratio is not a ratio of zero. */
 function rateOrDash(value: number | null | undefined): string {
   return typeof value === 'number' ? `${(value * 100).toFixed(2)}%` : '—'
@@ -2509,7 +2317,7 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
               // The row's own figures — the numbers the reader is looking at, not a second query.
               figures: [
                 { label: ar ? 'الإنفاق' : 'Spend', value: rowMoney(row, 'spend', currency) },
-                { label: ar ? 'الظهور' : 'Impressions', value: metricOrDash(row.impressions) },
+                { label: ar ? 'الظهور' : 'Impressions', value: countCell(row.impressions).text },
                 { label: 'CTR', value: rateOrDash(row.ctr) },
               ],
             })
@@ -2560,15 +2368,38 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
      */
     <EntityState key={`state-${row.entity_id}`} row={row} windowEnd={windowEnd} ar={ar} />,
     rowMoney(row, 'spend', currency),
-    metricOrDash(row.impressions),
-    metricOrDash(row.reach),
+    countCell(row.impressions).text,
+    countCell(row.reach).text,
+    /* Frequency is «2.4 times», not a magnitude — it is read exactly, as it always was. */
     metricOrDash(row.frequency, 2),
-    metricOrDash(row.clicks),
+    countCell(row.clicks).text,
     rateOrDash(row.ctr),
     rowCostPer(row, 'cpc', row.clicks ?? 0, currency),
     rowCostPer(row, 'cpm', (row.impressions ?? 0) / 1000, currency),
-    metricOrDash(row.conversions),
+    countCell(row.conversions).text,
     rowCostPer(row, 'cpa', row.conversions ?? 0, currency),
+  ])
+
+  /*
+   * NUMBER-PRESENTATION-001 — the exact figure behind each abbreviated one, per cell.
+   *
+   * An abbreviation with no way back to the original is a number the reader cannot audit, and that
+   * is the whole reason the table is allowed to abbreviate. Positions match `cells` above; a column
+   * that was never abbreviated carries `null` and gets no tooltip.
+   */
+  const exact: (string | null)[][] = rows.map((row) => [
+    null,                                   // name
+    null,                                   // state
+    null,                                   // spend — money carries its own exact value
+    countCell(row.impressions).exact,
+    countCell(row.reach).exact,
+    null,                                   // frequency
+    countCell(row.clicks).exact,
+    null,                                   // CTR
+    null,                                   // CPC
+    null,                                   // CPM
+    countCell(row.conversions).exact,
+    null,                                   // CPA
   ])
 
   /*
@@ -2607,6 +2438,26 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
 
   return (
     <div className="space-y-4">
+      {/*
+        DASHBOARD-HIERARCHY — above the table, on every tab that is not «نظرة عامة».
+
+        «هذي تكون اعلى كل تصنيف في لوحة التحكم والتحليلات باستثناء على نظرة عامة تكون بمكانها الحالي
+        بالاسفل.» The decomposition leads each drill-down tab: a reader who opened «المجموعات» is
+        asking which of them moved the account, and the table is what they check the answer against.
+        On the overview it keeps the position it has, at the bottom — that surface answers «ماذا
+        يحدث» and the figures lead it.
+
+        Only on the ad-set tab: there is no decomposition of an AD by ad.
+      */}
+      {level === 'ad_set' && (
+        <ChangeDiagnosis
+          data={adSetDrivers.data}
+          currency={currency}
+          loading={adSetDrivers.isPending}
+          error={adSetDrivers.isError}
+        />
+      )}
+
       <DrillCrumbs path={path} level={level} ar={ar} onUpTo={(lvl) => go(drillUpTo(path, lvl), lvl)} />
       <Panel
         title={heading}
@@ -2636,7 +2487,7 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
               still sortable; the reader chooses, and the default is the answer to the question they
               opened the tab with.
             */}
-            <MetricTable head={head} rows={cells} values={values} />
+            <MetricTable head={head} rows={cells} values={values} exact={exact} />
 
             {openAd && (
               <AdPreviewDialog
@@ -2650,24 +2501,6 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
         )}
       </Panel>
 
-      {/*
-        DASHBOARD-HIERARCHY — below the table, not above it.
-
-        «The system is built on the primary picture of the data: the cards, and beneath them the
-        chart and the analytical side.» This decomposition answers «which of the things underneath
-        moved», which is the analytical side — it belongs after the figures a reader came to read,
-        on every surface that has them, not only on the Dashboard.
-
-        Only on the ad-set tab: there is no decomposition of an AD by ad.
-      */}
-      {level === 'ad_set' && (
-        <ChangeDiagnosis
-          data={adSetDrivers.data}
-          currency={currency}
-          loading={adSetDrivers.isPending}
-          error={adSetDrivers.isError}
-        />
-      )}
     </div>
   )
 }
@@ -2729,6 +2562,22 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
 
   return (
     <div className="space-y-4">
+      {/*
+        ANALYTICS-DIFFERENTIATION-001 — the objective decomposition, ABOVE the per-family breakdown.
+
+        The panel below answers «how did each objective do», which is a report. This answers «what
+        moved between them», which is a diagnosis — and it is the one axis a platform split cannot
+        show: an account can spend exactly the same on exactly the same platforms and return less
+        because the money moved from sales to awareness. Every platform looks unchanged; the whole
+        answer is in what the money was BOUGHT for.
+      */}
+      <ChangeDiagnosis
+        data={drivers.data}
+        currency={currency}
+        loading={drivers.isPending}
+        error={drivers.isError}
+        title={ar ? 'ما الذي تغيّر بين الأهداف' : 'What moved between the objectives'}
+      />
 
       <Panel
         title={ar ? 'الأداء حسب الهدف' : 'Performance by objective'}
@@ -2884,22 +2733,6 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
         explanations={explanations.data?.paths ?? []}
         loading={leaders.isLoading}
         error={leaders.isError}
-      />
-      {/*
-        ANALYTICS-DIFFERENTIATION-001 — the objective decomposition, ABOVE the per-family breakdown.
-
-        The panel below answers «how did each objective do», which is a report. This answers «what
-        moved between them», which is a diagnosis — and it is the one axis a platform split cannot
-        show: an account can spend exactly the same on exactly the same platforms and return less
-        because the money moved from sales to awareness. Every platform looks unchanged; the whole
-        answer is in what the money was BOUGHT for.
-      */}
-      <ChangeDiagnosis
-        data={drivers.data}
-        currency={currency}
-        loading={drivers.isPending}
-        error={drivers.isError}
-        title={ar ? 'ما الذي تغيّر بين الأهداف' : 'What moved between the objectives'}
       />
     </div>
   )
@@ -3099,8 +2932,8 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
               <span key={`${cr.id}-c`} className="block max-w-40 truncate text-text-secondary">{cr.campaign_name ?? '—'}</span>,
               cr.objective ?? '—',
               rowMoney(cr.metrics ?? undefined, 'spend', currency),
-              metricOrDash(cr.metrics?.impressions ?? null),
-              metricOrDash(cr.metrics?.clicks ?? null),
+              countCell(cr.metrics?.impressions ?? null).text,
+              countCell(cr.metrics?.clicks ?? null).text,
               rateOrDash(cr.metrics?.ctr ?? null),
               cr.freshness?.last_active_at ? fmtDate(cr.freshness.last_active_at) : '—',
             ])}
@@ -3211,7 +3044,24 @@ function AccountsTab({ projectId, range, filters }: TabProps) {
 
   return (
     <>
-    <Panel
+      {/*
+        DASHBOARD-HIERARCHY — above the table, on every tab that is not «نظرة عامة».
+
+        «هذي تكون اعلى كل تصنيف في لوحة التحكم والتحليلات باستثناء على نظرة عامة تكون بمكانها الحالي
+        بالاسفل.» The decomposition leads each drill-down tab: a reader who opened it is asking which
+        of these moved the account, and the table below is what they check the answer against. On
+        «نظرة عامة» it keeps the position it has, at the bottom — that surface answers «ماذا يحدث»
+        and the figures lead it.
+      */}
+      <ChangeDiagnosis
+        data={drivers.data}
+        currency={currency}
+        loading={drivers.isPending}
+        error={drivers.isError}
+        title={ar ? 'ما الذي تغيّر بين الحسابات' : 'What moved between the accounts'}
+      />
+
+      <Panel
       title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'}
       description={ar ? 'الأعلى إنفاقًا أولًا — ويمكن الترتيب بأي عمود' : 'Highest spend first — sortable by any column'}
       loading={a.isLoading}
@@ -3223,13 +3073,6 @@ function AccountsTab({ projectId, range, filters }: TabProps) {
       </div>
     </Panel>
 
-      <ChangeDiagnosis
-        data={drivers.data}
-        currency={currency}
-        loading={drivers.isPending}
-        error={drivers.isError}
-        title={ar ? 'ما الذي تغيّر بين الحسابات' : 'What moved between the accounts'}
-      />
     </>
   )
 }

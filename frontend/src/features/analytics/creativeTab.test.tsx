@@ -81,7 +81,8 @@ describe('the ad analysis tab', () => {
 
     expect(table).toHaveTextContent('Summer hero')
     expect(table).toHaveTextContent('Always-On')
-    expect(table).toHaveTextContent('90,000')
+    /* NUMBER-PRESENTATION-001 — abbreviated, like every other count in the product. */
+    expect(table).toHaveTextContent('90K')
   })
 
   /** Withheld spend keeps its own currency here too — one money contract across every surface. */
