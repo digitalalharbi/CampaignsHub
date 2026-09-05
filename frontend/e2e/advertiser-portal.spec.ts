@@ -122,9 +122,49 @@ test.describe('the advertiser portal', () => {
 
     await expect(roas).toContainText('العائد على الإنفاق', { timeout: 20000 })
 
+    /*
+     * FILTER-LOCALE-EMPTY-STATE-OBS — watch EVERY state the strip passes through, not the last one.
+     *
+     * The observation was: «switching language after selecting Objective=Sales produced ‹No data
+     * matches these filters› moments after the same objective rendered its ROAS KPI». The assertions
+     * below could never have caught that. They retry for twenty seconds, so a strip that flickered
+     * into `empty-scope` and recovered would satisfy them exactly as a strip that never flickered —
+     * and the only reason the gate ever saw it was that one run happened to be sampled mid-flicker.
+     * «Element not found, retried, passed» is how a real defect is filed as flake.
+     *
+     * A MutationObserver installed BEFORE the toggle records the whole sequence, so the claim is
+     * about the transition rather than about whichever instant the assertion happened to sample.
+     * The recorded list is asserted non-empty and asserted to END on `rows`, because an observer
+     * that attached to nothing would otherwise report «no empty-scope seen» having seen nothing at
+     * all — which is the shape of a guard that closes an observation by looking away from it.
+     *
+     * If this never fires, the row closes with evidence. If it does, it arrives with the sequence.
+     */
+    await page.evaluate(() => {
+      const strip = document.querySelector('[data-testid="dashboard-metrics"]')
+      const w = window as unknown as { __stripStates?: string[] }
+      w.__stripStates = strip ? [strip.getAttribute('data-strip-state') ?? 'none'] : []
+
+      new MutationObserver(() => {
+        const el = document.querySelector('[data-testid="dashboard-metrics"]')
+        const state = el?.getAttribute('data-strip-state') ?? 'none'
+
+        if (w.__stripStates![w.__stripStates!.length - 1] !== state) w.__stripStates!.push(state)
+      }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-strip-state'] })
+    })
+
     await toggleLanguage(page)
     await expect(roas).toContainText('Return on ad spend', { timeout: 20000 })
     await expect(roas).not.toContainText('العائد على الإنفاق')
+
+    const states = await page.evaluate(() => (window as unknown as { __stripStates: string[] }).__stripStates)
+
+    expect(states.length, 'the observer recorded nothing — it attached to the wrong element').toBeGreaterThan(0)
+    expect(states.at(-1), `the strip settled on «${states.at(-1)}» rather than on its rows: ${states.join(' → ')}`).toBe('rows')
+    expect(
+      states,
+      `the strip passed through «empty-scope» for an objective that has rows: ${states.join(' → ')}`,
+    ).not.toContain('empty-scope')
   })
 
   /**
