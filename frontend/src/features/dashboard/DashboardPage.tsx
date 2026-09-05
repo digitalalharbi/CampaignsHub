@@ -556,24 +556,6 @@ export function DashboardPage() {
         onRetry={() => void summary.refetch()}
       />
       {/*
-        DASHBOARD-HIERARCHY — the finding sits BELOW the KPI row, and that position is a requirement.
-        «The top of the Dashboard is permanently reserved for the PRIMARY PERFORMANCE KPIs … never
-        insert diagnostic cards, change-driver cards, recommendation cards, alerts or explanatory
-        cards ABOVE the primary KPI row. The first thing the user sees must remain the campaign
-        performance indicators.» This line is a diagnostic with a warning icon; it was the first
-        thing on the page, so a healthy account showed its numbers second and a struggling one led
-        with an alarm before the reader had seen a single figure.
-      */}
-      <ConciseFindingLine
-        objective={objective}
-        totals={summary.data?.current as Record<string, number | null | undefined> | undefined}
-        reported={summary.data?.reported}
-        rowsInScope={summary.data?.rows_in_scope}
-        pending={summary.isPending || summary.isError}
-        ar={ar}
-      />
-
-      {/*
         DASH-ORDER-001 — the answer first, the working underneath.
         
         The page used to open on a day-by-day trend chart and a funnel, and put «which platform, which
@@ -800,6 +782,31 @@ export function DashboardPage() {
           {ar ? 'افتح الإعلانات' : 'Open ads'} <ArrowUpRight size={13} aria-hidden />
         </Link>
       </div>
+
+      {/*
+        DASHBOARD-HIERARCHY — the finding is the LAST thing on the page, and that position is a
+        requirement twice over.
+
+        First: «The top of the Dashboard is permanently reserved for the PRIMARY PERFORMANCE KPIs …
+        never insert diagnostic cards, change-driver cards, recommendation cards, alerts or
+        explanatory cards ABOVE the primary KPI row.» This line is a diagnostic with a warning icon;
+        it was once the first thing on the page, so a healthy account showed its numbers second and
+        a struggling one led with an alarm before the reader had seen a single figure.
+
+        Then, below the KPI row was still too high: «قوم بازالة البيانات هذه من لوحة التحكم نظرة
+        عامة او اجعلها اخر نظرة عامة بالاسفل لان بالاساس بالنظام الشارت والرسوم التفاعلية». The
+        platform split, the trend, the funnel and the store all sat underneath it, so a sentence of
+        reasoning still came before the drawings this product is built on. It reads the same summary
+        it always read; it is read last.
+      */}
+      <ConciseFindingLine
+        objective={objective}
+        totals={summary.data?.current as Record<string, number | null | undefined> | undefined}
+        reported={summary.data?.reported}
+        rowsInScope={summary.data?.rows_in_scope}
+        pending={summary.isPending || summary.isError}
+        ar={ar}
+      />
 
       <LivePerformanceNotice variant="compact" />
     </div>
