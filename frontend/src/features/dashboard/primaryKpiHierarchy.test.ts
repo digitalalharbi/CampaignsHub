@@ -119,47 +119,72 @@ describe('the primary KPI region is the first analytical block on the page', () 
   })
 
   /**
-   * And on the Overview itself, EVERY drawing comes before the first block of reasoning.
+   * And on the surfaces themselves, EVERY drawing comes before the first block of reasoning.
    *
    * «قوم بازالة البيانات هذه من لوحة التحكم نظرة عامة او اجعلها اخر نظرة عامة بالاسفل لان بالاساس
    * بالنظام الشارت والرسوم التفاعلية.» Moving the diagnosis below the KPI row was not enough: the
-   * curve, the three rate trends and the platform split all still sat underneath it, so the reader
-   * met a paragraph of reasoning before the drawings the product is built on.
+   * curve, the rate trends, the funnel and the platform split all still sat underneath it, so the
+   * reader met a paragraph of reasoning before the drawings the product is built on.
    *
-   * The rule this encodes is the ORDER of the Overview — figures, then everything that draws, then
-   * the reading of why — so it is checked as «the last drawing precedes the first reasoning block»
+   * The rule this encodes is the ORDER of a surface — figures, then everything that draws, then the
+   * reading of why — so it is checked as «the last drawing precedes the first reasoning block»
    * rather than as a fixed list of positions. Inserting a new chart is free; inserting it below the
    * diagnosis is what fails.
    */
-  it('the Overview draws everything it draws before it explains anything', () => {
-    const entry = Object.entries(SOURCES).find(([path]) => path.endsWith('/AnalyticsPage.tsx'))
-    expect(entry, 'AnalyticsPage.tsx was not found').toBeTruthy()
+  const ORDERED = [
+    {
+      what: 'the Analytics Overview',
+      file: 'AnalyticsPage.tsx',
+      /* Scoped to the tab, because the file holds a dozen others. */
+      scope: 'function PerformanceTab(',
+      draws: ['<MetricStrip', '<Panel', '<RateTrend', '<UnifiedCampaignOverview'],
+      explains: ['<DiagnosticPanel', '<ChangeDiagnosis'],
+    },
+    {
+      /*
+       * `DashboardPage.tsx` is NOT what `/app/dashboard` renders — the route is
+       * `<AnalyticsPage surface="dashboard" />`, and this file is imported by nothing but its own
+       * four test files. It is kept in the same order as the surface it used to be, so that
+       * re-mounting it cannot quietly reintroduce the inversion; it is named here for what it is
+       * rather than as «the Dashboard», because a guard that overstates its subject is worse than
+       * no guard.
+       */
+      what: 'the unrouted DashboardPage',
+      file: 'DashboardPage.tsx',
+      scope: null,
+      draws: ['<MetricStrip', '<UnifiedCampaignOverview', '<Panel'],
+      explains: ['<ConciseFindingLine'],
+    },
+  ] as const
+
+  it.each(ORDERED)('$what draws everything it draws before it explains anything', ({ file, scope, draws, explains }) => {
+    const entry = Object.entries(SOURCES).find(([path]) => path.endsWith(`/${file}`))
+    expect(entry, `${file} was not found — the guard would pass having read nothing`).toBeTruthy()
 
     const whole = bodyOf(entry![1])
-    const start = whole.indexOf('function PerformanceTab(')
-    expect(start, 'PerformanceTab was not found — the guard would pass having read nothing').toBeGreaterThan(-1)
+    let body = whole
+    if (scope) {
+      const start = whole.indexOf(scope)
+      expect(start, `${scope} was not found — the guard would pass having read nothing`).toBeGreaterThan(-1)
+      const next = whole.indexOf('\nfunction ', start + 10)
+      body = whole.slice(start, next === -1 ? undefined : next)
+    }
 
-    const next = whole.indexOf('\nfunction ', start + 10)
-    const body = whole.slice(start, next === -1 ? undefined : next)
+    const lastDrawing = draws
+      .map((tag) => {
+        const at = body.lastIndexOf(tag)
+        expect(at, `${file} renders no ${tag} — this guard is measuring the wrong thing`).toBeGreaterThan(-1)
+        return { tag, at }
+      })
+      .reduce((a, b) => (b.at > a.at ? b : a))
 
-    /* What the reader came for: the strip, the curve, the rate trends, the platform split. */
-    const DRAWS = ['<MetricStrip', '<Panel', '<RateTrend', '<UnifiedCampaignOverview']
-    /* What is read afterwards, not instead. */
-    const EXPLAINS = ['<DiagnosticPanel', '<ChangeDiagnosis']
-
-    const lastDrawing = DRAWS.map((tag) => {
-      const at = body.lastIndexOf(tag)
-      expect(at, `the Overview renders no ${tag} — this guard is measuring the wrong thing`).toBeGreaterThan(-1)
-      return { tag, at }
-    }).reduce((a, b) => (b.at > a.at ? b : a))
-
-    for (const tag of EXPLAINS) {
+    for (const tag of explains) {
       const at = body.indexOf(tag)
-      expect(at, `the Overview renders no ${tag} — this guard is measuring the wrong thing`).toBeGreaterThan(-1)
+      expect(at, `${file} renders no ${tag} — this guard is measuring the wrong thing`).toBeGreaterThan(-1)
 
       expect(
         at,
-        `the Overview renders ${tag} before ${lastDrawing.tag} — the reader meets the reasoning before the picture`,
+        `${file} renders ${tag} before ${lastDrawing.tag} — the reader meets the reasoning before the picture`,
       ).toBeGreaterThan(lastDrawing.at)
     }
   })
