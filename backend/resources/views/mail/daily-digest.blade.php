@@ -129,7 +129,19 @@
                         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px; font-size:13px;">
                             @foreach ($p['paths'] as $path)
                                 <tr>
-                                    <td style="padding:6px 0; border-bottom:1px solid #eef2f1; color:#0f172a;">{{ $path['label'] }}</td>
+                                    <td width="28%" style="padding:6px 0; border-bottom:1px solid #eef2f1; color:#0f172a;">{{ $path['label'] }}</td>
+                                    {{--
+                                        The share of spend, drawn. Nested table with a percentage-width
+                                        cell — the same email-safe technique the funnel below already
+                                        uses, which is what proves it renders in the clients this
+                                        product sends to. «Where did the money go» is read from bar
+                                        lengths in one pass and from a column of figures in several.
+                                    --}}
+                                    <td width="30%" style="padding:6px 0; border-bottom:1px solid #eef2f1;">
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef2f1; border-radius:4px;">
+                                            <tr><td width="{{ $path['width'] }}%" style="background-color:#0f766e; height:8px; line-height:8px; border-radius:4px; font-size:0;">&nbsp;</td><td>&nbsp;</td></tr>
+                                        </table>
+                                    </td>
                                     <td style="padding:6px 0; border-bottom:1px solid #eef2f1; color:#0f172a; text-align:{{ $endSide }};" dir="ltr">{{ $path['spend'] }}</td>
                                     <td style="padding:6px 0; border-bottom:1px solid #eef2f1; color:#5b6b68; text-align:{{ $endSide }};" dir="ltr">{{ $path['result'] }}</td>
                                 </tr>
