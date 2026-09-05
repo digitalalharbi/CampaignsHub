@@ -417,9 +417,34 @@ final class AccountMetricsSyncer
         Carbon $from,
         Carbon $to,
     ): void {
-        // The campaigns this account owns — the parents of the ad-squad grain.
+        /*
+         * The campaigns this account owns — the parents of the ad-squad grain.
+         *
+         * SANDBOX-PROD-001 / SNAP-AD-STATS-ROUTE-001 — a row the SANDBOX wrote is never asked of a
+         * live provider.
+         *
+         * Production recorded «Snapchat Marketing API could not return ad stats: Request URL can not
+         * be correctly processed [path: /v1/campaigns/sbx-cmp-1/stats]» on the live bound account,
+         * and the diagnosis then counted them: TWO sandbox campaigns sitting under that account —
+         * `sbx-cmp-1` and `sbx-cmp-2`, the pair `SandboxAdvertisingConnector` seeds. This plucked
+         * every `external_id` it found, so both became live Snapchat requests on every sweep: 48
+         * sweeps a day, 96 refusals the provider was right to give, each one an unexplained line in
+         * a run log somebody has to read past to find a real failure.
+         *
+         * The rule is the one SANDBOX-PROD-001 already draws, one layer down: the sandbox may write
+         * rows, and those rows may never leave for a real API. Filtered on the connector's own
+         * `raw.sandbox` marker rather than on an `sbx-` prefix — a prefix is a guess about a string,
+         * and a provider is entitled to name a real campaign anything it likes.
+         *
+         * The rows are NOT deleted and the census that found them is not removed: `integrations:diagnose`
+         * keeps printing «SANDBOX campaigns on this account: N», so they stay visible instead of
+         * becoming a silent exclusion nobody can audit. Why they are there at all is still open.
+         */
         $campaigns = ExternalCampaign::withoutGlobalScopes()
             ->where('external_account_id', $account->id)
+            ->where(function ($q): void {
+                $q->whereNull('raw')->orWhereJsonDoesntContain('raw->sandbox', true);
+            })
             ->pluck('external_id', 'id');
 
         $squadRows = $this->grain(
