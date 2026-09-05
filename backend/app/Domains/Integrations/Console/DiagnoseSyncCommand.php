@@ -155,9 +155,31 @@ final class DiagnoseSyncCommand extends Command
 
         $connection = ProviderConnection::withoutGlobalScopes()->find($account->provider_connection_id);
 
-        $campaigns = ExternalCampaign::withoutGlobalScopes()
+        /*
+         * SANDBOX-PROD-001 §2 — stored rows are not the same fact as provider discovery.
+         *
+         * This counted every `external_campaigns` row on the account and printed it as «campaigns
+         * discovered», which is a claim about what the PROVIDER returned. On the live Meta account
+         * the two numbers were 2 and 0: the provider's own structure sweep returned `no_data
+         * records=0`, and the only two rows stored were sandbox campaigns written by the binding-sync
+         * defect. The diagnosis therefore reported a working discovery for an account that had
+         * discovered nothing — the single most misleading line it could print, on the account whose
+         * emptiness was the thing being investigated.
+         *
+         * Three separate numbers now, because they answer three separate questions: what the provider
+         * gave us, what is contaminated, and what is stored in total. A reader can see at a glance
+         * that 0 + 2 = 2 rather than inferring a discovery that never happened.
+         */
+        $stored = ExternalCampaign::withoutGlobalScopes()
             ->where('external_account_id', $account->getKey())
             ->count();
+
+        $contaminated = ExternalCampaign::withoutGlobalScopes()
+            ->where('external_account_id', $account->getKey())
+            ->whereJsonContains('raw->sandbox', true)
+            ->count();
+
+        $campaigns = $stored - $contaminated;
 
         $this->line('');
         $this->line(str_repeat('-', 78));
@@ -170,10 +192,19 @@ final class DiagnoseSyncCommand extends Command
             $account->currency ?? 'NOT CAPTURED',
         ));
         $this->line(sprintf(
-            '  binding=%s  campaigns discovered=%d',
+            '  binding=%s  provider campaigns=%d',
             $binding === null ? 'NONE — nothing will sync' : "ACTIVE → {$projectName}",
             $campaigns,
         ));
+
+        if ($contaminated > 0) {
+            $this->line(sprintf(
+                '  SANDBOX-CONTAMINATED rows=%d  stored total=%d   (sandbox rows are NOT provider'
+                .' discovery — they were written by the binding-sync defect, SANDBOX-PROD-001)',
+                $contaminated,
+                $stored,
+            ));
+        }
         $this->line(str_repeat('-', 78));
 
         $runs = MetricSyncRun::withoutGlobalScopes()

@@ -14,7 +14,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
-use App\Domains\Integrations\Sandbox\SandboxAdvertisingConnector;
+use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Projects\Context\ProjectContext;
@@ -317,10 +317,33 @@ final class ProjectIntegrationController extends Controller
     }
 
     /**
-     * Run a Sandbox sync for a binding; records an IntegrationSyncRun and imports the returned
-     * campaigns into external_campaigns (idempotent upsert) — project-scoped.
+     * Run a sync for a binding, THROUGH THE BINDING'S OWN PROVIDER.
+     *
+     * ## SANDBOX-PROD-001 — this method wrote sandbox campaigns into live accounts
+     *
+     * It called `(new SandboxAdvertisingConnector)->syncCampaigns(...)` unconditionally and imported
+     * the result under `$model->externalAccount`. Whatever the binding was. So «Sync now» on a real
+     * Snapchat or Meta binding wrote `sbx-cmp-1` and `sbx-cmp-2` into that live account.
+     *
+     * Production measured the damage: TWO sandbox campaigns under the bound Snapchat account, and TWO
+     * under the bound Meta account — where they were the ONLY campaigns the product held, so a real,
+     * authorised, correctly-bound Meta account read as «2 campaigns discovered» while its own
+     * structure sweep returned `no_data records=0`. Every metrics sweep then asked the live provider
+     * about them, 48 times a day, and was refused.
+     *
+     * The connector is now resolved from the ACCOUNT'S OWN PROVIDER through the canonical registry —
+     * the same registry the structure and metrics syncers use, so there is one answer to «which
+     * connector serves this account» rather than one per call site.
+     *
+     * ## Fail closed, and never fall back
+     *
+     * A provider the registry cannot serve records a FAILED run and imports nothing. It does not fall
+     * back to anything, because a fallback is precisely how this defect existed: the sandbox was the
+     * only connector this endpoint knew, so every account got it. In production the registry excludes
+     * the sandbox connector entirely (`AppServiceProvider`), so a `sandbox` binding there resolves to
+     * nothing and is refused rather than served — which is the correct answer on a live install.
      */
-    public function sync(Request $request, ImportExternalCampaigns $import): JsonResponse
+    public function sync(Request $request, ImportExternalCampaigns $import, AdvertisingConnectorRegistry $registry): JsonResponse
     {
         abort_unless($request->user()->hasPermission('integrations.view'), 403);
 
@@ -336,7 +359,29 @@ final class ProjectIntegrationController extends Controller
             'started_at' => now(),
         ]);
 
-        $result = (new SandboxAdvertisingConnector)->syncCampaigns($model->externalAccount->external_id);
+        $provider = (string) $model->externalAccount->provider;
+        $connector = $registry->get($provider);
+
+        if ($connector === null) {
+            /*
+             * Recorded as a failure the operator can read, not thrown: a binding whose provider this
+             * build cannot serve is a real state (INTEG-UNKNOWN-PROVIDER-001), and the run log is
+             * where it belongs. Nothing is imported, so nothing is written under the account.
+             */
+            $run->update([
+                'status' => 'failed',
+                'records' => 0,
+                'error' => "No connector is registered for «{$provider}» on this install, so nothing was synced.",
+                'finished_at' => now(),
+            ]);
+
+            return ApiResponse::success(
+                ['sync_run_id' => $run->id, 'status' => $run->status, 'records' => 0, 'imported' => 0],
+                'Sync could not run.',
+            );
+        }
+
+        $result = $connector->syncCampaigns($model->externalAccount->external_id);
         $imported = $import->execute($model->externalAccount, $result);
 
         $run->update([
