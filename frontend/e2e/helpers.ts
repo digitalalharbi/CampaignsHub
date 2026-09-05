@@ -1,5 +1,6 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import { E2E_ORIGIN } from './env'
+import { RAIL_PAINT_TIMEOUT } from './railWalkTimeout'
 
 /**
  * Re-exported so a spec that needs the gate's origin has one obvious place to take it from — the
@@ -546,12 +547,31 @@ export async function verifyMobileThroughApi(
  * Measured AFTER the content area actually has something in it, because `goto` resolves on load and
  * React renders after that — measuring immediately reports every page as empty, which is a broken
  * test rather than a broken product.
+ *
+ * ## Why the ceiling is named and not 20000
+ *
+ * The rail walks were given `RAIL_PAINT_TIMEOUT` as their per-TEST budget, and this assertion — the
+ * one that actually expires — was left at a bare twenty seconds. That is the same contradiction in
+ * the other direction: raising the outer budget cannot help an inner wait that gives up first, and
+ * the webkit leg went on failing with «Timeout: 20000ms» on `/app/subscriptions` while the test it
+ * sat inside had forty-five seconds left to spend.
+ *
+ * The failure carried its own diagnosis: five requests reported «Load request cancelled», the two
+ * font files among them, at test 446 of ~450 in a twenty-eight-minute run. Requests cancelled
+ * including static assets is a document being torn down mid-load — the Vite dev server
+ * re-optimising its module graph under a browser that had been hammering it for half an hour — not
+ * a route that renders nothing. A route that renders nothing fails on all three browsers in two
+ * seconds.
+ *
+ * Nothing is relaxed but the clock, and a slow paint no longer costs less time than the test it
+ * runs inside is allowed to take. A page that never mounts still fails, with the same evidence
+ * `walkRail` already collects.
  */
 export async function contentLength(page: Page): Promise<number> {
   const main = page.locator('main')
-  await expect(main).toBeVisible({ timeout: 20000 })
+  await expect(main).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
   await expect
-    .poll(async () => (await main.innerText()).trim().length, { timeout: 20000 })
+    .poll(async () => (await main.innerText()).trim().length, { timeout: RAIL_PAINT_TIMEOUT })
     .toBeGreaterThan(0)
 
   return (await main.innerText()).trim().length
