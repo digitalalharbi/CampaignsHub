@@ -641,26 +641,6 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
       />
 
       {/*
-       * ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — directly beneath the figures that raise the question.
-       *
-       * The strip above says WHAT happened. This says where along the journey it went wrong, reading
-       * the same `useSummary` entry the strip read — the same totals and the same `reported` map, so
-       * the two cannot disagree about the account they are both describing. The request state is
-       * forwarded rather than re-derived for the same reason.
-       */}
-      <DiagnosticPanel
-        objective={objective}
-        totals={s.data?.current as Record<string, number | null | undefined> | undefined}
-        reported={s.data?.reported}
-        rowsInScope={s.data?.rows_in_scope}
-        loading={s.isPending}
-        error={s.isError ? s.error : undefined}
-        onRetry={() => void s.refetch()}
-        ar={ar}
-      />
-      {/* The comparisons, the details and the alerts — «أ», shared with the marketing preview. */}
-      <UnifiedCampaignOverview vm={vm} lang={ar ? 'ar' : 'en'} />
-      {/*
        * REPORT-OBJECTIVE-005 — «النتائج» above is the SUM of what each platform claimed.
        *
        * One sale clicked from two platforms is reported in full by both, and there is no shared key
@@ -738,6 +718,47 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
       </Panel>
 
       {/*
+        Three metrics, three units — «3.20x», «21.96 USD» and «0.72%» share no axis. On one scale the
+        two small numbers lie flat on the floor and the chart says nothing, which is what shipped:
+        a single line at zero under a title naming three metrics, one of which was never plotted.
+
+        Each gets its own panel and its own scale, so each is readable.
+      */}
+      <div className="grid gap-3 lg:grid-cols-3">
+        <RateTrend title="ROAS" data={series.rows} dataKey="roas" color={SERIES.revenue} loading={ts.isLoading} error={ts.isError} format={(v: number) => ratio(v)} />
+        <RateTrend title="CPA" data={series.rows} dataKey="cpa" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => money(v, chartCurrency)} />
+        <RateTrend title="CTR" data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} />
+      </div>
+
+      {/* The comparisons, the details and the alerts — «أ», shared with the marketing preview. */}
+      <UnifiedCampaignOverview vm={vm} lang={ar ? 'ar' : 'en'} />
+
+      {/*
+       * ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — kept, and kept BELOW everything that draws.
+       *
+       * It used to sit directly beneath the strip, on the argument that a diagnosis belongs next to
+       * the figures that raise the question. The owner's correction retires that argument for this
+       * surface: «النظام مبني على الصورة الرئيسية للبيانات — البطاقات، وتحته يأتي الشارت والجانب
+       * الابداعي»، وهذه الكتل «اجعلها اخر نظرة عامة بالاسفل». So the order of the Overview is the
+       * figures, then the curve, then the rates, then the platform split — and only after all of
+       * that, the reading of why.
+       *
+       * Nothing about WHAT it reads changed: the same `useSummary` entry the strip read, the same
+       * totals and the same `reported` map, so the two still cannot disagree about the account they
+       * are both describing. The request state is forwarded rather than re-derived for the same
+       * reason.
+       */}
+      <DiagnosticPanel
+        objective={objective}
+        totals={s.data?.current as Record<string, number | null | undefined> | undefined}
+        reported={s.data?.reported}
+        rowsInScope={s.data?.rows_in_scope}
+        loading={s.isPending}
+        error={s.isError ? s.error : undefined}
+        onRetry={() => void s.refetch()}
+        ar={ar}
+      />
+      {/*
         DASHBOARD-HIERARCHY — the diagnosis sits BELOW the KPI row, and the note here used to argue
         the opposite.
 
@@ -752,6 +773,13 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
         distribution and evidence — rather than by pushing the figures down the page. The strip is
         the same totals in the same window as the diagnosis beneath it, so the two still cannot
         disagree about the account they describe.
+
+        Then a second correction moved it further down still, to the LAST block on the Overview:
+        «قوم بازالة البيانات هذه من لوحة التحكم نظرة عامة او اجعلها اخر نظرة عامة بالاسفل لان
+        بالاساس بالنظام الشارت والرسوم التفاعلية». Below the KPI row was not enough while the curve,
+        the rate trends and the platform split all sat underneath it — the reader met a paragraph of
+        reasoning before the drawings the product is built on. Nothing was deleted: the diagnosis is
+        the same block with the same evidence, read after the picture rather than instead of it.
       */}
       <ChangeDiagnosis
         data={drivers.data}
@@ -762,18 +790,6 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
         // reader is already looking at rather than on a second one fetched for the purpose.
         series={points}
       />
-      {/*
-        Three metrics, three units — «3.20x», «21.96 USD» and «0.72%» share no axis. On one scale the
-        two small numbers lie flat on the floor and the chart says nothing, which is what shipped:
-        a single line at zero under a title naming three metrics, one of which was never plotted.
-
-        Each gets its own panel and its own scale, so each is readable.
-      */}
-      <div className="grid gap-3 lg:grid-cols-3">
-        <RateTrend title="ROAS" data={series.rows} dataKey="roas" color={SERIES.revenue} loading={ts.isLoading} error={ts.isError} format={(v: number) => ratio(v)} />
-        <RateTrend title="CPA" data={series.rows} dataKey="cpa" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => money(v, chartCurrency)} />
-        <RateTrend title="CTR" data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} />
-      </div>
     </div>
   )
 }
