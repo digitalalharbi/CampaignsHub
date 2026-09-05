@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { QueryFailure } from '@/components/ui/QueryFailure'
+import { Explainer } from '@/components/ui/Explainer'
 
 /**
  * FUNNEL-001 — «الفانل والمتجر»: impression to riyal, with the source of every number on the row.
@@ -291,11 +292,33 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
           />
           <Fact label={ar ? 'طلبات ملغاة' : 'Cancelled orders'} value={num(totals.cancelled_orders)} tone={totals.cancelled_orders > 0 ? 'warning' : undefined} />
         </dl>
-        <p className="mt-2 text-[11px] text-text-muted">
+        {/*
+          VISUAL-FIRST-001 — the subtraction is a proportion, so it is drawn as one.
+
+          «If a fact can be represented truthfully as a visual, the VISUAL is primary.» The three
+          figures above already say gross, refunded and net; what a merchant actually asks is «how
+          much of the month came back», and a share of a bar answers that at a glance where a ratio
+          of two eight-digit numbers does not. Drawn only when there is a gross figure to take a
+          share OF — a bar over zero would be a drawing of nothing.
+        */}
+        {totals.gross_revenue > 0 && (
+          <ShareBar
+            testid="funnel-refund-share"
+            kept={totals.gross_revenue - totals.refunded}
+            lost={totals.refunded}
+            keptLabel={ar ? 'بقي' : 'Kept'}
+            lostLabel={ar ? 'مسترد' : 'Refunded'}
+          />
+        )}
+        <Explainer
+          className="mt-2"
+          testid="funnel-refund-note"
+          label={ar ? 'كيف تُحتسب هذه المبالغ' : 'How these amounts are counted'}
+        >
           {ar
             ? 'كل مبلغ في هذه الصفحة صافٍ بعد الاسترداد — وهذا هو مقدار ما طُرح. الطلب الملغى لم يُحتسب إيرادًا أصلًا، فهو ليس استردادًا.'
             : 'Every amount on this page is net of refunds — this is how much was taken off. A cancelled order was never counted as revenue, so it is not a refund.'}
-        </p>
+        </Explainer>
       </Panel>
 
       <Panel title={ar ? 'صدق الإسناد' : 'Attribution honesty'}>
@@ -304,11 +327,29 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
           <Fact label={ar ? 'طلبات بلا إسناد' : 'Orders with no attribution'} value={num(coverage.orders_without_attribution)} tone="warning" />
           <Fact label={ar ? 'إيراد مُسند' : 'Attributed revenue'} value={money(totals.attributed_revenue, cur)} />
         </dl>
-        <p className="mt-2 text-[11px] text-text-muted">
+        {/*
+          The same reasoning, and here the proportion IS the finding: «a high share of them is a
+          link-tagging problem before it is anything about performance». A reader cannot judge «high»
+          from two counts side by side, and can from a bar.
+        */}
+        {totals.attributed_orders + coverage.orders_without_attribution > 0 && (
+          <ShareBar
+            testid="funnel-attribution-share"
+            kept={totals.attributed_orders}
+            lost={coverage.orders_without_attribution}
+            keptLabel={ar ? 'مُسندة' : 'Traced'}
+            lostLabel={ar ? 'بلا إسناد' : 'Untraced'}
+          />
+        )}
+        <Explainer
+          className="mt-2"
+          testid="funnel-attribution-note"
+          label={ar ? 'ماذا يعني «بلا إسناد»' : 'What «untraced» means'}
+        >
           {ar
             ? 'الطلبات التي تعذّر ربطها بحملة تُعرض هنا ولا تُوزَّع على الحملات. نسبة مرتفعة منها تعني مشكلة في وسوم الروابط قبل أن تعني أي شيء عن الأداء.'
             : 'Orders that could not be traced are shown here and never spread across campaigns. A high share of them is a link-tagging problem before it is anything about performance.'}
-        </p>
+        </Explainer>
       </Panel>
 
       {comparisons.platforms.length > 0 && (
@@ -397,6 +438,55 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
           </span>
         )}
       </p>
+    </div>
+  )
+}
+
+/**
+ * One bar, two shares — what stayed and what did not.
+ *
+ * Deliberately not a chart library: two counts on one axis is a `<div>` with two widths, and reaching
+ * for Recharts here would buy an SVG, a ResponsiveContainer and a resize observer to draw a rectangle.
+ *
+ * The percentage is rendered next to the label rather than inside the bar, because the losing share
+ * is routinely small enough that no text fits inside it, and a number that disappears at 3% is worse
+ * than one that never moved.
+ */
+function ShareBar({
+  kept,
+  lost,
+  keptLabel,
+  lostLabel,
+  testid,
+}: {
+  kept: number
+  lost: number
+  keptLabel: string
+  lostLabel: string
+  testid: string
+}) {
+  const total = kept + lost
+  /* Callers guard against an empty total; this is the second lock, so a division can never be by zero. */
+  if (total <= 0) return null
+
+  const lostShare = (lost / total) * 100
+
+  return (
+    <div className="mt-3" data-testid={testid}>
+      <div className="flex h-2.5 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
+        <div className="bg-brand-500" style={{ width: `${100 - lostShare}%` }} />
+        <div className="bg-warning" style={{ width: `${lostShare}%` }} />
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-text-secondary">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2 rounded-full bg-brand-500" aria-hidden />
+          {keptLabel} <span className="tnum font-semibold">{(100 - lostShare).toFixed(1)}%</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2 rounded-full bg-warning" aria-hidden />
+          {lostLabel} <span className="tnum font-semibold">{lostShare.toFixed(1)}%</span>
+        </span>
+      </div>
     </div>
   )
 }

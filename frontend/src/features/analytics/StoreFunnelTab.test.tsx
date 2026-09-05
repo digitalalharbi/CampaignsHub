@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { StoreFunnelTab } from './StoreFunnelTab'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 
@@ -306,11 +306,77 @@ describe('what did not stick', () => {
     expect(block.querySelectorAll('.text-warning')).toHaveLength(0)
   })
 
-  /* A cancelled order was never counted as revenue, so calling it a refund would double-count it. */
-  it('says a cancelled order is not a refund', async () => {
+  /*
+   * A cancelled order was never counted as revenue, so calling it a refund would double-count it.
+   *
+   * The sentence is now disclosed rather than printed — VISUAL-FIRST-001, «move deeper explanation to
+   * expandable details». It says the same thing; the test opens the row instead of scanning the page,
+   * and asserts it was closed first, or it would pass on a version that never disclosed anything.
+   */
+  it('says a cancelled order is not a refund, once the reader asks', async () => {
     vi.mocked(getData).mockResolvedValue(payload())
     renderWithProviders(<StoreFunnelTab projectId="p1" range={RANGE} />, { locale: 'en' })
 
+    const toggle = await screen.findByTestId('funnel-refund-note-toggle')
+    expect(screen.queryByText(/not a refund|ليس استردادًا/)).not.toBeInTheDocument()
+
+    fireEvent.click(toggle)
+
     expect(await screen.findByText(/not a refund|ليس استردادًا/)).toBeInTheDocument()
+  })
+
+  /*
+   * VISUAL-FIRST-001 — «if a fact can be represented truthfully as a visual, the VISUAL is primary».
+   *
+   * The bar is the answer to «how much of the month came back» and to «is the untraced share high»,
+   * which is the question the prose underneath used to answer in words. Asserted on the WIDTHS,
+   * because a bar that renders with both halves at 50% whatever the data is a decoration, and this
+   * requirement explicitly refuses decoration.
+   */
+  it('draws what came back and what could not be traced, to scale', async () => {
+    vi.mocked(getData).mockResolvedValue(payload({
+      totals: {
+        reporting_currency: 'SAR',
+        spend: 1000, revenue: 7500, gross_revenue: 10000, refunded: 2500, cancelled_orders: 0,
+        orders: 40, new_customers: 10, attributed_orders: 30, attributed_revenue: 6000,
+        unattributed_orders: 10,
+      },
+    }))
+    renderWithProviders(<StoreFunnelTab projectId="p1" range={RANGE} />, { locale: 'en' })
+
+    const refunds = await screen.findByTestId('funnel-refund-share')
+    const [kept, lost] = [...refunds.querySelectorAll<HTMLElement>('div[style]')]
+    expect(kept.style.width).toBe('75%')
+    expect(lost.style.width).toBe('25%')
+
+    const attribution = screen.getByTestId('funnel-attribution-share')
+    const [traced, untraced] = [...attribution.querySelectorAll<HTMLElement>('div[style]')]
+    expect(traced.style.width).toBe('75%')
+    expect(untraced.style.width).toBe('25%')
+  })
+
+  /* Nothing sold is not «0% refunded» — it is a bar with no share to take, so it is not drawn. */
+  it('draws no bar for a month with no revenue', async () => {
+    vi.mocked(getData).mockResolvedValue(payload({
+      totals: {
+        reporting_currency: 'SAR',
+        spend: 1000, revenue: 0, gross_revenue: 0, refunded: 0, cancelled_orders: 0,
+        orders: 0, new_customers: 0, attributed_orders: 0, attributed_revenue: 0,
+        unattributed_orders: 0,
+      },
+      /* `coverage` is its own key: leaving the default here would leave ten untraced orders in a
+         month with no orders, and the bar would be right to draw them. */
+      coverage: {
+        stores: 1, stores_without_cart_data: [], store_last_synced_at: null,
+        orders_in_window: 0, orders_without_attribution: 0,
+        reporting_currency: 'SAR', orders_with_money_withheld: 0, money_withheld_currencies: [],
+      },
+    }))
+    renderWithProviders(<StoreFunnelTab projectId="p1" range={RANGE} />, { locale: 'en' })
+
+    await screen.findByTestId('funnel-refunds')
+
+    expect(screen.queryByTestId('funnel-refund-share')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('funnel-attribution-share')).not.toBeInTheDocument()
   })
 })
