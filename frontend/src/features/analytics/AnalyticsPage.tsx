@@ -67,6 +67,7 @@ import { MetricStrip } from '@/components/ui/MetricStrip'
 import { Explainer } from '@/components/ui/Explainer'
 import { ChangeDiagnosis } from './ChangeDiagnosis'
 import { ContentReading } from './ContentReading'
+import { DistributionBars } from './DistributionBars'
 import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCampaignOverview'
 import { useOverviewVm } from '@/features/campaigns/overview/useOverviewVm'
 import { SPECS, dashboardMetrics, layoutFor } from './metricCatalog'
@@ -640,28 +641,6 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
       />
 
       {/*
-        DASHBOARD-HIERARCHY — the diagnosis sits BELOW the KPI row, and the note here used to argue
-        the opposite.
-
-        It reasoned that a reader who opens Analytics has already seen «what is happening», so
-        leading with «what changed and who moved it» was the point of the page. The owner's
-        correction overrides that: «never insert diagnostic cards, change-driver cards,
-        recommendation cards, alerts or explanatory cards ABOVE the primary KPI row — the first thing
-        the user sees must remain the campaign performance indicators.»
-
-        Analytics stays materially different from the Dashboard, but through what the requirement
-        actually asks for — a mixed analytical grid, chart types chosen per question, decomposition,
-        distribution and evidence — rather than by pushing the figures down the page. The strip is
-        the same totals in the same window as the diagnosis beneath it, so the two still cannot
-        disagree about the account they describe.
-      */}
-      <ChangeDiagnosis
-        data={drivers.data}
-        currency={reportingCurrency}
-        loading={drivers.isPending}
-        error={drivers.isError}
-      />
-      {/*
        * ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — directly beneath the figures that raise the question.
        *
        * The strip above says WHAT happened. This says where along the journey it went wrong, reading
@@ -757,6 +736,32 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
           <p data-testid="series-currency-mixed" className="mt-2 text-xs text-text-secondary">{series.note}</p>
         )}
       </Panel>
+
+      {/*
+        DASHBOARD-HIERARCHY — the diagnosis sits BELOW the KPI row, and the note here used to argue
+        the opposite.
+
+        It reasoned that a reader who opens Analytics has already seen «what is happening», so
+        leading with «what changed and who moved it» was the point of the page. The owner's
+        correction overrides that: «never insert diagnostic cards, change-driver cards,
+        recommendation cards, alerts or explanatory cards ABOVE the primary KPI row — the first thing
+        the user sees must remain the campaign performance indicators.»
+
+        Analytics stays materially different from the Dashboard, but through what the requirement
+        actually asks for — a mixed analytical grid, chart types chosen per question, decomposition,
+        distribution and evidence — rather than by pushing the figures down the page. The strip is
+        the same totals in the same window as the diagnosis beneath it, so the two still cannot
+        disagree about the account they describe.
+      */}
+      <ChangeDiagnosis
+        data={drivers.data}
+        currency={reportingCurrency}
+        loading={drivers.isPending}
+        error={drivers.isError}
+        // The same series the graph below this block draws, so a marked day sits on the curve the
+        // reader is already looking at rather than on a second one fetched for the purpose.
+        series={points}
+      />
       {/*
         Three metrics, three units — «3.20x», «21.96 USD» and «0.72%» share no axis. On one scale the
         two small numbers lie flat on the floor and the chart says nothing, which is what shipped:
@@ -1140,21 +1145,38 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
    * totals, which is the difference between «Eid is the biggest» and «Eid is why the month fell».
    */
   const drivers = useDrivers(projectId, range, 'campaign', 'spend', filters)
+  /*
+   * The reporting currency, for the distribution's money contract. Same query key as the overview's
+   * summary, so react-query answers it from cache rather than making a second request — and a shared
+   * key is also what stops this tab naming a different currency from the page around it.
+   */
+  const reportingCurrency = useSummary(projectId, range, filters).data?.currency ?? null
   const rows = c.data ?? []
   const best = rows[0]
   const worst = [...rows].filter((r) => r.spend > 0).sort((a, b) => (a.roas ?? 0) - (b.roas ?? 0))[0]
   return (
     <div className="space-y-4">
-      <ChangeDiagnosis
-        data={drivers.data}
-        currency={s.data?.currency ?? null}
-        loading={drivers.isPending}
-        error={drivers.isError}
-        title={ar ? 'أي الحملات حرّكت الحساب' : 'Which campaigns moved the account'}
-        subtitle={ar
-          ? 'توزيع التغيّر، لا توزيع الإجماليات — أكبر حملة ليست بالضرورة سبب ما حدث.'
-          : 'The distribution of the CHANGE, not of the totals — the biggest campaign is not necessarily why the month moved.'}
+            {/*
+        VISUAL-FIRST-001 / clause D — «CAMPAIGN DISTRIBUTION → contribution/distribution bars».
+
+        The block above decomposes what MOVED. This shows where the money SITS, which is a different
+        question with a different answer: an account can be perfectly stable and still hold most of
+        its budget behind one campaign, and a change decomposition will never surface that because
+        nothing changed.
+      */}
+      <DistributionBars
+        testid="campaign-distribution"
+        title={ar ? 'أين يقع الإنفاق' : 'Where the spend sits'}
+        currency={reportingCurrency}
+        ar={ar}
+        rows={rows.map((r) => ({
+          key: r.campaign_id,
+          // A campaign whose name is no longer held keeps its spend and loses its label — never a UUID.
+          label: r.campaign_name ?? (ar ? 'حملة لم يعد اسمها محفوظًا' : 'A campaign whose name is no longer held'),
+          totals: r,
+        }))}
       />
+
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Panel title={ar ? 'أفضل حملة (ROAS)' : 'Best campaign (ROAS)'} loading={c.isLoading} error={c.isError}>
@@ -1209,6 +1231,14 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
           initialSort={{ column: 2, dir: 'desc' }}
         />
       </Panel>
+
+      <ChangeDiagnosis
+        data={drivers.data}
+        currency={s.data?.currency ?? null}
+        loading={drivers.isPending}
+        error={drivers.isError}
+        title={ar ? 'أي الحملات حرّكت الحساب' : 'Which campaigns moved the account'}
+      />
     </div>
   )
 }
@@ -1264,14 +1294,20 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
             spans an unreported stage says so, because a loss attributed to the wrong step sends an
             operator to fix a page that was never the problem.
 
-            The label column and the caption are DROPPED on a phone rather than shrunk. The first
-            version copied the stage row's geometry — a 128px label gutter and a 160px caption —
-            around a figure that cannot wrap («−1,940,581 (98%)» is `whitespace-nowrap` by
-            necessity): a 415px minimum on a 375px screen, and the whole document scrolled sideways.
-            Caught by the responsive sweep on all three browsers, on the one route this component
-            also serves as the dashboard. At phone width the loss keeps the connector that ties it to
-            the stages either side and the figure itself, and the caption rides at the end of the
-            same line instead of holding its own column.
+            The label column and the caption are DROPPED on a phone rather than shrunk — and this is
+            a layout choice, NOT a fix for an overflow.
+
+            It was first written as one, on the arithmetic that a 128px gutter and a 160px caption
+            around a figure that cannot wrap could not fit 375px. Measured afterwards with the fixed
+            widths restored, on the project whose funnel actually produces loss rows: the row came
+            back 301px wide inside a 375px viewport with the document not scrolling at all. The
+            overflow that prompted the change was `h-full` on `StatCard`, isolated separately, and
+            this row was never part of it.
+
+            The behaviour is kept because it is better use of a phone's width — a 288px gutter and
+            caption around a 90px figure spends most of the line on furniture — but the reason is
+            legibility, not a defect, and recording it as a defect would leave a false claim in the
+            file for the next reader to inherit.
           */}
           {lossBefore(rows, i) && (
             <div className="flex items-center gap-2 sm:gap-3" data-testid={`ad-funnel-loss-${s.stage}`}>
@@ -2572,20 +2608,6 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
   return (
     <div className="space-y-4">
       <DrillCrumbs path={path} level={level} ar={ar} onUpTo={(lvl) => go(drillUpTo(path, lvl), lvl)} />
-      {/*
-        ANALYTICS-DIFFERENTIATION-001 — the ad-set grain a campaign total hides.
-        A campaign whose spend held steady while one ad set doubled and another stopped looks, one
-        level up, like a week in which nothing happened. Only on the ad-set tab: there is no
-        decomposition of an AD by ad, and this component asks «which of the things underneath moved».
-      */}
-      {level === 'ad_set' && (
-        <ChangeDiagnosis
-          data={adSetDrivers.data}
-          currency={currency}
-          loading={adSetDrivers.isPending}
-          error={adSetDrivers.isError}
-        />
-      )}
       <Panel
         title={heading}
         description={ar ? 'الأعلى إنفاقًا أولًا — ويمكن الترتيب بأي عمود' : 'Highest spend first — sortable by any column'}
@@ -2627,6 +2649,25 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
           </div>
         )}
       </Panel>
+
+      {/*
+        DASHBOARD-HIERARCHY — below the table, not above it.
+
+        «The system is built on the primary picture of the data: the cards, and beneath them the
+        chart and the analytical side.» This decomposition answers «which of the things underneath
+        moved», which is the analytical side — it belongs after the figures a reader came to read,
+        on every surface that has them, not only on the Dashboard.
+
+        Only on the ad-set tab: there is no decomposition of an AD by ad.
+      */}
+      {level === 'ad_set' && (
+        <ChangeDiagnosis
+          data={adSetDrivers.data}
+          currency={currency}
+          loading={adSetDrivers.isPending}
+          error={adSetDrivers.isError}
+        />
+      )}
     </div>
   )
 }
@@ -2688,25 +2729,6 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
 
   return (
     <div className="space-y-4">
-      {/*
-        ANALYTICS-DIFFERENTIATION-001 — the objective decomposition, ABOVE the per-family breakdown.
-
-        The panel below answers «how did each objective do», which is a report. This answers «what
-        moved between them», which is a diagnosis — and it is the one axis a platform split cannot
-        show: an account can spend exactly the same on exactly the same platforms and return less
-        because the money moved from sales to awareness. Every platform looks unchanged; the whole
-        answer is in what the money was BOUGHT for.
-      */}
-      <ChangeDiagnosis
-        data={drivers.data}
-        currency={currency}
-        loading={drivers.isPending}
-        error={drivers.isError}
-        title={ar ? 'ما الذي تغيّر بين الأهداف' : 'What moved between the objectives'}
-        subtitle={ar
-          ? 'تحوّل المزيج: أين ذهبت الميزانية بين ما اشتُريت من أجله — وهو ما لا يظهر في تفصيل المنصات.'
-          : 'The mix shift: where the budget moved between what it was bought for — which a platform split cannot show.'}
-      />
 
       <Panel
         title={ar ? 'الأداء حسب الهدف' : 'Performance by objective'}
@@ -2862,6 +2884,22 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
         explanations={explanations.data?.paths ?? []}
         loading={leaders.isLoading}
         error={leaders.isError}
+      />
+      {/*
+        ANALYTICS-DIFFERENTIATION-001 — the objective decomposition, ABOVE the per-family breakdown.
+
+        The panel below answers «how did each objective do», which is a report. This answers «what
+        moved between them», which is a diagnosis — and it is the one axis a platform split cannot
+        show: an account can spend exactly the same on exactly the same platforms and return less
+        because the money moved from sales to awareness. Every platform looks unchanged; the whole
+        answer is in what the money was BOUGHT for.
+      */}
+      <ChangeDiagnosis
+        data={drivers.data}
+        currency={currency}
+        loading={drivers.isPending}
+        error={drivers.isError}
+        title={ar ? 'ما الذي تغيّر بين الأهداف' : 'What moved between the objectives'}
       />
     </div>
   )
@@ -3023,13 +3061,6 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
         drill: { value: encodePath(drillUpTo(path, lvl)), fallback: '' },
         tab: { value: TAB_FOR[lvl], fallback: 'performance' },
       })} />
-      {!intelligence.isLoading && (
-        <ContentReading
-          data={intelligence.data?.by_format}
-          currency={intelligence.data?.currency ?? currency}
-          creativesRead={intelligence.data?.creatives_read ?? 0}
-        />
-      )}
       <Panel
         title={ar ? 'أداء الإعلانات' : 'Ad performance'}
         description={ar ? 'من بيانات الإعلان نفسه — لا تُنسب أرقام الحملة إلى إعلان' : 'From ad-level data — campaign figures are never attributed to a ad'}
@@ -3088,6 +3119,21 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
           />
         </div>
       </Panel>
+
+      {/*
+        DASHBOARD-HIERARCHY — the reading sits BELOW the ads, not above them.
+
+        «The cards, and beneath them the chart and the creative side.» The reader of this tab came
+        for the ads; the format comparison is what they read AFTER seeing them, and putting an
+        analysis above the thing it analyses is the same inversion the other tabs carried.
+      */}
+      {!intelligence.isLoading && (
+        <ContentReading
+          data={intelligence.data?.by_format}
+          currency={intelligence.data?.currency ?? currency}
+          creativesRead={intelligence.data?.creatives_read ?? 0}
+        />
+      )}
     </div>
   )
 }
@@ -3165,17 +3211,6 @@ function AccountsTab({ projectId, range, filters }: TabProps) {
 
   return (
     <>
-      <ChangeDiagnosis
-        data={drivers.data}
-        currency={currency}
-        loading={drivers.isPending}
-        error={drivers.isError}
-        title={ar ? 'ما الذي تغيّر بين الحسابات' : 'What moved between the accounts'}
-        subtitle={ar
-          ? 'انهيار في حساب يقابله ارتفاع في آخر يجعل المنصة تبدو ثابتة — هنا يظهر.'
-          : 'A collapse in one account offset by a rise in another makes the platform look unchanged — here it shows.'}
-      />
-
     <Panel
       title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'}
       description={ar ? 'الأعلى إنفاقًا أولًا — ويمكن الترتيب بأي عمود' : 'Highest spend first — sortable by any column'}
@@ -3187,6 +3222,14 @@ function AccountsTab({ projectId, range, filters }: TabProps) {
         <MetricTable head={head} rows={cells} values={values} initialSort={{ column: 2, dir: 'desc' }} />
       </div>
     </Panel>
+
+      <ChangeDiagnosis
+        data={drivers.data}
+        currency={currency}
+        loading={drivers.isPending}
+        error={drivers.isError}
+        title={ar ? 'ما الذي تغيّر بين الحسابات' : 'What moved between the accounts'}
+      />
     </>
   )
 }

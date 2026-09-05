@@ -1,11 +1,12 @@
 import { useMemo } from 'react'
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
 import { StatCard } from '@/components/ui/StatCard'
+import { Explainer } from '@/components/ui/Explainer'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { compact, money, moneyExact, num } from '@/features/analytics/format'
 import { useUi } from '@/stores/ui'
-import type { Decomposition, DriverRow, DriversPayload } from './api'
+import type { Decomposition, DriverRow, DriversPayload, TimePoint } from './api'
 
 /**
  * ANALYTICS-DIFFERENTIATION-001 — the block that makes Analytics a different product.
@@ -196,6 +197,87 @@ const everythingMovedTogether = (by: string, ar: boolean): string => {
   return ar ? `${d.ar} تتحرّك في الاتجاه نفسه.` : `${d.en} moved the same way.`
 }
 
+/**
+ * One metric's daily curve, with the days that departed from their own baseline marked on it.
+ *
+ * Deliberately small and axis-free: this answers «where does that day sit» and nothing else, so a
+ * grid, a legend and tick labels would be furniture around a single question. The exact figures are
+ * in the list underneath, which is where a reader goes once the shape has told them which day to
+ * look at.
+ *
+ * Drawn as an SVG path rather than a charting component because it is one series and a handful of
+ * dots — pulling in a chart library for that would cost more than it explains.
+ */
+function AnomalyTrend({
+  metric, series, marks, ar,
+}: {
+  metric: string
+  series: readonly TimePoint[]
+  marks: Array<{ date: string; direction: 'up' | 'down' }>
+  ar: boolean
+}) {
+  /*
+   * Read by KEY, because which metric this chart draws is decided at runtime by what the timeline
+   * flagged. A day the series does not carry the metric for is null, not zero — the curve breaks
+   * there rather than dipping to the floor and inventing a fall.
+   */
+  const values = series.map((d) => {
+    const v = (d as unknown as Record<string, unknown>)[metric]
+    return typeof v === 'number' ? v : null
+  })
+  const known = values.filter((v): v is number => v !== null)
+
+  // Two points is a line between two points, not a trend — and a flat series has no shape to show.
+  if (known.length < 3) return null
+
+  const min = Math.min(...known)
+  const max = Math.max(...known)
+  const span = max - min || 1
+  const W = 100
+  const H = 28
+
+  const x = (i: number) => (series.length === 1 ? 0 : (i / (series.length - 1)) * W)
+  const y = (v: number) => H - ((v - min) / span) * H
+
+  const path = values
+    .map((v, i) => (v === null ? null : `${i === 0 ? 'M' : 'L'}${x(i).toFixed(2)},${y(v).toFixed(2)}`))
+    .filter(Boolean)
+    .join(' ')
+
+  const marked = marks
+    .map((m) => {
+      const i = series.findIndex((d) => d.date === m.date)
+      const v = i === -1 ? null : values[i]
+      return v === null || i === -1 ? null : { cx: x(i), cy: y(v), direction: m.direction, date: m.date }
+    })
+    .filter((m): m is { cx: number; cy: number; direction: 'up' | 'down'; date: string } => m !== null)
+
+  return (
+    <div data-testid={`anomaly-trend-${metric}`}>
+      <span className="text-[11px] font-semibold text-text-secondary">{metricLabel(metric, ar)}</span>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="mt-1 h-8 w-full"
+        role="img"
+        aria-label={ar ? `${metricLabel(metric, true)} — الأيام المعلَّمة خرجت عن سلوكها` : `${metricLabel(metric, false)} — marked days departed from their own baseline`}
+      >
+        <path d={path} fill="none" stroke="var(--border-strong)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        {marked.map((m) => (
+          <circle
+            key={m.date}
+            cx={m.cx}
+            cy={m.cy}
+            r={2.5}
+            vectorEffect="non-scaling-stroke"
+            className={m.direction === 'up' ? 'fill-success' : 'fill-warning'}
+          />
+        ))}
+      </svg>
+    </div>
+  )
+}
+
 /** A card that says why it is empty instead of being empty. */
 function Declined({ text, testid }: { text: string; testid: string }) {
   return (
@@ -313,11 +395,19 @@ export function ChangeDiagnosis({
   error,
   title,
   subtitle,
+  series = [],
 }: {
   data: DriversPayload | undefined
   currency: string | null
   loading?: boolean
   error?: boolean
+  /**
+   * The daily series the page already fetched for its own graph, so the anomaly markers sit on the
+   * same curve the reader just looked at. Empty is the honest default: a caller with no series gets
+   * the list alone rather than a chart drawn from the anomalies themselves, which would be a trend
+   * invented out of its own exceptions.
+   */
+  series?: readonly TimePoint[]
   /** The question this instance answers — «who moved it» by platform, by objective, by campaign. */
   title?: string
   subtitle?: string
@@ -487,11 +577,22 @@ export function ChangeDiagnosis({
         <h3 className="mb-1 text-base font-bold text-text-primary">
           {ar ? 'الأيام التي خرجت عن سلوك الفترة' : 'The days that departed from the period’s behaviour'}
         </h3>
-        <p className="mb-3 text-xs text-text-muted">
+        {/*
+          VISUAL-FIRST-001 — «I do not want any text details at all, except in a few simple places.»
+
+          How a baseline is computed is a METHOD, not a finding, and it was a standing paragraph
+          above the findings themselves. It is disclosed now: the reader who wants to know what
+          «departed» means can ask, and everyone else meets the marked days and the chart.
+        */}
+        <Explainer
+          className="mb-3"
+          testid="anomaly-method"
+          label={ar ? 'كيف تُقاس' : 'How this is measured'}
+        >
           {ar
             ? 'كل يوم يُقاس على وسيط الأيام التي سبقته وحدها — لا على الفترة كاملة، لأن ما بعد اليوم لم يكن متاحًا لأحد وقتها.'
             : 'Each day is measured against the median of the days before it alone — not the whole window, because what came after was available to nobody at the time.'}
-        </p>
+        </Explainer>
 
         {points.length === 0 ? (
           <Declined
@@ -499,6 +600,35 @@ export function ChangeDiagnosis({
             text={reasonText(timeline.reason ?? null, ar) ?? (ar ? 'لا شيء لعرضه.' : 'Nothing to show.')}
           />
         ) : (
+          <>
+          {/*
+            VISUAL-FIRST-001 / clause D — «ANOMALIES → a timeline with markers ON the actual metric
+            trend», not a list of dates.
+
+            «2026-08-15 · spend · 2.89K · usual before it 2.56K» is four figures a reader has to
+            assemble into a shape. The same day drawn on the metric's own curve IS the shape: how far
+            it sits from the line either side, and whether it is a spike or the start of a level
+            change — which are different findings and lead to different actions.
+
+            The series is the one the page already fetched for the graph above, so this costs no
+            request and cannot disagree with the drawing the reader just looked at. Where the series
+            is absent the list still renders on its own: markers with nothing to mark would be a
+            chart of two points pretending to be a trend.
+          */}
+          {series.length > 2 && (
+            <div className="mb-3 flex flex-col gap-3" data-testid="anomaly-charts">
+              {[...new Set(points.map((p) => p.metric))].slice(0, 2).map((metric) => (
+                <AnomalyTrend
+                  key={metric}
+                  metric={metric}
+                  series={series}
+                  marks={points.filter((p) => p.metric === metric)}
+                  ar={ar}
+                />
+              ))}
+            </div>
+          )}
+
           <ul data-testid="change-timeline" className="flex flex-col gap-2">
             {points.slice(0, 8).map((p) => (
               <li
@@ -521,6 +651,7 @@ export function ChangeDiagnosis({
               </li>
             ))}
           </ul>
+          </>
         )}
       </div>
     </section>

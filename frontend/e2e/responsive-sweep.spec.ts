@@ -77,3 +77,72 @@ for (const portal of PORTALS) {
     }
   })
 }
+
+/**
+ * VISUAL-FIRST-001 clause H — the ANALYTICS TABS, which the portal sweep above never reaches.
+ *
+ * That sweep opens each portal's landing route. Analytics is one route with twelve tabs behind a
+ * query parameter, so every tab except the default was unswept — and the tabs are where this
+ * product's densest layouts live: tables that must scroll inside themselves, bar rows with fixed
+ * gutters, funnels with connectors between stages.
+ *
+ * It is also where the recent visual work landed. What this sweep can and cannot prove is worth
+ * stating, because it was written believing it proved more: it holds the DOCUMENT contract for every
+ * tab in both themes and both directions, and it cannot hold a CONDITIONAL row's layout unless the
+ * seeded data happens to produce that row. Verified by injecting a fixed-width variant of the
+ * funnel's loss row and watching this pass — the gate's data produces no loss rows on that tab, so
+ * there was nothing to measure. A conditional layout needs a fixture that forces it, and that is a
+ * different piece of work from this sweep.
+ *
+ * The four theme/direction combinations are reached by TOGGLING, as the portal sweep does and as a
+ * customer does — a stamped attribute would prove the palette resolves and not that the control
+ * anybody actually uses works.
+ */
+const ANALYTICS_TABS = ['platforms', 'campaigns', 'ad_sets', 'budget', 'funnel', 'store', 'quality'] as const
+
+test.describe('every analytics tab holds its shape', () => {
+  test.use({ storageState: AUTH.advertiser })
+
+  for (const vp of VIEWPORTS) {
+    for (const tab of ANALYTICS_TABS) {
+      test(`${tab} at ${vp.name}: no sideways scroll in either theme or direction`, async ({ page }) => {
+        await page.setViewportSize({ width: vp.width, height: vp.height })
+        await page.goto(`/app/analytics?tab=${tab}`)
+
+        const main = page.locator('main')
+        await expect(main).toBeVisible({ timeout: 20000 })
+
+        /*
+         * A tab that rendered nothing proves nothing. This is a floor rather than a specific
+         * assertion because each tab's content differs and several legitimately decline — what must
+         * never happen is a sweep that measures an empty shell and reports success.
+         */
+        await expect
+          .poll(async () => (await main.innerText()).trim().length, { timeout: 20000 })
+          .toBeGreaterThan(40)
+
+        for (const step of ['start', 'theme', 'language', 'theme-again'] as const) {
+          if (step === 'theme' || step === 'theme-again') {
+            await page.getByRole('button', { name: 'Toggle theme' }).first().click()
+          }
+          if (step === 'language') {
+            await page.getByRole('button', { name: 'Toggle language' }).first().click()
+          }
+
+          const dir = await page.locator('html').getAttribute('dir')
+          const theme = await page.locator('html').getAttribute('data-theme')
+          const where = `analytics?tab=${tab} · ${vp.name} · ${dir} · ${theme}`
+
+          /*
+           * The DOCUMENT must not scroll sideways. A table may — that is the contract these tabs are
+           * built to, and it is why this measures the document rather than the widest element.
+           */
+          const overflow = await page.evaluate(
+            () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          )
+          expect(overflow, `${where} scrolls sideways by ${overflow}px`).toBeLessThanOrEqual(1)
+        }
+      })
+    }
+  }
+})
