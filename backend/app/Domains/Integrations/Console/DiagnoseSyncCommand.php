@@ -326,6 +326,35 @@ final class DiagnoseSyncCommand extends Command
         $this->line("  creatives referenced by no ad: {$creativesWithNoAd}"
             .'   (unreachable from any screen that walks the hierarchy downwards)');
 
+        /*
+         * SANDBOX-PROD-001 / SNAP-AD-STATS-ROUTE-001 — how many of these parents are SANDBOX rows.
+         *
+         * Production recorded «Snapchat Marketing API could not return ad stats: Request URL can not
+         * be correctly processed [path: /v1/campaigns/sbx-cmp-1/stats]» on the live bound account.
+         * The path is well-formed — the blank-id defect this route already fixed is not what happened
+         * — and `sbx-cmp-1` is a SANDBOX campaign id from `SandboxAdvertisingConnector`, reaching the
+         * live Snapchat API. The refusal is Snapchat being right.
+         *
+         * `AccountMetricsSyncer::syncEntityGrains()` plucks EVERY `external_id` on the account and
+         * hands the list to the connector, so any sandbox row stored under a live account becomes a
+         * live request on every metrics sweep — forty-eight times a day, each one an unexplained
+         * refusal in the run log.
+         *
+         * What is NOT yet known is how a sandbox row came to sit under a live account, and that is
+         * the whole reason this counts rather than filters. A filter would silence the symptom and
+         * leave the rows there; this says how many there are and on which account, so the fix can
+         * name the cause. Counted from the sandbox connector's own marker rather than from an id
+         * prefix — a prefix is a guess about a string, a marker is what the writer wrote.
+         */
+        $sandboxCampaigns = ExternalCampaign::withoutGlobalScopes()
+            ->where('external_account_id', $account->id)
+            ->whereJsonContains('raw->sandbox', true)
+            ->count();
+
+        $this->line("  SANDBOX campaigns on this account: {$sandboxCampaigns}"
+            .'   (must be 0 on a live connection — each one becomes a live /stats request that the'
+            .' provider is right to refuse)');
+
         foreach (['campaigns' => $campaignIds->count(), 'ad_squads' => $adSetIds->count(),
             'ads' => $adIds->count(), 'creatives' => (clone $creatives)->count()] as $level => $count) {
             if ($count === 0) {

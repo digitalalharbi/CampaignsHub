@@ -415,6 +415,42 @@ final class HierarchyCountsTest extends TestCase
 
     // ── helpers ───────────────────────────────────────────────────────────────────────────────
 
+    /**
+     * SANDBOX-PROD-001 / SNAP-AD-STATS-ROUTE-001 — a sandbox row under a live account is COUNTED.
+     *
+     * Production recorded «could not return ad stats … [path: /v1/campaigns/sbx-cmp-1/stats]» on the
+     * live bound Snapchat account. The path is well-formed, so the blank-id defect this route already
+     * fixed is not what happened: `sbx-cmp-1` is a SANDBOX campaign, and it reached the live API
+     * because `AccountMetricsSyncer::syncEntityGrains()` plucks every `external_id` on the account.
+     * Forty-eight sweeps a day, each producing a refusal the provider is right to give.
+     *
+     * The diagnosis counts them rather than filtering them, because HOW a sandbox row came to sit
+     * under a live account is not yet known and a filter would hide the rows while silencing the
+     * symptom. Counted from the sandbox connector's own `raw.sandbox` marker, not from an id prefix:
+     * a prefix is a guess about a string.
+     */
+    public function test_a_sandbox_campaign_under_a_live_account_is_counted(): void
+    {
+        $this->campaign('cmp-live');
+
+        $sandbox = $this->campaign('sbx-cmp-1');
+        $sandbox->forceFill(['raw' => ['sandbox' => true]])->save();
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('SANDBOX campaigns on this account: 1')
+            ->assertSuccessful();
+    }
+
+    /** And an account with none says zero, so «1» is a finding rather than the only sentence it has. */
+    public function test_an_account_with_no_sandbox_rows_reports_zero(): void
+    {
+        $this->campaign('cmp-live');
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('SANDBOX campaigns on this account: 0')
+            ->assertSuccessful();
+    }
+
     private function campaign(string $externalId): ExternalCampaign
     {
         return ExternalCampaign::withoutGlobalScopes()->create([
