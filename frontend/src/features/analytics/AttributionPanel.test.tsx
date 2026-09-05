@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { AttributionPanel } from './AttributionPanel'
 import type { Attribution, PlatformClaim } from './api'
 import { renderWithProviders } from '@/test/utils'
@@ -125,9 +125,20 @@ describe('AttributionPanel', () => {
     expect(within(panel).queryByText('80')).not.toBeInTheDocument()
   })
 
-  /** The refusal carries its reason. An absent number with no explanation reads as a broken sync. */
-  it('states why the total is withheld', async () => {
+  /**
+   * The refusal carries its reason. An absent number with no explanation reads as a broken sync.
+   *
+   * The reason is now disclosed rather than printed — VISUAL-FIRST-001. The refusal itself stays on
+   * the page (asserted in the case above); this one proves the reason is still REACHABLE, and that
+   * it was closed to begin with, or it would pass on a version that disclosed nothing.
+   */
+  it('states why the total is withheld, once the reader asks', async () => {
     render(payload())
+
+    const toggle = await screen.findByTestId('attribution-total-withheld-why-toggle')
+    expect(screen.queryByText(/A single sale can be reported by more than one platform/)).not.toBeInTheDocument()
+
+    fireEvent.click(toggle)
 
     expect(
       await screen.findByText(/A single sale can be reported by more than one platform/),

@@ -3,6 +3,7 @@ import { Panel } from './components'
 import { money, num, percent } from './format'
 import type { Attribution, PlatformClaim } from './api'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
+import { Explainer } from '@/components/ui/Explainer'
 import { providerLabel } from '@/features/campaigns/labels'
 import type { Locale } from '@/stores/ui'
 import { campaigns as countedCampaigns } from '@/lib/counted'
@@ -173,16 +174,29 @@ export function AttributionPanel({
           {/*
            * The refusal, printed where the total would be. This is the sentence the panel exists for
            * — an absent number with no reason beside it reads as a broken sync.
+           *
+           * VISUAL-FIRST-001 splits it in two. The REFUSAL stays on the page, because that is the
+           * finding: there is no unified total, and a reader who takes nothing else from this panel
+           * must take that. The thirty words explaining WHY there cannot be one — no shared key, one
+           * sale reported by two platforms, summing produces a count of orders that never happened —
+           * are true, load-bearing and read once; they are disclosed rather than printed, so the
+           * panel states its answer and offers its reasoning instead of leading with it.
            */}
-          <p
+          <div
             data-testid="attribution-total-withheld"
             className="mt-3 rounded-lg border border-border bg-surface-secondary p-3 text-text-secondary"
           >
-            <span className="font-semibold text-text-primary">
+            <p className="font-semibold text-text-primary">
               {ar ? 'لا يوجد إجمالي موحّد للمنصات.' : 'There is no unified platform total.'}
-            </span>{' '}
-            {ar ? data?.platform_reported?.total_withheld_ar : data?.platform_reported?.total_withheld_en}
-          </p>
+            </p>
+            <Explainer
+              className="mt-1.5"
+              testid="attribution-total-withheld-why"
+              label={ar ? 'لماذا لا يُجمع' : 'Why it cannot be summed'}
+            >
+              {ar ? data?.platform_reported?.total_withheld_ar : data?.platform_reported?.total_withheld_en}
+            </Explainer>
+          </div>
         </section>
 
         {/*
