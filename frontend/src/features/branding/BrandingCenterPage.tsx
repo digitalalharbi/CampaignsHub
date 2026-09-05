@@ -12,6 +12,29 @@ import {
 } from './api'
 
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
+/**
+ * WHY white-labelling is not in force, in the reader's language.
+ *
+ * Three different situations, and an operator acts on each differently: a plan that does not carry
+ * the feature is a purchase, a lapsed subscription is a payment, and no subscription at all is a
+ * different conversation entirely. One sentence for all three would send two of those readers to the
+ * wrong place.
+ */
+const WHY_NOT: Record<string, { ar: string; en: string }> = {
+  plan_does_not_include_white_label: {
+    ar: 'خطتك الحالية لا تشمل العلامة البيضاء. الإعداد محفوظ ويعمل فور ترقية الخطة.',
+    en: 'Your current plan does not include white-labelling. The setting is saved and takes effect as soon as the plan does.',
+  },
+  subscription_not_active: {
+    ar: 'الاشتراك غير نشط حاليًا، ولذلك لا تسري ميزات الخطة. الإعداد محفوظ.',
+    en: 'The subscription is not active, so the plan’s features do not apply. The setting is saved.',
+  },
+  no_subscription: {
+    ar: 'لا يوجد اشتراك على هذا الحساب. الإعداد محفوظ ويعمل عند الاشتراك بخطة تشمل العلامة البيضاء.',
+    en: 'There is no subscription on this account. The setting is saved and applies once a plan that includes white-labelling is active.',
+  },
+}
+
 const COPY = {
   ar: {
     title: 'مركز الهوية', subtitle: 'ارفع أصول العلامة لكل نطاق، وأدِر الألوان والخطوط وإعدادات العلامة البيضاء.',
@@ -25,6 +48,7 @@ const COPY = {
     no_permission: 'لا تملك صلاحية عرض مركز الهوية.',
     themed_note: 'هذا النوع يدعم نسختين: فاتحة وداكنة.', single_note: 'أصل واحد موحّد لكل الأسطح.',
     colors: 'الألوان', fonts: 'الخطوط', white_label: 'العلامة البيضاء', white_label_hint: 'إخفاء علامة المنصّة على الأسطح المصدَّرة.',
+    white_label_inactive: 'غير مفعّلة', white_label_generic: 'خطتك الحالية لا تتيح العلامة البيضاء — الإعداد محفوظ ويعمل فور توفّرها.',
     color_primary: 'اللون الأساسي', color_accent: 'اللون الثانوي', color_bg: 'الخلفية', color_text: 'النص',
     font_heading: 'خط العناوين', font_body: 'خط المتن', save: 'حفظ', saving: 'جارٍ الحفظ…', saved: 'تم الحفظ',
     manage_note: 'الرفع والحذف والحفظ تتطلّب صلاحية branding.manage.',
@@ -41,6 +65,7 @@ const COPY = {
     no_permission: 'You do not have permission to view the Branding Center.',
     themed_note: 'This kind supports a light + dark pair.', single_note: 'A single theme-agnostic asset for all surfaces.',
     colors: 'Colors', fonts: 'Fonts', white_label: 'White-label', white_label_hint: 'Hide the platform mark on exported surfaces.',
+    white_label_inactive: 'Not in force', white_label_generic: 'Your current plan does not include white-labelling — the setting is saved and takes effect as soon as it does.',
     color_primary: 'Primary', color_accent: 'Accent', color_bg: 'Background', color_text: 'Text',
     font_heading: 'Heading font', font_body: 'Body font', save: 'Save', saving: 'Saving…', saved: 'Saved',
     manage_note: 'Upload, delete, and save require the branding.manage permission.',
@@ -284,6 +309,7 @@ const FONT_KEYS: { key: string; label: keyof Copy }[] = [
 function SettingsTab({ c, scope, scopeId, canManage }: {
   c: Copy; scope: BrandingScope; scopeId: string | null; canManage: boolean
 }) {
+  const ar = useUi((u) => u.locale) === 'ar'
   const qc = useQueryClient()
   const q = useQuery({
     queryKey: ['branding-settings', scope, scopeId],
@@ -348,6 +374,20 @@ function SettingsTab({ c, scope, scopeId, canManage }: {
         </div>
       </div>
 
+      {/*
+        BRANDING-WHITE-LABEL-ENTITLEMENT — the switch says whether it is IN FORCE, not just whether it
+        was asked for.
+
+        `white_label` is a stored preference; the plan decides whether it does anything. This screen
+        showed the preference alone, so an operator on a plan without the feature ticked a box and
+        watched nothing happen — «a switch that silently does nothing is worse than one that explains
+        why it is off», and it is the same principle as refusing at the endpoint rather than hiding
+        the control.
+
+        The control stays ENABLED. The preference is real, it is saved, and it takes effect the moment
+        the plan carries the feature — disabling it would lose the operator's intent on a downgrade
+        and force them to come back and re-tick after upgrading.
+      */}
       <div className="flex flex-col gap-1.5 border-t border-border pt-4">
         <label className="flex items-center gap-2 text-sm font-semibold text-text-primary">
           <input
@@ -355,8 +395,21 @@ function SettingsTab({ c, scope, scopeId, canManage }: {
             onChange={(e) => saveM.mutate({ white_label: e.target.checked })}
           />
           {c.white_label}
+          {s.white_label && s.white_label_effective === false && (
+            <span
+              data-testid="white-label-not-in-force"
+              className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] font-semibold text-warning"
+            >
+              {c.white_label_inactive}
+            </span>
+          )}
         </label>
         <span className="text-[11px] text-text-muted">{c.white_label_hint}</span>
+        {s.white_label && s.white_label_effective === false && (
+          <span className="text-[11px] text-text-secondary" data-testid="white-label-reason">
+            {WHY_NOT[s.white_label_reason ?? ''] ? (ar ? WHY_NOT[s.white_label_reason!].ar : WHY_NOT[s.white_label_reason!].en) : c.white_label_generic}
+          </span>
+        )}
       </div>
 
       {saveM.isSuccess && <span className="text-xs font-semibold text-success">{c.saved}</span>}

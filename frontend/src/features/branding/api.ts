@@ -67,6 +67,16 @@ export interface BrandingSettings {
   colors: Record<string, string> | null
   fonts: Record<string, string> | null
   white_label: boolean
+  /**
+   * BRANDING-WHITE-LABEL-ENTITLEMENT — what the operator ASKED for, whether it is IN FORCE, and why
+   * not when it is not.
+   *
+   * `white_label` alone was the whole story, so the screen showed a switch that silently did nothing
+   * on a plan without the feature. Optional because an install answering from before this shipped
+   * sends neither field, and the surface then reads exactly as it did.
+   */
+  white_label_effective?: boolean
+  white_label_reason?: string | null
 }
 
 /**
