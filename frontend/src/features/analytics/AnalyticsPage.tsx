@@ -660,6 +660,9 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
         currency={reportingCurrency}
         loading={drivers.isPending}
         error={drivers.isError}
+        // The same series the graph below this block draws, so a marked day sits on the curve the
+        // reader is already looking at rather than on a second one fetched for the purpose.
+        series={points}
       />
       {/*
        * ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — directly beneath the figures that raise the question.
