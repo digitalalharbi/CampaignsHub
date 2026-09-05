@@ -46,7 +46,7 @@ const GUARDED = [
  * Checked as «the first analytical block is not the first thing rendered»: each of these tabs leads
  * with a `<Panel>` — its table or its chart — and the decomposition follows.
  */
-const TAB_ORDER = ['ObjectiveTab', 'CampaignsTab', 'AccountsTab', 'EntityTab'] as const
+const TAB_ORDER = ['ObjectiveTab', 'CampaignsTab', 'AccountsTab', 'EntityTab', 'CreativeTab'] as const
 
 /**
  * Blocks that answer «why», «what changed» or «what should I do» — every one of them belongs below
@@ -104,14 +104,16 @@ describe('the primary KPI region is the first analytical block on the page', () 
     const body = whole.slice(start, next === -1 ? undefined : next)
 
     const panel = body.indexOf('<Panel')
-    const diagnosis = body.indexOf('<ChangeDiagnosis')
-
     expect(panel, `${fn} renders no Panel — this guard is measuring the wrong thing`).toBeGreaterThan(-1)
 
-    if (diagnosis > -1) {
+    // Every analytical block this tab may carry, each of which belongs after the tab's own content.
+    for (const block of ['<ChangeDiagnosis', '<ContentReading']) {
+      const at = body.indexOf(block)
+      if (at === -1) continue
+
       expect(
-        diagnosis,
-        `${fn} renders ChangeDiagnosis before its own content — the reader meets a diagnosis before a figure`,
+        at,
+        `${fn} renders ${block} before its own content — the reader meets an analysis before a figure`,
       ).toBeGreaterThan(panel)
     }
   })

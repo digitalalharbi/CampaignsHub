@@ -3061,13 +3061,6 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
         drill: { value: encodePath(drillUpTo(path, lvl)), fallback: '' },
         tab: { value: TAB_FOR[lvl], fallback: 'performance' },
       })} />
-      {!intelligence.isLoading && (
-        <ContentReading
-          data={intelligence.data?.by_format}
-          currency={intelligence.data?.currency ?? currency}
-          creativesRead={intelligence.data?.creatives_read ?? 0}
-        />
-      )}
       <Panel
         title={ar ? 'أداء الإعلانات' : 'Ad performance'}
         description={ar ? 'من بيانات الإعلان نفسه — لا تُنسب أرقام الحملة إلى إعلان' : 'From ad-level data — campaign figures are never attributed to a ad'}
@@ -3126,6 +3119,21 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
           />
         </div>
       </Panel>
+
+      {/*
+        DASHBOARD-HIERARCHY — the reading sits BELOW the ads, not above them.
+
+        «The cards, and beneath them the chart and the creative side.» The reader of this tab came
+        for the ads; the format comparison is what they read AFTER seeing them, and putting an
+        analysis above the thing it analyses is the same inversion the other tabs carried.
+      */}
+      {!intelligence.isLoading && (
+        <ContentReading
+          data={intelligence.data?.by_format}
+          currency={intelligence.data?.currency ?? currency}
+          creativesRead={intelligence.data?.creatives_read ?? 0}
+        />
+      )}
     </div>
   )
 }
