@@ -8,8 +8,11 @@ use App\Domains\Branding\BrandingSpec;
 use App\Domains\Branding\Models\BrandingAsset;
 use App\Domains\Branding\Models\BrandingSetting;
 use App\Domains\Branding\Services\BrandingService;
+use App\Domains\Branding\Services\WhiteLabelEntitlement;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
+use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -28,7 +31,22 @@ final class BrandingCenterController extends Controller
     public function __construct(
         private readonly BrandingService $branding,
         private readonly ClientAccess $clients,
+        private readonly WhiteLabelEntitlement $whiteLabel,
     ) {}
+
+    /**
+     * The tenant this request belongs to, or null outside a tenant.
+     *
+     * Null is treated as «not entitled» by the callers rather than as an error: a platform-scoped
+     * caller has no subscription to read, and defaulting an entitlement ON where there is nothing to
+     * check is how a paid capability leaks.
+     */
+    private function tenantOfRequest(Request $request): ?Tenant
+    {
+        $tenantId = app(TenantContext::class)->tenantId();
+
+        return $tenantId === null ? null : Tenant::find((string) $tenantId);
+    }
 
     /**
      * A client-scoped write must name a client the CALLER can reach (AGENCY-005).
@@ -158,12 +176,24 @@ final class BrandingCenterController extends Controller
             ->where('scope_id', $scopeId)
             ->first();
 
+        $tenant = $this->tenantOfRequest($request);
+
         return ApiResponse::success([
             'scope' => $scope,
             'scope_id' => $scopeId,
             'colors' => $setting?->colors,
             'fonts' => $setting?->fonts,
+            /*
+             * BRANDING-WHITE-LABEL-ENTITLEMENT — three fields, because they answer three questions.
+             *
+             * `white_label` is what the operator ASKED for and is preserved across a downgrade;
+             * `white_label_effective` is whether it is in force, which also requires the plan to
+             * grant it; `white_label_reason` says which half is missing. A surface with only the
+             * first showed a switch that silently did nothing.
+             */
             'white_label' => $setting !== null && $setting->white_label,
+            'white_label_effective' => $tenant !== null && $this->whiteLabel->effective($tenant, $setting),
+            'white_label_reason' => $tenant === null ? 'no_subscription' : $this->whiteLabel->reason($tenant, $setting),
         ], 'Branding settings.');
     }
 
@@ -188,12 +218,22 @@ final class BrandingCenterController extends Controller
             'white_label' => (bool) ($data['white_label'] ?? false),
         ]);
 
+        $tenant = $this->tenantOfRequest($request);
+
+        /*
+         * The preference is SAVED whatever the plan allows, and the answer says whether it took
+         * effect. Refusing the save would lose an operator's intent on a downgrade and force them to
+         * re-tick a box after upgrading; recording it and reporting «not in force» keeps both the
+         * intent and the truth.
+         */
         return ApiResponse::success([
             'scope' => $setting->scope,
             'scope_id' => $setting->scope_id,
             'colors' => $setting->colors,
             'fonts' => $setting->fonts,
             'white_label' => $setting->white_label,
+            'white_label_effective' => $tenant !== null && $this->whiteLabel->effective($tenant, $setting),
+            'white_label_reason' => $tenant === null ? 'no_subscription' : $this->whiteLabel->reason($tenant, $setting),
         ], 'Branding settings saved.');
     }
 

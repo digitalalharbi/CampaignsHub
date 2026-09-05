@@ -42,7 +42,20 @@
 
   --text-primary: #0d1526;
   --text-secondary: #475569;
-  --text-muted: #8a95a5;
+  /*
+   * MUTED-TEXT-CONTRAST — WCAG AA on every ground this theme paints, hue and hierarchy preserved.
+   *
+   * #8a95a5 measured 2.85:1 on the page and 3.03:1 on a card — below AA's 4.5:1 for normal text and
+   * below even the 3:1 large-text floor, across 1,042 usages that are mostly 13px and so get no
+   * large-text exemption: hints under KPI cards, table metadata, the sentence under a chart.
+   *
+   * Solved against the WORST ground rather than the average: #eef2f6, the hover surface, where a
+   * tone that passes on white can still fail. Same hue and saturation, lightness reduced until every
+   * ground clears 4.5 — 5.10 on white, 4.79 on the page, 4.70 on the secondary surface, 4.53 on
+   * hover. Secondary stays at 6.74 on the same ground, so «muted» still reads as the quieter tone;
+   * the hierarchy is preserved rather than flattened into one grey.
+   */
+  --text-muted: #636f81;
   --ring: #cfd8e3;
 
   --positive-background: #eefbf3;
@@ -147,7 +160,10 @@
 
   --text-primary: #e8eef5;
   --text-secondary: #a7b2bf;
-  --text-muted: #6b7684;
+  /* Dark: #6b7684 measured 3.79:1 on a card — WORSE than on the page, and cards are where most of
+     this text lives. Lightened along the same hue until every dark ground clears AA: 5.46 on the
+     card, 6.03 on the page, 5.05 and 4.53 on the two raised surfaces. Secondary stays at 6.75. */
+  --text-muted: #86919d;
   --ring: #3a4550;
 
   --positive-background: rgba(34, 197, 94, 0.12);
