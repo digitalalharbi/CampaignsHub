@@ -115,6 +115,7 @@ const OUTCOME_KEYS = Object.keys(OUTCOME_LABEL)
 
 /** The objectives with a layout elsewhere in the product — the same six the dashboard offers. */
 import { accounts as countedAccounts, countedAr, countedEn, days as countedDays } from '@/lib/counted'
+import { readMetricValue } from '@/lib/metricValue'
 import { useUi } from '@/stores/ui'
 import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
 import { useProject } from '@/stores/project'
@@ -2042,6 +2043,31 @@ function metricOrDash(value: number | null | undefined, digits = 0): string {
     : '—'
 }
 
+/**
+ * NUMBER-PRESENTATION-001 — a count in a table is abbreviated, and its exact value is reachable.
+ *
+ * «لم يتم تقريب الارقام 1k, 3M, 54.5K وهكذا في الجداول في المجموعات الاعلانية والاعلانات.»
+ *
+ * These columns printed `toLocaleString` straight — «1,284,663» in a cell sized for four glyphs, on
+ * the two widest tables in the product, while every other analytical surface abbreviated the same
+ * metric. Nobody chose that: the entity tables build their own cells and so never passed through the
+ * value law the rest of the product reads counts by.
+ *
+ * They pass through it now. `readMetricValue('number', …)` is the SAME function `DataMetricTable`
+ * calls, so «1.28M» here and «1.28M» on a KPI card agree by construction rather than by both
+ * happening to call `compact`. The exact figure travels with the cell as its `title`, which is the
+ * contract that lets a table abbreviate at all — an abbreviated number with no way back to the
+ * original is a number the reader cannot audit.
+ *
+ * `digits` is still honoured for frequency, which is «2.4 times», not a count to abbreviate: the law
+ * abbreviates only when there is a magnitude worth abbreviating, and 2.4 is not one.
+ */
+function countCell(value: number | null | undefined): { text: string; exact: string | null } {
+  const read = readMetricValue('number', value ?? null)
+
+  return { text: read.text, exact: read.exact }
+}
+
 /** A rate, or «—». Same rule: an unavailable ratio is not a ratio of zero. */
 function rateOrDash(value: number | null | undefined): string {
   return typeof value === 'number' ? `${(value * 100).toFixed(2)}%` : '—'
@@ -2291,7 +2317,7 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
               // The row's own figures — the numbers the reader is looking at, not a second query.
               figures: [
                 { label: ar ? 'الإنفاق' : 'Spend', value: rowMoney(row, 'spend', currency) },
-                { label: ar ? 'الظهور' : 'Impressions', value: metricOrDash(row.impressions) },
+                { label: ar ? 'الظهور' : 'Impressions', value: countCell(row.impressions).text },
                 { label: 'CTR', value: rateOrDash(row.ctr) },
               ],
             })
@@ -2342,15 +2368,38 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
      */
     <EntityState key={`state-${row.entity_id}`} row={row} windowEnd={windowEnd} ar={ar} />,
     rowMoney(row, 'spend', currency),
-    metricOrDash(row.impressions),
-    metricOrDash(row.reach),
+    countCell(row.impressions).text,
+    countCell(row.reach).text,
+    /* Frequency is «2.4 times», not a magnitude — it is read exactly, as it always was. */
     metricOrDash(row.frequency, 2),
-    metricOrDash(row.clicks),
+    countCell(row.clicks).text,
     rateOrDash(row.ctr),
     rowCostPer(row, 'cpc', row.clicks ?? 0, currency),
     rowCostPer(row, 'cpm', (row.impressions ?? 0) / 1000, currency),
-    metricOrDash(row.conversions),
+    countCell(row.conversions).text,
     rowCostPer(row, 'cpa', row.conversions ?? 0, currency),
+  ])
+
+  /*
+   * NUMBER-PRESENTATION-001 — the exact figure behind each abbreviated one, per cell.
+   *
+   * An abbreviation with no way back to the original is a number the reader cannot audit, and that
+   * is the whole reason the table is allowed to abbreviate. Positions match `cells` above; a column
+   * that was never abbreviated carries `null` and gets no tooltip.
+   */
+  const exact: (string | null)[][] = rows.map((row) => [
+    null,                                   // name
+    null,                                   // state
+    null,                                   // spend — money carries its own exact value
+    countCell(row.impressions).exact,
+    countCell(row.reach).exact,
+    null,                                   // frequency
+    countCell(row.clicks).exact,
+    null,                                   // CTR
+    null,                                   // CPC
+    null,                                   // CPM
+    countCell(row.conversions).exact,
+    null,                                   // CPA
   ])
 
   /*
@@ -2438,7 +2487,7 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
               still sortable; the reader chooses, and the default is the answer to the question they
               opened the tab with.
             */}
-            <MetricTable head={head} rows={cells} values={values} />
+            <MetricTable head={head} rows={cells} values={values} exact={exact} />
 
             {openAd && (
               <AdPreviewDialog
@@ -2883,8 +2932,8 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
               <span key={`${cr.id}-c`} className="block max-w-40 truncate text-text-secondary">{cr.campaign_name ?? '—'}</span>,
               cr.objective ?? '—',
               rowMoney(cr.metrics ?? undefined, 'spend', currency),
-              metricOrDash(cr.metrics?.impressions ?? null),
-              metricOrDash(cr.metrics?.clicks ?? null),
+              countCell(cr.metrics?.impressions ?? null).text,
+              countCell(cr.metrics?.clicks ?? null).text,
               rateOrDash(cr.metrics?.ctr ?? null),
               cr.freshness?.last_active_at ? fmtDate(cr.freshness.last_active_at) : '—',
             ])}
