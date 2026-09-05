@@ -39,7 +39,7 @@ export type PreviewReading =
    * exposing the asset at all; `no_media` is the state the presenter calls «available» while every
    * URL on it is null, which happens when a creative carries only a carousel breakdown.
    */
-  | { kind: 'none'; reason: 'withheld' | 'expired' | 'unavailable' | 'never_fetched' | 'no_media'; note: string | null }
+  | { kind: 'none'; reason: 'withheld' | 'expired' | 'unavailable' | 'never_fetched' | 'shape_not_fetched' | 'no_media'; note: string | null }
   /**
    * CONTENT-PREVIEW-SHAPES-001 — two shapes whose media is not one asset.
    *
@@ -203,6 +203,22 @@ export function absenceLabel(reading: PreviewReading, ar: boolean): string {
     never_fetched: [
       'هذا الصف مُستنتج من أداء الإعلان، ولم يُجلب الإعلان نفسه من المنصة — فلا يوجد ملف لعرضه.',
       'This row was derived from ad-level performance; the ad itself was never fetched, so there is no file to show.',
+    ],
+    /*
+     * Also not the platform's doing, and for a different reason than `never_fetched`.
+     *
+     * The ad WAS fetched. Its shape simply carries more than one asset — a collection is a hero over
+     * a grid of product tiles — and the tiles are behind a call this product does not make yet.
+     * Snapchat exposes them; `MetaConnector` is the only place in the tree that has ever written
+     * `cards`. Saying «the platform exposed no file» would send an operator to debug a working
+     * integration, which is the exact defect `never_fetched` exists to prevent, one shape over.
+     *
+     * No «coming soon»: a status line that promises a date ages into a lie, and this one is true
+     * whatever happens next.
+     */
+    shape_not_fetched: [
+      'إعلان تشكيلة: صورة رئيسية فوق شبكة منتجات. المنصة تتيح البطاقات ولم يطلبها النظام بعد.',
+      'A collection ad — a hero over a grid of product tiles. The platform exposes the tiles; this product does not fetch them yet.',
     ],
     no_media: ['لم تُرسل المنصة ملفًا لهذا الإعلان.', 'The platform sent no file for this ad.'],
   }

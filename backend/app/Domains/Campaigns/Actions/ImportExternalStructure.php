@@ -172,7 +172,19 @@ final class ImportExternalStructure
                 'campaign_id' => $campaign->unified_campaign_id,
                 'external_campaign_id' => $campaign->id,
                 'name' => (string) ($creative['name'] ?? $creative['external_id']),
-                'format' => (string) ($creative['format'] ?? 'image'),
+                /*
+                 * CONTENT-PREVIEW-SHAPES-001 — an unstated format is not an image.
+                 *
+                 * This read `(string) ($creative['format'] ?? 'image')`. A connector that could not
+                 * map a platform's creative type deliberately emits nothing, and this turned that
+                 * silence into a claim: the ad became an IMAGE, `CreativePresenter::kind()` looked
+                 * for a still, found none, and told the reader «the platform exposed no asset for
+                 * it» — a sentence about Snapchat that was really about a default here.
+                 *
+                 * Null is what a column says when nobody knows. The presenter has an honest answer
+                 * for it; it had none for a lie.
+                 */
+                'format' => isset($creative['format']) ? (string) $creative['format'] : null,
                 'thumbnail_url' => $creative['thumbnail_url'] ?? null,
                 'preview_url' => $creative['preview_url'] ?? null,
                 /*

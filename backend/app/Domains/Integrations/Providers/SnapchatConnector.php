@@ -287,11 +287,29 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             $creatives[(string) $c['id']] = array_filter([
                 'external_id' => (string) $c['id'],
                 'name' => isset($c['name']) ? (string) $c['name'] : null,
-                'format' => match (strtoupper((string) ($c['type'] ?? ''))) {
+                /*
+                 * CONTENT-PREVIEW-SHAPES-001 — the platform's word for the shape, mapped or kept.
+                 *
+                 * Two corrections. COLLECTION mapped to «carousel», which is not what a collection
+                 * is: `CreativePresenter::kind()` has had a `collection` case since it was written —
+                 * a hero asset over a grid of tiles — and calling it a carousel sent Snapchat's
+                 * collections down the branch for a swipeable strip of equals.
+                 *
+                 * And `default => null` DISCARDED the type. Snapchat states more of them than this
+                 * `match` knows — COMPOSITE, DEEP_LINK, AD_TO_LENS, LENS_SNAPCODE, PREVIEW — and a
+                 * discarded answer became «unknown», which the importer then defaulted to «image».
+                 * The type is kept, lower-cased, so an unmapped shape is VISIBLE in the data instead
+                 * of silently becoming a still. `kind()` reads it with `str_contains`, so a type it
+                 * does not recognise lands on «other», which is the truth, and one it does — a
+                 * «composite» carrying no known word — is at least reported as what Snapchat called
+                 * it rather than as something it is not.
+                 */
+                'format' => match ($type = strtoupper((string) ($c['type'] ?? ''))) {
                     'SNAP_AD', 'LONGFORM_VIDEO' => 'video',
                     'WEB_VIEW', 'APP_INSTALL' => 'image',
-                    'COLLECTION' => 'carousel',
-                    default => null,
+                    'COLLECTION' => 'collection',
+                    '' => null,
+                    default => strtolower($type),
                 },
                 /*
                  * SNAP-CREATIVE-ASSETS-001 — the asset lives behind a second call, and this is its key.
@@ -431,6 +449,16 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
 
             $creatives[$id] = array_filter([
                 ...$creative,
+                /*
+                 * CONTENT-PREVIEW-SHAPES-001 — a shape the creative body did not state, answered by
+                 * the media Snapchat resolved for it.
+                 *
+                 * Only when nothing was stated. A creative that DID name its type keeps it: a
+                 * COMPOSITE story is a sequence of snaps whose first one happens to be a film, and
+                 * overwriting «composite» with «video» would trade the shape for one of its parts.
+                 * This fills a blank from the platform's own answer; it never argues with one.
+                 */
+                'format' => $creative['format'] ?? ($isVideo ? 'video' : 'image'),
                 // A video's file is the video; an image's file is the image. Storing a video URL in
                 // the image column is what makes a card try to render an MP4 as a picture.
                 'asset_url' => $isVideo ? null : $link,

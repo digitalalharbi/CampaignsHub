@@ -69,6 +69,14 @@ describe('the silences, told apart', () => {
      * the creative's asset» — and went looking for a broken integration that was working.
      */
     ['never_fetched' as const, 'derived from ad-level performance'],
+    /*
+     * CONTENT-PREVIEW-SHAPES-001 — the fifth state, and it is about US.
+     *
+     * A collection ad's tiles are behind a call this product does not make yet. Reporting that as
+     * `unavailable` — «the platform exposed no file» — is the same false accusation `never_fetched`
+     * exists to prevent, one shape over.
+     */
+    ['shape_not_fetched' as const, 'does not fetch them yet'],
   ])('%s says what happened', (state, expected) => {
     const reading = readPreview(preview({ state }), false)
 

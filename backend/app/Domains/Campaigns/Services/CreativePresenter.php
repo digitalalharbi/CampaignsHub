@@ -247,6 +247,35 @@ final class CreativePresenter
                     'note_ar' => 'هذا الصف مُستنتج من أداء الإعلان، ولم يُجلب الإعلان نفسه من المنصة — فلا يوجد أصل لعرضه.',
                     'note_en' => 'This row was derived from ad-level performance; the ad itself was never fetched from the platform, so there is no asset to show.',
                 ],
+            /*
+             * CONTENT-PREVIEW-SHAPES-001 — «the platform exposed no asset» is FALSE for these.
+             *
+             * A collection ad is a hero over a grid of product tiles, and a catalog ad has no fixed
+             * asset at all — the platform composes one per product at delivery. For a collection the
+             * tiles live behind a call this product does not yet make: Snapchat's connector resolves
+             * `top_snap_media_id` and nothing else, and `MetaConnector` is the only place in the tree
+             * that has ever written `cards`.
+             *
+             * So an empty collection reached the reader as «This ad was fetched from the platform,
+             * and the platform exposed no asset for it» — the same false accusation AD-MEDIA-
+             * RECOVERY-001 removed for `estimated` rows, made again for a different reason. Snapchat
+             * exposes the tiles; nobody asked for them.
+             *
+             * The sentence says whose gap it is. It is deliberately NOT a promise about when: a
+             * status line that says «coming soon» ages into a lie, and this one stays true either
+             * way. The `catalog` kind keeps its own separate wording in the UI — a catalog ad is not
+             * missing anything, it simply has no fixed asset — so only `collection` lands here.
+             */
+            $kind === 'collection' && $image === null && $video === null && $thumb === null
+                && $creative->cards === null => [
+                    'state' => 'shape_not_fetched',
+                    'kind' => $kind,
+                    'aspect' => $aspect,
+                    'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
+                    'expires_at' => null,
+                    'note_ar' => 'هذا إعلان تشكيلة: صورة رئيسية فوق شبكة منتجات. المنصة تتيح البطاقات، ولم يطلبها النظام بعد — فلا شيء يُعرض هنا، والنقص عندنا لا عند المنصة.',
+                    'note_en' => 'This is a collection ad — a hero asset over a grid of product tiles. The platform does expose the tiles; this product does not fetch them yet, so there is nothing to show and the gap is ours, not the platform’s.',
+                ],
             $image === null && $video === null && $thumb === null && $creative->cards === null => [
                 'state' => 'unavailable',
                 'kind' => $kind,

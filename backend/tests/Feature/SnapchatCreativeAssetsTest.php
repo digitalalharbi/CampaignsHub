@@ -204,6 +204,80 @@ final class SnapchatCreativeAssetsTest extends TestCase
         Http::assertNotSent(fn ($request): bool => array_key_exists('media_ids', (array) $request->data()));
     }
 
+    /**
+     * CONTENT-PREVIEW-SHAPES-001 — a COLLECTION is a collection, not a carousel.
+     *
+     * The map said `carousel`, and `CreativePresenter::kind()` has had a separate `collection` case
+     * since it was written: a hero asset over a grid of tiles, which is not a swipeable strip of
+     * equals. Snapchat's collections went down the wrong branch on every surface that reads a kind.
+     */
+    public function test_a_collection_is_reported_as_a_collection(): void
+    {
+        $this->fakeApi([
+            'cr-1' => ['media' => 'me-1', 'type' => 'COLLECTION'],
+        ], [
+            'me-1' => ['type' => 'IMAGE', 'download_link' => 'https://cf.snapchat.com/hero.jpg'],
+        ]);
+
+        $this->assertSame('collection', $this->creatives()['cr-1']['format']);
+    }
+
+    /**
+     * A type this `match` does not know is KEPT, not discarded.
+     *
+     * `default => null` threw the platform's answer away, and `ImportExternalStructure` then wrote
+     * `'image'` for the blank — so a Snapchat COMPOSITE was stored as a still, and every surface
+     * downstream behaved correctly on a claim we had invented. Keeping the word makes the gap
+     * visible in the data instead of silent.
+     */
+    public function test_an_unmapped_creative_type_is_kept_rather_than_discarded(): void
+    {
+        $this->fakeApi([
+            'cr-1' => ['media' => 'me-1', 'type' => 'COMPOSITE'],
+        ], [
+            'me-1' => ['type' => 'VIDEO', 'download_link' => 'https://cf.snapchat.com/story.mp4'],
+        ]);
+
+        $creative = $this->creatives()['cr-1'];
+
+        $this->assertSame('composite', $creative['format'], 'The platform said COMPOSITE; nothing else may be recorded.');
+        $this->assertSame('https://cf.snapchat.com/story.mp4', $creative['video_url']);
+    }
+
+    /**
+     * A creative that states NO type takes the one its media reports.
+     *
+     * The platform's own answer, one call later — not a guess. Filled only into a blank: a creative
+     * that named its shape keeps it, because a COMPOSITE story whose first snap is a film is a
+     * story, not a video.
+     */
+    public function test_an_unstated_format_is_answered_by_the_resolved_media(): void
+    {
+        Http::fake([
+            '*get_media_by_ids*' => Http::response(['media' => [
+                ['media' => ['id' => 'me-1', 'type' => 'VIDEO', 'download_link' => 'https://cf.snapchat.com/x.mp4']],
+            ]], 200),
+            '*/creatives*' => Http::response(['creatives' => [
+                ['creative' => ['id' => 'cr-1', 'name' => 'No type', 'top_snap_media_id' => 'me-1']],
+            ]], 200),
+            '*' => Http::response([], 200),
+        ]);
+
+        $this->assertSame('video', $this->creatives()['cr-1']['format']);
+    }
+
+    /** ...and a stated shape is never overwritten by one of its parts. */
+    public function test_a_stated_shape_survives_its_medias_type(): void
+    {
+        $this->fakeApi([
+            'cr-1' => ['media' => 'me-1', 'type' => 'COLLECTION'],
+        ], [
+            'me-1' => ['type' => 'VIDEO', 'download_link' => 'https://cf.snapchat.com/hero.mp4'],
+        ]);
+
+        $this->assertSame('collection', $this->creatives()['cr-1']['format'], 'A collection whose hero is a film is still a collection.');
+    }
+
     /** @return array<string, array<string, mixed>> */
     private function creatives(): array
     {

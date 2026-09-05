@@ -158,6 +158,82 @@ final class SignedMediaUrlTest extends TestCase
     }
 
     /**
+     * CONTENT-PREVIEW-SHAPES-001 — a collection with no tiles says whose gap it is.
+     *
+     * «جُلب هذا الإعلان من المنصة، ولم تُتِح المنصة أصل المحتوى» is FALSE for a collection ad.
+     * Snapchat exposes the tiles perfectly well; this product fetches `top_snap_media_id` and
+     * nothing else, and `MetaConnector` is the only place in the tree that has ever written `cards`.
+     * So every Snapchat collection accused the platform of a gap that is ours — the same false
+     * accusation AD-MEDIA-RECOVERY-001 removed for derived rows, made again one shape over.
+     */
+    public function test_a_collection_with_no_tiles_blames_nobody_but_us(): void
+    {
+        $creative = ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'provider' => 'snapchat',
+            'external_creative_id' => 'cr-'.Str::random(8),
+            'name' => 'Bundle collection',
+            'format' => 'collection',
+            'source_type' => 'api',
+        ]);
+
+        $preview = app(CreativePresenter::class)->preview($creative);
+
+        $this->assertSame('shape_not_fetched', $preview['state']);
+        $this->assertSame('collection', $preview['kind']);
+
+        // The sentence names the gap as ours, and never says the platform withheld anything.
+        $this->assertStringContainsString('does not fetch them yet', (string) $preview['note_en']);
+        $this->assertStringNotContainsString('exposed no asset', (string) $preview['note_en']);
+        $this->assertStringContainsString('ولم يطلبها النظام بعد', (string) $preview['note_ar']);
+    }
+
+    /**
+     * ...and every OTHER assetless shape still says what it always said.
+     *
+     * The new state is narrow on purpose. A plain image ad the platform sent nothing for is a real
+     * `unavailable`, and widening the collection sentence over it would trade one false statement
+     * for another.
+     */
+    public function test_an_assetless_image_ad_still_reports_unavailable(): void
+    {
+        $creative = ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'provider' => 'snapchat',
+            'external_creative_id' => 'cr-'.Str::random(8),
+            'name' => 'A still',
+            'format' => 'image',
+            'source_type' => 'api',
+        ]);
+
+        $this->assertSame('unavailable', app(CreativePresenter::class)->preview($creative)['state']);
+    }
+
+    /**
+     * A collection whose tiles DID arrive is not in this state at all.
+     *
+     * `cards` is the whole distinction: `null` is «no breakdown reached us», and a list is the
+     * breakdown. A collection that has its tiles has nothing missing and must render them.
+     */
+    public function test_a_collection_that_has_its_tiles_is_available(): void
+    {
+        $creative = ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'provider' => 'meta',
+            'external_creative_id' => 'cr-'.Str::random(8),
+            'name' => 'Bundle collection',
+            'format' => 'collection',
+            'source_type' => 'api',
+            'cards' => [['image_url' => 'https://cdn.example/1.jpg']],
+        ]);
+
+        $this->assertNotSame('shape_not_fetched', app(CreativePresenter::class)->preview($creative)['state']);
+    }
+
+    /**
      * CONTENT-PREVIEW-SHAPES-001 — the SHAPE of the frame, which the preview could not see.
      *
      * A story or a reel is 9:16. Shown in the square frame every preview used, it is letterboxed into

@@ -47,7 +47,14 @@ export interface CreativePreview {
    * itself was never requested, so blaming the platform would send an operator to debug an
    * integration that is working.
    */
-  state: 'available' | 'withheld' | 'expired' | 'unavailable' | 'never_fetched'
+  /*
+   * CONTENT-PREVIEW-SHAPES-001 — `shape_not_fetched` is the fifth, and it is about US.
+   *
+   * A collection ad's tiles live behind a call this product does not make yet. Reporting that as
+   * `unavailable` — «the platform exposed no asset» — is a false accusation of exactly the kind
+   * `never_fetched` was added to stop. Five states, five sentences.
+   */
+  state: 'available' | 'withheld' | 'expired' | 'unavailable' | 'never_fetched' | 'shape_not_fetched'
   /**
    * CONTENT-PREVIEW-SHAPES-001 — the shapes a real ad takes, including the two that have no single
    * asset to show.
