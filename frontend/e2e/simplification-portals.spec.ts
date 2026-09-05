@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { AUTH } from './helpers'
+import { RAIL_PAINT_TIMEOUT, RAIL_PATH_BUDGET } from './railWalkTimeout'
 
 /**
  * `/app`, `/admin` and `/portal` — UX-FILTERS-001, which narrowed the scope of SIMPLIFY-003/004/005.
@@ -34,7 +35,7 @@ test.describe('the advertiser portal opens on its data, with its filters on it',
       await page.goto(p.path)
 
       const bar = page.getByTestId(`${p.id}-filters`)
-      await expect(bar, 'no visible filter bar').toBeVisible({ timeout: 20000 })
+      await expect(bar, 'no visible filter bar').toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
 
       // At least one real narrowing control, reachable without opening anything.
       await expect(bar.locator('select').first()).toBeVisible()
@@ -47,7 +48,7 @@ test.describe('the advertiser portal opens on its data, with its filters on it',
     test(`${p.id}: narrowing names itself as a chip that can be undone`, async ({ page }) => {
       await page.goto(p.path)
       const bar = page.getByTestId(`${p.id}-filters`)
-      await expect(bar).toBeVisible({ timeout: 20000 })
+      await expect(bar).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
 
       // Pick the first non-default value of the first select on the bar.
       const select = bar.locator('select').first()
@@ -59,7 +60,7 @@ test.describe('the advertiser portal opens on its data, with its filters on it',
       await select.selectOption(chosen!)
 
       // The page now says what is narrowing it, and offers the way back.
-      await expect(page.getByTestId(`${p.id}-applied`)).toBeVisible({ timeout: 20000 })
+      await expect(page.getByTestId(`${p.id}-applied`)).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
       await page.getByTestId(`${p.id}-reset`).click()
       await expect(page.getByTestId(`${p.id}-applied`)).toHaveCount(0)
     })
@@ -73,7 +74,7 @@ test.describe('the advertiser portal opens on its data, with its filters on it',
    */
   test('search stays on the page, beside the filters', async ({ page }) => {
     await page.goto('/app/files')
-    await expect(page.getByTestId('files-filters')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('files-filters')).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
     await expect(page.getByTestId('files-search'), 'the search box was folded away').toBeVisible()
   })
 })
@@ -92,7 +93,7 @@ test.describe('the platform console separates daily work from rare tools', () =>
     await page.goto('/admin')
 
     const advanced = page.getByTestId('admin-advanced-nav')
-    await expect(advanced, 'there is no advanced section').toBeVisible({ timeout: 20000 })
+    await expect(advanced, 'there is no advanced section').toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
     await expect(advanced).toContainText(/انتقال بوابة العملاء|Portal cutover/)
     await expect(advanced).toContainText(/وسائل الدفع|Payment methods/)
   })
@@ -107,7 +108,7 @@ test.describe('the platform console separates daily work from rare tools', () =>
       '/admin/settings/currency-rates',
     ]) {
       await page.goto(path)
-      await expect(page.locator('main'), `${path} rendered nothing`).toBeVisible({ timeout: 20000 })
+      await expect(page.locator('main'), `${path} rendered nothing`).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
       await expect(page.locator('main'), `${path} is a not-found page`)
         .not.toContainText(/الصفحة غير موجودة|Page not found/i)
     }
@@ -116,11 +117,11 @@ test.describe('the platform console separates daily work from rare tools', () =>
   /** Every daily entry still opens — reordering a rail must not strand a page. */
   test('every daily destination still opens', async ({ page }) => {
     const paths = ['/admin', '/admin/registrations', '/admin/tenants', '/admin/billing', '/admin/audit', '/admin/settings']
-    test.setTimeout(20_000 + paths.length * 8_000)
+    test.setTimeout(RAIL_PAINT_TIMEOUT + paths.length * RAIL_PATH_BUDGET)
 
     for (const path of paths) {
       await page.goto(path)
-      await expect(page.locator('main'), `${path} rendered nothing`).toBeVisible({ timeout: 20000 })
+      await expect(page.locator('main'), `${path} rendered nothing`).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
     }
   })
 })
@@ -139,7 +140,7 @@ test.describe('the client portal leads with results, not paperwork', () => {
     await page.goto('/portal')
 
     const nav = page.getByRole('navigation').first()
-    await expect(nav).toBeVisible({ timeout: 20000 })
+    await expect(nav).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
 
     const labels = await nav.locator('a').evaluateAll((els) =>
       els.map((e) => (e as HTMLElement).innerText.trim()).filter(Boolean),
@@ -165,11 +166,11 @@ test.describe('the client portal leads with results, not paperwork', () => {
    */
   test('no operator vocabulary reaches the client', async ({ page }) => {
     const paths = ['/portal', '/portal/campaigns', '/portal/reports', '/portal/invoices']
-    test.setTimeout(20_000 + paths.length * 8_000)
+    test.setTimeout(RAIL_PAINT_TIMEOUT + paths.length * RAIL_PATH_BUDGET)
 
     for (const path of paths) {
       await page.goto(path)
-      await expect(page.locator('main')).toBeVisible({ timeout: 20000 })
+      await expect(page.locator('main')).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
 
       const text = await page.locator('main').innerText()
       expect(text, `${path} shows the client internal plumbing`)

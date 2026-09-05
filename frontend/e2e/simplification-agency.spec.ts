@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { AUTH, openFilters } from './helpers'
+import { RAIL_PAINT_TIMEOUT, RAIL_PATH_BUDGET } from './railWalkTimeout'
 
 /**
  * `/agency` after SIMPLIFY-002 — the rail is grouped by job, and filters fold.
@@ -38,13 +39,13 @@ test.describe('the agency rail', () => {
    * this way, which is the distinction worth knowing.
    */
   test('every destination opens, and none was lost in the regrouping', async ({ page }) => {
-    test.setTimeout(20_000 + AGENCY_PATHS.length * 8_000)
+    test.setTimeout(RAIL_PAINT_TIMEOUT + AGENCY_PATHS.length * RAIL_PATH_BUDGET)
 
     for (const path of AGENCY_PATHS) {
       await page.goto(path)
-      await expect(page.locator('main'), `${path} rendered nothing`).toBeVisible({ timeout: 20000 })
+      await expect(page.locator('main'), `${path} rendered nothing`).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
       await expect(page.locator('main').getByRole('heading').first(), `${path} has no heading`)
-        .toBeVisible({ timeout: 20000 })
+        .toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
       // A route that fell through to a not-found or a portal refusal is the failure this catches.
       await expect(page.locator('main'), `${path} is a not-found page`)
         .not.toContainText(/غير متاحة لحسابك|not available to your account|الصفحة غير موجودة|Page not found/i)
@@ -55,7 +56,7 @@ test.describe('the agency rail', () => {
   test('the rail is two levels and named for what somebody came to do', async ({ page }) => {
     await page.goto('/agency/dashboard')
     const nav = page.getByRole('navigation').first()
-    await expect(nav).toBeVisible({ timeout: 20000 })
+    await expect(nav).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
 
     const text = await nav.innerText()
     for (const group of ['العملاء والمشاريع', 'الحملات', 'المهام والطلبات', 'التقارير والملفات', 'المالية', 'الإعدادات']) {
@@ -158,7 +159,7 @@ test.describe('agency filters are on the page, and name what they narrow', () =>
       await page.goto(p.path)
 
       const bar = page.getByTestId(`${p.id}-filters`)
-      await expect(bar, 'no visible filter bar').toBeVisible({ timeout: 20000 })
+      await expect(bar, 'no visible filter bar').toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
 
       // Nothing narrowed on arrival: no chip row, and nothing had to be opened to see the controls.
       await expect(page.getByTestId(`${p.id}-applied`)).toHaveCount(0)
@@ -168,12 +169,12 @@ test.describe('agency filters are on the page, and name what they narrow', () =>
     test(`${p.id}: narrowing names itself, and can be undone`, async ({ page }) => {
       await page.goto(p.path)
       const bar = page.getByTestId(`${p.id}-filters`)
-      await expect(bar).toBeVisible({ timeout: 20000 })
+      await expect(bar).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
       await page.waitForLoadState('networkidle')
 
       await p.narrow(bar)
 
-      await expect(page.getByTestId(`${p.id}-applied`)).toBeVisible({ timeout: 20000 })
+      await expect(page.getByTestId(`${p.id}-applied`)).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
       await page.getByTestId(`${p.id}-reset`).click()
       await expect(page.getByTestId(`${p.id}-applied`)).toHaveCount(0)
     })
@@ -193,7 +194,7 @@ test.describe('agency filters are on the page, and name what they narrow', () =>
       await page.setViewportSize({ width: 343, height: 760 })
       await page.goto('/agency/clients')
 
-      await expect(page.getByTestId('clients-filters')).toBeVisible({ timeout: 20000 })
+      await expect(page.getByTestId('clients-filters')).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
 
       /*
        * Wait for the clients themselves, not just the toolbar above them.
