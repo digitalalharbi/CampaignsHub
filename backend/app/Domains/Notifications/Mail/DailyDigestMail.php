@@ -468,20 +468,47 @@ final class DailyDigestMail extends Mailable
      * a kind of campaign this account did not run yesterday.
      *
      * @param  array<string,mixed>  $paths
-     * @return list<array<string,string>>
+     * @return list<array{label: string, spend: string, width: int, result: string}>
      */
     private function paths(DigestPresenter $p, bool $ar, array $paths): array
     {
+        $spends = [];
+        foreach ($paths as $bucket) {
+            $spend = (float) ($bucket['spend'] ?? 0);
+            if ($spend > 0) {
+                $spends[] = $spend;
+            }
+        }
+
+        /*
+         * VISUAL-FIRST-001 — «email: a compact dashboard, not an essay … short bars where supported».
+         *
+         * This block was three columns of text while the funnel directly beneath it already drew
+         * email-safe bars, which is what proves the technique works in the clients this product
+         * sends to. A path breakdown is a CONTRIBUTION — «where did the money go» — and that is a
+         * question a reader answers from bar lengths in one pass and from a column of figures in
+         * several.
+         *
+         * The share is of the LARGEST path rather than of the total, for the same reason the funnel
+         * scales to its top stage: it fills the available width, so the smallest path is still
+         * visible rather than collapsing to a sliver nobody can compare.
+         */
+        $top = $spends === [] ? 0.0 : max($spends);
+
         $out = [];
 
         foreach ($paths as $key => $bucket) {
-            if ((float) ($bucket['spend'] ?? 0) <= 0) {
+            $spend = (float) ($bucket['spend'] ?? 0);
+
+            if ($spend <= 0) {
                 continue;
             }
 
             $out[] = [
                 'label' => $p->pathLabel((string) $key),
                 'spend' => $p->money($bucket['spend']),
+                // A floor of 2, so a path that spent something never draws as though it spent none.
+                'width' => $top > 0.0 ? max(2, (int) round(($spend / $top) * 100)) : 0,
                 // Only the conversion path has a cost per result. The others report what they DID
                 // buy — campaigns running — rather than borrowing a denominator they do not own.
                 'result' => $bucket['cost_per_result'] !== null
