@@ -34,6 +34,7 @@ import type { Locale } from '@/stores/ui'
 const COPY = {
   ar: {
     title: 'بطاقات الكاروسيل',
+    collectionTitle: 'منتجات المجموعة',
     of: 'من',
     card: 'البطاقة',
     previous: 'البطاقة السابقة',
@@ -49,6 +50,7 @@ const COPY = {
   },
   en: {
     title: 'Carousel cards',
+    collectionTitle: 'Collection products',
     of: 'of',
     card: 'Card',
     previous: 'Previous card',
@@ -86,15 +88,28 @@ export function CreativeCarousel({
     setActive((i) => (i < cards.length ? i : 0))
   }, [cards.length])
 
-  // Only a carousel has cards. Everything else renders nothing at all rather than an empty section.
-  if (preview.kind !== 'carousel') return null
+  /*
+   * CONTENT-PREVIEW-SHAPES-001 — a COLLECTION has cards too, and they were being dropped.
+   *
+   * This returned null unless the kind was exactly `carousel`, so a collection rendered its hero and
+   * nothing else — «showing one sixth of it», in the words of the reading that already carried the
+   * shape. A collection is a hero over a grid of product tiles; the tiles are the rest of the ad.
+   *
+   * They are the same DATA and a different THING, so the section is named differently: a carousel's
+   * cards are slides a viewer swipes, a collection's are products underneath a film or a still.
+   * Everything else still renders nothing rather than an empty section.
+   */
+  const isCollection = preview.kind === 'collection'
+  if (preview.kind !== 'carousel' && !isCollection) return null
+
+  const heading = isCollection ? t.collectionTitle : t.title
 
   if (!reported) {
     return (
       <section className="rounded-lg border border-border bg-surface p-4">
         <h2 className="flex items-center gap-2 text-sm font-medium text-text-primary">
           <Images className="h-4 w-4" aria-hidden />
-          {t.title}
+          {heading}
         </h2>
         <p className="mt-2 text-sm text-text-secondary">{t.notReported}</p>
       </section>
@@ -108,7 +123,7 @@ export function CreativeCarousel({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-sm font-medium text-text-primary">
           <Images className="h-4 w-4" aria-hidden />
-          {t.title}
+          {heading}
         </h2>
         {cards.length > 0 && (
           <p className="text-xs text-text-secondary" dir="ltr">
