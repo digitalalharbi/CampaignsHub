@@ -35,6 +35,20 @@ const GUARDED = [
 ]
 
 /**
+ * And on every OTHER analytics tab, the analytical blocks come after that tab's own primary content.
+ *
+ * The owner's correction is about the whole system, not the two surfaces that happen to carry a
+ * `MetricStrip`: «the system is built on the primary picture of the data — the cards, and beneath
+ * them the chart and the analytical side». Four tabs opened with `ChangeDiagnosis` and no figures
+ * above it at all, so a reader arriving at Objectives, Campaigns, Accounts or Ad sets met a
+ * diagnosis before a single number.
+ *
+ * Checked as «the first analytical block is not the first thing rendered»: each of these tabs leads
+ * with a `<Panel>` — its table or its chart — and the decomposition follows.
+ */
+const TAB_ORDER = ['ObjectiveTab', 'CampaignsTab', 'AccountsTab', 'EntityTab'] as const
+
+/**
  * Blocks that answer «why», «what changed» or «what should I do» — every one of them belongs below
  * the figures. Named by component, because that is what an author actually inserts.
  */
@@ -76,6 +90,30 @@ describe('the primary KPI region is the first analytical block on the page', () 
       above,
       `${file} renders ${above.join(', ')} above its primary KPI row — the reader meets a diagnosis before a figure`,
     ).toEqual([])
+  })
+
+  it.each(TAB_ORDER)('%s renders its own content before any analytical block', (fn) => {
+    const entry = Object.entries(SOURCES).find(([path]) => path.endsWith('/AnalyticsPage.tsx'))
+    expect(entry, 'AnalyticsPage.tsx was not found').toBeTruthy()
+
+    const whole = bodyOf(entry![1])
+    const start = whole.indexOf(`function ${fn}(`)
+    expect(start, `${fn} was not found — the guard would pass having read nothing`).toBeGreaterThan(-1)
+
+    const next = whole.indexOf('\nfunction ', start + 10)
+    const body = whole.slice(start, next === -1 ? undefined : next)
+
+    const panel = body.indexOf('<Panel')
+    const diagnosis = body.indexOf('<ChangeDiagnosis')
+
+    expect(panel, `${fn} renders no Panel — this guard is measuring the wrong thing`).toBeGreaterThan(-1)
+
+    if (diagnosis > -1) {
+      expect(
+        diagnosis,
+        `${fn} renders ChangeDiagnosis before its own content — the reader meets a diagnosis before a figure`,
+      ).toBeGreaterThan(panel)
+    }
   })
 
   /** The guard must have read real files, not an empty glob. */

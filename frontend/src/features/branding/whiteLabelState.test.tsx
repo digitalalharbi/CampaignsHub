@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { BrandingCenterPage } from './BrandingCenterPage'
-import { renderWithProviders, signInWith, signOut } from '@/test/utils'
+import { renderWithProviders, signInWith } from '@/test/utils'
 
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),

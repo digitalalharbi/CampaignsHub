@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
 import { StatCard } from '@/components/ui/StatCard'
+import { Explainer } from '@/components/ui/Explainer'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { compact, money, moneyExact, num } from '@/features/analytics/format'
@@ -576,11 +577,22 @@ export function ChangeDiagnosis({
         <h3 className="mb-1 text-base font-bold text-text-primary">
           {ar ? 'الأيام التي خرجت عن سلوك الفترة' : 'The days that departed from the period’s behaviour'}
         </h3>
-        <p className="mb-3 text-xs text-text-muted">
+        {/*
+          VISUAL-FIRST-001 — «I do not want any text details at all, except in a few simple places.»
+
+          How a baseline is computed is a METHOD, not a finding, and it was a standing paragraph
+          above the findings themselves. It is disclosed now: the reader who wants to know what
+          «departed» means can ask, and everyone else meets the marked days and the chart.
+        */}
+        <Explainer
+          className="mb-3"
+          testid="anomaly-method"
+          label={ar ? 'كيف تُقاس' : 'How this is measured'}
+        >
           {ar
             ? 'كل يوم يُقاس على وسيط الأيام التي سبقته وحدها — لا على الفترة كاملة، لأن ما بعد اليوم لم يكن متاحًا لأحد وقتها.'
             : 'Each day is measured against the median of the days before it alone — not the whole window, because what came after was available to nobody at the time.'}
-        </p>
+        </Explainer>
 
         {points.length === 0 ? (
           <Declined
