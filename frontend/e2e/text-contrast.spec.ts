@@ -84,10 +84,27 @@ const MEASURE = `() => {
 
 for (const theme of ['light', 'dark'] as const) {
   test(`no muted text falls below AA in ${theme}`, async ({ page }) => {
+    /*
+     * The theme is STAMPED, not emulated.
+     *
+     * `emulateMedia({ colorScheme })` only moves `prefers-color-scheme`, and this product resolves
+     * its palette from a `data-theme` attribute set from the signed-in user's stored preference —
+     * so the «light» run measured whatever theme that user happened to hold, which was dark. The
+     * guard passed against the ORIGINAL failing tone, and only injecting it revealed that: a test
+     * that cannot fail is not evidence, and this one had been reporting success for both themes
+     * while exercising one.
+     *
+     * Stamping is also what the palette contract itself defines as the deciding signal, so this
+     * measures the case a reader with an explicit preference actually gets.
+     */
     await page.emulateMedia({ colorScheme: theme })
     await page.goto('/app/analytics')
     await expect(page.locator('main')).toBeVisible({ timeout: 20000 })
+    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme)
     await page.waitForTimeout(2500)
+
+    // And the stamp took: a run that measured the other theme would pass while proving nothing.
+    expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe(theme)
 
     /*
      * Called, not merely evaluated. `page.evaluate(string)` treats its argument as an EXPRESSION, so
