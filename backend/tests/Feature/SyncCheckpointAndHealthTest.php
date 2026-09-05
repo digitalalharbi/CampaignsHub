@@ -193,6 +193,83 @@ final class SyncCheckpointAndHealthTest extends TestCase
     }
 
     /**
+     * CONNECTION HEALTH ≠ DATA HEALTH — a sync that stored nothing is not «healthy».
+     *
+     * ## What the owner saw
+     *
+     * Meta on `/app/integrations` read «يعمل»: authorised, one linked account, a recent sync, no
+     * error. And it contributed nothing to the Dashboard. Production said why — its metrics runs are
+     * `no_data`, raw 0 → parsed 0 → mapped 0 → stored 0, on both windows — but the card could not,
+     * because `for()` returned HEALTHY the moment the account was bound, the connection was fine and
+     * `last_synced_at` was recent. Whether a single ROW had been stored was never asked.
+     *
+     * So a provider feeding 3,420 rows and a provider feeding zero were the same word, and the one
+     * question the operator actually had — «why is Meta connected but not in my KPIs?» — was the one
+     * the screen could not answer.
+     *
+     * NO_DATA is deliberately NOT an error. Nothing is broken: the authorisation works, the sweep
+     * ran, the provider answered, and the answer was «nothing here». An account that genuinely has no
+     * campaigns is in exactly this state and there is nothing to fix — which is why reporting it as
+     * FAILED would be as wrong as reporting it as HEALTHY.
+     */
+    public function test_a_sync_that_stored_nothing_is_not_reported_as_healthy(): void
+    {
+        $account = $this->assignedAccount($this->projectB, $this->clientB);
+        $account->forceFill(['last_synced_at' => Carbon::now()->subHour()])->save();
+
+        MetricSyncRun::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->projectB->id,
+            'external_account_id' => $account->id,
+            'provider' => $account->provider,
+            'status' => 'no_data',
+            'window_start' => Carbon::now()->subDays(7),
+            'window_end' => Carbon::now(),
+            'metrics_upserted' => 0,
+            'started_at' => Carbon::now()->subHour(),
+            'finished_at' => Carbon::now()->subHour(),
+        ]);
+
+        $this->assertSame(AccountHealth::NO_DATA, app(AccountHealth::class)->for($account->refresh()));
+    }
+
+    /** ...and a sync that DID store rows still reads healthy, so the new state is not swallowing them. */
+    public function test_a_sync_that_stored_rows_is_still_healthy(): void
+    {
+        $account = $this->assignedAccount($this->projectB, $this->clientB);
+        $account->forceFill(['last_synced_at' => Carbon::now()->subHour()])->save();
+
+        MetricSyncRun::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->projectB->id,
+            'external_account_id' => $account->id,
+            'provider' => $account->provider,
+            'status' => 'success',
+            'window_start' => Carbon::now()->subDays(7),
+            'window_end' => Carbon::now(),
+            'metrics_upserted' => 1044,
+            'started_at' => Carbon::now()->subHour(),
+            'finished_at' => Carbon::now()->subHour(),
+        ]);
+
+        $this->assertSame(AccountHealth::HEALTHY, app(AccountHealth::class)->for($account->refresh()));
+    }
+
+    /**
+     * An account with no run at all keeps saying «awaiting its first sync».
+     *
+     * «We have never asked» and «we asked and there was nothing» are different sentences with
+     * different next steps, and collapsing them into NO_DATA would lose the one that tells an
+     * operator to wait rather than to investigate.
+     */
+    public function test_an_account_with_no_run_yet_is_not_reported_as_no_data(): void
+    {
+        $account = $this->assignedAccount($this->projectB, $this->clientB);
+
+        $this->assertSame(AccountHealth::PENDING_FIRST_SYNC, app(AccountHealth::class)->for($account->refresh()));
+    }
+
+    /**
      * A success long enough ago is DELAYED, and that is different from failed.
      *
      * Nothing errored; the data is simply older than the customer should have to guess at. Reporting

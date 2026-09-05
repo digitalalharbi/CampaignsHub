@@ -104,6 +104,13 @@ export type WizardState =
 export interface ConnectionHealthSummary {
   connected: number
   healthy: number
+  /*
+   * CONNECTION HEALTH ≠ DATA HEALTH — accounts that synced and stored nothing.
+   *
+   * Neither healthy nor needing attention: the authorisation works and there is nothing to repair,
+   * and this is the number that answers «why is Meta connected but not in my KPIs?».
+   */
+  no_data?: number
   pending_first_sync: number
   needs_attention: number
   states: Record<string, number>
@@ -158,7 +165,7 @@ export interface DiscoveredAccount {
    * whose access was withdrawn used to render as a single green «متصل», and that one account is the
    * only fact on the card anybody needed.
    */
-  health?: 'not_connected' | 'revoked' | 'access_lost' | 'failed' | 'pending_first_sync' | 'delayed' | 'healthy'
+  health?: 'not_connected' | 'revoked' | 'access_lost' | 'failed' | 'pending_first_sync' | 'delayed' | 'no_data' | 'healthy'
   /** We TRIED. Distinct from `last_synced_at`, which is only written when data really arrives. */
   last_sync_attempt_at?: string | null
   /** Why it did not work, as a category — the thing that decides who has to act. */

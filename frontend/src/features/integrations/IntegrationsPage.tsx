@@ -552,6 +552,20 @@ function ConnectorCard({
             {ar
               ? `${connectedAccounts(wizard.health.connected, 'ar')} · ${wizard.health.healthy} تعمل`
               : `${connectedAccounts(wizard.health.connected, 'en')} · ${wizard.health.healthy} healthy`}
+            {/*
+              CONNECTION HEALTH ≠ DATA HEALTH — «متصل · 1 تعمل» was true of Meta and useless.
+              The authorisation worked, the sweep ran, and it stored nothing; the card said «تعمل»
+              and the owner had no way to learn that from the screen. Stated in its own words and
+              in a neutral tone, because nothing is broken: an ad account that genuinely has no
+              campaigns is in exactly this state and there is nothing to repair.
+            */}
+            {(wizard.health.no_data ?? 0) > 0 && (
+              <span className="text-text-secondary" data-testid={`connector-no-data-${c.key}`}>
+                {ar
+                  ? ` · ${wizard.health.no_data} متصل بلا بيانات`
+                  : ` · ${wizard.health.no_data} connected, no data`}
+              </span>
+            )}
             {wizard.health.needs_attention > 0 && (
               <span className="text-warning">
                 {ar
