@@ -92,6 +92,40 @@ final class EntityMetricsAreActuallySyncedTest extends TestCase
         $this->assertGreaterThan(0, DB::table('metric_sync_runs')->count());
     }
 
+    /**
+     * SANDBOX-PROD-001 / SNAP-AD-STATS-ROUTE-001 — a sandbox row never leaves for a real API.
+     *
+     * Production recorded «Snapchat Marketing API could not return ad stats: Request URL can not be
+     * correctly processed [path: /v1/campaigns/sbx-cmp-1/stats]» on the live bound account, and the
+     * diagnosis then counted the cause: TWO sandbox campaigns sitting under it — `sbx-cmp-1` and
+     * `sbx-cmp-2`, the pair `SandboxAdvertisingConnector` seeds. The grain sweep plucked every
+     * `external_id` it found, so both became live Snapchat requests 48 times a day.
+     *
+     * Asserted on the REQUEST rather than on the stored rows, because the defect is a call being
+     * made: a version that filtered the results afterwards would store the same thing and still ask.
+     */
+    public function test_a_sandbox_campaign_is_never_asked_of_the_live_provider(): void
+    {
+        $this->seed(MetricDefinitionSeeder::class);
+        [$account, $project] = $this->liveSnapchatAccount();
+
+        ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $account->tenant_id, 'project_id' => $project->id,
+            'external_account_id' => $account->id, 'provider' => 'snapchat',
+            'external_id' => 'sbx-cmp-1', 'name' => 'Sandbox Awareness', 'status' => 'active',
+            'raw' => ['sandbox' => true],
+        ]);
+
+        $this->fakeSnapchatStats();
+
+        app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-02'));
+
+        Http::assertNotSent(fn ($request): bool => str_contains($request->url(), 'campaigns/sbx-cmp-1/stats'));
+
+        // ...and the real campaign beside it is still swept, so this is a filter and not a stop.
+        Http::assertSent(fn ($request): bool => str_contains($request->url(), 'campaigns/cmp-1/stats'));
+    }
+
     /** @return array{0: ExternalAccount, 1: Project} */
     private function liveSnapchatAccount(): array
     {
