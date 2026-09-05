@@ -67,6 +67,7 @@ import { MetricStrip } from '@/components/ui/MetricStrip'
 import { Explainer } from '@/components/ui/Explainer'
 import { ChangeDiagnosis } from './ChangeDiagnosis'
 import { ContentReading } from './ContentReading'
+import { DistributionBars } from './DistributionBars'
 import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCampaignOverview'
 import { useOverviewVm } from '@/features/campaigns/overview/useOverviewVm'
 import { SPECS, dashboardMetrics, layoutFor } from './metricCatalog'
@@ -1143,6 +1144,12 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
    * totals, which is the difference between «Eid is the biggest» and «Eid is why the month fell».
    */
   const drivers = useDrivers(projectId, range, 'campaign', 'spend', filters)
+  /*
+   * The reporting currency, for the distribution's money contract. Same query key as the overview's
+   * summary, so react-query answers it from cache rather than making a second request — and a shared
+   * key is also what stops this tab naming a different currency from the page around it.
+   */
+  const reportingCurrency = useSummary(projectId, range, filters).data?.currency ?? null
   const rows = c.data ?? []
   const best = rows[0]
   const worst = [...rows].filter((r) => r.spend > 0).sort((a, b) => (a.roas ?? 0) - (b.roas ?? 0))[0]
@@ -1158,6 +1165,27 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
           ? 'توزيع التغيّر، لا توزيع الإجماليات — أكبر حملة ليست بالضرورة سبب ما حدث.'
           : 'The distribution of the CHANGE, not of the totals — the biggest campaign is not necessarily why the month moved.'}
       />
+      {/*
+        VISUAL-FIRST-001 / clause D — «CAMPAIGN DISTRIBUTION → contribution/distribution bars».
+
+        The block above decomposes what MOVED. This shows where the money SITS, which is a different
+        question with a different answer: an account can be perfectly stable and still hold most of
+        its budget behind one campaign, and a change decomposition will never surface that because
+        nothing changed.
+      */}
+      <DistributionBars
+        testid="campaign-distribution"
+        title={ar ? 'أين يقع الإنفاق' : 'Where the spend sits'}
+        currency={reportingCurrency}
+        ar={ar}
+        rows={rows.map((r) => ({
+          key: r.campaign_id,
+          // A campaign whose name is no longer held keeps its spend and loses its label — never a UUID.
+          label: r.campaign_name ?? (ar ? 'حملة لم يعد اسمها محفوظًا' : 'A campaign whose name is no longer held'),
+          totals: r,
+        }))}
+      />
+
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Panel title={ar ? 'أفضل حملة (ROAS)' : 'Best campaign (ROAS)'} loading={c.isLoading} error={c.isError}>
