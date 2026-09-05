@@ -1263,19 +1263,28 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
             is what actually left. Drawn only between two stages the platform REPORTED — a gap that
             spans an unreported stage says so, because a loss attributed to the wrong step sends an
             operator to fix a page that was never the problem.
+
+            The label column and the caption are DROPPED on a phone rather than shrunk. The first
+            version copied the stage row's geometry — a 128px label gutter and a 160px caption —
+            around a figure that cannot wrap («−1,940,581 (98%)» is `whitespace-nowrap` by
+            necessity): a 415px minimum on a 375px screen, and the whole document scrolled sideways.
+            Caught by the responsive sweep on all three browsers, on the one route this component
+            also serves as the dashboard. At phone width the loss keeps the connector that ties it to
+            the stages either side and the figure itself, and the caption rides at the end of the
+            same line instead of holding its own column.
           */}
           {lossBefore(rows, i) && (
-            <div className="flex items-center gap-3" data-testid={`ad-funnel-loss-${s.stage}`}>
-              <span className="w-32 shrink-0" />
-              <div className="flex flex-1 items-center gap-2">
-                <span className="h-px flex-1 bg-border" />
+            <div className="flex items-center gap-2 sm:gap-3" data-testid={`ad-funnel-loss-${s.stage}`}>
+              <span className="hidden shrink-0 sm:block sm:w-32" />
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="h-px min-w-0 flex-1 bg-border" />
                 <span className="tnum whitespace-nowrap text-[11px] font-semibold text-warning" dir="ltr">
                   −{num(lossBefore(rows, i)!.lost)}
                   {lossBefore(rows, i)!.share !== null && ` (${percent(lossBefore(rows, i)!.share!, 0)})`}
                 </span>
-                <span className="h-px flex-1 bg-border" />
+                <span className="h-px min-w-0 flex-1 bg-border" />
               </div>
-              <span className="w-40 shrink-0 text-end text-[11px] text-text-muted">
+              <span className="shrink-0 truncate text-end text-[11px] text-text-muted sm:w-40">
                 {lossBefore(rows, i)!.spans
                   ? (ar ? 'عبر مرحلة لم تُبلَّغ' : 'across an unreported stage')
                   : (ar ? 'الفاقد هنا' : 'lost here')}
