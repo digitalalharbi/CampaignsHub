@@ -64,6 +64,9 @@ const COPY = {
     zoomOut: 'تصغير',
     reset: 'الحجم الأصلي',
     noPreview: 'لا تتوفر معاينة',
+    // Not an absence: the format has no fixed asset. One short state, not an explanation.
+    catalogTitle: 'إعلان كتالوج — بلا أصل ثابت',
+    catalogWhy: 'تُركّب المنصة الإعلان لكل منتج عند العرض.',
     identity: 'التعريف والمصدر',
     platform: 'المنصة',
     campaign: 'الحملة',
@@ -143,6 +146,8 @@ const COPY = {
     zoomOut: 'Zoom out',
     reset: 'Actual size',
     noPreview: 'No preview available',
+    catalogTitle: 'Catalog ad — no fixed asset',
+    catalogWhy: 'The platform composes one per product at delivery.',
     identity: 'Identity and source',
     platform: 'Platform',
     campaign: 'Campaign',
@@ -397,6 +402,23 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
               style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
               className="max-h-[60vh] max-w-full object-contain transition-transform"
             />
+          ) : preview.kind === 'catalog' ? (
+            /*
+             * CONTENT-PREVIEW-SHAPES-001 — a catalog ad is NOT a missing asset.
+             *
+             * `readPreview()` has returned `kind: 'catalog'` since the shapes requirement shipped,
+             * with the note that «nothing is missing, and no media would send an operator looking for
+             * a sync fault that does not exist». This page never asked, so a dynamic product ad said
+             * «no preview available — the platform did not expose the content asset»: a false
+             * accusation against the provider for doing exactly what the format is.
+             *
+             * ONE short state, not a paragraph — the platform composes the creative per product at
+             * delivery, so there is no fixed asset to have fetched.
+             */
+            <div className="max-w-md p-6 text-center" data-testid="creative-catalog-state">
+              <p className="text-sm font-medium text-text-primary">{t.catalogTitle}</p>
+              <p className="mt-1 text-xs text-text-secondary">{t.catalogWhy}</p>
+            </div>
           ) : (
             <div className="max-w-md p-6 text-center text-sm text-text-secondary">
               <p className="font-medium">{t.noPreview}</p>

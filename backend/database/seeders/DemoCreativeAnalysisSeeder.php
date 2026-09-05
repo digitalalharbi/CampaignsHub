@@ -137,8 +137,13 @@ final class DemoCreativeAnalysisSeeder extends Seeder
                      * also carry no token and cannot expire, which keeps the demo out of the two
                      * hazards the presenter exists to handle.
                      */
-                    'thumbnail_url' => $this->placeholder($case['name'], $case['tint']),
-                    'asset_url' => $this->placeholder($case['name'], $case['tint']),
+                    /*
+                     * A CATALOG ad carries no media on purpose — the platform composes one per
+                     * product at delivery — and the fixture must reproduce that, or the branch that
+                     * says «nothing is missing here» is never the branch under test.
+                     */
+                    'thumbnail_url' => ($case['no_media'] ?? false) ? null : $this->placeholder($case['name'], $case['tint']),
+                    'asset_url' => ($case['no_media'] ?? false) ? null : $this->placeholder($case['name'], $case['tint']),
                     /*
                      * A real, playable file for the video cases — nothing else proves §15.4.
                      *
@@ -246,6 +251,48 @@ final class DemoCreativeAnalysisSeeder extends Seeder
                     ['headline' => 'طرحة حرير', 'body' => 'ثمانية ألوان.', 'cta' => 'SHOP_NOW', 'path' => '/scarf-silk'],
                     ['headline' => 'حقيبة يد جلدية', 'body' => 'جلد طبيعي مبطّن.', 'cta' => 'SHOP_NOW', 'path' => '/bag-leather'],
                 ],
+            ],
+            /*
+             * AD-MEDIA-RECOVERY-001 / CONTENT-PREVIEW-SHAPES-001 — the two shapes whose media is not
+             * one asset, and which no fixture exercised.
+             *
+             * `readPreview()` has understood `collection` and `catalog` since the shapes requirement
+             * shipped, and no install had a row of either — so «a collection renders its hero and
+             * says it is a collection» and «a catalog ad says the platform composes it per product»
+             * were claims about code nobody could see on a screen. Both are seeded here for the same
+             * reason the carousel above is: a branch that has never rendered is a branch that has
+             * never been checked.
+             */
+            [
+                'key' => 'collection', 'name' => 'مجموعة الصيف — واجهة ومنتجات', 'format' => 'collection',
+                'objective' => 'sales', 'provider' => 'meta', 'tint' => '#1f5f4f', 'age' => 21,
+                'width' => 1080, 'height' => 1080, 'aspect_ratio' => '1:1',
+                'headline' => 'تشكيلة الصيف', 'cta' => 'SHOP_NOW',
+                'shape' => 'steady', 'video' => false, 'sales' => true,
+                /*
+                 * A collection is a HERO over a grid of tiles. The hero is a real frame and renders;
+                 * the tiles are the rest of the ad, which is why the reading carries the shape as
+                 * well — showing the hero alone and calling it the ad is showing one sixth of it.
+                 */
+                'cards' => [
+                    ['headline' => 'قميص كتان', 'body' => 'أربعة ألوان.', 'cta' => 'SHOP_NOW', 'path' => '/linen-shirt'],
+                    ['headline' => 'بنطال واسع', 'body' => 'قصّة مريحة.', 'cta' => 'SHOP_NOW', 'path' => '/wide-trousers'],
+                    ['headline' => 'صندل جلدي', 'body' => 'نعل مبطّن.', 'cta' => 'SHOP_NOW', 'path' => '/leather-sandal'],
+                    ['headline' => 'قبعة قش', 'body' => 'حافة عريضة.', 'cta' => 'SHOP_NOW', 'path' => '/straw-hat'],
+                ],
+            ],
+            [
+                /*
+                 * A CATALOG ad has no fixed creative at all — the platform composes one per product
+                 * at delivery. That is NOT an absence: nothing is missing, and rendering «no media»
+                 * would send an operator looking for a sync fault that does not exist. The fixture
+                 * therefore carries NO media on purpose, which is the state under test.
+                 */
+                'key' => 'catalog', 'name' => 'كتالوج المنتجات — ديناميكي', 'format' => 'catalog',
+                'objective' => 'sales', 'provider' => 'meta', 'tint' => '#3f3f7a', 'age' => 18,
+                'width' => null, 'height' => null, 'aspect_ratio' => null,
+                'headline' => 'منتجات مختارة لك', 'cta' => 'SHOP_NOW',
+                'shape' => 'steady', 'video' => false, 'sales' => true, 'no_media' => true,
             ],
             [
                 // The other half of the cross-platform pair — same hash as `awareness-video`.
