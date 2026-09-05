@@ -133,12 +133,43 @@ final class DemoSeeder extends Seeder
                 ['name' => 'Falcon Media', 'source' => 'event', 'status' => 'negotiation', 'estimated_value' => 5600],
                 ['name' => 'Bright Foods', 'source' => 'paid', 'status' => 'contacted', 'estimated_value' => 15250],
             ];
+            $created = [];
             foreach ($seed as $row) {
-                Lead::create(array_merge($row, [
+                $created[$row['name']] = Lead::create(array_merge($row, [
                     'owner_id' => $ownerUser->id,
                     'currency' => 'SAR',
                 ]));
             }
+
+            /*
+             * LEAD-DEDUP-001 — the three states the duplicate column can be in, so all three RENDER.
+             *
+             * The column has shipped with no fixture behind it: every demo install had zero
+             * duplicates and zero ambiguous rows, so «duplicate», «+N arrivals» and «conflicting
+             * identity» were three branches nobody had ever seen on a screen, and the row's own
+             * evidence clause has been open on exactly that.
+             *
+             * A duplicate is a RELATIONSHIP, never a deletion — both rows stay, and the later one
+             * points at the first. `ambiguous` is deliberately NOT a duplicate: its email says one
+             * person and its phone says another, so it was linked to NEITHER, and showing it as a
+             * resolved match would present a refusal to guess as an answer.
+             */
+            $canonical = $created['Acme Co'];
+
+            Lead::create([
+                'name' => 'Acme Co', 'source' => 'paid', 'status' => 'new', 'estimated_value' => 12000,
+                'owner_id' => $ownerUser->id, 'currency' => 'SAR',
+                'email' => 'ops@acme.test', 'phone' => '+966500000001',
+                'canonical_lead_id' => $canonical->id,
+                'duplicate_reason' => 'email',
+            ]);
+
+            Lead::create([
+                'name' => 'Nova Retail', 'source' => 'website', 'status' => 'new', 'estimated_value' => 8400,
+                'owner_id' => $ownerUser->id, 'currency' => 'SAR',
+                'email' => 'hello@nova.test', 'phone' => '+966500000009',
+                'duplicate_reason' => 'ambiguous',
+            ]);
         }
 
         // Demo client workspaces (3 modes) + projects + a task + notification + sandbox AI key.
