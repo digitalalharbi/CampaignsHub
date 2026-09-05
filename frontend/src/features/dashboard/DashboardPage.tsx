@@ -530,19 +530,6 @@ export function DashboardPage() {
         />
       </FilterBar>
 
-      {/*
-        ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — one line, from the SAME engine the panel reads.
-        A second, smaller rule set for the headline would eventually disagree with the panel one
-        click away, and the reader could not tell which was lying. This chooses; it does not reason.
-      */}
-      <ConciseFindingLine
-        objective={objective}
-        totals={summary.data?.current as Record<string, number | null | undefined> | undefined}
-        reported={summary.data?.reported}
-        rowsInScope={summary.data?.rows_in_scope}
-        pending={summary.isPending || summary.isError}
-        ar={ar}
-      />
       <MetricStrip
         id="dashboard"
         ar={ar}
@@ -567,6 +554,23 @@ export function DashboardPage() {
         loading={summary.isPending}
         error={summary.isError ? summary.error : undefined}
         onRetry={() => void summary.refetch()}
+      />
+      {/*
+        DASHBOARD-HIERARCHY — the finding sits BELOW the KPI row, and that position is a requirement.
+        «The top of the Dashboard is permanently reserved for the PRIMARY PERFORMANCE KPIs … never
+        insert diagnostic cards, change-driver cards, recommendation cards, alerts or explanatory
+        cards ABOVE the primary KPI row. The first thing the user sees must remain the campaign
+        performance indicators.» This line is a diagnostic with a warning icon; it was the first
+        thing on the page, so a healthy account showed its numbers second and a struggling one led
+        with an alarm before the reader had seen a single figure.
+      */}
+      <ConciseFindingLine
+        objective={objective}
+        totals={summary.data?.current as Record<string, number | null | undefined> | undefined}
+        reported={summary.data?.reported}
+        rowsInScope={summary.data?.rows_in_scope}
+        pending={summary.isPending || summary.isError}
+        ar={ar}
       />
 
       {/*

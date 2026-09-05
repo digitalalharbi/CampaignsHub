@@ -50,6 +50,21 @@ const VALUE_TONE: Record<StatTone, string> = {
   danger: 'text-danger',
 }
 
+/**
+ * The sparkline row's height, reserved whether or not a chart draws in it.
+ *
+ * `h-9` matches what the spark itself renders at, so a card that HAS one is unchanged and a card
+ * that cannot have one stops standing shorter than its neighbours.
+ */
+/*
+ * The sparkline row's height, reserved whether or not a chart draws in it.
+ *
+ * `h-9` matches what the spark itself renders at, so a card that HAS one is unchanged and a card
+ * that cannot have one stops standing shorter than its neighbours. `min-w-0` lets the row shrink, so
+ * a chart inside it can never widen the card that holds it.
+ */
+const SPARK_ROW = 'h-9 min-w-0'
+
 export function StatCard({
   label,
   value,
@@ -113,6 +128,18 @@ export function StatCard({
   return (
     <div
       data-testid={testid}
+      /*
+       * NOT `h-full`, and that is load-bearing rather than an omission.
+       *
+       * Adding it to make the card «fill its cell» made `/app/dashboard` scroll sideways by 26px on
+       * firefox at every viewport — chromium and webkit were clean, which is why it reached CI.
+       * Isolated by reverting this one file: all three browsers turned green, and removing `h-full`
+       * alone reproduced that.
+       *
+       * It was also unnecessary. All four rows below are reserved — label, value, hint and spark —
+       * so every card is already the same height by construction, which is what `h-full` was reached
+       * for. Measured after removing it: six cards at one height, 124 at 390 and 132 at 1440.
+       */
       className={`flex flex-col gap-1.5 rounded-2xl border border-border bg-surface ${CARD_PAD} shadow-[var(--shadow-small)] ${
         shape === 'square' ? 'aspect-square justify-between' : ''
       }`}
@@ -152,7 +179,17 @@ export function StatCard({
       */}
       <span aria-hidden={!hint} className={`min-h-[1.125rem] text-text-muted ${METRIC_HINT}`}>{hint}</span>
 
-      {spark}
+      {/*
+        RESERVED, and the last of the four rows to be — measured on PRODUCTION after the other three
+        were fixed: the shared report's six KPI cards stood at 174, 174, 174, 174, 132, 132, because
+        the top row's metrics had a sparkline and the bottom row's did not. A sparkline is present
+        exactly when a metric has a valid series behind it, so on any real KPI row some cards carry
+        one and some cannot — which makes this the row most likely to differ, not the least.
+
+        `MetricStrip` has reserved its chart row from the start. This card did not, and that is the
+        whole difference between the two components' geometry.
+      */}
+      <div className={`mt-auto ${SPARK_ROW}`} aria-hidden={!spark}>{spark}</div>
     </div>
   )
 }

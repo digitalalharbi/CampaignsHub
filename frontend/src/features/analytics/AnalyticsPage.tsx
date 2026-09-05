@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import {
   Bar,
@@ -64,6 +64,7 @@ const MONEY_KPIS = new Set(['spend', 'revenue'])
 import { SavedViewsBar } from '@/features/dashboard/SavedViewsBar'
 import { useSavedViews, type SavedView } from '@/features/dashboard/savedViews'
 import { MetricStrip } from '@/components/ui/MetricStrip'
+import { Explainer } from '@/components/ui/Explainer'
 import { ChangeDiagnosis } from './ChangeDiagnosis'
 import { ContentReading } from './ContentReading'
 import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCampaignOverview'
@@ -619,25 +620,6 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
             : `The previous period (${s.data.previous_range.from} → ${s.data.previous_range.to}) holds no data, so there is nothing for this one to be measured against.`}
         </p>
       )}
-      {/*
-        ANALYTICS-DIFFERENTIATION-001 — the diagnosis LEADS, and the figures follow it.
-
-        This is the ordering decision the whole requirement turns on. The dashboard already answers
-        «what is happening», and a reader who opens Analytics has seen it — they are here because they
-        want to know WHY. Putting the KPI row first and the diagnosis below it would make this page
-        the dashboard with more scrolling, which is exactly what «explicitly refused: the same cards
-        with a longer date range» names.
-
-        So «what changed and who moved it» is the first thing on the page. The strip stays beneath it
-        as the evidence the diagnosis is drawn from — the same totals, in the same window, so the two
-        cannot disagree about the account they are both describing.
-      */}
-      <ChangeDiagnosis
-        data={drivers.data}
-        currency={reportingCurrency}
-        loading={drivers.isPending}
-        error={drivers.isError}
-      />
 
       <MetricStrip
         id="dashboard"
@@ -655,6 +637,29 @@ function PerformanceTab({ projectId, range, filters, objective }: OverviewTabPro
         loading={s.isPending}
         error={s.isError ? s.error : undefined}
         onRetry={() => void s.refetch()}
+      />
+
+      {/*
+        DASHBOARD-HIERARCHY — the diagnosis sits BELOW the KPI row, and the note here used to argue
+        the opposite.
+
+        It reasoned that a reader who opens Analytics has already seen «what is happening», so
+        leading with «what changed and who moved it» was the point of the page. The owner's
+        correction overrides that: «never insert diagnostic cards, change-driver cards,
+        recommendation cards, alerts or explanatory cards ABOVE the primary KPI row — the first thing
+        the user sees must remain the campaign performance indicators.»
+
+        Analytics stays materially different from the Dashboard, but through what the requirement
+        actually asks for — a mixed analytical grid, chart types chosen per question, decomposition,
+        distribution and evidence — rather than by pushing the figures down the page. The strip is
+        the same totals in the same window as the diagnosis beneath it, so the two still cannot
+        disagree about the account they describe.
+      */}
+      <ChangeDiagnosis
+        data={drivers.data}
+        currency={reportingCurrency}
+        loading={drivers.isPending}
+        error={drivers.isError}
       />
       {/*
        * ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — directly beneath the figures that raise the question.
@@ -1244,7 +1249,49 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
     <Panel title={ar ? 'قمع التحويل' : 'Conversion funnel'} description={ar ? 'الظهور ← النقرة ← صفحة الهبوط ← السلة ← الدفع ← الشراء' : 'Impression → Click → Landing → Add to cart → Checkout → Purchase'} loading={f.isLoading} error={f.isError} empty={!f.isLoading && rows.length === 0}>
       <div className="space-y-3">
         {rows.map((s, i) => (
-          <div key={s.stage} className="flex items-center gap-3" data-testid={`ad-funnel-stage-${s.stage}`}>
+          <Fragment key={s.stage}>
+          {/*
+            FUNNEL-ANALYTICAL-PATTERN-001 / VISUAL-FIRST-001 — «a measurable stage funnel with LOSS
+            between stages».
+
+            The bars were proportional and the drop was a caption on the right reading «step 2%». A
+            funnel is opened to answer one question — where are people lost — and that question was
+            answered by a number the reader had to convert into a subtraction themselves.
+
+            The loss now sits BETWEEN the two stages it happened between, which is the only place it
+            means anything, and it names the count as well as the share: «2%» is a rate, «−1,940,581»
+            is what actually left. Drawn only between two stages the platform REPORTED — a gap that
+            spans an unreported stage says so, because a loss attributed to the wrong step sends an
+            operator to fix a page that was never the problem.
+
+            The label column and the caption are DROPPED on a phone rather than shrunk. The first
+            version copied the stage row's geometry — a 128px label gutter and a 160px caption —
+            around a figure that cannot wrap («−1,940,581 (98%)» is `whitespace-nowrap` by
+            necessity): a 415px minimum on a 375px screen, and the whole document scrolled sideways.
+            Caught by the responsive sweep on all three browsers, on the one route this component
+            also serves as the dashboard. At phone width the loss keeps the connector that ties it to
+            the stages either side and the figure itself, and the caption rides at the end of the
+            same line instead of holding its own column.
+          */}
+          {lossBefore(rows, i) && (
+            <div className="flex items-center gap-2 sm:gap-3" data-testid={`ad-funnel-loss-${s.stage}`}>
+              <span className="hidden shrink-0 sm:block sm:w-32" />
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="h-px min-w-0 flex-1 bg-border" />
+                <span className="tnum whitespace-nowrap text-[11px] font-semibold text-warning" dir="ltr">
+                  −{num(lossBefore(rows, i)!.lost)}
+                  {lossBefore(rows, i)!.share !== null && ` (${percent(lossBefore(rows, i)!.share!, 0)})`}
+                </span>
+                <span className="h-px min-w-0 flex-1 bg-border" />
+              </div>
+              <span className="shrink-0 truncate text-end text-[11px] text-text-muted sm:w-40">
+                {lossBefore(rows, i)!.spans
+                  ? (ar ? 'عبر مرحلة لم تُبلَّغ' : 'across an unreported stage')
+                  : (ar ? 'الفاقد هنا' : 'lost here')}
+              </span>
+            </div>
+          )}
+          <div className="flex items-center gap-3" data-testid={`ad-funnel-stage-${s.stage}`}>
             <span className="w-32 shrink-0 text-sm font-medium text-text-secondary">{funnelStageLabel(s.stage, s.label, ar)}</span>
             {s.count !== null ? (
               <div className="h-10 flex-1 overflow-hidden rounded-xl bg-surface-secondary">
@@ -1265,6 +1312,7 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
               {s.cost_per !== null && <span className="ms-2">{ar ? 'تكلفة' : 'cost'} {moneyExact(s.cost_per, costCurrency ?? null)}</span>}
             </div>
           </div>
+          </Fragment>
         ))}
       </div>
       {unreported.length > 0 && (
@@ -1278,6 +1326,41 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
       )}
     </Panel>
   )
+}
+
+/**
+ * The loss between this stage and the previous REPORTED one, or null when there is none to state.
+ *
+ * Null in three different situations, and conflating them is how a funnel starts lying: this is the
+ * first measured stage and nothing preceded it; this stage was not reported, so nothing is known
+ * about what reached it; or the count went UP, which is real on a funnel whose stages come from
+ * different attribution windows and is not a «negative loss».
+ *
+ * `spans` says the gap crossed a stage the platform never reported — the loss is then between two
+ * stages that are not adjacent in the funnel, and calling it the drop-off of one step would send an
+ * operator to fix a page that was never the problem.
+ */
+export function lossBefore(
+  rows: Array<{ stage: string; count: number | null; reported?: boolean }>,
+  index: number,
+): { lost: number; share: number | null; spans: boolean } | null {
+  const here = rows[index]
+  if (!here || here.count === null) return null
+
+  let previous: { count: number | null } | null = null
+  let skipped = false
+
+  for (let i = index - 1; i >= 0; i--) {
+    if (rows[i].count !== null) { previous = rows[i]; break }
+    skipped = true
+  }
+
+  if (previous?.count == null) return null
+
+  const lost = previous.count - here.count
+  if (lost <= 0) return null
+
+  return { lost, share: previous.count > 0 ? lost / previous.count : null, spans: skipped }
 }
 
 /**
@@ -1568,7 +1651,16 @@ export function QualityTab({ projectId, range, filters }: TabProps) {
         /* Most missing days first: the platform with the biggest hole is the reason to open this. */
         initialSort={{ column: 4, dir: 'desc' }}
       />
-      <p className="mt-3 text-xs text-text-muted">{ar ? 'لا يتم جمع Reach عبر المنصات كوصول فريد — يُعرض لكل منصة على حدة.' : 'Reach is not summed across platforms as unique reach — it is shown per platform.'}</p>
+      {/*
+        A definition, not a finding — disclosed rather than printed under every render of this panel.
+        It matters the first time a reader wonders why the platform reaches do not add up, and costs
+        them a line every time after.
+      */}
+      <Explainer className="mt-3" testid="reach-note" label={ar ? 'كيف يُقرأ الوصول' : 'How reach is counted'}>
+        {ar
+          ? 'لا يتم جمع Reach عبر المنصات كوصول فريد — يُعرض لكل منصة على حدة.'
+          : 'Reach is not summed across platforms as unique reach — it is shown per platform.'}
+      </Explainer>
       </Panel>
       <NormalizationPanel projectId={projectId} range={range} filters={filters} />
       {/*
@@ -1704,22 +1796,23 @@ function AttributionFindings({
   )
 }
 
+/** Who can actually clear a finding — hoisted so the row component below shares one definition. */
+const OWNER: Record<QualityFinding['owner'], { ar: string; en: string }> = {
+  system: { ar: 'النظام — تلقائيًا', en: 'The system, on its own' },
+  operator: { ar: 'أنت — خطوة واحدة', en: 'You — one step' },
+  credentials: { ar: 'يحتاج بيانات اعتماد', en: 'Needs credentials' },
+  provider: { ar: 'يحتاج فحصًا على المنصة', en: 'Needs a look on the platform' },
+}
+
+const TONE: Record<QualityFinding['severity'], string> = {
+  critical: 'border-danger/40 bg-danger/5',
+  attention: 'border-warning/40 bg-warning/5',
+  watch: 'border-border bg-surface-secondary',
+}
+
 function QualityFindings({ findings, ar, loading }: { findings: QualityFinding[]; ar: boolean; loading: boolean }) {
   if (loading) {
     return null
-  }
-
-  const OWNER: Record<QualityFinding['owner'], { ar: string; en: string }> = {
-    system: { ar: 'النظام — تلقائيًا', en: 'The system, on its own' },
-    operator: { ar: 'أنت — خطوة واحدة', en: 'You — one step' },
-    credentials: { ar: 'يحتاج بيانات اعتماد', en: 'Needs credentials' },
-    provider: { ar: 'يحتاج فحصًا على المنصة', en: 'Needs a look on the platform' },
-  }
-
-  const TONE: Record<QualityFinding['severity'], string> = {
-    critical: 'border-danger/40 bg-danger/5',
-    attention: 'border-warning/40 bg-warning/5',
-    watch: 'border-border bg-surface-secondary',
   }
 
   if (findings.length === 0) {
@@ -1739,25 +1832,88 @@ function QualityFindings({ findings, ar, loading }: { findings: QualityFinding[]
   return (
     <ul data-testid="quality-findings" className="mb-4 flex flex-col gap-2">
       {findings.map((finding) => (
-        <li key={finding.key} data-testid={`quality-finding-${finding.provider}`} className={`rounded-xl border p-3.5 ${TONE[finding.severity]}`}>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-bold text-text-primary">{finding.name ?? finding.provider}</span>
-            <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
-              {ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en}
-            </span>
-            {finding.coverage !== null && (
-              <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] text-text-muted" dir="ltr">
-                {ar ? 'التغطية' : 'Coverage'} {Math.round(finding.coverage * 100)}%
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-sm text-text-primary">{ar ? finding.what.ar : finding.what.en}</p>
-          <p className="mt-0.5 text-xs text-text-secondary">{ar ? finding.affects.ar : finding.affects.en}</p>
-          <p className="mt-0.5 text-xs text-text-muted">{ar ? finding.check.ar : finding.check.en}</p>
-        </li>
+        <QualityFindingRow key={finding.key} finding={finding} ar={ar} />
       ))}
     </ul>
   )
+}
+
+/**
+ * VISUAL-FIRST-001 — a data-quality finding leads with COVERAGE, not with three paragraphs.
+ *
+ * «DATA QUALITY → compact status/coverage visual with detailed diagnostics progressively disclosed.»
+ *
+ * The row stacked `what`, `affects` and `check` as three sentences under a text pill reading
+ * «Coverage 43%». Measured across the analytics tabs, this was the most prose-dense surface in the
+ * product: six separate runs of fourteen words or more on one screen, and the number a reader
+ * actually scans for — how much of the window this source covered — was a caption among them.
+ *
+ * Coverage is now a BAR, because coverage is a proportion and a proportion is the one thing a bar
+ * says faster than a sentence: four sources at 43%, 100%, 12% and 90% are comparable at a glance and
+ * are not comparable as four paragraphs. The bar carries the finding's own severity tone, so «how
+ * much» and «how bad» are read together.
+ *
+ * `what` stays visible — one sentence, which is what the requirement allows. `affects` and `check`
+ * are the deeper diagnosis and move behind a disclosure: they are what a reader opens AFTER deciding
+ * this source is worth their attention, and printing them first is what made the decision slow.
+ */
+function QualityFindingRow({ finding, ar }: { finding: QualityFinding; ar: boolean }) {
+  const [open, setOpen] = useState(false)
+  const pct = finding.coverage === null ? null : Math.round(finding.coverage * 100)
+
+  return (
+    <li data-testid={`quality-finding-${finding.provider}`} className={`rounded-xl border p-3.5 ${TONE[finding.severity]}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-bold text-text-primary">{finding.name ?? finding.provider}</span>
+        <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+          {ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en}
+        </span>
+      </div>
+
+      {/*
+        The coverage bar. Absent — not drawn at zero — when the finding carries no coverage figure:
+        an empty bar reads as «this source covered none of the window», which is a different and
+        much worse claim than «coverage was not measured for this finding».
+      */}
+      {pct !== null && (
+        <div className="mt-2 flex items-center gap-2" data-testid={`quality-coverage-${finding.provider}`}>
+          <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface">
+            <span
+              className={`block h-full rounded-full ${COVERAGE_FILL[finding.severity]}`}
+              style={{ width: `${Math.max(2, pct)}%` }}
+            />
+          </span>
+          <span className="tnum w-24 shrink-0 text-end text-[11px] font-semibold text-text-secondary" dir="ltr">
+            {ar ? `التغطية ${pct}%` : `${pct}% covered`}
+          </span>
+        </div>
+      )}
+
+      <p className="mt-2 text-sm text-text-primary">{ar ? finding.what.ar : finding.what.en}</p>
+
+      {open && (
+        <div className="mt-2 space-y-1 border-t border-border pt-2">
+          <p className="text-xs text-text-secondary">{ar ? finding.affects.ar : finding.affects.en}</p>
+          <p className="text-xs text-text-muted">{ar ? finding.check.ar : finding.check.en}</p>
+        </div>
+      )}
+
+      <button
+        onClick={() => setOpen((v) => !v)}
+        data-testid={`quality-finding-toggle-${finding.provider}`}
+        className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:underline"
+      >
+        {open ? (ar ? 'إخفاء التفاصيل' : 'Hide details') : (ar ? 'ما الذي يتأثر' : 'What this affects')}
+      </button>
+    </li>
+  )
+}
+
+/** The bar's fill, by the finding's own severity — «how much» and «how bad», read together. */
+const COVERAGE_FILL: Record<QualityFinding['severity'], string> = {
+  critical: 'bg-danger',
+  attention: 'bg-warning',
+  watch: 'bg-brand-500',
 }
 
 function AttributionSection({ projectId, range, filters }: TabProps) {

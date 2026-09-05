@@ -73,26 +73,57 @@ export function PerformanceNotice({
     )
   }
 
-  // compact (default): collapsible quiet bar.
+  /*
+   * compact (default): ONE LINE until asked, then the whole notice.
+   *
+   * VISUAL-FIRST-001 — «normal visible analytical copy should usually be one short sentence, not a
+   * paragraph … move deeper explanation to tooltip, expandable details, modal or evidence section.»
+   *
+   * The short section is written by the operator and on this install runs to twenty-one words across
+   * five clauses. Measured across the analytics tabs, it was the longest single text run on SEVEN of
+   * them — the same paragraph re-read at the top of every tab, above the work the reader came for.
+   *
+   * It is CLAMPED rather than removed. A performance disclaimer is not decoration: it stays on the
+   * page, in the same place, legible, and the first line is the operator's own opening clause. What
+   * changed is that it now occupies one line instead of three, and the rest is one click away — so
+   * the notice is disclosed progressively rather than hidden, which is the distinction the
+   * requirement draws.
+   */
   if (!short) return null
+
+  const hasMore = Boolean(full || freshness)
+
   return (
     <div className={`rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5 ${className}`}>
       <div className="flex items-start gap-2">
         <Info size={15} className="mt-0.5 shrink-0 text-text-muted" />
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] leading-relaxed text-text-secondary">{short}</p>
-          {open && (full || freshness) && (
+          <p
+            data-testid="performance-notice-short"
+            data-clamped={open ? 'false' : 'true'}
+            className={`text-[13px] leading-relaxed text-text-secondary ${open ? '' : 'line-clamp-1'}`}
+          >
+            {short}
+          </p>
+          {open && hasMore && (
             <div className="mt-2 space-y-2 border-t border-border pt-2">
               {full && <p className="text-[13px] leading-relaxed text-text-secondary">{full}</p>}
               {freshness && <p className="text-xs leading-relaxed text-text-muted">{freshness}</p>}
             </div>
           )}
-          {(full || freshness) && (
-            <button onClick={() => setOpen((v) => !v)} className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:underline">
-              {open ? t.less : t.more}
-              <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
-            </button>
-          )}
+          {/*
+            Offered whenever there is ANYTHING more to read — including when the only thing more is
+            the rest of this sentence. Without that, a clamped line with no control would be text
+            silently truncated, which is worse than the paragraph it replaced.
+          */}
+          <button
+            onClick={() => setOpen((v) => !v)}
+            data-testid="performance-notice-toggle"
+            className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:underline"
+          >
+            {open ? t.less : t.more}
+            <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+          </button>
         </div>
       </div>
     </div>

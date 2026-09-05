@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { AnalyticsPage } from './AnalyticsPage'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 import { useProject } from '@/stores/project'
@@ -100,12 +100,24 @@ describe('the data quality tab answers the operator’s questions', () => {
 
     const finding = await screen.findByTestId('quality-finding-snapchat')
 
+    /*
+     * VISUAL-FIRST-001 — coverage is a BAR now, and the deeper diagnosis is disclosed on demand.
+     *
+     * What must remain true is that every one of these four answers is REACHABLE, which is what this
+     * test was always about. What changed is that «what is wrong» leads, «what it affects» and «what
+     * to check» sit one click behind it, and the coverage figure is read off a bar rather than a
+     * caption — so the assertions open the disclosure instead of expecting three stacked paragraphs.
+     */
     expect(finding).toHaveTextContent('The last sync from this platform failed')
-    expect(finding).toHaveTextContent('lower than the truth, not zero')
-    expect(finding).toHaveTextContent('read the error')
     // The answer an operator needs first, and the one six technical columns could not give.
     expect(finding).toHaveTextContent('Needs a look on the platform')
-    expect(finding).toHaveTextContent('Coverage 21%')
+    expect(within(finding).getByTestId('quality-coverage-snapchat')).toBeInTheDocument()
+    expect(finding).toHaveTextContent('21% covered')
+
+    fireEvent.click(within(finding).getByTestId('quality-finding-toggle-snapchat'))
+
+    expect(finding).toHaveTextContent('lower than the truth, not zero')
+    expect(finding).toHaveTextContent('read the error')
 
   })
 
