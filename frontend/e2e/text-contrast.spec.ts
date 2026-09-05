@@ -89,7 +89,13 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.locator('main')).toBeVisible({ timeout: 20000 })
     await page.waitForTimeout(2500)
 
-    const measured = await page.evaluate(MEASURE)
+    /*
+     * Called, not merely evaluated. `page.evaluate(string)` treats its argument as an EXPRESSION, so
+     * passing an arrow function produced the function object — unserialisable, so `measured` came
+     * back undefined and the run failed on `.length`. The vacuity check below is what turned that
+     * into a visible failure rather than a guard that measured nothing and passed.
+     */
+    const measured = (await page.evaluate(`(${MEASURE})()`)) as Array<{ ratio: number; size: number; text: string }>
 
     // A sweep that measured nothing proves nothing — this page carries hundreds of these nodes.
     expect(measured.length, 'no toned text was found on the page').toBeGreaterThan(10)
