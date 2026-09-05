@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
-import { DashboardPage } from './DashboardPage'
+import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 import { useProject } from '@/stores/project'
 import type { CommerceSummary, FreshnessRow } from '../analytics/api'
@@ -16,8 +16,16 @@ import type { CommerceSummary, FreshnessRow } from '../analytics/api'
 
 const EMPTY = { data: undefined, isLoading: false, isError: false }
 
-vi.mock('../analytics/hooks', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../analytics/hooks')>()
+/*
+ * Mocked at `../analytics/api`, not `../analytics/hooks`.
+ *
+ * `hooks.ts` is a re-export of `api.ts`, and the overview composition imports from `api` directly.
+ * Mocking the re-export replaced a module the code under test never loads, so every hook ran for
+ * real, every query stayed pending, and the assertions below failed against a page that was
+ * genuinely still loading. Mock what the code imports.
+ */
+vi.mock('../analytics/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../analytics/api')>()
   return {
     ...actual,
     useSummary: vi.fn(),
@@ -36,7 +44,7 @@ vi.mock('./savedViews', () => ({
 
 vi.mock('./SavedViewsBar', () => ({ SavedViewsBar: () => null }))
 
-import { useFreshness, useSummary } from '../analytics/hooks'
+import { useFreshness, useSummary } from '../analytics/api'
 
 const TOTALS = {
   impressions: 1000, clicks: 50, conversions: 2, spend: 500, revenue: 200,
@@ -64,6 +72,16 @@ function summary(commerce: CommerceSummary | null) {
   return { data: { current: TOTALS, previous: TOTALS, delta: {}, commerce }, isLoading: false, isError: false }
 }
 
+/*
+ * Mounted as `<AnalyticsPage surface="dashboard" />` — the component `/app/dashboard` actually
+ * renders (router.tsx). These cases were written against `features/dashboard/DashboardPage.tsx`,
+ * which stopped being routed and was imported by nothing but these four files: coverage aimed at a
+ * page no user could open, while the real Dashboard was covered only by inference.
+ *
+ * The assertions are unchanged. They already addressed the surface by its testids — `dashboard-intro`,
+ * `dashboard-metrics` — and those come from the `surface` prop, so they read the routed page as
+ * literally as they read the retired one.
+ */
 describe('the dashboard store strip', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -82,7 +100,7 @@ describe('the dashboard store strip', () => {
   it('shows the store ledger beside the platforms figures, labelled as the stores', async () => {
     vi.mocked(useSummary).mockReturnValue(summary(STORE) as never)
 
-    renderWithProviders(<DashboardPage />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
 
     const block = await screen.findByTestId('dashboard-store')
     expect(block.textContent).toMatch(/سجل التاجر/)
@@ -99,7 +117,7 @@ describe('the dashboard store strip', () => {
   it('says how many orders arrived with no campaign attribution', async () => {
     vi.mocked(useSummary).mockReturnValue(summary(STORE) as never)
 
-    renderWithProviders(<DashboardPage />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
 
     const note = await screen.findByTestId('dashboard-store-unattributed')
     expect(note.textContent).toMatch(/10/)
@@ -119,7 +137,7 @@ describe('the dashboard store strip', () => {
       ...STORE, filtered_view: true,
     }) as never)
 
-    renderWithProviders(<DashboardPage />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
 
     const note = await screen.findByTestId('dashboard-store-unfiltered')
     expect(note.textContent).toMatch(/لكامل المتجر/)
@@ -131,7 +149,7 @@ describe('the dashboard store strip', () => {
   it('shows no unfiltered warning when nothing is filtered', async () => {
     vi.mocked(useSummary).mockReturnValue(summary(STORE) as never)
 
-    renderWithProviders(<DashboardPage />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
 
     await screen.findByTestId('dashboard-store')
     expect(screen.queryByTestId('dashboard-store-unfiltered')).toBeNull()
@@ -141,7 +159,7 @@ describe('the dashboard store strip', () => {
   it('shows no store strip when the project has no store', async () => {
     vi.mocked(useSummary).mockReturnValue(summary(null) as never)
 
-    renderWithProviders(<DashboardPage />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
 
     // Waits on the page's own header rather than on the applied-filters row: after UX-DASH-001 that
     // row is absent whenever nothing is narrowed, which on a freshly opened dashboard is always.
@@ -159,7 +177,7 @@ describe('the dashboard store strip', () => {
   it('says when an order had its timezone assumed', async () => {
     vi.mocked(useSummary).mockReturnValue(summary({ ...STORE, orders_with_assumed_timezone: 4 }) as never)
 
-    renderWithProviders(<DashboardPage />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
 
     const note = await screen.findByTestId('dashboard-store-assumed-tz')
     expect(note.textContent).toMatch(/4/)
@@ -170,7 +188,7 @@ describe('the dashboard store strip', () => {
   it('shows no timezone warning when every store stated its zone', async () => {
     vi.mocked(useSummary).mockReturnValue(summary(STORE) as never)
 
-    renderWithProviders(<DashboardPage />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
 
     await screen.findByTestId('dashboard-store')
     expect(screen.queryByTestId('dashboard-store-assumed-tz')).toBeNull()
@@ -192,7 +210,7 @@ describe('the dashboard store strip', () => {
     // `useFreshness` now yields the envelope's two halves: the rows, and the scope the endpoint declined.
     vi.mocked(useFreshness).mockReturnValue({ data: { rows: [row], scope: undefined }, isLoading: false, isError: false } as never)
 
-    renderWithProviders(<DashboardPage />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
 
     expect(await screen.findByText(/متجر العميل/)).toBeInTheDocument()
   })

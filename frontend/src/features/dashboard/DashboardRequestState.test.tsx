@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
-import { DashboardPage } from './DashboardPage'
+import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 import { useProject } from '@/stores/project'
 
@@ -15,8 +15,16 @@ import { useProject } from '@/stores/project'
  */
 const EMPTY = { data: undefined, isPending: false, isLoading: false, isError: false }
 
-vi.mock('../analytics/hooks', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../analytics/hooks')>()
+/*
+ * Mocked at `../analytics/api`, not `../analytics/hooks`.
+ *
+ * `hooks.ts` is a re-export of `api.ts`, and the overview composition imports from `api` directly.
+ * Mocking the re-export replaced a module the code under test never loads, so every hook ran for
+ * real, every query stayed pending, and the assertions below failed against a page that was
+ * genuinely still loading. Mock what the code imports.
+ */
+vi.mock('../analytics/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../analytics/api')>()
   return {
     ...actual,
     useSummary: vi.fn(),
@@ -32,7 +40,7 @@ vi.mock('../analytics/hooks', async (importOriginal) => {
 vi.mock('./savedViews', () => ({ useSavedViews: () => ({ data: [], isLoading: false, isError: false }) }))
 vi.mock('./SavedViewsBar', () => ({ SavedViewsBar: () => null }))
 
-import { useSummary } from '../analytics/hooks'
+import { useSummary } from '../analytics/api'
 
 const failing = (status: number, message?: string) => ({
   data: undefined,
@@ -43,6 +51,16 @@ const failing = (status: number, message?: string) => ({
   refetch: vi.fn(),
 })
 
+/*
+ * Mounted as `<AnalyticsPage surface="dashboard" />` — the component `/app/dashboard` actually
+ * renders (router.tsx). These cases were written against `features/dashboard/DashboardPage.tsx`,
+ * which stopped being routed and was imported by nothing but these four files: coverage aimed at a
+ * page no user could open, while the real Dashboard was covered only by inference.
+ *
+ * The assertions are unchanged. They already addressed the surface by its testids — `dashboard-intro`,
+ * `dashboard-metrics` — and those come from the `surface` prop, so they read the routed page as
+ * literally as they read the retired one.
+ */
 describe('the dashboard when the summary request does not answer', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -54,7 +72,7 @@ describe('the dashboard when the summary request does not answer', () => {
   it('says a refusal was a refusal, not that this account has no data', async () => {
     vi.mocked(useSummary).mockReturnValue(failing(403, 'Your membership does not cover this client') as never)
 
-    renderWithProviders(<DashboardPage />, { locale: 'en' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
     await screen.findByTestId('dashboard-intro')
 
     expect(screen.getByTestId('dashboard-metrics-failure-permission')).toBeInTheDocument()
@@ -66,7 +84,7 @@ describe('the dashboard when the summary request does not answer', () => {
   it('offers a retry for a dead backend, which is the one case retrying helps', async () => {
     vi.mocked(useSummary).mockReturnValue(failing(500) as never)
 
-    renderWithProviders(<DashboardPage />, { locale: 'en' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
     await screen.findByTestId('dashboard-intro')
 
     expect(screen.getByTestId('dashboard-metrics-failure-retryable')).toBeInTheDocument()
@@ -76,7 +94,7 @@ describe('the dashboard when the summary request does not answer', () => {
   it('does not answer for the figures while the request is still in flight', async () => {
     vi.mocked(useSummary).mockReturnValue({ ...EMPTY, isPending: true, isLoading: true } as never)
 
-    renderWithProviders(<DashboardPage />, { locale: 'en' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
     await screen.findByTestId('dashboard-intro')
 
     expect(screen.getByTestId('dashboard-metrics-loading')).toBeInTheDocument()

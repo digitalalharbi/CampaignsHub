@@ -53,10 +53,16 @@ describe('the product platform order', () => {
    * (SIMPLIFY-001) — an e2e check that reads the page text finds no platform names at all and passes
    * for the wrong reason. This is the literal that drifted, so this is what is pinned.
    */
-  it('is what the dashboard filter offers', async () => {
-    const { PLATFORM_KEYS } = await import('@/features/dashboard/DashboardPage')
+  it('is what the dashboard and analytics filter offers', async () => {
+    /*
+     * One list for both surfaces now. It used to be `PLATFORM_KEYS` in
+     * `features/dashboard/DashboardPage.tsx`, which stopped being routed and has been retired —
+     * `/app/dashboard` and `/app/analytics` both render `AnalyticsPage`, whose filter is the control
+     * this pins.
+     */
+    const { ANALYTICS_PLATFORMS } = await import('@/features/analytics/AnalyticsPage')
 
-    expect(PLATFORM_KEYS.map(canonicalPlatform)).toEqual([...PLATFORM_ORDER])
+    expect(ANALYTICS_PLATFORMS.map(canonicalPlatform)).toEqual([...PLATFORM_ORDER])
   })
 
   /** Stable: two unknowns keep the order they arrived in rather than swapping between renders. */

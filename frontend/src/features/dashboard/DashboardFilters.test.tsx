@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen } from '@testing-library/react'
-import { DashboardPage } from './DashboardPage'
+import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 import { useProject } from '@/stores/project'
 
@@ -16,8 +16,16 @@ import { useProject } from '@/stores/project'
 
 const EMPTY = { data: undefined, isLoading: false, isError: false }
 
-vi.mock('../analytics/hooks', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../analytics/hooks')>()
+/*
+ * Mocked at `../analytics/api`, not `../analytics/hooks`.
+ *
+ * `hooks.ts` is a re-export of `api.ts`, and the overview composition imports from `api` directly.
+ * Mocking the re-export replaced a module the code under test never loads, so every hook ran for
+ * real, every query stayed pending, and the assertions below failed against a page that was
+ * genuinely still loading. Mock what the code imports.
+ */
+vi.mock('../analytics/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../analytics/api')>()
   return {
     ...actual,
     useSummary: vi.fn(),
@@ -33,7 +41,7 @@ vi.mock('../analytics/hooks', async (importOriginal) => {
 vi.mock('./savedViews', () => ({ useSavedViews: () => ({ data: [], isLoading: false, isError: false }) }))
 vi.mock('./SavedViewsBar', () => ({ SavedViewsBar: () => null }))
 
-import { useCampaigns, useSummary } from '../analytics/hooks'
+import { useCampaigns, useSummary } from '../analytics/api'
 
 const TOTALS = {
   impressions: 40000, clicks: 800, conversions: 12, spend: 5000, revenue: 30000,
@@ -65,6 +73,16 @@ function summary() {
   }
 }
 
+/*
+ * Mounted as `<AnalyticsPage surface="dashboard" />` — the component `/app/dashboard` actually
+ * renders (router.tsx). These cases were written against `features/dashboard/DashboardPage.tsx`,
+ * which stopped being routed and was imported by nothing but these four files: coverage aimed at a
+ * page no user could open, while the real Dashboard was covered only by inference.
+ *
+ * The assertions are unchanged. They already addressed the surface by its testids — `dashboard-intro`,
+ * `dashboard-metrics` — and those come from the `surface` prop, so they read the routed page as
+ * literally as they read the retired one.
+ */
 describe('the dashboard filter bar', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -77,7 +95,7 @@ describe('the dashboard filter bar', () => {
 
   /** The claim, plainly: nothing has to be opened to reach the filters this product is used through. */
   it('puts the period, platform and objective controls on the page', async () => {
-    renderWithProviders(<DashboardPage />, { locale: 'en' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
 
     await screen.findByTestId('dashboard-intro')
 
@@ -97,7 +115,7 @@ describe('the dashboard filter bar', () => {
 
   /** A narrowed page names what narrowed it, and the chip removes exactly that. */
   it('names an applied filter as a chip and removes only that one', async () => {
-    renderWithProviders(<DashboardPage />, { locale: 'en' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
     await screen.findByTestId('dashboard-intro')
 
     fireEvent.change(screen.getByTestId('dashboard-objective'), { target: { value: 'sales' } })
@@ -117,7 +135,7 @@ describe('the dashboard filter bar', () => {
    * inflated number a client would set next month's budget on.
    */
   it('leads with the metrics the objective is judged on', async () => {
-    renderWithProviders(<DashboardPage />, { locale: 'en' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
     await screen.findByTestId('dashboard-intro')
 
     fireEvent.change(screen.getByTestId('dashboard-objective'), { target: { value: 'sales' } })
@@ -140,7 +158,7 @@ describe('the dashboard filter bar', () => {
    * and the card turns this into «Reach 0» beside forty thousand impressions.
    */
   it('says a metric was never reported instead of printing its coalesced zero', async () => {
-    renderWithProviders(<DashboardPage />, { locale: 'en' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
     await screen.findByTestId('dashboard-intro')
 
     fireEvent.change(screen.getByTestId('dashboard-objective'), { target: { value: 'awareness_engagement' } })
@@ -162,7 +180,7 @@ describe('the dashboard filter bar', () => {
    * put a raw objective back on the list.
    */
   it('offers the five canonical objectives, and «all»', async () => {
-    renderWithProviders(<DashboardPage />, { locale: 'en' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
     await screen.findByTestId('dashboard-intro')
 
     const objectives = Array.from(
