@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { GitCompare, Layers, LayoutGrid, Rows3 } from 'lucide-react'
+import { PosterImage } from './PosterImage'
 import { CreativeViewer } from './CreativeViewer'
 import { CreativeCompare } from './CreativeCompare'
 import { formatMetric, metricLabel, metricState } from './metrics'
@@ -1080,7 +1081,21 @@ function CreativeGridCard({
    * sentence it already has for an absent asset, so one fact gets one statement.
    */
   const [brokenVideo, setBrokenVideo] = useState(false)
-  const video = poster === null && !brokenVideo ? preview.video_url : null
+  /*
+   * AD-PREVIEW-001 — the still gets the same treatment the film already had.
+   *
+   * `brokenVideo` has existed for a while: a `<video>` that will not decode falls back to the card's
+   * own sentence rather than keeping a black box. The `<img>` beside it had no equivalent, so a
+   * refused or expired asset painted nothing at all and said nothing about it — which is the blank
+   * card the owner reported, and the one state no server-side probe can see.
+   *
+   * When the poster fails the card asks the same question it asks when there was never a poster: is
+   * there a film here instead? So a video creative whose cover has expired still shows the film.
+   */
+  const [brokenPoster, setBrokenPoster] = useState(false)
+  useEffect(() => setBrokenPoster(false), [poster])
+  const usablePoster = brokenPoster ? null : poster
+  const video = usablePoster === null && !brokenVideo ? preview.video_url : null
   const note = ar ? preview.note_ar : preview.note_en
 
   return (
@@ -1101,15 +1116,14 @@ function CreativeGridCard({
            */
           className={showPreviewPanel ? `block w-full bg-surface-hover ${aspectClass(preview.aspect ?? null) ?? 'aspect-video'}` : 'block w-full bg-surface-hover'}
         >
-          {poster ? (
-            <img
-              src={poster}
+          {usablePoster ? (
+            <PosterImage
+              src={usablePoster}
               alt={creative.name}
               // Off-screen cards cost nothing until they scroll into view — the difference between
               // a page and a download on a phone with twenty creatives on it. An INLINE asset is
               // exempt: see `imageLoading`, where lazy-loading a `data:` URI stopped it loading at all.
-              loading={imageLoading(poster)}
-              decoding="async"
+              loading={imageLoading(usablePoster)}
               /*
                * CONTENT-PREVIEW-SHAPES-001 — a story is contained, never covered.
                *
@@ -1118,7 +1132,14 @@ function CreativeGridCard({
                * then shows a picture the ad never was, and two creatives compared side by side are
                * two crops this product invented.
                */
-              data-shape={previewShape(creative.width, creative.height, creative.aspect_ratio)}
+              shape={previewShape(creative.width, creative.height, creative.aspect_ratio) ?? undefined}
+              /*
+               * Nothing is drawn here on failure: the card re-renders with `usablePoster` null and
+               * falls through to the film, or to the sentence, which is what it already does for a
+               * creative that never had a still.
+               */
+              fallback={null}
+              onFailed={() => setBrokenPoster(true)}
               className={`h-full w-full ${
                 previewShape(creative.width, creative.height, creative.aspect_ratio) === 'portrait'
                   ? 'object-contain'
