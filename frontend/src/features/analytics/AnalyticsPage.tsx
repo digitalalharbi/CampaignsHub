@@ -65,7 +65,7 @@ import { Explainer } from '@/components/ui/Explainer'
 import { ChangeDiagnosis } from './ChangeDiagnosis'
 import { ContentReading } from './ContentReading'
 import { DistributionBars } from './DistributionBars'
-import { SPECS, layoutFor } from './metricCatalog'
+import { SPECS, layoutFor, valueReading } from './metricCatalog'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro } from '@/components/ui/PageIntro'
@@ -2650,16 +2650,58 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                         <dt className="text-text-secondary">
                           {spec ? (ar ? spec.label.ar : spec.label.en) : k}
                         </dt>
-                        <dd className="tnum text-text-primary" dir="ltr">
-                          {/* Null stays «—»: an unavailable figure is not a figure of zero. */}
-                          {total === null
-                            ? '—'
-                            : money
-                              ? `${total.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${unit}`.trim()
-                              : spec
-                                ? spec.format(total)
-                                : total.toLocaleString('en-US', { maximumFractionDigits: 2 })}
-                        </dd>
+                        {/*
+                          NUMBER-PRESENTATION-001 — the last two places in this file that printed a
+                          count at full width.
+
+                          «لم يتم تقريب الارقام 1k, 3M, 54.5K وهكذا» was answered for the entity
+                          tables and not for this block, because these two branches are the FALLBACKS
+                          — money, and a metric with no spec — and both reached `toLocaleString`
+                          directly. So a family summary printed «1,284,663 SAR» beside a KPI card
+                          reading «1.28M SAR» for the same figure, which reads as two different
+                          numbers rather than as one number written twice.
+
+                          `readMetricValue` is the same function the tables and the cards call, so
+                          they now agree by construction. The exact figure travels as the `title`,
+                          which is what earns an abbreviation the right to be there: a number the
+                          reader cannot get back to is a number they cannot audit.
+                        */}
+                        {(() => {
+                          if (total === null) {
+                            /* Null stays «—»: an unavailable figure is not a figure of zero. */
+                            return <dd className="tnum text-text-primary" dir="ltr">—</dd>
+                          }
+
+                          /*
+                           * NUMBER-PRESENTATION-001 — one reading, the same one the cards use.
+                           *
+                           * This block decided all of it by hand and got two things wrong that
+                           * `valueReading` already has right. It called `spec.format(total)` with no
+                           * currency, and every cost-per spec is formatted by `moneyExact`, so an
+                           * ordinary awareness family printed «237.90 undefined» on screen. And its
+                           * two fallback branches — money, and a metric with no spec — reached
+                           * `toLocaleString` directly, so «1,284,663 SAR» sat under a KPI card
+                           * reading «1.28M SAR» for the same figure.
+                           *
+                           * «لم يتم تقريب الارقام 1k, 3M, 54.5K وهكذا» was answered for the entity
+                           * tables and missed here, because a fallback is the path nobody looks at.
+                           *
+                           * The exact figure travels as the `title`, and only when the display
+                           * actually abbreviated — a tooltip repeating what is already on screen is
+                           * noise.
+                           */
+                          const read = spec
+                            ? valueReading(spec, total, unit || currency || null)
+                            : readMetricValue(money ? 'money' : 'number', total, { currency: unit || currency || null })
+
+                          const exact = 'exact' in read ? read.exact : (read.exact ?? undefined)
+
+                          return (
+                            <dd className="tnum text-text-primary" dir="ltr" title={exact ?? undefined}>
+                              {read.text}
+                            </dd>
+                          )
+                        })()}
                       </div>
                     )
                   })}

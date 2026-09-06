@@ -82,6 +82,29 @@ describe('moneyExact', () => {
     expect(moneyExact(null, 'SAR')).toBe('—')
     expect(moneyExact(undefined, 'SAR')).toBe('—')
   })
+
+  /**
+   * The rule `money()` has always stated, which its exact counterpart never learned.
+   *
+   * Both interpolations were a bare `${currency}`, so a caller with nothing to give printed the word
+   * «undefined» beside the figure. `Fmt` makes the argument OPTIONAL — `(n, currency?)` — so every
+   * call site that formats a cost-per with one argument reached this, and one of them was the
+   * objective family summary, which rendered «237.90 undefined» in production.
+   *
+   * An unknown currency prints no currency. «237.90» is incomplete and reads as incomplete; the word
+   * «undefined» reads as a broken product, and it is the one this printed.
+   */
+  it('prints no currency rather than the word undefined when it has none', () => {
+    expect(moneyExact(237.9, undefined)).toBe('237.90')
+    expect(moneyExact(237.9, null)).toBe('237.90')
+    expect(moneyExact(96121, undefined)).toBe('96,121')
+    expect(moneyExact(96121, '')).toBe('96,121')
+
+    /* Said as the rule rather than as four examples: the word never appears, for any figure. */
+    for (const n of [0, 1.5, 999.99, 1000, 1284663]) {
+      expect(moneyExact(n, undefined)).not.toMatch(/undefined/)
+    }
+  })
 })
 
 /**
