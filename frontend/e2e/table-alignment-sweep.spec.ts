@@ -244,18 +244,26 @@ test.describe('the surfaces that still hand-roll a table', () => {
             await list.first().click()
 
             /*
-             * Wait for the TABLE, not for a duration.
+             * Wait for the TABLE, not for a duration — and let THAT be the failure.
              *
-             * A flat three seconds passed on firefox and webkit and on chromium in Arabic, and lost
-             * the race on chromium in English exactly once — «no table was found» reported for a page
-             * that renders one perfectly, which is the sweep failing the product for the sweep's own
-             * timing. At 390 the list legitimately has no table, so this waits only where the control
-             * that produces one was actually pressed, and does not fail if it stays absent.
+             * Two versions of this were wrong in opposite ways. A flat three seconds lost the race on
+             * chromium in English once. Replacing it with a wait whose timeout was swallowed
+             * (`.catch(() => undefined)`) was worse: when firefox-in-Arabic lost the race under CI
+             * load, the floor below reported «no table was found on any hand-rolled surface» — a
+             * sentence about the PRODUCT for what was entirely this file's timing, which is the exact
+             * class of misreport this whole spec was written to avoid.
+             *
+             * The wait now fails on its own terms, with its own message, and gets a budget matched to
+             * a loaded CI runner rather than to a warm laptop. At 390 the list has no such control, so
+             * nothing here runs and the width-guarded floor is what applies.
              */
-            await page.locator('table').first().waitFor({ timeout: 20000 }).catch(() => undefined)
+            await expect(
+              page.locator('table').first(),
+              `${surface.path} @${width} (${locale}): the list view was opened and no table arrived`,
+            ).toBeVisible({ timeout: 45000 })
           }
 
-          // These tables arrive with their own requests; a surface with none is caught by the floor.
+          // The rows arrive with their own request after the table's frame does.
           await page.waitForTimeout(2000)
 
           const columns = await numericColumns(page)
