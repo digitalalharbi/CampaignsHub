@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Reporting\ReportingWindow;
+use App\Domains\Integrations\Support\AssetExpiry;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 
 /**
@@ -463,6 +464,14 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                 // the image column is what makes a card try to render an MP4 as a picture.
                 'asset_url' => $isVideo ? null : $link,
                 'video_url' => $isVideo ? $link : null,
+                /*
+                 * AD-MEDIA-RECOVERY-001 — Snapchat states its grant's expiry in `e` (decimal seconds).
+                 *
+                 * Same gap as Meta's: the column and the `expired` state existed and nothing wrote
+                 * one, so a `download_link` that had gone stale was served as `available` and the card
+                 * showed a broken frame with no explanation.
+                 */
+                'asset_expires_at' => AssetExpiry::fromUrl($link)?->toIso8601String(),
                 'source_updated_at' => isset($m['updated_at']) ? (string) $m['updated_at'] : null,
             ], static fn ($v) => $v !== null);
         }

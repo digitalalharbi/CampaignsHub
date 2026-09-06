@@ -278,6 +278,41 @@ final class SnapchatCreativeAssetsTest extends TestCase
         $this->assertSame('collection', $this->creatives()['cr-1']['format'], 'A collection whose hero is a film is still a collection.');
     }
 
+    /**
+     * AD-MEDIA-RECOVERY-001 — the grant's expiry travels with the link.
+     *
+     * `asset_expires_at` is in the connector contract and the importer writes it, and no connector
+     * had ever emitted one — so `CreativePresenter::assetExpired()` was always false and the
+     * `expired` state was unreachable. A `download_link` that had gone stale reached the browser as
+     * `available`, the CDN refused it, and the card showed a broken frame with no explanation.
+     *
+     * Snapchat states it in `e`, decimal seconds, on the same signed URL it already sends.
+     */
+    public function test_a_signed_media_link_carries_its_expiry(): void
+    {
+        $this->fakeApi([
+            'cr-1' => ['media' => 'me-1', 'type' => 'WEB_VIEW'],
+        ], [
+            'me-1' => ['type' => 'IMAGE', 'download_link' => 'https://cf.snapchat.com/media/me-1.jpg?sig=abc&e=1790000000'],
+        ]);
+
+        $creative = $this->creatives()['cr-1'];
+
+        $this->assertSame(1790000000, strtotime((string) $creative['asset_expires_at']));
+    }
+
+    /** A link that states no expiry emits none — «not stated» is not «never expires». */
+    public function test_a_link_without_an_expiry_emits_none(): void
+    {
+        $this->fakeApi([
+            'cr-1' => ['media' => 'me-1', 'type' => 'WEB_VIEW'],
+        ], [
+            'me-1' => ['type' => 'IMAGE', 'download_link' => 'https://cf.snapchat.com/media/me-1.jpg'],
+        ]);
+
+        $this->assertArrayNotHasKey('asset_expires_at', $this->creatives()['cr-1']);
+    }
+
     /** @return array<string, array<string, mixed>> */
     private function creatives(): array
     {
