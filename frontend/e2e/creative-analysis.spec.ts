@@ -465,3 +465,103 @@ test.describe('the media a reader can actually play', () => {
     expect(body, 'a derived row still blames the platform').not.toMatch(/does not expose the creative|لا تتيح هذه المنصة أصل المحتوى/i)
   })
 })
+
+/**
+ * AD-PREVIEW-001 — «visibly rendered», asserted as pixels rather than as a DOM node.
+ *
+ * ## Why this file needed one more case
+ *
+ * Every check the product had on the library's media stopped at the payload. The server-side probe
+ * fetches each first-page asset from the VPS and reports status, content type and decoded size; the
+ * component tests assert the `<img>` is composed with the right `src`. Both passed while the owner
+ * was looking at blank cards, and neither could have caught it: a datacentre's fetch is not the
+ * browser's fetch, and an element being in the document says nothing about whether it painted.
+ *
+ * `data-media` closes that gap. The card sets it to `loaded` ONLY after the browser reports a decode
+ * with real dimensions — a load event fires for zero-by-zero, which is exactly what a CDN returns
+ * when a signature has died — so a card claiming `loaded` has genuinely put pixels on the screen.
+ *
+ * Run in all three engines because the failure is engine-shaped: a referrer policy, a lazy-loading
+ * threshold and an image decoder are three different implementations, and «works in Chromium» has
+ * never been the claim.
+ *
+ * One limit stated rather than implied: the demo library's assets are `data:` URIs, so what this
+ * proves in a real browser is the instrument and the decode — that a card reports `loaded` only with
+ * real dimensions behind it. A refused NETWORK fetch cannot be staged against this fixture at all,
+ * and is asserted where the events can be driven, in `posterImageReportsWhatTheBrowserDid.test.tsx`.
+ *
+ * ## What this does NOT prove
+ *
+ * The seeded library, not the owner's. It proves the rendering PATH — that a card handed a usable
+ * asset draws it, and that a card handed a dead one says so instead of going blank. It cannot prove
+ * anything about production's own assets, which is a separate acceptance run against the live estate.
+ */
+test.describe('the library draws pixels, not just elements', () => {
+  /* The agency owner, like every other block here: the demo library belongs to the agency tenant. */
+  test.use({ storageState: AUTH.owner })
+
+  test('every card that claims an image has actually decoded one', async ({ page, request }) => {
+    await openLibrary(page, request)
+
+    const posters = page.locator('[data-media]')
+    await expect(posters.first()).toBeAttached({ timeout: 30000 })
+
+    /*
+     * `pending` is a real, legitimate state — an off-screen card has not been asked to load yet —
+     * so the wait is for the FIRST resolution rather than for a count, and only resolved cards are
+     * judged. Waiting for «none pending» would be waiting for the lazy loader to give up.
+     */
+    await expect
+      .poll(async () => page.locator('[data-media="loaded"], [data-media="failed"]').count(), { timeout: 30000 })
+      .toBeGreaterThan(0)
+
+    const failed = await page.locator('[data-media="failed"]').count()
+    const loaded = await page.locator('[data-media="loaded"]').count()
+
+    expect(loaded, 'no card on the library decoded an image').toBeGreaterThan(0)
+    expect(failed, 'a card was handed an asset the browser could not draw').toBe(0)
+
+    /*
+     * And the dimensions are real. `data-natural` is written from `naturalWidth`/`naturalHeight`, so
+     * a card that reported `loaded` without pixels — the precise shape of the owner's blank
+     * rectangle — cannot satisfy this.
+     */
+    const natural = await page.locator('[data-media="loaded"]').first().getAttribute('data-natural')
+    expect(natural, 'a loaded card reported no decoded size').toMatch(/^[1-9]\d*x[1-9]\d*$/)
+  })
+
+  /**
+   * The requirement itself, asserted directly: NO card is an empty frame.
+   *
+   * Two earlier drafts of this case were worth less than nothing. The first aborted image requests
+   * at the network layer — the demo assets are `data:image/svg+xml` URIs, which are not network
+   * requests, so the route never fired and the only way it could go green was vacuously. The second
+   * looked for `[data-absence]`, which the LIST row renders and the grid card does not; it never
+   * passed, and had it been written the other way round it would have passed while asserting nothing
+   * about the grid the reader actually opens on.
+   *
+   * So this asks the question the requirement asks, of every card on the page at once: does the
+   * frame hold a picture, a film, or a sentence? A frame holding none of the three is the blank
+   * rectangle the owner reported, and it is the single outcome AD-PREVIEW-001 forbids by name.
+   */
+  test('no card on the library is an empty frame', async ({ page, request }) => {
+    await openLibrary(page, request)
+    await expect(cards(page).first()).toBeVisible({ timeout: 30000 })
+    await expect(page.locator('[data-media]').first()).toBeAttached({ timeout: 30000 })
+
+    const empty = await page.evaluate(() =>
+      [...document.querySelectorAll('article')]
+        .map((card) => {
+          /* The frame is the button the whole preview lives in. */
+          const frame = card.querySelector('button')
+          if (frame === null) return null
+          if (frame.querySelector('[data-media], video') !== null) return null
+
+          return (frame.textContent ?? '').trim() === '' ? (card.textContent ?? '').slice(0, 60) : null
+        })
+        .filter((x): x is string => x !== null),
+    )
+
+    expect(empty, 'a card drew neither a picture, a film, nor a sentence').toEqual([])
+  })
+})
