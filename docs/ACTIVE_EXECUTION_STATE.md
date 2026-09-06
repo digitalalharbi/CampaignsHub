@@ -1,80 +1,80 @@
-# ACTIVE EXECUTION STATE — 2026-09-04
+# ACTIVE EXECUTION STATE — 2026-09-06
 
 The current control plane, and nothing else. Requirements and their status live in
 `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`; how to resume from cold lives in `docs/RESUME_STATE.md`.
 If this file and the Matrix disagree, the Matrix wins — and if the Matrix and the running product
 disagree, the product wins.
 
-**This file had gone stale by sixteen merges.** It described #248/#249 as in flight while main had
-moved to #264, which is the failure mode it exists to prevent: a control plane nobody can plan from
-is worse than none, because it is trusted. Repaired from `git log origin/main`, not from memory.
+## Main
 
-## Active unit
+`20a98685` — «The sandbox never reaches a live provider — outbound, and the write path that created
+it» (#292). Deployed to Production, success. Nothing in flight; no open PR; no prepared branch.
 
-**PR #265 — `feat/client-facing-reset`**: the four requirements of §57, the client-facing
-presentation reset. One table primitive that owns the numbers rather than only the grid; operator
-diagnostics removed from the client's payload rather than hidden in the view; the digest rebuilt as
-a dashboard with movement on every card; and the live report reordered so a client meets «at what
-cost» before «where».
+## What the live estate actually says — traced 2026-09-05/06, read-only
 
-## In flight
+`integrations:diagnose` on the VPS, calling no provider and writing no row. Three authorised
+advertising providers, three different answers, and only one of them was ever a software defect.
 
-| PR | unit | state |
-|---|---|---|
-| #265 | the client-facing presentation reset (§57, all four rows) | in CI |
-| #266 | three modals open one ad · three settings the report builder could not send | in CI |
+| provider | accounts | bound to | structure | metrics | downstream |
+|---|---|---|---|---|---|
+| Snapchat | 309 | **Project 1** | 4×/day `success`, 11,716 records | 30-min `success`, raw 87 → parsed 87 → mapped 87 → **stored 1044** | 3,420 rows / 26 days · 9,446.29 spend · 38,405.14 revenue USD · 89 campaigns |
+| LinkedIn | 10 | **project «لينكدن»** — not Project 1 | 4×/day `success`, 11 records | 30-min `success`, raw 8 → parsed 8 → mapped 8 → **stored 63** | 71 rows / 9 days · 390.44 spend USD · 6 campaigns |
+| Meta | 4 | **Project 1** | `no_data`, **0 records** | `no_data`, 0 → 0 → 0 → **0** | nothing |
 
-`origin/main` = `ff5126e7837c9897f3f07235e75d3c3515e33357`.
+**LinkedIn is not broken.** It is bound to a different project and feeding it correctly, with
+«rows in ANY OTHER project: 0». It is absent from Project 1 because it was never bound to Project 1
+— project isolation working, and the reason nobody could see that was the Integration Center saying
+«يعمل» without saying WHICH project it feeds.
 
-Merged and deployed since this file was last true: **#250**–**#256** the presentation and lead
-units · **#257** the library is not a list of ads, and five more presentation truths · **#259** every
-client received a file called report.pdf · **#260** two rows described work that had already shipped
-· **#261** the objective tab could say how a family was doing and not which campaign to fund ·
-**#262** a lead can name the chain that produced it, and the ad-set table can be read · **#263** the
-follow-up figures finally have a screen · **#264** the action a campaign buys is a dimension of its
-own.
+**Meta is not a software failure either.** The bound account is `RazzahAvenu` /
+`act_1500383245036671`, timezone **America/Los_Angeles** — Meta's default for an ad account that has
+never been configured. The other three discovered Meta accounts are all Asia/Riyadh, and the
+Snapchat account running this business is «RazzahAvenu Self Service». The run status is `no_data`,
+not `failed`: Meta answered 200 with an empty list, which rules out a permission refusal, a
+pagination or field bug, and an app-mode limit — each of those errors rather than returning nothing.
 
-Merge rule in force: squash on a current head, backend and frontend green plus the three browser
-gates, then verify the deploy and production 200. Branch protection is strict, so a merge
-invalidates every other open head — keep the queue at two and prepare the rest locally.
+## The one decision that is not mine
 
-## Prepared next, in dependency order
+**Which Meta ad account should be bound to Project 1.** Binding is the owner's explicit choice
+(«do NOT silently auto-assign an account to a project»), and Meta's live-data proof cannot progress
+until an account that has campaigns is bound. Recorded as BLOCKED_OPERATIONAL_EVIDENCE, not as a
+defect and not as VERIFIED.
 
-Repaired against the tree on 2026-09-04: the list below had four entries that shipped in #262–#264.
+## Closed since the last update, each Production-verified
 
-1. **`CLIENT-FACING-PRESENTATION-001`** — three of the nine composition blocks are still absent from
-   the live report: budget status, alerts that need a decision, and concise actions with their
-   evidence. The dashboard and both snapshot forms have not been re-composed at all.
-2. **`TABLE-NUMERIC-ALIGNMENT-001`** — twelve surfaces still draw their own table. The spec API needs
-   a transposed shape (three of the twelve) and an editable cell kind (one) before those can move.
-3. **`CLIENT-DIAGNOSTIC-SEPARATION-001`** — the PDF path and the remaining mail templates have not
-   been swept for operator vocabulary.
-4. **`EMAIL-DASHBOARD-UX-001`** — the weekly and monthly rhythms carry their own copy and have not
-   been rebuilt to the daily's standard.
-5. **`REPORT-DETAIL-PARITY-001`** — the chain below the ad set: ad, content and media, budget,
-   funnel and store, attribution and data quality, findings and recommendations, the evidence
-   appendix, and the snapshot form's own parity. The ad-set rung and its names landed in #259/#262.
-6. **`CONTENT-PREVIEW-SHAPES-001`** — collection, multi-asset, catalog media and the provider
-   permalink fallback.
-7. **`BRANDING-RENDER-EVIDENCE-001`** — the platform layer of the branding chain is unreachable
-   across tenants by construction (`BrandingAsset` is tenant-scoped), so the documented CampaignsHub
-   fallback can never answer for anybody. That is the code gap; the production install additionally
-   has no logo configured at any layer, which is why the header reads a name and no mark.
-8. **`ADSET-METRICS-TRUTH-001`** — the other five providers.
+- **The sandbox write path.** `ProjectIntegrationController::sync()` ran
+  `SandboxAdvertisingConnector` unconditionally against whatever binding was passed, which is how
+  `sbx-cmp-1`/`sbx-cmp-2` reached the live Snapchat AND Meta accounts. The connector is resolved from
+  the account's own provider through the canonical registry and fails closed. #292's outbound filter
+  stays as containment.
+- **The census stopped calling contamination «discovery».** Production now prints
+  `provider campaigns=0` and `SANDBOX-CONTAMINATED rows=2  stored total=2` where it used to print
+  `campaigns discovered=2` — verified on the live Meta account after deploy.
+- **Connection health ≠ data health.** `AccountHealth::NO_DATA`, outside `NEEDS_ATTENTION`, and the
+  connector card says «متصل بلا بيانات / connected, no data».
+- **The Meta credential probe.** `grant_type=client_credentials` at Meta's documented app-token
+  endpoint, POSTed so no secret enters a URL, token never leaving the method, with a regression that
+  fails if anyone adds «Invalid verification code format» to the generic string list.
 
-## Blockers
+## Next, in order
 
-* `WHATSAPP-CONVERSATION-SOURCE-001` — WhatsApp Business Platform authorisation absent. The ads-side
-  messaging metric is a different source and may not stand in for it.
-* `INTEGRATION-TIKTOK-001` — provider approval pending; blocks nothing else.
-* `MAIL-SEND` — no live SMTP credential; composition is proven, delivery is not.
+1. Safe production cleanup of the `raw.sandbox` rows now that the write path is closed (§3) —
+   count before/after, quarantine only what provenance proves, destroy no live history.
+2. Cross-platform regression: one project, three providers, every surface and every provider filter
+   (§10).
+3. Aggregation truth: additive vs derived vs results vs reach vs revenue vs currency vs coverage
+   (§9).
+4. Then the remaining Matrix.
 
-## Standing obligation
+## Matrix, parsed from the file at this commit
 
-`PRODUCTION-TRUTH-AUDIT-001` is open. Four rows have been reopened against observed behaviour; the
-rest of the named list — content previews, ad-set metrics, compact numbers, objective presentation,
-platform dashboard, budget governance, email settings, analytical tables, data quality, attribution,
-mobile parity, AR/EN, RTL/LTR, light/dark — has not been audited yet.
+| status | rows |
+|---|---|
+| VERIFIED | 458 |
+| PARTIAL | 26 |
+| IMPLEMENTED_NOT_VERIFIED | 24 |
+| IN_PROGRESS | 17 |
+| BLOCKED_EXTERNAL_CREDENTIALS | 17 |
+| BLOCKED_OPERATIONAL_EVIDENCE | 11 |
 
-Eighty-one Matrix rows are still executable. This file may not report otherwise, and
-`MatrixStatusVocabularyTest` fails if it tries.
+**67 executable rows remain.** Counted programmatically from the status column, never from memory.
