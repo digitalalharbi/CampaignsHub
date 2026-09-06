@@ -82,6 +82,49 @@ final class CreativeFormatIsNotInventedTest extends TestCase
         $this->assertSame('other', $preview['kind']);
     }
 
+    /**
+     * CONTENT-PREVIEW-SHAPES-001 — when the label and the asset disagree, the asset wins.
+     *
+     * The live first-page census found «[snapchat/image] available  image=no thumb=no video=yes»: a
+     * row the platform labelled an image, on which the only thing that ever resolved is a film.
+     * `format` won outright, so the reading was `image`, the card looked for a still, found none,
+     * and drew «the platform sent no file for it» over a video that had arrived and would play.
+     *
+     * That is one of the owner's blank rectangles, and it is the weaker evidence winning: a label the
+     * platform wrote ABOUT the ad, beating a file it actually handed over.
+     */
+    public function test_a_film_is_not_called_an_image_because_the_label_said_so(): void
+    {
+        $creative = $this->import([
+            'external_id' => 'cr-film', 'name' => 'Labelled an image, delivered as a film',
+            'format' => 'image', 'video_url' => 'https://cdn.example/a.mp4',
+        ]);
+
+        $preview = app(CreativePresenter::class)->preview($creative);
+
+        $this->assertSame('video', $preview['kind'], 'The only asset on this row is a film.');
+        $this->assertSame('available', $preview['state']);
+    }
+
+    /**
+     * ...and the label still wins where it is the only tie-breaker there is.
+     *
+     * An image ad with a preview clip has both, and calling every one of those a video would trade
+     * one wrong reading for another. The rule above is deliberately narrow: it fires only when
+     * nothing still-shaped resolved at all.
+     */
+    public function test_an_image_that_also_has_a_clip_is_still_an_image(): void
+    {
+        $creative = $this->import([
+            'external_id' => 'cr-both', 'name' => 'An image with a clip',
+            'format' => 'image',
+            'asset_url' => 'https://cdn.example/a.png',
+            'video_url' => 'https://cdn.example/a.mp4',
+        ]);
+
+        $this->assertSame('image', app(CreativePresenter::class)->preview($creative)['kind']);
+    }
+
     /** A format the connector DID state is written exactly, and never rounded to a known word. */
     public function test_a_stated_format_is_written_verbatim(): void
     {

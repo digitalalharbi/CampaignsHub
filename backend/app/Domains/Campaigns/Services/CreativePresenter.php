@@ -449,10 +449,31 @@ final class CreativePresenter
          * «collection_video» names a collection whose hero is a film, and the collection is the more
          * specific truth.
          */
+        /*
+         * CONTENT-PREVIEW-SHAPES-001 — the label loses to the asset when the two disagree.
+         *
+         * The first-page census on the live estate found «[snapchat/image] available  image=no
+         * thumb=no video=yes»: a row the platform labelled an image whose ONLY resolved asset is a
+         * film. `format` used to win outright, so the reading was `image`, the card looked for a
+         * still, found none, and drew «the platform sent no file» over a video that had arrived and
+         * would play. That is one of the owner's blank rectangles, and the format string is the
+         * weaker evidence — a label the platform wrote about the ad, against a file it actually
+         * handed over.
+         *
+         * Narrow on purpose: only when nothing still-shaped resolved at all. A row with both an image
+         * and a video is exactly what an image ad with a preview clip looks like, and the label is
+         * the right tie-breaker there.
+         */
+        $onlyFilmResolved = $creative->video_url !== null
+            && $creative->asset_url === null
+            && $creative->thumbnail_url === null
+            && $creative->preview_url === null;
+
         return match (true) {
             str_contains($format, 'collection') => 'collection',
             str_contains($format, 'catalog') || str_contains($format, 'dynamic_product') || str_contains($format, 'dpa') => 'catalog',
             str_contains($format, 'video') => 'video',
+            str_contains($format, 'image') && $onlyFilmResolved => 'video',
             str_contains($format, 'carousel') => 'carousel',
             str_contains($format, 'image') => 'image',
             $creative->video_url !== null => 'video',

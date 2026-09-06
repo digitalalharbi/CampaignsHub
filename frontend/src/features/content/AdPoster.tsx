@@ -1,6 +1,7 @@
 import { useUi } from '@/stores/ui'
 import { absenceLabel, posterSource, previewShape, readPreview } from './adPreview'
 import type { CreativePreview } from './api'
+import { PosterImage } from './PosterImage'
 
 /**
  * AD-PREVIEW-001 — one still, drawn the same way on every surface that shows an ad.
@@ -37,17 +38,27 @@ export function AdPoster({
   const reading = readPreview(preview, ar)
   const src = posterSource(reading)
 
+  /*
+   * The stated absence, drawn either because there was never a still to draw or because the browser
+   * could not draw the one there was. `data-absence` names which, so the two never blur together.
+   */
+  const absent = (reason: string) => (
+    <span
+      data-testid={testid ? `${testid}-absent` : undefined}
+      /* Which of the reasons this is, so a surface can tell «there is a film here» from «there is nothing». */
+      data-absence={reason}
+      className={`flex items-center justify-center rounded-lg bg-surface-secondary p-2 text-center text-[11px] leading-tight text-text-muted ${className}`}
+    >
+      {reason === 'fetch_failed'
+        ? ar
+          ? 'تعذّر تحميل أصل هذا الإعلان من المنصة — قد يكون الرابط انتهت صلاحيته. يحتاج مزامنة جديدة.'
+          : 'This ad’s asset could not be loaded from the platform — the link may have expired. It needs a fresh sync.'
+        : absenceLabel(reading, ar)}
+    </span>
+  )
+
   if (!src) {
-    return (
-      <span
-        data-testid={testid ? `${testid}-absent` : undefined}
-        /* Which of the reasons this is, so a surface can tell «there is a film here» from «there is nothing». */
-        data-absence={reading.kind === 'none' ? reading.reason : 'video-no-cover'}
-        className={`flex items-center justify-center rounded-lg bg-surface-secondary p-2 text-center text-[11px] leading-tight text-text-muted ${className}`}
-      >
-        {absenceLabel(reading, ar)}
-      </span>
-    )
+    return absent(reading.kind === 'none' ? reading.reason : 'video-no-cover')
   }
 
   /*
@@ -58,17 +69,22 @@ export function AdPoster({
   const portrait = previewShape(width, height, aspectRatio) === 'portrait'
 
   return (
-    <img
+    <PosterImage
       src={src}
       alt={name}
-      data-shape={portrait ? 'portrait' : 'landscape'}
-      data-testid={testid}
+      shape={portrait ? 'portrait' : 'landscape'}
+      testid={testid}
       /*
        * A `data:` URI must load eagerly. A lazy one never enters the viewport observer, never
        * decodes, and leaves a blank frame with no error anywhere — which is how the demo library
        * came to render ten empty cards.
        */
       loading={src.startsWith('data:') ? 'eager' : 'lazy'}
+      /*
+       * A load that fails says so. It used to leave an `<img>` painting nothing over the space where
+       * the ad should be — the owner's blank card, with no sentence and no signal anywhere.
+       */
+      fallback={absent('fetch_failed')}
       className={`rounded-lg ${portrait ? 'bg-surface-secondary object-contain' : 'object-cover'} ${className}`}
     />
   )

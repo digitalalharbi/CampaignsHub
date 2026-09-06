@@ -238,7 +238,18 @@ final class ProbeInsightsCommand extends Command
      */
     private function reportMedia(ExternalAccount $account): int
     {
+        /*
+         * Scoped by PROVIDER, not only by project — because two accounts can share one.
+         *
+         * The first cut of this filtered on «the project this binding points at» and nothing else.
+         * Project 1 holds both the Meta account and the Snapchat one, so probing either returned the
+         * SAME twelve rows: identical names, identical byte counts, identical object ids, in
+         * identical order. It read like a finding about both providers and was one query answering
+         * one question twice. `external_creatives` carries no account column, so the provider is
+         * what separates them, inside the project the account is actually bound to.
+         */
         $creatives = ExternalCreative::withoutGlobalScopes()
+            ->where('provider', (string) $account->provider)
             ->where('project_id', function ($q) use ($account): void {
                 $q->select('project_id')
                     ->from('project_integration_bindings')
@@ -253,19 +264,42 @@ final class ProbeInsightsCommand extends Command
             ->get();
 
         $this->line('');
-        $this->line(sprintf('  fetching %d first-page asset(s) — the request a browser would make', $creatives->count()));
+        $this->line(sprintf(
+            '  %s — fetching the still %d first-page card(s) would draw',
+            (string) $account->provider,
+            $creatives->count(),
+        ));
+        $this->line('    state      = what the presenter says about the asset');
+        $this->line('    card       = what the CARD does with it (adPreview.ts)');
 
         $ok = 0;
         $bad = 0;
+        $blank = 0;
 
         foreach ($creatives as $creative) {
             $preview = app(CreativePresenter::class)->preview($creative);
-            $url = $preview['image_url'] ?? $preview['thumbnail_url'] ?? $preview['video_url'] ?? null;
+            [$card, $url] = $this->cardStill($preview);
 
             $label = mb_substr((string) ($creative->name ?: '(unnamed)'), 0, 26);
+            $state = (string) $preview['state'];
 
             if (! is_string($url) || $url === '') {
-                $this->line(sprintf('    · %-26s %s — nothing to fetch', $label, (string) $preview['state']));
+                /*
+                 * A card with nothing to draw is not automatically a fault — a catalog ad has no
+                 * single asset by design, and a stated absence is the product working. What IS a
+                 * fault is a card the presenter calls «available» that still draws nothing, which is
+                 * the owner's blank rectangle, so those are counted separately and named.
+                 */
+                $selection = $state === 'available' && $card !== 'catalog';
+                $blank += $selection ? 1 : 0;
+
+                $this->line(sprintf(
+                    '    · %-26s %-12s %-16s %s',
+                    $label,
+                    $state,
+                    $card,
+                    $selection ? 'BLANK — available, yet the card selects no still' : 'nothing to fetch',
+                ));
 
                 continue;
             }
@@ -276,7 +310,7 @@ final class ProbeInsightsCommand extends Command
                 $response = Http::withOptions(['allow_redirects' => true])->timeout(20)->get($url);
             } catch (Throwable $e) {
                 $bad++;
-                $this->line(sprintf('    · %-26s REQUEST FAILED %s — %s', $label, $where, $e->getMessage()));
+                $this->line(sprintf('    · %-26s %-12s %-16s REQUEST FAILED %s — %s', $label, $state, $card, $where, $e->getMessage()));
 
                 continue;
             }
@@ -285,31 +319,85 @@ final class ProbeInsightsCommand extends Command
             $body = $response->body();
             $size = @getimagesizefromstring($body);
 
-            $isMedia = str_starts_with($type, 'image/') || str_starts_with($type, 'video/');
+            /*
+             * The still a card draws is always an IMAGE — `posterSource` never hands back a video
+             * file. So «content type begins with video/» is no longer an acceptable answer here: it
+             * would mean the card is about to put an mp4 in an `<img>`, which draws nothing.
+             */
             $decoded = is_array($size) ? sprintf('%dx%d', $size[0], $size[1]) : 'did not decode';
+            $usable = $response->successful() && str_starts_with($type, 'image/') && is_array($size);
 
-            if ($response->successful() && $isMedia && (is_array($size) || str_starts_with($type, 'video/'))) {
-                $ok++;
-            } else {
-                $bad++;
-            }
+            $usable ? $ok++ : $bad++;
 
             $this->line(sprintf(
-                '    · %-26s %d  %-24s %8s bytes  %s  %s',
+                '    · %-26s %-12s %-16s %d  %-16s %9s bytes  %-14s %-8s %s',
                 $label,
+                $state,
+                $card,
                 $response->status(),
-                mb_substr($type, 0, 24),
+                mb_substr($type, 0, 16),
                 number_format(strlen($body)),
                 $decoded,
+                $usable ? 'USABLE' : 'UNUSABLE',
                 $where,
             ));
         }
 
         $this->line('');
-        $this->line(sprintf('  usable media : %d', $ok));
-        $this->line(sprintf('  unusable     : %d   (a 200 carrying an HTML error page counts here)', $bad));
+        $this->line(sprintf('  usable stills    : %d', $ok));
+        $this->line(sprintf('  unusable         : %d   (a 200 carrying an HTML error page counts here)', $bad));
+        $this->line(sprintf('  blank by selection: %d   (presenter said «available»; the card still draws nothing)', $blank));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The still the CARD would draw — `readPreview` then `posterSource`, in PHP.
+     *
+     * The probe used to fetch `image_url ?? thumbnail_url ?? video_url`, which is not a question any
+     * surface asks. It made the probe generous in exactly the place the owner is being failed: a
+     * creative whose kind is `image` while only `video_url` arrived has no still, so the card draws
+     * an absence — and the old probe fetched the mp4, found 200 and `video/mp4`, and called it
+     * usable. «Usable» then meant «some byte stream exists somewhere on this row», and the card the
+     * owner is looking at was blank.
+     *
+     * Mirrors `frontend/src/features/content/adPreview.ts`. `MediaProbeMatchesTheCardTest` walks the
+     * shapes and fails if the two ever disagree.
+     *
+     * @param  array<string, mixed>  $preview
+     * @return array{0: string, 1: string|null}
+     */
+    private function cardStill(array $preview): array
+    {
+        $image = is_string($preview['image_url'] ?? null) ? $preview['image_url'] : null;
+        $thumb = is_string($preview['thumbnail_url'] ?? null) ? $preview['thumbnail_url'] : null;
+        $video = is_string($preview['video_url'] ?? null) ? $preview['video_url'] : null;
+        $kind = (string) ($preview['kind'] ?? 'image');
+
+        /*
+         * Every non-available state draws the SENTENCE, not a still — `readPreview` returns `none`
+         * and `posterSource` returns null. `expired` still carries a `thumbnail_url` in the payload
+         * and the card deliberately ignores it: a stale poster over a dead asset is the fabricated
+         * preview this module exists to prevent.
+         */
+        if ((string) $preview['state'] !== 'available') {
+            return [(string) $preview['state'], null];
+        }
+
+        if ($kind === 'catalog') {
+            return ['catalog', null];
+        }
+
+        if ($kind === 'collection') {
+            return ['collection', $image ?? $thumb];
+        }
+
+        if ($kind === 'video' && $video !== null) {
+            /* The poster, never the film: `AdPoster` renders an `<img>` and nothing else. */
+            return ['video/poster', $thumb ?? $image];
+        }
+
+        return ['image', $image ?? $thumb];
     }
 
     /**

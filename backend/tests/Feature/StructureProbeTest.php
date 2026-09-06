@@ -133,9 +133,14 @@ final class StructureProbeTest extends TestCase
         Http::fake(['cdn.example/*' => Http::response('<html>Access denied</html>', 200, ['Content-Type' => 'text/html'])]);
 
         $this->artisan('integrations:probe', ['account' => 'act_374140991630974', '--media' => true])
+            /*
+             * One expectation per LINE: `expectsOutputToContain` consumes a write call, so two
+             * substrings from the same row silently starve the second. The row line is proven by
+             * «did not decode»; the verdict is proven by the counts beneath it.
+             */
             ->expectsOutputToContain('did not decode')
-            ->expectsOutputToContain('usable media : 0')
-            ->expectsOutputToContain('unusable     : 1')
+            ->expectsOutputToContain('usable stills    : 0')
+            ->expectsOutputToContain('unusable         : 1')
             ->assertSuccessful();
     }
 
@@ -151,7 +156,7 @@ final class StructureProbeTest extends TestCase
 
         $this->artisan('integrations:probe', ['account' => 'act_374140991630974', '--media' => true])
             ->expectsOutputToContain('1x1')
-            ->expectsOutputToContain('usable media : 1')
+            ->expectsOutputToContain('usable stills    : 1')
             ->assertSuccessful();
     }
 
@@ -164,7 +169,7 @@ final class StructureProbeTest extends TestCase
 
         $this->artisan('integrations:probe', ['account' => 'act_374140991630974', '--media' => true])
             ->expectsOutputToContain('403')
-            ->expectsOutputToContain('usable media : 0')
+            ->expectsOutputToContain('usable stills    : 0')
             ->assertSuccessful();
     }
 
@@ -180,28 +185,124 @@ final class StructureProbeTest extends TestCase
         $this->assertDatabaseCount('external_campaigns', 0);
     }
 
-    private function creativeWith(string $asset): void
+    /**
+     * The probe answers for ONE provider, because the project holds several.
+     *
+     * The first cut scoped only by «the project this binding points at». Project 1 holds both the
+     * Meta account and the Snapchat one, so probing either returned the same twelve rows — identical
+     * names, identical byte counts, identical object ids, in identical order. It read like a finding
+     * about both providers and was one query answering one question twice. Two accounts, two
+     * answers, or the output is worthless.
+     */
+    public function test_it_probes_only_the_provider_of_the_account_it_was_given(): void
+    {
+        $this->creativeWith('https://cdn.example/meta.png');
+        $this->creativeWith('https://cdn.example/snap.png', provider: 'snapchat', id: 'cr-snap-1', name: 'A Snapchat creative');
+
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
+        Http::fake(['cdn.example/*' => Http::response($png, 200, ['Content-Type' => 'image/png'])]);
+
+        $this->artisan('integrations:probe', ['account' => 'act_374140991630974', '--media' => true])
+            ->doesntExpectOutputToContain('A Snapchat creative')
+            ->expectsOutputToContain('usable stills    : 1')
+            ->assertSuccessful();
+    }
+
+    /**
+     * AD-PREVIEW-001 — «usable» means the still the CARD draws, not any byte stream on the row.
+     *
+     * The probe used to fetch `image_url ?? thumbnail_url ?? video_url`, which is a question no
+     * surface asks. A creative whose kind is an image while only a film resolved has no still, so the
+     * card draws an absence — and the old probe fetched the mp4, saw 200 and `video/mp4`, and called
+     * it USABLE. The probe then reported health for precisely the card the owner was staring at
+     * blank, which makes it worse than no probe at all.
+     *
+     * Injecting the old rule — accepting `video/` as media — fails this case.
+     */
+    public function test_a_film_is_never_counted_as_the_still_a_card_draws(): void
     {
         $project = Project::withoutGlobalScopes()->firstOrFail();
-
-        ProjectIntegrationBinding::withoutGlobalScopes()->create([
-            'tenant_id' => $this->account->tenant_id,
-            'project_id' => $project->id,
-            'external_account_id' => $this->account->id,
-            'provider' => 'meta',
-            'purpose' => 'advertising',
-            'is_active' => true,
-        ]);
+        $this->bind();
 
         ExternalCreative::withoutGlobalScopes()->create([
             'tenant_id' => $this->account->tenant_id,
             'project_id' => $project->id,
             'provider' => 'meta',
-            'external_creative_id' => 'cr-media-1',
-            'name' => 'A creative',
+            'external_creative_id' => 'cr-film-1',
+            'name' => 'A film with no cover',
+            /* The platform's label says image; the only thing it handed over is a film. */
+            'format' => 'image',
+            'video_url' => 'https://cdn.example/a.mp4',
+            'source_type' => 'api',
+        ]);
+
+        Http::fake(['cdn.example/*' => Http::response('....', 200, ['Content-Type' => 'video/mp4'])]);
+
+        $this->artisan('integrations:probe', ['account' => 'act_374140991630974', '--media' => true])
+            ->expectsOutputToContain('BLANK — available, yet the card selects no still')
+            ->expectsOutputToContain('usable stills    : 0')
+            ->expectsOutputToContain('blank by selection: 1')
+            ->assertSuccessful();
+    }
+
+    /** A video's POSTER is fetched — an `<img>` cannot draw an mp4, so the poster is the still. */
+    public function test_a_video_with_a_cover_has_its_poster_fetched_and_not_its_film(): void
+    {
+        $project = Project::withoutGlobalScopes()->firstOrFail();
+        $this->bind();
+
+        ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->account->tenant_id,
+            'project_id' => $project->id,
+            'provider' => 'meta',
+            'external_creative_id' => 'cr-film-2',
+            'name' => 'A film with a cover',
+            'format' => 'video',
+            'video_url' => 'https://cdn.example/a.mp4',
+            'thumbnail_url' => 'https://cdn.example/cover.png',
+            'source_type' => 'api',
+        ]);
+
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
+
+        Http::fake([
+            'cdn.example/cover.png' => Http::response($png, 200, ['Content-Type' => 'image/png']),
+            'cdn.example/a.mp4' => Http::response('....', 200, ['Content-Type' => 'video/mp4']),
+        ]);
+
+        $this->artisan('integrations:probe', ['account' => 'act_374140991630974', '--media' => true])
+            ->expectsOutputToContain('cover.png')
+            ->expectsOutputToContain('usable stills    : 1')
+            ->assertSuccessful();
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'a.mp4'));
+    }
+
+    private function creativeWith(string $asset, string $provider = 'meta', string $id = 'cr-media-1', string $name = 'A creative'): void
+    {
+        $this->bind();
+
+        ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->account->tenant_id,
+            'project_id' => Project::withoutGlobalScopes()->firstOrFail()->id,
+            'provider' => $provider,
+            'external_creative_id' => $id,
+            'name' => $name,
             'format' => 'image',
             'asset_url' => $asset,
             'source_type' => 'api',
         ]);
+    }
+
+    /** The binding is what makes the account's project findable; created once, idempotently. */
+    private function bind(): void
+    {
+        ProjectIntegrationBinding::withoutGlobalScopes()->firstOrCreate([
+            'tenant_id' => $this->account->tenant_id,
+            'project_id' => Project::withoutGlobalScopes()->firstOrFail()->id,
+            'external_account_id' => $this->account->id,
+            'provider' => 'meta',
+            'purpose' => 'advertising',
+        ], ['is_active' => true]);
     }
 }
