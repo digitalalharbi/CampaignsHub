@@ -242,7 +242,7 @@ function countRead(value: number | null | undefined): { text: string; exact: str
   return { text: read.text, exact: read.exact }
 }
 
-export function ConversionFunnelChart({ stages, currency = 'SAR', ar = false }: { stages: Array<{ stage?: string; label: string; count: number | null; step_rate: number | null; cost_per: number | null }>; currency?: string; ar?: boolean }) {
+export function ConversionFunnelChart({ stages, currency = 'SAR', ar = false }: { stages: Array<{ stage?: string; label: string; count: number | null; step_rate: number | null; cost_per: number | null; exceeds_previous?: boolean }>; currency?: string; ar?: boolean }) {
   const counts = stages.map((s) => s.count).filter((c): c is number => c !== null && c !== undefined)
   const top = counts.length > 0 ? Math.max(...counts) : 1
   return (
@@ -282,7 +282,32 @@ export function ConversionFunnelChart({ stages, currency = 'SAR', ar = false }: 
               </div>
             )}
             <div className="w-36 shrink-0 text-end text-xs text-text-muted">
-              {s.step_rate !== null && <span className="tnum">{percent(s.step_rate, 0)}</span>}
+              {/*
+                FUNNEL-NOT-NESTED-001 — «165%» is not a conversion rate, and this said it was.
+                *
+                * Seen on the live client report: «بدء الدفع 7.42K 165%». The aggregator has computed
+                * `exceeds_previous` since the rule was written, and refuses to invert it into a
+                * negative drop-off — it knows these stages do not nest. A buy-now flow reaches
+                * checkout without an add-to-cart, and each event is attributed on its own window.
+                *
+                * The flag was in the API type and rendered NOWHERE, so every surface printed the
+                * ratio as though it were an ordinary step and left a client to work out how a funnel
+                * widened. The figure stays, because it is real and hiding it would hide a fact about
+                * the account; what changes is that it stops claiming to be a conversion.
+              */}
+              {s.step_rate !== null && (
+                <span
+                  className={`tnum ${s.exceeds_previous ? 'text-warning' : ''}`}
+                  title={s.exceeds_previous
+                    ? (ar
+                        ? 'هذه المرحلة أكبر من التي قبلها، فالمرحلتان لا تتداخلان: يمكن الوصول إلى الدفع دون إضافة للسلة، وكل حدث يُنسب في نافذته. النسبة ليست معدل تحويل.'
+                        : 'This stage is larger than the one above it, so the two do not nest: checkout is reachable without an add to cart, and each event is attributed in its own window. This ratio is not a conversion rate.')
+                    : undefined}
+                >
+                  {percent(s.step_rate, 0)}
+                  {s.exceeds_previous && <span aria-hidden> ⚠</span>}
+                </span>
+              )}
               {s.cost_per !== null && <span className="tnum ms-2">{moneyExact(s.cost_per, currency ?? null)}</span>}
             </div>
           </div>

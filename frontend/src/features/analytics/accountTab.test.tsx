@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { AnalyticsPage } from './AnalyticsPage'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 import { useProject } from '@/stores/project'
@@ -61,7 +61,21 @@ describe('the account analysis tab', () => {
     const table = await screen.findByTestId('account-table')
 
     expect(table).toHaveTextContent('رزه افينيو — Snapchat')
-    expect(table).toHaveTextContent('90,000')
+
+    /*
+     * NUMBER-PRESENTATION-001 — «90K», not «90,000».
+     *
+     * This asserted the full-width form, which is what the table used to print: `metricOrDash` runs
+     * through `toLocaleString`, and its own note had said for a while that it was «in scope for that
+     * sweep». The sweep found it — «1,257,827» in a column three glyphs wide, beside a KPI card
+     * reading «1.26M» for the same figure.
+     *
+     * The exact value is asserted too, because that is the half that makes abbreviating legitimate:
+     * a figure a reader cannot get back to is a figure they cannot audit.
+     */
+    expect(table).toHaveTextContent('90K')
+    expect(table).not.toHaveTextContent('90,000')
+    expect(within(table).getByTitle('90,000')).toBeInTheDocument()
   })
 
   /** One money contract at every rung. */

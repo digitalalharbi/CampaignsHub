@@ -131,3 +131,38 @@ describe('the funnel writes a count the way the rest of the product does', () =>
     expect(screen.queryByText('6,596,500')).toBeNull()
   })
 })
+
+/**
+ * FUNNEL-NOT-NESTED-001 — «165%» is not a conversion rate, and the client's report said it was.
+ *
+ * Seen on the LIVE shared report: «بدء الدفع 7.42K 165%». The aggregator has computed
+ * `exceeds_previous` since the rule was written and deliberately refuses to invert it into a
+ * negative drop-off, because it knows these stages do not nest — a buy-now flow reaches checkout
+ * without an add to cart, and each event is attributed in its own window.
+ *
+ * The flag was in the API type and rendered NOWHERE. Every surface printed the ratio as an ordinary
+ * step and left a client to work out how a funnel had widened. The figure stays — it is real, and
+ * hiding it would hide a fact about the account — but it stops claiming to be a conversion.
+ */
+describe('a funnel step that grew is not called a conversion', () => {
+  const stages = [
+    { stage: 'add_to_cart', label: 'Add to Cart', count: 4_490, step_rate: 0.31, cost_per: 2.19 },
+    { stage: 'checkout', label: 'Checkout', count: 7_420, step_rate: 1.65, cost_per: 1.33, exceeds_previous: true },
+  ]
+
+  it('marks the ratio and explains why the stages do not nest', () => {
+    renderWithProviders(<ConversionFunnelChart stages={stages} currency="USD" />)
+
+    const marked = screen.getByText(/165%/)
+
+    expect(marked.getAttribute('title') ?? '', 'the client was given a bare 165% with no explanation')
+      .toMatch(/do not nest|لا تتداخلان/)
+  })
+
+  /** An ordinary step keeps its plain reading — the marker means something only if it is rare. */
+  it('leaves an ordinary step unmarked', () => {
+    renderWithProviders(<ConversionFunnelChart stages={stages} currency="USD" />)
+
+    expect(screen.getByText(/31%/).getAttribute('title')).toBeNull()
+  })
+})

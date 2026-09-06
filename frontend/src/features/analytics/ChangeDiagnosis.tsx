@@ -99,7 +99,19 @@ const DIMENSION_SINGULAR: Record<string, { ar: string; en: string }> = {
 function formatFor(metric: string, currency: string | null): (n: number) => string {
   return metric === 'spend' || metric === 'revenue'
     ? (n: number) => money(n, currency ?? undefined)
-    : (n: number) => num(n)
+    /*
+     * `compact`, not `num` — the display half of the rule the comment above already states.
+     *
+     * `num` is the EXACT formatter. This returned it for every non-money metric, so the display and
+     * the `title` were the same string: «2,790,380» drawn in sixty pixels beside a name and a bar,
+     * with a tooltip repeating it. `exactFor` below has always been written for a compacted display
+     * — it withholds the title when `full === compact(n)` — and that condition could never be false
+     * while the display was `num`.
+     *
+     * Found by the sweep on `/agency/analytics` and the objectives tab, in both languages, after the
+     * same class of defect was found on the client report's funnel.
+     */
+    : (n: number) => compact(n)
 }
 
 /** The same figure written out, for the `title` — null where the display abbreviated nothing. */
@@ -503,7 +515,21 @@ export function ChangeDiagnosis({
         {rows.length > 0 && (
           <p className="mb-3 text-sm text-text-secondary">
             {metricLabel(lead.metric, ar)}{' '}
-            <span dir="ltr" className="tnum font-bold text-text-primary">{fmt(lead.current)}</span>
+            {/*
+              The headline figure abbreviates like the rows beneath it, so it needs the same way back.
+              *
+              * The driver rows have carried their exact value in a `title` since they were written;
+              * the figure they are decomposing did not, because until now it was never abbreviated —
+              * it printed every digit. Compacting it without this would trade a number too wide to
+              * read for a number nobody can audit.
+            */}
+            <span
+              dir="ltr"
+              className="tnum font-bold text-text-primary"
+              title={exactFor(lead.metric, currency)(lead.current)}
+            >
+              {fmt(lead.current)}
+            </span>
             {lead.change_pct !== null && (
               <>
                 {' · '}

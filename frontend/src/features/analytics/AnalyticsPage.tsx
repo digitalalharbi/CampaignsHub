@@ -1098,7 +1098,7 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 <span className="h-px min-w-0 flex-1 bg-border" />
                 <span className="tnum whitespace-nowrap text-[11px] font-semibold text-warning" dir="ltr">
-                  −{num(lossBefore(rows, i)!.lost)}
+                  −{countCell(lossBefore(rows, i)!.lost).text}
                   {lossBefore(rows, i)!.share !== null && ` (${percent(lossBefore(rows, i)!.share!, 0)})`}
                 </span>
                 <span className="h-px min-w-0 flex-1 bg-border" />
@@ -1118,7 +1118,16 @@ function FunnelTab({ projectId, range, filters }: TabProps) {
                   className="flex h-full items-center justify-between rounded-xl px-3 text-sm font-semibold text-white"
                   style={{ width: `${Math.max(8, (s.count / top) * 100)}%`, background: `color-mix(in oklab, ${SERIES.spend} ${100 - i * 10}%, var(--brand-700))` }}
                 >
-                  <span className="tnum">{num(s.count)}</span>
+                  {/*
+                    NUMBER-PRESENTATION-001 — the bar compacts, like every other count in the product.
+                    *
+                    * `num` is the EXACT formatter, and this bar is a strip of colour sixty pixels
+                    * wide: «2,790,380» in it is unreadable and disagrees with the KPI card above,
+                    * which says «2.79M» for the same figure. Found by the product sweep after the
+                    * same defect was found on the client report's funnel and on the change
+                    * decomposition — three surfaces, one rule, and each had chosen its own formatter.
+                  */}
+                  <span className="tnum" title={countCell(s.count).exact ?? undefined}>{countCell(s.count).text}</span>
                 </div>
               </div>
             ) : (
@@ -2066,6 +2075,26 @@ function countCell(value: number | null | undefined): { text: string; exact: str
   const read = readMetricValue('number', value ?? null)
 
   return { text: read.text, exact: read.exact }
+}
+
+/**
+ * A count for a table cell — compacted, with its exact figure one hover away.
+ *
+ * NUMBER-PRESENTATION-001. `metricOrDash` formats through `toLocaleString`, and its own note has
+ * said for a while that it «still formats through the exact layer rather than the canonical one, and
+ * is in scope for that sweep». This is that sweep: the accounts table printed «1,257,827» in a
+ * column three glyphs wide while the KPI card above it read «1.26M» for the same figure.
+ *
+ * It stays a NODE rather than a string because the exact value has to travel with the cell, and a
+ * string has nowhere to carry it. `metricOrDash` keeps its callers for figures that are not counts —
+ * a frequency of 2.4 is not a magnitude worth abbreviating.
+ */
+function countNode(value: number | null | undefined): React.ReactNode {
+  const read = countCell(value)
+
+  return typeof value === 'number'
+    ? <span title={read.exact ?? undefined}>{read.text}</span>
+    : '—'
 }
 
 /** A rate, or «—». Same rule: an unavailable ratio is not a ratio of zero. */
@@ -3067,8 +3096,8 @@ function AccountsTab({ projectId, range, filters }: TabProps) {
     r.account_name ?? (ar ? 'حساب لم يعد متاحًا' : 'Account no longer available'),
     providerLabel(r.provider, ar ? 'ar' : 'en'),
     rowMoney(r, 'spend', currency),
-    metricOrDash(r.impressions),
-    metricOrDash(r.clicks),
+    countNode(r.impressions),
+    countNode(r.clicks),
     rateOrDash(r.ctr),
     rowCostPer(r, 'cpm', (r.impressions ?? 0) / 1000, currency),
   ])
