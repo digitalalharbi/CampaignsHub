@@ -298,6 +298,28 @@ final class CreativePresenter
                     'note_ar' => 'هذا إعلان تشكيلة: صورة رئيسية فوق شبكة منتجات. المنصة تتيح البطاقات، ولم يطلبها النظام بعد — فلا شيء يُعرض هنا، والنقص عندنا لا عند المنصة.',
                     'note_en' => 'This is a collection ad — a hero asset over a grid of product tiles. The platform does expose the tiles; this product does not fetch them yet, so there is nothing to show and the gap is ours, not the platform’s.',
                 ],
+            /*
+             * CONTENT-PREVIEW-SHAPES-001 — a catalog ad has nothing missing, so it is not «unavailable».
+             *
+             * The platform composes one image per product at delivery: there is no fixed asset to
+             * have sent, and «the platform exposed no asset for it» reads as a fault and sends an
+             * operator looking for a sync problem that does not exist. `absenceLabel` has had the
+             * right sentence for this since the shape was added — «إعلان كتالوج — تُركّب المنصة صورته
+             * لكل منتج عند العرض» — and could never reach it, because the frontend only asks what
+             * KIND an ad is once the state is `available`, and an asset-less catalog ad fell into the
+             * arm below first.
+             *
+             * `available` is the honest state for it. Nothing is absent.
+             */
+            $kind === 'catalog' => [
+                'state' => 'available',
+                'kind' => $kind,
+                'aspect' => $aspect,
+                'image_url' => $image, 'video_url' => $video, 'thumbnail_url' => $thumb,
+                'expires_at' => $creative->asset_expires_at?->toIso8601String(),
+                'note_ar' => null,
+                'note_en' => null,
+            ],
             $image === null && $video === null && $thumb === null && $creative->cards === null => [
                 'state' => 'unavailable',
                 'kind' => $kind,

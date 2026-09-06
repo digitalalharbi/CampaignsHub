@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Providers\MetaConnector;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -121,6 +122,30 @@ final class AShareLinkIsNotAnAssetTest extends TestCase
         $this->assertSame('unavailable', $preview['state']);
     }
 
+    /**
+     * CONTENT-PREVIEW-SHAPES-001 — a catalog ad is not «unavailable», because nothing is missing.
+     *
+     * The platform composes one image per product at delivery. «The platform exposed no asset for
+     * it» reads as a fault and sends an operator looking for a sync problem that does not exist.
+     *
+     * `absenceLabel` has had the right sentence since the shape was added and could never reach it:
+     * the frontend only asks what KIND an ad is once the state is `available`, and an asset-less
+     * catalog ad fell into the `unavailable` arm first. So the sentence existed, was tested, and was
+     * unreachable — the same shape of defect as `asset_expires_at`, which no connector ever emitted.
+     */
+    public function test_a_catalog_ad_is_available_because_nothing_is_missing(): void
+    {
+        $preview = app(CreativePresenter::class)->preview($this->creative([
+            'name' => '{{product.name}} 2026-08-01',
+            'format' => 'catalog',
+            'preview_url' => 'https://fb.me/2x0aR2X4NTvx2V7',
+        ]));
+
+        $this->assertSame('catalog', $preview['kind']);
+        $this->assertSame('available', $preview['state'], 'A catalog ad has nothing missing.');
+        $this->assertNull($preview['image_url'], 'And still no page in an <img>.');
+    }
+
     /** A real asset is untouched — this removes a fallback, not the picture. */
     public function test_a_real_asset_still_reaches_the_card(): void
     {
@@ -146,6 +171,64 @@ final class AShareLinkIsNotAnAssetTest extends TestCase
 
         $this->assertSame('available', $preview['state']);
         $this->assertSame('https://cdn.example/cover.png', $preview['thumbnail_url']);
+    }
+
+    /**
+     * CONTENT-PREVIEW-SHAPES-001 — Meta calls a dynamic product ad a `SHARE`, like any link post.
+     *
+     * Which is why six of the live account's twelve first-page creatives mapped to `image`. They
+     * have no image and never will, so the card went looking for a still it could not have and the
+     * fallback handed it the share link.
+     *
+     * `object_story_spec.template_data` is the platform describing its own object: a DPA carries it
+     * where an ordinary link post carries `link_data`, and the template IS the creative — which is
+     * the whole reason there is no fixed asset. Already fetched, so this costs no extra field.
+     *
+     * Read from the spec and not from the name. The stored names read `{{product.name}} 2026-08-01`,
+     * Meta's own template token sitting unrendered in the database, and that is strong evidence — but
+     * it is still a string an advertiser could type.
+     */
+    public function test_a_dynamic_product_ad_is_recognised_by_its_template(): void
+    {
+        $mapped = $this->mapCreative([
+            'id' => 'cr-1',
+            'name' => '{{product.name}} 2026-08-01',
+            /* Exactly what Meta answers for a dynamic product ad. */
+            'object_type' => 'SHARE',
+            'object_story_spec' => ['template_data' => ['link' => 'https://shop.example']],
+        ]);
+
+        $this->assertSame('catalog', $mapped['format']);
+    }
+
+    /** An ordinary link post is still an image — the marker is the template, not the object type. */
+    public function test_an_ordinary_share_is_still_an_image(): void
+    {
+        $mapped = $this->mapCreative([
+            'id' => 'cr-2',
+            'name' => 'A link post',
+            'object_type' => 'SHARE',
+            'object_story_spec' => ['link_data' => ['picture' => 'https://scontent.example/a.jpg']],
+        ]);
+
+        $this->assertSame('image', $mapped['format']);
+    }
+
+    /**
+     * Meta's own mapping, driven through the private writer.
+     *
+     * @param  array<string, mixed>  $creative
+     * @return array<string, mixed>
+     */
+    private function mapCreative(array $creative): array
+    {
+        $method = new \ReflectionMethod(MetaConnector::class, 'creativeFrom');
+        $method->setAccessible(true);
+
+        /** @var array<string, mixed> $mapped */
+        $mapped = $method->invokeArgs(new MetaConnector, [$creative, ['preview_shareable_link' => 'https://fb.me/2x0aR2X4NTvx2V7']]);
+
+        return $mapped;
     }
 
     /** @param array<string, mixed> $over */
