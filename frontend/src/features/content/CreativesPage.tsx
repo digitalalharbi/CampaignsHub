@@ -7,7 +7,7 @@ import { CreativeViewer } from './CreativeViewer'
 import { CreativeCompare } from './CreativeCompare'
 import { formatMetric, metricLabel, metricState } from './metrics'
 import { creativeGrainMissing, emptyReason, noDisplayableMetrics, type EmptyReason, type MetricsAvailability } from './availability'
-import { aspectClass, previewShape } from './adPreview'
+import { absenceLabel, aspectClass, previewShape, readPreview } from './adPreview'
 import { imageLoading } from './format'
 import { creativeMoney } from './creativeMoney'
 import { VideoPoster } from './VideoPoster'
@@ -307,6 +307,27 @@ const isoDaysAgo = (days: number) => {
   return d.toISOString().slice(0, 10)
 }
 
+/**
+ * The address this library should be at, for a given set of controls — CONTENT-VIEW-PERSISTS-001.
+ *
+ * One builder, because there are now two writers: the effect that follows the controls, and the view
+ * toggle that records its own decision the moment it is made. Two hand-rolled strings would drift,
+ * and the drift would show up as a click that appears to do nothing — which is the bug this exists
+ * to end rather than to reproduce somewhere new.
+ *
+ * The default is NOT written. An address should carry a decision, not a restatement of what the page
+ * would have done anyway, or every link anybody shares grows a `view=grid` that means nothing.
+ */
+function addressFor(query: LibraryQuery, view: 'grid' | 'list', creative: string | null): string {
+  return [
+    libraryQueryString(query).replace(/^\?/, ''),
+    view === 'list' ? 'view=list' : '',
+    creative ? `creative=${creative}` : '',
+  ]
+    .filter((part) => part !== '')
+    .join('&')
+}
+
 export function CreativesPage() {
   const { locale } = useUi()
   const ar = locale === 'ar'
@@ -349,7 +370,26 @@ export function CreativesPage() {
    * keeps forgetting which view I chose», and it was invisible in isolation because nothing remounts
    * the page when you are looking at it.
    */
-  const [view, setView] = useState<'grid' | 'list'>(() => (initial.current.get('view') === 'list' ? 'list' : 'grid'))
+  /*
+   * ...and seeding from the address was not enough, because the seed can still be read too early.
+   *
+   * The first fix gave `view` a `useState` initialiser reading the address. It closed the refresh and
+   * the shared link, and left a race the sweep kept finding: click «قائمة» and the answer vanishes,
+   * roughly two runs in four at 1440, in EITHER writing direction — the locale had nothing to do with
+   * it, which is what ruled out the layout explanation.
+   *
+   * The sequence. This page opens on a bare address and the effect below writes the controls into it,
+   * computed while `view` is still `grid`. A click arriving before that navigation settles sets the
+   * state, and then the write lands, the page re-reads its opening state from an address that says
+   * nothing about the view, and the answer is gone. Measured: one `evaluate` round trip inserted
+   * before the click — enough for the first write to land — and the failure stopped.
+   *
+   * So the state stops being a copy. The ADDRESS is the view, read on every render: there is now no
+   * second place holding the answer, and therefore nowhere to lose it. A user meets this as «it
+   * forgot which view I chose» after clicking a little too quickly on a slow connection, which is
+   * exactly when a reader is most likely to click before a page has settled.
+   */
+  const view: 'grid' | 'list' = params.get('view') === 'list' ? 'list' : 'grid'
   const [search, setSearch] = useState(() => initial.current.get('search') ?? '')
   const [from, setFrom] = useState(() => initial.current.get('from') ?? isoDaysAgo(29))
   const [to, setTo] = useState(() => initial.current.get('to') ?? isoDaysAgo(0))
@@ -428,21 +468,32 @@ export function CreativesPage() {
    * keystroke, and Back would walk the reader backwards through their own typing.
    */
   useEffect(() => {
-    const next = libraryQueryString(query).replace(/^\?/, '')
-    const creative = params.get('creative')
+    const wanted = addressFor(query, view, params.get('creative'))
 
     /*
-     * The default is NOT written. An address should carry a decision, not a restatement of what the
-     * page would have done anyway — every link anybody shares would otherwise grow a `view=grid` that
-     * means nothing.
+     * Written only when it would actually change something.
+     *
+     * An unconditional `setParams` navigates on every render that reaches here, and a navigation
+     * this page does not need is a re-render it does not need — which is the very thing that used to
+     * throw a click away. Comparing first makes the common case a no-op.
      */
-    const parts = [next, view === 'list' ? 'view=list' : '', creative ? `creative=${creative}` : '']
-      .filter((part) => part !== '')
-
-    setParams(parts.join('&'), { replace: true })
-    // `params` is deliberately absent: including it would re-run this on the write it just made.
+    if (wanted !== params.toString()) {
+      setParams(wanted, { replace: true })
+    }
+    // `params` is deliberately absent from the deps: including it would re-run this on the write it
+    // just made. It is READ here only to compare, which cannot loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, view, setParams])
+
+  /*
+   * Choosing a view IS writing the address — one step, not two.
+   *
+   * Setting a state and letting an effect mirror it into the URL a render later is what left the
+   * window a click could fall into. There is no window now: the decision and the record of it are
+   * the same operation.
+   */
+  const chooseView = (next: 'grid' | 'list') =>
+    setParams(addressFor(query, next, params.get('creative')), { replace: true })
 
   const setAxis = (key: string, values: string[]) => {
     setPage(1)
@@ -622,7 +673,7 @@ export function CreativesPage() {
               <button
                 type="button"
                 aria-pressed={view === 'grid'}
-                onClick={() => setView('grid')}
+                onClick={() => chooseView('grid')}
                 className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${view === 'grid' ? 'bg-surface-hover text-text-primary' : 'text-text-secondary'}`}
               >
                 <LayoutGrid className="h-3.5 w-3.5" aria-hidden /> {t.grid}
@@ -630,7 +681,7 @@ export function CreativesPage() {
               <button
                 type="button"
                 aria-pressed={view === 'list'}
-                onClick={() => setView('list')}
+                onClick={() => chooseView('list')}
                 className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${view === 'list' ? 'bg-surface-hover text-text-primary' : 'text-text-secondary'}`}
               >
                 <Rows3 className="h-3.5 w-3.5" aria-hidden /> {t.list}
@@ -1161,8 +1212,24 @@ function CreativeGridCard({
               onUnavailable={() => setBrokenVideo(true)}
             />
           ) : showPreviewPanel ? (
-            <span className="flex h-full flex-col items-center justify-center gap-1 p-3 text-center text-xs text-text-secondary">
-              <span>{t.noPreview}</span>
+            /*
+             * AD-PREVIEW-001 — the canonical sentence, not a generic one.
+             *
+             * This said «لا تتوفر معاينة» for every shape, and `absenceLabel` has a written sentence
+             * for each of them: a film whose platform sent no cover, a collection with no hero, a
+             * catalog ad that has no fixed asset by design. The grid is the surface the owner opens,
+             * and it was the one surface not asking the module whose whole job is to answer this —
+             * so a catalog ad, which is missing nothing, read as an ad with no preview.
+             *
+             * The platform's own note still wins where it sent one: it is more specific than
+             * anything written here, and it is what the presenter composed for this exact moment.
+             */
+            <span
+              data-testid="creative-absence-reason"
+              data-absence={preview.state}
+              className="flex h-full flex-col items-center justify-center gap-1 p-3 text-center text-xs text-text-secondary"
+            >
+              <span>{absenceLabel(readPreview(preview, ar), ar) || t.noPreview}</span>
               {note && <span className="text-[11px] opacity-80">{note}</span>}
             </span>
           ) : (

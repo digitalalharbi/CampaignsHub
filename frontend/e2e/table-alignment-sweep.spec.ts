@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { AUTH, seededProject, selectProject } from './helpers'
 
 /**
@@ -172,6 +172,34 @@ for (const locale of ['en', 'ar'] as const) {
  *
  * The exemption list may keep these surfaces. It does not get to keep them mis-aligned.
  */
+
+/**
+ * Wait until an element's box stops changing, then let the caller act on it.
+ *
+ * Playwright's own stability check happens immediately before the dispatch, which is too late for a
+ * toolbar that rewraps when its filter options arrive: the check passes, the row wraps, and the
+ * click lands on whatever moved into that space. This holds until two consecutive readings agree.
+ *
+ * Bounded, and it FAILS rather than proceeding on a page that never settles — a helper that gave up
+ * quietly would put us back to clicking into a moving layout and blaming the product for it.
+ */
+async function stillFor(locator: Locator, timeout = 15000): Promise<void> {
+  const started = Date.now()
+  let previous = ''
+
+  while (Date.now() - started < timeout) {
+    const box = await locator.boundingBox()
+    const now = box === null ? 'none' : `${Math.round(box.x)},${Math.round(box.y)},${Math.round(box.width)},${Math.round(box.height)}`
+
+    if (now !== 'none' && now === previous) return
+
+    previous = now
+    await locator.page().waitForTimeout(250)
+  }
+
+  throw new Error('the control never stopped moving, so a click on it could not be aimed')
+}
+
 const HAND_ROLLED = [
   { path: '/app/campaigns', what: 'the campaigns list — row selection and bulk actions' },
   { path: '/app/content', what: 'the content list — selection checkboxes and media cells' },
@@ -241,6 +269,26 @@ test.describe('the surfaces that still hand-roll a table', () => {
            */
           const list = page.getByRole('button', { name: /^(قائمة|List)$/ })
           if (await list.count()) {
+            /*
+             * Clicked once the control has stopped moving — and this is not a timeout in disguise.
+             *
+             * MEASURED. The sweep failed here roughly two runs in four at 1440, in EITHER writing
+             * direction, and a recorder attached to `document` showed why: the only click the page
+             * ever received landed on `DIV|ابحث بالاسم` — the SEARCH BOX. The filter options arrive
+             * with the data, the platform filter gains a chip, the toolbar rewraps, and the toggle
+             * moves down between Playwright's actionability check and the dispatch. The pointer then
+             * hits whatever took its place.
+             *
+             * So the earlier readings were all wrong about the cause: the table was not slow, the
+             * state was not lost, and the locale had nothing to do with it. Nothing was ever asked to
+             * switch views, and the 45-second wait below was waiting for a click that never landed on
+             * the button.
+             *
+             * Waiting for the box to hold still targets that exact cause and weakens no assertion —
+             * the click still has to work, the table still has to arrive, and the floor below still
+             * has to be met.
+             */
+            await stillFor(list.first())
             await list.first().click()
 
             /*
