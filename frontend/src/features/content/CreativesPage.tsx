@@ -770,8 +770,13 @@ export function CreativesPage() {
             *
             * Reserved HERE rather than inside `FilterPlatforms`, which analytics also renders and
             * which has no such problem: a shared component should not carry one page's layout.
+            *
+            * `sm:` ONLY. A 384px floor on a 390px phone is wider than the screen once padding is
+            * taken, and it pushed `/agency/content` into a sideways scroll — caught by the
+            * appearance gate at «phone · rtl · light». The reservation exists to stop a row from
+            * REWRAPPING, and at 390 there is no row to rewrap: the controls are stacked already.
           */}
-          <div className="min-w-96">
+          <div className="min-w-0 sm:min-w-96">
             <FilterPlatforms
               label={t.platform}
               allLabel={ar ? 'الكل' : 'All'}
