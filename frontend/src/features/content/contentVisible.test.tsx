@@ -164,3 +164,64 @@ describe('what the owner sees on /content', () => {
     expect(screen.getByText(/1,500 SAR/)).toBeInTheDocument()
   })
 })
+
+/**
+ * CONTENT-PREVIEW-SHAPES-001 — the GRID names the shape it cannot draw.
+ *
+ * The library grid does not render through `AdPoster`; it builds its own card, and for anything with
+ * no still it said «لا تتوفر معاينة» — one sentence for every shape. `absenceLabel` has had a
+ * written sentence for each of them since the shapes requirement shipped, and the one surface the
+ * owner actually opens was the one surface not asking the module whose whole job is to answer this.
+ *
+ * A catalog ad is what makes that wrong rather than merely vague. Nothing about it is missing — the
+ * platform composes one image per product at delivery — so «no preview available» describes a fault
+ * that does not exist and sends somebody looking for a sync problem. Six of the live Meta account's
+ * twelve first-page creatives are catalog ads.
+ */
+describe('the grid names the shape it cannot draw', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProject.setState({ currentProjectId: 'p1' })
+    signInWith(['campaigns.view'])
+  })
+  afterEach(() => signOut())
+
+  it('says a catalog ad has no fixed asset, rather than that it has no preview', async () => {
+    vi.mocked(listCreatives).mockResolvedValue(
+      page({
+        creatives: [
+          /*
+           * A drawable card beside it, because the grid deliberately collapses the media area when
+           * NOTHING on the page can be drawn and explains it once in a banner instead. The live Meta
+           * first page is mixed — six drawable, six catalog — so a fixture of catalog ads alone would
+           * be testing the empty-result path, not the card.
+           */
+          card({ id: 'ordinary-1', name: 'A real still' }),
+          card({
+            id: 'cat-1',
+            name: '{{product.name}} 2026-08-01',
+            format: 'catalog',
+            preview: {
+              state: 'available',
+              kind: 'catalog',
+              aspect: null,
+              image_url: null,
+              video_url: null,
+              thumbnail_url: null,
+              expires_at: null,
+              note_ar: null,
+              note_en: null,
+            },
+          }),
+        ],
+      }) as never,
+    )
+
+    renderWithProviders(<CreativesPage />, { locale: 'ar' })
+
+    const stated = await screen.findByTestId('creative-absence-reason')
+
+    expect(stated.textContent ?? '').toMatch(/كتالوج/)
+    expect(stated.textContent ?? '').not.toMatch(/لا تتوفر معاينة/)
+  })
+})
