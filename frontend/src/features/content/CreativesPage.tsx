@@ -655,15 +655,21 @@ export function CreativesPage() {
         applied={applied}
         onReset={resetFilters}
         advancedActive={advancedActive}
+        /*
+          CONTENT-TOOLBAR-STABLE-001 — and the «More filters» button with them.
+          *
+          * `FilterBar` renders that button only when it is GIVEN an advanced slot, and this slot was
+          * gated on `options` like the controls above. So even with the controls fixed, one more
+          * child appeared in the same wrapping row a second later and pushed the view toggle down a
+          * whole line. The same defect, one level up, and it needed the same answer.
+        */
         advanced={
-          options && (
-            <div className="flex flex-wrap items-end gap-3">
-              {multi('statuses', t.status, options.statuses.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) })))}
-              {multi('ad_set_ids', t.adSet, options.ad_sets.map((id) => ({ value: id, label: id })))}
-              {/* Already labelled by the server — the id is the value, the ad's name is what is read. */}
-              {multi('ad_ids', t.ad, options.ads)}
-            </div>
-          )
+          <div className="flex flex-wrap items-end gap-3">
+            {multi('statuses', t.status, (options?.statuses ?? []).map((s) => ({ value: s, label: campaignStatusLabel(s, locale) })))}
+            {multi('ad_set_ids', t.adSet, (options?.ad_sets ?? []).map((id) => ({ value: id, label: id })))}
+            {/* Already labelled by the server — the id is the value, the ad's name is what is read. */}
+            {multi('ad_ids', t.ad, options?.ads ?? [])}
+          </div>
         }
         trailing={
           <>
@@ -733,24 +739,52 @@ export function CreativesPage() {
           <DateField aria-label={t.to} value={to} onChange={(v) => { setTo(v); setPage(1) }} />
         </div>
 
-        {options && (
-          <>
-            {multi('client_ids', t.client, options.clients.map((c) => ({ value: c.id, label: c.name })))}
-            {multi('project_ids', t.project, options.projects.map((p) => ({ value: p.id, label: p.name })))}
-            {/* UX-FILTERS-001 — platforms as visible chips here too, so the library filters the
-                same way the dashboard and analytics do. */}
+        {/*
+          CONTENT-TOOLBAR-STABLE-001 — the controls exist from the first paint, empty until answered.
+          *
+          * These were gated on `options`, which arrives with the data. Seven controls therefore
+          * appeared a second or two after the page did, in the SAME wrapping row as the view toggle
+          * and before it — so the toggle dropped 68 pixels, measured, in every browser. Two whole
+          * rows, under a reader who is already reaching for it.
+          *
+          * A gate found it while blaming something else: the alignment sweep clicked «قائمة» and hit
+          * `DIV|ابحث بالاسم`, the search box, because the search box is what moved into that space.
+          * A person meets the same thing as a mis-click on a page that has just finished loading.
+          *
+          * An empty control is honest — nothing has been narrowed yet, and «الكل» is exactly what it
+          * would say anyway. A control that is not there and then IS there is the thing that lies,
+          * because it moves everything a reader has already aimed at.
+        */}
+        <>
+          {multi('client_ids', t.client, (options?.clients ?? []).map((c) => ({ value: c.id, label: c.name })))}
+          {multi('project_ids', t.project, (options?.projects ?? []).map((p) => ({ value: p.id, label: p.name })))}
+          {/* UX-FILTERS-001 — platforms as visible chips here too, so the library filters the
+              same way the dashboard and analytics do. */}
+          {/*
+            CONTENT-TOOLBAR-STABLE-001 — and the space its chips will need is reserved for them.
+            *
+            * This control shows one chip per platform present in the data, so it is «الكل» alone on
+            * first paint and «الكل جوجل ميتا سناب شات تيك توك» a second later. The chips are short
+            * but there are several, and the extra width rewraps the row — which moved the view
+            * toggle a whole line even after every control had stopped popping in.
+            *
+            * Reserved HERE rather than inside `FilterPlatforms`, which analytics also renders and
+            * which has no such problem: a shared component should not carry one page's layout.
+          */}
+          <div className="min-w-96">
             <FilterPlatforms
               label={t.platform}
               allLabel={ar ? 'الكل' : 'All'}
               values={axes.providers ?? []}
               testid="content-providers"
-              options={options.providers.map((p) => ({ value: p, label: providerLabel(p, locale) }))}
+              options={(options?.providers ?? []).map((p) => ({ value: p, label: providerLabel(p, locale) }))}
               onChange={(next) => setAxis('providers', next)}
             />
-            {multi('campaign_ids', t.campaign, options.campaigns.map((c) => ({ value: c.id, label: c.name })))}
-            {multi('objectives', t.objective, options.objectives.map((o) => ({ value: o, label: objectiveLabel(o, locale) })))}
-            {multi('paths', t.path, options.paths.map((p) => ({ value: p, label: marketingPathLabel(p, locale) })))}
-            {multi('kinds', t.kind, options.kinds.map((k) => ({ value: k, label: KIND_LABEL[k]?.[ar ? 'ar' : 'en'] ?? k })))}
+          </div>
+            {multi('campaign_ids', t.campaign, (options?.campaigns ?? []).map((c) => ({ value: c.id, label: c.name })))}
+            {multi('objectives', t.objective, (options?.objectives ?? []).map((o) => ({ value: o, label: objectiveLabel(o, locale) })))}
+            {multi('paths', t.path, (options?.paths ?? []).map((p) => ({ value: p, label: marketingPathLabel(p, locale) })))}
+            {multi('kinds', t.kind, (options?.kinds ?? []).map((k) => ({ value: k, label: KIND_LABEL[k]?.[ar ? 'ar' : 'en'] ?? k })))}
 
             {/* Single-valued: a creative is in exactly one fatigue state, so «watch AND fatigued» is
                 not a question the server can be asked. */}
@@ -760,15 +794,14 @@ export function CreativesPage() {
               testid="content-health"
               options={[
                 { value: '', label: t.all },
-                ...options.health.map((status) => ({
+                ...(options?.health ?? []).map((status) => ({
                   value: status,
                   label: FATIGUE_LABEL[status]?.[ar ? 'ar' : 'en'] ?? status,
                 })),
               ]}
               onChange={(v) => { setHealth(v); setPage(1) }}
             />
-          </>
-        )}
+        </>
       </FilterBar>
 
       {selected.length > 0 && (
