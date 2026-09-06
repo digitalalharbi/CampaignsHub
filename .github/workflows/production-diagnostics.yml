@@ -61,6 +61,11 @@ on:
         description: 'Probe window end, YYYY-MM-DD'
         required: false
         default: ''
+      probe_structure:
+        description: 'Ask for the CAMPAIGN STRUCTURE instead of insights — identity, counts, statuses and date range. Use this to choose which ad account to bind.'
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: production-diagnostics
@@ -127,17 +132,22 @@ jobs:
           ACCOUNT: ${{ inputs.probe_account }}
           FROM: ${{ inputs.probe_from }}
           TO: ${{ inputs.probe_to }}
+          STRUCTURE: ${{ inputs.probe_structure && '--structure' || '' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          envs: ACCOUNT,FROM,TO
+          envs: ACCOUNT,FROM,TO,STRUCTURE
           script: |
             set -Eeuo pipefail
             cd /opt/campaignshub
             docker compose \
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
+              # `--structure` asks the campaigns edge instead of insights: «does this ad account hold
+              # the business's campaigns» cannot be answered from a spend window, because an account
+              # silent for thirty days looks exactly like an empty one through one. Still stores
+              # nothing — the campaigns come back, are counted, and are thrown away.
               exec -T backend php artisan integrations:probe \
-                "${ACCOUNT}" --from="${FROM}" --to="${TO}"
+                "${ACCOUNT}" --from="${FROM}" --to="${TO}" ${STRUCTURE}
