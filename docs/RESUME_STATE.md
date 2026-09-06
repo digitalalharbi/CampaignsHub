@@ -1,4 +1,4 @@
-# START HERE — 2026-09-04
+# START HERE — 2026-09-07
 
 Read this file, then `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then `git log origin/main`.
 Operational authority: `Git → REQUIREMENTS_TRACEABILITY_MATRIX.md → RESUME_STATE.md`.
@@ -20,9 +20,9 @@ obligation and is not closed.
 ## 1. Where the tree is
 
 ```
-origin/main = ff5126e7837c9897f3f07235e75d3c3515e33357   (#264)
+origin/main = 1c1490c03e9ed1027250f5249dc270c1a77f6af7   (#298 the compact-number and «undefined» fix)
 production  = https://campaignshub.io/   (200 after every deploy; the VPS resets hard to origin/main on push)
-open PRs    = #265 the client-facing presentation reset (§57)  ·  #266 ad detail parity + report creation UX
+open PRs    = #300 counts compacted on three more surfaces + the funnel ratio that claimed to be a conversion
 ```
 
 Reference share used for browser acceptance: the live client report the owner opened. **Do not
@@ -30,13 +30,39 @@ hard-code its token into product logic or fixtures** — read it in a browser, t
 
 ## 2. The active unit
 
-`feat/lead-pii` → **PR #249**. A lead's identity is a permission answered by the lead's own project:
-the media buyer keeps the count and loses the person, the search box stops being an oracle for the
-number it hides, and a lead agent sees the leads they were given. Alongside it, **PR #248** makes a
-live share honour its FORM — Live dashboard against Live detailed report — instead of labelling one
-as the other.
+`fix/counts-compact-everywhere` → **PR #300**. Three surfaces still wrote counts at full width — the
+change decomposition, the store/ad funnels and the accounts table — and the client report presented a
+non-nesting funnel ratio («165%») as a conversion rate. All found by
+`e2e/owner-defect-sweep.spec.ts`, which walks twelve operator routes and three client routes in both
+languages.
 
-Seven units merged and deployed before these: #241 #242 #243 #244 #245 #246 #247.
+### What is DEPLOYED and PRODUCTION-VERIFIED since #296
+
+* **#299 (`b233bea9`) — the blank-image root cause.** `CreativePresenter` read an ad's image as
+  `asset_url ?? preview_url`, and `preview_url` is Meta's `preview_shareable_link`: six of twelve
+  first-page Meta cards fetched `fb.me`, got 200 with `text/html`, and decoded nothing. Production
+  after the deploy: **Meta 12 usable / 0 unusable, Snapchat 9 / 0.** Zero cards fetch HTML.
+* **#298 (`1c1490c0`) — «237.90 undefined» and the compact rule.** Verified on the live client
+  report: the funnel reads 6.6M / 40.2K / 14.4K / 4.49K with exact titles behind them, and the page
+  carries no `undefined`.
+
+### The blocker that appeared on 2026-09-07
+
+A forced Meta structure sync is refused by the provider:
+`(#200) Ad account owner has NOT grant ads_management or ads_read permission`. The same account
+synced `records=58` earlier the same day, so this is a permission change on Meta's side. It is
+registered as row 67 of the owner ledger against `INTEGRATION-META-001`, which was already
+`BLOCKED_EXTERNAL_CREDENTIALS`. **It blocks only the re-mapping of six catalog rows; everything else
+continued past it.**
+
+### The new permanent register
+
+`docs/OWNER_OBSERVED_DEFECTS.md` — 66 owner-observed Production defects, every one mapped to a
+requirement ID that already existed. It is not a second requirements system; it is the record that
+stops an observation turning into an implementation detail and then into a status report while the
+owner is still looking at it. `OwnerDefectLedgerTest` holds three rules: a cited ID must exist in
+the Matrix, a row may not claim verified while it still names a gap, and the count may grow but
+never shrink.
 
 ## 3. What binds, and where it is written down
 
