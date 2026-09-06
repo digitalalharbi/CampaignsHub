@@ -66,6 +66,53 @@ async function readerSees(page: Page): Promise<string> {
   return page.evaluate(() => (document.querySelector('main') ?? document.body).innerText)
 }
 
+/**
+ * The CLIENT's own surfaces, which are the ones an agency's reputation rests on.
+ *
+ * A client has no second view of their account and no way to tell a broken figure from a real one.
+ * The same two questions are asked here as of the operator routes, under the client's own session —
+ * `undefined` in front of the person paying for the campaigns is the worst place for it to appear,
+ * and the funnel defect that started this sweep was found on exactly such a surface.
+ */
+const CLIENT_ROUTES = ['/portal', '/portal/campaigns', '/portal/reports'] as const
+
+for (const locale of ['ar', 'en'] as const) {
+  test.describe(`what a client actually sees — ${locale}`, () => {
+    test.use({ storageState: AUTH.client })
+
+    test(`no client surface renders a value that never arrived — ${locale}`, async ({ page }) => {
+      test.setTimeout(120_000)
+
+      await page.addInitScript((l) => {
+        try {
+          window.localStorage.setItem('ui', JSON.stringify({ state: { locale: l }, version: 0 }))
+        } catch {
+          // As above.
+        }
+      }, locale)
+
+      const offences: string[] = []
+
+      for (const route of CLIENT_ROUTES) {
+        await page.goto(route)
+        await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
+        await page.waitForLoadState('networkidle').catch(() => undefined)
+        await page.waitForTimeout(1000)
+
+        const text = await readerSees(page)
+        const found = text.match(NEVER_RENDERED)
+
+        if (found) {
+          const at = text.indexOf(found[0])
+          offences.push(`${route}: «…${text.slice(Math.max(0, at - 60), at + 40).replace(/\n/g, ' ')}…»`)
+        }
+      }
+
+      expect(offences, 'a client surface printed a value that never arrived').toEqual([])
+    })
+  })
+}
+
 for (const locale of ['ar', 'en'] as const) {
   test.describe(`what an operator actually sees — ${locale}`, () => {
     test.use({ storageState: AUTH.owner })
