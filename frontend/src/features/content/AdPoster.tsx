@@ -58,7 +58,21 @@ export function AdPoster({
   )
 
   if (!src) {
-    return absent(reading.kind === 'none' ? reading.reason : 'video-no-cover')
+    /*
+     * The attribute names the shape, and it used to name only one of them. Everything that was not
+     * `none` was labelled `video-no-cover`, so a catalog ad and a collection with no hero both
+     * reported themselves as a film without a poster — the sentence was right and the attribute a
+     * surface or a test reads was wrong.
+     */
+    return absent(
+      reading.kind === 'none'
+        ? reading.reason
+        : reading.kind === 'catalog'
+          ? 'catalog'
+          : reading.kind === 'collection'
+            ? 'collection-no-hero'
+            : 'video-no-cover',
+    )
   }
 
   /*

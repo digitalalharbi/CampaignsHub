@@ -565,3 +565,65 @@ test.describe('the library draws pixels, not just elements', () => {
     expect(empty, 'a card drew neither a picture, a film, nor a sentence').toEqual([])
   })
 })
+
+/**
+ * CONTENT-TOOLBAR-STABLE-001 — the controls do not move while a reader is reaching for them.
+ *
+ * ## Found by a test that was failing for this reason and blaming something else
+ *
+ * The alignment sweep clicked «قائمة» and about one run in five the page did nothing. A recorder on
+ * `document` showed the click landing on `DIV|ابحث بالاسم` — the SEARCH BOX. Nothing was wrong with
+ * the toggle, the view state or the table: the toolbar had MOVED between the moment the click was
+ * aimed and the moment it landed.
+ *
+ * The mechanism is ordinary and applies to every reader, not to tests. `FilterSelect` is a native
+ * `<select>` with `min-w-36` — a minimum, not a width — and a native select sizes itself to its
+ * widest option. The library's campaign filter is populated from campaign names («20Jan 2026-
+ * January offers»), which arrive with the data. The select grows to fit one, the row rewraps, and
+ * the view toggle drops to the next line.
+ *
+ * A person meets this as a mis-click: they reach for «list» on a page that has just finished loading
+ * and get the search box instead. Making the test aim better fixed the test and left that alone,
+ * which is why this exists separately.
+ *
+ * Measured against the CONTROL's own box, not a screenshot: a few pixels of drift is not the
+ * complaint, and a control that lands on a different LINE is.
+ */
+test.describe('the library toolbar holds still while it loads', () => {
+  test.use({ storageState: AUTH.owner })
+
+  test('the view toggle does not move once the filter options arrive', async ({ page, request }) => {
+    const projectId = await seededProject(request, STORE_PROJECT)
+    await selectProject(page, projectId)
+
+    await page.goto('/agency/content')
+
+    const toggle = page.getByRole('button', { name: /^(قائمة|List)$/ })
+    await expect(toggle).toBeVisible({ timeout: 30000 })
+
+    const before = await toggle.boundingBox()
+
+
+    /*
+     * Everything the page is still waiting for. The filter options are the last thing to land and
+     * they are what resizes the controls, so this is the moment the layout is finally honest.
+     */
+    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(1500)
+
+    const after = await toggle.boundingBox()
+
+
+    expect(before, 'the toggle had no box to measure').not.toBeNull()
+    expect(after, 'the toggle lost its box').not.toBeNull()
+
+    /*
+     * A whole line is 30-odd pixels; a sub-pixel reflow is not what this is about. Ten is comfortably
+     * below one row of controls and comfortably above rounding.
+     */
+    expect(
+      Math.abs((after?.y ?? 0) - (before?.y ?? 0)),
+      `the view toggle moved ${Math.round(Math.abs((after?.y ?? 0) - (before?.y ?? 0)))}px vertically after the options loaded — a reader aiming at it hits whatever takes its place`,
+    ).toBeLessThan(10)
+  })
+})

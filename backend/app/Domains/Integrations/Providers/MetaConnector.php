@@ -304,7 +304,7 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
         return array_filter([
             'external_id' => (string) $creative['id'],
             'name' => $str($creative['name'] ?? null),
-            'format' => $this->creativeFormat($creative['object_type'] ?? null),
+            'format' => $this->creativeFormat($creative['object_type'] ?? null, $spec),
             // The full-size image, then the story spec's own picture. Both are Meta's, never built here.
             'asset_url' => $str($creative['image_url'] ?? null) ?? $str($link['picture'] ?? null),
             // A video's poster is an image Meta already chose for it; a listing thumbnail is the fallback.
@@ -365,8 +365,32 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
         };
     }
 
-    private function creativeFormat(mixed $objectType): ?string
+    /**
+     * CONTENT-PREVIEW-SHAPES-001 — a dynamic product ad, named by the shape Meta itself describes.
+     *
+     * Meta reports `object_type: SHARE` for a dynamic product ad, exactly as it does for an ordinary
+     * link post, so this mapped six of the live account's twelve first-page creatives to `image`.
+     * They have no image and never will: the platform composes one per product at delivery. The card
+     * then went looking for a still it could not have, and the presenter's fallback handed it the
+     * share link — six blank rectangles on the owner's screen.
+     *
+     * `object_story_spec.template_data` is the marker, and it is already fetched. A DPA carries
+     * `template_data` where an ordinary link post carries `link_data`: the template IS the creative,
+     * which is the whole reason there is no fixed asset. The stored names corroborate it — they read
+     * `{{product.name}} 2026-08-01`, Meta's own template token, sitting unrendered in the database.
+     *
+     * Read from the spec rather than from the name. `{{product.name}}` is strong evidence and it is
+     * still a string an advertiser could type; `template_data` is the platform describing its own
+     * object, and it costs no extra field on the request.
+     *
+     * @param  array<string, mixed>  $spec
+     */
+    private function creativeFormat(mixed $objectType, array $spec = []): ?string
     {
+        if (is_array($spec['template_data'] ?? null)) {
+            return 'catalog';
+        }
+
         return match (strtoupper((string) $objectType)) {
             'VIDEO' => 'video',
             'PHOTO', 'SHARE' => 'image',

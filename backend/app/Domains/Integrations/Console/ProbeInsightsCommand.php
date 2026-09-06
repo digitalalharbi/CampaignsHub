@@ -285,21 +285,31 @@ final class ProbeInsightsCommand extends Command
 
             if (! is_string($url) || $url === '') {
                 /*
-                 * A card with nothing to draw is not automatically a fault — a catalog ad has no
-                 * single asset by design, and a stated absence is the product working. What IS a
-                 * fault is a card the presenter calls «available» that still draws nothing, which is
-                 * the owner's blank rectangle, so those are counted separately and named.
+                 * «No still» is not «blank», and the first draft of this said it was.
+                 *
+                 * It printed «BLANK — available, yet the card selects no still» for every available
+                 * row with no poster, and the live Snapchat account has three: two videos whose
+                 * platform sent no cover, and a collection with no hero. None of them is a blank
+                 * card. The library grid MOUNTS A PLAYER for a video with no poster — that is what
+                 * `VideoPoster` is for — and every other surface draws `absenceLabel`, which has a
+                 * written sentence for each of those shapes.
+                 *
+                 * An instrument that cries wolf on the healthy rows is worth less than no instrument,
+                 * because the reader stops believing the row that matters. The alarming class here is
+                 * UNUSABLE — fetched, and undrawable — which is where Meta's six actually sat.
                  */
-                $selection = $state === 'available' && $card !== 'catalog';
-                $blank += $selection ? 1 : 0;
+                $film = $card === 'video/poster' && is_string($preview['video_url'] ?? null);
 
-                $this->line(sprintf(
-                    '    · %-26s %-12s %-16s %s',
-                    $label,
-                    $state,
-                    $card,
-                    $selection ? 'BLANK — available, yet the card selects no still' : 'nothing to fetch',
-                ));
+                $said = match (true) {
+                    $state !== 'available' => 'nothing to fetch',
+                    $card === 'catalog' => 'no single asset by design — the card says so',
+                    $film => 'no cover — the surface plays the film instead',
+                    default => 'no still — the card states why',
+                };
+
+                $blank += $state === 'available' && $card !== 'catalog' && ! $film ? 1 : 0;
+
+                $this->line(sprintf('    · %-26s %-12s %-16s %s', $label, $state, $card, $said));
 
                 continue;
             }
@@ -346,7 +356,7 @@ final class ProbeInsightsCommand extends Command
         $this->line('');
         $this->line(sprintf('  usable stills    : %d', $ok));
         $this->line(sprintf('  unusable         : %d   (a 200 carrying an HTML error page counts here)', $bad));
-        $this->line(sprintf('  blank by selection: %d   (presenter said «available»; the card still draws nothing)', $blank));
+        $this->line(sprintf('  no still         : %d   (available, not a film, not a catalog — the card draws its sentence)', $blank));
 
         return self::SUCCESS;
     }

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { AUTH, seededProject, selectProject } from './helpers'
 
 /**
@@ -43,9 +43,14 @@ async function numericColumns(page: Page): Promise<Column[]> {
   return page.evaluate(() => {
     const out: Array<{ head: string; cell: string; drift: number; tabular: boolean; table: number }> = []
 
+    /* A figure, with or without a unit, a sign or a compact suffix. «—» and names are skipped. */
+    const looksNumeric = (text: string) => /^[+\-−]?[\d.,]+\s*(%|×|[A-Z]{3}|K|M|B)?$/.test(text)
+    const unmeasured = (text: string) => text === '' || text === '—' || text === '–'
+
     document.querySelectorAll('table').forEach((table, ti) => {
       const heads = [...table.querySelectorAll('thead th')]
-      const row = table.querySelector('tbody tr')
+      const rows = [...table.querySelectorAll('tbody tr')]
+      const row = rows[0]
       if (!row || heads.length === 0) return
 
       const cells = [...row.children]
@@ -55,8 +60,25 @@ async function numericColumns(page: Page): Promise<Column[]> {
         if (!cell) return
 
         const text = (cell as HTMLElement).innerText.trim()
-        // A figure, with or without a unit, a sign or a compact suffix. «—» and names are skipped.
-        if (!/^[+\-−]?[\d.,]+\s*(%|×|[A-Z]{3}|K|M|B)?$/.test(text)) return
+        if (!looksNumeric(text)) return
+
+        /*
+         * A column is numeric when its WHOLE column is, not when its first row happens to be.
+         *
+         * Reading one row made this misfire on the store tab's «الحملة» column: campaign names here
+         * read «20Jan 2026- January offers», the first row sometimes sorted to one that matched the
+         * figure pattern, and the sweep then demanded tabular numerals of a column of NAMES. It
+         * failed about one run in five, in both locales, and it was a false accusation against the
+         * product — the exact thing the comment below is about and this file exists to avoid.
+         *
+         * Intermittent because the first row is not stable: ordering decides which name lands there.
+         * Requiring the whole column removes the coincidence rather than reducing its odds.
+         */
+        const column = rows
+          .map((r) => (r.children[i] as HTMLElement | undefined)?.innerText.trim() ?? '')
+          .filter((t) => !unmeasured(t))
+
+        if (!column.every(looksNumeric)) return
 
         const a = th.getBoundingClientRect()
         const b = cell.getBoundingClientRect()
@@ -91,6 +113,38 @@ async function numericColumns(page: Page): Promise<Column[]> {
  * so this reaches each one deterministically in either language. A label-based walk went looking for
  * «Platforms» on an Arabic render and silently visited nothing, which the vacuity check below caught.
  */
+/**
+ * The instrument, checked against a fixture — because the defect it had was intermittent.
+ *
+ * `numericColumns` decided a column was numeric from the FIRST body row alone. On the store tab the
+ * campaign names read «20Jan 2026- January offers», the first row sometimes sorted to one that
+ * matched the figure pattern, and the sweep then demanded tabular numerals of a column of NAMES. It
+ * failed about one run in five, in both locales, and it was a false accusation against the product.
+ *
+ * A passing sweep cannot prove that fixed: the fault only appeared when the ordering cooperated. So
+ * the rule is held here against a table built to trigger it — a name column whose first row reads
+ * «2026» beside a real figure column. Deterministic, and it fails if the one-row rule ever returns.
+ */
+test('the sweep does not mistake a column of names for a column of figures', async ({ page }) => {
+  await page.setContent(`
+    <table>
+      <thead><tr><th>Campaign</th><th>Spend</th></tr></thead>
+      <tbody>
+        <tr><td>2026</td><td><span style="font-variant-numeric: tabular-nums">1,200</span></td></tr>
+        <tr><td>January offers</td><td><span style="font-variant-numeric: tabular-nums">900</span></td></tr>
+        <tr><td>Ramadan</td><td><span style="font-variant-numeric: tabular-nums">750</span></td></tr>
+      </tbody>
+    </table>
+  `)
+
+  const columns = await numericColumns(page)
+
+  expect(
+    columns.map((c) => c.head),
+    'a column of names was read as a column of figures because its first row looked like one',
+  ).toEqual(['Spend'])
+})
+
 const TAB_IDS = ['platforms', 'accounts', 'campaigns', 'ad_sets', 'budget', 'objective', 'store'] as const
 
 for (const locale of ['en', 'ar'] as const) {
@@ -172,6 +226,34 @@ for (const locale of ['en', 'ar'] as const) {
  *
  * The exemption list may keep these surfaces. It does not get to keep them mis-aligned.
  */
+
+/**
+ * Wait until an element's box stops changing, then let the caller act on it.
+ *
+ * Playwright's own stability check happens immediately before the dispatch, which is too late for a
+ * toolbar that rewraps when its filter options arrive: the check passes, the row wraps, and the
+ * click lands on whatever moved into that space. This holds until two consecutive readings agree.
+ *
+ * Bounded, and it FAILS rather than proceeding on a page that never settles — a helper that gave up
+ * quietly would put us back to clicking into a moving layout and blaming the product for it.
+ */
+async function stillFor(locator: Locator, timeout = 15000): Promise<void> {
+  const started = Date.now()
+  let previous = ''
+
+  while (Date.now() - started < timeout) {
+    const box = await locator.boundingBox()
+    const now = box === null ? 'none' : `${Math.round(box.x)},${Math.round(box.y)},${Math.round(box.width)},${Math.round(box.height)}`
+
+    if (now !== 'none' && now === previous) return
+
+    previous = now
+    await locator.page().waitForTimeout(250)
+  }
+
+  throw new Error('the control never stopped moving, so a click on it could not be aimed')
+}
+
 const HAND_ROLLED = [
   { path: '/app/campaigns', what: 'the campaigns list — row selection and bulk actions' },
   { path: '/app/content', what: 'the content list — selection checkboxes and media cells' },
@@ -241,6 +323,26 @@ test.describe('the surfaces that still hand-roll a table', () => {
            */
           const list = page.getByRole('button', { name: /^(قائمة|List)$/ })
           if (await list.count()) {
+            /*
+             * Clicked once the control has stopped moving — and this is not a timeout in disguise.
+             *
+             * MEASURED. The sweep failed here roughly two runs in four at 1440, in EITHER writing
+             * direction, and a recorder attached to `document` showed why: the only click the page
+             * ever received landed on `DIV|ابحث بالاسم` — the SEARCH BOX. The filter options arrive
+             * with the data, the platform filter gains a chip, the toolbar rewraps, and the toggle
+             * moves down between Playwright's actionability check and the dispatch. The pointer then
+             * hits whatever took its place.
+             *
+             * So the earlier readings were all wrong about the cause: the table was not slow, the
+             * state was not lost, and the locale had nothing to do with it. Nothing was ever asked to
+             * switch views, and the 45-second wait below was waiting for a click that never landed on
+             * the button.
+             *
+             * Waiting for the box to hold still targets that exact cause and weakens no assertion —
+             * the click still has to work, the table still has to arrive, and the floor below still
+             * has to be met.
+             */
+            await stillFor(list.first())
             await list.first().click()
 
             /*

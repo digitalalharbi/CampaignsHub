@@ -239,9 +239,14 @@ final class StructureProbeTest extends TestCase
         Http::fake(['cdn.example/*' => Http::response('....', 200, ['Content-Type' => 'video/mp4'])]);
 
         $this->artisan('integrations:probe', ['account' => 'act_374140991630974', '--media' => true])
-            ->expectsOutputToContain('BLANK — available, yet the card selects no still')
+            /*
+             * A film with no cover is NOT counted as a card that draws nothing: the library grid
+             * mounts a player for exactly this row, and every other surface has a written sentence
+             * for it. What is asserted is that the probe never fetches the mp4 as if it were a still.
+             */
+            ->expectsOutputToContain('no cover — the surface plays the film instead')
             ->expectsOutputToContain('usable stills    : 0')
-            ->expectsOutputToContain('blank by selection: 1')
+            ->expectsOutputToContain('no still         : 0')
             ->assertSuccessful();
     }
 
