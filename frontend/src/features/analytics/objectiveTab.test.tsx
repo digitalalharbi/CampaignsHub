@@ -132,3 +132,91 @@ describe('the objective analysis tab', () => {
     expect(await screen.findByTestId('objective-family-unknown')).toHaveTextContent('Unknown intent')
   })
 })
+
+/**
+ * NUMBER-PRESENTATION-001 — one number, written the same way wherever it appears.
+ *
+ * The family summary's two FALLBACK branches — money, and a metric with no spec — printed
+ * `toLocaleString` directly, so a family that spent 1,284,663 read «1,284,663 SAR» here and
+ * «1.28M SAR» on the KPI card above it. Same figure, two shapes, on one screen: the reader has to
+ * work out that they are the same number before they can use either.
+ *
+ * «لم يتم تقريب الارقام 1k, 3M, 54.5K وهكذا» was answered for the entity tables and these two
+ * branches were missed, because a fallback is exactly the path nobody looks at.
+ *
+ * The exact figure has to survive the abbreviation, which is the condition that makes abbreviating
+ * legitimate at all — «1.28M» with no way back to 1,284,663 is a figure nobody can audit.
+ */
+describe('a family summary is written like the rest of the product', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProject.setState({ currentProjectId: 'p1' })
+    signInWith(['campaigns.view'])
+  })
+  afterEach(() => signOut())
+
+  /**
+   * The word «undefined», on screen, next to a figure.
+   *
+   * `Fmt` is `(n, currency?) => string` and this block called `spec.format(total)` with one
+   * argument. Every cost-per spec is formatted by `moneyExact`, which interpolated a bare
+   * `${currency}` — so an ordinary awareness family printed «237.90 undefined» where the CPM should
+   * be. Two independent faults meeting: a formatter that trusted its caller, and a caller that gave
+   * it nothing.
+   *
+   * Both are fixed, and both are held here: the currency is passed, and `moneyExact` prints no
+   * currency rather than a placeholder when it has none.
+   */
+  it('never prints the word undefined where a currency belongs', async () => {
+    route([campaign({ spend: 1000, impressions: 4200, clicks: 300 })])
+
+    await openObjective()
+    await screen.findAllByText(/4\.2K|4,200/)
+
+    expect(document.body.textContent ?? '').not.toMatch(/undefined/)
+  })
+
+  /** ...and a cost-per carries the real currency, which is what makes it a cost. */
+  it('gives a cost-per its currency', async () => {
+    route([campaign({ spend: 1000, impressions: 4200, clicks: 300 })])
+
+    await openObjective()
+
+    const dds = [...document.querySelectorAll('dd')].map((el) => el.textContent ?? '')
+    const costs = dds.filter((t) => /^\d[\d,.]*\s+\S+$/.test(t.trim()))
+
+    expect(costs.length, 'no cost-per figure was rendered to check').toBeGreaterThan(0)
+    for (const cost of costs) {
+      expect(cost.trim()).toMatch(/\s(SAR|USD)$/)
+    }
+  })
+})
+
+describe('a family summary abbreviates like the rest of the product', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProject.setState({ currentProjectId: 'p1' })
+    signInWith(['campaigns.view'])
+  })
+  afterEach(() => signOut())
+
+  it('abbreviates a large total and keeps the exact figure reachable', async () => {
+    route([campaign({ spend: 1284663, impressions: 5400000, clicks: 91200 })])
+
+    await openObjective()
+
+    /*
+     * Impressions rather than spend: the awareness family's KPI list is what it is, and asserting on
+     * a metric this family does not carry would be asserting on the fixture. 5,400,000 is the figure
+     * the block renders, and it is exactly the shape the complaint named.
+     */
+    const dds = [...document.querySelectorAll('dd')]
+    const abbreviated = dds.find((el) => (el.textContent ?? '').trim() === '5.4M')
+
+    expect(abbreviated, 'the family summary printed a count at full width').toBeDefined()
+    expect(abbreviated?.getAttribute('title'), 'an abbreviated figure with no way back to it').toBe('5,400,000')
+
+    /* And the raw grouped form is not ALSO printed as the visible text. */
+    expect(dds.some((el) => (el.textContent ?? '').trim() === '5,400,000')).toBe(false)
+  })
+})

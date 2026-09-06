@@ -122,11 +122,22 @@ export function money(n: number | null | undefined, currency: string | null | un
  */
 export function moneyExact(n: number | null | undefined, currency: string | null | undefined): string {
   if (n === null || n === undefined) return '—'
-  if (Math.abs(n) < 1000 && !Number.isInteger(n)) {
-    return `${formatFixed(n, 2)} ${currency}`
-  }
 
-  return `${num(n)} ${currency}`
+  const figure = Math.abs(n) < 1000 && !Number.isInteger(n) ? formatFixed(n, 2) : num(n)
+
+  /*
+   * The same rule `money()` states above, which its exact counterpart never learned.
+   *
+   * Both interpolations were bare `${currency}`, so a caller with no currency to give printed the
+   * word «undefined» next to the figure — «237.90 undefined» in a family summary, on screen, in
+   * production. Every spec formatted by `moneyExact` is a cost-per, and `spec.format(total)` is
+   * called with one argument in more than one place, so this was reachable from ordinary use rather
+   * than from anything exotic.
+   *
+   * An unknown currency prints NO currency, never a guessed one and never a placeholder: «237.90»
+   * is incomplete and reads as incomplete, which is the honest state.
+   */
+  return currency ? `${figure} ${currency}` : figure
 }
 
 export function num(n: number | null | undefined): string {
