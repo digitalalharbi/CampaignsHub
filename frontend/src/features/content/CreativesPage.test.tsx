@@ -144,6 +144,57 @@ describe('CreativesPage', () => {
    * The predecessor of this test opened a dialog first. That is the change: somebody who came to
    * LOOK at creatives should not have to discover that the library can be narrowed at all.
    */
+  /**
+   * CONTENT-VIEW-PERSISTS-001 — the chosen view is the one library control that did not survive.
+   *
+   * `search`, `from`, `to` and `sort` all seed from the address and are written back, under a comment
+   * that says «so a refresh, a Back, or a shared link reopens this view». `view` was
+   * `useState('grid')` — no seed, no write-back — so a reader who chose the list got the grid again
+   * on every refresh, every shared link, and every remount.
+   *
+   * A gate caught it before a person reported it: the alignment sweep clicked «قائمة», and the page
+   * came back reporting «شبكة=true, قائمة=false» with four grid cards still on screen. The click had
+   * landed and a re-render had thrown the answer away, which is the same defect a user meets as «it
+   * keeps forgetting».
+   */
+  it('opens in the view the address asks for', async () => {
+    renderWithProviders(<CreativesPage />, { locale: 'en', route: '/app/content?view=list' })
+
+    expect(await screen.findByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Grid' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  /**
+   * ...and choosing one writes it back, so a refresh or a shared link reopens the same view.
+   *
+   * Read off the page's OWN links rather than `window.location`: these tests run under a
+   * `MemoryRouter`, which never touches the browser's address, and asserting there would have passed
+   * for the wrong reason on a version that wrote nothing. Every row links to its detail through
+   * `libraryAddress` — the live search string — so the href IS the address, rendered.
+   */
+  it('writes the chosen view into the address', async () => {
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'List' }))
+
+    await waitFor(() => {
+      const links = [...document.querySelectorAll('a[href]')].map((a) => a.getAttribute('href') ?? '')
+
+      expect(links.some((href) => href.includes('view=list'))).toBe(true)
+    })
+  })
+
+  /** The default is not written: an address should carry a decision, not a restatement of the default. */
+  it('leaves the address alone while the view is the default', async () => {
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+
+    await screen.findByRole('button', { name: 'Grid' })
+
+    const links = [...document.querySelectorAll('a[href]')].map((a) => a.getAttribute('href') ?? '')
+
+    expect(links.some((href) => href.includes('view='))).toBe(false)
+  })
+
   it('puts every daily axis §15.2 asks for on the page, populated from real rows', async () => {
     renderWithProviders(<CreativesPage />, { locale: 'en' })
     await screen.findByRole('article')

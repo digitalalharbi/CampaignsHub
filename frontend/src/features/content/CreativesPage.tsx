@@ -334,7 +334,21 @@ export function CreativesPage() {
   const initial = useRef(params)
   const opened = useRef(false)
 
-  const [view, setView] = useState<'grid' | 'list'>('grid')
+  /*
+   * CONTENT-VIEW-PERSISTS-001 — the view is a control, so it lives where the other controls live.
+   *
+   * `search`, `from`, `to` and `sort` all seed from the address and are written back, under the
+   * comment above that says «so a refresh, a Back, or a shared link reopens this view». `view` was
+   * the exception: `useState('grid')` with no seed and no write-back, so a reader who chose the list
+   * got the grid again on every refresh, every shared link, and every remount of this page.
+   *
+   * A gate found it before a person reported it. The alignment sweep clicked «قائمة» and the page
+   * came back reporting «شبكة=true, قائمة=false» with four grid cards still on screen — the click had
+   * landed and a re-render had thrown the answer away. That is the same defect a user meets as «it
+   * keeps forgetting which view I chose», and it was invisible in isolation because nothing remounts
+   * the page when you are looking at it.
+   */
+  const [view, setView] = useState<'grid' | 'list'>(() => (initial.current.get('view') === 'list' ? 'list' : 'grid'))
   const [search, setSearch] = useState(() => initial.current.get('search') ?? '')
   const [from, setFrom] = useState(() => initial.current.get('from') ?? isoDaysAgo(29))
   const [to, setTo] = useState(() => initial.current.get('to') ?? isoDaysAgo(0))
@@ -415,10 +429,19 @@ export function CreativesPage() {
   useEffect(() => {
     const next = libraryQueryString(query).replace(/^\?/, '')
     const creative = params.get('creative')
-    setParams(creative ? `${next}${next ? '&' : ''}creative=${creative}` : next, { replace: true })
+
+    /*
+     * The default is NOT written. An address should carry a decision, not a restatement of what the
+     * page would have done anyway — every link anybody shares would otherwise grow a `view=grid` that
+     * means nothing.
+     */
+    const parts = [next, view === 'list' ? 'view=list' : '', creative ? `creative=${creative}` : '']
+      .filter((part) => part !== '')
+
+    setParams(parts.join('&'), { replace: true })
     // `params` is deliberately absent: including it would re-run this on the write it just made.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, setParams])
+  }, [query, view, setParams])
 
   const setAxis = (key: string, values: string[]) => {
     setPage(1)
