@@ -62,7 +62,17 @@ export function FamilyDecisionTable({
   currency: string | null
   locale: Locale
   /** The catalogue's label and formatter per key, passed in so this file holds no second copy. */
-  specs: Record<string, { label: { ar: string; en: string }; format: (n: number) => string } | undefined>
+  /*
+   * The formatter's real signature, which this narrowed and thereby hid a defect.
+   *
+   * `Fmt` is `(n, currency?) => string`. Declaring it as `(n: number) => string` did not just omit
+   * the currency — it made passing one a TYPE ERROR, so the call below could not have been written
+   * correctly even by somebody who noticed. Every cost-per on this client-facing table printed with
+   * no currency, and before `moneyExact` learnt to refuse an absent one, with the word «undefined».
+   *
+   * A narrowed type that makes the right call impossible is worse than no type.
+   */
+  specs: Record<string, { label: { ar: string; en: string }; format: (n: number, currency?: string | null) => string } | undefined>
 }) {
   const ar = locale === 'ar'
 
@@ -134,7 +144,18 @@ export function FamilyDecisionTable({
 
     const spec = specs[key]
 
-    return spec ? spec.format(value) : compact(value)
+    /*
+     * NUMBER-PRESENTATION-001 — the currency goes with the figure, and this dropped it.
+     *
+     * `Fmt` is `(n, currency?) => string`, so this compiled and ran for months while calling every
+     * spec with one argument. The money keys are handled above, but the COST-PERS are not: cpm, cpc,
+     * cpa, cpl and cpi all reach here, and all of them are formatted by `moneyExact`. On a
+     * client-facing table that printed a cost with no currency at all — and before `moneyExact`
+     * learnt to refuse an absent one, it printed the word «undefined» beside the number.
+     *
+     * The currency is a prop on this component. It was in scope the whole time.
+     */
+    return spec ? spec.format(value, currency) : compact(value)
   }
 
   /*
