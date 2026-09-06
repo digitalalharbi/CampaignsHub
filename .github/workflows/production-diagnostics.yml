@@ -66,6 +66,11 @@ on:
         type: boolean
         required: false
         default: false
+      quarantine_sandbox:
+        description: 'Report the sandbox rows sitting in LIVE accounts. Reports only; never deletes from this workflow.'
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: production-diagnostics
@@ -151,3 +156,34 @@ jobs:
               # nothing — the campaigns come back, are counted, and are thrown away.
               exec -T backend php artisan integrations:probe \
                 "${ACCOUNT}" --from="${FROM}" --to="${TO}" ${STRUCTURE}
+
+  # ── The sandbox quarantine, in its REPORTING form only ───────────────────────────────────────────
+  #
+  # `integrations:quarantine-sandbox` can delete, and this workflow deliberately cannot pass
+  # `--apply`. Removing rows from a production database is not something a dispatch button should be
+  # able to do by having a box ticked: the report is what a person reads before deciding, and the
+  # decision is made by somebody with a shell.
+  #
+  # SANDBOX-PROD-001 §3 — «document exact row counts before/after», which is what a dry run is for.
+  quarantine:
+    if: inputs.quarantine_sandbox
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Report sandbox rows in live accounts
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          PROVIDER: ${{ inputs.provider }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: PROVIDER
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan integrations:quarantine-sandbox --provider="${PROVIDER}"
