@@ -197,7 +197,29 @@ final class CreativePresenter
         $kind = $this->kind($creative);
         $aspect = $this->aspect($creative);
 
-        $image = $this->safe($creative->asset_url) ?? $this->safe($creative->preview_url);
+        /*
+         * AD-PREVIEW-001 — `preview_url` is a PAGE, and this put it in an `<img>`.
+         *
+         * The live Meta account's first page: six of twelve cards fetched `fb.me/…`, got 200 with
+         * `text/html`, 260KB of it, and decoded nothing. Six blank rectangles, in production, on the
+         * page the owner opens. Every one of them a dynamic product ad — no `asset_url` ever
+         * resolves for those, because the platform composes the creative per product at delivery —
+         * so the fallback fired and handed the browser a web page to draw.
+         *
+         * `MetaConnector` is the only writer of this column and it writes `preview_shareable_link`.
+         * The field's own name says what it is. There has never been a provider that puts an image
+         * here, so this fallback could not have worked for anybody: its only possible outcome was a
+         * link where a picture belongs.
+         *
+         * Two of this product's own docblocks already said so — `CampaignCreativesController` calls
+         * it «too generous» and `adPreview.ts` says «the card asked for a picture that would never
+         * arrive» — and the withholding rule kept it hidden, because a share link that happens to
+         * carry a credential IS suppressed. `fb.me` carries none, so it sailed through.
+         *
+         * A row with nothing but a share link now reads as what it is: an ad the platform exposed no
+         * asset for. That sentence is true, and a reader can act on it. A blank rectangle is neither.
+         */
+        $image = $this->safe($creative->asset_url);
         $video = $this->safe($creative->video_url);
         $thumb = $this->safe($creative->thumbnail_url);
 
@@ -485,8 +507,16 @@ final class CreativePresenter
     /** True when the row HAS a link but every one of them was withheld for carrying a credential. */
     private function wasWithheld(ExternalCreative $creative): bool
     {
+        /*
+         * The ASSET links only — a share link is not something we were going to show.
+         *
+         * `preview_url` used to count here, so a row whose only link was a credentialed share link
+         * reported «the platform's preview link carries a credential, so it is not shown» — which
+         * tells the reader we are holding a picture back. We are not: there was never an asset on
+         * that row, and «no asset was exposed» is the fact they need in order to stop waiting for one.
+         */
         $links = array_filter([
-            $creative->asset_url, $creative->preview_url, $creative->video_url, $creative->thumbnail_url,
+            $creative->asset_url, $creative->video_url, $creative->thumbnail_url,
         ]);
 
         if ($links === []) {
