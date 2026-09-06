@@ -42,7 +42,8 @@ final class ProbeInsightsCommand extends Command
         {account : The external account — ours, or the provider\'s own id}
         {--from= : Window start, YYYY-MM-DD (default: 30 days back)}
         {--to= : Window end, YYYY-MM-DD (default: yesterday)}
-        {--rows=3 : How many returned rows to print}';
+        {--rows=3 : How many returned rows to print}
+        {--structure : Ask for the CAMPAIGN structure instead of insights — identity, counts and date range}';
 
     protected $description = 'Read-only: ask the provider for insights over a window and print what came back. Stores nothing.';
 
@@ -50,8 +51,26 @@ final class ProbeInsightsCommand extends Command
     {
         $reference = (string) $this->argument('account');
 
+        /*
+         * The signature invites either id — «ours, or the provider's own» — and comparing a provider
+         * id against our uuid column made Postgres refuse the whole query:
+         *
+         *     SQLSTATE[22P02]: invalid input syntax for type uuid: "act_374140991630974"
+         *
+         * So the one form the help text puts first for a human («act_…», the id they can read off
+         * the provider's own screen) was the form that crashed. `id` is only compared when the
+         * reference is shaped like a uuid; otherwise the provider's id is the only column asked.
+         */
         $account = ExternalAccount::withoutGlobalScopes()
-            ->where(fn ($q) => $q->where('id', $reference)->orWhere('external_id', $reference))
+            ->where(function ($q) use ($reference): void {
+                if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $reference) === 1) {
+                    $q->where('id', $reference)->orWhere('external_id', $reference);
+
+                    return;
+                }
+
+                $q->where('external_id', $reference);
+            })
             ->where('account_type', 'ad_account')
             ->first();
 
@@ -92,9 +111,37 @@ final class ProbeInsightsCommand extends Command
 
         $this->line('');
         $this->line(str_repeat('=', 78));
-        $this->line('  INSIGHTS PROBE — nothing is stored by this command.');
+        $this->line('  '.($this->option('structure') ? 'STRUCTURE' : 'INSIGHTS').' PROBE — nothing is stored by this command.');
         $this->line(str_repeat('=', 78));
         $this->line(sprintf('  %s  [%s]  provider id %s', $account->name ?: '(unnamed)', $account->provider, $account->external_id));
+        $this->line(sprintf(
+            '  account status %s   timezone %s   currency %s',
+            $account->status ?? 'NOT CAPTURED',
+            $account->timezone ?? 'NOT CAPTURED',
+            $account->currency ?? 'NOT CAPTURED',
+        ));
+
+        /*
+         * INTEG-ACCOUNT-CHOICE-001 — «does this ad account hold the business's campaigns?»
+         *
+         * The insights half of this command answers «what did it spend in a window», which is the
+         * wrong question when choosing WHICH account to bind: an account can be silent for thirty
+         * days and still hold four years of history, and an empty account and a quiet one look
+         * identical through a window.
+         *
+         * The owner met exactly that. `act_1500383245036671` was bound to Project 1 and returned
+         * nothing, while three other discovered Meta accounts were never asked — and the stored
+         * diagnosis could not help, because an account that has never been bound has never been
+         * synced, so the database holds no answer about it at all. Only the provider does.
+         *
+         * Read-only, like everything here: the campaigns come back, are counted, and are thrown away.
+         * Nothing is imported and no binding is created — choosing an account is the owner's decision
+         * and this exists to inform it, not to make it.
+         */
+        if ($this->option('structure')) {
+            return $this->reportStructure($connector, $account);
+        }
+
         $this->line(sprintf('  window %s → %s   account timezone %s', $from, $to, $account->timezone ?? 'NOT CAPTURED'));
 
         try {
@@ -165,6 +212,108 @@ final class ProbeInsightsCommand extends Command
      * request id are what let somebody look the call up on the platform's side. No secret is in any
      * of it — every platform here authenticates in a header.
      */
+    /**
+     * The campaign structure, counted and dated — and then discarded.
+     *
+     * What a person choosing an account actually needs: how many campaigns exist, how many ever ran,
+     * and how far back the history goes. A name cannot answer it — «razzahavenu», «RazahAvanue» and
+     * «RazzahAvenu» are three different accounts on this estate and only the provider knows which of
+     * them the business used.
+     *
+     * Dates are read from the campaign's own `raw` body rather than from anything we mapped, so this
+     * reports what the platform said rather than what our importer would have made of it.
+     */
+    private function reportStructure(object $connector, ExternalAccount $account): int
+    {
+        try {
+            $result = $connector->syncCampaigns($account->external_id);
+        } catch (Throwable $e) {
+            $this->line('');
+            $this->error('  The provider call threw: '.$e->getMessage());
+            $this->reportCalls($connector);
+
+            return self::SUCCESS;
+        }
+
+        if (! $result->success) {
+            $this->line('');
+            $this->error('  The provider refused: '.($result->message ?? 'no message given'));
+            $this->reportCalls($connector);
+
+            return self::SUCCESS;
+        }
+
+        $campaigns = $result->records;
+
+        $this->line('');
+        $this->line(sprintf('  campaigns returned : %d', count($campaigns)));
+
+        if ($campaigns === []) {
+            $this->line('  The provider answered and listed no campaigns. This account is empty —');
+            $this->line('  which is a fact about the account, not a failure of the request.');
+            $this->reportCalls($connector);
+
+            return self::SUCCESS;
+        }
+
+        $statuses = [];
+        $starts = [];
+        $stops = [];
+
+        foreach ($campaigns as $campaign) {
+            $statuses[(string) ($campaign['status'] ?? 'unknown')] = ($statuses[(string) ($campaign['status'] ?? 'unknown')] ?? 0) + 1;
+
+            $raw = (array) ($campaign['raw'] ?? []);
+
+            foreach (['start_time', 'created_time'] as $key) {
+                if (isset($raw[$key]) && is_string($raw[$key])) {
+                    $starts[] = substr($raw[$key], 0, 10);
+                    break;
+                }
+            }
+
+            foreach (['stop_time', 'updated_time'] as $key) {
+                if (isset($raw[$key]) && is_string($raw[$key])) {
+                    $stops[] = substr($raw[$key], 0, 10);
+                    break;
+                }
+            }
+        }
+
+        ksort($statuses);
+
+        foreach ($statuses as $status => $count) {
+            $this->line(sprintf('    %-24s %d', $status, $count));
+        }
+
+        sort($starts);
+        sort($stops);
+
+        $this->line(sprintf(
+            '  earliest start     : %s',
+            $starts === [] ? 'the platform stated none' : $starts[0],
+        ));
+        $this->line(sprintf(
+            '  latest end/updated : %s',
+            $stops === [] ? 'the platform stated none' : $stops[count($stops) - 1],
+        ));
+
+        /* A few names, so a human can recognise the business without reading five hundred rows. */
+        $this->line('  first few campaigns:');
+
+        foreach (array_slice($campaigns, 0, max(1, (int) $this->option('rows'))) as $campaign) {
+            $this->line(sprintf(
+                '    · %s  [%s]',
+                (string) ($campaign['name'] ?? '(unnamed)'),
+                (string) ($campaign['status'] ?? 'unknown'),
+            ));
+        }
+
+        $this->reportCalls($connector);
+
+        return self::SUCCESS;
+    }
+
     private function reportCalls(object $connector): void
     {
         if (! $connector instanceof ApiAdvertisingConnector) {

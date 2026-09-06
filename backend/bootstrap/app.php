@@ -12,6 +12,7 @@ use App\Domains\Integrations\Console\AcceptStructureSyncCommand;
 use App\Domains\Integrations\Console\DiagnoseSyncCommand;
 use App\Domains\Integrations\Console\ProbeInsightsCommand;
 use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
+use App\Domains\Integrations\Console\QuarantineSandboxRowsCommand;
 use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
@@ -96,6 +97,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // INTEG-RUNTIME §7 — asks the provider over a chosen window and stores nothing, which is what
         // separates «the account was quiet» from «the request cannot return rows for this account».
         ProbeInsightsCommand::class,
+        QuarantineSandboxRowsCommand::class,
         // COMMERCE-001 — the store sweep: products, customers, orders and abandoned carts.
         SyncStoresCommand::class,
         // FX-FEED-001 — the exchange rates the conversions need. Registered even though no source
