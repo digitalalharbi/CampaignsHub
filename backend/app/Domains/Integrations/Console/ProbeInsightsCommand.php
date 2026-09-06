@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Console;
 
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\ExternalCreative;
+use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Http;
 use Throwable;
 
 /**
@@ -43,7 +46,8 @@ final class ProbeInsightsCommand extends Command
         {--from= : Window start, YYYY-MM-DD (default: 30 days back)}
         {--to= : Window end, YYYY-MM-DD (default: yesterday)}
         {--rows=3 : How many returned rows to print}
-        {--structure : Ask for the CAMPAIGN structure instead of insights — identity, counts and date range}';
+        {--structure : Ask for the CAMPAIGN structure instead of insights — identity, counts and date range}
+        {--media : FETCH the first page of creative assets and report status, content type and decoded size}';
 
     protected $description = 'Read-only: ask the provider for insights over a window and print what came back. Stores nothing.';
 
@@ -138,6 +142,10 @@ final class ProbeInsightsCommand extends Command
          * Nothing is imported and no binding is created — choosing an account is the owner's decision
          * and this exists to inform it, not to make it.
          */
+        if ($this->option('media')) {
+            return $this->reportMedia($account);
+        }
+
         if ($this->option('structure')) {
             return $this->reportStructure($connector, $account);
         }
@@ -212,6 +220,98 @@ final class ProbeInsightsCommand extends Command
      * request id are what let somebody look the call up on the platform's side. No secret is in any
      * of it — every platform here authenticates in a header.
      */
+    /**
+     * AD-MEDIA-RECOVERY-001 — «a drawable URL exists» is not acceptance. This fetches it.
+     *
+     * The first-page census in `integrations:diagnose` reports what the PRESENTER would hand the
+     * browser: on the live estate, 21 of 24 cards. The owner still sees blanks, so the remaining
+     * candidates are all downstream of the payload — the request is refused, the bytes are not an
+     * image, or the asset has gone stale — and none of them can be settled by reading a column.
+     *
+     * So this asks the same question a browser asks: GET the asset, and report the status, the
+     * content type and the DECODED dimensions. `getimagesizefromstring` reads the real header, so a
+     * 200 carrying an HTML error page reports «not an image» rather than «fine»; that is the failure
+     * shape a CDN produces when a signature has expired, and it is invisible to a status check.
+     *
+     * The URL is never printed. It carries the signature that makes it work, and this output is read
+     * in a CI log — the host and the path's last segment are enough to recognise an asset.
+     */
+    private function reportMedia(ExternalAccount $account): int
+    {
+        $creatives = ExternalCreative::withoutGlobalScopes()
+            ->where('project_id', function ($q) use ($account): void {
+                $q->select('project_id')
+                    ->from('project_integration_bindings')
+                    ->where('external_account_id', $account->getKey())
+                    ->where('is_active', true)
+                    ->limit(1);
+            })
+            ->orderByRaw('last_active_at DESC NULLS LAST')
+            ->orderByRaw('last_synced_at DESC NULLS LAST')
+            ->orderBy('id')
+            ->limit((int) max(1, (int) $this->option('rows')))
+            ->get();
+
+        $this->line('');
+        $this->line(sprintf('  fetching %d first-page asset(s) — the request a browser would make', $creatives->count()));
+
+        $ok = 0;
+        $bad = 0;
+
+        foreach ($creatives as $creative) {
+            $preview = app(CreativePresenter::class)->preview($creative);
+            $url = $preview['image_url'] ?? $preview['thumbnail_url'] ?? $preview['video_url'] ?? null;
+
+            $label = mb_substr((string) ($creative->name ?: '(unnamed)'), 0, 26);
+
+            if (! is_string($url) || $url === '') {
+                $this->line(sprintf('    · %-26s %s — nothing to fetch', $label, (string) $preview['state']));
+
+                continue;
+            }
+
+            $where = parse_url($url, PHP_URL_HOST).'/…/'.basename((string) parse_url($url, PHP_URL_PATH));
+
+            try {
+                $response = Http::withOptions(['allow_redirects' => true])->timeout(20)->get($url);
+            } catch (Throwable $e) {
+                $bad++;
+                $this->line(sprintf('    · %-26s REQUEST FAILED %s — %s', $label, $where, $e->getMessage()));
+
+                continue;
+            }
+
+            $type = (string) $response->header('Content-Type');
+            $body = $response->body();
+            $size = @getimagesizefromstring($body);
+
+            $isMedia = str_starts_with($type, 'image/') || str_starts_with($type, 'video/');
+            $decoded = is_array($size) ? sprintf('%dx%d', $size[0], $size[1]) : 'did not decode';
+
+            if ($response->successful() && $isMedia && (is_array($size) || str_starts_with($type, 'video/'))) {
+                $ok++;
+            } else {
+                $bad++;
+            }
+
+            $this->line(sprintf(
+                '    · %-26s %d  %-24s %8s bytes  %s  %s',
+                $label,
+                $response->status(),
+                mb_substr($type, 0, 24),
+                number_format(strlen($body)),
+                $decoded,
+                $where,
+            ));
+        }
+
+        $this->line('');
+        $this->line(sprintf('  usable media : %d', $ok));
+        $this->line(sprintf('  unusable     : %d   (a 200 carrying an HTML error page counts here)', $bad));
+
+        return self::SUCCESS;
+    }
+
     /**
      * The campaign structure, counted and dated — and then discarded.
      *

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Projects\Models\Project;
@@ -112,6 +114,60 @@ final class StructureProbeTest extends TestCase
             ->assertSuccessful();
     }
 
+    /**
+     * AD-MEDIA-RECOVERY-001 — «a drawable URL exists» is not acceptance, so `--media` fetches it.
+     *
+     * The first-page census reports what the PRESENTER would hand the browser — 21 of 24 on the live
+     * estate — and the owner still saw blanks, so everything left is downstream of the payload: the
+     * request is refused, or the bytes are not an image. Neither can be settled by reading a column.
+     *
+     * The decisive check is the DECODE, not the status. A CDN whose signature has expired commonly
+     * answers 200 with an HTML error page, and a status check calls that healthy while the card stays
+     * blank. `getimagesizefromstring` reads the real header, so those bytes report «did not decode».
+     */
+    public function test_media_that_is_not_an_image_is_reported_as_unusable(): void
+    {
+        $this->creativeWith('https://cdn.example/a.jpg');
+
+        // 200, and an HTML error page — the shape an expired CDN grant actually returns.
+        Http::fake(['cdn.example/*' => Http::response('<html>Access denied</html>', 200, ['Content-Type' => 'text/html'])]);
+
+        $this->artisan('integrations:probe', ['account' => 'act_374140991630974', '--media' => true])
+            ->expectsOutputToContain('did not decode')
+            ->expectsOutputToContain('usable media : 0')
+            ->expectsOutputToContain('unusable     : 1')
+            ->assertSuccessful();
+    }
+
+    /** ...and real image bytes report their decoded dimensions and count as usable. */
+    public function test_real_image_bytes_are_reported_with_their_decoded_size(): void
+    {
+        $this->creativeWith('https://cdn.example/a.png');
+
+        // A one-pixel PNG: the smallest thing that is genuinely an image.
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
+
+        Http::fake(['cdn.example/*' => Http::response($png, 200, ['Content-Type' => 'image/png'])]);
+
+        $this->artisan('integrations:probe', ['account' => 'act_374140991630974', '--media' => true])
+            ->expectsOutputToContain('1x1')
+            ->expectsOutputToContain('usable media : 1')
+            ->assertSuccessful();
+    }
+
+    /** A refused request is named as refused rather than counted as media. */
+    public function test_a_refused_asset_is_counted_as_unusable(): void
+    {
+        $this->creativeWith('https://cdn.example/a.jpg');
+
+        Http::fake(['cdn.example/*' => Http::response('', 403, ['Content-Type' => 'text/plain'])]);
+
+        $this->artisan('integrations:probe', ['account' => 'act_374140991630974', '--media' => true])
+            ->expectsOutputToContain('403')
+            ->expectsOutputToContain('usable media : 0')
+            ->assertSuccessful();
+    }
+
     /** And it stores nothing — the whole premise of a probe. */
     public function test_the_probe_imports_nothing(): void
     {
@@ -122,5 +178,30 @@ final class StructureProbeTest extends TestCase
         $this->artisan('integrations:probe', ['account' => 'act_374140991630974', '--structure' => true])->assertSuccessful();
 
         $this->assertDatabaseCount('external_campaigns', 0);
+    }
+
+    private function creativeWith(string $asset): void
+    {
+        $project = Project::withoutGlobalScopes()->firstOrFail();
+
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->account->tenant_id,
+            'project_id' => $project->id,
+            'external_account_id' => $this->account->id,
+            'provider' => 'meta',
+            'purpose' => 'advertising',
+            'is_active' => true,
+        ]);
+
+        ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->account->tenant_id,
+            'project_id' => $project->id,
+            'provider' => 'meta',
+            'external_creative_id' => 'cr-media-1',
+            'name' => 'A creative',
+            'format' => 'image',
+            'asset_url' => $asset,
+            'source_type' => 'api',
+        ]);
     }
 }

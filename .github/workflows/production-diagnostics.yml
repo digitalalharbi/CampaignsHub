@@ -61,6 +61,11 @@ on:
         description: 'Probe window end, YYYY-MM-DD'
         required: false
         default: ''
+      probe_media:
+        description: 'FETCH the first-page assets for probe_account and report status, content type and decoded size. Proves an image actually loads, not that a URL exists.'
+        type: boolean
+        required: false
+        default: false
       probe_structure:
         description: 'Ask for the CAMPAIGN STRUCTURE instead of insights — identity, counts, statuses and date range. Use this to choose which ad account to bind.'
         type: boolean
@@ -138,12 +143,13 @@ jobs:
           FROM: ${{ inputs.probe_from }}
           TO: ${{ inputs.probe_to }}
           STRUCTURE: ${{ inputs.probe_structure && '--structure' || '' }}
+          MEDIA: ${{ inputs.probe_media && '--media' || '' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          envs: ACCOUNT,FROM,TO,STRUCTURE
+          envs: ACCOUNT,FROM,TO,STRUCTURE,MEDIA
           script: |
             set -Eeuo pipefail
             cd /opt/campaignshub
@@ -160,7 +166,7 @@ jobs:
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan integrations:probe \
-                "${ACCOUNT}" --from="${FROM}" --to="${TO}" ${STRUCTURE}
+                "${ACCOUNT}" --from="${FROM}" --to="${TO}" --rows="12" ${STRUCTURE} ${MEDIA}
 
   # ── The sandbox quarantine, in its REPORTING form only ───────────────────────────────────────────
   #
