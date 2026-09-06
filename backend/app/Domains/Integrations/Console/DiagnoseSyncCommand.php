@@ -12,6 +12,7 @@ use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CreativeMetrics;
+use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\PlatformObjectiveMap;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
@@ -630,6 +631,71 @@ final class DiagnoseSyncCommand extends Command
             ->orderByDesc('last_active_at')
             ->limit(3)
             ->get(['id', 'name', 'external_creative_id', 'campaign_id', 'last_active_at']);
+
+        /*
+         * CONTENT-FIRST-PAGE-MEDIA-001 — «الصور لا تظهر» is a claim about ONE SCREEN, not an estate.
+         *
+         * The estate census above says 770 of 1,469 creatives hold an image. That number cannot
+         * answer the owner's report, because nobody looks at an estate: they look at page one. If the
+         * twenty-four rows the library puts first happen to be the assetless ones, every card on the
+         * first screen is blank while the estate reads two-thirds covered — and both facts are true.
+         *
+         * So this counts the SAME rows the library's default sort puts on page one, through the same
+         * ordering (`last_active_at DESC NULLS LAST`, then `last_synced_at`, then `id`), and reports
+         * how many of them actually carry something to draw. It answers «what does the first screen
+         * hold», which is the question that was asked.
+         */
+        $firstPage = ExternalCreative::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->orderByRaw('last_active_at DESC NULLS LAST')
+            ->orderByRaw('last_synced_at DESC NULLS LAST')
+            ->orderBy('id')
+            ->limit(24)
+            ->get(['id', 'name', 'provider', 'format', 'asset_url', 'video_url', 'thumbnail_url', 'preview_url', 'source_type', 'cards']);
+
+        $drawable = 0;
+        $states = [];
+
+        foreach ($firstPage as $creative) {
+            $preview = app(CreativePresenter::class)->preview($creative);
+            $states[(string) $preview['state']] = ($states[(string) $preview['state']] ?? 0) + 1;
+
+            /*
+             * «Drawable» is asked of the PRESENTER's output, not of the columns, because that is what
+             * the browser receives. A row with a stored `asset_url` the presenter withholds is a blank
+             * card, and counting the column would call it covered.
+             */
+            if (($preview['image_url'] ?? null) !== null || ($preview['thumbnail_url'] ?? null) !== null
+                || ($preview['video_url'] ?? null) !== null) {
+                $drawable++;
+            }
+        }
+
+        ksort($states);
+
+        $this->line('');
+        $this->line('  FIRST PAGE — what the twenty-four cards the reader opens on actually hold');
+        $this->line(sprintf('    rows on page one   : %d', $firstPage->count()));
+        $this->line(sprintf('    with something to draw : %d', $drawable));
+        $this->line(sprintf('    blank                  : %d', $firstPage->count() - $drawable));
+
+        foreach ($states as $state => $count) {
+            $this->line(sprintf('      %-20s %d', $state, $count));
+        }
+
+        foreach ($firstPage->take(5) as $creative) {
+            $preview = app(CreativePresenter::class)->preview($creative);
+            $this->line(sprintf(
+                '      · %-28s [%s/%s] %s  image=%s thumb=%s video=%s',
+                mb_substr((string) ($creative->name ?: '(unnamed)'), 0, 28),
+                (string) $creative->provider,
+                (string) ($creative->format ?? 'no-format'),
+                (string) $preview['state'],
+                ($preview['image_url'] ?? null) !== null ? 'yes' : 'no',
+                ($preview['thumbnail_url'] ?? null) !== null ? 'yes' : 'no',
+                ($preview['video_url'] ?? null) !== null ? 'yes' : 'no',
+            ));
+        }
 
         $this->line('');
         $this->line('  CREATIVE KPI TRACE — the first three cards the library would show');

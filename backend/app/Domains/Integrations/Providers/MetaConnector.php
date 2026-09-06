@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Providers;
 
 use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\Support\AssetExpiry;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 
 /**
@@ -309,6 +310,23 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
             // A video's poster is an image Meta already chose for it; a listing thumbnail is the fallback.
             'thumbnail_url' => $str($creative['thumbnail_url'] ?? null) ?? $str($video['image_url'] ?? null),
             'preview_url' => $str($ad['preview_shareable_link'] ?? null),
+            /*
+             * AD-MEDIA-RECOVERY-001 — Meta states when its CDN grant runs out, in `oe` (hex seconds).
+             *
+             * The column, the presenter's `expired` state and its sentence have all existed since the
+             * table did, and no connector had ever emitted a value — so `assetExpired()` was always
+             * false and a stale link reached the browser as `available`. The reader got a broken
+             * rectangle instead of «انتهت صلاحية رابط المنصة — يحتاج مزامنة جديدة».
+             *
+             * Read from the asset first and the thumbnail second, matching the order the presenter
+             * reads them in, so the recorded expiry belongs to the link a card will actually request.
+             */
+            'asset_expires_at' => AssetExpiry::fromUrl(
+                $str($creative['image_url'] ?? null)
+                ?? $str($link['picture'] ?? null)
+                ?? $str($creative['thumbnail_url'] ?? null)
+                ?? $str($video['image_url'] ?? null),
+            )?->toIso8601String(),
             'destination_url' => $str($link['link'] ?? null)
                 ?? $str($video['call_to_action']['value']['link'] ?? null),
             /*

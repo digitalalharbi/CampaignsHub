@@ -520,6 +520,50 @@ final class HierarchyCountsTest extends TestCase
         $this->assertSame(1, ExternalCampaign::withoutGlobalScopes()->count());
     }
 
+    /**
+     * CONTENT-FIRST-PAGE-MEDIA-001 — «الصور لا تظهر» is a claim about ONE SCREEN, not an estate.
+     *
+     * The estate census reports 770 of 1,469 creatives holding an image, and that number cannot
+     * answer the owner's report: nobody looks at an estate, they look at page one. If the rows the
+     * library puts first are the assetless ones, every card on the first screen is blank while the
+     * estate reads two-thirds covered, and both facts are true at once.
+     *
+     * «Drawable» is asked of the PRESENTER's output rather than of the columns, because that is what
+     * the browser receives — a stored `asset_url` the presenter withholds is a blank card, and
+     * counting the column would call it covered.
+     */
+    public function test_the_first_page_census_counts_what_the_presenter_would_draw(): void
+    {
+        $campaign = $this->campaign('cmp-live');
+
+        $this->creativeWith($campaign, 'has-image', asset: 'https://cdn.example/a.jpg');
+        $this->creativeWith($campaign, 'has-nothing', asset: null);
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('FIRST PAGE — what the twenty-four cards the reader opens on actually hold')
+            ->expectsOutputToContain('with something to draw : 1')
+            ->expectsOutputToContain('blank                  : 1')
+            ->assertSuccessful();
+    }
+
+    /**
+     * A URL the presenter WITHHOLDS counts as blank, not as covered.
+     *
+     * This is the whole reason the census asks the presenter: a credential-bearing link is stored,
+     * so every column-based count calls the row covered, and the reader still sees nothing.
+     */
+    public function test_a_withheld_asset_counts_as_blank(): void
+    {
+        $campaign = $this->campaign('cmp-live');
+
+        $this->creativeWith($campaign, 'withheld', asset: 'https://cdn.example/a.jpg?access_token=SECRET');
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('with something to draw : 0')
+            ->expectsOutputToContain('blank                  : 1')
+            ->assertSuccessful();
+    }
+
     /** A clean account prints no contamination line at all — the finding must stay a finding. */
     public function test_a_clean_account_prints_no_contamination_line(): void
     {
@@ -539,6 +583,21 @@ final class HierarchyCountsTest extends TestCase
         $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
             ->expectsOutputToContain('SANDBOX campaigns on this account: 0')
             ->assertSuccessful();
+    }
+
+    private function creativeWith(ExternalCampaign $campaign, string $externalId, ?string $asset): ExternalCreative
+    {
+        return ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'external_campaign_id' => $campaign->id,
+            'provider' => 'snapchat',
+            'external_creative_id' => $externalId,
+            'name' => $externalId,
+            'format' => 'image',
+            'asset_url' => $asset,
+            'source_type' => 'api',
+        ]);
     }
 
     private function campaign(string $externalId): ExternalCampaign

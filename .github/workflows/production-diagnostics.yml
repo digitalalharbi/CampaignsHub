@@ -147,13 +147,18 @@ jobs:
           script: |
             set -Eeuo pipefail
             cd /opt/campaignshub
+            # `--structure` asks the campaigns edge instead of insights: «does this ad account hold
+            # the business's campaigns» cannot be answered from a spend window, because an account
+            # silent for thirty days looks exactly like an empty one through one. Still stores
+            # nothing — the campaigns come back, are counted, and are thrown away.
+            #
+            # The comment sits ABOVE the command and not inside it: a `#` line between two
+            # backslash-continued lines ENDS the continuation, and bash then ran `exec -T backend …`
+            # as a statement of its own — «bash: line 14: exec: -T: invalid option», which reads like
+            # a docker problem and was a comment in the wrong place.
             docker compose \
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
-              # `--structure` asks the campaigns edge instead of insights: «does this ad account hold
-              # the business's campaigns» cannot be answered from a spend window, because an account
-              # silent for thirty days looks exactly like an empty one through one. Still stores
-              # nothing — the campaigns come back, are counted, and are thrown away.
               exec -T backend php artisan integrations:probe \
                 "${ACCOUNT}" --from="${FROM}" --to="${TO}" ${STRUCTURE}
 

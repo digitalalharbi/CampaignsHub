@@ -91,7 +91,45 @@ async function registerAndVerify(
    * one door there is (LOGIN-UNIFIED-001) — and lands where the wizard left off.
    */
   await signIn(page, email, 'secret1234')
-  await expect(page).toHaveURL(/\/onboarding/, { timeout: 20000 })
+
+  /*
+   * When this lands anywhere but the wizard, say WHAT the application thought instead.
+   *
+   * CI has seen it once, on firefox, inside a 445-test run: «5 × /login, 38 × /agency» for an
+   * account registered seconds earlier — the app had decided onboarding was already done. It passes
+   * in isolation on all three browsers, so the report was «element not found» plus a URL, and that
+   * is not enough to tell a real skip from a race in the setup around it.
+   *
+   * The identity is unique per millisecond and per browser project, so a collision is not the
+   * explanation. What is missing is the account's own state at the moment of the wrong URL, and that
+   * is exactly what a failure needs to carry. Asserted through `toPass` so the message is rebuilt on
+   * the last attempt rather than captured from the first.
+   */
+  await expect(async () => {
+    const url = page.url()
+
+    if (/\/onboarding/.test(url)) {
+      return
+    }
+
+    const state = await page.evaluate(async () => {
+      try {
+        const r = await fetch('/api/v1/auth/me', { headers: { Accept: 'application/json' } })
+        const body = await r.json()
+
+        return JSON.stringify({
+          status: r.status,
+          onboarded: body?.data?.onboarding_completed_at ?? body?.data?.tenant?.onboarding_completed_at ?? null,
+          tenant: body?.data?.tenant?.id ?? null,
+          memberships: body?.data?.memberships?.length ?? null,
+        })
+      } catch (e) {
+        return `could not read /auth/me: ${String(e)}`
+      }
+    })
+
+    expect(url, `signed in and landed on ${url} rather than the wizard; the account reports ${state}`).toMatch(/\/onboarding/)
+  }).toPass({ timeout: 20000 })
 }
 
 /**
