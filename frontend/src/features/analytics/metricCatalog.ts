@@ -67,8 +67,15 @@ const EXACT_OF = new Map<Fmt, Fmt>([
   [compact, num],
 ])
 
-/** A measured figure, plus the full version of it when the display abbreviated it. */
-function valueReading(spec: Spec, n: number, currency: string | null): { kind: 'value'; text: string; exact?: string } {
+/**
+ * A measured figure, plus the full version of it when the display abbreviated it.
+ *
+ * Exported because the objective family summary was hand-rolling the same decision and getting two
+ * things wrong that this already has right: it called `spec.format(total)` with no currency, so
+ * every cost-per printed «237.90 undefined», and it attached no exact form, so an abbreviated total
+ * had no way back to its figure. One reading, one place.
+ */
+export function valueReading(spec: Spec, n: number, currency: string | null): { kind: 'value'; text: string; exact?: string } {
   const text = spec.format(n, currency)
   const exact = EXACT_OF.get(spec.format)?.(n, currency)
 

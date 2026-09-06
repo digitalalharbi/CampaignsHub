@@ -18,6 +18,7 @@ import {
 } from 'recharts'
 import { platformColor, tooltipProps } from './components'
 import { compact, money, moneyExact, num, percent, ratio } from './format'
+import { readMetricValue } from '@/lib/metricValue'
 import { funnelStageLabel } from './metricLabels'
 import { useUi } from '@/stores/ui'
 
@@ -228,6 +229,19 @@ export function RankingBarChart({
  * first stage is exactly the one that can be missing on a platform that reports conversions without
  * impressions — and scaling every bar to `undefined` would have collapsed the whole chart.
  */
+/**
+ * A count, read the way every other surface reads one — NUMBER-PRESENTATION-001.
+ *
+ * `readMetricValue` is the same function the analytical tables and the KPI cards call, so «6.6M»
+ * here and «6.6M» on the card above agree by construction rather than by both happening to reach
+ * for the same helper.
+ */
+function countRead(value: number | null | undefined): { text: string; exact: string | null } {
+  const read = readMetricValue('number', value ?? null)
+
+  return { text: read.text, exact: read.exact }
+}
+
 export function ConversionFunnelChart({ stages, currency = 'SAR', ar = false }: { stages: Array<{ stage?: string; label: string; count: number | null; step_rate: number | null; cost_per: number | null }>; currency?: string; ar?: boolean }) {
   const counts = stages.map((s) => s.count).filter((c): c is number => c !== null && c !== undefined)
   const top = counts.length > 0 ? Math.max(...counts) : 1
@@ -243,7 +257,23 @@ export function ConversionFunnelChart({ stages, currency = 'SAR', ar = false }: 
             {reported ? (
               <div className="h-9 flex-1 overflow-hidden rounded-xl bg-surface-secondary">
                 <div className="flex h-full items-center justify-between rounded-xl px-3 text-sm font-semibold text-white transition-all" style={{ width: `${w}%`, background: `color-mix(in oklab, var(--brand-600) ${100 - i * 10}%, var(--brand-700))` }}>
-                  <span className="tnum">{num(s.count)}</span>
+                  {/*
+                    NUMBER-PRESENTATION-001 — the funnel wrote its counts at full width.
+                    *
+                    * Found on the live client report: the KPI card above read «6.6M» and the
+                    * impressions bar below it read «6,596,500». One figure, two shapes, on one page,
+                    * in front of a client — who has no second view of their account to work out that
+                    * they are the same number.
+                    *
+                    * `num()` is the EXACT formatter; every other analytical surface reads a count
+                    * through the value law and compacts it. This is the only place that printed one
+                    * raw, and it is on the most public surface in the product.
+                    *
+                    * The exact figure travels as the `title`, which is what makes an abbreviation
+                    * legitimate: «6.6M» a reader cannot get back to 6,596,500 is a figure they
+                    * cannot audit.
+                  */}
+                  <span className="tnum" title={countRead(s.count).exact ?? undefined}>{countRead(s.count).text}</span>
                 </div>
               </div>
             ) : (

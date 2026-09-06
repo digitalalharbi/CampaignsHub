@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { FamilyDecisionTable } from './FamilyDecisionTable'
 import type { FamilyRow } from './familyTotals'
+import { SPECS as CATALOGUE } from './metricCatalog'
 
 /**
  * OBJECTIVE-ANALYTICS-DEPTH-001 — the objective tab's decision surface.
@@ -232,5 +233,70 @@ describe('the decision table inside one objective family', () => {
 
     expect(screen.getAllByRole('table')).toHaveLength(1)
     expect(screen.queryByTestId('objective-decision-aside-sales')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * NUMBER-PRESENTATION-001 — a cost is a figure AND a currency, and this table dropped the currency.
+ *
+ * The `specs` prop was typed `format: (n: number) => string`. The real signature is
+ * `(n, currency?) => string`, so the narrowed type did not merely omit the currency — it made
+ * passing one a compile error. The call could not have been written correctly by somebody who
+ * noticed. A narrowed type that makes the right call impossible is worse than no type.
+ *
+ * The money keys are handled on their own path above, so the columns that reached the broken call
+ * were the COST-PERS — cpm, cpc, cpa, cpl, cpi — every one of them formatted by `moneyExact`. On a
+ * client-facing table that printed a cost with no currency, and before `moneyExact` learnt to refuse
+ * an absent one, it printed the word «undefined» next to the number.
+ */
+describe('a cost-per carries its currency', () => {
+  /*
+   * TWO campaigns, because this table RANKS. A group of one has nothing to rank and the component
+   * renders nothing at all — which is also why the first draft of the «undefined» case below passed
+   * while asserting on an empty document. A test that can pass on a blank page is not a test.
+   */
+  /*
+   * The REAL catalogue, not the stub above.
+   *
+   * The stub carries three metrics with hand-written formatters, which is right for the cases it was
+   * written for and useless for this one: the defect lives in what happens when a CATALOGUE spec —
+   * `moneyExact` for every cost-per — is called without a currency. A test that formats through its
+   * own fixture cannot see it, and the first draft of this case did exactly that: it asserted on a
+   * column whose header rendered the raw key `cpa`, because the stub has no such spec.
+   */
+  const table = (campaigns: FamilyRow[], kpis: string[]) =>
+    render(
+      <FamilyDecisionTable
+        family="sales"
+        campaigns={campaigns}
+        kpis={kpis}
+        currency="SAR"
+        locale="en"
+        specs={CATALOGUE}
+      />,
+    )
+
+  const pair = (extra: Record<string, number>) => [
+    { ...converted('Eid', 3_000, 40), ...extra } as unknown as FamilyRow,
+    { ...converted('Always-on', 1_000, 5), ...extra } as unknown as FamilyRow,
+  ]
+
+  it('prints the currency beside a cost per result', () => {
+    table(pair({ cpa: 75 }), ['spend', 'cpa'])
+
+    /* Read from the table's text: the figure and its currency can sit in sibling elements. */
+    const text = screen.getByTestId('objective-decision-sales').textContent ?? ''
+
+    expect(text).toMatch(/75(\.\d+)?\s*SAR/)
+  })
+
+  it('never prints the word undefined where a currency belongs', () => {
+    table(pair({ cpa: 75, cpc: 1.25, cpm: 32.4 }), ['spend', 'cpa', 'cpc', 'cpm'])
+
+    /* Anchored on the rendered table, so an empty document cannot satisfy it. */
+    const grid = screen.getByTestId('objective-decision-sales')
+
+    expect(grid.textContent ?? '').toMatch(/SAR/)
+    expect(grid.textContent ?? '').not.toMatch(/undefined/)
   })
 })

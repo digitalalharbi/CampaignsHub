@@ -1,0 +1,117 @@
+# Owner-observed defects — the register that stops an observation disappearing
+
+## What this is, and what it is not
+
+This is **not** a second requirements system. `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md` remains the
+only authority on what this product owes; every row below maps to an ID that already exists there.
+
+It is a **loss-prevention register**. The owner reports a defect against the running product, work
+starts, a pull request lands, a gate goes green — and somewhere in that sequence the original
+observation stops being tracked as an observation and starts being tracked as an implementation
+detail. Then a status report says a requirement is done while the owner is still looking at the
+thing they reported. That is the failure this file exists to prevent, and it has already happened
+here more than once.
+
+## The rules
+
+- **An observation is never deleted.** It is closed only by acceptance on the running Production
+  product, by the owner or by a check against the real authenticated surface.
+- **Every row maps to an existing Matrix ID.** Where none fits, the row is marked
+  `UNMAPPED_OWNER_DEFECT` and reconciled with the Matrix *before* any implementation.
+- **Merged is not deployed. Deployed is not verified.** The four columns are separate because they
+  have been confused, and a green test suite is none of them.
+- **A fallback sentence is not a fix** where the underlying capability can still be made to work.
+  Telling a reader why a picture is missing is the right behaviour when it genuinely is; it is not
+  the answer when the picture could have been shown.
+
+## Status of the columns
+
+`Matrix status` is read from the Matrix and is the canonical one — this file never overrides it.
+`Prod verified` is the only column that closes a row.
+
+| # | Sev | Owner observation | Symptom | Route | Matrix ID(s) | Matrix status | Root cause | Code | Merged | Deployed | Prod verified | Remaining acceptance gap | External blocker |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | P0 | /app/content previews still do not visibly render reliably | Cards on the content library show nothing where an ad should be | /app/content | AD-PREVIEW-001; CONTENT-PREVIEW-SHAPES-001 | AD-PREVIEW-001=PARTIAL<br>CONTENT-PREVIEW-SHAPES-001=IN_PROGRESS | Meta share links rendered as images (see 3); catalog ads mis-typed (see 8) | yes (#299) | no | no | no | Owner-authenticated /app/content must show media in AR/EN, 1440/390, 3 browsers | — |
+| 2 | P0 | Meta blank image cards | Blank rectangle, no explanation | /app/content | AD-PREVIEW-001 | AD-PREVIEW-001=PARTIAL | `CreativePresenter` read the image as `asset_url ?? preview_url`; `preview_url` is Meta `preview_shareable_link` | yes (#299) | no | no | no | Re-probe after deploy must show 0 unusable | — |
+| 3 | P0 | fb.me/shareable HTML must never be rendered as an image | `<img>` fetched 260KB of `text/html`, decoded nothing | /app/content; report ad detail | AD-PREVIEW-001 | AD-PREVIEW-001=PARTIAL | PROVEN: 6 of 12 Meta first-page cards fetched fb.me at HTTP 200 `text/html` | yes (#299) | no | no | no | Production probe after deploy | — |
+| 4 | P0 | Videos must actually play | A film with no cover showed a grey box | /app/content | AD-PREVIEW-001; CONTENT-PREVIEW-SHAPES-001 | AD-PREVIEW-001=PARTIAL<br>CONTENT-PREVIEW-SHAPES-001=IN_PROGRESS | `absenceLabel` had no branch for video-without-poster; grid mounts `VideoPoster` | yes (earlier) | yes | yes | no | Owner-visible playback on the real surface | — |
+| 5 | P0 | Story/vertical media must render at the correct aspect | 9:16 cropped into 16:9 lost the logo and CTA | /app/content | CONTENT-PREVIEW-SHAPES-001 | CONTENT-PREVIEW-SHAPES-001=IN_PROGRESS | Every card was `aspect-video`; provider dimensions were synced but unused | yes (earlier) | yes | yes | no | Owner-visible check at 1440 and 390 | — |
+| 6 | P0 | Carousel navigation must work | A five-card creative rendered as one picture | /app/content; content detail | CONTENT-PREVIEW-SHAPES-001; CREATIVE-AD-RELATION-001 | CONTENT-PREVIEW-SHAPES-001=IN_PROGRESS<br>CREATIVE-AD-RELATION-001=PARTIAL | `cards` column was never written by any importer | yes (earlier) | yes | yes | no | Owner-visible carousel paging | — |
+| 7 | P0 | Collection media must render where provider data exists | Collection hero absent; tiles never fetched | /app/content | CONTENT-PREVIEW-SHAPES-001 | CONTENT-PREVIEW-SHAPES-001=IN_PROGRESS | `shape_not_fetched` state: Snapchat exposes tiles, the product does not fetch them | partial | yes | yes | no | Tiles are still not fetched — the gap is ours and is stated on the card | — |
+| 8 | P0 | Multi-asset/catalog/product media must render where provider data exists | Catalog ads read as images with a missing picture | /app/content | CONTENT-PREVIEW-SHAPES-001 | CONTENT-PREVIEW-SHAPES-001=IN_PROGRESS | Meta reports `object_type: SHARE` for a DPA; `object_story_spec.template_data` is the real marker | yes (#299) | no | no | no | Forced Meta structure sync must re-map the rows to `catalog` | — |
+| 9 | P0 | No broken-image icon | A refused asset left a broken frame | /app/content | AD-PREVIEW-001 | AD-PREVIEW-001=PARTIAL | `<img>` had no `onError` on any surface | yes (#297) | yes | yes | no | Owner-visible confirmation | — |
+| 10 | P0 | No unexplained blank rectangle | Empty card, no sentence, no state | /app/content | AD-PREVIEW-001 | AD-PREVIEW-001=PARTIAL | Same as 9; plus the grid used one generic sentence for every shape | yes (#297,#299) | partial | partial | no | Owner-visible confirmation | — |
+| 11 | P0 | Expired media must RECOVER, not merely say expired | Stale link drew nothing | /app/content | AD-MEDIA-RECOVERY-001 | AD-MEDIA-RECOVERY-001=PARTIAL | `asset_expires_at` was never emitted by any connector, so `expired` was unreachable | yes (#295,#297) | yes | yes | no | Recovery proven as a chain in test; not yet observed on a real expired Production row | — |
+| 12 | P0 | Content detail modal must use the same canonical preview truth | Detail disagreed with the card | content detail | CONTENT-DETAIL-MODAL-001; AD-PREVIEW-001 | CONTENT-DETAIL-MODAL-001=IMPLEMENTED_NOT_VERIFIED<br>AD-PREVIEW-001=PARTIAL | Six surfaces each re-derived the rules; now one `readPreview` | yes (earlier) | yes | yes | no | Owner-visible parity check | — |
+| 13 | P0 | Literal "undefined" must never appear as a currency | «237.90 undefined» on screen | /app/analytics objectives; family decision table | NUMBER-PRESENTATION-001 | NUMBER-PRESENTATION-001=PARTIAL | `moneyExact` interpolated a bare `${currency}`; two call sites passed none; `FamilyDecisionTable` typed the formatter as one-argument | yes (#298) | no | no | no | Deploy then Production sweep for the literal string | — |
+| 14 | P0 | Large numbers must use canonical compact notation | «1,284,663 SAR» beside a card reading «1.28M SAR»; and on the LIVE client report the KPI card read «6.6M» while the funnel bar beneath it read «6,596,500» | /app/analytics; entity tables; shared report funnel | NUMBER-PRESENTATION-001; CLIENT-FACING-PRESENTATION-001 | NUMBER-PRESENTATION-001=**PARTIAL**<br>CLIENT-FACING-PRESENTATION-001=**PARTIAL** | Family summary fallbacks called `toLocaleString`; `ConversionFunnelChart` called `num()`, the EXACT formatter, on the most public surface in the product | yes (#298) | no | no | no | Deploy then Production re-check of the shared report funnel | — |
+| 15 | P0 | Decision-critical values must keep meaningful precision | A CPM of 29.71 printed «30 SAR» | KPI strip; reports | NUMBER-PRESENTATION-001 | NUMBER-PRESENTATION-001=PARTIAL | `moneyExact` rounded through `num()` | yes (earlier) | yes | yes | no | Production check | — |
+| 16 | P0 | Numeric headers and values aligned in RTL and LTR | Figures sat under the wrong heading | analytical tables | TABLE-NUMERIC-ALIGNMENT-001 | TABLE-NUMERIC-ALIGNMENT-001=PARTIAL | Sweep measures drift on 7 tabs + hand-rolled tables | yes | yes | yes | partial | Alignment half is measured on one column only on this seed | — |
+| 17 | P0 | KPI cards must use one canonical geometry | Cards differed per surface | dashboard; analytics; reports | UX-KPI-PRESENTATION-001 | UX-KPI-PRESENTATION-001=PARTIAL | — | partial | yes | yes | no | Owner-visible confirmation across surfaces | — |
+| 18 | P0 | KPI movement and real sparkline where evidence exists | Cards showed no trend | dashboard; analytics | UX-KPI-PRESENTATION-001 | UX-KPI-PRESENTATION-001=PARTIAL | — | partial | yes | yes | no | Owner-visible confirmation | — |
+| 19 | P0 | No page-level mobile horizontal overflow | Page scrolled sideways at 390 | all | TABLE-NUMERIC-ALIGNMENT-001; TYPOGRAPHY-PRODUCT-POLISH-001 | TABLE-NUMERIC-ALIGNMENT-001=PARTIAL<br>TYPOGRAPHY-PRODUCT-POLISH-001=PARTIAL | Most recent: my own 384px reservation on a 390px screen | yes | no | no | no | Covered by the appearance gate; owner check at 390 | — |
+| 20 | P0 | Real Meta + Snapchat Project 1 data must reconcile end-to-end | Figures disagreed between surfaces | all | PROVIDER-CROSS-SURFACE-PROPAGATION-001; CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 | PROVIDER-CROSS-SURFACE-PROPAGATION-001=IN_PROGRESS<br>CROSS-PLATFORM-ATTRIBUTION-DEPTH-001=PARTIAL | — | partial | partial | partial | no | Surface-level reconciliation on live data not yet done | — |
+| 21 | P0 | All-provider filter = Meta + Snapchat | — | /app/analytics | ANALYTICS-FILTER-TRUTH-001 | ANALYTICS-FILTER-TRUTH-001=IN_PROGRESS | — | partial | — | — | no | Live filter proof outstanding | — |
+| 22 | P0 | Meta filter = Meta only | — | /app/analytics | ANALYTICS-FILTER-TRUTH-001 | ANALYTICS-FILTER-TRUTH-001=IN_PROGRESS | — | partial | — | — | no | Live filter proof outstanding | — |
+| 23 | P0 | Snapchat filter = Snapchat only | — | /app/analytics | ANALYTICS-FILTER-TRUTH-001 | ANALYTICS-FILTER-TRUTH-001=IN_PROGRESS | — | partial | — | — | no | Live filter proof outstanding | — |
+| 24 | P0 | Provider totals → aggregate → API → Dashboard → Analytics → Reports reconcile | — | all | PROVIDER-CROSS-SURFACE-PROPAGATION-001 | PROVIDER-CROSS-SURFACE-PROPAGATION-001=IN_PROGRESS | — | partial | — | — | no | Independent recomputation vs each surface outstanding | — |
+| 25 | P0 | Derived ratios recomputed, never averaged or summed | CTR/CPC/ROAS averaged from provider ratios | aggregation | CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 | CROSS-PLATFORM-ATTRIBUTION-DEPTH-001=PARTIAL | `MetricsAggregator::withDerived()` recomputes; `CrossProviderTotalsAreTruthfulTest` holds it | yes | yes | yes | no | Surface-level proof on live data | — |
+| 26 | P0 | Purchases/Leads/Installs/Registrations/Conversations not one Results total | — | analytics; reports | CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 | CROSS-PLATFORM-ATTRIBUTION-DEPTH-001=PARTIAL | — | partial | — | — | no | Not yet proven on rendering surfaces | — |
+| 27 | P0 | Cross-platform Reach must not claim deduplicated unique people | — | analytics; reports | CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 | CROSS-PLATFORM-ATTRIBUTION-DEPTH-001=PARTIAL | — | partial | — | — | no | Labelling on rendering surfaces outstanding | — |
+| 28 | P0 | Platform-attributed revenue distinct from store-confirmed | — | analytics; reports | CROSS-PLATFORM-ATTRIBUTION-DEPTH-001; MONEY-SCOPE-TRUTH-001 | CROSS-PLATFORM-ATTRIBUTION-DEPTH-001=PARTIAL<br>MONEY-SCOPE-TRUTH-001=VERIFIED | — | partial | — | — | no | Surface labelling outstanding | — |
+| 29 | P0 | Incomplete currency/coverage shows partial/withheld truth | A withheld figure printed as 0 | all money surfaces | MONEY-SCOPE-TRUTH-001; MONEY-USD-002 | MONEY-SCOPE-TRUTH-001=VERIFIED<br>MONEY-USD-002=PARTIAL | — | yes | yes | yes | partial | Historical re-normalisation still PARTIAL | — |
+| 30 | P1 | Client-facing reports simple and professional | — | shared report | CLIENT-FACING-PRESENTATION-001 | CLIENT-FACING-PRESENTATION-001=PARTIAL | — | partial | — | — | no | — | — |
+| 31 | P1 | Operator diagnostics must not appear in client payload/UI/PDF/email | — | shared report; PDF; email | CLIENT-DIAGNOSTIC-SEPARATION-001 | CLIENT-DIAGNOSTIC-SEPARATION-001=PARTIAL | — | partial | — | — | no | — | — |
+| 32 | P1 | Internal campaign/ad-set/ad names must not leak to client reports | — | shared report | CLIENT-DIAGNOSTIC-SEPARATION-001 | CLIENT-DIAGNOSTIC-SEPARATION-001=PARTIAL | — | partial | — | — | no | — | — |
+| 33 | P1 | Detailed Report detailed through the supported hierarchy | — | reports | REPORT-DETAIL-PARITY-001 | REPORT-DETAIL-PARITY-001=PARTIAL | — | partial | — | — | no | — | — |
+| 34 | P1 | Content/media previews must render inside reports | — | reports | REPORT-AD-PREVIEW-001 | REPORT-AD-PREVIEW-001=VERIFIED | Same preview truth as the library | yes | yes | yes | partial | Row is VERIFIED; re-check after the share-link fix deploys | — |
+| 35 | P1 | Budget/funnel/store/findings/recommendations appear where the form requires | — | reports | REPORT-DETAIL-PARITY-001; REPORT-ANALYTICAL-DEPTH-001 | REPORT-DETAIL-PARITY-001=PARTIAL<br>REPORT-ANALYTICAL-DEPTH-001=PARTIAL | — | partial | — | — | no | — | — |
+| 36 | P1 | Snapshot and Live form parity truthful | — | reports | REPORT-INTERACTION-PARITY-001 | REPORT-INTERACTION-PARITY-001=VERIFIED | — | yes | yes | yes | no | — | — |
+| 37 | P1 | Report creation exposes mode/form/section/branding choices | — | report creation | REPORT-CREATION-UX-001 | REPORT-CREATION-UX-001=PARTIAL | — | partial | — | — | no | — | — |
+| 38 | P1 | Client/project branding and logo must actually render | — | reports; portal | BRANDING-RENDER-EVIDENCE-001; BRANDING-HIERARCHY-001 | BRANDING-RENDER-EVIDENCE-001=IN_PROGRESS<br>BRANDING-HIERARCHY-001=PARTIAL | — | partial | — | — | no | Per-surface render evidence outstanding | — |
+| 39 | P1 | Share/PDF/report/email identity and branding agree | — | share; PDF; email | BRANDING-HIERARCHY-001; REPORT-TITLE-METADATA-001 | BRANDING-HIERARCHY-001=PARTIAL<br>REPORT-TITLE-METADATA-001=IN_PROGRESS | — | partial | — | — | no | — | — |
+| 40 | P1 | Canonical filters scope backend aggregations | — | analytics; dashboard | ANALYTICS-FILTER-TRUTH-001; DASH-010 | ANALYTICS-FILTER-TRUTH-001=IN_PROGRESS<br>DASH-010=PARTIAL | — | partial | — | — | no | — | — |
+| 41 | P1 | Filters persist through refresh/back/deep-link | The library forgot the chosen view | /app/content; analytics | ANALYTICS-FILTER-TRUTH-001 | ANALYTICS-FILTER-TRUTH-001=IN_PROGRESS | `view` was state with no seed and no write-back; the address is now the only source of truth | yes | no | no | no | Held end to end by `filters-survive.spec.ts` on three browsers — refresh, back, and a COLD deep link, which is what a shared link is. Proved by injection: writing the address but never reading it back fails the refresh case. Awaiting deploy for Production confirmation. | — |
+| 42 | P1 | Objective system drives KPIs/columns/rankings consistently | — | analytics | ANALYTICS-OBJECTIVE-SYSTEM-001; OBJECTIVE-ANALYTICS-DEPTH-001 | ANALYTICS-OBJECTIVE-SYSTEM-001=IMPLEMENTED_NOT_VERIFIED<br>OBJECTIVE-ANALYTICS-DEPTH-001=PARTIAL | — | partial | — | — | no | — | — |
+| 43 | P1 | Analytics materially different from Dashboard | Both rendered one composition | /app/dashboard; /app/analytics | ANALYTICS-DIFFERENTIATION-001 | ANALYTICS-DIFFERENTIATION-001=IMPLEMENTED_NOT_VERIFIED | `PerformanceTab` received no `surface` | yes | yes | yes | no | Owner-visible check of both routes | — |
+| 44 | P1 | Platforms gives within-objective decision analytics | — | analytics platforms | PLATFORM-DECISION-ANALYTICS-001; PLATFORM-DECISION-ANALYTICS-001-UI | PLATFORM-DECISION-ANALYTICS-001=PARTIAL<br>PLATFORM-DECISION-ANALYTICS-001-UI=PARTIAL | — | partial | — | — | no | — | — |
+| 45 | P1 | Campaign workspace active-first and decision-oriented | — | /app/campaigns | CAMPAIGN-INTELLIGENCE-HUB | CAMPAIGN-INTELLIGENCE-HUB=IN_PROGRESS | — | partial | — | — | no | — | — |
+| 46 | P1 | Campaign → ad set → ad → content drill-down preserves context | — | analytics; campaigns | HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN | HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN=IMPLEMENTED_NOT_VERIFIED | — | yes | yes | yes | no | — | — |
+| 47 | P1 | Large-estate selection/search usable | — | filters | UX-MULTISELECT-SCALE-001 | UX-MULTISELECT-SCALE-001=IN_PROGRESS | — | partial | — | — | no | — | — |
+| 48 | P1 | Connection state must not imply data-flow health | HEALTHY while contributing nothing | /app/integrations | INTEG-ESTATE-001; PROVIDER-CROSS-SURFACE-PROPAGATION-001 | INTEG-ESTATE-001=VERIFIED<br>PROVIDER-CROSS-SURFACE-PROPAGATION-001=IN_PROGRESS | `AccountHealth` never asked whether a row was stored; `NO_DATA` added | yes | yes | yes | no | Owner-visible check | — |
+| 49 | P1 | Manage Accounts works without unnecessary re-OAuth | — | /app/integrations | INTEGRATION-DATASOURCE-WIZARD-001 | INTEGRATION-DATASOURCE-WIZARD-001=PARTIAL | — | partial | — | — | no | — | — |
+| 50 | P1 | Sandbox rows must never reach live providers | sbx-cmp-* written into live accounts | /app/integrations | SANDBOX-PROD-001 | SANDBOX-PROD-001=IMPLEMENTED_NOT_VERIFIED | `ProjectIntegrationController::sync()` ran the sandbox connector against real bindings | yes | yes | yes | no | Owner-visible check | — |
+| 51 | P1 | Historical sandbox contamination visible and safely handled | — | /app/integrations | SANDBOX-PROD-001 | SANDBOX-PROD-001=IMPLEMENTED_NOT_VERIFIED | Census separates contaminated rows by `raw.sandbox`, never by name | yes | yes | yes | partial | Quarantine remains report-only by design | — |
+| 52 | P1 | Budget monitoring must never imply provider enforcement | — | /app/budget | BUDGET-GOVERNANCE-001 | BUDGET-GOVERNANCE-001=PARTIAL | — | partial | — | — | no | — | — |
+| 53 | P1 | Budget hierarchy/threshold/email workflow incomplete until verified | — | /app/budget | BUDGET-GOVERNANCE-001; BUDGET-ALERT-EMAIL-001 | BUDGET-GOVERNANCE-001=PARTIAL<br>BUDGET-ALERT-EMAIL-001=IMPLEMENTED_NOT_VERIFIED | — | partial | — | — | no | — | — |
+| 54 | P1 | Data Quality operator-actionable | — | /app/analytics data quality | DATA-QUALITY-OPERATOR-UX-001 | DATA-QUALITY-OPERATOR-UX-001=PARTIAL | — | partial | — | — | no | — | — |
+| 55 | P1 | Store-confirmed and platform-attributed outcomes separated | — | analytics; reports | CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 | CROSS-PLATFORM-ATTRIBUTION-DEPTH-001=PARTIAL | — | partial | — | — | no | — | — |
+| 56 | P1 | Performance email a compact actionable dashboard | — | email | EMAIL-DASHBOARD-UX-001 | EMAIL-DASHBOARD-UX-001=PARTIAL | — | partial | — | — | no | — | — |
+| 57 | P1 | Daily/weekly/monthly semantics correct | — | email | EXECUTIVE-DAILY-DIGEST-001; DIGEST-PORTFOLIO-SCOPE-001 | EXECUTIVE-DAILY-DIGEST-001=IMPLEMENTED_NOT_VERIFIED<br>DIGEST-PORTFOLIO-SCOPE-001=IMPLEMENTED_NOT_VERIFIED | — | yes | yes | yes | no | — | — |
+| 58 | P1 | Live email sending not verified without a real delivery | — | email | EMAIL-SETTINGS-DEPTH-001 | EMAIL-SETTINGS-DEPTH-001=IN_PROGRESS | — | partial | — | — | no | — | BLOCKED_OPERATIONAL_EVIDENCE — needs a real delivery |
+| 59 | P1 | Project RBAC enforced on backend and completed in management UI | — | team; projects | TEAM-PROJECT-RBAC-001 | TEAM-PROJECT-RBAC-001=IN_PROGRESS | — | partial | — | — | no | — | — |
+| 60 | P1 | Executive Ops frontend/drilldown incomplete | — | executive ops | EXECUTIVE-OPS-DASHBOARD-001 | EXECUTIVE-OPS-DASHBOARD-001=IMPLEMENTED_NOT_VERIFIED | — | partial | — | — | no | — | — |
+| 61 | EXT | Google Ads Basic Access awaiting Google approval | — | integrations | INTEGRATION-GOOGLE-001 | INTEGRATION-GOOGLE-001=BLOCKED_EXTERNAL_CREDENTIALS | — | n/a | n/a | n/a | n/a | — | BLOCKED_EXTERNAL_CREDENTIALS |
+| 62 | EXT | Google Brand Verification external workflow | — | integrations | INTEGRATION-GOOGLE-001 | INTEGRATION-GOOGLE-001=BLOCKED_EXTERNAL_CREDENTIALS | — | n/a | n/a | n/a | n/a | — | BLOCKED_EXTERNAL_CREDENTIALS |
+| 63 | EXT | TikTok production approval external where pending | — | integrations | INTEGRATION-TIKTOK-001; TIKTOK-001 | INTEGRATION-TIKTOK-001=BLOCKED_EXTERNAL_CREDENTIALS<br>TIKTOK-001=BLOCKED_EXTERNAL_CREDENTIALS | — | n/a | n/a | n/a | n/a | — | BLOCKED_EXTERNAL_CREDENTIALS |
+| 64 | EXT | WhatsApp conversation identity needs WhatsApp Business authorization | — | leads | LEAD-SOURCE-ATTRIBUTION-001 | LEAD-SOURCE-ATTRIBUTION-001=VERIFIED | Meta Ads messaging metrics and WhatsApp conversations are different sources | n/a | n/a | n/a | n/a | — | BLOCKED_EXTERNAL_CREDENTIALS |
+| 65 | EXT | Missing real email delivery evidence is operational | — | email | EMAIL-SETTINGS-DEPTH-001 | EMAIL-SETTINGS-DEPTH-001=IN_PROGRESS | — | n/a | n/a | n/a | n/a | — | BLOCKED_OPERATIONAL_EVIDENCE |
+| 67 | EXT | Meta structure sync refused by the provider | Forced sync returns `(#200) Ad account owner has NOT grant ads_management or ads_read permission` — the same account synced `records=58` earlier the same day | integrations; /app/content | INTEGRATION-META-001 | INTEGRATION-META-001=**BLOCKED_EXTERNAL_CREDENTIALS** | Provider-side permission on the ad account, not a code fault | n/a | n/a | n/a | n/a | Meta access must be restored before the catalog re-mapping in row 8 can take effect | BLOCKED_EXTERNAL_CREDENTIALS |
+| 66 | GOV | Production Truth Audit open until every observation is checked against the running product | — | all | PRODUCTION-TRUTH-AUDIT-001 | PRODUCTION-TRUTH-AUDIT-001=IN_PROGRESS | — | n/a | n/a | n/a | no | This ledger is the checklist | — |
+## Reading the P0 media block together
+
+Rows 1–12 are one defect family and were reported as one symptom: **the content library shows
+nothing where an ad should be.** They are listed separately because they have different causes and
+close at different times, not because the owner reported twelve things.
+
+The two proven root causes so far, both on the live estate rather than in a fixture:
+
+1. `CreativePresenter` read a creative's image as `asset_url ?? preview_url`. `preview_url` is
+   Meta's `preview_shareable_link` — a link to a page. Six of twelve first-page Meta cards fetched
+   `fb.me/…`, got HTTP 200 with `text/html`, and decoded nothing.
+2. Meta reports `object_type: SHARE` for a dynamic product ad, so those same six were typed as
+   images with a missing picture. `object_story_spec.template_data` is the marker, and it was
+   already being fetched.
+
+Neither was visible from a database column, a presenter payload or a component test, which is why
+rows 1–12 stay open until the owner's own `/app/content` is seen.

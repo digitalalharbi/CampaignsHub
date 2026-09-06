@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import { LiveSharedReport } from './LiveSharedReport'
+import { ConversionFunnelChart } from '@/features/analytics/charts'
 import { renderWithProviders } from '@/test/utils'
 
 vi.mock('./api', async (importOriginal) => ({
@@ -94,5 +95,39 @@ describe('the order a client reads a live report in', () => {
     await screen.findByTestId('live-report')
 
     expect(screen.queryByTestId('live-detail-tables')).toBeNull()
+  })
+})
+
+/**
+ * NUMBER-PRESENTATION-001 — the funnel wrote its counts at full width, on the client's own page.
+ *
+ * Found on the LIVE shared report rather than in a fixture: the KPI card read «6.6M» and the
+ * impressions bar directly beneath it read «6,596,500». One figure, two shapes, on one page — and on
+ * the one surface whose reader has no second view of their account to work out that they are the
+ * same number.
+ *
+ * `num()` is the exact formatter. Every other analytical surface reads a count through the value law
+ * and compacts it; the funnel was the only place printing one raw, and it is the most public place
+ * in the product.
+ */
+describe('the funnel writes a count the way the rest of the product does', () => {
+  it('compacts a large stage count and keeps the exact figure reachable', () => {
+    renderWithProviders(
+      <ConversionFunnelChart
+        stages={[
+          { stage: 'impressions', label: 'Impressions', count: 6_596_500, step_rate: null, cost_per: null },
+          { stage: 'clicks', label: 'Clicks', count: 40_183, step_rate: 0.0061, cost_per: 0.24 },
+        ]}
+        currency="USD"
+      />,
+    )
+
+    const shown = screen.getByText('6.6M')
+
+    expect(shown).toBeInTheDocument()
+    expect(shown.getAttribute('title'), 'an abbreviated figure with no way back to it').toBe('6,596,500')
+
+    /* And the raw grouped form is not what the reader is given. */
+    expect(screen.queryByText('6,596,500')).toBeNull()
   })
 })
