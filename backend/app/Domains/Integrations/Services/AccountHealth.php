@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Services;
 
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Metrics\Models\MetricSyncRun;
 use Illuminate\Support\Carbon;
 
 /**
@@ -53,6 +54,23 @@ final class AccountHealth
 
     public const DELAYED = 'delayed';
 
+    /**
+     * CONNECTION HEALTH ≠ DATA HEALTH — the sweep ran, the provider answered, and there was nothing.
+     *
+     * Meta on `/app/integrations` read «يعمل»: authorised, one linked account, a recent sync, no
+     * error — and it contributed nothing to the Dashboard. Production said why (metrics `no_data`,
+     * raw 0 → parsed 0 → mapped 0 → stored 0) and the card could not, because this method returned
+     * HEALTHY as soon as the account was bound, the connection was fine and `last_synced_at` was
+     * recent. Whether a single ROW had been stored was never asked, so a provider feeding 3,420 rows
+     * and one feeding zero were the same word.
+     *
+     * Deliberately NOT an error, and it sits outside `NEEDS_ATTENTION`. Nothing is broken: an ad
+     * account that genuinely has no campaigns is in exactly this state and there is nothing to fix.
+     * Reporting it as FAILED would be as wrong as reporting it as HEALTHY, in the other direction —
+     * it would send an operator to reconnect an authorisation that is working perfectly.
+     */
+    public const NO_DATA = 'no_data';
+
     public const HEALTHY = 'healthy';
 
     /** The states that mean somebody has to do something. */
@@ -86,9 +104,34 @@ final class AccountHealth
             return self::PENDING_FIRST_SYNC;
         }
 
-        return $account->last_synced_at->lt(Carbon::now()->subHours($this->staleAfterHours()))
-            ? self::DELAYED
-            : self::HEALTHY;
+        if ($account->last_synced_at->lt(Carbon::now()->subHours($this->staleAfterHours()))) {
+            return self::DELAYED;
+        }
+
+        /*
+         * The last thing asked, because it is the only one about DATA rather than about the
+         * connection: did the most recent run put anything in?
+         *
+         * The LATEST run, not a window of them: «is data flowing now» is a question about now, and
+         * an account that answered yesterday and is empty today is empty today. `no_data` is the
+         * status the metrics syncer already writes for exactly this, and `metrics_upserted = 0` is
+         * checked beside it so a run that reported success while storing nothing cannot slip past
+         * on its status alone.
+         *
+         * An account with no run at all is unreachable here — `last_synced_at === null` returned
+         * PENDING_FIRST_SYNC above — which keeps «we have never asked» and «we asked and there was
+         * nothing» as the two different sentences they are.
+         */
+        $latest = MetricSyncRun::withoutGlobalScopes()
+            ->where('external_account_id', $account->getKey())
+            ->orderByDesc('started_at')
+            ->first(['status', 'metrics_upserted']);
+
+        if ($latest !== null && ($latest->status === 'no_data' || (int) $latest->metrics_upserted === 0)) {
+            return self::NO_DATA;
+        }
+
+        return self::HEALTHY;
     }
 
     /**
@@ -98,7 +141,11 @@ final class AccountHealth
      * 1 needs attention» is a sentence somebody can act on, and both a green tick and a red one over
      * the same ten accounts would be a lie in one direction or the other.
      *
-     * @return array{connected:int, healthy:int, needs_attention:int, pending_first_sync:int, states:array<string,int>}
+     * `no_data` is counted separately and is NOT folded into either «healthy» or «needs attention».
+     * It is neither: the authorisation works and there is nothing to repair, and it is the number the
+     * operator asking «why is Meta connected but not in my KPIs?» is actually looking for.
+     *
+     * @return array{connected:int, healthy:int, no_data:int, needs_attention:int, pending_first_sync:int, states:array<string,int>}
      */
     public function summarise(string $connectionId): array
     {
@@ -126,6 +173,7 @@ final class AccountHealth
         return [
             'connected' => $connected,
             'healthy' => $states[self::HEALTHY] ?? 0,
+            'no_data' => $states[self::NO_DATA] ?? 0,
             'pending_first_sync' => $states[self::PENDING_FIRST_SYNC] ?? 0,
             'needs_attention' => array_sum(array_map(
                 static fn (string $s): int => $states[$s] ?? 0,

@@ -388,6 +388,52 @@ describe('an authorisation with nothing selected yet', () => {
     const line = await screen.findByTestId('connector-health-snapchat')
     expect(line.textContent).not.toMatch(/يحتاج انتباه|need attention/)
   })
+
+  /**
+   * CONNECTION HEALTH ≠ DATA HEALTH — «متصل · 1 تعمل» was true of Meta and useless.
+   *
+   * The owner's Integration Center showed Meta authorised, one linked account, a recent sync and no
+   * error. It contributed nothing to the Dashboard. Production said why — its metrics runs stored
+   * zero rows — and the card could not, because the only two numbers it had were «healthy» and
+   * «needs attention», and Meta was neither.
+   *
+   * Stated in its own words and in a neutral tone: nothing is broken, an ad account that genuinely
+   * has no campaigns is in exactly this state, and colouring it as a fault would send somebody to
+   * reconnect an authorisation that works.
+   */
+  it('says when an account is connected and storing nothing', async () => {
+    rows.data = [connector({ key: 'meta', state: 'connected', accounts: 1 })]
+    wizardStates.connections = [{
+      connection: { id: 'conn-5', provider: 'meta', label: 'Meta', label_ar: 'ميتا', client_workspace_id: null },
+      state: 'active', discovered: 4, assigned: 1, synced: 1,
+      has_parent: true, resumable: false, next_step: null,
+      health: { connected: 1, healthy: 0, no_data: 1, pending_first_sync: 0, needs_attention: 0, states: { no_data: 1 } },
+    }]
+
+    renderWithProviders(<IntegrationsPage />, { route: '/app/integrations', locale: 'en' })
+
+    const line = await screen.findByTestId('connector-health-meta')
+
+    expect(line.textContent).toMatch(/1 connected, no data/)
+    // And it is NOT dressed as a fault: nothing here needs repairing.
+    expect(line.textContent).not.toMatch(/need attention/)
+  })
+
+  /** ...and a connection that IS storing rows says nothing of the kind. */
+  it('says nothing about missing data when data is arriving', async () => {
+    rows.data = [connector({ key: 'snapchat', state: 'connected', accounts: 1 })]
+    wizardStates.connections = [{
+      connection: { id: 'conn-6', provider: 'snapchat', label: 'Snapchat', label_ar: 'سناب شات', client_workspace_id: null },
+      state: 'active', discovered: 309, assigned: 1, synced: 1,
+      has_parent: true, resumable: false, next_step: null,
+      health: { connected: 1, healthy: 1, no_data: 0, pending_first_sync: 0, needs_attention: 0, states: { healthy: 1 } },
+    }]
+
+    renderWithProviders(<IntegrationsPage />, { route: '/app/integrations', locale: 'en' })
+
+    const line = await screen.findByTestId('connector-health-snapchat')
+    expect(line.textContent).not.toMatch(/connected, no data/)
+  })
 })
 
 /**

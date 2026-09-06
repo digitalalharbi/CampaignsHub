@@ -441,6 +441,41 @@ final class HierarchyCountsTest extends TestCase
             ->assertSuccessful();
     }
 
+    /**
+     * SANDBOX-PROD-001 §2 — stored rows are NOT «campaigns discovered».
+     *
+     * The header counted every `external_campaigns` row and printed it as provider discovery. On the
+     * live Meta account those two numbers were 2 and 0: the provider's structure sweep returned
+     * `no_data records=0`, and the only rows stored were sandbox campaigns the binding-sync defect
+     * wrote. The diagnosis reported a working discovery for the very account whose emptiness was
+     * being investigated.
+     *
+     * One real campaign and one sandbox row must therefore read «provider campaigns=1», never 2.
+     */
+    public function test_the_header_separates_provider_discovery_from_contamination(): void
+    {
+        $this->campaign('cmp-live');
+
+        $sandbox = $this->campaign('sbx-cmp-1');
+        $sandbox->forceFill(['raw' => ['sandbox' => true]])->save();
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat'])
+            ->expectsOutputToContain('provider campaigns=1')
+            ->expectsOutputToContain('SANDBOX-CONTAMINATED rows=1  stored total=2')
+            ->assertSuccessful();
+    }
+
+    /** A clean account prints no contamination line at all — the finding must stay a finding. */
+    public function test_a_clean_account_prints_no_contamination_line(): void
+    {
+        $this->campaign('cmp-live');
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat'])
+            ->expectsOutputToContain('provider campaigns=1')
+            ->doesntExpectOutputToContain('SANDBOX-CONTAMINATED')
+            ->assertSuccessful();
+    }
+
     /** And an account with none says zero, so «1» is a finding rather than the only sentence it has. */
     public function test_an_account_with_no_sandbox_rows_reports_zero(): void
     {

@@ -317,15 +317,24 @@ final class PlatformProviderSettingsTest extends TestCase
         Http::assertNothingSent();
     }
 
-    /** A provider that refuses the deliberately invalid CODE has recognised the app. */
+    /**
+     * A provider that refuses the deliberately invalid CODE has recognised the app.
+     *
+     * Driven on SNAPCHAT, not Meta. These four cases are about the GENERIC probe — the one that
+     * presents the credentials with an impossible authorization code and reads the refusal — and Meta
+     * no longer takes that path: PROVCFG-META-001 gives it `grant_type=client_credentials`, because
+     * Meta's refusal («Invalid verification code format.») names the code's shape rather than the
+     * grant and proves nothing about the credentials either way. Left on Meta, these would have gone
+     * on passing while testing a branch Meta never reaches — a test that reports on code nobody runs.
+     */
     public function test_a_refusal_naming_the_grant_is_recorded_as_a_pass_with_a_narrow_claim(): void
     {
-        app(ProviderConfigurationService::class)->save('meta', ['client_id' => 'a', 'client_secret' => 'b']);
+        app(ProviderConfigurationService::class)->save('snapchat', ['client_id' => 'a', 'client_secret' => 'b']);
 
         Http::fake(['*' => Http::response(['error' => ['message' => 'invalid_grant: code is invalid']], 400)]);
 
         $response = $this->actingAs($this->owner, 'sanctum')
-            ->postJson('/api/v1/admin/settings/integrations/providers/meta/test')
+            ->postJson('/api/v1/admin/settings/integrations/providers/snapchat/test')
             ->assertOk()
             ->assertJsonPath('data.passed', true);
 
@@ -347,12 +356,12 @@ final class PlatformProviderSettingsTest extends TestCase
     /** A provider that does not recognise the app is a configuration error, and says which. */
     public function test_a_rejected_client_is_recorded_as_a_configuration_error(): void
     {
-        app(ProviderConfigurationService::class)->save('meta', ['client_id' => 'a', 'client_secret' => 'b']);
+        app(ProviderConfigurationService::class)->save('snapchat', ['client_id' => 'a', 'client_secret' => 'b']);
 
         Http::fake(['*' => Http::response(['error' => 'invalid_client'], 401)]);
 
         $this->actingAs($this->owner, 'sanctum')
-            ->postJson('/api/v1/admin/settings/integrations/providers/meta/test')
+            ->postJson('/api/v1/admin/settings/integrations/providers/snapchat/test')
             ->assertOk()
             ->assertJsonPath('data.passed', false)
             ->assertJsonPath('data.state', ProviderSetupState::ConfigurationError->value);
@@ -361,12 +370,12 @@ final class PlatformProviderSettingsTest extends TestCase
     /** An answer we cannot read is NOT a pass. The direction of doubt is fixed. */
     public function test_an_ambiguous_refusal_is_not_recorded_as_a_pass(): void
     {
-        app(ProviderConfigurationService::class)->save('meta', ['client_id' => 'a', 'client_secret' => 'b']);
+        app(ProviderConfigurationService::class)->save('snapchat', ['client_id' => 'a', 'client_secret' => 'b']);
 
         Http::fake(['*' => Http::response('<html>Service Unavailable</html>', 400)]);
 
         $this->actingAs($this->owner, 'sanctum')
-            ->postJson('/api/v1/admin/settings/integrations/providers/meta/test')
+            ->postJson('/api/v1/admin/settings/integrations/providers/snapchat/test')
             ->assertOk()
             ->assertJsonPath('data.passed', false);
     }
@@ -374,18 +383,169 @@ final class PlatformProviderSettingsTest extends TestCase
     /** A provider echoing our own secret back must not have it stored in a plaintext column. */
     public function test_the_recorded_message_never_contains_a_configured_value(): void
     {
-        app(ProviderConfigurationService::class)->save('meta', [
+        app(ProviderConfigurationService::class)->save('snapchat', [
             'client_id' => 'app-id-1234', 'client_secret' => 'echoed-secret-value',
         ]);
 
         Http::fake(['*' => Http::response(['error_description' => 'client_secret echoed-secret-value was rejected'], 400)]);
 
         $this->actingAs($this->owner, 'sanctum')
-            ->postJson('/api/v1/admin/settings/integrations/providers/meta/test')->assertOk();
+            ->postJson('/api/v1/admin/settings/integrations/providers/snapchat/test')->assertOk();
 
-        $stored = (string) ProviderConfiguration::query()->where('provider', 'meta')->value('last_test_message');
+        $stored = (string) ProviderConfiguration::query()->where('provider', 'snapchat')->value('last_test_message');
         $this->assertStringNotContainsString('echoed-secret-value', $stored);
         $this->assertStringContainsString('[redacted]', $stored);
+    }
+
+    // ── Meta, which cannot be probed the generic way ──────────────────────────────────────────
+
+    /**
+     * PROVCFG-META-001 — the exact answer the real Meta app gives, and why the generic probe is blind.
+     *
+     * With a real App ID and Secret configured and the redirect URI accepted by Meta, «Test
+     * configuration» reported:
+     *
+     *     The provider's answer did not identify whether the app was recognised…
+     *     Invalid verification code format.
+     *
+     * That is Meta refusing the deliberately invalid CODE — the app was recognised — and the generic
+     * probe could not tell, because its positive test is a list of strings (`invalid_grant`,
+     * `invalid_code`, `authorization code`, `auth_code`, `invalid_request`) and Meta's wording is on
+     * none of them. So a correct configuration was reported as unproven.
+     *
+     * **The fix is deliberately NOT that string.** A heuristic over another provider's prose is the
+     * same defect with one more entry in it: it would have to be extended for every provider whose
+     * copywriter picks different words, and it proves nothing about the credentials — «Invalid
+     * verification code format» is equally what an app that does not exist would be told, because
+     * Meta validates the code's SHAPE before it looks the app up.
+     *
+     * This case pins that: the string must never become a pass on its own.
+     */
+    public function test_metas_invalid_code_wording_is_never_read_as_a_pass(): void
+    {
+        app(ProviderConfigurationService::class)->save('meta', ['client_id' => 'a', 'client_secret' => 'b']);
+
+        // Meta's real body, verbatim.
+        Http::fake(['*' => Http::response([
+            'error' => [
+                'message' => 'Invalid verification code format.',
+                'type' => 'OAuthException',
+                'code' => 100,
+                'fbtrace_id' => 'Axxxxxxxxxxxxxxxxxxxxxx',
+            ],
+        ], 400)]);
+
+        $this->actingAs($this->owner, 'sanctum')
+            ->postJson('/api/v1/admin/settings/integrations/providers/meta/test')
+            ->assertOk()
+            ->assertJsonPath('data.passed', false);
+    }
+
+    /**
+     * The probe Meta actually documents: an APP access token from the client credentials.
+     *
+     * `grant_type=client_credentials` at the same `oauth/access_token` endpoint returns an app access
+     * token when the App ID and Secret are a real pair, and an `OAuthException` when they are not. It
+     * needs no user, no consent and no authorisation code — which is the whole reason it can answer
+     * the only question this stage is entitled to ask.
+     *
+     * Asserted on the REQUEST, because that is what makes «Invalid verification code format»
+     * impossible to receive: no code is sent, so no code can be judged.
+     *
+     * The secret goes in the form BODY, never the query string. Meta documents the call as a GET with
+     * query parameters; a URL carrying a client secret is written into every proxy log and error
+     * report between here and Menlo Park, and the Graph endpoint accepts the same parameters posted.
+     */
+    public function test_meta_is_probed_with_client_credentials_and_never_an_authorisation_code(): void
+    {
+        app(ProviderConfigurationService::class)->save('meta', ['client_id' => 'app-id-1234', 'client_secret' => 'app-secret-5678']);
+
+        Http::fake(['*' => Http::response(['access_token' => 'app-id-1234|APP-TOKEN', 'token_type' => 'bearer'], 200)]);
+
+        $this->actingAs($this->owner, 'sanctum')
+            ->postJson('/api/v1/admin/settings/integrations/providers/meta/test')
+            ->assertOk()
+            ->assertJsonPath('data.passed', true);
+
+        Http::assertSent(function ($request): bool {
+            if (! str_contains($request->url(), 'oauth/access_token')) {
+                return false;
+            }
+
+            $body = $request->data();
+
+            return ($body['grant_type'] ?? null) === 'client_credentials'
+                && ! array_key_exists('code', $body)
+                && ! str_contains($request->url(), 'app-secret-5678');
+        });
+    }
+
+    /**
+     * A pass proves the pair and NOTHING else, and the app access token never leaves this method.
+     *
+     * Meta's app access token is literally «APP-ID|APP-SECRET» in its simplest form, so a probe that
+     * echoed the response into `last_test_message` would write the secret into the one column on this
+     * table that is not encrypted and IS rendered in a browser.
+     */
+    public function test_a_meta_pass_claims_only_the_credentials_and_stores_no_token(): void
+    {
+        app(ProviderConfigurationService::class)->save('meta', ['client_id' => 'app-id-1234', 'client_secret' => 'app-secret-5678']);
+
+        Http::fake(['*' => Http::response(['access_token' => 'app-id-1234|app-secret-5678', 'token_type' => 'bearer'], 200)]);
+
+        $response = $this->actingAs($this->owner, 'sanctum')
+            ->postJson('/api/v1/admin/settings/integrations/providers/meta/test')->assertOk();
+
+        $message = (string) $response->json('data.message');
+
+        $this->assertStringNotContainsString('app-secret-5678', $message);
+        $this->assertStringNotContainsString('access_token', $message);
+
+        // The claim is bounded in the message itself, in the words a reader will act on.
+        $this->assertStringContainsString('App ID and App Secret', $message);
+        $this->assertStringContainsString('not', $message);
+
+        $stored = (string) ProviderConfiguration::query()->where('provider', 'meta')->value('last_test_message');
+        $this->assertStringNotContainsString('app-secret-5678', $stored);
+
+        // And nothing anywhere kept the token.
+        $this->assertDatabaseMissing('provider_configurations', ['last_test_message' => 'app-id-1234|app-secret-5678']);
+    }
+
+    /** A wrong SECRET is Meta's «Error validating client secret.» — a configuration error, named. */
+    public function test_a_wrong_meta_secret_is_a_configuration_error(): void
+    {
+        app(ProviderConfigurationService::class)->save('meta', ['client_id' => 'app-id-1234', 'client_secret' => 'wrong']);
+
+        Http::fake(['*' => Http::response([
+            'error' => ['message' => 'Error validating client secret.', 'type' => 'OAuthException', 'code' => 1],
+        ], 400)]);
+
+        $this->actingAs($this->owner, 'sanctum')
+            ->postJson('/api/v1/admin/settings/integrations/providers/meta/test')
+            ->assertOk()
+            ->assertJsonPath('data.passed', false)
+            ->assertJsonPath('data.state', ProviderSetupState::ConfigurationError->value);
+    }
+
+    /** A wrong APP ID is Meta's code 101 — the same verdict, reached from the other half of the pair. */
+    public function test_a_wrong_meta_app_id_is_a_configuration_error(): void
+    {
+        app(ProviderConfigurationService::class)->save('meta', ['client_id' => 'nope', 'client_secret' => 'app-secret-5678']);
+
+        Http::fake(['*' => Http::response([
+            'error' => [
+                'message' => 'Error validating application. Cannot get application info due to a system error.',
+                'type' => 'OAuthException',
+                'code' => 101,
+            ],
+        ], 400)]);
+
+        $this->actingAs($this->owner, 'sanctum')
+            ->postJson('/api/v1/admin/settings/integrations/providers/meta/test')
+            ->assertOk()
+            ->assertJsonPath('data.passed', false)
+            ->assertJsonPath('data.state', ProviderSetupState::ConfigurationError->value);
     }
 
     // ── the connectors read the same configuration ────────────────────────────────────────────

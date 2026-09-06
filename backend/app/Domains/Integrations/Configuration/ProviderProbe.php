@@ -84,6 +84,40 @@ final class ProviderProbe
         $values = $this->settings->values($provider);
         $client = PlatformHttp::client($provider);
 
+        if ($provider === 'meta') {
+            /*
+             * PROVCFG-META-001 — Meta gets the probe Meta documents, not the generic one.
+             *
+             * The generic probe presents the credentials with a deliberately invalid authorization
+             * code and reads the refusal. Meta answers that with «Invalid verification code format.»
+             * — and the generic interpreter's positive test is a list of strings (`invalid_grant`,
+             * `invalid_code`, `authorization code`, `auth_code`, `invalid_request`) that Meta's
+             * wording is on none of. A correct App ID and Secret were therefore reported as unproven,
+             * which is what the owner met with a real app configured and the redirect URI accepted.
+             *
+             * Adding that phrase to the list would be the same defect with one more entry in it. It
+             * would need extending for every provider whose copywriter chooses different words, and —
+             * decisively — it proves NOTHING: Meta validates the code's SHAPE before it looks the app
+             * up, so an app that does not exist is told exactly the same thing. The string is not
+             * evidence about credentials in either direction.
+             *
+             * `grant_type=client_credentials` is Meta's own documented way to obtain an APP access
+             * token from an App ID and App Secret. It needs no user, no consent and no authorization
+             * code, and it fails with an `OAuthException` when either half of the pair is wrong —
+             * which is precisely, and only, the question this stage is entitled to ask.
+             *
+             * POSTed, though Meta documents the call as a GET with query parameters: a URL carrying a
+             * client secret is written into every proxy log, error report and browser history between
+             * here and the provider. The Graph endpoint accepts the same parameters in a form body,
+             * and a secret in a body is the smaller surface.
+             */
+            return $client->asForm()->post($tokenUrl, [
+                'grant_type' => 'client_credentials',
+                'client_id' => $values['client_id'],
+                'client_secret' => $values['client_secret'],
+            ]);
+        }
+
         if ($provider === 'tiktok') {
             /*
              * TikTok does not use the OAuth parameter names anywhere, including here — and its
@@ -125,6 +159,10 @@ final class ProviderProbe
      */
     private function interpret(string $provider, Response $response): array
     {
+        if ($provider === 'meta') {
+            return $this->interpretMeta($response);
+        }
+
         $body = strtolower($response->body());
         $reason = $this->scrub($provider, PlatformHttp::reason($response));
 
@@ -163,6 +201,62 @@ final class ProviderProbe
         return [
             'passed' => false,
             'message' => 'The provider\'s answer did not identify whether the app was recognised, so this is not recorded as a pass: '.$reason,
+        ];
+    }
+
+    /**
+     * PROVCFG-META-001 — what an app access token does and does not prove.
+     *
+     * A token means the App ID and App Secret are a real pair that Meta recognises. That is the whole
+     * claim. It says nothing about `ads_read`, `ads_management` or `business_management` approval,
+     * nothing about App Review, and nothing about any ad account — those are proven only when a real
+     * person authorises and an account listing returns, which is a separate stage the product keeps
+     * separate.
+     *
+     * The token itself never leaves this method. Meta's app access token is literally
+     * «APP-ID|APP-SECRET» in its simplest form, so echoing the response into `last_test_message`
+     * would write the secret into the one column on this table that is NOT encrypted and IS rendered
+     * in a browser. Nothing from the body reaches the message on the success path — not a prefix, not
+     * a length, not a redacted form of it. There is nothing about the token a reader needs.
+     *
+     * @return array{passed: bool, message: string}
+     */
+    private function interpretMeta(Response $response): array
+    {
+        $token = $response->successful() ? $response->json('access_token') : null;
+
+        if (is_string($token) && $token !== '') {
+            return [
+                'passed' => true,
+                'message' => 'Meta issued an app access token for these credentials, so the App ID and App Secret are a '
+                    .'real pair that Meta recognises. That is all this proves: not that ads_read, ads_management or '
+                    .'business_management have been approved, not that App Review has passed, and not that any ad '
+                    .'account has granted access. Those are proven when someone authorises and their accounts list.',
+            ];
+        }
+
+        $reason = $this->scrub('meta', PlatformHttp::reason($response));
+
+        /*
+         * Meta names both halves of the pair, and both are the same verdict for the operator: the
+         * configuration is wrong. Matched on the documented codes rather than on the prose, because
+         * prose is what put this row here — code 1 «Error validating client secret», code 101 «Error
+         * validating application».
+         */
+        $code = $response->json('error.code');
+
+        if (in_array($code, [1, 101, 190], true) || $response->status() === 401) {
+            return [
+                'passed' => false,
+                'message' => 'Meta does not recognise this App ID and App Secret as a pair: '.$reason,
+            ];
+        }
+
+        // Anything else is unread, and unread is not a pass — the direction of doubt is fixed here too.
+        return [
+            'passed' => false,
+            'message' => 'Meta did not answer with an app access token and did not name a credential error, so this is '
+                .'not recorded as a pass: '.$reason,
         ];
     }
 
