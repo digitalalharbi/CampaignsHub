@@ -465,6 +465,61 @@ final class HierarchyCountsTest extends TestCase
             ->assertSuccessful();
     }
 
+    /**
+     * SANDBOX-PROD-001 §3 — the cleanup reports before it changes anything, and changes nothing
+     * without being told to.
+     *
+     * It operates on production data that includes four years of somebody's advertising history, so
+     * a dry run is the default and the counts are printed either way. A cleanup whose effect nobody
+     * can see beforehand is one nobody can approve.
+     */
+    public function test_the_quarantine_reports_without_deleting_by_default(): void
+    {
+        $this->campaign('cmp-live');
+        $this->campaign('sbx-cmp-1')->forceFill(['raw' => ['sandbox' => true]])->save();
+
+        $this->artisan('integrations:quarantine-sandbox')
+            ->expectsOutputToContain('dry run, nothing will change')
+            ->expectsOutputToContain('contaminated 1 of 2 stored campaign(s)')
+            ->expectsOutputToContain('sandbox rows removed                : 0')
+            ->assertSuccessful();
+
+        $this->assertSame(2, ExternalCampaign::withoutGlobalScopes()->count(), 'A dry run deleted a row.');
+    }
+
+    /** ...and on --apply it removes the marked rows and leaves the real one alone. */
+    public function test_the_quarantine_removes_only_the_marked_rows(): void
+    {
+        $this->campaign('cmp-live');
+        $this->campaign('sbx-cmp-1')->forceFill(['raw' => ['sandbox' => true]])->save();
+
+        $this->artisan('integrations:quarantine-sandbox', ['--apply' => true])
+            ->expectsOutputToContain('sandbox rows removed                : 1')
+            ->assertSuccessful();
+
+        $remaining = ExternalCampaign::withoutGlobalScopes()->pluck('external_id')->all();
+
+        $this->assertSame(['cmp-live'], $remaining, 'The live campaign must survive the cleanup.');
+    }
+
+    /**
+     * A campaign NAMED like a sandbox row but carrying no marker is left alone.
+     *
+     * The whole identification rule: a provider is entitled to name a real campaign anything it
+     * likes, so a prefix is a guess about a string and the marker is what the writer wrote. Getting
+     * this backwards would delete a customer's campaign for being called the wrong thing.
+     */
+    public function test_a_campaign_named_like_a_sandbox_row_is_not_touched(): void
+    {
+        $this->campaign('sbx-cmp-1');
+
+        $this->artisan('integrations:quarantine-sandbox', ['--apply' => true])
+            ->expectsOutputToContain('sandbox rows found                  : 0')
+            ->assertSuccessful();
+
+        $this->assertSame(1, ExternalCampaign::withoutGlobalScopes()->count());
+    }
+
     /** A clean account prints no contamination line at all — the finding must stay a finding. */
     public function test_a_clean_account_prints_no_contamination_line(): void
     {
