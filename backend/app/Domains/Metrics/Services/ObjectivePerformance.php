@@ -116,7 +116,23 @@ final class ObjectivePerformance
              * by the same line of reasoning.
              */
             $bucket['coverage']['state'] = 'complete';
-            $bucket['coverage']['included_contributors'][] = (string) $row->unified_campaign_id;
+
+            /*
+             * The PLATFORM contributed, not the campaign — CLIENT-REPORT-ENTITY-BOUNDARY-001.
+             *
+             * A first version of this recorded `unified_campaign_id`, and
+             * `LiveReportShareTest > a client link never carries a campaign or ad set name` refused
+             * it: "an internal id reached the client". It was right. A shared link carries
+             * performance and never the campaign plan, and an id in a coverage list is the plan
+             * arriving through a side door — readable in the JSON whatever the page draws.
+             *
+             * The provider is already published to a client in this same path's `platforms`
+             * breakdown, so naming it here adds nothing they cannot see, and it answers the question
+             * the field is actually for: which platforms are behind these figures.
+             */
+            if (! in_array((string) $row->provider, $bucket['coverage']['included_contributors'], true)) {
+                $bucket['coverage']['included_contributors'][] = (string) $row->provider;
+            }
 
             $totalSpend += (float) $row->spend;
 

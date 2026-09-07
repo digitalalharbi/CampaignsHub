@@ -188,6 +188,50 @@ final class ObjectivePerformanceTest extends TestCase
         );
     }
 
+    /**
+     * CLIENT-REPORT-ENTITY-BOUNDARY-001 — and what it names is a PLATFORM, never a campaign.
+     *
+     * The first version of the fix above recorded `unified_campaign_id`, and the client-link guard
+     * refused it: «an internal id reached the client». It was right. A shared link carries
+     * performance and never the campaign plan, and an id in a coverage list is the plan arriving
+     * through a side door — readable in the JSON whatever the page chooses to draw.
+     *
+     * The provider is already published to a client in this same path's `platforms` breakdown, so
+     * naming it costs nothing they cannot already see.
+     */
+    public function test_the_coverage_names_platforms_and_never_an_internal_id(): void
+    {
+        $paths = collect($this->read()->json('data.paths'));
+
+        foreach ($paths as $path) {
+            foreach ($path['coverage']['included_contributors'] as $contributor) {
+                $this->assertDoesNotMatchRegularExpression(
+                    '/^[0-9a-f]{8}-[0-9a-f]{4}-/i',
+                    (string) $contributor,
+                    "«{$path['path']}» names an internal id in its coverage: {$contributor}",
+                );
+            }
+        }
+
+        /*
+         * And it names a PROVIDER — a short lower-case key like `snapchat`, which a client already
+         * sees in the platform breakdown — rather than anything with an internal shape.
+         *
+         * The provider name is not copied out of the fixture here: an earlier draft asserted
+         * «snapchat» and failed on a seed that uses another platform, which proved nothing about the
+         * rule and everything about the seed.
+         */
+        $conversion = $paths->firstWhere('path', 'conversion');
+
+        foreach ($conversion['coverage']['included_contributors'] as $contributor) {
+            $this->assertMatchesRegularExpression(
+                '/^[a-z][a-z0-9_]{2,30}$/',
+                (string) $contributor,
+                "the coverage names «{$contributor}», which is not a provider key",
+            );
+        }
+    }
+
     /** ...and a path nothing ran on still says so, which is the state's whole purpose. */
     public function test_a_path_nothing_ran_on_still_reports_no_contributors(): void
     {
