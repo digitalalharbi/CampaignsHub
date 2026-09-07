@@ -85,6 +85,24 @@ Schedule::command('integrations:sync')->everyThirtyMinutes()->withoutOverlapping
 Schedule::command('integrations:sync-structure')->cron('55 */6 * * *')->withoutOverlapping();
 
 /*
+ * Close the runs a worker abandoned — before the next sweep reads them as work in progress.
+ *
+ * `SyncAccountStructureJob::failed()` closes a run whose job the QUEUE knows died. It cannot close
+ * one whose worker vanished: a SIGKILL, an OOM, a container replaced mid-flight. Nothing calls that
+ * hook then, and the row stays `running` with no upper bound.
+ *
+ * That is not hypothetical here. A forced Snapchat sync on 2026-09-07 was refused by its own guard
+ * because a structure run had been «running» since 2026-08-26 — twelve days, on a job whose timeout
+ * is fifteen minutes. An open run is read as work in progress by the Integration Centre, by the
+ * diagnosis and by the accept command, so a worker that died in August blocked an operator in
+ * September and the product's answer to «what is happening» was wrong the whole time.
+ *
+ * Ten past the hour: after the metrics sweep on the hour has had time to open its own runs
+ * legitimately, and well before the next structure pass at :55.
+ */
+Schedule::command('integrations:close-abandoned-runs --apply')->hourlyAt(10)->withoutOverlapping();
+
+/*
  * Refresh tokens BEFORE a sync needs them.
  *
  * The vault refreshes on use too, but discovering a revoked authorisation from a queue worker at 3am
