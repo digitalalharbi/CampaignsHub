@@ -226,6 +226,16 @@ final class ClientReportView
         }
 
         /*
+         * The same boundary the live link applies — the snapshot path is a client document too.
+         *
+         * This class's own note says why it exists: two independent paths produce client documents,
+         * and a boundary implemented in one of them is a boundary that holds until somebody opens
+         * the other. A written-down report carries the identical coverage blocks, so it carries the
+         * identical exception message unless it is filtered here as well.
+         */
+        $data = ClientEntityBoundary::coverage($data);
+
+        /*
          * Prose written down before this requirement, which quotes a campaign by name.
          *
          * An old snapshot's observations say «حملة «National Day Sale — Demo» تستهلك الميزانية أبطأ

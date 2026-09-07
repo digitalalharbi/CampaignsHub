@@ -71,9 +71,16 @@ final class LiveReportService
         ]);
 
         return [
-            'ads' => $built['ads'],
+            /*
+             * CLIENT-REPORT-ENTITY-BOUNDARY-001 — the ad, without our primary key for it.
+             *
+             * These rows carried `id` and `campaign_id` — our own UUIDs — to a link whose whole
+             * point is that it names nothing internal. The snapshot path has stripped `campaign_id`
+             * since it was written; this one never did.
+             */
+            'ads' => ClientEntityBoundary::ads($built['ads']),
             'ads_level' => $built['level'],
-            'ads_groups' => $built['groups'],
+            'ads_groups' => ClientEntityBoundary::ads($built['groups']),
             'ads_absent_reason' => $built['reason'],
             // The same reading the generated deck carries, from the same two ranked lists.
             'ads_reading' => (new AdsExplanation)->explain($built['ads'], $built['worst'], $objective),
@@ -138,8 +145,18 @@ final class LiveReportService
             $engine = $engine->forCampaigns($applied['campaigns']);
         }
 
-        $totals = $engine->totals($from, $to);
-        $previous = $this->previousPeriod($engine, $from, $to);
+        /*
+         * CLIENT-REPORT-ENTITY-BOUNDARY-001 — the coverage verdict travels, its evidence does not.
+         *
+         * `totals` carries three coverage blocks, and each carries `reasons`: the operator's own
+         * account of why a contributor is in the state it is in. On the owner's live client link one
+         * of them read «The last sync failed: No connector is registered for provider 'sandbox'.» —
+         * an English exception naming an internal artefact, on a report written for a paying client
+         * in Arabic. The verdict and the contributor lists stay, because «are these numbers whole»
+         * is the client's question and they answer it; why our sync failed is ours.
+         */
+        $totals = ClientEntityBoundary::coverage($engine->totals($from, $to));
+        $previous = ClientEntityBoundary::coverage($this->previousPeriod($engine, $from, $to));
 
         $payload = [
             'period' => [

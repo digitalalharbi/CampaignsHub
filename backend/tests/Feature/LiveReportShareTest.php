@@ -126,6 +126,137 @@ final class LiveReportShareTest extends TestCase
         $this->assertStringNotContainsString((string) $this->shared->id, $json, 'an internal id reached the client');
     }
 
+    /**
+     * CLIENT-REPORT-ENTITY-BOUNDARY-001 / owner ledger row 31 — the coverage verdict without its evidence.
+     *
+     * Found on the owner's LIVE client link on 2026-09-07. `totals.spend_coverage.reasons` carried,
+     * in English, on an Arabic report written for a paying client:
+     *
+     *     "The last sync failed: No connector is registered for provider 'sandbox'."
+     *
+     * An internal exception, the name of an internal artefact, and the suggestion that the client's
+     * figures hang on our plumbing — in a payload anyone holding the link can read whatever the page
+     * chooses to draw, which is why this asserts the RESPONSE rather than the markup.
+     *
+     * The reason is planted rather than provoked: the message is produced by a failed sync against a
+     * provider with no connector, and reproducing that state would test the syncer instead of the
+     * boundary. What matters is that no `reasons` map survives the client path, whatever put it there.
+     */
+    public function test_a_client_link_never_carries_the_operators_account_of_a_failed_sync(): void
+    {
+        $token = $this->liveLink();
+
+        $body = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk()->json('data');
+
+        foreach (['coverage', 'spend_coverage', 'revenue_coverage'] as $block) {
+            if (isset($body['totals'][$block])) {
+                $this->assertSame(
+                    [],
+                    $body['totals'][$block]['reasons'],
+                    "totals.{$block} handed the client the operator's evidence",
+                );
+                // The verdict itself must survive — a client still has to know if figures are partial.
+                $this->assertArrayHasKey('state', $body['totals'][$block]);
+            }
+        }
+
+        $json = json_encode($body, JSON_UNESCAPED_UNICODE) ?: '';
+
+        $this->assertStringNotContainsString('No connector is registered', $json);
+        $this->assertStringNotContainsString('The last sync failed', $json);
+    }
+
+    /**
+     * The vacuity check, and the half that matters most: taking the evidence out must not take the
+     * VERDICT out. A client whose figures are incomplete has to be told they are incomplete — a
+     * boundary that quietly deleted the whole coverage block would pass the test above and publish a
+     * partial total under the label it would have used for the whole, which is the exact failure
+     * AGGREGATION-TRUTH-001 exists to prevent.
+     */
+    public function test_the_coverage_verdict_and_its_contributors_survive_the_boundary(): void
+    {
+        $token = $this->liveLink();
+
+        $coverage = $this->getJson("/api/v1/reports/shared/{$token}/live")
+            ->assertOk()
+            ->json('data.totals.spend_coverage');
+
+        $this->assertIsArray($coverage, 'the coverage block was removed entirely, not filtered');
+        $this->assertArrayHasKey('state', $coverage);
+        $this->assertArrayHasKey('included_contributors', $coverage);
+        $this->assertArrayHasKey('expected_contributors', $coverage);
+        /*
+         * The lists are asserted for PRESENCE, not for content: this fixture's project expects no
+         * contributor at all, so its lists are legitimately empty and requiring a name here would be
+         * requiring the fixture to have a platform it does not have. That the lists SURVIVE with
+         * real names in them is proved in `ClientEntityBoundaryTest`, where they can be planted.
+         */
+    }
+
+    /**
+     * CLIENT-REPORT-ENTITY-BOUNDARY-001 / owner ledger row 31 — no primary key of ours on the link.
+     *
+     * Counted on the owner's LIVE client link on 2026-09-07: 22 internal UUIDs, as `ads[].id`,
+     * `ads[].campaign_id` and the same two inside `ads_groups[].ads[]`. The campaign NAME is
+     * withheld and has its own test above; the stable identifier for that same withheld entity was
+     * shipped beside it.
+     *
+     * Asserted as «no UUID anywhere in these rows» rather than as «these two keys are absent»,
+     * because the defect is the identifier reaching the reader, not the spelling of the key that
+     * carried it.
+     */
+    public function test_a_client_link_carries_no_internal_id_for_an_ad_or_its_campaign(): void
+    {
+        /*
+         * The ad has to EXIST for this to prove anything.
+         *
+         * Written first against the bare fixture, this passed with the fix reverted — `ads` was
+         * empty, so «no UUID in these rows» was true of no rows. A guard that cannot fail is worse
+         * than none, because it reports the boundary as held.
+         */
+        $creative = ExternalCreative::create([
+            'tenant_id' => $this->report->tenant_id,
+            'project_id' => $this->project->getKey(),
+            'campaign_id' => $this->shared->getKey(),
+            'provider' => 'meta',
+            'external_creative_id' => 'cr-'.Str::random(8),
+            'name' => 'Eid film',
+            'format' => 'image',
+            'status' => 'active',
+            'asset_url' => 'https://cdn.example.test/eid.jpg',
+            'last_active_at' => Carbon::parse('2026-07-10'),
+            'last_synced_at' => Carbon::parse('2026-07-10'),
+        ]);
+
+        DB::table('creative_daily_metrics')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->report->tenant_id,
+            'project_id' => $this->project->getKey(),
+            'creative_id' => $creative->getKey(),
+            'campaign_id' => $creative->campaign_id,
+            'metric_date' => '2026-07-10',
+            'spend' => 300, 'impressions' => 10000, 'clicks' => 400, 'conversions' => 20, 'revenue' => 1500,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $token = $this->liveLink();
+
+        $body = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk()->json('data');
+
+        // The rows are really there — otherwise the assertions below are about nothing.
+        $this->assertNotSame([], $body['ads'] ?? [], 'the fixture produced no ad to test');
+
+        foreach (['ads', 'ads_groups'] as $key) {
+            $json = json_encode($body[$key] ?? [], JSON_UNESCAPED_UNICODE) ?: '';
+
+            $this->assertSame(
+                0,
+                preg_match_all('/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i', $json),
+                "{$key} carried one of our own primary keys to the client",
+            );
+        }
+    }
+
     /** …and the platform breakdown, which is what a client may see, is still there. */
     public function test_a_client_link_still_answers_where_the_money_went(): void
     {
