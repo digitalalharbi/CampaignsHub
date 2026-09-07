@@ -328,6 +328,71 @@ final class SnapchatCreativeAssetsTest extends TestCase
      * @param  array<string, array{media:string, type:string}>  $creatives
      * @param  array<string, array{type:string, download_link:string}>  $media
      */
+    /**
+     * CONTENT-PREVIEW-SHAPES-001 — a story ad's cover, taken from the children it names.
+     *
+     * Snapchat's COMPOSITE creative is a story ad: several snaps behind one tile. It carries no
+     * `top_snap_media_id` of its own, so the connector stored nothing for one and every composite
+     * reached the reader as «جُلب هذا الإعلان من المنصة، ولم تُتِح المنصة أصل المحتوى» — a statement
+     * about Snapchat that is false. Snapchat exposes the snaps; nobody had asked.
+     *
+     * Found on the owner's LIVE client report, where the THREE HIGHEST-SPENDING ads are composites
+     * and all three carried that sentence where a picture belongs.
+     *
+     * `composite_properties.creative_ids` names the children, and this connector already fetches
+     * every creative on the account — so they are in hand and no second call is made.
+     */
+    public function test_a_composite_takes_its_cover_from_the_child_it_names(): void
+    {
+        Http::fake([
+            '*get_media_by_ids*' => Http::response(['media' => [
+                ['media' => ['id' => 'me-child', 'type' => 'IMAGE', 'download_link' => 'https://cf.snapchat.com/tile.jpg']],
+            ]], 200),
+            '*/creatives*' => Http::response(['creatives' => [
+                ['creative' => [
+                    'id' => 'cr-story', 'name' => 'A story ad', 'type' => 'COMPOSITE',
+                    /* No top snap of its own — it names its children instead. */
+                    'composite_properties' => ['creative_ids' => ['cr-child']],
+                ]],
+                ['creative' => [
+                    'id' => 'cr-child', 'name' => 'The first snap', 'type' => 'SNAP_AD',
+                    'top_snap_media_id' => 'me-child',
+                ]],
+            ]], 200),
+            '*' => Http::response([], 200),
+        ]);
+
+        $story = $this->creatives()['cr-story'];
+
+        $this->assertSame('composite', $story['format'], 'The platform said COMPOSITE; nothing else may be recorded.');
+        $this->assertSame('https://cf.snapchat.com/tile.jpg', $story['asset_url'], 'The story ad drew nothing.');
+    }
+
+    /**
+     * ...and it invents nothing when the children are not there.
+     *
+     * A composite whose body names no children, or names one this response does not carry, keeps the
+     * stated absence it has today. This can ADD a cover; it must never manufacture one.
+     */
+    public function test_a_composite_with_no_reachable_child_still_states_its_absence(): void
+    {
+        Http::fake([
+            '*get_media_by_ids*' => Http::response(['media' => []], 200),
+            '*/creatives*' => Http::response(['creatives' => [
+                ['creative' => [
+                    'id' => 'cr-story', 'name' => 'A story ad', 'type' => 'COMPOSITE',
+                    'composite_properties' => ['creative_ids' => ['cr-missing']],
+                ]],
+            ]], 200),
+            '*' => Http::response([], 200),
+        ]);
+
+        $story = $this->creatives()['cr-story'];
+
+        $this->assertArrayNotHasKey('asset_url', $story);
+        $this->assertArrayNotHasKey('video_url', $story);
+    }
+
     private function fakeApi(array $creatives, array $media): void
     {
         Http::fake([
