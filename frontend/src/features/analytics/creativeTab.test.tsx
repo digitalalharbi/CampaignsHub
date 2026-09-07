@@ -139,3 +139,80 @@ describe('the ad tab and the filter bar', () => {
     })
   })
 })
+
+/**
+ * CONTENT-TERMINOLOGY-001 — a surface named for content must be written in content's words.
+ *
+ * The tab was renamed «أداء المحتويات» / «Content performance» when the ads/content duplication was
+ * corrected, and everything INSIDE it kept the old vocabulary: the panel said «أداء الإعلانات», the
+ * first column «الإعلان», the description «from ad-level data», and the narrowed empty state that no
+ * AD was reported.
+ *
+ * That is the same defect the rename was for, one level down — and here it is worse, because these
+ * figures come from `creative_daily_metrics` at the CONTENT grain. One creative can be carried by
+ * several ads, so heading its row «الإعلان» tells a reader they are looking at one ad's numbers when
+ * they are looking at a content item's.
+ *
+ * Both languages, because the copy is written separately in each and can be wrong in one alone.
+ * The PARENT is still an ad, and the empty state still says so — that part is not a slip.
+ */
+describe('the content surface is written in content’s words', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProject.setState({ currentProjectId: 'p1' })
+    signInWith(['campaigns.view'])
+  })
+  afterEach(() => signOut())
+
+  const open = async (locale: 'ar' | 'en') => {
+    renderWithProviders(<AnalyticsPage />, { locale, route: '/agency/analytics?tab=creative' })
+
+    return screen.findByRole('table')
+  }
+
+  it.each([
+    ['en', 'Content performance', 'Content', /content-level data/i],
+    ['ar', 'أداء المحتويات', 'المحتوى', /من بيانات المحتوى/],
+  ] as const)('titles the panel and its first column for content — %s', async (locale, title, column, description) => {
+    route([CREATIVE])
+
+    const table = await open(locale)
+
+    /*
+     * Somewhere other than the tab. Both now read «Content performance», which is the point — so a
+     * bare `getByText` finds two and fails on ambiguity rather than on the product.
+     */
+    const titled = screen.getAllByText(title).filter((el) => el.closest('[role="tab"]') === null)
+
+    expect(titled.length, 'the panel is still titled for ads').toBeGreaterThan(0)
+    expect(screen.getByText(description), 'the description still describes ad-level data').toBeInTheDocument()
+
+    const first = table.querySelector('thead th')?.textContent ?? ''
+
+    expect(first, `the first column reads «${first}» over content rows`).toContain(column)
+  })
+
+  /**
+   * The narrowed empty state names what is missing — content — and what it was looked for under.
+   *
+   * «No ad was reported» under a content surface is wrong twice: the thing absent is content, and a
+   * reader who drilled into an ad already knows the ad exists. It is not «no content for the
+   * project» either, which is the distinction this sentence has always been careful about.
+   */
+  it.each([
+    ['en', /No content was reported under the selected ad or ad set/i],
+    ['ar', /لا يوجد محتوى مسجَّل تحت الإعلان أو المجموعة المختارة/],
+  ] as const)('says no CONTENT was reported under the chosen ad — %s', async (locale, sentence) => {
+    route([])
+
+    renderWithProviders(<AnalyticsPage />, {
+      locale,
+      /* Narrowed: a drill path pinned to an ad is what makes this the «under this parent» state. */
+      route: '/agency/analytics?tab=creative&drill=ad%3Aext-a1',
+    })
+
+    const empty = await screen.findByTestId('creative-empty-under-parent')
+
+    expect(empty.textContent ?? '', 'the empty state still says no AD was reported').toMatch(sentence)
+  })
+})

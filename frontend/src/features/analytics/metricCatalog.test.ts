@@ -310,3 +310,35 @@ describe('the sparkline on an indicator card', () => {
     expect(spendCard({}, series([100]))?.spark).toBeUndefined()
   })
 })
+
+/**
+ * CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — reach is never described as distinct people.
+ *
+ * The hint read «عدد الأشخاص المختلفين الذين رأوا الإعلان» — «how many different people saw the ad».
+ * True of ONE platform's figure, false of the total this product usually shows: Meta de-duplicates
+ * within Meta, Snapchat within Snapchat, and the sum counts anybody reached on both twice. No
+ * platform tells another who it reached, and this product cannot know either.
+ *
+ * That phrase is the one a reader plans a budget against. Believing it means sizing an audience that
+ * does not exist, which is why it may not appear over a figure that spans platforms — and the same
+ * card shows one platform or six depending on a filter, so the wording has to be true in both.
+ *
+ * Asserted on the CATALOGUE rather than on a rendered card: every surface reads its copy from here,
+ * so this is the one place the claim can be made or unmade.
+ */
+describe('reach never claims to be distinct people', () => {
+  it('does not describe the figure as different or unique people', () => {
+    for (const locale of ['ar', 'en'] as const) {
+      const hint = SPECS.reach.hint[locale]
+
+      expect(hint, `reach is described as distinct people in ${locale}: «${hint}»`)
+        .not.toMatch(/different people|unique people|الأشخاص المختلفين|أشخاص مختلفين/)
+    }
+  })
+
+  /** ...and it says what the figure actually is when more than one platform is in scope. */
+  it('states that platform figures are added rather than de-duplicated', () => {
+    expect(SPECS.reach.hint.en).toMatch(/not de-duplicated|counted twice/i)
+    expect(SPECS.reach.hint.ar).toMatch(/لا يُطرح المكرَّر|يُحسب مرتين/)
+  })
+})

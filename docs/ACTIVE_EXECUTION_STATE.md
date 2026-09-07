@@ -7,42 +7,41 @@ disagree, the product wins.
 
 ## Main
 
-`1c1490c0` — «The word «undefined» was on screen where a currency belongs» (#298). Deployed,
-success. Before it, `b233bea9` (#299) — «A share link is not an asset, and six cards were drawing
-one» — also deployed and Production-verified.
+`711a5f69` — «Ads and Content are named for what they are — and Content keeps its analytics» (#302).
+Deployed, success.
 
 ## In flight
 
-**PR #300** `fix/counts-compact-everywhere`. Three surfaces still wrote a count at full width and one
-ratio claimed to be a conversion. CI running.
+`fix/content-is-written-in-contents-words`. #302 renamed the tab and left the vocabulary INSIDE it
+unchanged: the panel read «أداء الإعلانات», the first column «الإعلان», the description «from
+ad-level data», the narrowed empty state «No ad was reported». These figures are
+`creative_daily_metrics` at the CONTENT grain, and one creative can be carried by several ads, so a
+row headed «الإعلان» tells a reader they are looking at one ad's numbers when they are not.
 
-## Production evidence taken after each deploy — 2026-09-07
+## Production evidence taken after each deploy
 
-| what was verified | how | result |
+| what | how | result |
 |---|---|---|
-| the blank-image root cause is gone | `integrations:probe --media` per provider | **Meta 12 usable / 0 unusable · Snapchat 9 / 0** · zero cards fetch HTML |
-| «undefined» and the compact rule | the live client report, read in a browser | funnel reads 6.6M / 40.2K / 14.4K / 4.49K with exact titles · no `undefined` · no full-width counts |
-| the client report at 390 | measured in a browser | `scrollWidth === clientWidth` — no sideways scroll |
+| the blank-image root cause | `integrations:probe --media` per provider | Meta **12 / 0**, Snapchat **9 / 0**; zero cards fetch HTML |
+| «undefined» and the compact rule | the live client report, in a browser | funnel 6.66M / 40.4K / 14.6K / 4.54K with exact titles; no `undefined`; no full-width counts |
+| the funnel ratio that lied | same | «165% ⚠» with «هذه المرحلة أكبر من التي قبلها…» behind it |
+| story ads | forced sweep `success records=11852`, then the report re-read | the three composites now render an image or say «فيديو — لم ترسل المنصة صورة غلاف له» and play |
+| the abandoned-run reaper | a forced sweep that had been refused | the stale-run guard no longer fires; the sweep queued and finished in 52s |
 
-## The blocker that appeared today
+## What is blocked, and by whom
 
-A forced Meta structure sync is refused by the provider:
+`(#200) Ad account owner has NOT grant ads_management or ads_read permission` — the bound Meta
+account, which synced `records=58` earlier the same day. Provider-side, not a code path. It blocks
+ONLY the re-mapping of six Meta catalog rows; they already draw a real thumbnail rather than a web
+page, so nothing is blank while it waits.
 
-```
-(#200) Ad account owner has NOT grant ads_management or ads_read permission
-```
+`Primemode` → «henka» is bound and ACTIVE with `connection=error`. Needs the owner's credentials.
 
-The same account synced `records=58` earlier the same day, so this is a permission change on Meta's
-side rather than a code fault. Registered as row 67 of `docs/OWNER_OBSERVED_DEFECTS.md` against
-`INTEGRATION-META-001`, already `BLOCKED_EXTERNAL_CREDENTIALS`. It blocks ONLY the re-mapping of six
-Meta catalog rows from `image` to `catalog`; those rows already draw a real thumbnail rather than a
-web page, so nothing is blank while it waits. Everything else continued past it.
+## What this session cannot close
 
-## The owner defect register
-
-`docs/OWNER_OBSERVED_DEFECTS.md` — 66 observations, each mapped to a requirement ID that already
-existed. `OwnerDefectLedgerTest` keeps it honest: every cited ID must exist in the Matrix, a row may
-not claim verified while it still names a gap, and rows may be added but never removed.
+`/app/content` and `/agency/analytics` are authenticated and no session here reaches them. The media
+rows and the Ads/Content naming stay open until the owner looks. A probe from the datacentre is not
+the owner's screen.
 
 ## What the live estate actually says — traced 2026-09-05/06, read-only
 

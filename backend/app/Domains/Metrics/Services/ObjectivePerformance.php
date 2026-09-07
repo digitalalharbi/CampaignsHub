@@ -98,6 +98,42 @@ final class ObjectivePerformance
                 'spend' => round((float) $row->spend, 2),
             ];
 
+            /*
+             * AGGREGATION-TRUTH-001 — the coverage has to describe the path it is attached to.
+             *
+             * Every path starts as `emptyPath()`, which states `no_contributors` because that is
+             * true of a path nothing has been added to yet. Rows were then accumulated into it —
+             * spend, orders, revenue, campaigns — and the coverage was never touched again. So the
+             * conversion path on the owner's live client report carried 9,437.86 in spend and 566
+             * orders while reporting that NOTHING had contributed to it.
+             *
+             * That is the inverse of the failure the state exists to prevent. Its own note says a
+             * surface can now say «no campaigns on this path» instead of printing a row of zeros;
+             * it was saying that over nine thousand of somebody's money.
+             *
+             * The contributor is the campaign just added, and it is recorded here rather than
+             * recomputed later so the state and the figures can never disagree — they are written
+             * by the same line of reasoning.
+             */
+            $bucket['coverage']['state'] = 'complete';
+
+            /*
+             * The PLATFORM contributed, not the campaign — CLIENT-REPORT-ENTITY-BOUNDARY-001.
+             *
+             * A first version of this recorded `unified_campaign_id`, and
+             * `LiveReportShareTest > a client link never carries a campaign or ad set name` refused
+             * it: "an internal id reached the client". It was right. A shared link carries
+             * performance and never the campaign plan, and an id in a coverage list is the plan
+             * arriving through a side door — readable in the JSON whatever the page draws.
+             *
+             * The provider is already published to a client in this same path's `platforms`
+             * breakdown, so naming it here adds nothing they cannot see, and it answers the question
+             * the field is actually for: which platforms are behind these figures.
+             */
+            if (! in_array((string) $row->provider, $bucket['coverage']['included_contributors'], true)) {
+                $bucket['coverage']['included_contributors'][] = (string) $row->provider;
+            }
+
             $totalSpend += (float) $row->spend;
 
             // The whole rule, in four lines: only a SALES campaign's money reaches the sales figures.
