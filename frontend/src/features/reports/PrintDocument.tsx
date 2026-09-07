@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import type { ReportData } from './InteractiveReport'
 import { moneyExact } from '@/features/analytics/format'
+import { mixedResultsNote, type ResultPart } from './reportMetrics'
 
 /**
  * English, LTR, A4-portrait DOCUMENT rendering of a report (distinct from the RTL 16:9 slide
@@ -177,7 +178,21 @@ export function PrintDocument({
       nfmt(Number(p.impressions ?? 0)),
       nfmt(Number(p.clicks ?? 0)),
       nfmt(Number(p.orders ?? 0)),
-      p.result_metrics_apply && p.cpa != null ? money(Number(p.cpa), currency) : '—',
+      /*
+       * CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — on paper the blend has to be written out.
+       *
+       * The conversion path is Leads, App installs, Add to cart, Sales, Conversions and Purchases
+       * together, so this cost per result can be a lead's price averaged with a sale's — always
+       * downwards. The screen can carry the reason in a `title`; a printed page cannot be hovered,
+       * so the parts are spelled into the cell itself and the reader sees what was averaged.
+       */
+      p.result_metrics_apply && p.cpa != null
+        ? money(Number(p.cpa), currency)
+          + (((p as Record<string, unknown>).cpa_mixes_result_types === true
+            && mixedResultsNote((p as Record<string, unknown>).result_composition as ResultPart[] | undefined, false) !== null)
+            ? ` (mixed: ${mixedResultsNote((p as Record<string, unknown>).result_composition as ResultPart[] | undefined, false)!.parts})`
+            : '')
+        : '—',
     ])
 
   /*

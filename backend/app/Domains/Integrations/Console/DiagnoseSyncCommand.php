@@ -570,25 +570,41 @@ final class DiagnoseSyncCommand extends Command
          * `format` is the platform's own word, kept lower-cased by the connectors, so an unmapped
          * type shows up here as itself instead of hiding inside «image».
          */
+        /*
+         * Read through `toBase()`: these rows are counts, not creatives.
+         *
+         * The same query as an Eloquent read would hand back `ExternalCreative` instances carrying
+         * three aliases that are not attributes of one — a shape the model does not have and static
+         * analysis is right to refuse. Grouped aggregates are rows, so they are read as rows.
+         *
+         * @var list<array{shape: string, total: int, drawing_nothing: int}> $shapes
+         */
         $shapes = (clone $creatives)
+            ->toBase()
             ->selectRaw('COALESCE(format, \'—\') AS shape, COUNT(*) AS total')
             ->selectRaw('COUNT(*) FILTER (WHERE asset_url IS NULL AND video_url IS NULL'
                 .' AND thumbnail_url IS NULL AND cards IS NULL) AS drawing_nothing')
             ->groupBy('shape')
             ->orderByDesc('total')
-            ->get();
+            ->get()
+            ->map(static fn (object $row): array => [
+                'shape' => (string) $row->shape,
+                'total' => (int) $row->total,
+                'drawing_nothing' => (int) $row->drawing_nothing,
+            ])
+            ->all();
 
-        if ($shapes->isNotEmpty()) {
+        if ($shapes !== []) {
             $this->line('');
             $this->line('  CREATIVE SHAPES — the platform\'s own word, and how many draw nothing');
 
             foreach ($shapes as $shape) {
-                $empty = (int) $shape->drawing_nothing;
+                $empty = $shape['drawing_nothing'];
 
                 $this->line(sprintf(
                     '  %-22s: %5d   %s',
-                    (string) $shape->shape,
-                    (int) $shape->total,
+                    $shape['shape'],
+                    $shape['total'],
                     $empty === 0 ? 'all carry an asset link' : "{$empty} carry no asset link of any kind",
                 ));
             }

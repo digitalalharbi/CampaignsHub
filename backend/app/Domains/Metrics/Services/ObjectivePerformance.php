@@ -88,6 +88,25 @@ final class ObjectivePerformance
             $bucket['clicks'] += (float) $row->clicks;
             $bucket['landing_page_views'] += (float) $row->landing_page_views;
             $bucket['orders'] += (float) $row->orders;
+            /*
+             * CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — WHAT the orders on this path are made of.
+             *
+             * The conversion path is Leads, App installs, Add to cart, Sales, Conversions and
+             * Purchases together — `CampaignObjective::path()` says so. Their `orders` were summed
+             * into one figure and `cpa` divided the path's whole spend by it, so a project running a
+             * lead programme beside a purchase campaign was shown ONE «cost per result» blending the
+             * cost of a lead with the cost of a sale. It is always the flattering direction: leads
+             * are many and cheap, purchases few and dear, and the blend hides the price of a sale
+             * behind the volume of leads. This reaches a paying client — `LiveDetailTables` and
+             * `PrintDocument` both render this `cpa` as cost per result.
+             *
+             * The aggregate stays, because every caller sums it and because the ratio IS recomputed
+             * from the aggregate numerator and denominator rather than averaged. What it may no
+             * longer do is travel alone: each objective's own count is kept beside it, so no surface
+             * can show the blend without being able to say what went into it.
+             */
+            $bucket['result_composition'][$objective->value]
+                = ($bucket['result_composition'][$objective->value] ?? 0.0) + (float) $row->orders;
             $bucket['revenue'] += (float) $row->revenue;
             $bucket['campaigns'][] = [
                 'id' => $row->unified_campaign_id,
@@ -717,6 +736,8 @@ final class ObjectivePerformance
             'spend' => 0.0, 'impressions' => 0.0, 'clicks' => 0.0,
             'landing_page_views' => 0.0, 'orders' => 0.0, 'revenue' => 0.0,
             'campaigns' => [],
+            /* Objective value => that objective's own orders. Emptied into a list by `derivePath`. */
+            'result_composition' => [],
             /*
              * AGGREGATION-TRUTH-001 — these zeros describe an EMPTY PATH, not a quiet one.
              *
@@ -753,6 +774,31 @@ final class ObjectivePerformance
          */
         $sellsThings = $path === MarketingPath::Conversion;
 
+        /*
+         * The composition, ordered by size, naming only objectives that actually produced a result.
+         *
+         * An objective that ran and converted nobody is not part of what the number is made of, and
+         * listing it at zero would invite a reader to divide by it. `Other` appears under its own
+         * label rather than being folded away — an objective the product could not classify is a
+         * fact about the data, and hiding it inside a neighbour is the failure this block prevents.
+         */
+        $contributed = array_filter($b['result_composition'] ?? [], static fn (float $n): bool => $n > 0);
+        arsort($contributed);
+
+        $composition = [];
+        foreach ($contributed as $value => $orders) {
+            $objective = CampaignObjective::tryFrom((string) $value) ?? CampaignObjective::Other;
+
+            $composition[] = [
+                'objective' => $objective->value,
+                'label_ar' => $objective->labels()['ar'],
+                'label_en' => $objective->labels()['en'],
+                'orders' => round($orders),
+            ];
+        }
+
+        $mixed = count($composition) > 1;
+
         return [
             ...$b,
             'spend' => round($b['spend'], 2),
@@ -769,6 +815,14 @@ final class ObjectivePerformance
             'cpa' => $sellsThings ? $this->ratio($b['spend'], $b['orders']) : null,
             'roas' => $sellsThings ? $this->ratio($b['revenue'], $b['spend']) : null,
             'result_metrics_apply' => $sellsThings,
+            'result_composition' => $composition,
+            /*
+             * True when more than one KIND of result is inside `orders` — so a surface showing the
+             * figure, or the `cpa` derived from it, has to say so. False for a path whose results are
+             * all one kind, which is the ordinary case and must not be decorated with a warning.
+             */
+            'results_mixed' => $mixed,
+            'cpa_mixes_result_types' => $sellsThings && $mixed,
         ];
     }
 

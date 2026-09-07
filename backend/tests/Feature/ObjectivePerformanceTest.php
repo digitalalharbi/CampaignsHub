@@ -443,6 +443,86 @@ final class ObjectivePerformanceTest extends TestCase
         $this->assertDatabaseMissing('audit_logs', ['action' => 'campaign.objective.corrected']);
     }
 
+    /**
+     * CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — one path, two kinds of result, and the blend declared.
+     *
+     * Owner rule: «never combine Purchases/Leads/Installs/Registrations/Conversations into one
+     * Results number.» `CampaignObjective::path()` files Leads, App installs, Add to cart, Sales,
+     * Conversions and Purchases on the SAME conversion path, so their orders were summed and `cpa`
+     * divided the path's whole spend by the total — a cost per result blending the price of a lead
+     * with the price of a sale, on a figure `LiveDetailTables` and `PrintDocument` show a client.
+     *
+     * The setup already sells 50 orders for 1000. Adding a lead programme — 2000 for 400 leads —
+     * makes the arithmetic damning: the true cost of a sale is 20, the true cost of a lead is 5, and
+     * the blend reads 6.67. The blend is not removed, because callers sum the aggregate and the
+     * ratio is honestly recomputed from it; what it may no longer do is travel without its parts.
+     */
+    public function test_a_path_carrying_two_kinds_of_result_declares_what_the_number_is_made_of(): void
+    {
+        $this->seedCampaign('حملة عملاء محتملين', CampaignObjective::Leads, spend: 2000, orders: 400);
+
+        $conversion = collect($this->read()->json('data.paths'))
+            ->firstWhere('path', MarketingPath::Conversion->value);
+
+        $this->assertTrue($conversion['results_mixed'], 'a path holding leads and sales did not say so');
+        $this->assertTrue($conversion['cpa_mixes_result_types'], 'the blended cost per result was not declared');
+
+        // The blend itself, unchanged: 3000 spent over 450 results.
+        $this->assertSame(450.0, (float) $conversion['orders']);
+        $this->assertSame(6.67, (float) $conversion['cpa']);
+
+        // And what it is made of — largest first, each with its own count, under its own label.
+        $this->assertSame(
+            [['objective' => 'leads', 'orders' => 400.0], ['objective' => 'sales', 'orders' => 50.0]],
+            array_map(
+                static fn (array $part): array => ['objective' => $part['objective'], 'orders' => (float) $part['orders']],
+                $conversion['result_composition'],
+            ),
+        );
+
+        $labels = array_column($conversion['result_composition'], 'label_ar');
+        $this->assertNotEmpty(array_filter($labels), 'a part of the blend reached the payload with no Arabic label');
+    }
+
+    /**
+     * The vacuity check. A path whose results are all one kind is the ordinary case and must NOT be
+     * decorated with a warning — a flag that is always true tells a reader nothing, and would put
+     * «this mixes different results» under every honest cost per sale in the product.
+     */
+    public function test_a_path_with_one_kind_of_result_is_not_called_mixed(): void
+    {
+        $conversion = collect($this->read()->json('data.paths'))
+            ->firstWhere('path', MarketingPath::Conversion->value);
+
+        $this->assertFalse($conversion['results_mixed'], 'a path holding only sales was called mixed');
+        $this->assertFalse($conversion['cpa_mixes_result_types']);
+        $this->assertSame(20.0, (float) $conversion['cpa'], 'the unblended cost per sale changed');
+        $this->assertSame(
+            ['sales'],
+            array_column($conversion['result_composition'], 'objective'),
+        );
+    }
+
+    /**
+     * An objective that ran and converted nobody is not part of what the number is made of.
+     *
+     * Listing it at zero would invite a reader to divide by it, and would make `results_mixed` true
+     * for a path with exactly one real kind of result — which is the false positive the check above
+     * exists to prevent, arrived at from the other side.
+     */
+    public function test_an_objective_that_produced_no_result_is_not_part_of_the_composition(): void
+    {
+        $this->seedCampaign('حملة تثبيتات بلا نتيجة', CampaignObjective::AppInstalls, spend: 700, orders: 0);
+
+        $conversion = collect($this->read()->json('data.paths'))
+            ->firstWhere('path', MarketingPath::Conversion->value);
+
+        $this->assertSame(['sales'], array_column($conversion['result_composition'], 'objective'));
+        $this->assertFalse($conversion['results_mixed']);
+        // Its spend is still on the path — the money was spent — so the cost per sale rises honestly.
+        $this->assertSame(1700.0, (float) $conversion['spend']);
+    }
+
     private function seedCampaign(
         string $name,
         CampaignObjective $objective,
