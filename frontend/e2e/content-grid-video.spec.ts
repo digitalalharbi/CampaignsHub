@@ -75,8 +75,47 @@ test.describe('the video previews on /app/content', () => {
     const poster = page.getByTestId('creative-video-poster').first()
     await expect(poster, 'the grid mounted no video poster for a film with no cover').toBeVisible({ timeout: 30000 })
 
-    /* The seek that forces a decode has to COMPLETE — `VideoPoster` reports it. */
-    await expect(poster).toHaveAttribute('data-painted', 'true', { timeout: 20000 })
+    /*
+     * The requirement is «no unexplained blank rectangle», not «every browser decodes a poster».
+     *
+     * Two rounds of this asserted `data-painted="true"` outright and CI's WebKit failed both: it will
+     * not decode a frame under `preload="metadata"` without a gesture, and the card then sat as an
+     * empty box — the owner's blank card, reproduced. A browser that manages the frame must show it;
+     * one that cannot must say so instead. Both are acceptable; a silent hole is not, and this waits
+     * for whichever answer arrives rather than demanding the one some engines cannot give.
+     */
+    /*
+     * Watched on the POSTER, never on «is there an absence sentence somewhere on the page».
+     *
+     * The first version polled `creative-absence-reason` at page level, and a catalog card — which
+     * legitimately says «this ad has no fixed asset» — satisfied it on the first tick, before the
+     * film had decoded anything. The test then judged the film card by another card's sentence.
+     * The seed holds exactly one coverless film, so the poster disappearing IS this card giving up.
+     */
+    await expect
+      .poll(
+        async () => {
+          if ((await page.getByTestId('creative-video-poster').count()) === 0) return 'gave-up'
+
+          return (await poster.getAttribute('data-painted')) === 'true' ? 'painted' : 'waiting'
+        },
+        { timeout: 25000, message: 'the card neither painted a frame nor gave up and explained itself' },
+      )
+      .not.toBe('waiting')
+
+    /*
+     * The fallback is a real sentence, not an empty element — and the dead `<video>` is GONE, because
+     * a card that says «no cover» while still holding a blank player is the same rectangle with a
+     * caption.
+     */
+    if ((await page.getByTestId('creative-video-poster').count()) === 0) {
+      const absence = page.getByTestId('creative-absence-reason').first()
+
+      await expect(absence, 'the card gave up on the film and explained nothing').toBeVisible()
+      await expect(absence).not.toHaveText(/^\s*$/)
+
+      return
+    }
 
     const verdict = await poster.evaluate((v: HTMLVideoElement) => {
       const box = v.getBoundingClientRect()

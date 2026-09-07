@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /**
  * CONTENT-VIDEO-POSTER-001 — a still frame from a video that has no thumbnail.
@@ -49,6 +49,50 @@ export function VideoPoster({
   const [painted, setPainted] = useState(false)
 
   /*
+   * A browser that will not paint has to SAY so, or the card is the blank rectangle.
+   *
+   * Two attempts at making WebKit decode a frame under `preload="metadata"` both failed on CI, and
+   * the second failure is the instructive one: the element sat at `data-painted="false"` and stayed
+   * mounted, so the card showed an empty box for ever. That is owner defect «no unexplained blank
+   * rectangle» — the requirement is not that every browser manages a poster, it is that the reader
+   * is never left looking at nothing with no account of it.
+   *
+   * So the attempt is given a budget, and when it expires the card is told the asset is unavailable
+   * and falls back to the sentence it already has for a film with no cover — «فيديو — لم ترسل
+   * المنصة صورة غلاف له», which is true, and which the client report has shown for this exact shape
+   * all along. A browser that CAN decode still shows the frame; one that cannot shows a sentence
+   * rather than a hole.
+   *
+   * Eight seconds: comfortably longer than the two it takes on the browsers that manage it, short
+   * enough that nobody sits in front of an empty card wondering. Cleared on unmount and on success,
+   * so a card scrolled past mid-decode does not report a failure it never had.
+   */
+  const gaveUp = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    setPainted(false)
+
+    gaveUp.current = setTimeout(() => {
+      if (ref.current === null || ref.current.readyState < 2) onUnavailable()
+    }, 8000)
+
+    /*
+     * The frame can arrive BEFORE this effect runs — a cached file decodes between render and
+     * commit, its events fire into a `settle` whose timeout does not exist yet, and the reset above
+     * then puts the card back to «not painted» with nothing left to fire. Asking the element
+     * directly closes that window: it is the same question `settle` asks, at the one moment no
+     * event will answer it.
+     */
+    settle()
+
+    return () => {
+      if (gaveUp.current !== null) clearTimeout(gaveUp.current)
+    }
+    // `onUnavailable` is a fresh closure on every render; the budget belongs to the SOURCE.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src])
+
+  /*
    * «Painted» is a frame being AVAILABLE, not a particular event having fired.
    *
    * This reported the `seeked` event, and WebKit does not always send one: under
@@ -62,7 +106,14 @@ export function VideoPoster({
    */
   const settle = () => {
     const el = ref.current
-    if (el !== null && el.readyState >= 2) setPainted(true)
+    if (el === null || el.readyState < 2) return
+
+    if (gaveUp.current !== null) {
+      clearTimeout(gaveUp.current)
+      gaveUp.current = null
+    }
+
+    setPainted(true)
   }
 
   return (
