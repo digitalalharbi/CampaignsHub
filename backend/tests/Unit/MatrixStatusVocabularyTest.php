@@ -345,6 +345,154 @@ final class MatrixStatusVocabularyTest extends TestCase
     }
 
     /**
+     * A requirement row must belong to a TABLE — GOVERNANCE-ANTILOSS-001.
+     *
+     * `tables()` closes the current table at any line that is not part of one, and drops every row
+     * that arrives while no table is open. So a single stray blank line inside a table, or a
+     * blockquote written between a header and its rows, silently removes everything after it from
+     * the reach of every check in this file — the status vocabulary, the width check, the duplicate
+     * check, «a finished row is not still naming work», all of it.
+     *
+     * That had happened three times and hidden 24 requirement rows, including `SNAP-001`,
+     * `META-001`, `ROUTE-BOUNDARY-001` and a `GATE-WK-001` copy that read IN_PROGRESS while the same
+     * requirement was VERIFIED elsewhere. Nothing was missing from the file, so nothing looked wrong:
+     * a human reading the document saw ordinary rows, and every guard that was supposed to police
+     * them skipped them without a word. That is precisely «a requirement leaving this ledger
+     * silently», which is the failure this whole test class exists to make impossible.
+     */
+    public function test_no_requirement_row_sits_outside_a_table(): void
+    {
+        $orphans = [];
+        $inTable = false;
+
+        foreach (file($this->matrixPath()) as $number => $line) {
+            $line = rtrim($line);
+
+            if (! str_starts_with($line, '| ')) {
+                if (! str_starts_with(trim($line), '|')) {
+                    $inTable = false;
+                }
+
+                continue;
+            }
+
+            $cells = array_map(trim(...), preg_split('/(?<!\\\\)\|/', $line) ?: []);
+
+            if (in_array($cells[1] ?? '', ['ID', 'Req ID'], true)) {
+                $inTable = true;
+
+                continue;
+            }
+
+            if (preg_match('/^\|[\s:|-]+\|$/', $line) === 1) {
+                continue;
+            }
+
+            /*
+             * Only rows that look like a REQUIREMENT. This document also carries small prose tables
+             * — «Cause / Failure / Where» — whose first cell is a word rather than an id, and they
+             * are not what this guards.
+             */
+            $id = $cells[1] ?? '';
+
+            if (! $inTable && preg_match('/^[A-Z][A-Z0-9]*(-[A-Za-z0-9]+)+$/', $id) === 1) {
+                $orphans[] = 'line '.($number + 1).': '.$id;
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $orphans,
+            "a requirement row sits outside every table, so no check in this file can see it:\n  "
+                .implode("\n  ", $orphans),
+        );
+    }
+
+    /**
+     * One requirement, one answer — GOVERNANCE-ANTILOSS-001, across the whole file.
+     *
+     * The sibling above catches a requirement stated twice in ONE table. `GATE-WK-001` was stated
+     * twice in two DIFFERENT tables, once IN_PROGRESS with no commit and once VERIFIED at `47c9ef9`,
+     * and so passed that check while the ledger held both answers at once. Which one a reader
+     * believed depended on which table they happened to open, and the IN_PROGRESS copy was the one
+     * that made a finished piece of work look outstanding.
+     *
+     * A repeated row is tolerated when both copies AGREE: this ledger records history by appending,
+     * the same requirement legitimately appears under two headings, and forbidding that outright
+     * would drive the history out of the file. Two different statuses for one id is the defect —
+     * the requirement's true state has been lost, and nothing in the file says which is current.
+     */
+    public function test_no_requirement_carries_two_different_statuses(): void
+    {
+        /** @var array<string, array<string, list<int>>> $states */
+        $states = [];
+
+        foreach (self::tables(file($this->matrixPath())) as $table) {
+            /*
+             * The table's OWN status column, never a fixed index.
+             *
+             * These tables do not agree on their shape — some open `ID`, others `Req ID`, and Status
+             * sits at a different offset in each. The first version of this read cell 7 everywhere,
+             * found an empty string in the tables where Status is elsewhere, skipped them, and so
+             * reported no conflict for the very row it was written to catch.
+             */
+            $at = $table['status'];
+
+            if ($at === null) {
+                continue;
+            }
+
+            foreach ($table['rows'] as [$line, $cells]) {
+                $id = trim($cells[1] ?? '');
+
+                if (preg_match('/^[A-Z][A-Za-z0-9._-]*$/', $id) !== 1) {
+                    continue;
+                }
+
+                /*
+                 * The canonical TOKEN, not the whole cell.
+                 *
+                 * A status legitimately carries a qualifier — «VERIFIED (2 tests)», «VERIFIED (16 new
+                 * tests)» — and comparing raw cells reported three requirements as contradicting
+                 * themselves when both copies said VERIFIED and merely counted differently. The
+                 * qualifier is bookkeeping about the evidence; the token is the claim.
+                 */
+                $cell = trim(str_replace('*', '', $cells[$at] ?? ''));
+                $status = null;
+
+                foreach (self::CANONICAL as $canonical) {
+                    if (str_starts_with($cell, $canonical)) {
+                        $status = $canonical;
+                        break;
+                    }
+                }
+
+                if ($status === null) {
+                    continue;
+                }
+
+                $states[$id][$status][] = $id;
+            }
+        }
+
+        $conflicted = [];
+
+        foreach ($states as $id => $byStatus) {
+            if (count($byStatus) < 2) {
+                continue;
+            }
+
+            $conflicted[] = $id.': '.implode(' vs ', array_keys($byStatus));
+        }
+
+        $this->assertSame(
+            [],
+            $conflicted,
+            "a requirement states more than one status, so the ledger holds two answers:\n  ".implode("\n  ", $conflicted),
+        );
+    }
+
+    /**
      * A row that is not finished says what is left.
      *
      * An empty Remaining gap on an unfinished row is how a requirement quietly stops being work:
