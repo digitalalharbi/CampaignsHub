@@ -36,6 +36,15 @@ final class ScheduledWorkInventoryTest extends TestCase
         'alerts:evaluate',
         'commerce:sync',
         'fx:rates',
+        /*
+         * Added 2026-09-07. `SyncAccountStructureJob::failed()` cannot close a run whose worker
+         * vanished, so a structure run had been «running» since 2026-08-26 — twelve days, on a job
+         * whose timeout is fifteen minutes — and was blocking the accept command.
+         *
+         * This test caught its own omission the moment the schedule gained it, which is the whole
+         * point of the inventory: a scheduled task nobody wrote down is one nobody maintains.
+         */
+        'integrations:close-abandoned-runs',
         'integrations:prune-raw',
         'integrations:refresh-tokens',
         'integrations:sync',
