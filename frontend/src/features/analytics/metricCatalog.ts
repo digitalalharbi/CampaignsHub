@@ -117,10 +117,26 @@ export const SPECS: Record<string, Spec> = {
     format: compact,
     hint: { ar: 'عدد مرات عرض الإعلان — قد يُعرض على الشخص نفسه أكثر من مرة.', en: 'How many times the ad was shown — the same person can be counted more than once.' },
   },
+  /*
+   * CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — reach is de-duplicated BY EACH PLATFORM, and by nobody
+   * after that.
+   *
+   * The hint read «عدد الأشخاص المختلفين الذين رأوا الإعلان» — «how many different people saw the
+   * ad». That is true of one platform's figure and false of the total this product usually shows:
+   * Meta de-duplicates within Meta, Snapchat within Snapchat, and the sum counts anybody reached on
+   * both TWICE. No platform tells another who it reached, and this product cannot know either.
+   *
+   * «Different people» is the one phrase that must never appear over a cross-platform total, because
+   * a reader who believes it plans a budget against an audience size that does not exist. The hint
+   * now says what the figure is in both scopes, which costs a sentence and is true either way.
+   */
   reach: {
     label: { ar: 'الوصول', en: 'Reach' },
     format: compact,
-    hint: { ar: 'عدد الأشخاص المختلفين الذين رأوا الإعلان مرة واحدة على الأقل.', en: 'How many different people saw the ad at least once.' },
+    hint: {
+      ar: 'عدد الأشخاص الذين رأوا الإعلان مرة واحدة على الأقل، كما تحسبه كل منصة داخل نفسها. عند الجمع بين أكثر من منصة تُجمع الأرقام ولا يُطرح المكرَّر: من رآه على منصتين يُحسب مرتين.',
+      en: 'How many people saw the ad at least once, as each platform counts it within itself. Across platforms the figures are added, not de-duplicated — somebody reached on two is counted twice.',
+    },
   },
   frequency: {
     label: { ar: 'التكرار', en: 'Frequency' },
