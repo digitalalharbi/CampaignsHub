@@ -246,13 +246,38 @@ final class LiveReportShareTest extends TestCase
         // The rows are really there — otherwise the assertions below are about nothing.
         $this->assertNotSame([], $body['ads'] ?? [], 'the fixture produced no ad to test');
 
-        foreach (['ads', 'ads_groups'] as $key) {
-            $json = json_encode($body[$key] ?? [], JSON_UNESCAPED_UNICODE) ?: '';
+        /*
+         * Asserted per VALUE, never by grepping the encoded blob.
+         *
+         * The first version of this searched the JSON for a UUID-shaped run, and on Production that
+         * reports a leak where there is none: a provider's signed CDN link carries hex runs of
+         * exactly that shape inside its own path, and eleven of them matched. The claim is «no
+         * identifier of OURS is a value here», so each value is what gets tested — a substring of
+         * somebody else's URL is not an id we published.
+         */
+        $ours = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
 
+        $walk = function (mixed $node, string $path) use (&$walk, $ours): array {
+            if (is_string($node)) {
+                return preg_match($ours, $node) === 1 ? [$path] : [];
+            }
+            if (! is_array($node)) {
+                return [];
+            }
+
+            $found = [];
+            foreach ($node as $key => $child) {
+                $found = [...$found, ...$walk($child, "{$path}.{$key}")];
+            }
+
+            return $found;
+        };
+
+        foreach (['ads', 'ads_groups'] as $key) {
             $this->assertSame(
-                0,
-                preg_match_all('/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i', $json),
-                "{$key} carried one of our own primary keys to the client",
+                [],
+                $walk($body[$key] ?? [], $key),
+                'a primary key of ours was published to the client',
             );
         }
     }
