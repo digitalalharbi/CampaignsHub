@@ -51,7 +51,14 @@ function route(creatives: unknown[]) {
 
 async function openCreative() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Ad' }))
+  /*
+   * ADS-TERMINOLOGY-001 — this tab is «Content performance» now, not «Ad».
+   *
+   * It was named for the wrong entity: it is the last rung of campaign → ad set → ad → CONTENT, and
+   * calling it «Ad» put it beside «Ads» as an apparent duplicate. The surface and everything it
+   * asserts are unchanged; only the word a reader clicks is.
+   */
+  fireEvent.click(await screen.findByRole('tab', { name: /Content/ }))
 }
 
 /**
@@ -64,7 +71,7 @@ async function openCreative() {
  * Asserted on the REQUEST rather than on the rows: what matters is that the choice reaches the
  * server, and a fixture that returns the same rows either way would pass a row assertion.
  */
-describe('the ad analysis tab', () => {
+describe('the content performance tab', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useProject.setState({ currentProjectId: 'p1' })
@@ -72,7 +79,7 @@ describe('the ad analysis tab', () => {
   })
   afterEach(() => signOut())
 
-  it('shows a ad with its campaign, objective and figures', async () => {
+  it('shows a content item with its campaign, objective and figures', async () => {
     route([CREATIVE])
 
     await openCreative()
@@ -86,7 +93,7 @@ describe('the ad analysis tab', () => {
   })
 
   /** Withheld spend keeps its own currency here too — one money contract across every surface. */
-  it('states withheld ad spend in its original currency', async () => {
+  it('states withheld content spend in its original currency', async () => {
     route([CREATIVE])
 
     await openCreative()
@@ -95,7 +102,7 @@ describe('the ad analysis tab', () => {
   })
 
   /** A creative the platform does not break out shows «—», never a share of the campaign. */
-  it('prints a dash rather than inventing a ad-level figure', async () => {
+  it('prints a dash rather than inventing a content-level figure', async () => {
     route([{ ...CREATIVE, metrics: { ...CREATIVE.metrics, impressions: null, clicks: null, ctr: null } }])
 
     await openCreative()
@@ -111,7 +118,14 @@ describe('the ad tab and the filter bar', () => {
   it('sends the chosen platform to the server instead of ignoring it', async () => {
     route([])
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-    fireEvent.click(await screen.findByRole('tab', { name: 'Ad' }))
+    /*
+   * ADS-TERMINOLOGY-001 — this tab is «Content performance» now, not «Ad».
+   *
+   * It was named for the wrong entity: it is the last rung of campaign → ad set → ad → CONTENT, and
+   * calling it «Ad» put it beside «Ads» as an apparent duplicate. The surface and everything it
+   * asserts are unchanged; only the word a reader clicks is.
+   */
+  fireEvent.click(await screen.findByRole('tab', { name: /Content/ }))
 
     await waitFor(() => expect(requested.some((u) => u.includes('/creatives'))).toBe(true))
 

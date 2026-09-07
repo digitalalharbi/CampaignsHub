@@ -191,3 +191,126 @@ describe('the ad set analysis tab', () => {
     expect(await screen.findByTestId('entity-table-ad_set')).toHaveTextContent('sq-1')
   })
 })
+
+/**
+ * ADS-TERMINOLOGY-001 — the duplication was in the NAME, not in the surface.
+ *
+ * The tab bar carried «الإعلانات» and «الإعلان» — «Ads» and «Ad» — a pair differing by a plural, so
+ * a reader could not tell which answered their question. But the second was never a second view of
+ * the same thing: it is the last rung of campaign → ad set → ad → CONTENT, with a grain of its own.
+ *
+ * A content item is not an ad. One creative can be carried by several ads, and its figures come
+ * from `creative_daily_metrics` rather than from an ad's row — so folding it into the ads table
+ * would have to pick one ad per creative or double-count. It keeps its capability and loses its
+ * misleading name.
+ */
+describe('ads and content are named for what they are', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProject.setState({ currentProjectId: 'p1' })
+    signInWith(['campaigns.view'])
+  })
+  afterEach(() => signOut())
+
+  it('names the content surface for content, not as a singular Ad', async () => {
+    route([ROW])
+    renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+
+    await screen.findByRole('tab', { name: 'Ads' })
+
+    /* «Ads» and «Ad» differ by a plural, and nothing in this bar may read that way again. */
+    expect(screen.queryByRole('tab', { name: 'Ad' }), 'the ambiguous singular is back').toBeNull()
+    expect(screen.getAllByRole('tab', { name: /^Ads?$/ })).toHaveLength(1)
+    expect(screen.getByRole('tab', { name: /Content/ })).toBeInTheDocument()
+  })
+
+  it('names them apart in Arabic too', async () => {
+    route([ROW])
+    renderWithProviders(<AnalyticsPage />, { locale: 'ar' })
+
+    await screen.findByRole('tab', { name: 'الإعلانات' })
+
+    expect(screen.queryByRole('tab', { name: 'الإعلان' }), 'the ambiguous singular is back').toBeNull()
+    expect(screen.getByRole('tab', { name: /المحتويات/ })).toBeInTheDocument()
+  })
+
+  /**
+   * `?tab=creative` opens CONTENT, not ads.
+   *
+   * A first version of this correction retired the surface and aliased its address to «Ads». That
+   * was wrong twice over: the capability was not redundant, and silently answering a content link
+   * with an ads table would tell the reader they were looking at content when they were not.
+   *
+   * Through the router's own initial entry — a first draft set `window.history`, which a
+   * `MemoryRouter` never reads, so the page saw no such address and the failure was mine.
+   */
+  it('opens the content surface for the address that has always meant content', async () => {
+    route([ROW])
+    renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/agency/analytics?tab=creative' })
+
+    const content = await screen.findByRole('tab', { name: /Content/ })
+
+    expect(content.getAttribute('aria-selected'), 'a content link did not open content').toBe('true')
+    expect(screen.getByRole('tab', { name: 'Ads' }).getAttribute('aria-selected')).toBe('false')
+  })
+})
+
+/**
+ * ADS-TERMINOLOGY-001 — the columns that made the retired tab worth opening are on this one.
+ *
+ * «الإعلان» carried campaign, objective and last-active, and «الإعلانات» did not. Removing a
+ * duplicate must not cost the reader the reason they were using it: an ad's own name rarely says
+ * which campaign bought it or what it was bought FOR, and «last active» separates an ad that
+ * stopped from one that never ran.
+ *
+ * They cost no extra request — the creative behind each ad is already fetched for the row previews.
+ * Asserted in BOTH languages, because the correction is partly about the words.
+ */
+describe('the canonical ads surface carries the merged columns', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProject.setState({ currentProjectId: 'p1' })
+    signInWith(['campaigns.view'])
+  })
+  afterEach(() => signOut())
+
+  const openAds = async (locale: 'ar' | 'en') => {
+    renderWithProviders(<AnalyticsPage />, { locale, route: '/agency/analytics?tab=ads' })
+
+    return screen.findByRole('table')
+  }
+
+  it.each([
+    ['en', ['Campaign', 'Objective', 'Last active']],
+    ['ar', ['الحملة', 'الهدف', 'آخر نشاط']],
+  ] as const)('shows campaign, objective and last active — %s', async (locale, wanted) => {
+    route([{ ...ROW, entity_id: 'a1', external_id: 'ext-a1', name: 'Video 9x16' }])
+
+    const table = await openAds(locale)
+    const headers = [...table.querySelectorAll('thead th')].map((h) => h.textContent ?? '')
+
+    for (const column of wanted) {
+      expect(
+        headers.some((h) => h.includes(column)),
+        `«${column}» is missing — headers: ${headers.join(' | ')}`,
+      ).toBe(true)
+    }
+  })
+
+  /**
+   * An ad set gets none of them, and that is deliberate.
+   *
+   * An ad set already sits under a campaign the reader drilled through, so the column would repeat
+   * the crumb above it — and the library holds no creative for an ad set to read an objective from,
+   * so the cell could only ever be «—».
+   */
+  it('does not put them on the ad-set surface, where they would repeat or be empty', async () => {
+    route([ROW])
+    renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/agency/analytics?tab=ad_sets' })
+
+    const table = await screen.findByRole('table')
+    const headers = [...table.querySelectorAll('thead th')].map((h) => h.textContent ?? '')
+
+    expect(headers.some((h) => h.includes('Objective'))).toBe(false)
+  })
+})

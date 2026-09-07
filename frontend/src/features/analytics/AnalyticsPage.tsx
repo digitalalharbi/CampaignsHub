@@ -50,6 +50,7 @@ import { FamilyDecisionTable } from './FamilyDecisionTable'
 import { PathAnalysis } from './PathAnalysis'
 import { PathTrends } from './PathTrends'
 import { contentIntelligence, listCreatives, type CreativeCard } from '@/features/content/api'
+import { ContentReading } from './ContentReading'
 import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
 import { AnalyticsOverview, DashboardOverview, useOverviewData } from './OverviewCompositions'
@@ -63,7 +64,6 @@ import { SavedViewsBar } from '@/features/dashboard/SavedViewsBar'
 import { useSavedViews, type SavedView } from '@/features/dashboard/savedViews'
 import { Explainer } from '@/components/ui/Explainer'
 import { ChangeDiagnosis } from './ChangeDiagnosis'
-import { ContentReading } from './ContentReading'
 import { DistributionBars } from './DistributionBars'
 import { SPECS, layoutFor, valueReading } from './metricCatalog'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
@@ -125,8 +125,7 @@ import { StoreFunnelTab } from './StoreFunnelTab'
 import { AttributionPanel } from './AttributionPanel'
 import { AdPoster } from '@/features/content/AdPoster'
 import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
-import {
-  creativeScope, decodePath, drillInto, drillUpTo, encodePath, nextLevel, parentFor, rememberName,
+import { creativeScope, decodePath, drillInto, drillUpTo, encodePath, nextLevel, parentFor, rememberName,
   stepLabel, withNames,
   type DrillLevel, type DrillStep,
 } from './drilldown'
@@ -163,8 +162,25 @@ const TAB_GROUPS = [
       { id: 'accounts', ar: 'الحسابات', en: 'Accounts' },
       { id: 'campaigns', ar: 'الحملات', en: 'Campaigns' },
       { id: 'ad_sets', ar: 'المجموعات', en: 'Ad sets' },
+      /*
+       * ADS-TERMINOLOGY-001 — the DUPLICATION was in the name, not in the surface.
+       *
+       * These two tabs read «الإعلانات» and «الإعلان» — «Ads» and «Ad» — a pair that differs by a
+       * plural, so a reader could not tell which one answered their question. But they are not two
+       * views of one thing: the first lists AD entities, and the second is the last rung of
+       * campaign → ad set → ad → CONTENT, with a grain of its own.
+       *
+       * A content item is not an ad. One creative can be carried by several ads — that relation is
+       * why `creative.ads` is a list — and its figures come from `creative_daily_metrics` rather
+       * than from an ad's row. Collapsing it into the ads table would have to pick one ad per
+       * creative or double-count, and both are wrong.
+       *
+       * So the second tab keeps its capability and loses its misleading name. `?tab=creative`
+       * still opens it — the id is untouched, because links people hold point at a surface that is
+       * still here.
+       */
       { id: 'ads', ar: 'الإعلانات', en: 'Ads' },
-      { id: 'creative', ar: 'الإعلان', en: 'Ad' },
+      { id: 'creative', ar: 'أداء المحتويات', en: 'Content performance' },
     ],
   },
   {
@@ -507,8 +523,8 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
       {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'ad_sets' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />}
       {tab === 'ads' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />}
-      {tab === 'objective' && <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'creative' && <CreativeTab projectId={currentProjectId} range={range} filters={filters} />}
+      {tab === 'objective' && <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'funnel' && <FunnelTab projectId={currentProjectId} range={range} filters={filters} />}
       {tab === 'store' && <StoreFunnelTab projectId={currentProjectId} range={range} />}
       {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} filters={filters} />}
@@ -2111,6 +2127,7 @@ const TAB_FOR: Record<DrillLevel, string> = {
   campaign: 'campaigns',
   ad_set: 'ad_sets',
   ad: 'ads',
+  /* The last rung: an ad drills into the CONTENT that ran under it, on the content surface. */
   creative: 'creative',
 }
 
@@ -2166,6 +2183,185 @@ function DrillCrumbs({ path, level, ar, onUpTo }: { path: DrillStep[]; level: Dr
           </button>
         </span>
       ))}
+    </div>
+  )
+}
+
+/**
+ * ANALYTICS-CREATIVE-VISIBLE-001 — the creative rung, inside Analytics.
+ *
+ * The last level of the drill-down: platform → campaign → ad set → ad → CREATIVE. It reads the same
+ * `CreativeAnalysisController` the Content library reads, deliberately — §15.17 calls an independent
+ * source an architectural defect rather than a discrepancy, and a second query here would let
+ * Analytics and Content disagree about the same creative.
+ *
+ * Figures come from `creative_daily_metrics` only. Nothing is projected down from the campaign or
+ * the ad: a creative that the platform does not break out shows «—», because inventing its share of
+ * a campaign total would be a number nobody measured.
+ */
+function CreativeTab({ projectId, range, filters }: TabProps) {
+  const ar = useAr()
+  /*
+   * HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN — the last rung of campaign → ad set → ad → creative.
+   *
+   * The library speaks `ad_ids` / `ad_set_ids` rather than the metrics API's single `parent`, so the
+   * path is translated rather than passed through, and it takes the DEEPEST pinned rung. It is part
+   * of the query key for the same reason `parent` is elsewhere: it changes the request, so a cached
+   * unnarrowed response must never answer a drilled-down question.
+   */
+  const [rawPath] = useUrlState('drill', '')
+  const path = useMemo(() => withNames(decodePath(rawPath)), [rawPath])
+  const scope = creativeScope(path)
+  const write = useUrlWriter()
+  const narrowed = scope.ad_ids !== undefined || scope.ad_set_ids !== undefined
+
+  /*
+   * ANALYTICS-CREATIVE-SCOPE-001 — this tab ignored the filter bar entirely.
+   *
+   * It took only `projectId` and `range`, so selecting TikTok left it listing Meta creatives with
+   * Meta's figures under a bar that said TikTok. The filter was not weak here, it was decorative —
+   * and a table that contradicts the control above it is worse than an empty one, because the
+   * reader has no way to know which of the two is lying.
+   *
+   * The library speaks a different dialect for the same axes — `providers` and `campaign_ids`
+   * against the metrics API's `provider` and `campaign` — so they are translated here rather than
+   * passed through. `objective` is deliberately not forwarded: the library filters objectives by
+   * the CAMPAIGN's objective through its own axis, and mapping the metric filter onto it would
+   * narrow twice for one choice.
+   */
+  const q = useQuery({
+    queryKey: [
+      'analytics', 'creatives', projectId, range.from, range.to, filters.provider, filters.campaign,
+      scope.ad_ids?.join(',') ?? '', scope.ad_set_ids?.join(',') ?? '',
+    ],
+    queryFn: () => listCreatives(
+      {
+        from: range.from,
+        to: range.to,
+        per_page: 24,
+        providers: filters.provider?.length ? filters.provider : undefined,
+        campaign_ids: filters.campaign?.length ? filters.campaign : undefined,
+        // The drill path, in the library's own dialect — the deepest pinned rung only.
+        ...scope,
+      },
+      projectId,
+    ),
+    enabled: Boolean(projectId),
+  })
+
+  const rows = q.data?.creatives ?? []
+  const currency = q.data?.currency ?? null
+
+  /*
+   * ANALYTICS-DIFFERENTIATION-001 — the READING above the ranked table.
+   *
+   * Same reach, same filters, same window as the table below it, for the reason `pulse` states: a
+   * reading built on its own query is one that can contradict the table it sits above. It is a
+   * SEPARATE request rather than a field on the library page because the library is paged, and a
+   * format comparison computed from twenty-four rows would change every time the reader turned a
+   * page — the signature of a figure that is not measuring what it claims to.
+   */
+  const intelligence = useQuery({
+    queryKey: [
+      'analytics', 'content-intelligence', projectId, range.from, range.to,
+      filters.provider, filters.campaign, filters.objective,
+      scope.ad_ids?.join(',') ?? '', scope.ad_set_ids?.join(',') ?? '',
+    ],
+    queryFn: () => contentIntelligence(
+      {
+        from: range.from,
+        to: range.to,
+        providers: filters.provider?.length ? filters.provider : undefined,
+        campaign_ids: filters.campaign?.length ? filters.campaign : undefined,
+        // ONE objective or none: a verdict has one metric, and picking arbitrarily from several
+        // would judge every format by a purpose most of them were not bought for.
+        objective: filters.objective?.length === 1 ? filters.objective[0] : undefined,
+        ...scope,
+      },
+      projectId!,
+    ),
+    enabled: Boolean(projectId),
+  })
+
+  return (
+    <div className="space-y-4">
+      <DrillCrumbs path={path} level="creative" ar={ar} onUpTo={(lvl) => write({
+        drill: { value: encodePath(drillUpTo(path, lvl)), fallback: '' },
+        tab: { value: TAB_FOR[lvl], fallback: 'performance' },
+      })} />
+      <Panel
+        title={ar ? 'أداء الإعلانات' : 'Ad performance'}
+        description={ar ? 'من بيانات الإعلان نفسه — لا تُنسب أرقام الحملة إلى إعلان' : 'From ad-level data — campaign figures are never attributed to a ad'}
+        loading={q.isLoading}
+        error={q.isError}
+        /* Narrowed and empty is «nothing under this ad», never «no creatives at all». */
+        empty={!q.isLoading && rows.length === 0 && !narrowed}
+      >
+        {!q.isLoading && !q.isError && rows.length === 0 && narrowed && (
+          <p className="rounded-xl border border-border p-3 text-sm text-text-muted" data-testid="creative-empty-under-parent">
+            {ar
+              ? 'لا يوجد إعلان مسجَّل تحت هذا المستوى في هذه الفترة. هذا ليس «لا يوجد إعلان» للمشروع.'
+              : 'No ad was reported under this level in this period. That is not «no ads» for the project.'}
+          </p>
+        )}
+        {/*
+          ANALYTICS-TABLES-001 — the canonical table, last of the four hand-rolled ones.
+          Numeric columns were `text-start`, so under RTL the figures and their headings sat against
+          opposite edges; and the list could not be re-ordered, on the tab where «which creative did
+          best» is the entire question being asked.
+        */}
+        <div data-testid="creative-analysis-table">
+          <MetricTable
+            head={[
+              ar ? 'الإعلان' : 'Ad',
+              ar ? 'الحملة' : 'Campaign',
+              ar ? 'الهدف' : 'Objective',
+              ar ? 'الإنفاق' : 'Spend',
+              ar ? 'الظهور' : 'Impressions',
+              ar ? 'النقرات' : 'Clicks',
+              'CTR',
+              ar ? 'آخر نشاط' : 'Last active',
+            ]}
+            rows={rows.map((cr) => [
+              <span key={cr.id} className="block max-w-56 truncate font-medium text-text-primary">{cr.name}</span>,
+              <span key={`${cr.id}-c`} className="block max-w-40 truncate text-text-secondary">{cr.campaign_name ?? '—'}</span>,
+              cr.objective ?? '—',
+              rowMoney(cr.metrics ?? undefined, 'spend', currency),
+              countCell(cr.metrics?.impressions ?? null).text,
+              countCell(cr.metrics?.clicks ?? null).text,
+              rateOrDash(cr.metrics?.ctr ?? null),
+              cr.freshness?.last_active_at ? fmtDate(cr.freshness.last_active_at) : '—',
+            ])}
+            values={rows.map((cr) => [
+              cr.name ?? '',
+              cr.campaign_name ?? '',
+              cr.objective ?? '',
+              typeof cr.metrics?.spend === 'number' ? cr.metrics.spend : null,
+              cr.metrics?.impressions ?? null,
+              cr.metrics?.clicks ?? null,
+              cr.metrics?.ctr ?? null,
+              // A date sorts as a date, not as the string it is printed as.
+              cr.freshness?.last_active_at ? Date.parse(cr.freshness.last_active_at) : null,
+            ])}
+            initialSort={{ column: 3, dir: 'desc' }}
+          />
+        </div>
+      </Panel>
+
+      {/*
+        DASHBOARD-HIERARCHY — the reading sits BELOW the ads, not above them.
+
+        «The cards, and beneath them the chart and the creative side.» The reader of this tab came
+        for the ads; the format comparison is what they read AFTER seeing them, and putting an
+        analysis above the thing it analyses is the same inversion the other tabs carried.
+      */}
+      {!intelligence.isLoading && (
+        <ContentReading
+          data={intelligence.data?.by_format}
+          currency={intelligence.data?.currency ?? currency}
+          creativesRead={intelligence.data?.creatives_read ?? 0}
+        />
+      )}
     </div>
   )
 }
@@ -2311,8 +2507,25 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
    * Sorting reads the values array, so a withheld spend stays last in both directions instead of
    * being read as zero, and a derived cost is sortable only where both its parts are real.
    */
+  /*
+   * ADS-TERMINOLOGY-001 — the three columns the retired «الإعلان» tab had and this one did not.
+   *
+   * Campaign and objective are the context that made that tab worth opening: an ad's name rarely
+   * says which campaign bought it or what it was bought FOR, and a reader scanning forty rows is
+   * asking both. «Last active» is the freshness that separates an ad that stopped from an ad that
+   * never ran.
+   *
+   * On the AD level only. An ad set already sits under a campaign the reader drilled through, so the
+   * column would repeat the crumb above it, and the library has no creative for an ad set to read an
+   * objective from.
+   *
+   * They cost no extra request: `creativeByAd` is already fetched for the previews.
+   */
+  const adContext = level === 'ad'
+
   const head = [
     ar ? 'الاسم' : 'Name',
+    ...(adContext ? [ar ? 'الحملة' : 'Campaign', ar ? 'الهدف' : 'Objective'] : []),
     ar ? 'الحالة' : 'State',
     ar ? 'الإنفاق' : 'Spend',
     ar ? 'الظهور' : 'Impressions',
@@ -2324,6 +2537,7 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
     'CPM',
     ar ? 'النتائج' : 'Results',
     'CPA',
+    ...(adContext ? [ar ? 'آخر نشاط' : 'Last active'] : []),
   ]
 
   const cells = rows.map((row) => [
@@ -2389,6 +2603,24 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
       </div>
     </div>,
     /*
+     * ADS-TERMINOLOGY-001 — the context the retired «الإعلان» tab carried.
+     *
+     * Read from the creative the previews query already fetched, so this costs nothing. An ad whose
+     * creative the library does not hold shows «—», which is the truth: the campaign is knowable
+     * from the ad, but the objective is a property of the campaign the CREATIVE names, and inventing
+     * either from the ad's own row would be a guess wearing a column heading.
+     */
+    ...(adContext
+      ? [
+          <span key={`camp-${row.entity_id}`} className="block max-w-40 truncate text-text-secondary">
+            {creativeByAd.get(row.external_id ?? '')?.campaign_name ?? '—'}
+          </span>,
+          <span key={`obj-${row.entity_id}`} className="text-text-secondary">
+            {creativeByAd.get(row.external_id ?? '')?.objective ?? '—'}
+          </span>,
+        ]
+      : []),
+    /*
      * The state, beside the row rather than only in its position.
      *
      * Ordering alone is not «clear grouping»: a reader who sorts by spend, or lands mid-table, loses
@@ -2407,6 +2639,9 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
     rowCostPer(row, 'cpm', (row.impressions ?? 0) / 1000, currency),
     countCell(row.conversions).text,
     rowCostPer(row, 'cpa', row.conversions ?? 0, currency),
+    ...(adContext
+      ? [row.last_active_on ? fmtDate(row.last_active_on) : '—']
+      : []),
   ])
 
   /*
@@ -2418,6 +2653,7 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
    */
   const exact: (string | null)[][] = rows.map((row) => [
     null,                                   // name
+    ...(adContext ? [null, null] : []),     // campaign, objective
     null,                                   // state
     null,                                   // spend — money carries its own exact value
     countCell(row.impressions).exact,
@@ -2429,6 +2665,7 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
     null,                                   // CPM
     countCell(row.conversions).exact,
     null,                                   // CPA
+    ...(adContext ? [null] : []),           // last active
   ])
 
   /*
@@ -2447,6 +2684,12 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
 
   const values: SortValues[] = rows.map((row) => [
     row.name ?? row.external_id ?? '',
+    ...(adContext
+      ? [
+          creativeByAd.get(row.external_id ?? '')?.campaign_name ?? '',
+          creativeByAd.get(row.external_id ?? '')?.objective ?? '',
+        ]
+      : []),
     /*
      * The state sorts by how much attention it deserves — serving, idle, stopped — not
      * alphabetically. A reader sorting this column is asking «what is running», and «Idle» before
@@ -2463,6 +2706,7 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
     per(row, (row.impressions ?? 0) / 1000),
     row.conversions ?? null,
     per(row, row.conversions ?? 0),
+    ...(adContext ? [row.last_active_on ?? null] : []),
   ])
 
   return (
@@ -2863,184 +3107,6 @@ function FamilySpend({
   )
 }
 
-/**
- * ANALYTICS-CREATIVE-VISIBLE-001 — the creative rung, inside Analytics.
- *
- * The last level of the drill-down: platform → campaign → ad set → ad → CREATIVE. It reads the same
- * `CreativeAnalysisController` the Content library reads, deliberately — §15.17 calls an independent
- * source an architectural defect rather than a discrepancy, and a second query here would let
- * Analytics and Content disagree about the same creative.
- *
- * Figures come from `creative_daily_metrics` only. Nothing is projected down from the campaign or
- * the ad: a creative that the platform does not break out shows «—», because inventing its share of
- * a campaign total would be a number nobody measured.
- */
-function CreativeTab({ projectId, range, filters }: TabProps) {
-  const ar = useAr()
-  /*
-   * HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN — the last rung of campaign → ad set → ad → creative.
-   *
-   * The library speaks `ad_ids` / `ad_set_ids` rather than the metrics API's single `parent`, so the
-   * path is translated rather than passed through, and it takes the DEEPEST pinned rung. It is part
-   * of the query key for the same reason `parent` is elsewhere: it changes the request, so a cached
-   * unnarrowed response must never answer a drilled-down question.
-   */
-  const [rawPath] = useUrlState('drill', '')
-  const path = useMemo(() => withNames(decodePath(rawPath)), [rawPath])
-  const scope = creativeScope(path)
-  const write = useUrlWriter()
-  const narrowed = scope.ad_ids !== undefined || scope.ad_set_ids !== undefined
-
-  /*
-   * ANALYTICS-CREATIVE-SCOPE-001 — this tab ignored the filter bar entirely.
-   *
-   * It took only `projectId` and `range`, so selecting TikTok left it listing Meta creatives with
-   * Meta's figures under a bar that said TikTok. The filter was not weak here, it was decorative —
-   * and a table that contradicts the control above it is worse than an empty one, because the
-   * reader has no way to know which of the two is lying.
-   *
-   * The library speaks a different dialect for the same axes — `providers` and `campaign_ids`
-   * against the metrics API's `provider` and `campaign` — so they are translated here rather than
-   * passed through. `objective` is deliberately not forwarded: the library filters objectives by
-   * the CAMPAIGN's objective through its own axis, and mapping the metric filter onto it would
-   * narrow twice for one choice.
-   */
-  const q = useQuery({
-    queryKey: [
-      'analytics', 'creatives', projectId, range.from, range.to, filters.provider, filters.campaign,
-      scope.ad_ids?.join(',') ?? '', scope.ad_set_ids?.join(',') ?? '',
-    ],
-    queryFn: () => listCreatives(
-      {
-        from: range.from,
-        to: range.to,
-        per_page: 24,
-        providers: filters.provider?.length ? filters.provider : undefined,
-        campaign_ids: filters.campaign?.length ? filters.campaign : undefined,
-        // The drill path, in the library's own dialect — the deepest pinned rung only.
-        ...scope,
-      },
-      projectId,
-    ),
-    enabled: Boolean(projectId),
-  })
-
-  const rows = q.data?.creatives ?? []
-  const currency = q.data?.currency ?? null
-
-  /*
-   * ANALYTICS-DIFFERENTIATION-001 — the READING above the ranked table.
-   *
-   * Same reach, same filters, same window as the table below it, for the reason `pulse` states: a
-   * reading built on its own query is one that can contradict the table it sits above. It is a
-   * SEPARATE request rather than a field on the library page because the library is paged, and a
-   * format comparison computed from twenty-four rows would change every time the reader turned a
-   * page — the signature of a figure that is not measuring what it claims to.
-   */
-  const intelligence = useQuery({
-    queryKey: [
-      'analytics', 'content-intelligence', projectId, range.from, range.to,
-      filters.provider, filters.campaign, filters.objective,
-      scope.ad_ids?.join(',') ?? '', scope.ad_set_ids?.join(',') ?? '',
-    ],
-    queryFn: () => contentIntelligence(
-      {
-        from: range.from,
-        to: range.to,
-        providers: filters.provider?.length ? filters.provider : undefined,
-        campaign_ids: filters.campaign?.length ? filters.campaign : undefined,
-        // ONE objective or none: a verdict has one metric, and picking arbitrarily from several
-        // would judge every format by a purpose most of them were not bought for.
-        objective: filters.objective?.length === 1 ? filters.objective[0] : undefined,
-        ...scope,
-      },
-      projectId!,
-    ),
-    enabled: Boolean(projectId),
-  })
-
-  return (
-    <div className="space-y-4">
-      <DrillCrumbs path={path} level="creative" ar={ar} onUpTo={(lvl) => write({
-        drill: { value: encodePath(drillUpTo(path, lvl)), fallback: '' },
-        tab: { value: TAB_FOR[lvl], fallback: 'performance' },
-      })} />
-      <Panel
-        title={ar ? 'أداء الإعلانات' : 'Ad performance'}
-        description={ar ? 'من بيانات الإعلان نفسه — لا تُنسب أرقام الحملة إلى إعلان' : 'From ad-level data — campaign figures are never attributed to a ad'}
-        loading={q.isLoading}
-        error={q.isError}
-        /* Narrowed and empty is «nothing under this ad», never «no creatives at all». */
-        empty={!q.isLoading && rows.length === 0 && !narrowed}
-      >
-        {!q.isLoading && !q.isError && rows.length === 0 && narrowed && (
-          <p className="rounded-xl border border-border p-3 text-sm text-text-muted" data-testid="creative-empty-under-parent">
-            {ar
-              ? 'لا يوجد إعلان مسجَّل تحت هذا المستوى في هذه الفترة. هذا ليس «لا يوجد إعلان» للمشروع.'
-              : 'No ad was reported under this level in this period. That is not «no ads» for the project.'}
-          </p>
-        )}
-        {/*
-          ANALYTICS-TABLES-001 — the canonical table, last of the four hand-rolled ones.
-          Numeric columns were `text-start`, so under RTL the figures and their headings sat against
-          opposite edges; and the list could not be re-ordered, on the tab where «which creative did
-          best» is the entire question being asked.
-        */}
-        <div data-testid="creative-analysis-table">
-          <MetricTable
-            head={[
-              ar ? 'الإعلان' : 'Ad',
-              ar ? 'الحملة' : 'Campaign',
-              ar ? 'الهدف' : 'Objective',
-              ar ? 'الإنفاق' : 'Spend',
-              ar ? 'الظهور' : 'Impressions',
-              ar ? 'النقرات' : 'Clicks',
-              'CTR',
-              ar ? 'آخر نشاط' : 'Last active',
-            ]}
-            rows={rows.map((cr) => [
-              <span key={cr.id} className="block max-w-56 truncate font-medium text-text-primary">{cr.name}</span>,
-              <span key={`${cr.id}-c`} className="block max-w-40 truncate text-text-secondary">{cr.campaign_name ?? '—'}</span>,
-              cr.objective ?? '—',
-              rowMoney(cr.metrics ?? undefined, 'spend', currency),
-              countCell(cr.metrics?.impressions ?? null).text,
-              countCell(cr.metrics?.clicks ?? null).text,
-              rateOrDash(cr.metrics?.ctr ?? null),
-              cr.freshness?.last_active_at ? fmtDate(cr.freshness.last_active_at) : '—',
-            ])}
-            values={rows.map((cr) => [
-              cr.name ?? '',
-              cr.campaign_name ?? '',
-              cr.objective ?? '',
-              typeof cr.metrics?.spend === 'number' ? cr.metrics.spend : null,
-              cr.metrics?.impressions ?? null,
-              cr.metrics?.clicks ?? null,
-              cr.metrics?.ctr ?? null,
-              // A date sorts as a date, not as the string it is printed as.
-              cr.freshness?.last_active_at ? Date.parse(cr.freshness.last_active_at) : null,
-            ])}
-            initialSort={{ column: 3, dir: 'desc' }}
-          />
-        </div>
-      </Panel>
-
-      {/*
-        DASHBOARD-HIERARCHY — the reading sits BELOW the ads, not above them.
-
-        «The cards, and beneath them the chart and the creative side.» The reader of this tab came
-        for the ads; the format comparison is what they read AFTER seeing them, and putting an
-        analysis above the thing it analyses is the same inversion the other tabs carried.
-      */}
-      {!intelligence.isLoading && (
-        <ContentReading
-          data={intelligence.data?.by_format}
-          currency={intelligence.data?.currency ?? currency}
-          creativesRead={intelligence.data?.creatives_read ?? 0}
-        />
-      )}
-    </div>
-  )
-}
 
 /**
  * ANALYTICS-DRILLDOWN-001 — the ad accounts beneath a platform.
