@@ -493,6 +493,21 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
      *
      * @return list<array<string,mixed>>
      */
+    /**
+     * Read the raw bodies WITHOUT draining them.
+     *
+     * `takeRawResponses()` empties the buffer, which is right for a caller that owns the sync and
+     * must not carry January's payloads into February. A reporter that only wants to describe what
+     * came back must not take them away from the next reader — two reports of one response, and the
+     * second one silently empty, is the sort of disagreement this class already guards against.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function peekRawResponses(): array
+    {
+        return $this->rawResponses;
+    }
+
     public function takeRawResponses(): array
     {
         $taken = $this->rawResponses;
