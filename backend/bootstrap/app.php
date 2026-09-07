@@ -9,6 +9,7 @@ use App\Domains\Commerce\Console\SyncStoresCommand;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
 use App\Domains\Identity\Middleware\RejectRevokedSessions;
 use App\Domains\Integrations\Console\AcceptStructureSyncCommand;
+use App\Domains\Integrations\Console\CloseAbandonedSyncRunsCommand;
 use App\Domains\Integrations\Console\DiagnoseSyncCommand;
 use App\Domains\Integrations\Console\ProbeInsightsCommand;
 use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
@@ -98,6 +99,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // separates «the account was quiet» from «the request cannot return rows for this account».
         ProbeInsightsCommand::class,
         QuarantineSandboxRowsCommand::class,
+        // A run whose worker vanished is closed here: `failed()` only fires when the QUEUE knows the
+        // job died, so a SIGKILL or an OOM leaves the row «running» with no upper bound at all.
+        CloseAbandonedSyncRunsCommand::class,
         // COMMERCE-001 — the store sweep: products, customers, orders and abandoned carts.
         SyncStoresCommand::class,
         // FX-FEED-001 — the exchange rates the conversions need. Registered even though no source

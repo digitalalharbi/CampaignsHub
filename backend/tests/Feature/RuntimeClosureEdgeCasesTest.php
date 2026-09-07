@@ -289,6 +289,89 @@ final class RuntimeClosureEdgeCasesTest extends TestCase
      * `AccountStructureSyncer` catches every `Throwable` a provider can raise, so `running` cannot
      * mean «the platform refused». It means the process went away, and that is what this hook is for.
      */
+    /**
+     * ...and the run whose worker vanished, which that hook can never reach.
+     *
+     * `failed()` is called when the QUEUE knows a job died. It is not called when the worker itself
+     * goes away — a SIGKILL, an OOM, a container replaced mid-flight — so the row stays `running`
+     * with no upper bound at all.
+     *
+     * That is not hypothetical. A forced Snapchat sync on 2026-09-07 was refused by its own guard
+     * because a structure run had been «running» since 2026-08-26: twelve days, on a job whose
+     * timeout is fifteen minutes. An open run is read as work in progress by the Integration Centre,
+     * by the diagnosis and by the accept command — so a worker that died in August blocked an
+     * operator in September, and the product's answer to «what is happening» was wrong throughout.
+     */
+    public function test_a_run_left_open_by_a_vanished_worker_is_closed(): void
+    {
+        $account = $this->assigned('sandbox', 'sandbox-act-6');
+
+        $abandoned = IntegrationSyncRun::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'provider_connection_id' => $account->provider_connection_id,
+            'type' => 'structure',
+            'status' => SyncRunStatus::Running->value,
+            'records' => 0,
+            'started_at' => Carbon::now()->subDays(12),
+        ]);
+
+        $this->artisan('integrations:close-abandoned-runs', ['--apply' => true])->assertSuccessful();
+
+        $abandoned->refresh();
+
+        $this->assertSame(SyncRunStatus::Failed->value, $abandoned->status);
+        $this->assertNotNull($abandoned->finished_at);
+        $this->assertStringContainsString('the worker stopped it', (string) $abandoned->error);
+    }
+
+    /**
+     * A job that could still be working is left alone.
+     *
+     * The whole value of this is that an open row means «busy» again. A reaper that closed a live
+     * run would make the row lie in the other direction, and would race the job that owns it.
+     */
+    public function test_a_run_that_could_still_be_alive_is_not_touched(): void
+    {
+        $account = $this->assigned('sandbox', 'sandbox-act-7');
+
+        $live = IntegrationSyncRun::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'provider_connection_id' => $account->provider_connection_id,
+            'type' => 'structure',
+            'status' => SyncRunStatus::Running->value,
+            'records' => 0,
+            'started_at' => Carbon::now()->subMinutes(3),
+        ]);
+
+        $this->artisan('integrations:close-abandoned-runs', ['--apply' => true])->assertSuccessful();
+
+        $this->assertSame(SyncRunStatus::Running->value, $live->refresh()->status);
+    }
+
+    /** Without `--apply` it reports and changes nothing — the default may not mutate production. */
+    public function test_it_reports_without_closing_unless_told_to(): void
+    {
+        $account = $this->assigned('sandbox', 'sandbox-act-8');
+
+        $abandoned = IntegrationSyncRun::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'provider_connection_id' => $account->provider_connection_id,
+            'type' => 'structure',
+            'status' => SyncRunStatus::Running->value,
+            'records' => 0,
+            'started_at' => Carbon::now()->subDays(3),
+        ]);
+
+        $this->artisan('integrations:close-abandoned-runs')
+            ->expectsOutputToContain('Reporting only. Pass --apply to close them.')
+            ->assertSuccessful();
+
+        $this->assertSame(SyncRunStatus::Running->value, $abandoned->refresh()->status);
+    }
+
     public function test_a_killed_structure_job_closes_its_run_instead_of_leaving_it_open(): void
     {
         $account = $this->assigned('sandbox', 'sandbox-act-5');
