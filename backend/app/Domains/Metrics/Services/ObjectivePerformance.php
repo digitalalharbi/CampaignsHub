@@ -98,6 +98,26 @@ final class ObjectivePerformance
                 'spend' => round((float) $row->spend, 2),
             ];
 
+            /*
+             * AGGREGATION-TRUTH-001 — the coverage has to describe the path it is attached to.
+             *
+             * Every path starts as `emptyPath()`, which states `no_contributors` because that is
+             * true of a path nothing has been added to yet. Rows were then accumulated into it —
+             * spend, orders, revenue, campaigns — and the coverage was never touched again. So the
+             * conversion path on the owner's live client report carried 9,437.86 in spend and 566
+             * orders while reporting that NOTHING had contributed to it.
+             *
+             * That is the inverse of the failure the state exists to prevent. Its own note says a
+             * surface can now say «no campaigns on this path» instead of printing a row of zeros;
+             * it was saying that over nine thousand of somebody's money.
+             *
+             * The contributor is the campaign just added, and it is recorded here rather than
+             * recomputed later so the state and the figures can never disagree — they are written
+             * by the same line of reasoning.
+             */
+            $bucket['coverage']['state'] = 'complete';
+            $bucket['coverage']['included_contributors'][] = (string) $row->unified_campaign_id;
+
             $totalSpend += (float) $row->spend;
 
             // The whole rule, in four lines: only a SALES campaign's money reaches the sales figures.

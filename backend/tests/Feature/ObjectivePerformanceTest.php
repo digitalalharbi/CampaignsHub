@@ -155,6 +155,59 @@ final class ObjectivePerformanceTest extends TestCase
     }
 
     /** Acceptance case 2 — the awareness path reports no cost per order, because it bought none. */
+    /**
+     * AGGREGATION-TRUTH-001 — a path's coverage has to describe the path it is attached to.
+     *
+     * Every path starts as `emptyPath()`, which states `no_contributors` because that is true of a
+     * path nothing has been added to yet. Rows were then accumulated into it — spend, orders,
+     * revenue, campaigns — and the coverage was never touched again.
+     *
+     * So on the owner's LIVE client report the conversion path carried 9,437.86 in spend and 566
+     * orders while reporting that NOTHING had contributed to it. That is the inverse of the failure
+     * the state exists to prevent: its own note says a surface can now say «no campaigns on this
+     * path» instead of printing a row of zeros, and it was saying that over nine thousand of
+     * somebody's money.
+     */
+    public function test_a_path_with_spend_does_not_report_that_nothing_contributed(): void
+    {
+        $paths = collect($this->read()->json('data.paths'));
+
+        $conversion = $paths->firstWhere('path', 'conversion');
+
+        $this->assertNotNull($conversion);
+        $this->assertGreaterThan(0, (float) $conversion['spend'], 'the fixture must have conversion spend for this to mean anything');
+
+        $this->assertNotSame(
+            'no_contributors',
+            $conversion['coverage']['state'],
+            'a path with spend and orders reported that nothing contributed to it',
+        );
+        $this->assertNotEmpty(
+            $conversion['coverage']['included_contributors'],
+            'the coverage names no contributor for a path that has campaigns',
+        );
+    }
+
+    /** ...and a path nothing ran on still says so, which is the state's whole purpose. */
+    public function test_a_path_nothing_ran_on_still_reports_no_contributors(): void
+    {
+        $paths = collect($this->read()->json('data.paths'));
+
+        foreach ($paths as $path) {
+            if ((float) $path['spend'] === 0.0 && count($path['campaigns']) === 0) {
+                $this->assertSame(
+                    'no_contributors',
+                    $path['coverage']['state'],
+                    "«{$path['path']}» has nothing on it and no longer says so",
+                );
+
+                return;
+            }
+        }
+
+        $this->markTestSkipped('This fixture has a contributor on every path, so the empty state cannot be checked here.');
+    }
+
     public function test_the_awareness_path_reports_no_cost_per_order(): void
     {
         $paths = collect($this->read()->json('data.paths'))->keyBy('path');
