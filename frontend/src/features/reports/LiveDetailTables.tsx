@@ -3,6 +3,7 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { compact, money, moneyFromTotals } from '@/features/analytics/format'
 import { formatMoneyReading, readCostPer, type MoneyTotals } from '@/lib/money/contract'
+import { mixedResultsNote } from './reportMetrics'
 import type { LivePayload } from './api'
 import type { Locale } from '@/stores/ui'
 
@@ -165,10 +166,33 @@ export function LiveDetailTables({
         ? formatMoneyReading(readCostPer(row as unknown as MoneyTotals, 'cpa', 'orders', currency, ar), money)
         : '\u2014'
 
+    /*
+     * CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — the cost per result above can be an average of prices.
+     *
+     * Leads, app installs, add to cart, sales, conversions and purchases share the conversion path,
+     * so this column could show a lead programme's cost averaged with a sale's — always downwards,
+     * because leads are many and cheap. The marker is visible and the sentence is the reason, on the
+     * same pattern the funnel already uses for a step that exceeds the one above it: a `title` alone
+     * is invisible in print and on a touch screen, and a marker alone explains nothing.
+     */
+    const blend = (row: (typeof objectiveRows)[number]) =>
+      row.cpa_mixes_result_types === true ? mixedResultsNote(row.result_composition, ar) : null
+
     return {
       rows: base.rows.map((cells, i) => [
         ...cells,
-        <span key="cost" dir="ltr">{costPer(objectiveRows[i])}</span>,
+        <span key="cost" dir="ltr">
+          {costPer(objectiveRows[i])}
+          {blend(objectiveRows[i]) !== null && (
+            <span
+              data-testid={`objective-${objectiveRows[i].path}-mixed-results`}
+              className="ms-1 text-warning"
+              title={blend(objectiveRows[i])!.note}
+            >
+              {ar ? '· مزيج' : '· mixed'}
+            </span>
+          )}
+        </span>,
       ]),
       values: base.values.map((v, i): SortValues => [
         ...v,

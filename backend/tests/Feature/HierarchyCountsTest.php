@@ -585,6 +585,55 @@ final class HierarchyCountsTest extends TestCase
             ->assertSuccessful();
     }
 
+    /**
+     * CONTENT-PREVIEW-SHAPES-001 — the shapes report names the one that draws nothing.
+     *
+     * Owner ledger row 7: a collection ad is a hero over a grid of product tiles, the tiles live
+     * behind a call this product does not make, and the card says so honestly. What no operator
+     * could ask until now is whether the live estate holds any — the hierarchy counted 1,451
+     * creatives and could not tell a drawable one from a shape with no picture at all.
+     *
+     * Two creatives, same account, same everything except the shape and the asset: one collection
+     * with no link of any kind, one image with one. A report that printed a single total, or that
+     * counted every creative as empty, fails both halves.
+     */
+    public function test_the_shape_that_draws_nothing_is_named_beside_the_one_that_draws(): void
+    {
+        $campaign = $this->campaign('cmp-1');
+
+        $this->creativeWith($campaign, 'cr-drawable', 'https://cdn.example/still.jpg');
+
+        $collection = $this->creativeWith($campaign, 'cr-collection', null);
+        $collection->forceFill(['format' => 'collection'])->save();
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('CREATIVE SHAPES')
+            ->expectsOutputToContain('collection            :     1   1 carry no asset link of any kind')
+            ->expectsOutputToContain('image                 :     1   all carry an asset link')
+            ->assertSuccessful();
+    }
+
+    /**
+     * The vacuity check for the line above: a shape whose rows all carry an asset must NOT be
+     * reported as drawing nothing. A report that says «carries no asset link» about everything
+     * would satisfy the test above and be worthless.
+     */
+    public function test_a_shape_whose_rows_all_carry_an_asset_is_not_called_empty(): void
+    {
+        $campaign = $this->campaign('cmp-1');
+
+        $this->creativeWith($campaign, 'cr-a', 'https://cdn.example/a.jpg');
+        $this->creativeWith($campaign, 'cr-b', 'https://cdn.example/b.jpg');
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('image                 :     2   all carry an asset link')
+            ->assertSuccessful();
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->doesntExpectOutputToContain('carry no asset link of any kind')
+            ->assertSuccessful();
+    }
+
     private function creativeWith(ExternalCampaign $campaign, string $externalId, ?string $asset): ExternalCreative
     {
         return ExternalCreative::withoutGlobalScopes()->create([

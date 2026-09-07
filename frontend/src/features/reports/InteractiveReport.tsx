@@ -25,7 +25,7 @@ import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import type { ResolvedDisclaimer } from '@/features/disclaimers/api'
 import type { MetricReading } from '@/components/ui/MetricStrip'
 import { SPECS } from '@/features/analytics/metricCatalog'
-import { type ReportMetric, creativeReadings, previousReading, reportMetrics, trendSeries } from './reportMetrics'
+import { type ReportMetric, type ResultPart, creativeReadings, mixedResultsNote, previousReading, reportMetrics, trendSeries } from './reportMetrics'
 import { useUi } from '@/stores/ui'
 import { ReportOutline } from './ReportOutline'
 
@@ -193,6 +193,10 @@ export interface ObjectivePath {
   roas: number | null
   /** False on the paths that were never meant to sell — their CPA and ROAS are null, not zero. */
   result_metrics_apply: boolean
+  /** What `orders` is made of: one entry per objective that actually produced a result. */
+  result_composition?: ResultPart[]
+  /** True when `cpa` averages across more than one kind of result — it must not be shown bare. */
+  cpa_mixes_result_types?: boolean
   /** Emptied for a client — CLIENT-REPORT-ENTITY-BOUNDARY-001. `campaigns_count` survives it. */
   campaigns: Array<{ id: string; name: string; objective: string; objective_label_ar: string; spend: number }>
   campaigns_count?: number
@@ -1108,6 +1112,20 @@ function ObjectiveSplitSlide({ data }: { data: ReportData }) {
               {p.result_metrics_apply
                 ? <div>CPA {moneyExact(p.cpa, c ?? null)} · ROAS {ratio(p.roas)}</div>
                 : <div>لا تنطبق تكلفة الطلب على هذا المسار</div>}
+              {/*
+                CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — the CPA above can be a blend, and says so.
+
+                Leads, app installs, add-to-cart, sales, conversions and purchases all file on the
+                conversion path, so this «CPA» could be a lead programme's price averaged with a
+                sale's. It always averages downwards, because leads are many and cheap — which is
+                the direction a client is least able to check. The sentence appears only when there
+                really is more than one kind; a warning under every honest cost per sale is noise.
+              */}
+              {p.cpa_mixes_result_types && mixedResultsNote(p.result_composition, true) !== null && (
+                <div data-testid={`path-${p.path}-mixed-results`} className="text-warning">
+                  {mixedResultsNote(p.result_composition, true)!.note}
+                </div>
+              )}
               {/*
                 How many, never which — CLIENT-REPORT-ENTITY-BOUNDARY-001.
 

@@ -223,3 +223,43 @@ export function creativeReadings(
       reading: readMetric(key, SPECS[key], row as Record<string, number | null>, reported, currency),
     }))
 }
+
+/** One kind of result inside a path's total, as the payload states it. */
+export type ResultPart = { objective: string; label_ar: string; label_en: string; orders: number }
+
+/**
+ * What a path's «results» number is made of, in one sentence — CROSS-PLATFORM-ATTRIBUTION-DEPTH-001.
+ *
+ * The conversion path is Leads, App installs, Add to cart, Sales, Conversions and Purchases
+ * together, so its `orders` can be several different things added up and its cost per result the
+ * average of two prices that have nothing to do with each other. Leads are many and cheap,
+ * purchases few and dear: the blend always flatters, and it is a number the client's own report
+ * prints.
+ *
+ * Three surfaces show it — the live report's path cards, the detailed objectives table and the PDF
+ * — so the wording lives here once. A surface that showed the blend and worded the reason itself
+ * would drift from the others, and the reader would meet two explanations of one figure.
+ *
+ * Returns null when there is nothing to say: one kind of result is the ordinary case, and putting
+ * «this mixes different results» under every honest cost per sale would make the warning worthless.
+ *
+ * Latin digits throughout — the product's numerals are Latin in both languages.
+ */
+export function mixedResultsNote(
+  parts: ResultPart[] | undefined,
+  ar: boolean,
+): { parts: string; note: string } | null {
+  if (!parts || parts.length < 2) return null
+
+  const named = parts
+    .map((part) => `${ar ? part.label_ar : part.label_en} ${Math.round(part.orders).toLocaleString('en-US')}`)
+    .join(' · ')
+
+  return {
+    parts: named,
+    note: ar
+      ? `النتائج هنا أكثر من نوع واحد (${named})، فتكلفة النتيجة متوسط بين أنواع مختلفة ولا تصلح لقياس نوع بعينه.`
+      : `The results here are more than one kind (${named}), so the cost per result averages across`
+        + ' different kinds and does not price any one of them.',
+  }
+}
