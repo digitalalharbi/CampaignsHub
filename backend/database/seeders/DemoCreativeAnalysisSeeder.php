@@ -142,8 +142,26 @@ final class DemoCreativeAnalysisSeeder extends Seeder
                      * product at delivery — and the fixture must reproduce that, or the branch that
                      * says «nothing is missing here» is never the branch under test.
                      */
-                    'thumbnail_url' => ($case['no_media'] ?? false) ? null : $this->placeholder($case['name'], $case['tint']),
-                    'asset_url' => ($case['no_media'] ?? false) ? null : $this->placeholder($case['name'], $case['tint']),
+                    /*
+                     * CONTENT-VIDEO-POSTER-001 — a film may arrive with NO cover, and usually does.
+                     *
+                     * `no_media` nulls the film as well, because it exists for the catalog ad, which
+                     * has no asset of any kind by design. Production's commonest video shape is a
+                     * different thing entirely: Snapchat sends the file and no separate thumbnail —
+                     * 549 video creatives and zero thumbnails on the live account — and the grid has
+                     * to decode its own still out of the film.
+                     *
+                     * No fixture had that shape. Every seeded video carried a placeholder cover, so
+                     * the grid always took the `<img>` branch and `VideoPoster` — the component that
+                     * does the decoding — was never once exercised in a real browser. `no_cover`
+                     * withholds the still and keeps the film, which is what the platform does.
+                     */
+                    'thumbnail_url' => ($case['no_media'] ?? false) || ($case['no_cover'] ?? false)
+                        ? null
+                        : $this->placeholder($case['name'], $case['tint']),
+                    'asset_url' => ($case['no_media'] ?? false) || ($case['no_cover'] ?? false)
+                        ? null
+                        : $this->placeholder($case['name'], $case['tint']),
                     /*
                      * A real, playable file for the video cases — nothing else proves §15.4.
                      *
@@ -301,6 +319,21 @@ final class DemoCreativeAnalysisSeeder extends Seeder
                 'width' => 1080, 'height' => 1920, 'aspect_ratio' => '9:16', 'duration' => 22,
                 'headline' => 'قصة علامتنا', 'cta' => 'WATCH_MORE',
                 'shape' => 'steady', 'video' => true, 'sales' => false, 'hash' => 'demo-hash-hero-video',
+            ],
+            [
+                /*
+                 * The Production shape: a Snapchat film with no cover at all.
+                 *
+                 * This is what the owner's library is mostly made of, and it was the one shape no
+                 * fixture reproduced — so «videos do not render on /app/content» could be true while
+                 * every gate stayed green. Portrait, because that is what a story is, and the card
+                 * has to letterbox rather than crop it.
+                 */
+                'key' => 'video-no-cover', 'name' => 'قصة بلا غلاف — سناب', 'format' => 'video',
+                'objective' => 'awareness', 'provider' => 'snapchat', 'tint' => '#2f6f5f', 'age' => 12,
+                'width' => 1242, 'height' => 2208, 'aspect_ratio' => '9:16', 'duration' => 3,
+                'headline' => 'قصة بلا غلاف', 'cta' => 'WATCH_MORE',
+                'shape' => 'steady', 'video' => true, 'sales' => false, 'no_cover' => true,
             ],
             [
                 'key' => 'burner', 'name' => 'إنفاق بلا نتائج — صورة', 'format' => 'image',
