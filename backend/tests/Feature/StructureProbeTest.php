@@ -80,6 +80,127 @@ final class StructureProbeTest extends TestCase
         ]);
     }
 
+    /**
+     * A Snapchat account, for the shape report — the creatives edge is Snapchat's, not Meta's.
+     *
+     * @return array{0: ExternalAccount}
+     */
+    private function snapchatAccount(): array
+    {
+        foreach (PlatformCredentials::for('snapchat')->requires() as $key) {
+            config()->set("ad_platforms.platforms.snapchat.{$key}", "test-{$key}");
+        }
+
+        $tenantId = $this->account->tenant_id;
+
+        $credential = IntegrationCredential::withoutGlobalScopes()->create([
+            'tenant_id' => $tenantId, 'provider' => 'snapchat',
+            'credential_scope' => 'tenant', 'credential_type' => 'oauth',
+            'encrypted_payload' => json_encode(['access_token' => 'tok', 'refresh_token' => 'r']), 'status' => 'active',
+        ]);
+        $connection = ProviderConnection::withoutGlobalScopes()->create([
+            'tenant_id' => $tenantId, 'credential_id' => $credential->id, 'provider' => 'snapchat',
+            'connection_name' => 'Snapchat', 'scope' => 'project_only', 'status' => 'connected',
+        ]);
+
+        return [ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $tenantId, 'provider_connection_id' => $connection->id,
+            'provider' => 'snapchat', 'account_type' => 'ad_account',
+            'external_id' => 'snap-act-1', 'name' => 'Snap', 'status' => 'active',
+            'currency' => 'SAR', 'timezone' => 'Asia/Riyadh',
+        ])];
+    }
+
+    /**
+     * CONTENT-PREVIEW-SHAPES-001 / owner ledger row 7 — the body's key names, so the tile fetch can
+     * be written against the provider's real shape instead of a guess.
+     *
+     * A collection ad is a hero over a grid of product tiles, and the tiles have never been fetched.
+     * The connector stores no `raw` for a creative, so nothing in the database can say where they
+     * live, and writing the fetch blind is how it ends up bound to a field that does not exist.
+     *
+     * The structure sweep already reads every creative, so this asks the provider nothing extra.
+     */
+    public function test_the_structure_probe_reports_the_key_names_a_creative_body_carries(): void
+    {
+        [$snap] = $this->snapchatAccount();
+
+        /*
+         * Each EDGE answers in its own shape. A single `*` fake returns creatives to the campaigns
+         * request too, the campaign census then reads zero, and `reportStructure` returns at its
+         * «this account is empty» branch before the shape report is ever reached — which is exactly
+         * how the first version of this test failed while the feature worked.
+         */
+        Http::fake([
+            '*/campaigns*' => Http::response(['campaigns' => [
+                ['campaign' => ['id' => 'c-1', 'name' => 'Ramadan', 'status' => 'ACTIVE']],
+            ]], 200),
+            '*/creatives*' => Http::response(['creatives' => [
+                ['creative' => [
+                    'id' => 'cr-1',
+                    'name' => 'Ramadan collection',
+                    'type' => 'COLLECTION',
+                    'top_snap_media_id' => 'media-1',
+                    'collection_properties' => [
+                        'interaction_zone_id' => 'zone-1',
+                        'default_fallback_interaction_type' => 'WEB_VIEW',
+                    ],
+                ]],
+                ['creative' => ['id' => 'cr-2', 'name' => 'Story', 'type' => 'SNAP_AD', 'top_snap_media_id' => 'media-2']],
+            ]], 200),
+            '*' => Http::response(['ads' => []], 200),
+        ]);
+
+        $run = $this->artisan('integrations:probe', [
+            'account' => $snap->external_id, '--structure' => true, '--shapes' => true,
+        ]);
+
+        $run->expectsOutputToContain('CREATIVE BODY SHAPES — key names only, never values');
+        $run->expectsOutputToContain('COLLECTION  (1)');
+        // The nested key is the whole point: it names where the tiles would be found.
+        $run->expectsOutputToContain('collection_properties.interaction_zone_id');
+        $run->expectsOutputToContain('SNAP_AD  (1)');
+        $run->assertSuccessful();
+    }
+
+    /**
+     * The rule that makes it safe to run in CI: SHAPE, never CONTENT.
+     *
+     * A creative body carries a business's ad copy and its media references. A probe that printed
+     * them would put both into a log readable by anyone with repository access, which is the sort of
+     * leak this whole command is careful about — it already refuses to print a signed URL.
+     */
+    public function test_the_shape_report_prints_no_value_from_the_body(): void
+    {
+        [$snap] = $this->snapchatAccount();
+
+        Http::fake([
+            '*/campaigns*' => Http::response(['campaigns' => [
+                ['campaign' => ['id' => 'c-1', 'name' => 'Ramadan', 'status' => 'ACTIVE']],
+            ]], 200),
+            '*/creatives*' => Http::response(['creatives' => [
+                ['creative' => [
+                    'id' => 'cr-secret-id',
+                    'name' => 'CONFIDENTIAL CAMPAIGN NAME',
+                    'type' => 'COLLECTION',
+                    'top_snap_media_id' => 'media-secret',
+                    'collection_properties' => ['interaction_zone_id' => 'zone-secret'],
+                ]],
+            ]], 200),
+            '*' => Http::response(['ads' => []], 200),
+        ]);
+
+        $run = $this->artisan('integrations:probe', [
+            'account' => $snap->external_id, '--structure' => true, '--shapes' => true,
+        ]);
+
+        $run->doesntExpectOutputToContain('CONFIDENTIAL CAMPAIGN NAME');
+        $run->doesntExpectOutputToContain('media-secret');
+        $run->doesntExpectOutputToContain('zone-secret');
+        $run->doesntExpectOutputToContain('cr-secret-id');
+        $run->assertSuccessful();
+    }
+
     /** An account with history reports its counts, its statuses and how far back it goes. */
     public function test_it_reports_the_campaign_census_and_date_range(): void
     {
