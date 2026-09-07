@@ -123,22 +123,43 @@ describe('drilling from an ad set into its ads', () => {
   })
 
   /**
-   * The last rung: an ad drills into the creatives that ran under it.
+   * The last rung: an ad's content, asked for by that ad.
    *
-   * The library takes `ad_ids` rather than the metrics API's `parent`, so this asserts the translated
-   * request rather than the heading — a filter applied to the rendered rows would pass a test that
-   * only looked at the table.
+   * ADS-TERMINOLOGY-001 — this used to drill into a fifth tab named «الإعلان», which was an
+   * ad-level surface sitting beside «الإعلانات». Two tabs whose names differ by a plural, over one
+   * entity level. The tab is retired; the CAPABILITY is not, because an ad reaching its own content
+   * is the whole point of the last rung.
+   *
+   * It is asked for on the ads surface itself — the library is queried with `ad_ids` for the ads on
+   * screen, and the row opens that ad's content in place. The request is what is asserted, not the
+   * heading: a filter applied to rendered rows would pass a test that only looked at the table.
    */
-  it('narrows the creative library to the ad the reader drilled into', async () => {
+  it('asks the content library for the ads on screen, by their own ids', async () => {
     route({ ad_set: [AD_SET], ad: [{ ...AD_SET, entity_id: 'a1', external_id: 'ext-a1', name: 'Video 9x16' }] })
     await openAdSets()
 
     fireEvent.click(await screen.findByTestId('drill-into-s1'))
-    fireEvent.click(await screen.findByTestId('drill-into-a1'))
 
     await waitFor(() => {
       expect(creativeCalls().some((u) => u.includes('ad_ids'))).toBe(true)
     })
+  })
+
+  /**
+   * ...and an ad no longer offers a drill into a level that has no tab.
+   *
+   * Below an ad is CONTENT, which is a library with a surface of its own — not a fifth analytics
+   * tab. A control that navigates nowhere visible is worse than no control, so the ad row does not
+   * pretend to have one.
+   */
+  it('offers no drill below an ad, because content is not an analytics tab', async () => {
+    route({ ad_set: [AD_SET], ad: [{ ...AD_SET, entity_id: 'a1', external_id: 'ext-a1', name: 'Video 9x16' }] })
+    await openAdSets()
+
+    fireEvent.click(await screen.findByTestId('drill-into-s1'))
+    await screen.findByTestId('drill-crumb-ad_set')
+
+    expect(screen.queryByTestId('drill-into-a1'), 'an ad still drills into a level with no surface').toBeNull()
   })
 
   /**

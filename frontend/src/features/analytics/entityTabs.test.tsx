@@ -191,3 +191,123 @@ describe('the ad set analysis tab', () => {
     expect(await screen.findByTestId('entity-table-ad_set')).toHaveTextContent('sq-1')
   })
 })
+
+/**
+ * ADS-TERMINOLOGY-001 — one ad level, one tab, and the old address still lands.
+ *
+ * The tab bar carried «الإعلانات» and «الإعلان» side by side — «Ads» and «Ad» — and both were
+ * ad-level surfaces over the same entity. A reader choosing between two tabs whose names differ by a
+ * plural has no way to know which answers their question, and the honest answer was «either».
+ *
+ * The hierarchy this product has is campaign → ad set → ad → content, where content is a library of
+ * media with a surface of its own. It is NOT another word for an ad, and this must not become a
+ * licence to fold the content library back into «Ads».
+ */
+describe('there is one ad level, and one tab for it', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProject.setState({ currentProjectId: 'p1' })
+    signInWith(['campaigns.view'])
+  })
+  afterEach(() => signOut())
+
+  it('offers no second ad-level tab beside Ads', async () => {
+    route([ROW])
+    renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+
+    await screen.findByRole('tab', { name: 'Ads' })
+
+    /* Exactly the plural, and nothing that is the same word without it. */
+    expect(screen.queryByRole('tab', { name: 'Ad' }), 'a second ad-level tab is back').toBeNull()
+    expect(screen.getAllByRole('tab', { name: /^Ads?$/ })).toHaveLength(1)
+  })
+
+  it('keeps the content library as its own thing, not another name for ads', async () => {
+    route([ROW])
+    renderWithProviders(<AnalyticsPage />, { locale: 'ar' })
+
+    await screen.findByRole('tab', { name: 'الإعلانات' })
+
+    expect(screen.queryByRole('tab', { name: 'الإعلان' }), 'the duplicate is back in Arabic').toBeNull()
+  })
+
+  /**
+   * A link somebody already holds must not open a blank page.
+   *
+   * `?tab=creative` was a real address for as long as that tab existed. Retiring a surface is not a
+   * licence to break the links people shared while it was there.
+   */
+  it('opens the canonical ads surface for the retired address', async () => {
+    route([ROW])
+
+    /*
+     * Through the router's own initial entry. A first draft set `window.history` directly, which a
+     * `MemoryRouter` never reads — the page saw no such address and the failure was mine.
+     */
+    renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/agency/analytics?tab=creative' })
+
+    const ads = await screen.findByRole('tab', { name: 'Ads' })
+
+    expect(ads.getAttribute('aria-selected'), 'the old address did not land on the ads surface').toBe('true')
+  })
+})
+
+/**
+ * ADS-TERMINOLOGY-001 — the columns that made the retired tab worth opening are on this one.
+ *
+ * «الإعلان» carried campaign, objective and last-active, and «الإعلانات» did not. Removing a
+ * duplicate must not cost the reader the reason they were using it: an ad's own name rarely says
+ * which campaign bought it or what it was bought FOR, and «last active» separates an ad that
+ * stopped from one that never ran.
+ *
+ * They cost no extra request — the creative behind each ad is already fetched for the row previews.
+ * Asserted in BOTH languages, because the correction is partly about the words.
+ */
+describe('the canonical ads surface carries the merged columns', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProject.setState({ currentProjectId: 'p1' })
+    signInWith(['campaigns.view'])
+  })
+  afterEach(() => signOut())
+
+  const openAds = async (locale: 'ar' | 'en') => {
+    renderWithProviders(<AnalyticsPage />, { locale, route: '/agency/analytics?tab=ads' })
+
+    return screen.findByRole('table')
+  }
+
+  it.each([
+    ['en', ['Campaign', 'Objective', 'Last active']],
+    ['ar', ['الحملة', 'الهدف', 'آخر نشاط']],
+  ] as const)('shows campaign, objective and last active — %s', async (locale, wanted) => {
+    route([{ ...ROW, entity_id: 'a1', external_id: 'ext-a1', name: 'Video 9x16' }])
+
+    const table = await openAds(locale)
+    const headers = [...table.querySelectorAll('thead th')].map((h) => h.textContent ?? '')
+
+    for (const column of wanted) {
+      expect(
+        headers.some((h) => h.includes(column)),
+        `«${column}» is missing — headers: ${headers.join(' | ')}`,
+      ).toBe(true)
+    }
+  })
+
+  /**
+   * An ad set gets none of them, and that is deliberate.
+   *
+   * An ad set already sits under a campaign the reader drilled through, so the column would repeat
+   * the crumb above it — and the library holds no creative for an ad set to read an objective from,
+   * so the cell could only ever be «—».
+   */
+  it('does not put them on the ad-set surface, where they would repeat or be empty', async () => {
+    route([ROW])
+    renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/agency/analytics?tab=ad_sets' })
+
+    const table = await screen.findByRole('table')
+    const headers = [...table.querySelectorAll('thead th')].map((h) => h.textContent ?? '')
+
+    expect(headers.some((h) => h.includes('Objective'))).toBe(false)
+  })
+})
