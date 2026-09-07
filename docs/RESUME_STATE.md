@@ -1,4 +1,4 @@
-# START HERE — 2026-09-07
+# START HERE — 2026-09-07 (reconciled from Git after #302)
 
 Read this file, then `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then `git log origin/main`.
 Operational authority: `Git → REQUIREMENTS_TRACEABILITY_MATRIX.md → RESUME_STATE.md`.
@@ -20,9 +20,9 @@ obligation and is not closed.
 ## 1. Where the tree is
 
 ```
-origin/main = 1c1490c03e9ed1027250f5249dc270c1a77f6af7   (#298 the compact-number and «undefined» fix)
+origin/main = 711a5f6928af3b14cd9a25d6118b980d73c37688   (#302 Ads and Content named for what they are)
 production  = https://campaignshub.io/   (200 after every deploy; the VPS resets hard to origin/main on push)
-open PRs    = #300 counts compacted on three more surfaces + the funnel ratio that claimed to be a conversion
+open PRs    = none at the time of writing
 ```
 
 Reference share used for browser acceptance: the live client report the owner opened. **Do not
@@ -30,39 +30,51 @@ hard-code its token into product logic or fixtures** — read it in a browser, t
 
 ## 2. The active unit
 
-`fix/counts-compact-everywhere` → **PR #300**. Three surfaces still wrote counts at full width — the
-change decomposition, the store/ad funnels and the accounts table — and the client report presented a
-non-nesting funnel ratio («165%») as a conversion rate. All found by
-`e2e/owner-defect-sweep.spec.ts`, which walks twelve operator routes and three client routes in both
-languages.
+`fix/content-is-written-in-contents-words` — the tab was renamed «أداء المحتويات» / «Content
+performance» in #302 and everything INSIDE it kept the old vocabulary: panel «أداء الإعلانات», first
+column «الإعلان», description «from ad-level data», empty state «No ad was reported». Same defect as
+the rename, one level down, and worse here because these figures are `creative_daily_metrics` at the
+CONTENT grain — one creative can be carried by several ads.
 
-### What is DEPLOYED and PRODUCTION-VERIFIED since #296
+### Merged and DEPLOYED since #296, each verified on the running product
 
-* **#299 (`b233bea9`) — the blank-image root cause.** `CreativePresenter` read an ad's image as
-  `asset_url ?? preview_url`, and `preview_url` is Meta's `preview_shareable_link`: six of twelve
-  first-page Meta cards fetched `fb.me`, got 200 with `text/html`, and decoded nothing. Production
-  after the deploy: **Meta 12 usable / 0 unusable, Snapchat 9 / 0.** Zero cards fetch HTML.
-* **#298 (`1c1490c0`) — «237.90 undefined» and the compact rule.** Verified on the live client
-  report: the funnel reads 6.6M / 40.2K / 14.4K / 4.49K with exact titles behind them, and the page
-  carries no `undefined`.
+| PR | what it was | Production evidence |
+|---|---|---|
+| #299 `b233bea9` | `preview_url` is Meta's `preview_shareable_link`; six of twelve Meta cards fetched `fb.me` and drew HTML | Meta **12 usable / 0 unusable**, Snapchat **9 / 0** |
+| #298 `1c1490c0` | «237.90 undefined»; counts written at full width | client report clean; funnel with exact figures behind it |
+| #300 `ecef0bd0` | three more surfaces wrote counts raw; a funnel ratio claimed to be a conversion | funnel reads «165% ⚠» with its explanation; zero full-width counts |
+| #301 `ce055c71` | a run left «running» since 2026-08-26 by a vanished worker | the stale-run guard no longer fires; a forced sweep queued and finished |
+| #302 `711a5f69` | «الإعلانات» and «الإعلان» side by side; Content restored under its own name | AWAITING the owner — both surfaces are authenticated |
 
-### The blocker that appeared on 2026-09-07
+**Snapchat story ads have their covers.** A COMPOSITE carries no `top_snap_media_id`; it names its
+children. After a forced sweep (`success records=11852`) the three highest-spending ads on the client
+report — all composites, all previously «the platform exposed no asset» — now render an image or say
+«فيديو — لم ترسل المنصة صورة غلاف له» and play.
 
-A forced Meta structure sync is refused by the provider:
-`(#200) Ad account owner has NOT grant ads_management or ads_read permission`. The same account
-synced `records=58` earlier the same day, so this is a permission change on Meta's side. It is
-registered as row 67 of the owner ledger against `INTEGRATION-META-001`, which was already
-`BLOCKED_EXTERNAL_CREDENTIALS`. **It blocks only the re-mapping of six catalog rows; everything else
-continued past it.**
+### The blocker, and exactly what it blocks
 
-### The new permanent register
+`(#200) Ad account owner has NOT grant ads_management or ads_read permission` on the bound Meta
+account, which synced `records=58` earlier the same day. It blocks ONLY re-mapping six Meta catalog
+rows from `image` to `catalog`; those rows already draw a real thumbnail rather than a web page, so
+nothing is blank while it waits. Registered as ledger row 67 against `INTEGRATION-META-001`.
 
-`docs/OWNER_OBSERVED_DEFECTS.md` — 66 owner-observed Production defects, every one mapped to a
-requirement ID that already existed. It is not a second requirements system; it is the record that
-stops an observation turning into an implementation detail and then into a status report while the
-owner is still looking at it. `OwnerDefectLedgerTest` holds three rules: a cited ID must exist in
-the Matrix, a row may not claim verified while it still names a gap, and the count may grow but
-never shrink.
+### The register, and where it stands
+
+`docs/OWNER_OBSERVED_DEFECTS.md` — 71 owner-observed defects, every one mapped to a requirement ID
+that already existed. **3 are closed on Production evidence**; the rest are open, and the file's own
+rule is that only Production closes one. `OwnerDefectLedgerTest` holds three invariants: a cited ID
+must exist in the Matrix, a row may not claim verified while it still names a gap, and the count may
+grow but never shrink.
+
+Matrix, parsed from the file rather than remembered:
+`VERIFIED 458 · PARTIAL 26 · IMPLEMENTED_NOT_VERIFIED 24 · IN_PROGRESS 17 ·
+BLOCKED_EXTERNAL_CREDENTIALS 17 · BLOCKED_OPERATIONAL_EVIDENCE 11`.
+
+### What no probe of mine can close
+
+`/app/content` and `/agency/analytics` are authenticated and this session has no session on them.
+Every media row and the Ads/Content naming stay open until the owner sees them. A probe from the
+datacentre is not the owner's screen, and the ledger does not accept one for the other.
 
 ## 3. What binds, and where it is written down
 

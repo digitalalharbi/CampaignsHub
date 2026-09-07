@@ -2289,19 +2289,38 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
         drill: { value: encodePath(drillUpTo(path, lvl)), fallback: '' },
         tab: { value: TAB_FOR[lvl], fallback: 'performance' },
       })} />
+      {/*
+        ADS-TERMINOLOGY-001 / CONTENT-TERMINOLOGY-001 — this surface is CONTENT, and said «ad».
+        *
+        * The tab was renamed to «أداء المحتويات» / «Content performance» when the ad/content
+        * duplication was corrected, and everything INSIDE it kept the old vocabulary: the panel was
+        * titled «أداء الإعلانات», the first column «الإعلان», the description said «from ad-level
+        * data», and the narrowed empty state said no AD was reported.
+        *
+        * A tab named for one entity whose contents are named for another is the same defect the
+        * rename was for, one level down — and here it is worse, because these figures come from
+        * `creative_daily_metrics` at the CONTENT grain. One creative can be carried by several ads,
+        * so calling its row «الإعلان» tells the reader they are looking at one ad's numbers when
+        * they are looking at a content item's.
+        *
+        * Only the words that name the CONTENT entity change. The drill crumbs above still say «ad
+        * set» and «ad» because those rungs really are ads.
+      */}
       <Panel
-        title={ar ? 'أداء الإعلانات' : 'Ad performance'}
-        description={ar ? 'من بيانات الإعلان نفسه — لا تُنسب أرقام الحملة إلى إعلان' : 'From ad-level data — campaign figures are never attributed to a ad'}
+        title={ar ? 'أداء المحتويات' : 'Content performance'}
+        description={ar
+          ? 'من بيانات المحتوى نفسه — لا تُنسب أرقام الحملة أو الإعلان إلى محتوى'
+          : 'From content-level data — campaign and ad figures are never attributed to a content item'}
         loading={q.isLoading}
         error={q.isError}
-        /* Narrowed and empty is «nothing under this ad», never «no creatives at all». */
+        /* Narrowed and empty is «no content under this ad», never «no content at all». */
         empty={!q.isLoading && rows.length === 0 && !narrowed}
       >
         {!q.isLoading && !q.isError && rows.length === 0 && narrowed && (
           <p className="rounded-xl border border-border p-3 text-sm text-text-muted" data-testid="creative-empty-under-parent">
             {ar
-              ? 'لا يوجد إعلان مسجَّل تحت هذا المستوى في هذه الفترة. هذا ليس «لا يوجد إعلان» للمشروع.'
-              : 'No ad was reported under this level in this period. That is not «no ads» for the project.'}
+              ? 'لا يوجد محتوى مسجَّل تحت الإعلان أو المجموعة المختارة في هذه الفترة. هذا ليس «لا يوجد محتوى» للمشروع.'
+              : 'No content was reported under the selected ad or ad set in this period. That is not «no content» for the project.'}
           </p>
         )}
         {/*
@@ -2313,7 +2332,8 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
         <div data-testid="creative-analysis-table">
           <MetricTable
             head={[
-              ar ? 'الإعلان' : 'Ad',
+              /* The row IS a content item — one creative, which several ads may carry. */
+              ar ? 'المحتوى' : 'Content',
               ar ? 'الحملة' : 'Campaign',
               ar ? 'الهدف' : 'Objective',
               ar ? 'الإنفاق' : 'Spend',
