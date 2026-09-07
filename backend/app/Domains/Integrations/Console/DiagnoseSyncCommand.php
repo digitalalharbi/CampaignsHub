@@ -555,6 +555,46 @@ final class DiagnoseSyncCommand extends Command
         $this->line('  latest metric_date          : '.($latest ?? '—'));
 
         /*
+         * CONTENT-PREVIEW-SHAPES-001 — WHICH SHAPES the estate actually holds, and which draw nothing.
+         *
+         * The counts above say whether creatives and their figures exist. They cannot say whether any
+         * of them is a shape the library has no picture for, which is the question every remaining
+         * blank card turns into: a collection whose tiles were never fetched, a catalog ad that has
+         * no fixed asset by design, an unmapped provider type that reached us as its own word.
+         *
+         * Asked of the stored columns rather than of `CreativePresenter`, deliberately: this must be
+         * cheap enough to run over an account with a few thousand creatives, and «no asset link of
+         * any kind» is the one condition every empty-card state has in common. It does not replace
+         * the presenter's judgement — it says where to point it.
+         *
+         * `format` is the platform's own word, kept lower-cased by the connectors, so an unmapped
+         * type shows up here as itself instead of hiding inside «image».
+         */
+        $shapes = (clone $creatives)
+            ->selectRaw('COALESCE(format, \'—\') AS shape, COUNT(*) AS total')
+            ->selectRaw('COUNT(*) FILTER (WHERE asset_url IS NULL AND video_url IS NULL'
+                .' AND thumbnail_url IS NULL AND cards IS NULL) AS drawing_nothing')
+            ->groupBy('shape')
+            ->orderByDesc('total')
+            ->get();
+
+        if ($shapes->isNotEmpty()) {
+            $this->line('');
+            $this->line('  CREATIVE SHAPES — the platform\'s own word, and how many draw nothing');
+
+            foreach ($shapes as $shape) {
+                $empty = (int) $shape->drawing_nothing;
+
+                $this->line(sprintf(
+                    '  %-22s: %5d   %s',
+                    (string) $shape->shape,
+                    (int) $shape->total,
+                    $empty === 0 ? 'all carry an asset link' : "{$empty} carry no asset link of any kind",
+                ));
+            }
+        }
+
+        /*
          * SNAP-CREATIVE-METRICS-LIVE-001 — the column that decides what the library OPENS on.
          *
          * The counts above were both true and useless for the actual defect: 814 rows existed and
