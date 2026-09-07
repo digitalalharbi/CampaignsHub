@@ -66,6 +66,11 @@ on:
         type: boolean
         required: false
         default: false
+      probe_shapes:
+        description: 'With probe_structure: also ask the ads edge and report the KEY NAMES each creative body carries, by type. Never values — this is how a provider''s real shape is read before writing a fetch against it.'
+        type: boolean
+        required: false
+        default: false
       probe_structure:
         description: 'Ask for the CAMPAIGN STRUCTURE instead of insights — identity, counts, statuses and date range. Use this to choose which ad account to bind.'
         type: boolean
@@ -143,6 +148,7 @@ jobs:
           FROM: ${{ inputs.probe_from }}
           TO: ${{ inputs.probe_to }}
           STRUCTURE: ${{ inputs.probe_structure && '--structure' || '' }}
+          SHAPES: ${{ inputs.probe_shapes && '--shapes' || '' }}
           MEDIA: ${{ inputs.probe_media && '--media' || '' }}
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -166,7 +172,7 @@ jobs:
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan integrations:probe \
-                "${ACCOUNT}" --from="${FROM}" --to="${TO}" --rows="12" ${STRUCTURE} ${MEDIA}
+                "${ACCOUNT}" --from="${FROM}" --to="${TO}" --rows="12" ${STRUCTURE} ${MEDIA} ${SHAPES}
 
   # ── The sandbox quarantine, in its REPORTING form only ───────────────────────────────────────────
   #
