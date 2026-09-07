@@ -1,4 +1,4 @@
-# ACTIVE EXECUTION STATE — 2026-09-06
+# ACTIVE EXECUTION STATE — 2026-09-07
 
 The current control plane, and nothing else. Requirements and their status live in
 `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`; how to resume from cold lives in `docs/RESUME_STATE.md`.
@@ -7,8 +7,42 @@ disagree, the product wins.
 
 ## Main
 
-`20a98685` — «The sandbox never reaches a live provider — outbound, and the write path that created
-it» (#292). Deployed to Production, success. Nothing in flight; no open PR; no prepared branch.
+`1c1490c0` — «The word «undefined» was on screen where a currency belongs» (#298). Deployed,
+success. Before it, `b233bea9` (#299) — «A share link is not an asset, and six cards were drawing
+one» — also deployed and Production-verified.
+
+## In flight
+
+**PR #300** `fix/counts-compact-everywhere`. Three surfaces still wrote a count at full width and one
+ratio claimed to be a conversion. CI running.
+
+## Production evidence taken after each deploy — 2026-09-07
+
+| what was verified | how | result |
+|---|---|---|
+| the blank-image root cause is gone | `integrations:probe --media` per provider | **Meta 12 usable / 0 unusable · Snapchat 9 / 0** · zero cards fetch HTML |
+| «undefined» and the compact rule | the live client report, read in a browser | funnel reads 6.6M / 40.2K / 14.4K / 4.49K with exact titles · no `undefined` · no full-width counts |
+| the client report at 390 | measured in a browser | `scrollWidth === clientWidth` — no sideways scroll |
+
+## The blocker that appeared today
+
+A forced Meta structure sync is refused by the provider:
+
+```
+(#200) Ad account owner has NOT grant ads_management or ads_read permission
+```
+
+The same account synced `records=58` earlier the same day, so this is a permission change on Meta's
+side rather than a code fault. Registered as row 67 of `docs/OWNER_OBSERVED_DEFECTS.md` against
+`INTEGRATION-META-001`, already `BLOCKED_EXTERNAL_CREDENTIALS`. It blocks ONLY the re-mapping of six
+Meta catalog rows from `image` to `catalog`; those rows already draw a real thumbnail rather than a
+web page, so nothing is blank while it waits. Everything else continued past it.
+
+## The owner defect register
+
+`docs/OWNER_OBSERVED_DEFECTS.md` — 66 observations, each mapped to a requirement ID that already
+existed. `OwnerDefectLedgerTest` keeps it honest: every cited ID must exist in the Matrix, a row may
+not claim verified while it still names a gap, and rows may be added but never removed.
 
 ## What the live estate actually says — traced 2026-09-05/06, read-only
 

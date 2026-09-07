@@ -252,3 +252,51 @@ describe('a refusal names the dimension it refused about', () => {
     expect(note).not.toHaveTextContent(/\{\{axis\}\}/)
   })
 })
+
+/**
+ * NUMBER-PRESENTATION-001 — the display compacts, and the exact figure is one hover away.
+ *
+ * `formatFor` returned `num` for every non-money metric. `num` is the EXACT formatter, so the
+ * display and the `title` were the same string: «2,790,380» drawn in sixty pixels beside a name and
+ * a bar, with a tooltip repeating it. The function's own docblock said «compact for the display and
+ * the full figure one hover away», and `exactFor` beneath it withholds the title when
+ * `full === compact(n)` — a condition that could never be false while the display was `num`.
+ *
+ * Found by the product sweep on `/agency/analytics` and the objectives tab, in both languages, after
+ * the same class of defect was found on the client report's funnel. Two surfaces, one rule, one
+ * cause: which formatter a surface happens to reach for.
+ */
+describe('a driver figure is compacted, and its exact value is reachable', () => {
+  it('compacts a seven-figure impression count and keeps the full figure in the title', () => {
+    render(
+      payload({
+        drivers: decomposition({
+          metric: 'impressions',
+          current: 2_790_380,
+          previous: 2_100_000,
+          change: 690_380,
+          drivers: [
+            { key: 'meta', name: 'meta', current: 2_790_380, previous: 2_100_000, change: 690_380, share: 1, direction: 'up' },
+          ],
+        }),
+      }),
+    )
+
+    /* The reader sees the compact form... */
+    expect(screen.queryByText('2,790,380'), 'a seven-figure count was drawn at full width').toBeNull()
+
+    const shown = screen.getAllByText('2.79M')
+
+    expect(shown.length).toBeGreaterThan(0)
+
+    /* ...and can still get back to the figure it stands for. */
+    expect(shown.some((el) => el.getAttribute('title') === '2,790,380')).toBe(true)
+  })
+
+  /** Money keeps its own rule: `money()` already compacts, and its exact form carries the currency. */
+  it('leaves a money driver reading as money', () => {
+    render(payload())
+
+    expect(screen.queryByText('48,000'), 'money was drawn at full width').toBeNull()
+  })
+})

@@ -226,7 +226,12 @@ export interface LivePayload {
    * outright. On a client link this matters more than anywhere else: the reader has no other view of
    * their account, so «0 add to cart» beside 176 purchases is a conclusion they cannot check.
    */
-  funnel: Array<{ stage: string; label: string; reported: boolean; count: number | null; from_stage: string | null; step_rate: number | null; cost_per: number | null }>
+  /*
+   * `exceeds_previous` — FUNNEL-NOT-NESTED-001. The aggregator sends it and this type dropped it, so
+   * the client's own report could not tell a conversion rate from a ratio between two stages that do
+   * not nest. It is optional because an older cached payload will not carry it.
+   */
+  funnel: Array<{ stage: string; label: string; reported: boolean; count: number | null; from_stage: string | null; step_rate: number | null; cost_per: number | null; exceeds_previous?: boolean }>
   /**
    * FUNNEL-001 — «الفانل والمتجر» for this link's project, or null when it has no store.
    *

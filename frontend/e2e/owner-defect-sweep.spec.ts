@@ -66,6 +66,53 @@ async function readerSees(page: Page): Promise<string> {
   return page.evaluate(() => (document.querySelector('main') ?? document.body).innerText)
 }
 
+/**
+ * The CLIENT's own surfaces, which are the ones an agency's reputation rests on.
+ *
+ * A client has no second view of their account and no way to tell a broken figure from a real one.
+ * The same two questions are asked here as of the operator routes, under the client's own session —
+ * `undefined` in front of the person paying for the campaigns is the worst place for it to appear,
+ * and the funnel defect that started this sweep was found on exactly such a surface.
+ */
+const CLIENT_ROUTES = ['/portal', '/portal/campaigns', '/portal/reports'] as const
+
+for (const locale of ['ar', 'en'] as const) {
+  test.describe(`what a client actually sees — ${locale}`, () => {
+    test.use({ storageState: AUTH.client })
+
+    test(`no client surface renders a value that never arrived — ${locale}`, async ({ page }) => {
+      test.setTimeout(120_000)
+
+      await page.addInitScript((l) => {
+        try {
+          window.localStorage.setItem('ui', JSON.stringify({ state: { locale: l }, version: 0 }))
+        } catch {
+          // As above.
+        }
+      }, locale)
+
+      const offences: string[] = []
+
+      for (const route of CLIENT_ROUTES) {
+        await page.goto(route)
+        await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
+        await page.waitForLoadState('networkidle').catch(() => undefined)
+        await page.waitForTimeout(1000)
+
+        const text = await readerSees(page)
+        const found = text.match(NEVER_RENDERED)
+
+        if (found) {
+          const at = text.indexOf(found[0])
+          offences.push(`${route}: «…${text.slice(Math.max(0, at - 60), at + 40).replace(/\n/g, ' ')}…»`)
+        }
+      }
+
+      expect(offences, 'a client surface printed a value that never arrived').toEqual([])
+    })
+  })
+}
+
 for (const locale of ['ar', 'en'] as const) {
   test.describe(`what an operator actually sees — ${locale}`, () => {
     test.use({ storageState: AUTH.owner })
@@ -104,6 +151,60 @@ for (const locale of ['ar', 'en'] as const) {
       }
 
       expect(offences, 'a surface printed a value that never arrived').toEqual([])
+    })
+
+    /**
+     * NUMBER-PRESENTATION-001 — a large count written at full width, anywhere in the product.
+     *
+     * Found on the LIVE client report: the KPI card read «6.6M» and the funnel bar beneath it read
+     * «6,596,500». One figure, two shapes, one page. The formatter that produced it is shared, so
+     * the defect was never about the funnel — it was about which formatter a surface happens to
+     * reach for, and every surface makes that choice independently.
+     *
+     * Seven digits is the threshold deliberately. Six-figure sums appear in money columns that are
+     * meant to be exact, and a rule that flagged those would be turned off within a week. Above a
+     * million, the product's own law says compact — and the exact figure travels as a `title`, which
+     * is not read here because it is not what the reader sees.
+     */
+    test(`no surface writes a seven-figure count at full width — ${locale}`, async ({ page, request }) => {
+      test.setTimeout(180_000)
+
+      await selectProject(page, await seededProject(request, STORE_PROJECT))
+      await page.addInitScript((l) => {
+        try {
+          window.localStorage.setItem('ui', JSON.stringify({ state: { locale: l }, version: 0 }))
+        } catch {
+          // As above.
+        }
+      }, locale)
+
+      const offences: string[] = []
+
+      for (const route of OPERATOR_ROUTES) {
+        await page.goto(route)
+        await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
+        await page.waitForLoadState('networkidle').catch(() => undefined)
+        await page.waitForTimeout(1200)
+
+        const long = await page.evaluate(() => {
+          const seen: string[] = []
+          const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+          let node: Node | null
+
+          while ((node = walk.nextNode())) {
+            const text = (node.textContent ?? '').trim()
+
+            /* The whole text node is the figure — a sentence that mentions one is not the defect. */
+            if (/^\d{1,3}(,\d{3}){2,}$/.test(text)) seen.push(text)
+          }
+
+          return seen.slice(0, 5)
+        })
+
+        if (long.length > 0) offences.push(`${route}: ${long.join(', ')}`)
+      }
+
+      expect(offences, 'a count was written at full width where the product compacts').toEqual([])
     })
 
   })

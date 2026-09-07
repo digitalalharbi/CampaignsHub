@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, HelpCircle, Store, TrendingDown } from 'lucide-react'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { Panel } from './components'
-import { money, moneyExact, num, ratio } from './format'
+import { compact, money, moneyExact, num, ratio } from './format'
 import { getData } from '@/lib/api/client'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState, Skeleton } from '@/components/ui/States'
@@ -208,10 +208,18 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
                     <Badge tone={source.tone}>{ar ? source.ar : source.en}</Badge>
                     {stage.state === 'partial' && <Badge tone="warning">{ar ? 'ناقص' : 'Undercount'}</Badge>}
                   </span>
-                  <span className="tnum text-lg font-extrabold text-text-primary">
+                  {/*
+                    NUMBER-PRESENTATION-001 — a store funnel stage is a headline figure, so it
+                    compacts. `num` is the EXACT formatter and this is the largest count on the tab:
+                    «2,790,380» beside «2.79M» on the card above is one number written twice.
+                  */}
+                  <span
+                    className="tnum text-lg font-extrabold text-text-primary"
+                    title={stage.value !== null && stage.key !== 'revenue' ? num(stage.value) : undefined}
+                  >
                     {stage.value === null
                       ? <span data-testid={`funnel-unmeasured-${stage.key}`} className="text-sm font-semibold text-text-muted">{ar ? 'لا يُقاس' : 'Not measured'}</span>
-                      : stage.key === 'revenue' ? money(stage.value, cur) : num(stage.value)}
+                      : stage.key === 'revenue' ? money(stage.value, cur) : compact(stage.value)}
                   </span>
                 </div>
 

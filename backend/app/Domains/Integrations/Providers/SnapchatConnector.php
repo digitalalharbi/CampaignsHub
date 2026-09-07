@@ -276,6 +276,8 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
     private function creativesById(OAuthTokens $tokens, string $adAccountId): array
     {
         $creatives = [];
+        /* The provider's own body per creative, kept for the composite pass. */
+        $bodies = [];
 
         foreach ($this->readAll($tokens, "adaccounts/{$adAccountId}/creatives", 'creatives', 'creatives') as $wrapper) {
             /** @var array<string,mixed> $c */
@@ -321,11 +323,31 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                  * the PLATFORM that was false. Snapchat exposes the asset perfectly well; we had
                  * not asked.
                  */
+                /*
+                 * CONTENT-PREVIEW-SHAPES-001 — a COMPOSITE has no top snap of its own.
+                 *
+                 * Snapchat's composite creative is a story ad: several snaps behind one tile. It
+                 * carries no `top_snap_media_id`, so this stored nothing for one, and every composite
+                 * reached the reader as «the platform exposed no asset» — a statement about Snapchat
+                 * that is false. Found on the owner's LIVE client report, where the THREE
+                 * highest-spending ads are composites and all three showed that sentence.
+                 *
+                 * The children are read from whichever key the payload actually carries: Snapchat
+                 * documents `composite_properties.creative_ids`, and a body that carries the child
+                 * creatives inline is handled too. The FIRST child's top snap becomes the cover,
+                 * which is the same snap the platform shows as the tile.
+                 *
+                 * Fail-closed on purpose. If neither shape is present the media id stays null and the
+                 * card says exactly what it says today — this can add a cover, and cannot invent one.
+                 */
                 'media_id' => isset($c['top_snap_media_id']) ? (string) $c['top_snap_media_id'] : null,
             ], static fn ($v) => $v !== null);
+
+            /* Kept for the composite pass below, which needs the children the body names. */
+            $bodies[(string) $c['id']] = $c;
         }
 
-        return $this->withMedia($tokens, $adAccountId, $creatives);
+        return $this->withMedia($tokens, $adAccountId, $this->coversForComposites($creatives, $bodies));
     }
 
     /**
@@ -353,6 +375,55 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
      * @param  array<string,array<string,mixed>>  $creatives
      * @return array<string,array<string,mixed>>
      */
+    /**
+     * A composite's cover, resolved from the children the SAME response already contains.
+     *
+     * Snapchat's composite creative is a story ad: several snaps behind one tile. It carries no
+     * `top_snap_media_id` of its own, so the importer stored nothing for one and every composite
+     * reached the reader as «the platform exposed no asset» — a statement about Snapchat that is
+     * false. Found on the owner's LIVE client report, where the three HIGHEST-SPENDING ads are
+     * composites and all three said exactly that.
+     *
+     * `composite_properties.creative_ids` names the children, and this connector has already fetched
+     * every creative on the account — so the children are in hand and no second call is needed. The
+     * first child that has a top snap provides the cover, which is the snap the platform itself
+     * shows as the tile.
+     *
+     * Fail-closed. An unrecognised body, a child that is not in the response, a child with no snap of
+     * its own: each leaves `media_id` null and the card saying precisely what it says today. This can
+     * add a cover; it cannot invent one.
+     *
+     * @param  array<string, array<string, mixed>>  $creatives
+     * @param  array<string, array<string, mixed>>  $bodies
+     * @return array<string, array<string, mixed>>
+     */
+    private function coversForComposites(array $creatives, array $bodies): array
+    {
+        foreach ($creatives as $id => $creative) {
+            if (($creative['media_id'] ?? null) !== null) {
+                continue;
+            }
+
+            $composite = $bodies[$id]['composite_properties'] ?? null;
+
+            if (! is_array($composite)) {
+                continue;
+            }
+
+            foreach ((array) ($composite['creative_ids'] ?? []) as $childId) {
+                $child = is_string($childId) ? ($bodies[$childId] ?? null) : null;
+                $media = is_array($child) ? ($child['top_snap_media_id'] ?? null) : null;
+
+                if (is_string($media) && trim($media) !== '') {
+                    $creatives[$id]['media_id'] = $media;
+                    break;
+                }
+            }
+        }
+
+        return $creatives;
+    }
+
     private function withMedia(OAuthTokens $tokens, string $adAccountId, array $creatives): array
     {
         $this->mediaAsked = 0;
