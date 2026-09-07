@@ -47,7 +47,8 @@ final class ProbeInsightsCommand extends Command
         {--to= : Window end, YYYY-MM-DD (default: yesterday)}
         {--rows=3 : How many returned rows to print}
         {--structure : Ask for the CAMPAIGN structure instead of insights — identity, counts and date range}
-        {--media : FETCH the first page of creative assets and report status, content type and decoded size}';
+        {--media : FETCH the first page of creative assets and report status, content type and decoded size}
+        {--shapes : Ask the ads edge and report the KEY NAMES each creative body carries, by type. Never values.}';
 
     protected $description = 'Read-only: ask the provider for insights over a window and print what came back. Stores nothing.';
 
@@ -507,9 +508,104 @@ final class ProbeInsightsCommand extends Command
             ));
         }
 
+        if ($this->option('shapes')) {
+            $this->reportShapes($connector, $account);
+        }
+
         $this->reportCalls($connector);
 
         return self::SUCCESS;
+    }
+
+    /**
+     * CONTENT-PREVIEW-SHAPES-001 / owner ledger row 7 — the KEY NAMES a creative body carries, by type.
+     *
+     * ## Why this exists
+     *
+     * A collection ad is a hero over a grid of product tiles, and the tiles are the part this product
+     * has never fetched. Writing that fetch needs the provider's own shape for them, and there was no
+     * way to see it: the Snapchat connector stores no `raw` for creatives, so the database cannot
+     * answer, and guessing at an API is how a fetch gets written against a field that does not exist.
+     *
+     * ## Why it is a flag and not part of every structure probe
+     *
+     * `syncCampaigns()` reads the campaigns edge and nothing else — the first version of this assumed
+     * the structure sweep already had the creatives in hand and printed nothing at all, because there
+     * were no creative bodies to find. The creatives arrive through the ADS edge, so this asks for
+     * them, which is a second provider call and therefore something a caller opts into rather than
+     * something every account census pays for. Read-only like the rest of the command: the bodies come
+     * back, are described, and are thrown away.
+     *
+     * ## What is printed, and what is deliberately not
+     *
+     * KEY NAMES only, never values. A creative body carries names, ids and media references, and a
+     * probe that dumped them would put a business's ad copy and a media id into a CI log for anybody
+     * with repository access. The shape is the question; the content is not. Nesting stops at one
+     * level below the interesting key, which is enough to see `collection_properties.…` without
+     * walking an entire tree.
+     */
+    private function reportShapes(object $connector, ExternalAccount $account): void
+    {
+        if (! $connector instanceof ApiAdvertisingConnector) {
+            return;
+        }
+
+        try {
+            $connector->syncAds($account->external_id);
+        } catch (Throwable $e) {
+            $this->line('');
+            $this->error('  The ads edge threw: '.$e->getMessage());
+
+            return;
+        }
+
+        /** @var array<string, array<string, true>> $byType */
+        $byType = [];
+        /** @var array<string, int> $counts */
+        $counts = [];
+
+        foreach ($connector->peekRawResponses() as $body) {
+            foreach ((array) ($body['creatives'] ?? []) as $wrapper) {
+                $creative = (array) (((array) $wrapper)['creative'] ?? []);
+
+                if ($creative === []) {
+                    continue;
+                }
+
+                $type = strtoupper((string) ($creative['type'] ?? 'UNSTATED'));
+                $counts[$type] = ($counts[$type] ?? 0) + 1;
+
+                foreach ($creative as $key => $value) {
+                    $byType[$type][(string) $key] = true;
+
+                    /* One level in, so `collection_properties` reveals what it actually holds. */
+                    if (is_array($value)) {
+                        foreach (array_keys($value) as $inner) {
+                            if (! is_int($inner)) {
+                                $byType[$type][$key.'.'.$inner] = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($byType === []) {
+            return;
+        }
+
+        ksort($counts);
+
+        $this->line('');
+        $this->line('  CREATIVE BODY SHAPES — key names only, never values');
+
+        foreach ($counts as $type => $count) {
+            $keys = array_keys($byType[$type] ?? []);
+            sort($keys);
+
+            $this->line(sprintf('    %s  (%d)', $type, $count));
+            $this->line('      '.implode(', ', $keys));
+        }
     }
 
     private function reportCalls(object $connector): void

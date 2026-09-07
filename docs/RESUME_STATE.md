@@ -1,6 +1,28 @@
-# START HERE — 2026-09-07 (reconciled from Git after #302)
+# START HERE — 2026-09-08 (reconciled from Git after #306)
 
 Read this file, then `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then `git log origin/main`.
+
+## 2026-09-08 — where this stopped
+
+`origin/main` = `c51228b8` (#306), deployed. #303, #304, #305 and #306 all merged, deployed and
+verified in Production this session. `docs/ACTIVE_EXECUTION_STATE.md` carries the detail.
+
+**Closed on Production evidence:** owner rows 25, 26, 31, 32, 72, and the REPORT half of 3, 9 and 10.
+
+**The defect the new gate found:** WebKit does not fire `seeked` under `preload="metadata"` without a
+user gesture, so `VideoPoster` — which reported that event as proof of a painted frame — left every
+coverless film as a blank card in Safari and on iOS. It reads `readyState` now. Fixed and deployed;
+owner acceptance on the authenticated `/app/content` is still OPEN, so row 4 is
+IMPLEMENTED_NOT_VERIFIED rather than verified.
+
+**In flight:** branch `media/collection-shapes` — `integrations:probe --structure --shapes` reports
+the key names a creative body carries, so the collection tile fetch (row 7) can be written against
+Snapchat's real shape instead of a guess. Row 7 has a live subject: 434 collections on the live
+account, 4 of them drawing nothing.
+
+**Blocked, each on one thing only:** `/app/content` acceptance (no authenticated session, no failing
+card named); the sandbox quarantine (AUTHORIZED, NOT EXECUTED — needs a VPS shell, safeguard stays);
+Meta catalog re-mapping (`ads_management` not granted); the «henka» binding (`connection=error`).
 Operational authority: `Git → REQUIREMENTS_TRACEABILITY_MATRIX.md → RESUME_STATE.md`.
 This file owns **resumability**. The Matrix owns **requirements and status**; do not keep a second
 copy of them here.
