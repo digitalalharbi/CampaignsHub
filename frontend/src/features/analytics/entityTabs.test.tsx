@@ -193,17 +193,18 @@ describe('the ad set analysis tab', () => {
 })
 
 /**
- * ADS-TERMINOLOGY-001 — one ad level, one tab, and the old address still lands.
+ * ADS-TERMINOLOGY-001 — the duplication was in the NAME, not in the surface.
  *
- * The tab bar carried «الإعلانات» and «الإعلان» side by side — «Ads» and «Ad» — and both were
- * ad-level surfaces over the same entity. A reader choosing between two tabs whose names differ by a
- * plural has no way to know which answers their question, and the honest answer was «either».
+ * The tab bar carried «الإعلانات» and «الإعلان» — «Ads» and «Ad» — a pair differing by a plural, so
+ * a reader could not tell which answered their question. But the second was never a second view of
+ * the same thing: it is the last rung of campaign → ad set → ad → CONTENT, with a grain of its own.
  *
- * The hierarchy this product has is campaign → ad set → ad → content, where content is a library of
- * media with a surface of its own. It is NOT another word for an ad, and this must not become a
- * licence to fold the content library back into «Ads».
+ * A content item is not an ad. One creative can be carried by several ads, and its figures come
+ * from `creative_daily_metrics` rather than from an ad's row — so folding it into the ads table
+ * would have to pick one ad per creative or double-count. It keeps its capability and loses its
+ * misleading name.
  */
-describe('there is one ad level, and one tab for it', () => {
+describe('ads and content are named for what they are', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useProject.setState({ currentProjectId: 'p1' })
@@ -211,44 +212,46 @@ describe('there is one ad level, and one tab for it', () => {
   })
   afterEach(() => signOut())
 
-  it('offers no second ad-level tab beside Ads', async () => {
+  it('names the content surface for content, not as a singular Ad', async () => {
     route([ROW])
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
 
     await screen.findByRole('tab', { name: 'Ads' })
 
-    /* Exactly the plural, and nothing that is the same word without it. */
-    expect(screen.queryByRole('tab', { name: 'Ad' }), 'a second ad-level tab is back').toBeNull()
+    /* «Ads» and «Ad» differ by a plural, and nothing in this bar may read that way again. */
+    expect(screen.queryByRole('tab', { name: 'Ad' }), 'the ambiguous singular is back').toBeNull()
     expect(screen.getAllByRole('tab', { name: /^Ads?$/ })).toHaveLength(1)
+    expect(screen.getByRole('tab', { name: /Content/ })).toBeInTheDocument()
   })
 
-  it('keeps the content library as its own thing, not another name for ads', async () => {
+  it('names them apart in Arabic too', async () => {
     route([ROW])
     renderWithProviders(<AnalyticsPage />, { locale: 'ar' })
 
     await screen.findByRole('tab', { name: 'الإعلانات' })
 
-    expect(screen.queryByRole('tab', { name: 'الإعلان' }), 'the duplicate is back in Arabic').toBeNull()
+    expect(screen.queryByRole('tab', { name: 'الإعلان' }), 'the ambiguous singular is back').toBeNull()
+    expect(screen.getByRole('tab', { name: /المحتويات/ })).toBeInTheDocument()
   })
 
   /**
-   * A link somebody already holds must not open a blank page.
+   * `?tab=creative` opens CONTENT, not ads.
    *
-   * `?tab=creative` was a real address for as long as that tab existed. Retiring a surface is not a
-   * licence to break the links people shared while it was there.
+   * A first version of this correction retired the surface and aliased its address to «Ads». That
+   * was wrong twice over: the capability was not redundant, and silently answering a content link
+   * with an ads table would tell the reader they were looking at content when they were not.
+   *
+   * Through the router's own initial entry — a first draft set `window.history`, which a
+   * `MemoryRouter` never reads, so the page saw no such address and the failure was mine.
    */
-  it('opens the canonical ads surface for the retired address', async () => {
+  it('opens the content surface for the address that has always meant content', async () => {
     route([ROW])
-
-    /*
-     * Through the router's own initial entry. A first draft set `window.history` directly, which a
-     * `MemoryRouter` never reads — the page saw no such address and the failure was mine.
-     */
     renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/agency/analytics?tab=creative' })
 
-    const ads = await screen.findByRole('tab', { name: 'Ads' })
+    const content = await screen.findByRole('tab', { name: /Content/ })
 
-    expect(ads.getAttribute('aria-selected'), 'the old address did not land on the ads surface').toBe('true')
+    expect(content.getAttribute('aria-selected'), 'a content link did not open content').toBe('true')
+    expect(screen.getByRole('tab', { name: 'Ads' }).getAttribute('aria-selected')).toBe('false')
   })
 })
 
