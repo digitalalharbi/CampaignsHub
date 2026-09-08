@@ -344,7 +344,16 @@ final class LiveReportService
          * would be a second answer to «what is in this report», and the first time the two disagreed
          * the client would be holding both.
          */
-        $payload['outline'] = (new ReportStructure)->sections($payload);
+        /*
+         * `composesNarrative: false` — this document composes no written analysis.
+         *
+         * Findings, recommendations and the executive summary are written when a report is
+         * GENERATED. A live link recomputes its figures on every open and never composes them,
+         * so the default reasons — «no finding is supported by the figures in this period» —
+         * would tell a client their own data had been examined and found wanting when it was
+         * never examined at all.
+         */
+        $payload['outline'] = (new ReportStructure)->sections($payload, composesNarrative: false);
 
         return $payload;
     }

@@ -260,4 +260,64 @@ final class ReportStructureTest extends TestCase
         $this->assertFalse($sections['performance']['present']);
         $this->assertSame('no_figures_in_this_window', $sections['performance']['absent_reason']);
     }
+
+    /**
+     * REPORT-DETAIL-PARITY-001 — «nothing was found» and «nothing was looked for» are different facts.
+     *
+     * On the owner's live client link the contents state, of the client's own data:
+     *
+     *     «لا نتيجة تدعمها الأرقام في هذه الفترة.»  / "No finding is supported by the figures in this period."
+     *     «لا توصية تدعمها الأرقام في هذه الفترة.»  / "No recommendation is supported by the figures…"
+     *     «لا ملخّص يمكن تكوينه من أرقام هذه الفترة.» / "No summary could be composed from this period's figures."
+     *
+     * All three claim the figures were examined and yielded nothing. They were never examined:
+     * `LiveReportService` composes none of the three — grep counts 0 against `ReportGenerator`'s 3 —
+     * because written analysis is composed when a report is GENERATED, and a live link recomputes
+     * its figures on every open instead.
+     *
+     * A client reading «your figures support no findings» has been told something about their
+     * business that nobody checked. That is a heavier claim than the missing section beside it, and
+     * it is the same defect as `performance`: a reason that names the wrong cause.
+     */
+    public function test_a_live_link_does_not_claim_the_figures_supported_no_findings(): void
+    {
+        $sections = $this->keyed((new ReportStructure)->sections(
+            ['totals' => ['spend' => 9842.78]],
+            composesNarrative: false,
+        ));
+
+        foreach (['findings', 'recommendations', 'executive_summary'] as $key) {
+            $this->assertFalse($sections[$key]['present'], "{$key} should still be absent on a live link");
+            $this->assertSame(
+                'not_composed_for_a_live_link',
+                $sections[$key]['absent_reason'],
+                "«{$key}» told the client their figures were examined when they never were",
+            );
+        }
+    }
+
+    /**
+     * And a GENERATED report keeps the honest version: there, the figures really were examined and
+     * really did support nothing, which is a fact about the period worth stating.
+     */
+    public function test_a_generated_report_still_says_the_figures_supported_nothing(): void
+    {
+        $sections = $this->keyed((new ReportStructure)->sections(['kpis' => ['spend' => 10.0]]));
+
+        $this->assertSame('no_finding_the_figures_support', $sections['findings']['absent_reason']);
+        $this->assertSame('no_recommendation_the_figures_support', $sections['recommendations']['absent_reason']);
+        $this->assertSame('no_summary_could_be_composed', $sections['executive_summary']['absent_reason']);
+    }
+
+    /** A live link that DOES carry findings still shows them — the flag governs the reason, not the section. */
+    public function test_the_flag_never_hides_a_section_that_is_present(): void
+    {
+        $sections = $this->keyed((new ReportStructure)->sections(
+            ['totals' => ['spend' => 1.0], 'findings' => [['title' => 'x']]],
+            composesNarrative: false,
+        ));
+
+        $this->assertTrue($sections['findings']['present']);
+        $this->assertNull($sections['findings']['absent_reason']);
+    }
 }

@@ -84,6 +84,15 @@ final class ReportStructure
         'no_creatives_in_window' => ['ar' => 'لا إعلانات ضمن نطاق هذا التقرير وفترته.', 'en' => 'No ads fall inside this report’s scope and window.'],
         'no_rankable_metric_for_this_objective' => ['ar' => 'لا مقياس يصح ترتيب الإعلانات به لهذا الهدف.', 'en' => 'No metric ranks ads honestly for this objective.'],
         'no_ads_to_show' => ['ar' => 'لا إعلانات تُعرض.', 'en' => 'There are no ads to show.'],
+        /*
+         * «Nothing was found» and «nothing was looked for» are different facts.
+         *
+         * A live link recomputes its figures on every open and composes no written analysis —
+         * that is done when a report is GENERATED. Saying «no finding is supported by the
+         * figures» on such a link tells a client something about their business that nobody
+         * checked. This reason says what is true instead.
+         */
+        'not_composed_for_a_live_link' => ['ar' => 'هذا رابط مباشر يعيد حساب الأرقام عند كل فتح، ولا تُكتب فيه النتائج والتوصيات — تُكتب عند إصدار التقرير.', 'en' => 'This is a live link: it recomputes the figures on every open and composes no written analysis. Findings and recommendations are written when a report is generated.'],
         'no_finding_the_figures_support' => ['ar' => 'لا نتيجة تدعمها الأرقام في هذه الفترة.', 'en' => 'No finding is supported by the figures in this period.'],
         'no_recommendation_the_figures_support' => ['ar' => 'لا توصية تدعمها الأرقام في هذه الفترة.', 'en' => 'No recommendation is supported by the figures in this period.'],
     ];
@@ -94,7 +103,13 @@ final class ReportStructure
      * @param  array<string,mixed>  $data  the report snapshot, after every figure is in place
      * @return list<array<string,mixed>>
      */
-    public function sections(array $data): array
+    /**
+     * @param  bool  $composesNarrative  whether this document composes written analysis at all.
+     *                                   False for a live link, which recomputes figures on every
+     *                                   open — so «the figures supported nothing» would be a
+     *                                   claim about a client's data that was never evaluated.
+     */
+    public function sections(array $data, bool $composesNarrative = true): array
     {
         $has = fn (string $key): bool => $this->rows($data, $key) !== [];
 
@@ -136,7 +151,7 @@ final class ReportStructure
         ];
 
         $reason = [
-            'executive_summary' => 'no_summary_could_be_composed',
+            'executive_summary' => $composesNarrative ? 'no_summary_could_be_composed' : 'not_composed_for_a_live_link',
             'performance' => 'no_figures_in_this_window',
             'platforms' => 'no_platform_reported_in_this_window',
             'objectives' => 'no_objective_split_available',
@@ -144,8 +159,10 @@ final class ReportStructure
             // ranks ads honestly for this objective» are different facts, and only the section that
             // built the list knows which applies.
             'ads' => is_string($data['ads_absent_reason'] ?? null) ? $data['ads_absent_reason'] : 'no_ads_to_show',
-            'findings' => 'no_finding_the_figures_support',
-            'recommendations' => 'no_recommendation_the_figures_support',
+            'findings' => $composesNarrative ? 'no_finding_the_figures_support' : 'not_composed_for_a_live_link',
+            'recommendations' => $composesNarrative
+                ? 'no_recommendation_the_figures_support'
+                : 'not_composed_for_a_live_link',
         ];
 
         /*
