@@ -198,6 +198,41 @@ final class DiagnoseSyncCommand extends Command
             $campaigns,
         ));
 
+        /*
+         * AGGREGATION-TRUTH-001 — the PROVIDER each stored campaign claims, and whether it is flagged.
+         *
+         * `ContributorCoverage::expectedProviders()` reads `external_campaigns.provider`, so that
+         * column alone decides which platforms a project's coverage expects to hear from — and it is
+         * the one thing no report printed. A live client report declares itself `partial` because it
+         * expects a «provider» called `sandbox`, and a fix aimed at rows flagged `raw->sandbox`
+         * changed nothing, because nothing here could say whether those are the same rows.
+         *
+         * Counting the flag ALONGSIDE the provider is the whole point: «sandbox 2, of which 2
+         * flagged» and «sandbox 2, of which 0 flagged» call for opposite fixes, and until now they
+         * printed identically. DB-only, like the rest of this command — no provider is called.
+         */
+        $byProvider = ExternalCampaign::withoutGlobalScopes()
+            ->where('external_account_id', $account->getKey())
+            ->toBase()
+            ->selectRaw('provider, COUNT(*) AS total')
+            ->selectRaw("COUNT(*) FILTER (WHERE (raw->'sandbox')::jsonb @> 'true') AS flagged")
+            ->groupBy('provider')
+            ->orderByDesc('total')
+            ->get();
+
+        if ($byProvider->count() > 1 || $contaminated > 0) {
+            $this->line('  campaigns by the provider the ROW claims (coverage reads this column):');
+
+            foreach ($byProvider as $row) {
+                $this->line(sprintf(
+                    '    %-14s %5d   %d flagged `raw->sandbox`',
+                    (string) $row->provider,
+                    (int) $row->total,
+                    (int) $row->flagged,
+                ));
+            }
+        }
+
         if ($contaminated > 0) {
             $this->line(sprintf(
                 '  SANDBOX-CONTAMINATED rows=%d  stored total=%d   (sandbox rows are NOT provider'
