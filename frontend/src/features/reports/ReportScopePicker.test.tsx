@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { ReportScopePicker } from './ReportScopePicker'
 import type { ScopeOptions } from './api'
 import { renderWithProviders } from '@/test/utils'
@@ -98,7 +98,16 @@ describe('ReportScopePicker', () => {
     expect(screen.getByText('Campaigns')).toBeInTheDocument()
     expect(screen.getByText('Marketing paths')).toBeInTheDocument()
     expect(screen.getByText('Ad sets')).toBeInTheDocument()
-    expect(screen.getByText('Ads')).toBeInTheDocument()
+    /*
+     * «Content», not «Ads» — CONTENT-TERMINOLOGY-001.
+     *
+     * This fixture holds a creative and NO ads, so the «Ads» this line used to find was the
+     * creatives axis wearing the ad axis's label: both read «Ads» in English and «الإعلانات» in
+     * Arabic. The assertion passed while pointing at the wrong rung. With the axes named apart it
+     * asserts what it says it does.
+     */
+    expect(screen.getByText('Content')).toBeInTheDocument()
+    expect(screen.queryByText('Ads')).not.toBeInTheDocument()
   })
 
   /**
@@ -169,5 +178,88 @@ describe('ReportScopePicker', () => {
     fireEvent.change(await screen.findByTestId('scope-template-name'), { target: { value: 'Everything' } })
 
     expect(screen.getByRole('button', { name: 'Save this scope' })).toBeDisabled()
+  })
+
+  /**
+   * UX-MULTISELECT-SCALE-001 — the axis has to work at the size a real account is.
+   *
+   * The entity axes were laid out as flat chips: every campaign, every ad, every creative, all on
+   * screen at once. That is fine for the five marketing paths and it is unusable for the live
+   * estate, which holds hundreds — an operator cannot find «Ramadan» in a wall of chips, and the
+   * server's cap means the one they want may not be rendered at all.
+   *
+   * Two hundred is the requirement's own bar («5, 50, 500»), and the assertion is the one that
+   * matters to a person: they can TYPE a name and reach the campaign it belongs to.
+   */
+  it('lets an operator search two hundred campaigns instead of scanning them', async () => {
+    const many = Array.from({ length: 200 }, (_, i) => ({
+      id: `c${i}`,
+      name: i === 137 ? 'Ramadan Sale' : `Campaign ${i}`,
+      status: 'active',
+      objective: 'sales',
+    }))
+    vi.mocked(scopeOptions).mockResolvedValue({ ...OPTIONS, campaigns: many } as ScopeOptions)
+
+    const onChange = vi.fn()
+    renderWithProviders(
+      <ReportScopePicker projectId="p1" value={{}} onChange={onChange} audience="internal" />,
+      { locale: 'en' },
+    )
+
+    const axis = await screen.findByTestId('scope-select-Campaigns')
+
+    /* Opened by its own trigger, then searched — not scrolled. */
+    fireEvent.click(axis.querySelector('button')!)
+    /* Trigger and panel search both carry role=combobox; the search is the one that is an input. */
+    const search = (await within(axis).findAllByRole('combobox')).find(
+      (el) => el.tagName === 'INPUT',
+    )!
+    fireEvent.change(search, { target: { value: 'Ramadan' } })
+
+    /*
+     * `mouseDown`, not `click` — the option commits on mouse-down so the panel does not lose the
+     * selection to its own blur. This is how the component's own tests drive it.
+     */
+    const hit = await within(axis).findByRole('option', { name: /Ramadan Sale/ })
+    fireEvent.mouseDown(hit)
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled())
+    expect(onChange.mock.calls.at(-1)![0]).toEqual({ campaign_ids: ['c137'] })
+  })
+
+  /**
+   * The cap notice survives the new control, and matters more with it.
+   *
+   * A search box that finds nothing is exactly when somebody needs telling that the list was cut
+   * server-side — otherwise the honest conclusion is «my campaign was never synced», which is the
+   * opposite action.
+   */
+  it('still says the axis was capped, above the search', async () => {
+    vi.mocked(scopeOptions).mockResolvedValue({
+      ...OPTIONS,
+      limit: 500,
+      truncated: { campaigns: true, ad_sets: false, ads: false, creatives: false },
+    } as ScopeOptions)
+
+    renderWithProviders(
+      <ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />,
+      { locale: 'en' },
+    )
+
+    expect(await screen.findByTestId('scope-truncated-Campaigns')).toHaveTextContent('Showing 500 only')
+  })
+
+  /**
+   * The short fixed axes keep their chips. Marketing paths are five and never grow; putting a
+   * search box on five options is a control asking to be operated rather than read.
+   */
+  it('leaves the short fixed axes as chips', async () => {
+    renderWithProviders(
+      <ReportScopePicker projectId="p1" value={{}} onChange={vi.fn()} audience="internal" />,
+      { locale: 'en' },
+    )
+
+    await screen.findByText('Marketing paths')
+    expect(screen.queryByTestId('scope-select-Marketing paths')).not.toBeInTheDocument()
   })
 })

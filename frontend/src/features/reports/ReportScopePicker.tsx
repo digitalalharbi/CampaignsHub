@@ -12,6 +12,7 @@ import {
   type ScopeTemplate,
 } from './api'
 import { Button } from '@/components/ui/Button'
+import { MultiSelectField } from '@/components/forms/MultiSelectField'
 import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { Field } from '@/components/ui/Field'
@@ -45,7 +46,16 @@ const COPY = {
     campaigns: 'الحملات',
     adSets: 'المجموعات الإعلانية',
     ads: 'الإعلانات',
-    creatives: 'الإعلانات',
+    /*
+     * CONTENT-TERMINOLOGY-001 — a content item is not an ad, and must not answer to its name.
+     *
+     * This axis read «الإعلانات» — the SAME word as the ad axis directly above it, in both
+     * languages. Two different rungs of the hierarchy, one label: an operator narrowing by content
+     * could not tell which control they were using, and the owner's ruling is explicit that Content
+     * and Ads stay named apart. A creative is reused by several ads and has its own grain, which is
+     * why the axis exists separately at all.
+     */
+    creatives: 'المحتويات',
     objectives: 'الأهداف',
     paths: 'المسارات التسويقية',
     metrics: 'المؤشرات المعروضة',
@@ -73,7 +83,7 @@ const COPY = {
     campaigns: 'Campaigns',
     adSets: 'Ad sets',
     ads: 'Ads',
-    creatives: 'Ads',
+    creatives: 'Content',
     objectives: 'Objectives',
     paths: 'Marketing paths',
     metrics: 'Metrics shown',
@@ -166,6 +176,21 @@ export function ReportScopePicker({
    * this file. The two shapes mean different things on the server and only one of them means «I
    * stopped narrowing by this».
    */
+  /*
+   * The whole selection at once, for the axes that use a real multi-select.
+   *
+   * `toggle` flips one id and is what a chip needs; a multi-select hands back the full array. The
+   * empty-axis rule is the same in both and is the part that matters: an axis with nothing chosen
+   * is REMOVED from the scope rather than stored as an empty list, because «[]» and «absent» mean
+   * different things to the report — one is «narrowed to nothing», the other is «not narrowed».
+   */
+  const set = (axis: ListAxis, next: string[]) => {
+    const out = { ...value }
+    if (next.length === 0) delete out[axis]
+    else out[axis] = next
+    onChange(out)
+  }
+
   const toggle = (axis: ListAxis, id: string) => {
     const current = value[axis] ?? []
     const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
@@ -209,22 +234,22 @@ export function ReportScopePicker({
         t={t}
       />
 
-      {namesInternalEntities && <Chips
+      {namesInternalEntities && <ScopeSelect
         label={t.accounts}
         items={o.accounts.map((a) => ({ id: a.id, label: `${a.name} · ${a.provider}` }))}
         selected={value.account_ids ?? []}
-        onToggle={(id) => toggle('account_ids', id)}
+        onChange={(next) => set('account_ids', next)}
         ar={ar}
         t={t}
       />}
 
-      {namesInternalEntities && <Chips
+      {namesInternalEntities && <ScopeSelect
         label={t.campaigns}
         truncated={o.truncated?.campaigns}
         limit={o.limit}
         items={o.campaigns.map((c) => ({ id: c.id, label: c.name }))}
         selected={value.campaign_ids ?? []}
-        onToggle={(id) => toggle('campaign_ids', id)}
+        onChange={(next) => set('campaign_ids', next)}
         ar={ar}
         t={t}
       />}
@@ -248,42 +273,42 @@ export function ReportScopePicker({
       />
 
       {namesInternalEntities && o.ad_sets.length > 0 && (
-        <Chips
+        <ScopeSelect
           label={t.adSets}
-        truncated={o.truncated?.ad_sets}
-        limit={o.limit}
           note={t.grainCampaign}
+          truncated={o.truncated?.ad_sets}
+          limit={o.limit}
           items={o.ad_sets.map((s) => ({ id: s.id, label: s.name }))}
           selected={value.ad_set_ids ?? []}
-          onToggle={(id) => toggle('ad_set_ids', id)}
+          onChange={(next) => set('ad_set_ids', next)}
           ar={ar}
           t={t}
         />
       )}
 
       {namesInternalEntities && o.ads.length > 0 && (
-        <Chips
+        <ScopeSelect
           label={t.ads}
-        truncated={o.truncated?.ads}
-        limit={o.limit}
           note={t.grainCampaign}
+          truncated={o.truncated?.ads}
+          limit={o.limit}
           items={o.ads.map((a) => ({ id: a.id, label: a.name }))}
           selected={value.ad_ids ?? []}
-          onToggle={(id) => toggle('ad_ids', id)}
+          onChange={(next) => set('ad_ids', next)}
           ar={ar}
           t={t}
         />
       )}
 
       {namesInternalEntities && o.creatives.length > 0 && (
-        <Chips
+        <ScopeSelect
           label={t.creatives}
-        truncated={o.truncated?.creatives}
-        limit={o.limit}
           note={t.grainCreatives}
+          truncated={o.truncated?.creatives}
+          limit={o.limit}
           items={o.creatives.map((c) => ({ id: c.id, label: c.name }))}
           selected={value.creative_ids ?? []}
-          onToggle={(id) => toggle('creative_ids', id)}
+          onChange={(next) => set('creative_ids', next)}
           ar={ar}
           t={t}
         />
@@ -345,6 +370,100 @@ export function ReportScopePicker({
           </Button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * UX-MULTISELECT-SCALE-001 — the entity axes, at the cardinality a real account has.
+ *
+ * `Chips` lays every option out flat. That is right for the five marketing paths and the eight
+ * platforms, which are a fixed short list. It is wrong for campaigns, ad sets, ads, creatives and
+ * accounts: the live estate holds hundreds, and a wall of hundreds of chips is not a control — an
+ * operator cannot find «Ramadan» in it, and the server's own cap means the one they want may not
+ * even be on screen.
+ *
+ * So those axes use the product's shared `MultiSelectField`, which is what every other multi-select surface
+ * already uses: a search box, Select all / Clear all, and the selection kept as removable chips.
+ * Same component, same behaviour, one place to fix.
+ *
+ * The truncation notice is kept exactly as it was and rendered ABOVE the control, because that is
+ * where an operator concludes their campaign does not exist — and it now matters more, not less: a
+ * search box that finds nothing is the moment somebody needs to be told the list was capped
+ * server-side rather than that their campaign is missing.
+ */
+function ScopeSelect({
+  label,
+  note,
+  items,
+  selected,
+  onChange,
+  truncated,
+  limit,
+  ar,
+  t,
+}: {
+  label: string
+  /**
+   * The grain warning, carried across from `Chips` — «No metrics are stored at this level».
+   *
+   * Dropping it while moving these axes to a real control lost the sentence that tells an operator
+   * an ad-set selection narrows the CAMPAIGNS behind it rather than the figures themselves. A test
+   * written long before this change caught it, which is the whole reason it was written.
+   */
+  note?: string
+  items: Array<{ id: string; label: string }>
+  selected: string[]
+  onChange: (next: string[]) => void
+  truncated?: boolean
+  limit?: number
+  ar: boolean
+  t: typeof COPY.ar
+}) {
+  if (items.length === 0) return null
+
+  return (
+    <div data-testid={`scope-select-${label}`}>
+      <div className="mb-1.5 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-bold text-text-primary">{label}</span>
+        {selected.length > 0 && (
+          <span className="tnum rounded-full bg-brand-500/10 px-2 py-0.5 text-[10px] font-semibold text-brand-600">
+            {selected.length} {t.selected}
+          </span>
+        )}
+      </div>
+
+      {note && (
+        <p className="mb-1.5 flex items-start gap-1 text-[10px] text-text-secondary">
+          <Info size={11} className="mt-px shrink-0" /> {note}
+        </p>
+      )}
+
+      {truncated === true && (
+        <p
+          data-testid={`scope-truncated-${label}`}
+          className="mb-1.5 flex items-start gap-1 text-[10px] font-semibold text-warning"
+        >
+          <Info size={11} className="mt-px shrink-0" />
+          {ar
+            ? `يُعرض ${limit ?? items.length} فقط — استخدم البحث أو ضيّق النطاق للوصول إلى البقية`
+            : `Showing ${limit ?? items.length} only — narrow the scope to reach the rest`}
+        </p>
+      )}
+
+      <MultiSelectField
+        label=""
+        value={selected}
+        onChange={onChange}
+        options={items.map((i) => ({ value: i.id, label: i.label }))}
+        /*
+         * Always searchable on these axes. `MultiSelectField` decides for itself above seven
+         * options, and that is the right default elsewhere — here the axis is known to be large
+         * even on the days it happens to be short, and a control that changes shape with the data
+         * teaches an operator two different screens.
+         */
+        searchable
+      />
     </div>
   )
 }
