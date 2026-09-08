@@ -175,7 +175,7 @@ final class ReportStructure
             'performance' => ['spend', 'impressions', 'clicks', 'ctr', 'results'],
             'platforms' => ['spend', 'results', 'share'],
             'objectives' => ['spend', 'results', 'cost_per_result'],
-            'ads' => ['impressions', 'clicks', 'ctr'],
+            'ads' => ['spend', 'results', 'ctr'],
             'findings' => [],
             'recommendations' => [],
         ];
@@ -184,7 +184,7 @@ final class ReportStructure
             'performance' => 'the summary states the headline; this section is the same figures over the whole period, with the components the headline hides',
             'platforms' => 'the same spend, divided by where it went',
             'objectives' => 'the same spend, divided by what it was bought for — and its cost per result is DIRECT rather than the blended one above',
-            'ads' => 'delivery figures beneath the campaigns, never money — an ad’s share of a campaign’s spend is not a figure any platform reports',
+            'ads' => 'the same spend, divided to the individual ad — the finest level the platforms report it at — beside the delivery figures that explain what it bought',
         ];
 
         $out = [];
