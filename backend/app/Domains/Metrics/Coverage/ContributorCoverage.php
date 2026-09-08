@@ -197,6 +197,34 @@ final class ContributorCoverage
             $q->whereIn('provider', $providers);
         }
 
+        /*
+         * SANDBOX-PROD-001 — a fixture row is not a contributor whose silence means anything.
+         *
+         * The owner's live client report reads `partial` and the only thing making it partial is a
+         * «provider» called `sandbox`: two rows the binding defect wrote into the live Snapchat
+         * account before that write path was closed. This method reads
+         * `external_campaigns.provider`, so it expected figures from a platform this install has no
+         * connector for and can never hear from, and the client was told their money was only partly
+         * counted because of an artefact of ours.
+         *
+         * The test is the quarantine's own, exactly: `raw->sandbox` on a campaign under an account
+         * whose provider is NOT sandbox. A real sandbox account's own fixtures stay its own — a demo
+         * tenant looking at demo data is not contamination, and that is the same line
+         * `integrations:quarantine-sandbox` draws before it removes anything.
+         *
+         * This does not replace removing the rows, which is authorised and still owed. It stops the
+         * report being false in the meantime, and it stays true if contamination ever recurs — a
+         * document that becomes accurate only once somebody remembers to run a command is not an
+         * accurate document.
+         */
+        $q->whereNotExists(function ($sub): void {
+            $sub->selectRaw('1')
+                ->from('external_accounts')
+                ->whereColumn('external_accounts.id', 'external_campaigns.external_account_id')
+                ->where('external_accounts.provider', '!=', 'sandbox')
+                ->whereJsonContains('external_campaigns.raw->sandbox', true);
+        });
+
         $out = [];
 
         foreach ($q->get() as $row) {
