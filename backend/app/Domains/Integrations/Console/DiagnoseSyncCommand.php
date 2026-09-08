@@ -233,6 +233,56 @@ final class DiagnoseSyncCommand extends Command
          * Two repairs of a live client-facing defect were written against inferred row shapes and
          * both failed in Production. This condition is why the shape could not simply be read.
          */
+        /*
+         * AGGREGATION-TRUTH-001 — the PROJECT's own rows, which is the scope coverage actually reads.
+         *
+         * Every other count here is ACCOUNT-scoped: it asks what hangs off the account in hand.
+         * `ContributorCoverage::expectedProviders()` is PROJECT-scoped — it reads every
+         * `external_campaigns` row carrying the project id, whatever account owns it and whether or
+         * not that account is still bound. A campaign keeps its `project_id` after a binding is
+         * removed, so rows under an UNLINKED account still decide which platforms a client's report
+         * expects to hear from, while every account-scoped report walks straight past them.
+         *
+         * That blind spot cost three failed repairs of a live client-facing defect. Walking accounts
+         * cannot close it: this estate holds 619 Snapchat accounts, and the rows in question are
+         * under whichever one nobody thought to open. Asking the PROJECT is one query and admits no
+         * such gap.
+         */
+        /*
+         * The project is taken from the BINDING where one exists, and from the account's own rows
+         * where it does not. An account whose binding was removed still holds campaigns carrying the
+         * project id — which is the very case this view exists to surface — so refusing to describe
+         * it without a binding would blind the report to its own subject.
+         */
+        $scopeProjectId = $binding->project_id ?? ExternalCampaign::withoutGlobalScopes()
+            ->where('external_account_id', $account->getKey())
+            ->whereNotNull('project_id')
+            ->value('project_id');
+
+        if ($scopeProjectId !== null) {
+            $projectRows = ExternalCampaign::withoutGlobalScopes()
+                ->where('project_id', $scopeProjectId)
+                ->toBase()
+                ->selectRaw('provider, COUNT(*) AS total')
+                ->selectRaw("COUNT(*) FILTER (WHERE (raw->'sandbox')::jsonb @> 'true') AS flagged")
+                ->groupBy('provider')
+                ->orderByDesc('total')
+                ->get();
+
+            if ($projectRows->isNotEmpty()) {
+                $this->line('  the whole PROJECT by provider (coverage reads THIS, not the account):');
+
+                foreach ($projectRows as $row) {
+                    $this->line(sprintf(
+                        '    %-14s %5d   %d flagged `raw->sandbox`',
+                        (string) $row->provider,
+                        (int) $row->total,
+                        (int) $row->flagged,
+                    ));
+                }
+            }
+        }
+
         if ($byProvider->isNotEmpty()) {
             $this->line('  campaigns by the provider the ROW claims (coverage reads this column):');
 
