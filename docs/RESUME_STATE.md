@@ -1,8 +1,8 @@
-# START HERE — 2026-09-08 (reconciled from Git after #306)
+# START HERE — 2026-09-08 (reconciled from Git after #308)
 
 Read this file, then `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then `git log origin/main`.
 
-## 2026-09-08 — where this stopped
+## 2026-09-08 — where this stopped (superseded below)
 
 `origin/main` = `c51228b8` (#306), deployed. #303, #304, #305 and #306 all merged, deployed and
 verified in Production this session. `docs/ACTIVE_EXECUTION_STATE.md` carries the detail.
@@ -177,3 +177,27 @@ Money     subscriptions USD, reporting SAR, the original currency always kept; t
 Metrics   one canonical model — no per-page objective maps, money rules or currency logic
 Engines   extend what exists. No second CRM, RBAC, scheduler, mail, media or reporting engine.
 ```
+
+
+## 2026-09-08, later — final state of this session
+
+`origin/main` = `f348306e`, deployed and verified. Eight PRs merged and deployed:
+#303 #304 #305 #306 #307 #309 #310 #308.
+
+Closed on Production evidence: owner rows 25, 26, 31, 32, 72, the report half of 3, 9 and 10,
+and `CREATIVE-AD-RELATION-001` (1,524 creatives reachable through the canonical relation).
+
+Corrected rather than carried forward:
+- `TABLE-NUMERIC-ALIGNMENT-001` — its recorded next step («the SEED») was false. The seed has
+  figures; the content list has no PURE-NUMERAL column by design, so no seeding can satisfy that
+  sweep. Status stays PARTIAL: VERIFIED needs Production observation of an authenticated table.
+- `CLIENT-DIAGNOSTIC-SEPARATION-001` — the PDF gap is auth-blocked, not code: `/reports/print/`
+  refuses a live share token by design.
+- `GATE-WK-001` — reconciled to VERIFIED on `47c9ef9`; it had held two statuses at once.
+
+Two process traps that nearly produced false reports, both now guarded by habit:
+a dispatch can FAIL while the script says «dispatched» (compare run ids before and after), and a
+merge can SUCCEED while the API call times out (check `state`/`mergeCommit`, never blind-retry).
+
+`docs/ACTIVE_EXECUTION_STATE.md` carries the full blocked list. Nothing independently executable
+remains open; every remaining item names exactly one external dependency.
