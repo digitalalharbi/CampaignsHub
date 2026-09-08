@@ -39,6 +39,31 @@ final class OAuthTokens
 
         $skew = $skewMinutes ?? (int) config('ad_platforms.refresh_skew_minutes', 60);
 
+        /*
+         * INTEG-OAUTH-001 — the margin may never be wider than the life it is protecting.
+         *
+         * The skew exists so a long sync does not begin on a token about to die. One value, 60
+         * minutes, was applied to every platform — and Snapchat issues a token that lives 1800
+         * seconds. Thirty minutes sits inside a sixty-minute window from the instant it is issued,
+         * so the token was «expired» while still warm, every `tokens()` call refreshed, and the
+         * `/token` quota went. Production showed it as a bare refusal with nothing attempted:
+         *
+         *     Snapchat Marketing API refused the token request (429) … calls made: 0
+         *
+         * A 429 there kills the whole operation before one business call is made, so a real sync
+         * fails identically and reports a provider refusal that has nothing to do with the data.
+         *
+         * The token states its own life in `expires_in` and `raw` keeps it, so the margin is capped
+         * at half of that: a 30-minute token is refreshed with 15 minutes left, a long-lived one
+         * keeps the full configured hour. No per-platform table to maintain, and nothing to keep in
+         * step with a provider changing its mind — the token itself is the authority.
+         */
+        $statedLife = $this->raw['expires_in'] ?? null;
+
+        if (is_numeric($statedLife) && (int) $statedLife > 0) {
+            $skew = min($skew, intdiv((int) $statedLife, 120));
+        }
+
         return $this->expiresAt->lessThanOrEqualTo(Carbon::now()->addMinutes($skew));
     }
 
