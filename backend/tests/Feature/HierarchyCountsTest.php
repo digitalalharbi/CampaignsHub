@@ -586,6 +586,61 @@ final class HierarchyCountsTest extends TestCase
     }
 
     /**
+     * AGGREGATION-TRUTH-001 — the PROJECT's rows, including those under an account nobody walks.
+     *
+     * `ContributorCoverage::expectedProviders()` is PROJECT-scoped: it reads every campaign carrying
+     * the project id, whatever account owns it and whether or not that account is still bound. A
+     * campaign KEEPS its `project_id` after a binding is removed, so a row under an unlinked account
+     * still decides which platforms a client's report expects to hear from — while every
+     * account-scoped report in this command walks straight past it.
+     *
+     * Three repairs of a live client-facing defect failed on exactly this. All 115 rows under the
+     * project's three BOUND accounts claim their own platform; the `sandbox` the coverage expects is
+     * under something else. Walking accounts cannot close that — the estate holds 619 Snapchat
+     * accounts — so the project is asked directly.
+     */
+    public function test_the_project_view_counts_rows_under_an_account_that_is_not_bound(): void
+    {
+        $this->campaign('cmp-1');
+
+        /*
+         * The account is deliberately a DIFFERENT platform from the one this run walks.
+         *
+         * `--provider=snapchat` never opens a Meta account, so the row below is reachable ONLY by
+         * asking the project. An earlier version put it under a second SNAPCHAT account and the
+         * guard was vacuous: the loop opened that account anyway, so account-scoped counting found
+         * the row too, and replacing the project filter with an account filter still passed.
+         */
+        $unbound = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'provider_connection_id' => $this->account->provider_connection_id,
+            'provider' => 'meta',
+            'account_type' => 'ad_account',
+            'external_id' => 'act_unbound',
+            'name' => 'Unbound',
+            'status' => 'active',
+            'discovered_at' => Carbon::now(),
+        ]);
+
+        $stray = ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $unbound->id,
+            'provider' => 'sandbox',
+            'external_id' => 'stray-1',
+            'name' => 'stray-1',
+            'status' => 'active',
+        ]);
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat'])
+            ->expectsOutputToContain('the whole PROJECT by provider')
+            ->expectsOutputToContain('sandbox            1   0 flagged `raw->sandbox`')
+            ->assertSuccessful();
+
+        unset($stray);
+    }
+
+    /**
      * AGGREGATION-TRUTH-001 — a single-provider account still reports what its rows claim.
      *
      * The distribution used to print only when an account held more than one provider or carried a
