@@ -586,6 +586,28 @@ final class HierarchyCountsTest extends TestCase
     }
 
     /**
+     * AGGREGATION-TRUTH-001 — a single-provider account still reports what its rows claim.
+     *
+     * The distribution used to print only when an account held more than one provider or carried a
+     * flagged row. An account whose campaigns ALL claim some OTHER platform therefore printed
+     * nothing at all, which reads exactly like «nothing to see» — and SANDBOX-PROD-001 is that
+     * shape: a Meta binding writing `sandbox` campaigns into a live account.
+     *
+     * Two repairs of a live client-facing defect were written against inferred row shapes, and both
+     * failed in Production, because this was the report that could have shown the real one.
+     */
+    public function test_an_account_whose_rows_all_claim_another_platform_still_reports_it(): void
+    {
+        $campaign = $this->campaign('cmp-1');
+        $campaign->forceFill(['provider' => 'sandbox'])->save();
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('campaigns by the provider the ROW claims')
+            ->expectsOutputToContain('sandbox            1   0 flagged `raw->sandbox`')
+            ->assertSuccessful();
+    }
+
+    /**
      * AGGREGATION-TRUTH-001 — the provider a ROW claims, counted beside whether it is flagged.
      *
      * `ContributorCoverage::expectedProviders()` reads `external_campaigns.provider`, and that column
