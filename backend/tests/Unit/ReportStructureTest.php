@@ -203,4 +203,121 @@ final class ReportStructureTest extends TestCase
             'with no spend at all only the summary survives',
         );
     }
+
+    /**
+     * REPORT-DETAIL-PARITY-001 — the contents may not DENY a section the report plainly has.
+     *
+     * Found on the owner's live client link. Its outline read:
+     *
+     *     key: performance   present: false
+     *     «لا أرقام في هذه الفترة.» / «There are no figures in this window.»
+     *
+     * on a payload carrying `totals.spend = 9,842.78`, with the KPI block rendered on the page above
+     * it. The rule this row states is that a report's contents must never promise a section the link
+     * does not have; this is that rule inverted, and it is the worse direction — a client is told
+     * their period is empty over nine thousand of their own money.
+     *
+     * The cause is a name. A SNAPSHOT calls that block `kpis`; the LIVE payload calls it `totals`,
+     * and `sections()` only knew the first. Both are the same figures and both mean the section is
+     * there, so both are read.
+     */
+    public function test_the_live_payload_names_its_figures_totals_and_still_has_a_performance_section(): void
+    {
+        $sections = collect((new ReportStructure)->sections([
+            'totals' => ['spend' => 9842.78, 'conversions' => 566],
+            'platforms' => [['provider' => 'snapchat', 'spend' => 9842.78]],
+        ]))->keyBy('key');
+
+        $this->assertTrue(
+            $sections['performance']['present'],
+            'the contents denied a performance section on a payload carrying 9,842.78 in spend',
+        );
+        $this->assertNull($sections['performance']['absent_reason']);
+    }
+
+    /** The snapshot spelling keeps working — it is the same section under the other name. */
+    public function test_the_snapshot_payload_still_has_its_performance_section(): void
+    {
+        $sections = collect((new ReportStructure)->sections([
+            'kpis' => ['spend' => 1200.0],
+        ]))->keyBy('key');
+
+        $this->assertTrue($sections['performance']['present']);
+    }
+
+    /**
+     * And a window that genuinely has no figures still says so. Without this the fix would be a
+     * filter that declares every report complete — the opposite failure, and the one a client
+     * cannot detect.
+     */
+    public function test_a_window_with_no_figures_at_all_still_reports_the_section_absent(): void
+    {
+        $sections = collect((new ReportStructure)->sections([
+            'totals' => ['spend' => null],
+            'kpis' => ['spend' => null],
+        ]))->keyBy('key');
+
+        $this->assertFalse($sections['performance']['present']);
+        $this->assertSame('no_figures_in_this_window', $sections['performance']['absent_reason']);
+    }
+
+    /**
+     * REPORT-DETAIL-PARITY-001 — «nothing was found» and «nothing was looked for» are different facts.
+     *
+     * On the owner's live client link the contents state, of the client's own data:
+     *
+     *     «لا نتيجة تدعمها الأرقام في هذه الفترة.»  / "No finding is supported by the figures in this period."
+     *     «لا توصية تدعمها الأرقام في هذه الفترة.»  / "No recommendation is supported by the figures…"
+     *     «لا ملخّص يمكن تكوينه من أرقام هذه الفترة.» / "No summary could be composed from this period's figures."
+     *
+     * All three claim the figures were examined and yielded nothing. They were never examined:
+     * `LiveReportService` composes none of the three — grep counts 0 against `ReportGenerator`'s 3 —
+     * because written analysis is composed when a report is GENERATED, and a live link recomputes
+     * its figures on every open instead.
+     *
+     * A client reading «your figures support no findings» has been told something about their
+     * business that nobody checked. That is a heavier claim than the missing section beside it, and
+     * it is the same defect as `performance`: a reason that names the wrong cause.
+     */
+    public function test_a_live_link_does_not_claim_the_figures_supported_no_findings(): void
+    {
+        $sections = $this->keyed((new ReportStructure)->sections(
+            ['totals' => ['spend' => 9842.78]],
+            composesNarrative: false,
+        ));
+
+        foreach (['findings', 'recommendations', 'executive_summary'] as $key) {
+            $this->assertFalse($sections[$key]['present'], "{$key} should still be absent on a live link");
+            $this->assertSame(
+                'not_composed_for_a_live_link',
+                $sections[$key]['absent_reason'],
+                "«{$key}» told the client their figures were examined when they never were",
+            );
+        }
+    }
+
+    /**
+     * And a GENERATED report keeps the honest version: there, the figures really were examined and
+     * really did support nothing, which is a fact about the period worth stating.
+     */
+    public function test_a_generated_report_still_says_the_figures_supported_nothing(): void
+    {
+        $sections = $this->keyed((new ReportStructure)->sections(['kpis' => ['spend' => 10.0]]));
+
+        $this->assertSame('no_finding_the_figures_support', $sections['findings']['absent_reason']);
+        $this->assertSame('no_recommendation_the_figures_support', $sections['recommendations']['absent_reason']);
+        $this->assertSame('no_summary_could_be_composed', $sections['executive_summary']['absent_reason']);
+    }
+
+    /** A live link that DOES carry findings still shows them — the flag governs the reason, not the section. */
+    public function test_the_flag_never_hides_a_section_that_is_present(): void
+    {
+        $sections = $this->keyed((new ReportStructure)->sections(
+            ['totals' => ['spend' => 1.0], 'findings' => [['title' => 'x']]],
+            composesNarrative: false,
+        ));
+
+        $this->assertTrue($sections['findings']['present']);
+        $this->assertNull($sections['findings']['absent_reason']);
+    }
 }
