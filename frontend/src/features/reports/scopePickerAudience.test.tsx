@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { ReportScopePicker } from './ReportScopePicker'
 import type { ScopeOptions } from './api'
 import { renderWithProviders } from '@/test/utils'
@@ -73,6 +73,21 @@ describe('what a report builder may name, by audience', () => {
         `«${name}» reached a client-facing builder`,
       ).not.toContain(name)
     }
+
+    /*
+     * And the AXES themselves are absent, not merely collapsed.
+     *
+     * Since the entity axes became real multi-selects their options are not in the DOM until the
+     * panel is opened — so a name-absence check alone would now pass even if a campaign picker were
+     * wrongly offered to a client, one click away from the names it must never show. The rung has
+     * to be missing, not shut.
+     */
+    for (const axis of ['Ad accounts', 'Campaigns', 'Ad sets', 'Ads', 'Content']) {
+      expect(
+        screen.queryByTestId(`scope-select-${axis}`),
+        `a client-facing builder offered the «${axis}» rung`,
+      ).not.toBeInTheDocument()
+    }
   })
 
   /** What it offers INSTEAD — the channel the client already knows they bought. */
@@ -84,18 +99,33 @@ describe('what a report builder may name, by audience', () => {
     expect(screen.getByText('Sales')).toBeInTheDocument()
   })
 
-  /** The other half: an internal report keeps every rung of the hierarchy. */
+  /**
+   * The other half: an internal report keeps every rung of the hierarchy.
+   *
+   * Read as «is the rung OFFERED», not «is every name printed on load». The entity axes are real
+   * multi-selects now (UX-MULTISELECT-SCALE-001) because the live estate holds hundreds of
+   * campaigns and a wall of chips is not a control — so their options live behind the panel until
+   * it is opened. The guarantee this protects is unchanged: an internal builder may narrow by
+   * account, campaign, ad set, ad and creative, and can reach those names.
+   */
   it('an internal report keeps the whole hierarchy', async () => {
     render('internal')
     await screen.findByText('Platforms')
 
-    // Read from the rendered text, because the account chip renders «name · provider» in one node.
-    for (const name of INTERNAL_NAMES) {
+    for (const axis of ['Ad accounts', 'Campaigns', 'Ad sets', 'Ads', 'Content']) {
       expect(
-        document.body.textContent ?? '',
-        `«${name}» was removed from an internal builder`,
-      ).toContain(name)
+        screen.queryByTestId(`scope-select-${axis}`),
+        `the «${axis}» rung was removed from an internal builder`,
+      ).toBeInTheDocument()
     }
+
+    /* And the names are genuinely reachable — one axis opened is enough to prove the wiring. */
+    const campaigns = screen.getByTestId('scope-select-Campaigns')
+    fireEvent.click(within(campaigns).getAllByRole('combobox')[0])
+
+    expect(
+      within(campaigns).getByRole('option', { name: /Prospecting Broad KSA/ }),
+    ).toBeInTheDocument()
   })
 
   /**

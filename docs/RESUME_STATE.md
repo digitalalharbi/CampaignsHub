@@ -1,4 +1,4 @@
-# START HERE — 2026-09-08 (reconciled from Git after #308)
+# START HERE — 2026-09-09 (reconciled from Git after #318)
 
 Read this file, then `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then `git log origin/main`.
 
@@ -201,3 +201,24 @@ merge can SUCCEED while the API call times out (check `state`/`mergeCommit`, nev
 
 `docs/ACTIVE_EXECUTION_STATE.md` carries the full blocked list. Nothing independently executable
 remains open; every remaining item names exactly one external dependency.
+
+
+## 2026-09-09 — end of the autonomous stretch
+
+`origin/main` = `8316d3a7`, deployed and Production-verified. Fifteen PRs merged and deployed.
+
+**The sandbox phantom is CLOSED.** The client report reads `state: complete`,
+`expected: [meta, linkedin, snapchat]`, `excluded: []`, with totals unchanged at 9,842.78 / 566 —
+so nothing real was hidden to achieve it. It took four attempts; #313 and #315 deployed and did
+NOT work, and both are recorded as such rather than as fixes. The cause of three wrong guesses was
+that every diagnostic was account-scoped while coverage is project-scoped.
+
+**Also closed on Production evidence:** owner row 2 (Meta media 12/0/0) and row 3's server half.
+
+**In flight on `queue/multiselect-and-terminology`:** the report-scope picker's entity axes moved to
+the shared searchable multiselect (owner row 47), and a terminology collision fixed — the creatives
+axis was labelled «Ads» / «الإعلانات», identical to the ads axis, in both languages.
+
+**Read `docs/ACTIVE_EXECUTION_STATE.md`** for the full blocked list; every remaining item names one
+external dependency — an authenticated session, a VPS shell, a provider credential, or an owner
+decision.
