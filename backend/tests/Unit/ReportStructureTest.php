@@ -320,4 +320,34 @@ final class ReportStructureTest extends TestCase
         $this->assertTrue($sections['findings']['present']);
         $this->assertNull($sections['findings']['absent_reason']);
     }
+
+    /**
+     * The contents page describes the ads section that exists, not one that shows no money.
+     *
+     * `ReportAdsSection` prints three figures per ad and the FIRST is spend — «الإنفاق 1,071 USD» on
+     * every card in production, ranked by return. That figure is real: `SUM(creative_daily_metrics.spend)`
+     * over the window, which is the finest level the platforms report spend at. The outline declared
+     * `impressions, clicks, ctr` and justified it with «never money — an ad's share of a campaign's
+     * spend is not a figure any platform reports»: it omitted the one figure the section leads with,
+     * listed `clicks`, which no card prints, and denied a figure the product stores per ad and sorts on.
+     */
+    public function test_the_ads_section_declares_the_money_it_leads_with(): void
+    {
+        $ads = $this->keyed((new ReportStructure)->sections($this->snapshot([
+            'ads' => [['id' => 'a1', 'name' => 'Story 9:16', 'spend' => 1071.0, 'ctr' => 0.0005, 'roas' => 2.4]],
+        ])))['ads'];
+
+        $this->assertContains('spend', $ads['figures'], 'the section leads every ad with its spend');
+        $this->assertNotContains('clicks', $ads['figures'], 'no ad card prints clicks');
+        $this->assertStringNotContainsStringIgnoringCase(
+            'never money',
+            $ads['repeat_reason'],
+            'the reason for repeating spend may not deny that the section repeats it',
+        );
+        $this->assertStringNotContainsStringIgnoringCase(
+            'is not a figure any platform reports',
+            $ads['repeat_reason'],
+            'ad-level spend is reported, stored per ad, and sorted on',
+        );
+    }
 }
