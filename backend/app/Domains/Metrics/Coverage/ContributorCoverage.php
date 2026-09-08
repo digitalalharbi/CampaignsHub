@@ -198,39 +198,39 @@ final class ContributorCoverage
         }
 
         /*
-         * SANDBOX-PROD-001 / AGGREGATION-TRUTH-001 — a platform with no connected account cannot
-         * contribute, so its silence is not a gap in the client's figures.
+         * SANDBOX-PROD-001 — a row the SANDBOX CONNECTOR wrote is a fixture, not delivery.
          *
-         * The owner's live client report reads `partial`, and the only thing making it partial is a
-         * «provider» called `sandbox` — rows the binding defect left behind before that write path
-         * was closed. There is no Snapchat-style account for it: `integrations:diagnose
-         * --provider=sandbox` answers «No external account matches that filter» on Production. A
-         * platform this install holds no account for can never sync, so expecting figures from it
-         * makes every report permanently partial for an artefact of ours, and tells a paying client
-         * their money is only partly counted.
+         * Production, read project-wide (`integrations:diagnose`, 2026-09-08):
          *
-         * ## Why this rule and not the previous one
+         *     snapchat  89   2 flagged `raw->sandbox`
+         *     linkedin  24   0 flagged
+         *     meta       4   2 flagged
+         *     sandbox    2   2 flagged      <- the whole of it
          *
-         * The first repair filtered rows flagged `raw->sandbox` under a live account. It deployed and
-         * Production was unchanged, because those two flagged rows claim `provider = 'snapchat'` —
-         * all 89 campaigns on that account do. The flag was never the handle. Both the quarantine and
-         * the account diagnosis are ACCOUNT-scoped while coverage is PROJECT-scoped, so nothing could
-         * see where the `sandbox` value actually came from; the shape was inferred and the inference
-         * was wrong.
+         * Both rows claiming `sandbox` are flagged, and that flag means one thing: the sandbox
+         * connector wrote them. They are synthetic. They never carried a riyal of anybody's money,
+         * so they cannot owe a figure, and their silence is not a gap in a client's report. Expecting
+         * them made the owner's live report permanently `partial` for a platform that does not exist.
          *
-         * This rule needs no such knowledge. It asks the question coverage is actually about — could
-         * this platform have reported? — and answers it from whether the tenant holds an account for
-         * it, wherever the campaign rows happen to sit.
+         * ## Two earlier repairs failed, and the shape above says why
          *
-         * A provider that HAS an account and reported nothing is untouched: that is a real gap and it
-         * must still make the total partial.
+         * The first excluded flagged rows under a NON-sandbox account, deliberately sparing «a
+         * sandbox account's own fixtures». The second expected only providers the tenant holds an
+         * account for. Four unlinked sandbox accounts exist, so each rule preserved exactly these
+         * rows, for opposite reasons. Both were written against an inferred shape; this one is
+         * written against the printed one.
+         *
+         * ## Why the flag alone, with no account condition
+         *
+         * The account was never the point. A fixture is a fixture wherever it is filed — and the
+         * account-based conditions are what let these two rows through twice. A demo tenant whose
+         * rows are ALL synthetic now reports `complete` rather than expecting a platform to answer
+         * for made-up data, which is the honest reading of a demo.
+         *
+         * Real contributors are untouched, and the numbers above show it: snapchat keeps 87 unflagged
+         * rows, meta 2, linkedin 24. Only `sandbox`, which is flagged end to end, leaves.
          */
-        $q->whereExists(function ($sub): void {
-            $sub->selectRaw('1')
-                ->from('external_accounts')
-                ->whereColumn('external_accounts.provider', 'external_campaigns.provider')
-                ->whereColumn('external_accounts.tenant_id', 'external_campaigns.tenant_id');
-        });
+        $q->whereRaw("COALESCE((raw->'sandbox')::jsonb, 'false'::jsonb) <> 'true'::jsonb");
 
         $out = [];
 

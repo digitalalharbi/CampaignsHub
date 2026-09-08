@@ -43,6 +43,13 @@ use Tests\TestCase;
  * falsehood returns the moment any contaminated row exists again. Contamination is not evidence about
  * a client's money.
  *
+ * ## Production's printed shape, project-wide (2026-09-08)
+ *
+ *     snapchat  89   2 flagged `raw->sandbox`
+ *     linkedin  24   0 flagged
+ *     meta       4   2 flagged
+ *     sandbox    2   2 flagged      <- the whole of it
+ *
  * ## The shape is Production's, not an inference
  *
  * A first repair filtered rows flagged `raw->sandbox` under a live account. It deployed and
@@ -162,35 +169,43 @@ final class ContaminationIsNotAContributorTest extends TestCase
     }
 
     /**
-     * The mirror of the mistake: an account EXISTS for the provider, so it is expected — and the
-     * `raw->sandbox` flag on the row makes no difference either way. The flag was the wrong handle,
-     * and this pins that it is no longer load-bearing.
+     * The belief this test used to hold was WRONG, and the data said so.
+     *
+     * It asserted that a flagged row under a sandbox account IS an expected contributor — «a sandbox
+     * account's own fixtures stay its own». That assumption is exactly what let the two live rows
+     * through: both are flagged, and preserving them is what kept the owner's report `partial`.
+     *
+     * A row the sandbox connector wrote is synthetic wherever it is filed. It never carried real
+     * money, so it can never owe a figure. A tenant whose rows are ALL synthetic now reports
+     * `complete` instead of expecting a platform to answer for invented data.
      */
-    public function test_a_provider_that_does_have_an_account_is_still_a_contributor(): void
+    public function test_a_flagged_fixture_row_is_never_a_contributor_wherever_it_is_filed(): void
     {
-        /*
-         * The account is built directly rather than through `TokenVault::open()`: `sandbox` is not a
-         * configured OAuth platform, so opening a connection for it throws «No platform configuration
-         * for 'sandbox'». What this test needs is an ACCOUNT whose provider is sandbox, and the
-         * coverage query reads that column and never the connection behind it.
-         */
-        $sandboxAccount = ExternalAccount::withoutGlobalScopes()->create([
-            'tenant_id' => $this->tenant->id,
-            'provider_connection_id' => $this->live->provider_connection_id,
-            'provider' => 'sandbox',
-            'account_type' => 'ad_account',
-            'external_id' => 'act_sandbox',
-            'name' => 'Sandbox',
-            'status' => 'active',
-            'discovered_at' => Carbon::now(),
-        ]);
+        $this->campaign('real-1', 'snapchat', ['id' => 'real-1']);
+        $this->campaign('sbx-under-live', 'sandbox', ['sandbox' => true]);
 
-        $this->campaign('sbx-own-1', 'sandbox', ['sandbox' => true], $sandboxAccount);
+        $coverage = $this->coverage();
+
+        $this->assertNotContains('sandbox', $coverage['expected_contributors']);
+        $this->assertContains('snapchat', $coverage['expected_contributors'],
+            'the real platform stopped being expected too — this filter is too wide');
+    }
+
+    /**
+     * The surgical check, in Production's own proportions: a platform with SOME flagged rows keeps
+     * its unflagged ones and stays a contributor. Live data has snapchat at 89 with 2 flagged and
+     * meta at 4 with 2 flagged — if this filter removed a platform because any row of it was
+     * flagged, it would erase two real contributors from a client's report.
+     */
+    public function test_a_platform_with_some_flagged_rows_keeps_its_real_ones(): void
+    {
+        $this->campaign('meta-real', 'meta', ['id' => 'meta-real']);
+        $this->campaign('meta-fixture', 'meta', ['sandbox' => true]);
 
         $this->assertContains(
-            'sandbox',
+            'meta',
             $this->coverage()['expected_contributors'],
-            'a provider whose account exists stopped being able to report its own figures',
+            'a platform lost its place because one of its rows was a fixture',
         );
     }
 }
