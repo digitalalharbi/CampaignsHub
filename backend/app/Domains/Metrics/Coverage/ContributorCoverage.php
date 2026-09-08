@@ -198,31 +198,38 @@ final class ContributorCoverage
         }
 
         /*
-         * SANDBOX-PROD-001 — a fixture row is not a contributor whose silence means anything.
+         * SANDBOX-PROD-001 / AGGREGATION-TRUTH-001 — a platform with no connected account cannot
+         * contribute, so its silence is not a gap in the client's figures.
          *
-         * The owner's live client report reads `partial` and the only thing making it partial is a
-         * «provider» called `sandbox`: two rows the binding defect wrote into the live Snapchat
-         * account before that write path was closed. This method reads
-         * `external_campaigns.provider`, so it expected figures from a platform this install has no
-         * connector for and can never hear from, and the client was told their money was only partly
-         * counted because of an artefact of ours.
+         * The owner's live client report reads `partial`, and the only thing making it partial is a
+         * «provider» called `sandbox` — rows the binding defect left behind before that write path
+         * was closed. There is no Snapchat-style account for it: `integrations:diagnose
+         * --provider=sandbox` answers «No external account matches that filter» on Production. A
+         * platform this install holds no account for can never sync, so expecting figures from it
+         * makes every report permanently partial for an artefact of ours, and tells a paying client
+         * their money is only partly counted.
          *
-         * The test is the quarantine's own, exactly: `raw->sandbox` on a campaign under an account
-         * whose provider is NOT sandbox. A real sandbox account's own fixtures stay its own — a demo
-         * tenant looking at demo data is not contamination, and that is the same line
-         * `integrations:quarantine-sandbox` draws before it removes anything.
+         * ## Why this rule and not the previous one
          *
-         * This does not replace removing the rows, which is authorised and still owed. It stops the
-         * report being false in the meantime, and it stays true if contamination ever recurs — a
-         * document that becomes accurate only once somebody remembers to run a command is not an
-         * accurate document.
+         * The first repair filtered rows flagged `raw->sandbox` under a live account. It deployed and
+         * Production was unchanged, because those two flagged rows claim `provider = 'snapchat'` —
+         * all 89 campaigns on that account do. The flag was never the handle. Both the quarantine and
+         * the account diagnosis are ACCOUNT-scoped while coverage is PROJECT-scoped, so nothing could
+         * see where the `sandbox` value actually came from; the shape was inferred and the inference
+         * was wrong.
+         *
+         * This rule needs no such knowledge. It asks the question coverage is actually about — could
+         * this platform have reported? — and answers it from whether the tenant holds an account for
+         * it, wherever the campaign rows happen to sit.
+         *
+         * A provider that HAS an account and reported nothing is untouched: that is a real gap and it
+         * must still make the total partial.
          */
-        $q->whereNotExists(function ($sub): void {
+        $q->whereExists(function ($sub): void {
             $sub->selectRaw('1')
                 ->from('external_accounts')
-                ->whereColumn('external_accounts.id', 'external_campaigns.external_account_id')
-                ->where('external_accounts.provider', '!=', 'sandbox')
-                ->whereJsonContains('external_campaigns.raw->sandbox', true);
+                ->whereColumn('external_accounts.provider', 'external_campaigns.provider')
+                ->whereColumn('external_accounts.tenant_id', 'external_campaigns.tenant_id');
         });
 
         $out = [];

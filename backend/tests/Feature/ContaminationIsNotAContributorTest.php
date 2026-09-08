@@ -43,9 +43,17 @@ use Tests\TestCase;
  * falsehood returns the moment any contaminated row exists again. Contamination is not evidence about
  * a client's money.
  *
- * The test used is the quarantine's own, exactly: `raw->sandbox = true` on a campaign under an
- * account whose provider is NOT `sandbox`. A real sandbox account's own fixtures stay its own —
- * that is the distinction the quarantine already draws, and it is drawn the same way here.
+ * ## The shape is Production's, not an inference
+ *
+ * A first repair filtered rows flagged `raw->sandbox` under a live account. It deployed and
+ * Production did not change, because those flagged rows claim `provider = 'snapchat'` — the
+ * account's provider distribution reads «snapchat 89, 2 flagged». The flag was never the handle,
+ * and the fixture that «proved» it was written to match the guess rather than the data.
+ *
+ * The fact this rests on instead is Production-proven: `integrations:diagnose --provider=sandbox`
+ * answers «No external account matches that filter». There is no account for that platform, so it
+ * cannot sync, so its silence is not a gap in a client's figures. These fixtures reproduce THAT:
+ * a campaign claiming a provider the tenant holds no account for.
  */
 final class ContaminationIsNotAContributorTest extends TestCase
 {
@@ -118,8 +126,11 @@ final class ContaminationIsNotAContributorTest extends TestCase
         )->toArray();
     }
 
-    /** The defect: a fixture row makes a client's report say their money is only partly counted. */
-    public function test_a_sandbox_row_under_a_live_account_is_not_an_expected_contributor(): void
+    /**
+     * The defect, in Production's own shape: a campaign claims a platform this tenant holds no
+     * account for, and the client's report is told their money is only partly counted because of it.
+     */
+    public function test_a_provider_with_no_account_is_not_an_expected_contributor(): void
     {
         $this->campaign('real-1', 'snapchat', ['id' => 'real-1']);
         $this->campaign('sbx-cmp-1', 'sandbox', ['sandbox' => true]);
@@ -129,7 +140,7 @@ final class ContaminationIsNotAContributorTest extends TestCase
         $this->assertNotContains(
             'sandbox',
             $coverage['expected_contributors'],
-            'a contaminated fixture row was expected to report figures, so the report reads partial for ever',
+            'a platform with no connected account was expected to report figures, so the report reads partial for ever',
         );
     }
 
@@ -151,10 +162,11 @@ final class ContaminationIsNotAContributorTest extends TestCase
     }
 
     /**
-     * And a sandbox ACCOUNT's own sandbox campaigns stay its own — the same line the quarantine
-     * draws. This is a demo tenant looking at its demo data, and nothing about it is contamination.
+     * The mirror of the mistake: an account EXISTS for the provider, so it is expected — and the
+     * `raw->sandbox` flag on the row makes no difference either way. The flag was the wrong handle,
+     * and this pins that it is no longer load-bearing.
      */
-    public function test_a_sandbox_accounts_own_rows_are_still_its_contributors(): void
+    public function test_a_provider_that_does_have_an_account_is_still_a_contributor(): void
     {
         /*
          * The account is built directly rather than through `TokenVault::open()`: `sandbox` is not a
@@ -178,7 +190,7 @@ final class ContaminationIsNotAContributorTest extends TestCase
         $this->assertContains(
             'sandbox',
             $this->coverage()['expected_contributors'],
-            'a sandbox account stopped being able to report its own figures',
+            'a provider whose account exists stopped being able to report its own figures',
         );
     }
 }
