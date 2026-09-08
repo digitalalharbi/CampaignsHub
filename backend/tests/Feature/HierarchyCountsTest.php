@@ -586,6 +586,43 @@ final class HierarchyCountsTest extends TestCase
     }
 
     /**
+     * AGGREGATION-TRUTH-001 — the provider a ROW claims, counted beside whether it is flagged.
+     *
+     * `ContributorCoverage::expectedProviders()` reads `external_campaigns.provider`, and that column
+     * alone decides which platforms a project's coverage expects to hear from. It is what makes the
+     * owner's live report declare itself `partial` for a «provider» called `sandbox` — and no report
+     * printed it, so a fix aimed at rows flagged `raw->sandbox` was written, deployed, and changed
+     * nothing, because nothing could say whether those were the same rows.
+     *
+     * The two cases demand opposite fixes and used to print identically:
+     *
+     *   sandbox 2, of which 2 flagged  → the flag is the handle; filter on it
+     *   sandbox 2, of which 0 flagged  → the flag is irrelevant; the provider value is the problem
+     *
+     * So this plants one of each and proves the report tells them apart.
+     */
+    public function test_the_provider_a_row_claims_is_counted_beside_whether_it_is_flagged(): void
+    {
+        $campaign = $this->campaign('cmp-1');
+
+        /* A flagged contaminated row — what the quarantine and the contamination count both find. */
+        $flagged = $this->campaign('sbx-flagged');
+        $flagged->forceFill(['provider' => 'sandbox', 'raw' => ['sandbox' => true]])->save();
+
+        /* And one claiming the same provider with NO flag — invisible to every existing report. */
+        $unflagged = $this->campaign('sbx-unflagged');
+        $unflagged->forceFill(['provider' => 'sandbox', 'raw' => ['id' => 'sbx-unflagged']])->save();
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat'])
+            ->expectsOutputToContain('campaigns by the provider the ROW claims')
+            ->expectsOutputToContain('sandbox            2   1 flagged `raw->sandbox`')
+            ->expectsOutputToContain('snapchat           1   0 flagged `raw->sandbox`')
+            ->assertSuccessful();
+
+        unset($campaign);
+    }
+
+    /**
      * CONTENT-PREVIEW-SHAPES-001 — the shapes report names the one that draws nothing.
      *
      * Owner ledger row 7: a collection ad is a hero over a grid of product tiles, the tiles live
