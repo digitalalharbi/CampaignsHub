@@ -203,4 +203,61 @@ final class ReportStructureTest extends TestCase
             'with no spend at all only the summary survives',
         );
     }
+
+    /**
+     * REPORT-DETAIL-PARITY-001 — the contents may not DENY a section the report plainly has.
+     *
+     * Found on the owner's live client link. Its outline read:
+     *
+     *     key: performance   present: false
+     *     «لا أرقام في هذه الفترة.» / «There are no figures in this window.»
+     *
+     * on a payload carrying `totals.spend = 9,842.78`, with the KPI block rendered on the page above
+     * it. The rule this row states is that a report's contents must never promise a section the link
+     * does not have; this is that rule inverted, and it is the worse direction — a client is told
+     * their period is empty over nine thousand of their own money.
+     *
+     * The cause is a name. A SNAPSHOT calls that block `kpis`; the LIVE payload calls it `totals`,
+     * and `sections()` only knew the first. Both are the same figures and both mean the section is
+     * there, so both are read.
+     */
+    public function test_the_live_payload_names_its_figures_totals_and_still_has_a_performance_section(): void
+    {
+        $sections = collect((new ReportStructure)->sections([
+            'totals' => ['spend' => 9842.78, 'conversions' => 566],
+            'platforms' => [['provider' => 'snapchat', 'spend' => 9842.78]],
+        ]))->keyBy('key');
+
+        $this->assertTrue(
+            $sections['performance']['present'],
+            'the contents denied a performance section on a payload carrying 9,842.78 in spend',
+        );
+        $this->assertNull($sections['performance']['absent_reason']);
+    }
+
+    /** The snapshot spelling keeps working — it is the same section under the other name. */
+    public function test_the_snapshot_payload_still_has_its_performance_section(): void
+    {
+        $sections = collect((new ReportStructure)->sections([
+            'kpis' => ['spend' => 1200.0],
+        ]))->keyBy('key');
+
+        $this->assertTrue($sections['performance']['present']);
+    }
+
+    /**
+     * And a window that genuinely has no figures still says so. Without this the fix would be a
+     * filter that declares every report complete — the opposite failure, and the one a client
+     * cannot detect.
+     */
+    public function test_a_window_with_no_figures_at_all_still_reports_the_section_absent(): void
+    {
+        $sections = collect((new ReportStructure)->sections([
+            'totals' => ['spend' => null],
+            'kpis' => ['spend' => null],
+        ]))->keyBy('key');
+
+        $this->assertFalse($sections['performance']['present']);
+        $this->assertSame('no_figures_in_this_window', $sections['performance']['absent_reason']);
+    }
 }

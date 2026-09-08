@@ -102,7 +102,24 @@ final class ReportStructure
             'executive_summary' => ($data['summary'] ?? $data['executive_summary'] ?? null) !== null,
             // The KPI block is present whenever the window has figures at all; an empty scope is the
             // one state where a report has nothing to say and says so at the top instead of below.
-            'performance' => ($data['kpis']['spend'] ?? null) !== null,
+            /*
+             * REPORT-DETAIL-PARITY-001 — the same block, under either of its two names.
+             *
+             * A SNAPSHOT calls its figures `kpis`; the LIVE payload calls them `totals`. This read
+             * only the first, so on the owner's live client link the contents said
+             *
+             *     performance  present: false  «لا أرقام في هذه الفترة.»
+             *
+             * over `totals.spend = 9,842.78`, with the KPI block rendered on the page above it. The
+             * rule here is that contents must never promise a section the link does not have; this
+             * was that rule inverted, which is the worse direction — a client told their period is
+             * empty over their own money has no way to know the report is wrong rather than the
+             * spend.
+             *
+             * Both keys carry the same figures and both mean the section is present, so both are
+             * read. A window that truly has neither still reports the section absent.
+             */
+            'performance' => ($data['kpis']['spend'] ?? $data['totals']['spend'] ?? null) !== null,
             'platforms' => $has('platforms'),
             // `objective_performance` is the block; its `paths` list is what makes it worth showing.
             'objectives' => ($data['objective_performance']['paths'] ?? []) !== [],
