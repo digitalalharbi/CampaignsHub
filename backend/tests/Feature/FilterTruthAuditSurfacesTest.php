@@ -295,4 +295,98 @@ final class FilterTruthAuditSurfacesTest extends TestCase
 
         return $out;
     }
+    // ---- the objective panels: the same defect, on four endpoints nobody had tested ---------------
+
+    /**
+     * The four objective panels read `campaign_ids`. The client has never sent that.
+     *
+     * `qf()` serialises the canonical axes as `provider`, `objective`, `campaign` and `outcome`, and
+     * `campaignFilter()` reads `campaign` for every other endpoint on this controller. These four
+     * read `$request->input('campaign_ids')`, which is absent from every request the product makes,
+     * so the campaign chip narrowed nothing on them.
+     *
+     * It is invisible from the reader's side in the worst way: `filterKeyParts()` puts the campaign
+     * in the React Query key, so choosing a different campaign MISSES the cache, refetches, and
+     * paints the identical numbers under the new chip. The panel looks alive and answers a question
+     * about the whole project.
+     *
+     * @return list<string> every provider the platform panel reports, across all paths, sorted.
+     */
+    private function providersReported(array $data): array
+    {
+        $out = [];
+        foreach ($data['paths'] ?? $data as $path) {
+            foreach ($path['platforms'] ?? [] as $key => $platform) {
+                // The map is keyed by provider in PHP and arrives as a list over JSON; the row
+                // carries its own `provider`, so read that and fall back to the key.
+                $out[] = (string) (is_array($platform) ? ($platform['provider'] ?? $key) : $key);
+            }
+        }
+        $out = array_values(array_unique($out));
+        sort($out);
+
+        return $out;
+    }
+
+    public function test_the_platform_objective_panel_narrows_by_campaign(): void
+    {
+        $this->assertSame(
+            ['google', 'meta'],
+            $this->providersReported($this->fetchData('platform-objectives')),
+            'both campaigns before filtering',
+        );
+
+        // The sales campaign reports on meta alone; google belongs to the awareness campaign.
+        $this->assertSame(
+            ['meta'],
+            $this->providersReported($this->fetchData('platform-objectives', [
+                'campaign' => $this->sales->getKey(),
+            ])),
+        );
+    }
+
+    /**
+     * All four, on the axis they each accept — a fix to one endpoint is not a fix to the panel set.
+     *
+     * Shape-agnostic on purpose: `leadersByPath`, `explainByPath` and `trendByPath` return three
+     * different structures, and what is being asserted is common to all of them — filtering away the
+     * awareness campaign must change the answer. Comparing the encoded payloads states exactly that
+     * without teaching this test the shape of three services it does not own.
+     */
+    public function test_every_objective_panel_narrows_by_campaign(): void
+    {
+        foreach (['platform-objectives', 'objective-leaders', 'objective-explanations', 'objective-trend'] as $path) {
+            $all = $this->fetchData($path);
+            $filtered = $this->fetchData($path, ['campaign' => $this->sales->getKey()]);
+
+            $this->assertNotSame(
+                json_encode($all),
+                json_encode($filtered),
+                "{$path} answered the same with the awareness campaign filtered out",
+            );
+        }
+    }
+
+    /**
+     * The objective axis is DECLINED here, and declining is only honest when it is stated.
+     *
+     * `ObjectivePerformance` takes projects, campaigns, providers and accounts — there is no
+     * objective bound on it, and adding one would narrow a panel whose entire purpose is to set the
+     * paths BESIDE each other. «Performance by objective path», filtered to one objective, is a
+     * comparison of one, which reads exactly like a comparison of four. So the axis does not apply,
+     * and the response says which axes did.
+     */
+    public function test_the_objective_panels_declare_the_axis_they_decline(): void
+    {
+        foreach (['platform-objectives', 'objective-leaders', 'objective-explanations', 'objective-trend'] as $path) {
+            $scope = $this->fetchBody($path, [
+                'campaign' => $this->sales->getKey(),
+                'objective' => 'sales',
+                'provider' => 'meta',
+            ])['meta']['filter_scope'];
+
+            $this->assertSame(['provider', 'campaign'], $scope['applied'], $path);
+            $this->assertSame(['objective'], $scope['unapplied'], $path);
+        }
+    }
 }

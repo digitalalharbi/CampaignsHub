@@ -47,6 +47,17 @@ final class MetricsController extends Controller
      */
     private const OPTION_LIMIT = 120;
 
+    /**
+     * The axes the objective panels apply. `objective` is deliberately absent.
+     *
+     * `ObjectivePerformance` takes projects, campaigns, providers and accounts; there is no objective
+     * bound on it, and adding one would narrow a panel whose whole purpose is to set the paths BESIDE
+     * each other. «Performance by objective path», filtered to a single objective, is a comparison of
+     * one — which reads exactly like a comparison of four. Declining is honest; declining silently is
+     * the defect, so the response names what it applied.
+     */
+    private const OBJECTIVE_PANEL_AXES = ['provider', 'campaign'];
+
     public function __construct(
         private readonly MetricsAggregator $agg,
         private readonly DataFreshnessService $freshness,
@@ -566,6 +577,14 @@ final class MetricsController extends Controller
         $this->authorizeView($request);
         [$from, $to] = $this->range($request);
 
+        /*
+         * This endpoint keeps `campaign_ids`, and it is not the same bug as the four panels above.
+         *
+         * They were reading a parameter NOBODY sends: their caller is `qf()`, which serialises the
+         * campaign axis as `campaign`. This one has no client caller at all — its callers are
+         * `ObjectivePerformanceTest` and `UnifiedFigureConsistencyTest`, which pass `campaign_ids`
+         * deliberately, so here the name is the contract rather than a typo for one.
+         */
         $campaigns = array_values(array_filter((array) $request->input('campaign_ids', [])));
 
         return ApiResponse::success(
@@ -590,15 +609,12 @@ final class MetricsController extends Controller
         $this->authorizeView($request);
         [$from, $to] = $this->range($request);
 
-        $campaigns = array_values(array_filter((array) $request->input('campaign_ids', [])));
-
         return ApiResponse::success(
-            (new ObjectivePerformance(
-                campaignIds: $campaigns === [] ? null : $campaigns,
-                providers: $this->providerFilter($request) === [] ? null : $this->providerFilter($request),
-            ))->byPlatform($from, $to),
+            $this->objectivePaths($request)->byPlatform($from, $to),
             'Platform contribution by objective.',
-            meta: $this->meta($from, $to),
+            meta: $this->meta($from, $to) + [
+                'filter_scope' => $this->filterScope($request, self::OBJECTIVE_PANEL_AXES),
+            ],
         );
     }
 
@@ -614,15 +630,12 @@ final class MetricsController extends Controller
         $this->authorizeView($request);
         [$from, $to] = $this->range($request);
 
-        $campaigns = array_values(array_filter((array) $request->input('campaign_ids', [])));
-
         return ApiResponse::success(
-            (new ObjectivePerformance(
-                campaignIds: $campaigns === [] ? null : $campaigns,
-                providers: $this->providerFilter($request) === [] ? null : $this->providerFilter($request),
-            ))->leadersByPath($from, $to),
+            $this->objectivePaths($request)->leadersByPath($from, $to),
             'Strongest and weakest campaign per objective path.',
-            meta: $this->meta($from, $to),
+            meta: $this->meta($from, $to) + [
+                'filter_scope' => $this->filterScope($request, self::OBJECTIVE_PANEL_AXES),
+            ],
         );
     }
 
@@ -639,15 +652,12 @@ final class MetricsController extends Controller
         $this->authorizeView($request);
         [$from, $to] = $this->range($request);
 
-        $campaigns = array_values(array_filter((array) $request->input('campaign_ids', [])));
-
         return ApiResponse::success(
-            (new ObjectivePerformance(
-                campaignIds: $campaigns === [] ? null : $campaigns,
-                providers: $this->providerFilter($request) === [] ? null : $this->providerFilter($request),
-            ))->explainByPath($from, $to),
+            $this->objectivePaths($request)->explainByPath($from, $to),
             'Objective path explanations.',
-            meta: $this->meta($from, $to),
+            meta: $this->meta($from, $to) + [
+                'filter_scope' => $this->filterScope($request, self::OBJECTIVE_PANEL_AXES),
+            ],
         );
     }
 
@@ -663,15 +673,12 @@ final class MetricsController extends Controller
         $this->authorizeView($request);
         [$from, $to] = $this->range($request);
 
-        $campaigns = array_values(array_filter((array) $request->input('campaign_ids', [])));
-
         return ApiResponse::success(
-            (new ObjectivePerformance(
-                campaignIds: $campaigns === [] ? null : $campaigns,
-                providers: $this->providerFilter($request) === [] ? null : $this->providerFilter($request),
-            ))->trendByPath($from, $to),
+            $this->objectivePaths($request)->trendByPath($from, $to),
             'Objective path trend.',
-            meta: $this->meta($from, $to),
+            meta: $this->meta($from, $to) + [
+                'filter_scope' => $this->filterScope($request, self::OBJECTIVE_PANEL_AXES),
+            ],
         );
     }
 
@@ -1357,6 +1364,27 @@ final class MetricsController extends Controller
             'applied' => array_values(array_intersect($requested, $applies)),
             'unapplied' => array_values(array_diff($requested, $applies)),
         ];
+    }
+
+    /**
+     * The objective-path service, bounded by the axes the canonical filter contract actually sends.
+     *
+     * Every one of these endpoints read `campaign_ids`, which this product has never sent: `qf()`
+     * serialises the campaign axis as `campaign`, and every other endpoint on this controller reads
+     * it through `campaignFilter()`. The chip narrowed nothing — and because `filterKeyParts()` puts
+     * the campaign in the React Query key, choosing another campaign missed the cache, refetched,
+     * and repainted the identical figures under the new chip. A panel that looks alive and answers a
+     * question about the whole project is the defect ANALYTICS-FILTER-TRUTH-001 is named for.
+     */
+    private function objectivePaths(Request $request): ObjectivePerformance
+    {
+        $campaigns = $this->campaignFilter($request);
+        $providers = $this->providerFilter($request);
+
+        return new ObjectivePerformance(
+            campaignIds: $campaigns === [] ? null : $campaigns,
+            providers: $providers === [] ? null : $providers,
+        );
     }
 
     /** The aggregator scoped by the dashboard's platform, objective and campaign filters. */
