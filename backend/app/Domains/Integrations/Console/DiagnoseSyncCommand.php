@@ -220,7 +220,20 @@ final class DiagnoseSyncCommand extends Command
             ->orderByDesc('total')
             ->get();
 
-        if ($byProvider->count() > 1 || $contaminated > 0) {
+        /*
+         * Printed ALWAYS, never only when it already looks interesting.
+         *
+         * This was suppressed unless an account held more than one provider or carried a flagged
+         * row, and that hid the exact case being hunted. An account whose campaigns ALL claim some
+         * OTHER platform shows one provider and no flag, so it printed nothing — indistinguishable
+         * from «nothing to see here». SANDBOX-PROD-001 is precisely that shape: a Meta binding
+         * writing `sandbox` campaigns into a live account, where every row of that account claims
+         * `sandbox` and the report stayed silent.
+         *
+         * Two repairs of a live client-facing defect were written against inferred row shapes and
+         * both failed in Production. This condition is why the shape could not simply be read.
+         */
+        if ($byProvider->isNotEmpty()) {
             $this->line('  campaigns by the provider the ROW claims (coverage reads this column):');
 
             foreach ($byProvider as $row) {
