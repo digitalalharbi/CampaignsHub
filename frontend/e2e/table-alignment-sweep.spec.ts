@@ -299,27 +299,28 @@ const HAND_ROLLED = [
 ] as const
 
 /*
- * ## What this block does and does NOT currently prove — read before trusting it
+ * ## What this block proves — and what it used to say it could not
  *
  * PROVEN: the document never scrolls sideways to hold one of these tables, at 1440 and at 390, in
  * both writing directions, on all three browsers. That is the half of TABLE-NUMERIC-ALIGNMENT-001
  * the requirement names separately and the half that makes a phone unusable when it breaks.
  *
- * NOT PROVEN: the alignment half, on this seed. Measured — `[alignment] en @1440: 1 table(s),
- * 10 cell(s), 1 numeric column(s)`. `/app/campaigns` renders cards rather than a table, and the
- * content list's figures are almost all either «—» (a seeded creative that never spent) or
- * COMPOSITE — «12» beside «Orders» in one cell — which this sweep deliberately does not measure
- * centre-to-centre, because a cell carrying a figure and its unit is a different kind from the pure
- * numerals the centring rule is written for.
+ * ALSO PROVEN NOW: the alignment half. This comment used to say the opposite — that an injection
+ * «proved they cannot catch the defect they are for», that the assertions were «NOT evidence
+ * today», and that «the next step is the seed, not the assertion». The diagnosis was wrong. The
+ * assertions could not catch that injection because the only alignment measurement here was
+ * centre-to-centre between a header's BOX and its cells' BOX, and a `th` shares one table column
+ * with the cells beneath it — those centres coincide by construction, whatever the text inside
+ * them does. No amount of seeding would ever have made that number move.
  *
- * So the alignment assertions below run over one column, and an injection proved they cannot catch
- * the defect they are for: setting the spend header to `text-end` against `text-start` cells — the
- * exact inversion this requirement exists to stop — passed on all three browsers. They are kept
- * because they cost nothing and will hold the day the seed has figures; they are NOT evidence today,
- * and this comment is here so nobody reads a green run as if they were.
+ * Comparing the RESOLVED text edge instead found a real defect on this very surface on its first
+ * run: the content list drew «الإنفاق» with its header at one edge of the column and its money at
+ * the other, in both locales, because the numeric cell carried `dir="ltr"` for its numerals and
+ * that flipped the cell's own `start` edge away from the header's.
  *
- * The next step is the seed, not the assertion: give the gate's content library a creative with
- * spend, results and efficiency, and this block starts doing its job without another line of test.
+ * Left here deliberately, because «a comment describing an intention the code has outgrown» is a
+ * defect this ledger has now found twice, and the second time it was in the file written to stop
+ * the first.
  *
  * ## Driven as the ADVERTISER, because these are `/app` routes.
  *
