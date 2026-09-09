@@ -540,3 +540,69 @@ test('a wide table scrolls inside itself rather than moving the page', async ({ 
 
   expect(overflow.page, 'the document scrolls sideways on a 390px screen').toBeLessThanOrEqual(1)
 })
+
+/**
+ * The agency's own money tables — the half of §58 the `/app` block could not reach.
+ *
+ * `billingRoutes` says «Paths are absolute under /app» and the router mounts it beside
+ * `/agency/team`. The comment is stale, the router is the truth, and a sweep pointed at
+ * `/app/billing/invoices` gets a page that never renders — which is how these tables stayed
+ * unswept while the ledger described them as `/app` surfaces.
+ *
+ * ONE surface, and the reason the others are absent is measured rather than assumed. Probed on the
+ * gate's own seed: `/agency/billing/invoices` draws one table of four rows — الرقم, الإجمالي,
+ * المدفوع, المتبقي, الاستحقاق — while `/agency/billing/payments`, `/agency/finance` and
+ * `/agency/clients` render their `main` and no `<table>` at all on this data. Adding them would
+ * sweep nothing and report a green tick for it, which is the exact failure the floor below exists
+ * to catch. They belong here the day the seed gives them rows.
+ */
+test.describe('the agency’s own money tables', () => {
+  test.use({ storageState: AUTH.owner })
+
+  for (const locale of ['en', 'ar'] as const) {
+    test(`the invoice table lines up — ${locale}`, async ({ page }) => {
+      test.setTimeout(120_000)
+
+      await page.setViewportSize({ width: 1440, height: 900 })
+      await page.addInitScript((l) => {
+        try {
+          window.localStorage.setItem('ui', JSON.stringify({ state: { locale: l }, version: 0 }))
+        } catch {
+          // A browser that refuses storage still runs the sweep in whatever direction it defaults to.
+        }
+      }, locale)
+
+      await page.goto('/agency/billing/invoices')
+      await expect(page.locator('main'), '/agency/billing/invoices did not render').toBeVisible({ timeout: 30000 })
+      await expect(page.locator('table').first(), 'the invoice table never arrived').toBeVisible({ timeout: 30000 })
+
+      const columns = await numericColumns(page)
+
+      /*
+       * The floor. A money table whose figures the sweep cannot see is a sweep that passes by
+       * measuring nothing — and this page is the reason the block exists.
+       */
+      expect(columns.length, 'the invoice table reported no numeric column to measure').toBeGreaterThan(0)
+
+      const drifting = columns.filter((c) => c.drift > TOLERANCE)
+      expect(
+        drifting,
+        `/agency/billing/invoices (${locale}): a numeric cell does not sit under its own heading — `
+          + drifting.map((c) => `«${c.head}» ${c.cell} off by ${Math.round(c.drift)}px`).join('; '),
+      ).toEqual([])
+
+      const misaligned = columns.filter((c) => c.headAlign !== c.cellAlign)
+      expect(
+        misaligned,
+        `/agency/billing/invoices (${locale}): a numeric header is set to one edge and its figures to another — `
+          + misaligned.map((c) => `«${c.head}» head ${c.headAlign} vs cell ${c.cellAlign}`).join('; '),
+      ).toEqual([])
+
+      const untabular = columns.filter((c) => !c.tabular)
+      expect(
+        untabular.map((c) => c.head),
+        `/agency/billing/invoices (${locale}): a numeric column is not set in tabular numerals`,
+      ).toEqual([])
+    })
+  }
+})
