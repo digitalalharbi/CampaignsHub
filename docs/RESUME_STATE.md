@@ -1,8 +1,38 @@
-# START HERE — 2026-09-09 (reconciled from Git after #318)
+# START HERE — 2026-09-09 (reconciled from Git after #327)
 
 Read this file, then `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then `git log origin/main`.
 
-## 2026-09-08 — where this stopped (superseded below)
+## 2026-09-09 — where this stopped
+
+`origin/main` = `a3cbff33` (#327), deployed. #320 through #327 all merged and deployed in this run;
+`docs/ACTIVE_EXECUTION_STATE.md` carries the detail and the evidence table.
+
+**Production-verified:** #320 (the outline reports `performance: present: true` over
+`totals.spend = 10,696.54`, and the narrative sections no longer claim the figures were examined)
+and #322 (the ads section declares the money it leads with). Also measured on Production: the public
+share link's detail tables, in Arabic RTL at 1440 and 375 — zero drift, zero alignment mismatch, all
+tabular numerals, the page not scrolling sideways while the tables do.
+
+**Deployed but NOT verified: #321.** Its endpoints are authenticated `/app` surfaces and the browser
+pane renders those at `docW: 0`. Local proof only. Not marked VERIFIED, and it should not be.
+
+**The run's real subject was a guard that could not fail.** `table-alignment-sweep.spec.ts` measured
+the distance between a numeric header's BOX centre and its cells' BOX centre. A `th` and the cells
+beneath it share one table column, so those centres coincide by construction — the number was zero
+whatever the text inside did. That is why «sixty-eight numeric columns, zero drifting» stood beside a
+recorded injection of exactly the right shape PASSING on all three browsers, which this ledger
+explained away as «no qualifying surface». With a real alignment check it found the owner's
+five-times-reported defect on `/app/content` immediately, then the root cause of the whole class:
+`.tnum` carries `direction: ltr`, so on a `<td>` it makes the cell an LTR box whose `text-end`
+resolves opposite to its header's. 37 cells across 14 files, and a source guard that cannot let it
+back.
+
+**Read every «Remaining» clause against the code before acting on it.** Eight were checked this run
+and eight were stale. One of them — `REPORT-DETAIL-PARITY-001`'s «ad, as a rung beneath its ad set» —
+would have REINTRODUCED what the owner had explicitly removed («اسم واختيار الحملة احذفه من
+التقارير»). The two accurate clauses each produced a real defect.
+
+## 2026-09-08 — where this stopped (superseded above)
 
 `origin/main` = `c51228b8` (#306), deployed. #303, #304, #305 and #306 all merged, deployed and
 verified in Production this session. `docs/ACTIVE_EXECUTION_STATE.md` carries the detail.
