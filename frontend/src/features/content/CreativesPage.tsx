@@ -1083,8 +1083,9 @@ export function CreativesPage() {
                         {FATIGUE_LABEL[creative.fatigue.status]?.[ar ? 'ar' : 'en'] ?? creative.fatigue.status}
                       </span>
                     </td>
-                    <td className="p-2 text-xs text-text-secondary" dir="ltr">
-                      {creative.freshness.last_synced_at?.slice(0, 10) ?? t.never}
+                    <td className="p-2 text-xs text-text-secondary">
+                      {/* The same flip as the figures above: `dir` belongs to the date, not the cell. */}
+                      <span dir="ltr">{creative.freshness.last_synced_at?.slice(0, 10) ?? t.never}</span>
                     </td>
                   </tr>
                 )
