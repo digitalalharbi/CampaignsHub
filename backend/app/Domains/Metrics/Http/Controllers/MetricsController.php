@@ -484,9 +484,35 @@ final class MetricsController extends Controller
          * which of the two is load-bearing. It stays because a reader of this query should not have
          * to know the model's scopes to see what it returns.
          */
+        /*
+         * ANALYTICS-FILTER-TRUTH-001 — the picker offers what the CURRENT scope can show.
+         *
+         * This control feeds the campaign axis of a filter row that already carries a platform and an
+         * objective, and it ignored both. An operator filtered to Meta was offered every Snapchat and
+         * Google campaign in the project, and choosing one produced an empty dashboard under two
+         * chips that contradict each other — the «an empty filtered scope never falls back to
+         * unfiltered» rule read from the other end: the scope was not wrong, the CHOICE could never
+         * have been anything but empty.
+         *
+         * A unified campaign has no provider column; it is one THROUGH its external campaigns, which
+         * is the same relation the entity scope resolves a campaign filter through. The objective is
+         * its own column, and `objectiveFilter()` has already expanded a family into its members.
+         *
+         * The `ids` branch above is deliberately NOT narrowed — see its own note: it answers for
+         * campaigns the reader already holds, and narrowing it would turn their own choice back into
+         * a bare uuid the moment they also filtered by platform.
+         */
+        $providers = $this->providerFilter($request);
+        $objectives = $this->objectiveFilter($request);
+
         $rows = UnifiedCampaign::query()
             ->where('project_id', $projectId)
             ->when($q !== '', fn ($b) => $b->whereRaw('LOWER(name) LIKE ?', ['%'.mb_strtolower($q).'%']))
+            ->when($objectives !== [], fn ($b) => $b->whereIn('objective', $objectives))
+            ->when($providers !== [], fn ($b) => $b->whereHas(
+                'externalCampaigns',
+                fn ($e) => $e->whereIn('provider', $providers),
+            ))
             /*
              * Name, then id. The id tiebreak is not decoration: a project with many identically named
              * campaigns is made entirely of ties, and rows that swap between two identical reads tell
