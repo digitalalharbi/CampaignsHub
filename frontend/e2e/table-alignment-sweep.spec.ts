@@ -293,9 +293,25 @@ async function stillFor(locator: Locator, timeout = 15000): Promise<void> {
   throw new Error('the control never stopped moving, so a click on it could not be aimed')
 }
 
+/*
+ * §58 — «audit EVERY analytical table in the whole product», which includes the ones that count money.
+ *
+ * The list stopped at two surfaces while six more hand-rolled a table of figures, and most of them
+ * are tables somebody reads about their own money. They are added rather than exempted, because an
+ * exemption is what §58 refuses: a table is not out of scope for being old, and a money column is
+ * the last place a heading should sit over the wrong edge.
+ *
+ * The `/app` ones are here. The agency's own billing tables live under `/agency` — `billingRoutes`
+ * says «Paths are absolute under /app» and the router mounts it beside `/agency/team`, which is how
+ * the first draft of this list asked for `/app/billing/invoices` and got a page that never rendered.
+ * They need the agency identity, so they are swept in their own block below rather than from here.
+ */
 const HAND_ROLLED = [
   { path: '/app/campaigns', what: 'the campaigns list — row selection and bulk actions' },
   { path: '/app/content', what: 'the content list — selection checkboxes and media cells' },
+  { path: '/app/subscriptions', what: 'the subscription list' },
+  { path: '/app/subscriptions/invoices', what: 'CampaignsHub’s own invoices to this customer' },
+  { path: '/app/files', what: 'the files library' },
 ] as const
 
 /*
@@ -354,7 +370,10 @@ test.describe('the surfaces that still hand-roll a table', () => {
 
         for (const surface of HAND_ROLLED) {
           await page.goto(surface.path)
-          await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
+          // Name the surface: «element(s) not found» about an unnamed page sends the reader to the
+          // wrong file, and this loop walks seven of them.
+          await expect(page.locator('main'), `${surface.path} did not render — ${surface.what}`)
+            .toBeVisible({ timeout: 30000 })
 
           /*
            * The content library opens as a GRID of cards, and a grid has no columns to line up. The
