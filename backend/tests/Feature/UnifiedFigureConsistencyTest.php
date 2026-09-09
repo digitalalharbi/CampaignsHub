@@ -325,6 +325,97 @@ final class UnifiedFigureConsistencyTest extends TestCase
     }
 
     /**
+     * HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN — the AD grain, which this harness had never seeded.
+     *
+     * Every entity case here writes `AD_SET` rows. The rung BELOW it — the one the product exposes as
+     * the ads tab, and the one an operator now opens a creative preview from — has never been
+     * reconciled against anything. That is the deepest level the drill-down offers and the last place
+     * a second query could diverge unnoticed: the ad rows would each look plausible, and only their
+     * SUM would contradict the ad squad above them.
+     *
+     * Two properties, and the second is the one a plausible-looking bug survives:
+     *
+     *   1. The ads beneath an ad set add up to that ad set. A reader who drills one level deeper is
+     *      owed the same figure, not a second opinion of it.
+     *   2. The ad-set table does not carry ad rows. Two grains in one table is how a total doubles
+     *      while every individual row on screen stays correct.
+     */
+    public function test_the_ads_beneath_an_ad_set_add_up_to_it(): void
+    {
+        $this->holdingTenant((string) $this->tenant->id);
+
+        /*
+         * Self-contained rather than built on `entityRows()`, and for a reason the schema decides:
+         * an ad's parent is matched on `external_ad_set_id`, which is a UUID column, while the ad
+         * squads that helper writes identify themselves with the string «sq-a». So this fixture
+         * gives its squad a UUID identity and hangs the ads off THAT.
+         */
+        $adSetId = (string) Str::uuid();
+        $half = round(self::SPEND / 2, 2);
+
+        (new EntityDailyMetric)->forceFill([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'external_account_id' => $this->account->getKey(),
+            'provider' => 'meta',
+            'entity_type' => EntityDailyMetric::AD_SET,
+            'entity_id' => (string) Str::uuid(),
+            'external_entity_id' => $adSetId,
+            'external_campaign_id' => (string) Str::uuid(),
+            'metric_date' => self::DATE,
+            'attribution_window' => 'default',
+            'is_demo' => false,
+            'spend' => self::SPEND,
+            'original_currency' => 'SAR',
+            'project_currency' => 'SAR',
+        ])->save();
+
+        foreach (['ad-a', 'ad-b'] as $adExternalId) {
+            (new EntityDailyMetric)->forceFill([
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $this->tenant->getKey(),
+                'project_id' => $this->project->getKey(),
+                'external_account_id' => $this->account->getKey(),
+                'provider' => 'meta',
+                'entity_type' => EntityDailyMetric::AD,
+                'entity_id' => (string) Str::uuid(),
+                'external_entity_id' => $adExternalId,
+                'external_ad_set_id' => $adSetId,
+                'metric_date' => self::DATE,
+                'attribution_window' => 'default',
+                'is_demo' => false,
+                'spend' => $half,
+                'original_currency' => 'SAR',
+                'project_currency' => 'SAR',
+            ])->save();
+        }
+
+        app(TenantContext::class)->forget();
+
+        $ads = $this->read('metrics/entities/ad', '&parent='.$adSetId)->json('data.entities');
+        $this->assertNotSame([], $ads, 'the ad level reported nothing for a sync that wrote it');
+
+        $this->assertSame(
+            self::SPEND,
+            $this->sum($ads, 'spend'),
+            'the ads beneath the ad squad do not add up to the squad the reader drilled into',
+        );
+
+        /*
+         * And the grain above is unchanged by their arrival. An ad-set table that started counting
+         * ad rows would report double this squad's spend while every row on screen stayed right.
+         */
+        $adSets = $this->read('metrics/entities/ad_set')->json('data.entities');
+
+        $this->assertSame(
+            self::SPEND,
+            $this->sum($adSets, 'spend'),
+            'the ad-set table changed when ad rows arrived, so it is counting two grains at once',
+        );
+    }
+
+    /**
      * And narrowing to a parent narrows the DATA, not just the label.
      *
      * `parent` changes the database scope. A drill-down that filtered on the client would show one
