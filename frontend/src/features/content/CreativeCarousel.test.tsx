@@ -100,6 +100,36 @@ describe('CreativeCarousel', () => {
     expect(screen.queryByTestId('creative-carousel')).not.toBeInTheDocument()
   })
 
+  /**
+   * AD-MEDIA-RECOVERY-001 — the same absence, and it is NOT the same sentence.
+   *
+   * A carousel with no breakdown is the platform's answer: it sent one asset and that is the ad. A
+   * COLLECTION with no tiles is ours: Snapchat exposes them, this product does not fetch them yet,
+   * and a collection ad by definition has products beneath its hero. Telling the reader «this
+   * platform sent no card breakdown — the asset above is all it exposes» is false twice over, and it
+   * sends an operator looking for a sync fault at Snapchat that does not exist.
+   *
+   * `CreativePresenter` has said the true thing since the shape was added, but only for a collection
+   * that arrived with NO hero; one that has a hero reaches the ordinary «available» state and this
+   * component instead.
+   */
+  it('says whose gap it is when a collection has no product tiles', async () => {
+    renderWithProviders(
+      <CreativeCarousel
+        preview={preview({ kind: 'collection', cards: null, cards_reported: false })}
+        locale="en"
+      />,
+      { locale: 'en' },
+    )
+
+    expect(await screen.findByText(/does expose the tiles/)).toBeInTheDocument()
+    expect(screen.getByText(/the gap is ours/)).toBeInTheDocument()
+
+    // The platform is not accused of a gap that is not its own.
+    expect(screen.queryByText(/sent no card breakdown/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/all it exposes/)).not.toBeInTheDocument()
+  })
+
   /** A refused card is counted, so «one of two is shown» is something the reader can see. */
   it('states how many card links were withheld', async () => {
     renderWithProviders(

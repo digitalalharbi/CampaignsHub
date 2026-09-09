@@ -40,6 +40,7 @@ const COPY = {
     previous: 'البطاقة السابقة',
     next: 'البطاقة التالية',
     notReported: 'لم ترسل هذه المنصة تفاصيل بطاقات هذا الإعلان — المعروض أعلاه هو الأصل الوحيد المتاح.',
+    tilesNotFetched: 'هذا إعلان تشكيلة: صورة رئيسية فوق شبكة منتجات. المنصة تتيح البطاقات، ولم يطلبها النظام بعد — فالنقص عندنا لا عند المنصة.',
     withheld: (n: number) => `${n} من البطاقات تحمل روابط بيانات اعتماد، فلم تُعرض.`,
     empty: 'أرسلت المنصة قائمة بطاقات فارغة.',
     headline: 'العنوان',
@@ -56,6 +57,7 @@ const COPY = {
     previous: 'Previous card',
     next: 'Next card',
     notReported: 'This platform sent no card breakdown for this ad — the asset above is all it exposes.',
+    tilesNotFetched: 'This is a collection ad — a hero asset over a grid of product tiles. The platform does expose the tiles; this product does not fetch them yet, so the gap is ours, not the platform’s.',
     withheld: (n: number) => `${n} card links carried a credential and were not shown.`,
     empty: 'The platform sent an empty card list.',
     headline: 'Headline',
@@ -111,7 +113,19 @@ export function CreativeCarousel({
           <Images className="h-4 w-4" aria-hidden />
           {heading}
         </h2>
-        <p className="mt-2 text-sm text-text-secondary">{t.notReported}</p>
+        {/*
+          AD-MEDIA-RECOVERY-001 / CONTENT-PREVIEW-SHAPES-001 — whose gap it is.
+
+          `notReported` says «this platform sent no card breakdown … the asset above is all it
+          exposes». For a CAROUSEL that is true. For a COLLECTION both halves are false: Snapchat
+          does expose the tiles and this product does not fetch them yet, and a collection ad by
+          definition has products under its hero — so the sentence blamed the platform for our gap
+          and told the reader the hero was the whole ad. `CreativePresenter` has carried the correct
+          sentence for the no-hero case since the shape was added («the gap is ours, not the
+          platform’s»); a collection that DID arrive with a hero fell past that arm into the
+          ordinary «available» state and reached this line instead.
+        */}
+        <p className="mt-2 text-sm text-text-secondary">{isCollection ? t.tilesNotFetched : t.notReported}</p>
       </section>
     )
   }
