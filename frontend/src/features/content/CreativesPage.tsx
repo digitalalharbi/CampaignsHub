@@ -1021,7 +1021,19 @@ export function CreativesPage() {
                     <td className="p-2 text-text-secondary">
                       {creative.objective ? objectiveLabel(creative.objective, locale) : marketingPathLabel(creative.path, locale)}
                     </td>
-                    <td className="p-2 tabular-nums" dir="ltr">
+                    {/*
+                      * TABLE-NUMERIC-ALIGNMENT-001 — `dir` belongs to the NUMERAL, not to the cell.
+                      *
+                      * On the `<td>` it also flipped the cell's own `start` edge. The header inherits
+                      * the Arabic page and resolves `text-start` to the RIGHT; these figures, inside
+                      * `dir="ltr"`, resolved the same `start` to the LEFT — «الإنفاق» at one edge of
+                      * the column and its money at the other, which is the defect the owner has
+                      * reported five times. The centre-to-centre sweep read zero throughout, because
+                      * a `th` and its cells share one column BOX however the text inside them sits.
+                      *
+                      * The numerals still need LTR bidi, so it moves inwards to the text it is about.
+                      */}
+                    <td className="p-2 tabular-nums">
                       {/*
                         * CONTENT-MONEY-VISIBLE-001 — through the canonical reader, not `metricState`.
                         *
@@ -1029,23 +1041,23 @@ export function CreativesPage() {
                         * is every Snapchat row on production, a USD account with no USD→SAR rate —
                         * rendered as «No data». Real, measured spend reported as never having run.
                         */}
-                      {creativeMoney(creative.metrics, 'spend', data?.currency ?? null, locale).text}
+                      <span dir="ltr">{creativeMoney(creative.metrics, 'spend', data?.currency ?? null, locale).text}</span>
                     </td>
-                    <td className="p-2" dir="ltr">
+                    <td className="p-2">
                       {resultKey === null ? (
                         <span className="text-text-muted">—</span>
                       ) : (
-                        <span className="tabular-nums">
+                        <span className="tabular-nums" dir="ltr">
                           {formatMetric(metricState(creative.metrics, resultKey), resultKey, locale, data?.currency ?? null)}
                           <span className="ms-1 text-[11px] text-text-muted">{metricLabel(resultKey, locale)}</span>
                         </span>
                       )}
                     </td>
-                    <td className="p-2" dir="ltr">
+                    <td className="p-2">
                       {efficiencyKey === null ? (
                         <span className="text-text-muted">—</span>
                       ) : (
-                        <span className="tabular-nums">
+                        <span className="tabular-nums" dir="ltr">
                           {formatMetric(metricState(creative.metrics, efficiencyKey), efficiencyKey, locale, data?.currency ?? null)}
                           <span className="ms-1 text-[11px] text-text-muted">{metricLabel(efficiencyKey, locale)}</span>
                         </span>

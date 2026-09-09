@@ -31,7 +31,7 @@ const STORE_PROJECT = 'متجر تجريبي — Demo'
 /** How far a numeric header's centre may sit from its cells' — a pixel of rounding, no more. */
 const TOLERANCE = 2
 
-type Column = { head: string; cell: string; drift: number; tabular: boolean; table: number }
+type Column = { head: string; cell: string; drift: number; tabular: boolean; table: number; headAlign: string; cellAlign: string }
 
 /**
  * Every numeric column on the page, with the distance between its header and its first cell.
@@ -41,7 +41,24 @@ type Column = { head: string; cell: string; drift: number; tabular: boolean; tab
  */
 async function numericColumns(page: Page): Promise<Column[]> {
   return page.evaluate(() => {
-    const out: Array<{ head: string; cell: string; drift: number; tabular: boolean; table: number }> = []
+    const out: Array<{ head: string; cell: string; drift: number; tabular: boolean; table: number; headAlign: string; cellAlign: string }> = []
+
+    /*
+     * Where the TEXT sits, resolved to a side a reader can see.
+     *
+     * `start` and `end` are direction-relative: a header reading `end` and its cells reading `right`
+     * are the same edge in LTR and opposite edges in RTL. Comparing the raw strings would accuse the
+     * product of a defect in one direction and miss a real one in the other, so both are resolved
+     * against the element's own direction before they are compared.
+     */
+    const side = (el: Element) => {
+      const s = getComputedStyle(el)
+      const rtl = s.direction === 'rtl'
+      const a = s.textAlign
+      if (a === 'start') return rtl ? 'right' : 'left'
+      if (a === 'end') return rtl ? 'left' : 'right'
+      return a
+    }
 
     /* A figure, with or without a unit, a sign or a compact suffix. «—» and names are skipped. */
     const looksNumeric = (text: string) => /^[+\-−]?[\d.,]+\s*(%|×|[A-Z]{3}|K|M|B)?$/.test(text)
@@ -87,6 +104,18 @@ async function numericColumns(page: Page): Promise<Column[]> {
           head: (th as HTMLElement).innerText.trim().slice(0, 24),
           cell: text.slice(0, 16),
           drift: Math.abs((a.left + a.right) / 2 - (b.left + b.right) / 2),
+          /*
+           * The centre-to-centre distance above CANNOT see this, and that is why it is here.
+           *
+           * A `th` and the cells beneath it share one table column, so their BOXES share a centre by
+           * construction — the drift figure catches a header row whose columns fall in a different
+           * order from its body, and reads a flat zero for the defect this row was opened for:
+           * a heading pushed to one edge over figures sitting at the other. The ledger already
+           * recorded that exact injection «PASSED on all three browsers» and put it down to there
+           * being no qualifying surface; the metric simply could not see it.
+           */
+          headAlign: side(th),
+          cellAlign: side(cell),
           /*
            * Read from whichever element actually CARRIES the numerals.
            *
@@ -189,6 +218,16 @@ for (const locale of ['en', 'ar'] as const) {
         drifting,
         `${id} (${locale}): a numeric cell does not sit under its own heading — `
           + drifting.map((c) => `«${c.head}» ${c.cell} off by ${Math.round(c.drift)}px`).join('; '),
+      ).toEqual([])
+
+      /*
+       * «share one alignment» — the half of the acceptance the drift figure never measured.
+       */
+      const misaligned = columns.filter((c) => c.headAlign !== c.cellAlign)
+      expect(
+        misaligned,
+        `${id} (${locale}): a numeric header is set to one edge and its figures to another — `
+          + misaligned.map((c) => `«${c.head}» head ${c.headAlign} vs cell ${c.cellAlign}`).join('; '),
       ).toEqual([])
 
       const untabular = columns.filter((c) => !c.tabular)
@@ -403,6 +442,16 @@ test.describe('the surfaces that still hand-roll a table', () => {
             drifting,
             `${surface.path} @${width} (${locale}) — ${surface.what}: a numeric cell does not sit under its own heading — `
               + drifting.map((c) => `«${c.head}» ${c.cell} off by ${Math.round(c.drift)}px`).join('; '),
+          ).toEqual([])
+
+          /*
+           * «share one alignment» — the half of the acceptance the drift figure never measured.
+           */
+          const misaligned = columns.filter((c) => c.headAlign !== c.cellAlign)
+          expect(
+            misaligned,
+            `${surface.path} @${width} (${locale}) — ${surface.what}: a numeric header is set to one edge and its figures to another — `
+              + misaligned.map((c) => `«${c.head}» head ${c.headAlign} vs cell ${c.cellAlign}`).join('; '),
           ).toEqual([])
 
           const untabular = columns.filter((c) => !c.tabular)
