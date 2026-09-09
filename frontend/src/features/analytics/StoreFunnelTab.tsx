@@ -310,12 +310,30 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
           share OF — a bar over zero would be a drawing of nothing.
         */}
         {totals.gross_revenue > 0 && (
+          /*
+            AGGREGATION-TRUTH-001 — «kept» is the server's net revenue, not a second one computed here.
+        
+            This drew `gross_revenue - refunded`, which is a THIRD figure agreeing with neither the
+            page nor the server. `revenue` is the sum of each order's own `netRevenue()`, and that
+            method does three things this subtraction cannot see: a cancelled order contributes 0, an
+            order whose money is withheld contributes NOTHING rather than a converted guess, and a
+            refund larger than its own order clamps at zero instead of eating another order's sale.
+            `refunded`, meanwhile, is summed over ALL orders while `gross_revenue` counts only the
+            live ones — so a refund on a cancelled order was subtracted from a total that never
+            included it, and the bar could show «kept» below the net revenue printed inches above it,
+            or below zero outright.
+        
+            Both figures now come from the same order set the server summed, so the bar is the
+            subtraction this panel describes rather than an approximation of it. The lost half is
+            «did not stick» rather than «refunded» because it is exactly that: refunds on live orders
+            AND money the contract refused to state.
+          */
           <ShareBar
             testid="funnel-refund-share"
-            kept={totals.gross_revenue - totals.refunded}
-            lost={totals.refunded}
+            kept={totals.revenue}
+            lost={Math.max(0, totals.gross_revenue - totals.revenue)}
             keptLabel={ar ? 'بقي' : 'Kept'}
-            lostLabel={ar ? 'مسترد' : 'Refunded'}
+            lostLabel={ar ? 'لم يبقَ' : 'Did not stick'}
           />
         )}
         <Explainer

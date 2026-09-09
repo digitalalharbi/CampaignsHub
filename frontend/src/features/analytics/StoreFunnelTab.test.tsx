@@ -333,6 +333,38 @@ describe('what did not stick', () => {
    * because a bar that renders with both halves at 50% whatever the data is a decoration, and this
    * requirement explicitly refuses decoration.
    */
+  /**
+   * AGGREGATION-TRUTH-001 — the bar reads the server's net revenue, not its own subtraction.
+   *
+   * `gross_revenue - refunded` is a THIRD figure. `revenue` is the sum of each order's own
+   * `netRevenue()`, which a subtraction here cannot reproduce: a cancelled order contributes 0, an
+   * order whose money is withheld contributes nothing rather than a converted guess, and a refund
+   * larger than its own order clamps at zero instead of eating another order's sale. `refunded` is
+   * also summed over ALL orders while `gross_revenue` counts only live ones, so a refund on a
+   * cancelled order was being subtracted from a total that never contained it.
+   *
+   * This fixture is the divergence: 10,000 gross, 2,500 refunded, and 7,000 net — the extra 500 is
+   * money the server did not count as revenue and the browser had no way to see. The old
+   * subtraction draws 75/25 and contradicts the «7,000» printed inches above it.
+   */
+  it('draws the net revenue the server stated, not gross minus refunds', async () => {
+    vi.mocked(getData).mockResolvedValue(payload({
+      totals: {
+        reporting_currency: 'SAR',
+        spend: 1000, revenue: 7000, gross_revenue: 10000, refunded: 2500, cancelled_orders: 1,
+        orders: 40, new_customers: 10, attributed_orders: 30, attributed_revenue: 6000,
+        unattributed_orders: 10,
+      },
+    }))
+    renderWithProviders(<StoreFunnelTab projectId="p1" range={RANGE} />, { locale: 'en' })
+
+    const refunds = await screen.findByTestId('funnel-refund-share')
+    const [kept, lost] = [...refunds.querySelectorAll<HTMLElement>('div[style]')]
+
+    expect(kept.style.width, 'the bar recomputed net revenue instead of reading it').toBe('70%')
+    expect(lost.style.width).toBe('30%')
+  })
+
   it('draws what came back and what could not be traced, to scale', async () => {
     vi.mocked(getData).mockResolvedValue(payload({
       totals: {
