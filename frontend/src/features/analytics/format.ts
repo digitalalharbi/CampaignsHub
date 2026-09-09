@@ -188,6 +188,24 @@ export function trend(delta: number | null | undefined): Trend {
  * stays invisible until an owner sees spend on one screen and «0» on another. Both now delegate.
  */
 /**
+ * A money amount written out in full — every digit, and the decimals when it has them.
+ *
+ * NOT `moneyExact`, which is not exact for this purpose: its rule keeps two decimals only BELOW
+ * 1000, which is right for the cost-per figures it was written for and wrong for a total. It renders
+ * 10,696.54 as «10,697 USD», so a value revealed behind «10.7K USD» would be a THIRD number that is
+ * neither the abbreviation nor the amount. A revealed value that rounds is not a revealed value.
+ */
+export function wholeMoney(n: number | null | undefined, currency?: string): string {
+  if (n === null || n === undefined) return '\u2014'
+
+  const figure = Number.isInteger(n)
+    ? n.toLocaleString('en-US')
+    : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  return currency ? `${figure} ${currency}` : figure
+}
+
+/**
  * `exact` — the same amount, unabbreviated, or null when there is nothing to reveal.
  *
  * NUMBER-PRESENTATION-001. `text` is compact so a 60px column can hold it; the contract's other half
@@ -219,15 +237,7 @@ export function moneyFromTotals(
    * behind «10.7K USD» would hand the reader a third number that is neither the abbreviation nor the
    * amount. A revealed value that rounds is not a revealed value.
    */
-  const exact = formatMoneyReading(r, (n, currency) => {
-    if (n === null || n === undefined) return '\u2014'
-
-    const figure = Number.isInteger(n)
-      ? n.toLocaleString('en-US')
-      : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-    return currency ? `${figure} ${currency}` : figure
-  })
+  const exact = formatMoneyReading(r, wholeMoney)
 
   return {
     text,

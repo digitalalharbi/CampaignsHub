@@ -95,3 +95,56 @@ describe('the spend card a client reads as an abbreviation', () => {
     }
   })
 })
+
+/**
+ * The census, and the reason it exists rather than three assertions.
+ *
+ * This defect was fixed three times on one page: the detail table, then the KPI cards, then the
+ * direct/blended split — each found by measuring production again after the previous fix, and each
+ * time the fix was correct and the SEARCH was too narrow. A rule stated once over the whole rendered
+ * report is what stops a fourth surface being found the same way.
+ *
+ * The rule: no money the page ABBREVIATED may be unreachable. It says nothing about figures printed
+ * in full, and nothing about a «—» the money contract refused — neither hides anything.
+ */
+const abbreviated = /^[\d.,]+[KMB]\s*(USD|SAR)$/
+
+describe('every abbreviation on the report can be opened', () => {
+  beforeEach(() => vi.clearAllMocks())
+  afterEach(() => vi.clearAllMocks())
+
+  it('leaves no compact money figure without its exact amount', async () => {
+    vi.mocked(fetchLiveShared).mockResolvedValue({
+      status: 200,
+      envelope: {
+        data: {
+          ...stated,
+          form: 'detailed',
+          objective_performance: {
+            direct: { label_ar: 'المباشر', label_en: 'Direct', spend: 10_372.67, conversions: 590, cpa: 17.58 },
+            blended: { label_ar: 'المدمج', label_en: 'Blended', spend: 10_696.54, blended_cpa: 17.62 },
+          },
+        },
+      },
+    } as never)
+
+    renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { locale: 'en' })
+    await screen.findByTestId('live-report')
+
+    const unreachable: string[] = []
+    for (const el of document.querySelectorAll('*')) {
+      if (el.children.length) continue
+      const text = (el.textContent ?? '').trim()
+      if (!abbreviated.test(text)) continue
+
+      let node: Element | null = el
+      let exact: string | null = null
+      for (let i = 0; i < 4 && node; i += 1, node = node.parentElement) {
+        if (node.getAttribute?.('title')) { exact = node.getAttribute('title'); break }
+      }
+      if (!exact) unreachable.push(text)
+    }
+
+    expect(unreachable, 'a compact money figure the reader cannot open').toEqual([])
+  })
+})
