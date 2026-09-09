@@ -215,8 +215,8 @@ export function FilesLibraryPage() {
                       {f.visibility === 'internal' ? c.vis_internal : c.vis_client}
                     </span>
                   </td>
-                  <td className="tnum p-3 text-end text-text-secondary" dir="ltr">{fmtSize(f.size)}</td>
-                  <td className="tnum p-3 text-text-muted" dir="ltr">{fmtDateTime(f.uploaded_at)}</td>
+                  <td className="p-3 text-end text-text-secondary"><span className="tnum" dir="ltr">{fmtSize(f.size)}</span></td>
+                  <td className="p-3 text-text-muted"><span className="tnum" dir="ltr">{fmtDateTime(f.uploaded_at)}</span></td>
                   <td className="p-3 text-end">
                     {f.download_url ? (
                       <a href={f.download_url} target="_blank" rel="noopener noreferrer" title={c.download} aria-label={c.download}

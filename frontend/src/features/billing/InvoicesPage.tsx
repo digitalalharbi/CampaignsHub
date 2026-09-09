@@ -136,10 +136,10 @@ export function InvoicesPage() {
                         <TaxTreatmentChip treatment={inv.tax_treatment} ar={ar} />
                       </div>
                     </td>
-                    <td className="p-3 tnum text-text-primary" dir="ltr">{formatMoney(inv.total, inv.currency)}</td>
-                    <td className="p-3 tnum text-text-secondary" dir="ltr">{formatMoney(inv.amount_paid, inv.currency)}</td>
-                    <td className="p-3 tnum text-text-primary" dir="ltr">{formatMoney(outstanding, inv.currency)}</td>
-                    <td className="p-3 tnum text-xs text-text-muted" dir="ltr">{formatDate(inv.due_date)}</td>
+                    <td className="p-3 text-text-primary"><span className="tnum" dir="ltr">{formatMoney(inv.total, inv.currency)}</span></td>
+                    <td className="p-3 text-text-secondary"><span className="tnum" dir="ltr">{formatMoney(inv.amount_paid, inv.currency)}</span></td>
+                    <td className="p-3 text-text-primary"><span className="tnum" dir="ltr">{formatMoney(outstanding, inv.currency)}</span></td>
+                    <td className="p-3 text-xs text-text-muted"><span className="tnum" dir="ltr">{formatDate(inv.due_date)}</span></td>
                     <td className="p-3 text-xs">{isPayable(inv) ? <span className="text-brand-600">•</span> : null}</td>
                   </tr>
                 )

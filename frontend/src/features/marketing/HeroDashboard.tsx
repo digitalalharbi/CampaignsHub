@@ -124,8 +124,8 @@ export function HeroDashboard({ c }: { c: HomeCopy }) {
                         {row.platform}
                       </span>
                     </td>
-                    <td className="tnum py-[3px] ps-2 text-end font-semibold text-white">{row.results}</td>
-                    <td className="tnum py-[3px] ps-2 text-end text-white/55">{row.cpr}</td>
+                    <td className="py-[3px] ps-2 text-end font-semibold text-white"><span className="tnum">{row.results}</span></td>
+                    <td className="py-[3px] ps-2 text-end text-white/55"><span className="tnum">{row.cpr}</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -151,8 +151,8 @@ export function HeroDashboard({ c }: { c: HomeCopy }) {
                         {row.name}
                       </span>
                     </td>
-                    <td className="tnum py-[3px] ps-2 text-end text-white/60">{row.spend}</td>
-                    <td className="tnum py-[3px] ps-2 text-end text-white/60">{row.results}</td>
+                    <td className="py-[3px] ps-2 text-end text-white/60"><span className="tnum">{row.spend}</span></td>
+                    <td className="py-[3px] ps-2 text-end text-white/60"><span className="tnum">{row.results}</span></td>
                     <td className="py-[3px] ps-1.5">
                       <span className="flex items-center justify-end gap-1.5">
                         {/* Scaled against the strongest return in view, so the bars compare like for like. */}

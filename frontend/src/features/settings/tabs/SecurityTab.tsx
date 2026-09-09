@@ -94,7 +94,7 @@ export function SecurityTab() {
             <tbody>{activity.data!.history.slice(0, 12).map((h, i) => (
               <tr key={i} className="border-b border-border last:border-0">
                 <td className="p-2">{h.action === 'user.login' ? (ar ? 'دخول' : 'Sign in') : (ar ? 'خروج' : 'Sign out')}</td>
-                <td className="p-2 tnum text-xs">{h.ip_address ?? '—'}</td>
+                <td className="p-2 text-xs"><span className="tnum">{h.ip_address ?? '—'}</span></td>
                 <td className="p-2 max-w-[220px] truncate text-xs text-text-muted" title={h.user_agent ?? ''}>{h.user_agent ?? '—'}</td>
                 <td className="p-2 text-xs">{h.at ? fmtDateTime(h.at) : '—'}</td>
               </tr>

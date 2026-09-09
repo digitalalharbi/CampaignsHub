@@ -61,7 +61,7 @@ export function ProjectsTab() {
                     <td className="p-3"><span className="inline-flex items-center gap-2 font-semibold text-text-primary"><FolderKanban size={15} className="text-brand-600" /> {p.name}</span></td>
                     <td className="p-3 text-text-secondary">{clientName(p.client_workspace_id)}</td>
                     <td className="p-3">{p.status === 'archived' ? <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs text-text-muted">{ar ? 'مؤرشف' : 'Archived'}</span> : <span className="rounded-full bg-[var(--positive-background)] px-2 py-0.5 text-xs text-success">{p.status}</span>}</td>
-                    <td className="p-3 tnum text-text-secondary">{Math.round((p.setup_completion ?? 0) * 100)}%</td>
+                    <td className="p-3 text-text-secondary"><span className="tnum">{Math.round((p.setup_completion ?? 0) * 100)}%</span></td>
                     <td className="p-3 text-end">
                       <Link to="/app/campaigns" className="me-3 text-xs font-semibold text-brand-600 hover:underline">{ar ? 'فتح' : 'Open'}</Link>
                       {p.status === 'archived'

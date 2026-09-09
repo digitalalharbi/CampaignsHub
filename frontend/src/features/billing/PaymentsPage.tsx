@@ -202,8 +202,8 @@ export function PaymentsPage() {
                             const tMeta = paymentStateMeta(t.state, ar)
                             return (
                               <tr key={t.at + i} className="border-t border-border">
-                                <td className="p-2 tnum text-text-muted" dir="ltr">{i + 1}</td>
-                                <td className="p-2 tnum text-text-secondary" dir="ltr">{formatDateTime(t.at)}</td>
+                                <td className="p-2 text-text-muted"><span className="tnum" dir="ltr">{i + 1}</span></td>
+                                <td className="p-2 text-text-secondary"><span className="tnum" dir="ltr">{formatDateTime(t.at)}</span></td>
                                 <td className="p-2"><span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${tMeta.tone}`}>{tMeta.label}</span></td>
                                 <td className="p-2 font-mono text-text-secondary" dir="ltr">{t.session_id ?? '—'}</td>
                                 <td className="p-2 text-text-secondary" dir="ltr">{t.error ?? '—'}</td>
