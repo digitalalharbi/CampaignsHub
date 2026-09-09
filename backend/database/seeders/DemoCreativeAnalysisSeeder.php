@@ -198,6 +198,18 @@ final class DemoCreativeAnalysisSeeder extends Seeder
                      * added to keep.
                      */
                     'cards' => isset($case['cards']) ? $this->cards($case) : null,
+                    /*
+                     * AD-MEDIA-RECOVERY-001 — a platform link that has already died.
+                     *
+                     * `assetExpired()` is «`asset_expires_at` is in the past», and the presenter's
+                     * `expired` arm, its sentence and the reader's «needs a refresh» have existed
+                     * since the table did — with NO fixture anywhere that reaches them. The unit
+                     * reading is covered; nothing rendered one, so «the page says it expired» and
+                     * «the page shows a broken frame» looked identical to every suite we have.
+                     */
+                    'asset_expires_at' => ($case['expired'] ?? false)
+                        ? $today->copy()->subDays(2)
+                        : null,
                     'source_type' => 'demo',
                     'is_demo' => true,
                 ],
@@ -311,6 +323,22 @@ final class DemoCreativeAnalysisSeeder extends Seeder
                 'width' => null, 'height' => null, 'aspect_ratio' => null,
                 'headline' => 'منتجات مختارة لك', 'cta' => 'SHOP_NOW',
                 'shape' => 'steady', 'video' => false, 'sales' => true, 'no_media' => true,
+            ],
+            /*
+             * A STILL whose platform link has expired — the state a reader meets most often on a
+             * stale account, and the one no fixture in this repository has ever produced.
+             *
+             * It carries a real asset URL on purpose: an expired creative is not one that never had
+             * media, and the difference between «the link died» and «the platform sent nothing» is
+             * the whole point of the state. The presenter nulls the URLs itself once the date is
+             * past, so nothing here has to pretend the asset is gone.
+             */
+            [
+                'key' => 'expired-still', 'name' => 'عرض منتهي — رابط قديم', 'format' => 'image',
+                'objective' => 'traffic', 'provider' => 'meta', 'tint' => '#7a4f1f', 'age' => 44,
+                'width' => 1200, 'height' => 628, 'aspect_ratio' => '1.91:1',
+                'headline' => 'العرض انتهى', 'cta' => 'LEARN_MORE',
+                'shape' => 'steady', 'video' => false, 'sales' => false, 'expired' => true,
             ],
             [
                 // The other half of the cross-platform pair — same hash as `awareness-video`.
