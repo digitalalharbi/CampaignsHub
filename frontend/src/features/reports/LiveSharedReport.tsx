@@ -15,7 +15,7 @@ import {
   PlatformDonutChart,
 } from '@/features/analytics/charts'
 import { KpiCard, platformColor } from '@/features/analytics/components'
-import { money, moneyExact, moneyFromTotals, ratio } from '@/features/analytics/format'
+import { money, moneyExact, moneyFromTotals, ratio, wholeMoney } from '@/features/analytics/format'
 import { formatMoneyReading, moneyState, rankableMoney, readCostPer, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import { fetchLiveShared, type LivePayload } from './api'
 import { useUi } from '@/stores/ui'
@@ -156,6 +156,20 @@ export function LiveSharedReport({
    * printed «2 USD» on a client's link. On a total the fraction is noise; on a cost-per it IS the
    * figure, and «2» instead of «1.50» is a different decision about the same campaign.
    */
+  /*
+   * The figure behind an abbreviation, or undefined when the abbreviation IS the figure.
+   *
+   * `title` takes undefined rather than null, and a tooltip repeating the cell teaches a reader to
+   * stop opening them — so it is only set where compacting actually hid something.
+   */
+  const revealed = useMemo(() => (v: number | null | undefined): string | undefined => {
+    if (v === null || v === undefined) return undefined
+    const shown = money(v, currency || null)
+    const whole = wholeMoney(v, currency || undefined)
+
+    return shown === whole ? undefined : whole
+  }, [currency])
+
   const asExactMoney = useMemo(() => (v: number | null | undefined) => moneyExact(v, currency || null), [currency])
   /*
    * A count, through the product's one value law — §58.
@@ -464,7 +478,20 @@ export function LiveSharedReport({
                   <dl className="mt-1 grid grid-cols-2 gap-1.5 text-xs">
                     <div>
                       <dt className="text-text-muted">{ar ? 'الإنفاق' : 'Spend'}</dt>
-                      <dd dir="ltr" className="tnum font-semibold text-text-primary">{asMoney(block.spend)}</dd>
+                      {/*
+                        NUMBER-PRESENTATION-001 — the last two abbreviations on this page.
+                        A census of the rendered report found six compact money figures; the KPI
+                        cards and both detail tables revealed theirs, and these two did not. They
+                        are the same «10.8K USD» the reader sees above, and a client comparing
+                        direct against blended is doing arithmetic on figures the page rounded.
+                      */}
+                      <dd
+                        dir="ltr"
+                        className="tnum font-semibold text-text-primary"
+                        title={revealed(block.spend)}
+                      >
+                        {asMoney(block.spend)}
+                      </dd>
                     </div>
                     <div>
                       <dt className="text-text-muted">{ar ? 'تكلفة الطلب' : 'Cost per order'}</dt>
