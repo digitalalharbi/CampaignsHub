@@ -425,9 +425,9 @@ function ComparisonTable({
                   <td
                     key={p.code}
                     data-testid={`compare-${row.key}-${p.code}`}
-                    className={`tnum p-2 text-sm text-text-primary ${p.code === RECOMMENDED ? 'bg-brand-primary-soft/40' : ''}`}
+                    className={`p-2 text-sm text-text-primary ${p.code === RECOMMENDED ? 'bg-brand-primary-soft/40' : ''}`}
                   >
-                    {row.value(p, ar)}
+                    <span className="tnum">{row.value(p, ar)}</span>
                   </td>
                 ))}
               </tr>

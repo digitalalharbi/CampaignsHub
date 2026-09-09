@@ -134,8 +134,8 @@ export function CampaignEventsTab({ campaign, projectId, range }: { campaign: Un
                         {e.key === purpose && <Badge tone="success">الغرض المعلن</Badge>}
                       </span>
                     </td>
-                    <td className="tnum p-3 text-end font-semibold text-text-primary">{num(e.count)}</td>
-                    <td className="tnum p-3 text-end text-text-secondary">{e.cost_per !== null ? moneyExact(e.cost_per, cur ?? null) : '—'}</td>
+                    <td className="p-3 text-end font-semibold text-text-primary"><span className="tnum">{num(e.count)}</span></td>
+                    <td className="p-3 text-end text-text-secondary"><span className="tnum">{e.cost_per !== null ? moneyExact(e.cost_per, cur ?? null) : '—'}</span></td>
                   </tr>
                 )
               })}

@@ -484,8 +484,8 @@ function ReportRowView({
         </button>
         <div className="text-xs text-text-muted">{typeLabel}</div>
       </td>
-      <td className="tnum p-3 text-text-secondary">
-        {report.period.from} → {report.period.to}
+      <td className="p-3 text-text-secondary">
+        <span className="tnum">{report.period.from} → {report.period.to}</span>
       </td>
       <td className="p-3">
         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[report.status]}`}>
@@ -494,7 +494,7 @@ function ReportRowView({
         </span>
         {report.status === 'failed' && report.error && <div className="mt-1 max-w-[220px] truncate text-xs text-danger" title={report.error}>{report.error}</div>}
       </td>
-      <td className="tnum p-3 text-text-muted">{report.created_at ? fmtDate(report.created_at) : '—'}</td>
+      <td className="p-3 text-text-muted"><span className="tnum">{report.created_at ? fmtDate(report.created_at) : '—'}</span></td>
       <td className="p-3">
         <div className="flex items-center justify-end gap-1">
           {report.status === 'completed' && (
@@ -1168,8 +1168,8 @@ function ShareAccessHistory({
                     <span className={l.action === 'denied' ? 'font-semibold text-danger' : ''}>{label(l.action)}</span>
                     {l.detail && <span className="ms-1 text-xs text-text-muted">({l.detail})</span>}
                   </td>
-                  <td className="tnum p-2 text-xs text-text-secondary">{fmtDateTime(l.created_at)}</td>
-                  <td className="tnum p-2 text-xs text-text-muted">{l.ip ?? '—'}</td>
+                  <td className="p-2 text-xs text-text-secondary"><span className="tnum">{fmtDateTime(l.created_at)}</span></td>
+                  <td className="p-2 text-xs text-text-muted"><span className="tnum">{l.ip ?? '—'}</span></td>
                 </tr>
               ))}
             </tbody>

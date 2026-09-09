@@ -301,11 +301,11 @@ function ClientTableView({ rows, t, lang }: { rows: ClientCard[]; t: ReturnType<
               <td className="p-3"><Link to={portalTo(`/clients/${c.id}`)} className="font-semibold text-brand-600 hover:underline">{c.name}</Link>
                 {c.industry && <div className="text-[11px] text-text-muted">{labelOf(INDUSTRY_LABELS, c.industry, lang)}</div>}</td>
               <td className="p-3"><span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusTone(c.client_status)}`}>{labelOf(CLIENT_STATUS_LABELS, c.client_status, lang)}</span></td>
-              <td className="p-3 text-center tnum">{c.projects}</td>
-              <td className="p-3 text-center tnum">{c.active_campaigns}</td>
-              <td className="p-3 text-center tnum">{c.open_requests}</td>
-              <td className="p-3 text-center tnum">{c.alerts > 0 ? <span className="font-semibold text-warning">{c.alerts}</span> : '—'}</td>
-              <td className="p-3 text-end tnum">{spendCell(c, t('cc_currency_mixed'))}</td>
+              <td className="p-3 text-center"><span className="tnum">{c.projects}</span></td>
+              <td className="p-3 text-center"><span className="tnum">{c.active_campaigns}</span></td>
+              <td className="p-3 text-center"><span className="tnum">{c.open_requests}</span></td>
+              <td className="p-3 text-center"><span className="tnum">{c.alerts > 0 ? <span className="font-semibold text-warning">{c.alerts}</span> : '—'}</span></td>
+              <td className="p-3 text-end"><span className="tnum">{spendCell(c, t('cc_currency_mixed'))}</span></td>
               <td className="p-3">{fmtDate(c.last_sync_at)}</td>
             </tr>
           ))}

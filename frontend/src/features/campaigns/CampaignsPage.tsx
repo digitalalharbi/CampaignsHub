@@ -658,8 +658,8 @@ export function CampaignsPage() {
                       <td className="p-3 font-semibold text-text-primary">{c.name}</td>
                       <td className="p-3 text-text-secondary">{objectiveLabel(c.objective, locale)}</td>
                       <td className="p-3"><Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge></td>
-                      <td className="tnum p-3 text-end">{money(c.total_budget, c.budget_currency)}</td>
-                      <td className="tnum p-3 text-end">{c.external_campaigns_count ?? 0}</td>
+                      <td className="p-3 text-end"><span className="tnum">{money(c.total_budget, c.budget_currency)}</span></td>
+                      <td className="p-3 text-end"><span className="tnum">{c.external_campaigns_count ?? 0}</span></td>
                     </tr>
                   ))}
                 </tbody>

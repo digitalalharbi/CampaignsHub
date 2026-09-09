@@ -312,10 +312,10 @@ export function UnifiedCampaignOverview({
                         {providerName(cp.provider)}
                       </span>
                     </td>
-                    <td className={`tnum py-1.5 text-end ${c.sub}`}>{money(cp.spend, currency)}</td>
-                    <td className={`tnum py-1.5 text-end ${c.sub}`}>{num(cp.results)}</td>
-                    <td className={`tnum py-1.5 text-end ${c.sub}`}>{cp.cpa === null ? '—' : moneyExact(cp.cpa, currency ?? null)}</td>
-                    <td className={`tnum py-1.5 text-end font-semibold ${c.value}`}>{cp.roas === null ? '—' : ratio(cp.roas)}</td>
+                    <td className={`py-1.5 text-end ${c.sub}`}><span className="tnum">{money(cp.spend, currency)}</span></td>
+                    <td className={`py-1.5 text-end ${c.sub}`}><span className="tnum">{num(cp.results)}</span></td>
+                    <td className={`py-1.5 text-end ${c.sub}`}><span className="tnum">{cp.cpa === null ? '—' : moneyExact(cp.cpa, currency ?? null)}</span></td>
+                    <td className={`py-1.5 text-end font-semibold ${c.value}`}><span className="tnum">{cp.roas === null ? '—' : ratio(cp.roas)}</span></td>
                   </tr>
                 ))}
               </tbody>

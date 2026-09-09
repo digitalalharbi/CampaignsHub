@@ -882,11 +882,11 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
                     </button>
                   </td>
                   <td className="p-2 text-text-muted">{providerLabel(c.provider, locale)}</td>
-                  <td className="tnum p-2">{money(c.metrics.spend, cur)}</td>
-                  <td className="tnum p-2">{num(c.metrics.conversions)}</td>
-                  <td className="tnum p-2">{moneyExact(c.metrics.cpa, cur ?? null)}</td>
-                  <td className="tnum p-2">{ratio(c.metrics.roas)}</td>
-                  <td className="tnum p-2">{percent(c.metrics.ctr ?? 0)}</td>
+                  <td className="p-2"><span className="tnum">{money(c.metrics.spend, cur)}</span></td>
+                  <td className="p-2"><span className="tnum">{num(c.metrics.conversions)}</span></td>
+                  <td className="p-2"><span className="tnum">{moneyExact(c.metrics.cpa, cur ?? null)}</span></td>
+                  <td className="p-2"><span className="tnum">{ratio(c.metrics.roas)}</span></td>
+                  <td className="p-2"><span className="tnum">{percent(c.metrics.ctr ?? 0)}</span></td>
                   <td className="p-2"><span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${cls(c.classification).tone}`}>{cls(c.classification).label}</span></td>
                 </tr>
               ))}
