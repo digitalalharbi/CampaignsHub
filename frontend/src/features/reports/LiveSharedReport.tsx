@@ -172,6 +172,17 @@ export function LiveSharedReport({
   const plain = (text: string): MetricValue => ({ text, exact: null, value: null })
 
   /*
+   * A money card reveals its exact amount, exactly as the counts beside it already do.
+   *
+   * NUMBER-PRESENTATION-001. Measured on production: «الظهور 7.08M» revealed 7,077,158 and «النقرات
+   * 42.7K» revealed 42,738, while «الإنفاق 10.8K USD» revealed nothing — the one card on the block
+   * whose figure is the reader's own money. `plain()` drops whatever the reading knew, and the money
+   * reading has carried its own exact figure since the detail table was fixed for the same defect.
+   */
+  const asReading = (r: { text: string; exact: string | null }): MetricValue =>
+    ({ text: r.text, exact: r.exact, value: null })
+
+  /*
    * How each chosen metric is rendered.
    *
    * A table rather than a chain of conditionals, because the SET is chosen by the operator at link
@@ -193,7 +204,7 @@ export function LiveSharedReport({
     // PARTIAL-WITHHELD-001 — a client link is the one place the reader has no other view, so money
     // goes through the contract: partial/mixed ⇒ «—», withheld ⇒ the original in its own currency,
     // never the coalesced 0 or the converted subset.
-    spend: { ar: 'الإنفاق', en: 'Spend', invertGood: true, spark: true, format: (t, p) => plain(moneyFromTotals(t as MoneyTotals, 'spend', ar, p.currency).text) },
+    spend: { ar: 'الإنفاق', en: 'Spend', invertGood: true, spark: true, format: (t, p) => asReading(moneyFromTotals(t as MoneyTotals, 'spend', ar, p.currency)) },
     impressions: { ar: 'الظهور', en: 'Impressions', spark: true, format: (t, _p, _m, count) => count(t.impressions) },
     clicks: { ar: 'النقرات', en: 'Clicks', spark: true, format: (t, _p, _m, count) => count(t.clicks) },
     ctr: { ar: 'نسبة النقر', en: 'CTR', format: (t) => plain(t.ctr === null || t.ctr === undefined ? '—' : `${(t.ctr * 100).toFixed(2)}%`) },
@@ -201,7 +212,7 @@ export function LiveSharedReport({
     // Add-to-cart is a funnel stage rather than a total, so it is read from where it actually lives.
     add_to_cart: { ar: 'الإضافات للسلة', en: 'Add to cart', format: (_t, p, _m, count) => count(p.funnel.find((f) => f.stage === 'add_to_cart')?.count) },
     purchases: { ar: 'المشتريات', en: 'Purchases', format: (t, _p, _m, count) => count(t.purchases) },
-    revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, p) => plain(moneyFromTotals(t as MoneyTotals, 'revenue', ar, p.currency).text) },
+    revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, p) => asReading(moneyFromTotals(t as MoneyTotals, 'revenue', ar, p.currency)) },
     roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => { const r = readRoas(t as MoneyTotals, ar); return plain(ratio(r.value)) } },
     cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpa', 'conversions', p.currency, ar), (v) => asExactMoney(v))) },
     /*
