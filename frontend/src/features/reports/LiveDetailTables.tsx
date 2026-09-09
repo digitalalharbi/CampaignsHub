@@ -121,13 +121,21 @@ export function LiveDetailTables({
       numberOf(row, 'conversions'),
     ]),
     /*
-     * The spend cell is deliberately absent: its text is produced by the money contract, which
-     * already decides what may be shown — and a «—» that a tooltip turned back into a number would
-     * hand the reader exactly the figure the contract refused to state.
+     * The spend cell reveals its exact amount ONLY when the contract printed one.
+     *
+     * This was a blanket `null`, and its reason was right about half the cases: a «—» that a tooltip
+     * turned back into a number would hand the reader exactly the figure the money contract refused
+     * to state. But it protected the withheld case by breaking the shown one. Production printed
+     * «10.7K USD» over a real 10,696.54 with nothing to reach it — on the one surface whose reader
+     * is the client whose money it is, and beside impressions and clicks that both revealed theirs.
+     *
+     * The reading decides, as it does for sorting: an amount it stated reveals itself in full, and
+     * one it refused stays refused. `exact` is null for a «—», and null when the exact form is the
+     * text already on screen.
      */
     exact: rows.map((row) => [
       null,
-      null,
+      spendOf(row).exact,
       full(numberOf(row, 'impressions')),
       full(numberOf(row, 'clicks')),
       full(numberOf(row, 'conversions')),

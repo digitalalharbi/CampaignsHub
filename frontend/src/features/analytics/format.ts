@@ -187,7 +187,15 @@ export function trend(delta: number | null | undefined): Trend {
  * a test proving the two currently agreed. That is not one contract: two copies drift, and the drift
  * stays invisible until an owner sees spend on one screen and «0» on another. Both now delegate.
  */
-export type MoneyReading = { text: string; withheld: boolean; note: string | null }
+/**
+ * `exact` — the same amount, unabbreviated, or null when there is nothing to reveal.
+ *
+ * NUMBER-PRESENTATION-001. `text` is compact so a 60px column can hold it; the contract's other half
+ * is that the exact figure stays reachable. It is null when the reading refused to state an amount,
+ * and null when the exact form is what is already on screen — a tooltip repeating the cell teaches a
+ * reader to stop opening them.
+ */
+export type MoneyReading = { text: string; withheld: boolean; note: string | null; exact: string | null }
 
 export function moneyFromTotals(
   totals: MoneyTotals,
@@ -198,13 +206,36 @@ export function moneyFromTotals(
   const r = readMoney(totals, key, reportingCurrency, ar)
 
   if (r.kind === 'unavailable' || r.kind === 'absent') {
-    return { text: '\u2014', withheld: r.kind === 'unavailable', note: r.note }
+    return { text: '\u2014', withheld: r.kind === 'unavailable', note: r.note, exact: null }
   }
 
+  const text = formatMoneyReading(r, money)
+
+  /*
+   * Not `moneyExact`, which is not exact for this purpose.
+   *
+   * Its rule keeps two decimals only BELOW 1000 — right for the cost-per figures it was written for,
+   * and wrong for a total: it renders 10,696.54 as «10,697 USD», so a tooltip promising the figure
+   * behind «10.7K USD» would hand the reader a third number that is neither the abbreviation nor the
+   * amount. A revealed value that rounds is not a revealed value.
+   */
+  const exact = formatMoneyReading(r, (n, currency) => {
+    if (n === null || n === undefined) return '\u2014'
+
+    const figure = Number.isInteger(n)
+      ? n.toLocaleString('en-US')
+      : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+    return currency ? `${figure} ${currency}` : figure
+  })
+
   return {
-    text: formatMoneyReading(r, money),
+    text,
     withheld: r.kind === 'withheld',
     note: r.note,
+    // Nothing to reveal when the exact form is the one already printed — a withheld amount is
+    // always stated in full, so it reveals nothing and says so.
+    exact: exact === text ? null : exact,
   }
 }
 
