@@ -917,6 +917,93 @@ final class MatrixStatusVocabularyTest extends TestCase
         return $tables;
     }
 
+    /**
+     * GOVERNANCE-ANTILOSS-001 — the resume document names the families it is supposed to resume.
+     *
+     * A requirement can leave this ledger without being deleted from it: the row stays, and the
+     * document the next session actually READS stops mentioning it. `RESUME_STATE` is that document
+     * — it says so in its own first line — and it has been wrong twice in ways that were only found
+     * by accident: once stale by sixteen merges while describing #248 as open, and once by eight
+     * while main had reached #327.
+     *
+     * Both times the Matrix was current and the resume was not, which is the failure this asserts
+     * against. Naming every registered family is a low bar deliberately: it does not police what the
+     * document SAYS about a family, only that a family cannot vanish from the page a session plans
+     * from.
+     */
+    public function test_the_resume_document_names_every_registered_family(): void
+    {
+        $resume = (string) file_get_contents($this->docPath('RESUME_STATE.md'));
+
+        $missing = array_values(array_filter(
+            self::REGISTERED,
+            static fn (string $id): bool => ! str_contains($resume, $id),
+        ));
+
+        $this->assertSame(
+            [],
+            $missing,
+            'RESUME_STATE does not name '.count($missing).' registered requirement famil'
+                .(count($missing) === 1 ? 'y' : 'ies').': '.implode(', ', $missing)
+                .' — a session planning from it would not know they exist',
+        );
+    }
+
+    /**
+     * GOVERNANCE-ANTILOSS-001 — the execution state may not report a finished queue over an open one.
+     *
+     * The document exists to tell the next session what is left. The one failure it can commit that
+     * nobody would catch is the reassuring one: «everything executable is done» written above a
+     * ledger still holding rows that are neither VERIFIED nor blocked. A stale «what is left» reads
+     * as work; a false «nothing is left» reads as permission to stop.
+     *
+     * Executable means exactly what the queue means: not VERIFIED, and not blocked on something
+     * outside this repository. A row waiting on credentials or on the owner is not work this
+     * document is lying about.
+     */
+    public function test_the_execution_state_cannot_report_an_empty_queue_while_rows_remain(): void
+    {
+        $executable = [];
+
+        foreach (self::statusCells(file($this->matrixPath())) as [$id, $status]) {
+            if ($status === 'VERIFIED' || str_starts_with($status, 'BLOCKED_')) {
+                continue;
+            }
+
+            $executable[] = $id;
+        }
+
+        /*
+         * The floor. If every row is ever VERIFIED or blocked, this guard has nothing to police and
+         * would pass by measuring nothing — so it fails instead, and says to come back and decide
+         * what it should assert then. A guard that can pass vacuously is the defect this file keeps
+         * finding in others.
+         */
+        $this->assertNotSame(
+            [],
+            $executable,
+            'no unresolved rows remain — this guard now measures nothing and needs rewriting rather than deleting',
+        );
+
+        $state = (string) file_get_contents($this->docPath('ACTIVE_EXECUTION_STATE.md'));
+
+        foreach ([
+            'no executable work remains',
+            'all executable work is exhausted',
+            'the executable queue is exhausted',
+            'the queue is empty',
+            'nothing remains to execute',
+            'لا يوجد عمل قابل للتنفيذ',
+        ] as $claim) {
+            $this->assertStringNotContainsStringIgnoringCase(
+                $claim,
+                $state,
+                'ACTIVE_EXECUTION_STATE claims a finished queue while '.count($executable)
+                    .' rows are neither VERIFIED nor blocked — the first of them is '.$executable[0],
+            );
+        }
+    }
+
     private function docPath(string $name): string
     {
         $path = dirname(__DIR__, 3).'/docs/'.$name;

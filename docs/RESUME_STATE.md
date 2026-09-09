@@ -27,6 +27,16 @@ five-times-reported defect on `/app/content` immediately, then the root cause of
 resolves opposite to its header's. 37 cells across 14 files, and a source guard that cannot let it
 back.
 
+**Two families this document had stopped naming, which is how a requirement leaves a ledger without
+being deleted from it.** `GOVERNANCE-ANTILOSS-001` now asserts that every registered family appears
+here, and its first run found both:
+
+  - **`CLIENT-FACING-PRESENTATION-001`** — PARTIAL. The nine blocks are complete on the LIVE link
+    only. The dashboard and snapshot forms have not been re-composed, and neither has the PDF.
+  - **`EMAIL-DASHBOARD-UX-001`** — PARTIAL. The surface is built; what is missing is a real
+    scheduled send observed end to end, which is MAIL-SEND's credential blocker rather than this
+    row's own work.
+
 **Read every «Remaining» clause against the code before acting on it.** Eight were checked this run
 and eight were stale. One of them — `REPORT-DETAIL-PARITY-001`'s «ad, as a rung beneath its ad set» —
 would have REINTRODUCED what the owner had explicitly removed («اسم واختيار الحملة احذفه من
