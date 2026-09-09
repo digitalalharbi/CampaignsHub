@@ -500,13 +500,27 @@ export function LiveSharedReport({
                           Null stays «—». A cost per order that nobody could compute is not a cost of
                           zero, and this is the figure a client acts on.
                         */}
+                        {/*
+                          NUMBER-PRESENTATION-001 — a cost per order keeps its decimals.
+                        
+                          `asMoney()` is the COMPACT reader: it rounds 17.62 to «18 USD». Production
+                          printed «تكلفة الطلب 17 USD» in this block beside «17.62» on the KPI card
+                          above it — the same figure, twice, differently, on one page. And the whole
+                          point of this panel is the COMPARISON between direct and blended: rounded to
+                          whole units, 17.62 against 18.40 reads as «17 vs 18», a gap a third bigger
+                          than the real one, on the one number a merchant decides from.
+                        
+                          Every other cost-per on this page already goes through `asExactMoney` —
+                          `cpa`, `cpm`, `cpc`, `cpl`, `cpi`, `cpe` and cost per visit all do. This
+                          block was the exception.
+                        */}
                         {kind === 'direct'
                           ? (block as typeof payload.objective_performance.direct).cpa === null
                             ? '—'
-                            : asMoney((block as typeof payload.objective_performance.direct).cpa)
+                            : asExactMoney((block as typeof payload.objective_performance.direct).cpa)
                           : (block as typeof payload.objective_performance.blended).blended_cpa === null
                             ? '—'
-                            : asMoney((block as typeof payload.objective_performance.blended).blended_cpa)}
+                            : asExactMoney((block as typeof payload.objective_performance.blended).blended_cpa)}
                       </dd>
                     </div>
                   </dl>
