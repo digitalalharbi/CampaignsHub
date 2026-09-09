@@ -397,9 +397,19 @@ function UsageTable({ usage, c }: { usage: Record<string, UsageMetric>; c: Copy 
             {rows.map(([metric, u]) => (
               <tr key={metric} className="border-t border-border">
                 <td className="p-3 font-medium text-text-primary">{metricLabel(metric, c)}</td>
-                <td className="p-3 text-end tnum text-text-secondary" dir="ltr">{num(u.used, c.unlimited)}</td>
-                <td className="p-3 text-end tnum text-text-secondary" dir="ltr">{u.remaining === null ? c.unlimited : num(u.remaining, c.unlimited)}</td>
-                <td className="p-3 text-end tnum text-text-secondary" dir="ltr">{u.limit === null ? c.unlimited : num(u.limit, c.unlimited)}</td>
+                {/*
+                  * TABLE-NUMERIC-ALIGNMENT-001 — `.tnum` carries `direction: ltr` (tokens.css), so on
+                  * a `<td>` it flips how that cell's own `text-end` resolves. The header, inheriting
+                  * the Arabic page, puts `end` on the LEFT; the figure, inside the LTR cell, puts the
+                  * same `end` on the RIGHT — heading and number at opposite edges of one column.
+                  *
+                  * Removing the `dir` ATTRIBUTE was not enough and the sweep said so: the class was
+                  * still setting the direction. Tabular numerals belong to the numeral, so the class
+                  * moves to the span with it and the cell keeps the page's direction.
+                  */}
+                <td className="p-3 text-end text-text-secondary"><span className="tnum" dir="ltr">{num(u.used, c.unlimited)}</span></td>
+                <td className="p-3 text-end text-text-secondary"><span className="tnum" dir="ltr">{u.remaining === null ? c.unlimited : num(u.remaining, c.unlimited)}</span></td>
+                <td className="p-3 text-end text-text-secondary"><span className="tnum" dir="ltr">{u.limit === null ? c.unlimited : num(u.limit, c.unlimited)}</span></td>
               </tr>
             ))}
           </tbody>
