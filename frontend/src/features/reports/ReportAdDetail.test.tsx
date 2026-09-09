@@ -174,4 +174,49 @@ describe('opening an ad from a report', () => {
      */
     expect(text).not.toContain('Eid sales')
   })
+  /**
+   * CONTENT-PREVIEW-SHAPES-001 — a COLLECTION reaches the client's report, products and all.
+   *
+   * This surface rendered `CreativeCarousel` only when the kind was exactly `carousel`, so a
+   * collection in a client's own report drew its hero and nothing else — the state the component's
+   * docblock records having been rescued from, still live here because the gate was outside it.
+   */
+  it('draws a collection’s products, not just its hero', () => {
+    renderWithProviders(
+      <ReportAdDetail
+        ad={ad({
+          preview: preview({
+            kind: 'collection',
+            cards_reported: true,
+            cards: [
+              { index: 0, kind: 'image', image_url: 'https://cdn/p1.jpg', video_url: null, thumbnail_url: null, headline: 'Linen shirt' },
+              { index: 1, kind: 'image', image_url: 'https://cdn/p2.jpg', video_url: null, thumbnail_url: null, headline: 'Wide trousers' },
+            ],
+          }),
+        })}
+        currency="USD"
+        locale="en"
+        onClose={() => {}}
+      />, { locale: 'en' },
+    )
+
+    expect(screen.getByTestId('creative-carousel')).toBeInTheDocument()
+    expect(screen.getByText('Collection products')).toBeInTheDocument()
+  })
+
+  /** And when the tiles were never fetched, the client is told whose gap that is. */
+  it('names our own gap for a collection with no tiles', () => {
+    renderWithProviders(
+      <ReportAdDetail
+        ad={ad({ preview: preview({ kind: 'collection', cards: null, cards_reported: false }) })}
+        currency="USD"
+        locale="en"
+        onClose={() => {}}
+      />, { locale: 'en' },
+    )
+
+    expect(screen.getByText(/the gap is ours/)).toBeInTheDocument()
+    expect(screen.queryByText(/sent no card breakdown/)).not.toBeInTheDocument()
+  })
+
 })

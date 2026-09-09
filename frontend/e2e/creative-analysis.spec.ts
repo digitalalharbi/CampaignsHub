@@ -232,6 +232,68 @@ test.describe('a carousel is more than one picture', () => {
   })
 })
 
+/**
+ * Every shape keeps its own treatment — the two the gate never walked.
+ *
+ * `creativesOfKind` has been driven with `carousel`, `image` and `video` only. Collection and
+ * catalog were rendered by code nothing exercised, and that is exactly how two surfaces came to drop
+ * collections entirely — `ReportAdDetail` and `AdPreviewDialog` gated the tiles on
+ * `kind === 'carousel'`, so a collection in a client's report drew its hero and nothing else, and no
+ * gate said a word. The fix was found by reading the callers, which is not a method that scales.
+ *
+ * FLOORS, not skips. The demo seeder defines both shapes deliberately, so their absence is a broken
+ * seed rather than an optional precondition — and a skip here would let the coverage disappear again
+ * while the run still said green. That failure has its own paragraph three describes down.
+ */
+test.describe('every media shape keeps its own treatment', () => {
+  test.use({ storageState: AUTH.owner })
+
+  test('a collection shows its products, not only its hero', async ({ page, request }) => {
+    await openLibrary(page, request)
+
+    const [collection] = await creativesOfKind(request, 'collection')
+    expect(collection, 'the seed defines a collection creative and the API returned none').toBeTruthy()
+
+    await page.goto(`/agency/content/${collection.id}`)
+    await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
+
+    /*
+     * Either the tiles or the sentence saying they were never fetched — both are correct answers and
+     * which one appears depends on the seed. What may never appear is the CAROUSEL wording, which
+     * blames the platform for a gap that is ours.
+     */
+    await expect(
+      page.getByText(/منتجات المجموعة|Collection products|does expose the tiles|المنصة تتيح البطاقات/),
+    ).toBeVisible({ timeout: 30000 })
+
+    await expect(page.getByText(/sent no card breakdown|لم ترسل هذه المنصة تفاصيل بطاقات/)).toHaveCount(0)
+  })
+
+  test('a catalog ad is not reported as a missing asset', async ({ page, request }) => {
+    await openLibrary(page, request)
+
+    const [catalog] = await creativesOfKind(request, 'catalog')
+    expect(catalog, 'the seed defines a catalog creative and the API returned none').toBeTruthy()
+
+    await page.goto(`/agency/content/${catalog.id}`)
+    await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
+
+    // A catalog ad has nothing missing: the platform composes one image per product at delivery.
+    await expect(
+      page.getByText(/إعلان كتالوج|Catalog ad/),
+    ).toBeVisible({ timeout: 30000 })
+
+    /*
+     * The sentence it must NOT get. «The platform exposed no asset» reads as a fault and sends an
+     * operator looking for a sync problem that does not exist — the reason the presenter gives a
+     * catalog its own `available` state rather than an absence.
+     */
+    await expect(
+      page.getByText(/exposed no asset|ولم تُتِح المنصة أصل المحتوى/),
+    ).toHaveCount(0)
+  })
+})
+
 test.describe('one asset across platforms', () => {
   test.use({ storageState: AUTH.owner })
 
