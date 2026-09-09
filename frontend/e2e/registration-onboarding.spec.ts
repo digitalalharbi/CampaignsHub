@@ -90,6 +90,25 @@ async function registerAndVerify(
    * behind. So the new owner signs in — with the password they chose when they applied, through the
    * one door there is (LOGIN-UNIFIED-001) — and lands where the wizard left off.
    */
+  /*
+   * What the LOGIN itself answered, captured before it is asked.
+   *
+   * `signIn()` fills the form, clicks submit and returns. It asserts nothing about the outcome, so a
+   * login that answered 422, 429 or 500 is indistinguishable from one that worked until a later
+   * assertion notices the URL — and the report then describes the destination rather than the cause.
+   *
+   * CI has produced «status 401» from `/auth/me` here on webkit more than once, sustained across a
+   * twenty-second retry window, which is not a race settling: it is a session that never existed.
+   * Whether the sign-in was refused or the session was lost afterwards are different defects with
+   * different fixes, and the failure could not tell them apart. Now it can.
+   */
+  const loginAnswers: string[] = []
+  page.on('response', (r) => {
+    if (r.url().includes('/auth/login')) {
+      loginAnswers.push(`${r.request().method()} ${r.status()}`)
+    }
+  })
+
   await signIn(page, email, 'secret1234')
 
   /*
@@ -128,7 +147,21 @@ async function registerAndVerify(
       }
     })
 
-    expect(url, `signed in and landed on ${url} rather than the wizard; the account reports ${state}`).toMatch(/\/onboarding/)
+    /*
+     * Does the browser still hold a session cookie at all? A 401 with a cookie present and a 401
+     * with no cookie are opposite defects: the first says the server rejected a credential it was
+     * given, the second says the browser never kept one.
+     */
+    const cookie = (await page.context().cookies())
+      .filter((c) => /session|XSRF/i.test(c.name))
+      .map((c) => `${c.name}(${c.value.length} chars)`)
+      .join(', ') || 'none'
+
+    expect(
+      url,
+      `signed in and landed on ${url} rather than the wizard; the account reports ${state}; `
+        + `login answered [${loginAnswers.join(', ') || 'no /auth/login response seen'}]; cookies: ${cookie}`,
+    ).toMatch(/\/onboarding/)
   }).toPass({ timeout: 20000 })
 }
 
