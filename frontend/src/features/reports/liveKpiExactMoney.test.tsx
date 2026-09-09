@@ -148,3 +148,41 @@ describe('every abbreviation on the report can be opened', () => {
     expect(unreachable, 'a compact money figure the reader cannot open').toEqual([])
   })
 })
+
+/**
+ * NUMBER-PRESENTATION-001 — the cost per order a merchant decides from keeps its decimals.
+ *
+ * Measured on production: this block printed «تكلفة الطلب 17 USD» while the payload carried 17.62
+ * and the KPI card above it showed «17.62» — the same figure twice, differently, on one page.
+ *
+ * The comparison is the whole point of the panel. Rounded to whole units, 17.62 against 18.40 reads
+ * as «17 vs 18»: a gap a third larger than the real one, on the number the decision turns on.
+ */
+describe('the cost per order in the direct-vs-blended split', () => {
+  beforeEach(() => vi.clearAllMocks())
+  afterEach(() => vi.clearAllMocks())
+
+  it('keeps its decimals rather than rounding to whole units', async () => {
+    vi.mocked(fetchLiveShared).mockResolvedValue({
+      status: 200,
+      envelope: {
+        data: {
+          ...stated,
+          objective_performance: {
+            direct: { label_ar: 'المباشر', label_en: 'Direct', spend: 10_372.67, conversions: 589, cpa: 17.62 },
+            blended: { label_ar: 'المدمج', label_en: 'Blended', spend: 10_696.54, blended_cpa: 18.40 },
+          },
+        },
+      },
+    } as never)
+
+    renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { locale: 'en' })
+    await screen.findByTestId('live-report')
+
+    const direct = within(screen.getByTestId('live-objective-direct'))
+    expect(await direct.findByText(/17\.62/), 'the direct cost per order was rounded').toBeInTheDocument()
+
+    const blended = within(screen.getByTestId('live-objective-blended'))
+    expect(blended.getByText(/18\.40/), 'the blended cost per order was rounded').toBeInTheDocument()
+  })
+})
