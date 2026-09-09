@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Campaigns\Models\CampaignAnnotation;
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
@@ -21,6 +22,7 @@ use App\Domains\Notifications\Services\DigestRecommendations;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Services\ReportAds;
 use App\Domains\Reports\Services\ReportGenerator;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -29,6 +31,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
@@ -793,6 +796,103 @@ final class UnifiedFigureConsistencyTest extends TestCase
             'priority' => 'high',
             'created_by' => $this->operator->getKey(),
         ]);
+    }
+
+    /**
+     * A CREATIVE's figures are one figure, from the library to the client's report.
+     *
+     * This harness reconciles spend across the dashboard, the breakdowns, the funnel, the drill-down,
+     * the generated report and the digest — and never once across CONTENT. The creative surfaces read
+     * `creative_daily_metrics` through `CreativeRows`, and the report's ads section reads the same
+     * table through `ReportAds`, which presents, ranks and bounds its rows on the way. Two readers of
+     * one table with no reason to agree beyond having been written to, which is the exact shape this
+     * file exists to catch.
+     *
+     * It matters commercially because these two surfaces face DIFFERENT people. The library is what
+     * an operator decides from; the ads section is what the client is shown. A creative that spent
+     * 60 in one and 60.000001 in the other is a conversation nobody can win.
+     *
+     * Asserted against the seeded value AS WELL AS between the surfaces: pinning them only to each
+     * other would pass if both grew the same wrong query.
+     */
+    public function test_a_creative_reports_one_spend_to_the_library_and_to_the_report(): void
+    {
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $creative = ExternalCreative::create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'campaign_id' => $this->campaign->id,
+            'provider' => 'meta',
+            'external_creative_id' => 'rec-'.uniqid(),
+            'name' => 'إعلان التوفيق',
+            'format' => 'image',
+            'status' => 'active',
+            'asset_url' => 'https://cdn.example/rec.jpg',
+            'source_type' => 'sync',
+        ]);
+
+        /*
+         * Two days inside the window and one outside it. The outside day is the half that makes this
+         * a reconciliation rather than a sum: a surface reading the whole table instead of the window
+         * agrees with the other on the total and is wrong about the period, and only a row it must
+         * exclude can tell them apart.
+         */
+        foreach ([[self::DATE, 40.0, 400.0], ['2026-07-11', 20.0, 200.0], ['2026-06-01', 999.0, 9990.0]] as [$date, $spend, $impressions]) {
+            DB::table('creative_daily_metrics')->insert([
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $this->tenant->id,
+                'project_id' => $this->project->id,
+                'creative_id' => $creative->getKey(),
+                'campaign_id' => $this->campaign->id,
+                'metric_date' => $date,
+                'spend' => $spend,
+                'impressions' => $impressions,
+                'clicks' => 0,
+                'conversions' => 0,
+                'revenue' => 0,
+                'video_views' => 0,
+                'video_completions' => 0,
+                'is_demo' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        app(TenantContext::class)->forget();
+
+        $library = collect((array) $this->read('creatives')->json('data.creatives'))
+            ->firstWhere('id', (string) $creative->getKey());
+
+        $this->assertNotNull($library, 'the creative library did not return the creative under test');
+
+        $this->holdingTenant((string) $this->tenant->id);
+        $section = app(ReportAds::class)->for(
+            'sales',
+            Carbon::parse('2026-07-01'),
+            Carbon::parse('2026-07-31'),
+            ['project_ids' => [(string) $this->project->id]],
+        );
+        app(TenantContext::class)->forget();
+
+        $reported = collect($section['ads'])->firstWhere('id', (string) $creative->getKey());
+        $this->assertNotNull($reported, 'the report’s ads section did not carry the creative the library shows');
+
+        $inWindow = 60.0;
+
+        $this->assertSame($inWindow, round((float) $library['metrics']['spend'], 6), 'the library summed the wrong window');
+        $this->assertSame($inWindow, round((float) $reported['spend'], 6), 'the report summed the wrong window');
+        $this->assertSame(
+            round((float) $library['metrics']['spend'], 6),
+            round((float) $reported['spend'], 6),
+            'the operator’s library and the client’s report disagree about one creative’s spend',
+        );
+
+        $this->assertSame(
+            600.0,
+            round((float) $reported['impressions'], 6),
+            'the report’s impressions for the creative do not match the window either',
+        );
     }
 
     private function read(string $path, string $extra = ''): TestResponse
