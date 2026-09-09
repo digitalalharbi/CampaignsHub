@@ -34,7 +34,7 @@ async function openLibrary(page: Page, request: APIRequestContext): Promise<stri
   return projectId
 }
 
-type Row = { id: string; provider?: string; preview?: { cards_reported?: boolean } }
+type Row = { id: string; provider?: string; preview?: { cards_reported?: boolean; state?: string } }
 
 /**
  * Creatives of a given kind, straight from the API — the grid's ordering is not a fixture.
@@ -267,6 +267,40 @@ test.describe('every media shape keeps its own treatment', () => {
     ).toBeVisible({ timeout: 30000 })
 
     await expect(page.getByText(/sent no card breakdown|لم ترسل هذه المنصة تفاصيل بطاقات/)).toHaveCount(0)
+  })
+
+  /**
+   * AD-MEDIA-RECOVERY-001 — a link that has already died says so, rather than drawing a broken frame.
+   *
+   * The presenter's `expired` arm, its sentence and the reader's «needs a fresh sync» have existed
+   * since the table did, and NO fixture in this repository ever reached them: `assetExpired()` is
+   * «`asset_expires_at` is in the past» and nothing wrote a past date. The unit reading was covered,
+   * so «the page says it expired» and «the page shows a broken image» looked identical to every
+   * suite we had. `DemoCreativeAnalysisSeeder` now carries one, with a real asset URL — an expired
+   * creative is not one that never had media, and that difference is the whole point of the state.
+   */
+  test('an expired platform link says so instead of breaking', async ({ page, request }) => {
+    await openLibrary(page, request)
+
+    const expired = (await creativesOfKind(request, 'image'))
+      .find((c) => c.preview?.state === 'expired')
+
+    expect(expired, 'the seed defines an expired creative and the API reported none').toBeTruthy()
+
+    await page.goto(`/agency/content/${expired!.id}`)
+    await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
+
+    await expect(
+      page.getByText(/انتهت صلاحية رابط المنصة|link has expired/),
+    ).toBeVisible({ timeout: 30000 })
+
+    /*
+     * And no image element is asked to load the dead link. A broken frame is the failure this state
+     * exists to replace, so a page that says «expired» AND still requests the asset has only added a
+     * sentence to the defect.
+     */
+    const requesting = await page.locator('img[src*="expired"], img[data-expired="true"]').count()
+    expect(requesting, 'the page still asked the platform for a link it knows is dead').toBe(0)
   })
 
   test('a catalog ad is not reported as a missing asset', async ({ page, request }) => {
