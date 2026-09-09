@@ -142,7 +142,16 @@ export function ReportAdDetail({
           />
         )}
 
-        {preview?.kind === 'carousel' && <CreativeCarousel preview={preview} locale={locale} />}
+        {/*
+          CONTENT-PREVIEW-SHAPES-001 — the component decides the kind, not the caller.
+
+          `CreativeCarousel` renders a carousel's slides AND a collection's product tiles, and
+          returns null for anything else. Gating it on `kind === 'carousel'` out here put the
+          collection back where the component's own docblock says it was rescued from: the hero
+          drawn and the products dropped, on a client's report and in the panel an operator opens
+          from Analytics. Two callers had the fix and two did not.
+        */}
+        {preview && <CreativeCarousel preview={preview} locale={locale} />}
 
         {figures.length > 0 && (
           <dl data-testid="report-ad-detail-figures" className="grid grid-cols-2 gap-2 sm:grid-cols-4">

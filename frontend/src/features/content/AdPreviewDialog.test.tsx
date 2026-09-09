@@ -159,6 +159,50 @@ describe('the in-place ad preview', () => {
     expect(screen.getByTestId('creative-carousel')).toBeInTheDocument()
   })
 
+  /**
+   * CONTENT-PREVIEW-SHAPES-001 — a COLLECTION is not a carousel, and it was being dropped out here.
+   *
+   * `CreativeCarousel` draws a carousel's slides and a collection's product tiles, and returns null
+   * for every other kind — the component decides. This caller gated it on `kind === 'carousel'`, so
+   * a collection opened from Analytics showed its hero and nothing about the products underneath it,
+   * which is exactly the state the component's own docblock records having rescued it from.
+   */
+  it('draws a collection’s products, not just its hero', () => {
+    renderWithProviders(
+      <AdPreviewDialog
+        creative={creative({
+          preview: preview({
+            kind: 'collection',
+            cards_reported: true,
+            cards: [
+              { index: 0, kind: 'image', image_url: 'https://cdn.example/p1.jpg', video_url: null, thumbnail_url: null, headline: 'Product one' },
+              { index: 1, kind: 'image', image_url: 'https://cdn.example/p2.jpg', video_url: null, thumbnail_url: null, headline: 'Product two' },
+            ],
+          } as Partial<CreativePreview>),
+        })}
+        locale="en"
+        onClose={() => {}}
+      />,
+    )
+
+    expect(screen.getByTestId('creative-carousel')).toBeInTheDocument()
+    expect(screen.getByText('Collection products')).toBeInTheDocument()
+  })
+
+  /** And when the tiles were never fetched, the panel says whose gap that is. */
+  it('names our own gap for a collection with no tiles', () => {
+    renderWithProviders(
+      <AdPreviewDialog
+        creative={creative({ preview: preview({ kind: 'collection', cards: null, cards_reported: false } as Partial<CreativePreview>) })}
+        locale="en"
+        onClose={() => {}}
+      />,
+    )
+
+    expect(screen.getByText(/the gap is ours/)).toBeInTheDocument()
+    expect(screen.queryByText(/sent no card breakdown/)).not.toBeInTheDocument()
+  })
+
   /** A modal a keyboard cannot leave is a trap, and this one opens from a grid people tab through. */
   it('closes on Escape', () => {
     const onClose = vi.fn()
