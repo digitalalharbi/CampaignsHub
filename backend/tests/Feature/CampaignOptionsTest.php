@@ -6,14 +6,19 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\Concerns\GrantsMemberships;
 use Tests\TestCase;
 
@@ -85,6 +90,107 @@ final class CampaignOptionsTest extends TestCase
             ->getJson("/api/v1/projects/{$this->project->getKey()}/metrics/campaign-options{$query}")
             ->assertOk()
             ->json('data');
+    }
+
+    /**
+     * ANALYTICS-FILTER-TRUTH-001 — the picker offers campaigns the current scope can actually show.
+     *
+     * The control feeds the campaign axis of the same filter row that already carries a PLATFORM and
+     * an OBJECTIVE. It ignored both, so an operator filtered to Meta was offered every Snapchat and
+     * Google campaign in the project — and choosing one produced an empty dashboard under two chips
+     * that contradict each other, which is precisely the «an empty filtered scope never falls back
+     * to unfiltered» rule read from the other end: the scope was not wrong, the CHOICE could never
+     * have been anything else.
+     *
+     * A unified campaign carries no provider of its own; it is one through its external campaigns,
+     * which is the same relation `EntityScope` resolves a campaign filter through.
+     */
+    public function test_the_options_are_narrowed_by_the_platform_already_chosen(): void
+    {
+        $meta = $this->campaign('Meta — Ramadan');
+        $snap = $this->campaign('Snapchat — Ramadan');
+
+        $this->onProvider($meta, 'meta');
+        $this->onProvider($snap, 'snapchat');
+
+        $names = array_column($this->fetchOptions('?provider=meta')['options'], 'name');
+
+        $this->assertSame(['Meta — Ramadan'], $names, 'the picker offered a campaign the platform filter excludes');
+    }
+
+    /** And the objective axis narrows it too, on the campaign's own column. */
+    public function test_the_options_are_narrowed_by_the_objective_already_chosen(): void
+    {
+        $this->campaign('Sales push');
+
+        $awareness = UnifiedCampaign::create([
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'name' => 'Brand week', 'status' => 'active', 'objective' => 'awareness',
+            'total_budget' => 100, 'budget_currency' => 'SAR',
+        ]);
+
+        $this->assertNotNull($awareness->getKey());
+
+        $names = array_column($this->fetchOptions('?objective=awareness')['options'], 'name');
+
+        $this->assertSame(['Brand week'], $names, 'the picker offered a campaign the objective filter excludes');
+    }
+
+    /**
+     * A RESOLUTION is not a search, and it is not narrowed either.
+     *
+     * `?ids=` answers for campaigns the reader ALREADY holds — a shared link arrives carrying them
+     * and nothing else. Narrowing that by the current platform would render the reader's own choice
+     * as a bare uuid the moment they also filtered by platform, which is the defect the `ids` branch
+     * was added to fix. It stays unnarrowed on purpose.
+     */
+    public function test_a_platform_filter_does_not_narrow_a_resolution(): void
+    {
+        $snap = $this->campaign('Snapchat — Ramadan');
+
+        $this->onProvider($snap, 'snapchat');
+
+        $names = array_column($this->fetchOptions('?provider=meta&ids='.$snap->getKey())['options'], 'name');
+
+        $this->assertSame(['Snapchat — Ramadan'], $names, 'a chosen campaign stopped resolving under a platform filter');
+    }
+
+    /** An ad account for a provider — `external_campaigns.external_account_id` is NOT NULL. */
+    private function account(string $provider): ExternalAccount
+    {
+        $connection = app(TokenVault::class)->open(
+            tenantId: (string) $this->tenant->getKey(),
+            provider: $provider,
+            tokens: new OAuthTokens('AT', 'RT', Carbon::now()->addDays(30)),
+            connectionName: $provider,
+        );
+
+        return ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(),
+            'provider_connection_id' => $connection->getKey(),
+            'provider' => $provider,
+            'account_type' => 'ad_account',
+            'external_id' => $provider.'-ad-'.uniqid(),
+            'name' => ucfirst($provider),
+            'currency' => 'SAR',
+            'status' => 'active',
+        ]);
+    }
+
+    /** A unified campaign made real on one platform, which is how it acquires a provider at all. */
+    private function onProvider(UnifiedCampaign $campaign, string $provider): void
+    {
+        ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'external_account_id' => $this->account($provider)->getKey(),
+            'unified_campaign_id' => $campaign->getKey(),
+            'provider' => $provider,
+            'external_id' => $provider.'-'.uniqid(),
+            'name' => $campaign->name,
+            'status' => 'active',
+        ]);
     }
 
     /** The list carries an id and a name — and deliberately no figures. */
