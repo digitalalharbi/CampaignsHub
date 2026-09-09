@@ -294,6 +294,52 @@ test.describe('every media shape keeps its own treatment', () => {
   })
 })
 
+/**
+ * CONTENT-DETAIL-MODAL-001 — the analytics modal, which nothing could open.
+ *
+ * The row has said «no ad row in this install's demo data has a matched creative, so the preview
+ * control is not drawn and the surface cannot be exercised here» since it was written. Asked of the
+ * seeded database it was true and worse than it read: the store project held 85 ads and 60 creatives
+ * with ZERO links, and nothing in the repository wrote `entity_daily_metrics` at all — so the ads
+ * table was empty in every project and there was no row to open a preview from, in any install.
+ *
+ * `DemoAdCreativeLinkSeeder` supplies both halves. This walks the surface the row asked for.
+ */
+test.describe('the preview an operator opens from Analytics', () => {
+  test.use({ storageState: AUTH.owner })
+
+  test('an ad row opens its creative in place', async ({ page, request }) => {
+    const projectId = await seededProject(request, STORE_PROJECT)
+    await selectProject(page, projectId)
+
+    await page.goto('/agency/analytics?tab=ads')
+    await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
+
+    /*
+     * A FLOOR, not a skip. The seeder links a bounded number of ads and writes their metrics, so no
+     * thumbnail here means the seed or the entity table regressed — which is the state this test
+     * exists to catch, and the state it would hide by skipping.
+     */
+    const thumb = page.locator('[data-testid^="ad-thumb-"]').first()
+    await expect(
+      thumb,
+      'no ad row offered a preview control — the seeded ad/creative link or its entity rows are gone',
+    ).toBeVisible({ timeout: 30000 })
+
+    await thumb.click()
+
+    // In place: a dialog, not a route change away from the table the reader was reading.
+    await expect(page.getByTestId('ad-preview-dialog')).toBeVisible({ timeout: 15000 })
+    await expect(page).toHaveURL(/\/agency\/analytics/)
+
+    // The row's own figures travel with it, so the modal is about the ad the reader clicked.
+    await expect(page.getByTestId('ad-preview-dialog-figures')).toBeVisible()
+
+    await page.getByTestId('ad-preview-dialog-close').click()
+    await expect(page.getByTestId('ad-preview-dialog')).toHaveCount(0)
+  })
+})
+
 test.describe('one asset across platforms', () => {
   test.use({ storageState: AUTH.owner })
 
