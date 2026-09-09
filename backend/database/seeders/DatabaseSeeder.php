@@ -125,6 +125,20 @@ class DatabaseSeeder extends Seeder
              * demo world than the same seeders run twice, and no one reading either would know.
              */
             $this->call(DemoCreativesSeeder::class);
+            /*
+             * CONTENT-DETAIL-MODAL-001 — an ad row a preview can be opened FROM.
+             *
+             * AFTER `DemoCreativesSeeder`, and that ordering is the whole reason this comment exists:
+             * placed with the other creative work it linked NOTHING, because the store project's own
+             * creatives are written down here and did not exist yet. The seeder reported «0 ads» and
+             * was right to.
+             *
+             * Measured before it was written — the store project held 85 ads and 60 creatives with
+             * zero links between them, and nothing in this repository wrote `entity_daily_metrics` at
+             * all, so the Analytics ad table was empty in EVERY project and the modal had no row to
+             * open from.
+             */
+            $this->call(DemoAdCreativeLinkSeeder::class);
             // DEMO-COMMERCE — the merchant's ledger. AFTER `DemoIntegrationsSeeder`, because an order
             // can only carry a `utm_campaign` that names a real campaign once those exist; without
             // them every order would seed as unattributed and the store half of the funnel, and
