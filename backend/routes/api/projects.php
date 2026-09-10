@@ -141,6 +141,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::post('spend-limits', [SpendLimitController::class, 'store'])->middleware('project.can:budget.manage')->name('spend-limits.store');
     Route::match(['put', 'patch'], 'spend-limits/{spendLimit}', [SpendLimitController::class, 'update'])->middleware('project.can:budget.manage')->name('spend-limits.update');
     Route::delete('spend-limits/{spendLimit}', [SpendLimitController::class, 'destroy'])->middleware('project.can:budget.manage')->name('spend-limits.destroy');
+    // The PLATFORM rung, between the project total and the accounts — same guard as its neighbours.
+    Route::get('metrics/budget-platforms', [MetricsController::class, 'budgetPlatforms'])->middleware('project.can:budget.view')->name('metrics.budget-platforms');
     Route::get('metrics/budget-accounts', [MetricsController::class, 'budgetAccounts'])->middleware('project.can:budget.view')->name('metrics.budget-accounts');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');
     // NORM-001: what was done to the numbers before they were shown — currency, timezone, attribution,

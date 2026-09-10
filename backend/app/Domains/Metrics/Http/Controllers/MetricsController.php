@@ -754,6 +754,30 @@ final class MetricsController extends Controller
      * will actually enforce». Different questions, different rows, and merging them would produce a
      * table where a column means one thing on some rows and something else on others.
      */
+    /**
+     * BUDGET-GOVERNANCE-001 — the PLATFORM rung of the budget hierarchy.
+     *
+     * `budgetPacingByProvider()` has existed since the digest needed it, and the daily email, the
+     * generated report and the client's live link have all been showing it. The operator running the
+     * account could not see it anywhere: the product had a project total, an account table and a
+     * campaign table, and nothing in between — so «which platform is overspending» was a question a
+     * client could answer from their report and the person responsible could not.
+     *
+     * The same shape the campaign rung returns, so the interface reads it with one table rather than
+     * a second one that would drift.
+     */
+    public function budgetPlatforms(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        return ApiResponse::success(
+            $this->scoped($request)->budgetPacingByProvider($from, $to, Carbon::today()),
+            'Budget pacing by platform.',
+            meta: $this->meta($from, $to),
+        );
+    }
+
     public function budgetAccounts(Request $request): JsonResponse
     {
         $this->authorizeView($request);
