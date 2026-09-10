@@ -347,6 +347,8 @@ export interface ScheduledWorkRow {
   failure_message: string | null
   /** Null when there is no history to judge against — rendered as its own thing, never as «fine». */
   overdue: boolean | null
+  /** When the scheduler will run it next, computed from its own expression. Null if unparseable. */
+  next_run_at: string | null
   consecutive_failures: number
 }
 

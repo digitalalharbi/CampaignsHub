@@ -6,6 +6,8 @@ namespace App\Domains\Ops\Services;
 
 use App\Domains\Ops\Models\ScheduledRun;
 use Carbon\CarbonInterface;
+use Cron\CronExpression;
+use Illuminate\Console\Scheduling\Event as ScheduledEvent;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Carbon;
 
@@ -78,6 +80,7 @@ final class ScheduledWorkStatus
                  * answer», and the surface must render that as its own thing rather than as «fine».
                  */
                 'overdue' => $last === null ? null : $this->overdue($event->expression, $last->started_at, $now),
+                'next_run_at' => $this->nextRun($event, $now)?->toIso8601String(),
                 /*
                  * AUTOMATION-FIRST-OPERATIONS-001 — «failed once» and «failing every night» are
                  * different problems, and the console showed the same thing for both.
@@ -136,6 +139,46 @@ final class ScheduledWorkStatus
      * would produce confident-looking alarms around DST, month boundaries and a scheduler that is
      * merely a few minutes late.
      */
+    /**
+     * When this command runs next — the answer, not the expression.
+     *
+     * The row already carried `expression`, and «0 3 * * *» is not an answer: it does not tell an
+     * operator whether the thing they are waiting for happens in ten minutes or in twenty-three
+     * hours. Parsed with the library Laravel's own scheduler uses to decide the same question, so
+     * the surface and the scheduler cannot disagree about it.
+     *
+     * The event's TIMEZONE is read rather than assumed, and this is NOT currently exercised: the app
+     * runs in UTC and no scheduled event sets one of its own, so today the branch is a no-op. It is
+     * here because the first event that does set one would otherwise be reported hours out — in the
+     * small hours, which is when these commands run and when somebody is on this page asking why one
+     * did not. Stated plainly so nobody reads it as a tested guarantee.
+     *
+     * Null rather than a throw when an expression cannot be parsed. A malformed entry is a real
+     * possibility on a box somebody edited, and this page exists to be readable when something is
+     * wrong — taking it down because one row is unparseable would be the observability defect this
+     * whole service is written to avoid.
+     */
+    private function nextRun(ScheduledEvent $event, CarbonInterface $now): ?Carbon
+    {
+        try {
+            $timezone = $event->timezone instanceof \DateTimeZone
+                ? $event->timezone->getName()
+                : (string) $event->timezone;
+
+            if ($timezone === '') {
+                $timezone = (string) config('app.timezone') ?: 'UTC';
+            }
+
+            $from = Carbon::instance($now->toDateTime())->setTimezone($timezone);
+
+            $next = (new CronExpression($event->expression))->getNextRunDate($from);
+
+            return Carbon::instance($next)->setTimezone($timezone);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function overdue(string $expression, ?CarbonInterface $lastStart, CarbonInterface $now): bool
     {
         if ($lastStart === null) {

@@ -131,6 +131,36 @@ final class ScheduledWorkObservabilityTest extends TestCase
     }
 
     /**
+     * AUTOMATION-FIRST-OPERATIONS-001 — «when will it run next» is on the surface, not in somebody's head.
+     *
+     * The row already carries the cron EXPRESSION, and an expression is not an answer: «0 3 * * *»
+     * tells an operator nothing about whether the thing they are waiting for happens in ten minutes
+     * or in twenty-three hours. That is the difference between a page you can act on and a page you
+     * have to decode, and it is the half of this requirement's remaining clause that needs no command
+     * to cooperate — the schedule already knows.
+     *
+     * Asserted as a real instant in the future rather than a formatted string: the format belongs to
+     * the reader, and pinning one here would test the presentation instead of the answer.
+     */
+    public function test_every_command_says_when_it_runs_next(): void
+    {
+        $rows = app(ScheduledWorkStatus::class)->all();
+
+        $this->assertNotSame([], $rows, 'the scheduler reported no commands at all');
+
+        foreach ($rows as $row) {
+            $this->assertArrayHasKey('next_run_at', $row, "«{$row['command']}» does not say when it runs next");
+            $this->assertNotNull($row['next_run_at'], "«{$row['command']}» has a schedule but no next run");
+
+            $next = Carbon::parse((string) $row['next_run_at']);
+            $this->assertTrue(
+                $next->isFuture(),
+                "«{$row['command']}» reported a next run in the past: {$row['next_run_at']}",
+            );
+        }
+    }
+
+    /**
      * The list comes from the SCHEDULER, not from the ledger.
      *
      * Built from the ledger, a command that has never run once — precisely the failure worth catching —

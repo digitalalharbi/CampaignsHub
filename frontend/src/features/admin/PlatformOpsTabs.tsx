@@ -216,6 +216,26 @@ export function ScheduledWorkTab() {
             : 4
   const rows = [...scheduled].sort((a, b) => rank(a) - rank(b) || a.command.localeCompare(b.command))
 
+  /*
+   * «In 3h», not «0 3 * * *».
+   *
+   * The row has always carried the cron expression, and an expression is not an answer: it does not
+   * tell an operator whether the thing they are waiting for happens in ten minutes or tomorrow. The
+   * expression stays beside it for anyone who reads cron; this is for everyone who does not, and it
+   * is the question actually being asked when somebody opens this page at 03:40.
+   */
+  const untilNext = (iso: string | null): string | null => {
+    if (iso === null) return null
+    const ms = Date.parse(iso) - Date.now()
+    if (Number.isNaN(ms)) return null
+    if (ms <= 0) return ar ? 'الآن' : 'due now'
+    const mins = Math.round(ms / 60_000)
+    if (mins < 60) return ar ? `بعد ${mins} دقيقة` : `in ${mins}m`
+    const hours = Math.round(mins / 60)
+    if (hours < 48) return ar ? `بعد ${hours} ساعة` : `in ${hours}h`
+    return ar ? `بعد ${countedDays(Math.round(hours / 24), 'ar')}` : `in ${Math.round(hours / 24)}d`
+  }
+
   const ago = (iso: string | null): string => {
     if (iso === null) return '—'
     const ms = Date.now() - Date.parse(iso)
@@ -264,6 +284,12 @@ export function ScheduledWorkTab() {
               </span>
               {r.last_duration_ms !== null && (
                 <span dir="ltr">{Math.round(r.last_duration_ms / 1000)}s</span>
+              )}
+              {untilNext(r.next_run_at) !== null && (
+                <span data-testid={`next-run-${r.command}`}>
+                  {ar ? 'التالي: ' : 'Next: '}
+                  <span dir="ltr">{untilNext(r.next_run_at)}</span>
+                </span>
               )}
             </div>
 

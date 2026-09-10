@@ -33,6 +33,8 @@ const row = (over: Partial<ScheduledWorkRow> = {}): ScheduledWorkRow => ({
   last_outcome: 'completed',
   last_started_at: new Date(Date.now() - 5 * 60_000).toISOString(),
   last_duration_ms: 4200,
+  // The server always sends the key; null only when its expression could not be parsed.
+  next_run_at: new Date(Date.now() + 25 * 60_000).toISOString(),
   failure_class: null,
   failure_message: null,
   overdue: false,
@@ -62,6 +64,31 @@ describe('the scheduled work surface', () => {
     expect(item).toHaveTextContent('integrations:sync')
     expect(item).toHaveTextContent('*/30 * * * *')
     expect(within(item).getByTestId('scheduled-state-integrations:sync')).toHaveTextContent('ok')
+  })
+
+  /**
+   * AUTOMATION-FIRST-OPERATIONS-001 — «in 25m», not a cron expression.
+   *
+   * The row has always carried the expression, and an expression is not an answer: it does not tell
+   * an operator whether the thing they are waiting for happens in ten minutes or tomorrow. That is
+   * the question actually being asked by somebody who opened this page at 03:40 because a digest did
+   * not arrive. The expression stays for anyone who reads cron; this is for everyone who does not.
+   */
+  it('says when each command runs next, in words rather than in cron', async () => {
+    vi.mocked(fetchScheduledWork).mockResolvedValue(payload([row({ command: 'notifications:send-digests' })]))
+    renderWithProviders(<ScheduledWorkTab />, { locale: 'en' })
+
+    const next = await screen.findByTestId('next-run-notifications:send-digests')
+    expect(next).toHaveTextContent(/in 25m/)
+  })
+
+  /** A command whose expression could not be parsed says nothing rather than guessing. */
+  it('says nothing about the next run when the server could not compute one', async () => {
+    vi.mocked(fetchScheduledWork).mockResolvedValue(payload([row({ command: 'alerts:evaluate', next_run_at: null })]))
+    renderWithProviders(<ScheduledWorkTab />, { locale: 'en' })
+
+    await screen.findByTestId('scheduled-alerts:evaluate')
+    expect(screen.queryByTestId('next-run-alerts:evaluate')).not.toBeInTheDocument()
   })
 
   it('separates never-observed from ok, because it is not the same answer', async () => {
