@@ -2810,6 +2810,26 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
 }
 
 function ObjectiveTab({ projectId, range, filters }: TabProps) {
+  /*
+   * OBJECTIVE-ANALYTICS-DEPTH-001 — the family tables were a dead end.
+   *
+   * They answer «which of these sales campaigns is worth more money next week». The reader's next
+   * question is always «which ad set, which ad», and reaching it meant leaving this tab, switching
+   * to Ad sets, and finding the campaign again by eye in a list that is not grouped by family.
+   *
+   * The rung tables already exist and are tested; only the way in was missing. This is the SAME
+   * drill vocabulary the entity tables use — `drillInto` then `encodePath`, with `TAB_FOR` deciding
+   * where a level is read — rather than a second way of saying where the reader is.
+   */
+  const drillWrite = useUrlWriter()
+  const drillToAdSets = (campaignId: string, name: string | null) => {
+    rememberName(campaignId, name)
+    drillWrite({
+      drill: { value: encodePath(drillInto([], { level: 'campaign', id: campaignId, name })), fallback: '' },
+      tab: { value: TAB_FOR.ad_set, fallback: 'performance' },
+    })
+  }
+
   /* The same decomposition the overview uses, on the axis this tab is about — see the note below. */
   const drivers = useDrivers(projectId, range, 'objective', 'spend', filters)
 
@@ -3052,6 +3072,7 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                   currency={currency}
                   locale={ar ? 'ar' : 'en'}
                   specs={SPECS}
+                  onDrill={drillToAdSets}
                 />
               </div>
             )
