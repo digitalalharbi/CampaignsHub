@@ -73,12 +73,7 @@ export default defineConfig({
     setupFiles: './src/test/setup.ts',
     css: false,
     // Playwright e2e specs live in ./e2e and run via `npx playwright test`, not vitest.
-    /*
-     * The e2e SPECS are Playwright's, but `e2e/railWalkTimeout.ts` is arithmetic, and arithmetic is
-     * checkable here. Excluding the whole directory left the number that decides whether a gate can
-     * spend its own ceiling as the one number nothing tested — and it was wrong.
-     */
-    exclude: ['e2e/**/*.spec.ts', 'node_modules/**', 'dist/**'],
+    exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
     /*
      * 15s, against vitest's 5s default — because the default was failing correct tests.
      *

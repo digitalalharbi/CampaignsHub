@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { PLAYWRIGHT_DEFAULT_TIMEOUT, RAIL_PAINT_TIMEOUT, RAIL_PATH_BUDGET, railBudget } from './railWalkTimeout'
+import { PLAYWRIGHT_DEFAULT_TIMEOUT, RAIL_PAINT_TIMEOUT, RAIL_PATH_BUDGET, railBudget } from '../../e2e/railWalkTimeout'
 
 /**
- * GATE-WK-001 — the ceiling this file argues for has to be one a test can actually reach.
+ * GATE-WK-001 — the ceiling `e2e/railWalkTimeout.ts` argues for has to be one a test can reach.
+ *
+ * ## Why this file is here and not beside the constant
+ *
+ * It was, and the gate refused it: Playwright's default `testMatch` is `**\/*.@(spec|test).*`, so a
+ * `.test.ts` inside `e2e/` is a Playwright spec whatever it imports — all three browsers died on
+ * `describe is not a function` before a single page loaded. Vitest owns `src/`, Playwright owns
+ * `e2e/`, and the arithmetic is imported across the line rather than moving the constant away from
+ * the specs that read it.
  *
  * `the advanced destinations still open` walked three admin routes, each asserted with
  * `{ timeout: RAIL_PAINT_TIMEOUT }` — forty-five seconds — inside a test Playwright stops at thirty,
