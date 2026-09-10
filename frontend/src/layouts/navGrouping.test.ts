@@ -47,6 +47,15 @@ const AGENCY_BEFORE = [
    * assertion into a subset check would be the thing decision 20 forbids. See the reversal recorded
    * in «the portals stay distinct» below for why an agency now has this entry.
    */
+  /*
+   * ADDED by SHORT-LINKS-001, deliberately.
+   *
+   * A short link belongs to whoever is sending the message, and an agency sends them on behalf of
+   * five clients — the backend route is workspace-level and `portal:app,agency` like the rest, so
+   * leaving the entry out of one portal would hide a working feature from the reader who uses it
+   * most. Pinned here, like the two below, so the NEXT addition is also a decision.
+   */
+  '/agency/short-links',
   '/agency/integrations',
   /*
    * ADDED for the same reason, and just as deliberately.
