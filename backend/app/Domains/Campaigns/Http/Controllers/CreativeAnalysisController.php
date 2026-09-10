@@ -93,27 +93,62 @@ final class CreativeAnalysisController extends Controller
 
         $perPage = min((int) $request->integer('per_page', 24) ?: 24, self::PER_PAGE_MAX);
         $page = max((int) $request->integer('page', 1), 1);
-        $total = (clone $query)->count();
 
-        $creatives = $this->applySort($query, $request, $from, $to)
-            ->forPage($page, $perPage)
-            ->get();
+        $sorted = $this->applySort($query, $request, $from, $to);
+        $health = $request->string('health')->toString();
+
+        if ($health === '') {
+            $total = (clone $query)->count();
+            $creatives = $sorted->forPage($page, $perPage)->get();
+        } else {
+            /*
+             * ANALYTICS-FILTER-TRUTH-001 — the health filter narrows the LIBRARY, before the page.
+             *
+             * The verdict is an assessment over two windows rather than a stored column, so it
+             * cannot be a `where`. That is why this used to paginate first and filter the resulting
+             * array — which narrowed twenty-four rows and called the answer a library: a matching
+             * creative anywhere past page one was invisible, `total` became the count of what
+             * survived one page, and «no results» read the same as «none on this page».
+             *
+             * The scope is judged whole instead. `idsWithFatigueStatus()` assesses every candidate
+             * from the same two grouped queries `present()` already makes — two for thirty creatives
+             * and two for three thousand, never one per row — and the ids come back in the reader's
+             * chosen order, so the pagination below is a slice of the FILTERED set and `total` is
+             * its real size. Only the page that survives is then presented, which is where the cost
+             * of building a card actually lives.
+             */
+            $candidates = $sorted->pluck('external_creatives.id')->map(static fn (mixed $id): string => (string) $id)->all();
+            $matching = $this->rows->idsWithFatigueStatus($candidates, $from, $to, $health);
+
+            $total = count($matching);
+            $pageIds = array_slice($matching, ($page - 1) * $perPage, $perPage);
+
+            /*
+             * Re-read in the order the filter answered in — `whereIn` promises no order at all, and
+             * a page that silently re-sorted itself would undo the reader's own choice of sort.
+             */
+            $position = array_flip($pageIds);
+            $creatives = $pageIds === []
+                ? ExternalCreative::query()->whereRaw('1 = 0')->get()
+                : ExternalCreative::query()->whereIn('id', $pageIds)->get()
+                    ->sortBy(static fn (ExternalCreative $c): int => $position[(string) $c->getKey()] ?? PHP_INT_MAX)
+                    ->values();
+        }
 
         $rows = $this->present($creatives, $from, $to, withFatigue: true);
-
-        // A status filter that depends on the ASSESSMENT can only be applied once the assessment
-        // exists, so it runs here rather than in SQL — and the total is corrected so the pager never
-        // promises pages that were filtered away.
-        $health = $request->string('health')->toString();
-        if ($health !== '') {
-            $rows = array_values(array_filter($rows, fn (array $r): bool => ($r['fatigue']['status'] ?? null) === $health));
-        }
 
         return ApiResponse::success([
             'creatives' => $rows,
             'page' => $page,
             'per_page' => $perPage,
-            'total' => $health === '' ? $total : count($rows),
+            /*
+             * The size of the FILTERED library, never of the page.
+             *
+             * This read `count($rows)` under a health filter, which is the number of rows on the
+             * page being returned — so the pager could not compute a second page and the reader was
+             * told the library held what one screen happened to show.
+             */
+            'total' => $total,
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             /*
              * CREATIVE-MONEY-TRUTH-001 — what the money on these cards is IN.
