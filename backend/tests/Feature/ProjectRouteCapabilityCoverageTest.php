@@ -35,8 +35,9 @@ final class ProjectRouteCapabilityCoverageTest extends TestCase
      *
      * `projects.show` and the context/switcher routes resolve WHICH project the reader is asking
      * about; a capability check on them would need the answer they are computing. The metrics
-     * family is guarded inside `MetricsController` by `authorizeView`, which additionally narrows
-     * the FIGURES to the reader's scope — a route-level check would be coarser, not stricter.
+     * family is guarded inside `MetricsController` by `authorizeView`, on every action rather than
+     * on eighteen route lines — see the note on `CONTROLLER_GUARDED`, and the reason that entry is
+     * now checked instead of believed.
      *
      * @var list<string>
      */
@@ -46,7 +47,7 @@ final class ProjectRouteCapabilityCoverageTest extends TestCase
          *
          * `index` and `store` have no project to resolve a capability against: one lists what the
          * reader can reach and the other creates the thing a membership would attach to. The rest —
-         * show, update, destroy, archive, restore, clone, pause, resume — are governed by the TENANT
+         * show, update, archive, restore, clone, pause, resume — are governed by the TENANT
          * permissions `projects.*`, which is the correct layer for «may this person run clients at
          * all». A project capability answers «what may they do inside THIS client», and asking it
          * about the act of creating that client is circular.
@@ -55,7 +56,6 @@ final class ProjectRouteCapabilityCoverageTest extends TestCase
         'api.v1.projects.store',
         'api.v1.projects.show',
         'api.v1.projects.update',
-        'api.v1.projects.destroy',
         'api.v1.projects.archive',
         'api.v1.projects.restore',
         'api.v1.projects.clone',
@@ -74,15 +74,49 @@ final class ProjectRouteCapabilityCoverageTest extends TestCase
          * states and enforces its own capability, and none of them consults this.
          */
         'api.v1.projects.scoped.capabilities',
+
+        /*
+         * The methodology copy, open to any project member and filed here rather than under
+         * CONTROLLER_GUARDED, where it used to sit.
+         *
+         * `DisclaimerController::resolve` makes no authorisation decision at all — it reads the
+         * effective disclaimer text for the active project — so calling it a controller that «holds a
+         * narrower check than a middleware could» was the same kind of untrue claim as the metrics
+         * entry beside it, in miniature. What is true is that this is the product's own methodology
+         * wording, carrying no client figures and no identities, and `ResolveProject` has already
+         * established that the reader may reach the project it belongs to.
+         */
+        'api.v1.projects.scoped.disclaimer.resolve',
     ];
 
-    /** Route-name prefixes whose controllers hold a narrower check than a middleware could. */
+    /**
+     * Route-name prefixes whose controllers hold a narrower check than a middleware could.
+     *
+     * ## An exemption is a claim, and this list once carried a false one
+     *
+     * The reason recorded against the metrics family said `authorizeView` «additionally narrows the
+     * FIGURES to the reader's scope — a route-level check would be coarser, not stricter». It did
+     * not. It read `hasPermission('campaigns.view')`: a TENANT permission, with no project in the
+     * question and nothing narrowed. Eighteen routes were exempted from the guard on the strength of
+     * a sentence, and a lead agent — whose preset grants no campaigns, dashboard or analytics
+     * capability — could read a project's spend, revenue, campaign breakdown, platform performance,
+     * funnel and entity drill-down while being refused its creative library and its budget.
+     *
+     * The guard was working. It had been told something untrue. So the two tests below check what
+     * the list asserts rather than trusting it: an entry that matches no route is dead and fails,
+     * and `MetricsProjectAuthorizationTest` holds the controller check this entry now names
+     * truthfully.
+     *
+     * @var list<string>
+     */
     private const CONTROLLER_GUARDED = [
+        /*
+         * `MetricsController::authorizeView()` resolves the capability through `ProjectAbilities`
+         * against the project `ResolveProject` has set — the same question the middleware asks, on
+         * every one of this controller's actions, so a route added here inherits it instead of
+         * needing somebody to remember. Held by `MetricsProjectAuthorizationTest`.
+         */
         'api.v1.projects.scoped.metrics.',
-        'api.v1.projects.scoped.leads.',
-        'api.v1.projects.scoped.integrations.',
-        'api.v1.projects.scoped.disclaimer',
-        'api.v1.projects.scoped.taxonomy.',
     ];
 
     public function test_every_project_route_states_a_capability_or_is_named_as_open(): void
@@ -157,5 +191,55 @@ final class ProjectRouteCapabilityCoverageTest extends TestCase
         }
 
         $this->assertSame([], $unknown, 'a route asks for a capability the vocabulary does not define');
+    }
+
+    /**
+     * An exemption that matches no route is not an exemption — it is a hole waiting for a name.
+     *
+     * Three of the five entries here matched nothing: `leads.`, `integrations.` and `taxonomy.`
+     * named prefixes that had been renamed or moved out from under `projects.scoped`. A dead entry
+     * costs nothing until the day a route is registered that happens to match it, and then it
+     * exempts that route silently, with a reason written for something else entirely.
+     *
+     * The same is true of `OPEN_BY_DESIGN`, and for the same reason.
+     */
+    public function test_every_exemption_still_names_a_route_that_exists(): void
+    {
+        $names = [];
+
+        foreach (Route::getRoutes() as $route) {
+            if (($name = $route->getName()) !== null) {
+                $names[] = $name;
+            }
+        }
+
+        $dead = [];
+
+        foreach (self::OPEN_BY_DESIGN as $name) {
+            if (! in_array($name, $names, true)) {
+                $dead[] = "OPEN_BY_DESIGN: {$name}";
+            }
+        }
+
+        foreach (self::CONTROLLER_GUARDED as $prefix) {
+            $matched = false;
+
+            foreach ($names as $name) {
+                if (str_starts_with($name, $prefix)) {
+                    $matched = true;
+                    break;
+                }
+            }
+
+            if (! $matched) {
+                $dead[] = "CONTROLLER_GUARDED: {$prefix}";
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $dead,
+            "These exemptions name nothing. Remove them, or fix the name:\n  ".implode("\n  ", $dead),
+        );
     }
 }
