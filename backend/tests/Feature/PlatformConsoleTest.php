@@ -52,6 +52,10 @@ final class PlatformConsoleTest extends TestCase
         return Tenant::create([
             'name' => $name, 'slug' => str($name)->slug()->value().'-'.uniqid(),
             'status' => $status, 'account_type' => $accountType,
+            // A workspace that has FINISHED setting up — the landing path depends on it
+            // (AUTH-SESSION-RACE-OBS), and these fixtures ask a portal question, not a setup one.
+            'onboarding_step' => 'done',
+            'onboarding_completed_at' => now(),
         ]);
     }
 

@@ -72,6 +72,10 @@ final class EmailSignInJourneyTest extends TestCase
             'name' => $name,
             'slug' => str($name)->slug()->value(),
             'status' => 'active',
+            // A workspace that has FINISHED setting up — the landing path depends on it
+            // (AUTH-SESSION-RACE-OBS), and these fixtures ask a portal question, not a setup one.
+            'onboarding_step' => 'done',
+            'onboarding_completed_at' => now(),
             'account_type' => $accountType,
         ]);
     }
