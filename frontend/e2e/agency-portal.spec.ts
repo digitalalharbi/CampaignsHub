@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { AUTH, untranslatedChrome, walkRail } from './helpers'
-import { RAIL_PAINT_TIMEOUT, RAIL_PATH_BUDGET } from './railWalkTimeout'
+import { RAIL_PAINT_TIMEOUT, railBudget } from './railWalkTimeout'
 
 /**
  * `/agency` is the agency's portal, and it is not the advertiser's with extra links (AGENCY-100).
@@ -40,7 +40,7 @@ test.describe('the agency portal', () => {
      * timeout raised to make a failure go away: the count is known, and a per-destination allowance
      * is the honest way to express what the test is actually waiting for.
      */
-    test.setTimeout(RAIL_PAINT_TIMEOUT + hrefs.length * RAIL_PATH_BUDGET)
+    test.setTimeout(railBudget(hrefs.length))
 
     /*
      * `walkRail` rather than a bare loop — the same walk `portal-audit.spec.ts` already uses.
@@ -83,7 +83,7 @@ test.describe('the agency portal', () => {
 
     // Same growing loop, same reasoning as above — and this one also loads each page twice over,
     // once to render and once to read all of its text back out.
-    test.setTimeout(RAIL_PAINT_TIMEOUT + hrefs.length * RAIL_PATH_BUDGET)
+    test.setTimeout(railBudget(hrefs.length))
 
     await toggleLanguage(page)
     await expect(page.locator('html')).toHaveAttribute('dir', 'ltr')

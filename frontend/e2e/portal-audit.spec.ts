@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { AUTH, contentLength, untranslatedChrome, walkRail } from './helpers'
-import { RAIL_PAINT_TIMEOUT, RAIL_PATH_BUDGET } from './railWalkTimeout'
+import { RAIL_PAINT_TIMEOUT, railBudget } from './railWalkTimeout'
 
 /**
  * Every route in a portal leads somewhere real (REVIEW-001).
@@ -62,7 +62,7 @@ test.describe('the advertiser portal', () => {
      * that genuinely fails to render still fails — the difference is that a slow machine no longer
      * looks like a broken page.
      */
-    test.setTimeout(RAIL_PAINT_TIMEOUT + hrefs.length * RAIL_PATH_BUDGET)
+    test.setTimeout(railBudget(hrefs.length))
 
     await walkRail(page, hrefs)
   })
@@ -81,7 +81,7 @@ test.describe('the agency portal', () => {
     expect(hrefs.length, 'the agency rail has no links').toBeGreaterThan(3)
 
     // Same reasoning as the advertiser walk above: budget the clock to the number of pages opened.
-    test.setTimeout(RAIL_PAINT_TIMEOUT + hrefs.length * RAIL_PATH_BUDGET)
+    test.setTimeout(railBudget(hrefs.length))
 
     await walkRail(page, hrefs)
   })
@@ -100,7 +100,7 @@ test.describe('the platform console', () => {
     expect(hrefs.length, 'the admin rail has no links').toBeGreaterThan(3)
 
     // Same reasoning as the advertiser walk above: budget the clock to the number of pages opened.
-    test.setTimeout(RAIL_PAINT_TIMEOUT + hrefs.length * RAIL_PATH_BUDGET)
+    test.setTimeout(railBudget(hrefs.length))
 
     await walkRail(page, hrefs)
   })
@@ -174,7 +174,7 @@ test.describe('the client portal', () => {
     expect(hrefs.length, 'the client rail has no links').toBeGreaterThan(3)
 
     // Same reasoning as the advertiser walk above: budget the clock to the number of pages opened.
-    test.setTimeout(RAIL_PAINT_TIMEOUT + hrefs.length * RAIL_PATH_BUDGET)
+    test.setTimeout(railBudget(hrefs.length))
 
     await walkRail(page, hrefs)
   })
@@ -226,7 +226,7 @@ test.describe('the client portal, in depth', () => {
      * that is genuinely being done is not the same act as raising one to wait longer for something
      * that never arrives.
      */
-    test.setTimeout(RAIL_PAINT_TIMEOUT + hrefs.length * RAIL_PATH_BUDGET)
+    test.setTimeout(railBudget(hrefs.length))
 
     await page.getByRole('button', { name: 'Toggle language' }).first().click()
     await expect(page.locator('html')).toHaveAttribute('dir', 'ltr')
