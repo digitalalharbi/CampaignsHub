@@ -129,3 +129,43 @@ test('link-external modal opens and labels sandbox data as Demo', async ({ page 
   // The modal makes clear this is demo data, not a production connection.
   await expect(page.getByText(/Sandbox data is demo|بيانات Sandbox تجريبية/)).toBeVisible()
 })
+
+/**
+ * BUDGET-GOVERNANCE-001 — the overview answers what is LEFT and where the period ENDS.
+ *
+ * The page showed a budget and what had been spent and stopped there, while the server had already
+ * computed the remaining, the straight-line projection and the pace for every campaign. This is the
+ * one assertion that holds the row is actually ON the page: `portfolioBudget` has unit tests for the
+ * arithmetic and `BudgetPacingRow` for the reading, and removing the row from the overview left all
+ * 144 campaign tests green.
+ *
+ * Written against whichever answer the seed produces — figures, or the stated refusal — because both
+ * are correct outcomes and pinning the demo's numbers would make this a test of the seeder.
+ */
+test('the campaigns overview paces the portfolio budget', async ({ page }) => {
+  // Project first, then the page — the order every passing spec here uses; reversed, the page
+  // renders its «choose a project» state and never reaches the overview.
+  await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
+  await page.goto('/app/campaigns')
+  await switchToEnglish(page)
+  // The view mode persists between specs, so the overview is SELECTED rather than assumed.
+  await page.getByTestId('view-overview').click()
+
+  const pacing = page.getByTestId('budget-pacing')
+  const refusal = page.getByTestId('budget-pacing-unavailable')
+
+  await expect(pacing.or(refusal).first(), 'the overview says nothing at all about the budget').toBeVisible({ timeout: 20_000 })
+
+  if (await pacing.isVisible()) {
+    // The three figures the page could not answer before, and the sentence that reads them.
+    await expect(pacing).toContainText(/Remaining|المتبقي/)
+    await expect(pacing).toContainText(/Forecast|المتوقع/)
+    await expect(page.getByTestId('budget-pacing-reading')).toContainText(/budget|الميزانية/)
+  } else {
+    /*
+     * A refusal is a correct answer and must SAY which one — «no comparable budget» and «different
+     * currencies» are different facts, and a blank row would be neither.
+     */
+    await expect(refusal).toContainText(/comparable budget|currencies|الميزانية|عملات/)
+  }
+})
