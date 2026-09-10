@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Agency\Http\Controllers\ClientBudgetController;
 use App\Domains\AI\Http\Controllers\AICredentialController;
 use App\Domains\Alerts\Http\Controllers\AlertController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
@@ -70,6 +71,15 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
     Route::get('short-links', [ShortLinkController::class, 'index'])->name('short-links.index');
     Route::post('short-links', [ShortLinkController::class, 'store'])->name('short-links.store');
     Route::post('short-links/{link}/disable', [ShortLinkController::class, 'disable'])->name('short-links.disable');
+
+    /*
+     * BUDGET-GOVERNANCE-001 — the CLIENT rung of the budget hierarchy.
+     *
+     * Workspace-level because it spans an agency's clients rather than sitting inside one project,
+     * and gated on  AND : it answers a money question about every client
+     * the reader can reach, so holding either permission alone is not enough.
+     */
+    Route::get('agency/client-budgets', ClientBudgetController::class)->name('agency.client-budgets');
 
     // Tasks.
     Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');

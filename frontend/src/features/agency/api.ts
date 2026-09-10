@@ -77,3 +77,28 @@ export function withdrawClientScope(membershipId: string, clientId: string): Pro
 export function replaceClientScopes(membershipId: string, clientIds: string[]): Promise<{ member: AgencyTeamMember }> {
   return putData(`/agency/team/${membershipId}/scopes`, { client_ids: clientIds })
 }
+
+/**
+ * BUDGET-GOVERNANCE-001 — the CLIENT rung of the budget hierarchy.
+ *
+ * One row per client the reader can reach, rolled up across that client's projects. The nulls are
+ * load-bearing: `budget: null` means «nothing comparable to add», never «no budget», and `excluded`
+ * counts the campaigns left out so a total can never quietly drop one.
+ */
+export interface ClientBudgetRow {
+  client_id: string
+  client_name: string
+  projects: number
+  campaigns: number
+  budget: number | null
+  spent: number | null
+  remaining: number | null
+  projected: number | null
+  /** `projected / budget`. 1.0 lands on budget; above it overruns. */
+  pace: number | null
+  currency: string | null
+  currencies: number
+  excluded: number
+}
+
+export const fetchClientBudgets = () => getData<ClientBudgetRow[]>('/agency/client-budgets')

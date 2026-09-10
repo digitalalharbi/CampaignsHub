@@ -4,7 +4,8 @@ import { AgencyDashboardPage } from './AgencyDashboardPage'
 import type { AgencyDashboard } from './api'
 import { renderWithProviders } from '@/test/utils'
 
-vi.mock('./api', () => ({ fetchAgencyDashboard: vi.fn() }))
+/* The client-budget rung is its own query on this page — stubbed empty so it renders nothing here. */
+vi.mock('./api', () => ({ fetchAgencyDashboard: vi.fn(), fetchClientBudgets: vi.fn(() => Promise.resolve([])) }))
 
 import { fetchAgencyDashboard } from './api'
 
