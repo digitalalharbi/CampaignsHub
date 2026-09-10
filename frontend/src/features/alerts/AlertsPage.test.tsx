@@ -36,8 +36,10 @@ vi.mock('./api', async (orig) => {
   return { ...actual, listAlertRules: vi.fn(), createAlertRule: vi.fn(), listAlertEvents: vi.fn() }
 })
 vi.mock('@/features/notifications/api', () => ({ listDeliveries: vi.fn() }))
+vi.mock('@/features/projects/api', () => ({ listProjects: vi.fn() }))
 
 import { createAlertRule, listAlertEvents, listAlertRules } from './api'
+import { listProjects } from '@/features/projects/api'
 import type { AlertEvent } from './api'
 
 async function openRulesTab() {
@@ -168,5 +170,97 @@ describe('AlertsPage — the queue counts what exists, not what fitted', () => {
 
     await waitFor(() => expect(screen.getByTestId('alert-summary-open').textContent).toContain('2'))
     expect(screen.queryByTestId('alert-events-capped')).toBeNull()
+  })
+})
+
+/**
+ * ANALYTICS-FILTER-TRUTH-001 — the alerts leg of the propagation clause.
+ *
+ * This ledger is workspace-scoped ON PURPOSE — `UnifiedFigureConsistencyTest` records the decision,
+ * and the page's siblings (preferences, the delivery log) are account-level surfaces too. So the
+ * defect was never the default. It was the SILENCE: an agency holding ten clients read ten clients'
+ * alerts on one screen with nothing on any row to say whose, under an empty state that promised
+ * «no active rule has fired for this project».
+ *
+ * Narrowing is a control the reader operates, and it narrows the BACKEND. Filtering the array
+ * already fetched would be the defect this page was fixed for once before: the list is capped at 200
+ * and the badges are counted over the whole ledger, so one client's page would carry every client's
+ * count. Both halves are held here — the project travels in the REQUEST and in the query KEY.
+ */
+describe('AlertsPage — the queue says whose alert each row is, and can be narrowed to one', () => {
+  const event = (id: string, projectId: string | null): AlertEvent => ({
+    id, project_id: projectId, rule_id: 'r1', type: 'sync_failure', entity_type: null, entity_id: null,
+    status: 'open', severity: 'warning', context: null, notification_id: null, task_id: null,
+    last_triggered_at: '2026-08-20T09:00:00Z', snoozed_until: null, resolved_at: null, created_at: null,
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(listAlertRules).mockResolvedValue({ rules: [], total: 0 })
+    vi.mocked(listProjects).mockResolvedValue([
+      { id: 'p1', name: 'Henka' }, { id: 'p2', name: 'Aldairman' },
+    ] as never)
+    vi.mocked(listAlertEvents).mockResolvedValue({
+      events: [event('mine', 'p1'), event('wide', null), event('theirs', 'p2')],
+      total: 3,
+      counts: { open: 3, snoozed: 0, resolved: 0, open_critical: 0 },
+    })
+    signInWith(['alerts.view', 'alerts.manage'])
+  })
+  afterEach(() => signOut())
+
+  /** Every project by default — the recorded decision — and that is what the ledger is asked for. */
+  it('asks for the whole account until the reader narrows it', async () => {
+    renderWithProviders(<AlertsPage />, { locale: 'en' })
+
+    await waitFor(() => expect(listAlertEvents).toHaveBeenCalledWith(undefined, null))
+  })
+
+  /*
+   * The row that is deliberately NOT about one client says so, and the ones that are name theirs.
+   *
+   * A token expiring belongs to a connection, so it has no project and the server keeps it through
+   * any narrowing. Unlabelled it reads as a leak the filter missed — and a reader who concludes the
+   * filter is broken stops trusting the rows that are correct.
+   */
+  it('names the project on every row, and marks the account-wide one as account-wide', async () => {
+    renderWithProviders(<AlertsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('alert-scope-mine')).toHaveTextContent('Henka')
+    expect(screen.getByTestId('alert-scope-theirs')).toHaveTextContent('Aldairman')
+    expect(screen.getByTestId('alert-scope-wide')).toHaveTextContent('Account-wide')
+  })
+
+  it('narrows the ledger itself when a project is chosen, not the rows already fetched', async () => {
+    renderWithProviders(<AlertsPage />, { locale: 'en' })
+    await waitFor(() => expect(listAlertEvents).toHaveBeenCalledWith(undefined, null))
+
+    await screen.findByRole('option', { name: 'Aldairman' })
+    fireEvent.change(screen.getByTestId('alerts-project'), { target: { value: 'p2' } })
+
+    await waitFor(() => expect(listAlertEvents).toHaveBeenCalledWith(undefined, 'p2'))
+  })
+
+  /*
+   * Two scopes, two cache entries.
+   *
+   * Sending the project while keying on a constant is the `useEntities` defect again: React Query
+   * would answer the second scope out of the first one's cache and the narrowing would look like it
+   * had worked. Going BACK is where that shows — a key that does not carry the scope serves the
+   * narrowed page under «all projects».
+   */
+  it('keeps the two scopes apart in the cache', async () => {
+    renderWithProviders(<AlertsPage />, { locale: 'en' })
+    // The options arrive with the project list; changing the select before then sets nothing.
+    await screen.findByRole('option', { name: 'Aldairman' })
+    const select = screen.getByTestId('alerts-project')
+
+    fireEvent.change(select, { target: { value: 'p2' } })
+    await waitFor(() => expect(listAlertEvents).toHaveBeenCalledWith(undefined, 'p2'))
+
+    vi.mocked(listAlertEvents).mockClear()
+    fireEvent.change(select, { target: { value: 'p1' } })
+
+    await waitFor(() => expect(listAlertEvents).toHaveBeenCalledWith(undefined, 'p1'))
   })
 })

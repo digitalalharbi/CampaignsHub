@@ -95,8 +95,22 @@ export interface AlertEventPage {
  * over the whole ledger, so they stay true wherever the cap falls — and `total` is what lets the list
  * say it is showing 200 of 431 rather than presenting a truncated ledger as the whole one.
  */
-export async function listAlertEvents(status?: 'open' | 'snoozed' | 'resolved'): Promise<AlertEventPage> {
-  const res = await api.get<ApiEnvelope<AlertEvent[]>>('/alerts/events', { params: status ? { status } : {} })
+export async function listAlertEvents(
+  status?: 'open' | 'snoozed' | 'resolved',
+  /**
+   * The project the reader is standing in — ANALYTICS-FILTER-TRUTH-001.
+   *
+   * The ledger is tenant-wide, so without this an agency reading one client's workspace was shown
+   * every client's alerts at once. The server keeps the account-wide rows (a token expiring belongs
+   * to a connection, not to a project) and drops the neighbours'.
+   */
+  projectId?: string | null,
+): Promise<AlertEventPage> {
+  const params: Record<string, string> = {}
+  if (status) params.status = status
+  if (projectId) params.project = projectId
+
+  const res = await api.get<ApiEnvelope<AlertEvent[]>>('/alerts/events', { params })
   const events = res.data.data ?? []
   const meta = res.data.meta as { total?: number; counts?: Partial<AlertEventCounts> } | undefined
   const c = meta?.counts
