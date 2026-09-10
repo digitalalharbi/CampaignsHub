@@ -364,4 +364,40 @@ final class CreativeHealthFilterScopeTest extends TestCase
         $this->assertCount(2, $first['creatives']);
         $this->assertCount(1, $second['creatives'], 'the last page carried the remainder, not a full page');
     }
+
+    /**
+     * The Pulse card's count and the library it links to describe the same set.
+     *
+     * This is not a second statement of the same property — it is the defect's other end, and the
+     * one a person actually meets. `CreativePulseSection` renders «N fatigued» and links it into
+     * this library with `health=<status>`; `pulse()` reads `$query->get()` and assesses the WHOLE
+     * scope, while `index()` assessed a page. So the card counted the library and the destination
+     * counted twenty-four rows, and clicking a number that said twelve could land on a page that
+     * said none — with nothing on either screen to explain the contradiction.
+     *
+     * Asserted through the two endpoints rather than through the service they share, because it is
+     * the AGREEMENT that is the product promise, and the two reach it by different routes.
+     */
+    public function test_the_pulse_count_and_the_filtered_library_agree(): void
+    {
+        [, $status] = $this->seedNeedleBeyondPageOne();
+
+        $window = '?from='.now()->subDays(29)->toDateString().'&to='.now()->toDateString();
+
+        $pulse = $this->actingAs($this->operator, 'sanctum')
+            ->getJson('/api/v1/creatives/pulse'.$window)
+            ->assertOk()
+            ->json('data');
+
+        $counted = (int) ($pulse['fatigue']['counts'][$status] ?? 0);
+        $this->assertSame(1, $counted, 'the pulse card did not count the judged creative this test seeds');
+
+        $library = $this->library('&health='.$status);
+
+        $this->assertSame(
+            $counted,
+            $library['total'],
+            'the pulse card counts the library and the link it opens counts something else',
+        );
+    }
 }
