@@ -21,6 +21,8 @@ use App\Domains\Metrics\Services\EntityMetricsAggregator;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Metrics\Support\EntityScope;
+use App\Domains\Projects\Access\ProjectAbilities;
+use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -1254,9 +1256,40 @@ final class MetricsController extends Controller
         return $ids;
     }
 
+    /**
+     * TEAM-PROJECT-RBAC-001 — may this reader see THIS project's money, not «may they see money».
+     *
+     * This asked `hasPermission('campaigns.view')`, which is a TENANT permission with no project in
+     * the question at all. `ProjectAbilities` states the rule the rest of the product enforces — «a
+     * project membership is a NARROWING, and it is authoritative» — and ninety-seven project-scoped
+     * routes apply it through `project.can:…`, including this controller's own three budget routes.
+     * The other eighteen did not, so a lead agent was refused the creative library and the budget of
+     * a project while being served its spend, revenue, campaign breakdown, platform performance,
+     * funnel and entity drill-down. «Hiding a menu item is NOT security» is exactly that case: the
+     * navigation never offers them the dashboard, and the URL was one request away.
+     *
+     * Fixed HERE rather than on eighteen route lines deliberately. Every action in this controller
+     * already calls this method, and a nineteenth route added tomorrow inherits the check instead of
+     * needing somebody to remember the middleware — which is how these eighteen came to differ from
+     * the three beside them in the first place.
+     *
+     * `CAMPAIGNS_VIEW` rather than a stricter capability so nothing changes for anyone who is not
+     * narrowed: `ProjectAbilities::FROM_TENANT` maps the tenant `campaigns.view` this line already
+     * required onto exactly that capability, so agency staff reading a client's project are served
+     * as before, and a tenant administrator cannot be locked out of their own client by a narrow
+     * membership. The project context is set by `ResolveProject`, which every route here runs.
+     */
     private function authorizeView(Request $request): void
     {
-        abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
+        $user = $request->user();
+        $projectId = (string) app(ProjectContext::class)->projectId();
+
+        abort_unless(
+            $user !== null
+                && $projectId !== ''
+                && app(ProjectAbilities::class)->allows($user, $projectId, ProjectCapability::CAMPAIGNS_VIEW),
+            403,
+        );
     }
 
     /**
