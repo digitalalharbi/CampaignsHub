@@ -39,3 +39,23 @@ describe('project role labels', () => {
     expect(projectRoleLabel('auditor', true)).toBe('auditor')
   })
 })
+
+/**
+ * TEAM-PROJECT-RBAC-001 — the value the invitation path stores must be labellable.
+ *
+ * `InvitationService` wrote `'member'`, which this map has no entry for, so an invitee appeared on
+ * the team page as the literal word «member». It writes `viewer` now — the preset the unknown-role
+ * fallback already resolved it to — and this holds that the value it stores is one this page can
+ * put in front of a person.
+ */
+describe('the roles the application itself stores', () => {
+  it('labels the role an accepted invitation creates', () => {
+    expect(projectRoleLabel('viewer', true)).toBe('مُطّلع')
+    expect(projectRoleLabel('viewer', false)).toBe('Viewer')
+  })
+
+  /* The old value stays legible if a row still carries it — it just is not written any more. */
+  it('shows an unknown stored role as itself rather than blank', () => {
+    expect(projectRoleLabel('member', false)).toBe('member')
+  })
+})
