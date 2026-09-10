@@ -73,7 +73,31 @@ export function VideoPoster({
     setPainted(false)
 
     gaveUp.current = setTimeout(() => {
-      if (ref.current === null || ref.current.readyState < 2) onUnavailable()
+      /*
+       * The budget expiring asks a question; it does not assume the answer.
+       *
+       * This called `onUnavailable()` when there was no frame and did NOTHING when there was one —
+       * and «there is a frame» was reachable without the card ever knowing. `settle()` marks the
+       * card painted from the media EVENTS, and WebKit under `preload="metadata"` may bring
+       * `readyState` up to HAVE_CURRENT_DATA without firing another of them: the seek is deferred,
+       * so no `seeked`, and the data arrived before this effect attached its listeners, so no
+       * `loadeddata` either.
+       *
+       * The card then satisfied neither branch. The give-up declined because there IS a frame, and
+       * nothing set `painted` because no event came to say so — «neither painted a frame nor gave up
+       * and explained itself», which is exactly how CI's WebKit reported it, and exactly the blank
+       * card the owner sees.
+       *
+       * Asking the element at the deadline closes it: the frame is there or it is not, and either
+       * answer is one the reader can act on.
+       */
+      if (ref.current !== null && ref.current.readyState >= 2) {
+        settle()
+
+        return
+      }
+
+      onUnavailable()
     }, 8000)
 
     /*
