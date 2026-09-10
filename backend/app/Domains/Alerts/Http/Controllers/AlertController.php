@@ -205,6 +205,30 @@ final class AlertController extends Controller
         abort_unless($request->user()?->hasPermission('alerts.view'), 403);
 
         $query = AlertEvent::query();
+
+        /*
+         * ANALYTICS-FILTER-TRUTH-001 — the ledger answers for the project the reader is standing in.
+         *
+         * `AlertEvent` is tenant-scoped and nothing narrowed it further, so an agency holding ten
+         * clients opened one client's workspace and was shown ten clients' alerts on one screen,
+         * with nothing on any row to say whose. The page's own empty state promised the opposite in
+         * as many words — «no active rule has fired for this project».
+         *
+         * A NULL project is kept deliberately rather than swept out with the neighbours:
+         * `AlertEvaluator::tokenExpiries()` writes one on purpose, because a token belongs to a
+         * connection that may feed several projects or none. Hiding those on every screen a person
+         * actually opens would trade a leak for a silence, and a silence is the worse of the two.
+         *
+         * An unknown id narrows to the account-wide rows and stops there. It does not fall back to
+         * the whole tenant: «an empty filtered scope never falls back to unfiltered» is this
+         * requirement's rule, and the fallback is exactly how a chip naming somebody else's project
+         * would come to sit above everybody's alerts.
+         */
+        $project = $request->string('project')->toString();
+        if ($project !== '') {
+            $query->where(fn ($q) => $q->where('project_id', $project)->orWhereNull('project_id'));
+        }
+
         if ($status = $request->string('status')->toString()) {
             if (in_array($status, ['open', 'snoozed', 'resolved'], true)) {
                 $query->where('status', $status);
@@ -228,6 +252,8 @@ final class AlertController extends Controller
                     'resolved' => (int) $counts->where('status', 'resolved')->sum('n'),
                     'open_critical' => (int) $counts->where('status', 'open')->where('severity', 'critical')->sum('n'),
                 ],
+                // What was actually answered, so a badge can never describe a wider ledger than the list.
+                'project' => $project === '' ? null : $project,
             ],
         );
     }
