@@ -336,6 +336,53 @@ final class CreativeRows
      *
      * @return list<array<string, mixed>>
      */
+    /**
+     * ANALYTICS-FILTER-TRUTH-001 — which of these creatives carry a given fatigue verdict.
+     *
+     * The library's health filter is the one filter that cannot be expressed in SQL: the verdict is
+     * an ASSESSMENT over two windows, not a stored column, and `CreativeAnalysisController` used to
+     * reach for the only option that looked available — paginate, present the page, then filter the
+     * array. That narrowed a page rather than the library: a matching creative anywhere past the
+     * first twenty-four was invisible, `total` became the count of what survived one page, and «no
+     * results» and «none on this page» became the same sentence.
+     *
+     * The assessment does not need the models, only the figures, so the whole candidate scope can be
+     * judged from the SAME two grouped queries `present()` already makes — one for the window and
+     * one for the window before it — whatever the scope's size. Two queries for thirty creatives and
+     * two for three thousand; the expensive part, building the cards, then runs on one page of them.
+     *
+     * The order of `$ids` is preserved, because it is the reader's chosen sort and the pagination
+     * that follows is a slice of this answer.
+     *
+     * @param  list<string>  $ids  every candidate, in the order the reader asked for
+     * @return list<string> those whose verdict is `$status`, in that same order
+     */
+    public function idsWithFatigueStatus(array $ids, Carbon $from, Carbon $to, string $status): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        $figures = $this->metrics->forCreatives($ids, $from, $to);
+
+        /* The comparison window, computed exactly as `present()` computes it — one rule, not two. */
+        $days = $from->diffInDays($to) + 1;
+        $prevTo = $from->copy()->subDay();
+        $previous = $this->metrics->forCreatives($ids, $prevTo->copy()->subDays($days - 1), $prevTo);
+
+        $matching = [];
+
+        foreach ($ids as $id) {
+            $verdict = $this->fatigue->assess($figures[$id] ?? ['active_days' => 0], $previous[$id] ?? null);
+
+            if (($verdict['status'] ?? null) === $status) {
+                $matching[] = $id;
+            }
+        }
+
+        return $matching;
+    }
+
     public function present(mixed $creatives, Carbon $from, Carbon $to, bool $withFatigue, bool $withPrevious = false): array
     {
         $ids = array_map('strval', $creatives->modelKeys());

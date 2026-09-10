@@ -150,12 +150,34 @@ async function registerAndVerify(
       try {
         const r = await fetch('/api/v1/auth/me', { headers: { Accept: 'application/json' } })
         const body = await r.json()
+        /*
+         * `/auth/me` answers `{ data: { user } }` — see `AuthController::me`, which wraps a
+         * `UserResource` under the `user` key.
+         *
+         * The first version of this probe read `data.onboarding_completed_at`, `data.tenant.id` and
+         * `data.memberships`, none of which this payload has ever carried at that depth. Every
+         * occurrence therefore reported three nulls, and three nulls read as «the account has no
+         * tenant and was never onboarded» — a diagnosis the evidence did not support and the
+         * opposite of what the URL implied. An instrument that reports the same value whatever
+         * happened is worse than none: it invites a confident wrong answer.
+         */
+        const user = body?.data?.user
 
+        /*
+         * The fields below are exactly the ones `OnboardingGate` branches on, in its order, so a
+         * failure names the branch that fired rather than leaving it to be re-derived:
+         * unverified → /verify-email, platform admin → through, no account → /switch,
+         * account not completed → /onboarding.
+         */
         return JSON.stringify({
           status: r.status,
-          onboarded: body?.data?.onboarding_completed_at ?? body?.data?.tenant?.onboarding_completed_at ?? null,
-          tenant: body?.data?.tenant?.id ?? null,
-          memberships: body?.data?.memberships?.length ?? null,
+          payload_shape: user === undefined ? Object.keys(body?.data ?? {}) : 'data.user',
+          email_verified: user?.email_verified ?? null,
+          is_platform_admin: user?.is_platform_admin ?? null,
+          account: user?.account === null ? 'null' : user?.account === undefined ? 'absent' : 'present',
+          onboarding_completed: user?.account?.onboarding?.completed ?? null,
+          tenant_ids: user?.tenant_ids?.length ?? null,
+          workspace: user?.workspace_name ?? null,
         })
       } catch (e) {
         return `could not read /auth/me: ${String(e)}`
@@ -167,9 +189,18 @@ async function registerAndVerify(
      * with no cookie are opposite defects: the first says the server rejected a credential it was
      * given, the second says the browser never kept one.
      */
+    /*
+     * The DOMAIN and PATH, not just the name and length.
+     *
+     * The first version printed «XSRF-TOKEN(342 chars), campaignshub-session(342 chars)» twice and
+     * left it looking like a duplicate-session defect. A cookie jar holds one entry per
+     * (name, domain, path), and this context legitimately visits more than one host — so two entries
+     * with one name are only interesting if they differ in a way the server would notice. Printing
+     * what distinguishes them is what makes that readable instead of alarming.
+     */
     const cookie = (await page.context().cookies())
       .filter((c) => /session|XSRF/i.test(c.name))
-      .map((c) => `${c.name}(${c.value.length} chars)`)
+      .map((c) => `${c.name}@${c.domain}${c.path}(${c.value.length} chars)`)
       .join(', ') || 'none'
 
     expect(
