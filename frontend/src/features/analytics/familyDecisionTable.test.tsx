@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { FamilyDecisionTable } from './FamilyDecisionTable'
 import type { FamilyRow } from './familyTotals'
 import { SPECS as CATALOGUE } from './metricCatalog'
@@ -23,6 +23,7 @@ const SPECS = {
 }
 
 const converted = (name: string, spend: number, conversions: number, revenue = 0): FamilyRow => ({
+  campaign_id: `c-${name.toLowerCase().replace(/\s+/g, '-')}`,
   campaign_name: name,
   spend,
   revenue,
@@ -48,7 +49,7 @@ const withheld = (name: string, original: number, conversions: number): FamilyRo
   money_original_currencies: 1,
 } as unknown as FamilyRow)
 
-function table(campaigns: FamilyRow[], kpis = ['spend', 'conversions']) {
+function table(campaigns: FamilyRow[], kpis = ['spend', 'conversions'], onDrill?: (id: string, name: string | null) => void) {
   return render(
     <FamilyDecisionTable
       family="sales"
@@ -57,6 +58,7 @@ function table(campaigns: FamilyRow[], kpis = ['spend', 'conversions']) {
       currency="SAR"
       locale="en"
       specs={SPECS}
+      onDrill={onDrill}
     />,
   )
 }
@@ -298,5 +300,58 @@ describe('a cost-per carries its currency', () => {
 
     expect(grid.textContent ?? '').toMatch(/SAR/)
     expect(grid.textContent ?? '').not.toMatch(/undefined/)
+  })
+})
+
+/**
+ * OBJECTIVE-ANALYTICS-DEPTH-001 — «the ad-set and ad rungs inside the family».
+ *
+ * The family tables were a dead end. They answer «which of these sales campaigns is worth more money
+ * next week», and the reader's next question is always «why» — which ad set, which ad. Getting there
+ * meant leaving the Objectives tab, switching to Ad sets, and finding the campaign again by eye in a
+ * list that is not grouped by family at all.
+ *
+ * The rung tables already exist and are tested; what was missing was the way in. So the campaign
+ * name becomes the link, through the same `drillInto`/`encodePath` the entity tables use — one drill
+ * vocabulary, not a second — and this component stays presentational by taking a callback rather
+ * than reaching for the URL itself.
+ */
+describe('a campaign in a family leads to its rungs', () => {
+  it('drills on the campaign the reader clicked', () => {
+    const onDrill = vi.fn()
+    table([converted('Ramadan', 900, 30), converted('Eid', 400, 12)], ['spend', 'conversions'], onDrill)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ramadan' }))
+
+    expect(onDrill).toHaveBeenCalledWith('c-ramadan', 'Ramadan')
+  })
+
+  /*
+   * Without a handler the name is plain text, not a button that does nothing.
+   *
+   * A control that looks like a control and answers nothing is worse than no control: the reader
+   * concludes the drill-down is broken rather than absent, and this table is rendered on the
+   * Platforms tab too, where the same click has no destination.
+   */
+  it('renders the name as plain text where there is nowhere to go', () => {
+    table([converted('Ramadan', 900, 30), converted('Eid', 400, 12)])
+
+    expect(screen.queryByRole('button', { name: 'Ramadan' })).toBeNull()
+    expect(screen.getByText('Ramadan')).toBeVisible()
+  })
+
+  /*
+   * A row the aggregator could not name has nothing to drill INTO.
+   *
+   * `campaign_id` is nullable on the row type, and a link built from a missing id would put
+   * `campaign:` with no value in the address — a drill-down scoped to nothing, which the entity
+   * endpoint reads as «every entity of this grain» and answers with the whole project.
+   */
+  it('does not offer a link for a campaign with no id', () => {
+    const nameless = { ...converted('Nameless', 700, 20), campaign_id: null } as FamilyRow
+    table([nameless, converted('Eid', 400, 12)], ['spend', 'conversions'], vi.fn())
+
+    expect(screen.queryByRole('button', { name: 'Nameless' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Eid' })).toBeVisible()
   })
 })
