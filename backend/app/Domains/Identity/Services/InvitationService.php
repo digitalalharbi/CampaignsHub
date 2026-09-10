@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Role;
 use App\Domains\Notifications\Mail\InvitationMail;
 use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\MailLinks;
+use App\Domains\Projects\Access\ProjectRole;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Tenancy\Actions\GrantMembership;
@@ -155,9 +156,24 @@ final class InvitationService
 
             $projectIds = $inv->project_ids ? json_decode($inv->project_ids, true) : [];
             foreach ($projectIds as $projectId) {
+                /*
+                 * TEAM-PROJECT-RBAC-001 — a role the vocabulary knows, not a word meaning «somebody».
+                 *
+                 * This wrote `'member'`, which is in neither list: not among the nine roles an
+                 * operator can pick on the team page, and not among the `ProjectRole` presets. It
+                 * survived on `preset()`'s unknown-role fallback — a kindness meant for rows an older
+                 * release wrote — so every invitee landed on viewer capabilities by accident rather
+                 * than by decision, and the team page printed the literal word «member» beside their
+                 * name because no label exists for it either.
+                 *
+                 * `VIEWER` is what the fallback already resolved to, so no invitee's access changes;
+                 * what changes is that the stored value now names the decision, can be labelled, and
+                 * can be widened on the team page like any other. An invitation carries a TENANT role
+                 * and says nothing about a project, so the narrowest read is the only honest default.
+                 */
                 ProjectMembership::create([
                     'tenant_id' => $inv->tenant_id, 'project_id' => $projectId, 'user_id' => $user->id,
-                    'role' => 'member', 'status' => 'active',
+                    'role' => ProjectRole::VIEWER, 'status' => 'active',
                 ]);
             }
 

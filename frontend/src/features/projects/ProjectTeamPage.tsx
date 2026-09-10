@@ -133,7 +133,15 @@ export function ProjectTeamPage() {
                   <span className="ms-2 text-xs text-text-muted">{m.email}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge tone="info">{m.role}</Badge>
+                  {/*
+                    PROJECT-ROLE-LABEL-001 — the same map the picker uses, one line below it.
+
+                    The picker was fixed to stop offering «account_manager» in an Arabic page; the
+                    LIST kept printing the stored value, so the role somebody had just chosen from a
+                    translated menu came back as its column value. A fix applied to one of two places
+                    is the shape of defect this file already carries a docblock about.
+                  */}
+                  <Badge tone="info">{projectRoleLabel(m.role, ar)}</Badge>
                   <button
                     type="button"
                     onClick={() => removeMutation.mutate(m.id)}
