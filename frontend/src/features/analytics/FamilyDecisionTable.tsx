@@ -54,6 +54,7 @@ export function FamilyDecisionTable({
   currency,
   locale,
   specs,
+  onDrill,
 }: {
   family: string
   campaigns: FamilyRow[]
@@ -73,6 +74,25 @@ export function FamilyDecisionTable({
    * A narrowed type that makes the right call impossible is worse than no type.
    */
   specs: Record<string, { label: { ar: string; en: string }; format: (n: number, currency?: string | null) => string } | undefined>
+  /**
+   * OBJECTIVE-ANALYTICS-DEPTH-001 — the way from a family's campaign to its rungs.
+   *
+   * The family tables answer «which of these sales campaigns is worth more money next week», and the
+   * reader's next question is always «which ad set, which ad». Reaching them meant leaving this tab,
+   * switching to Ad sets and finding the campaign again by eye, in a list not grouped by family at
+   * all.
+   *
+   * A CALLBACK rather than a link built here, because this component does not own an address: the
+   * drill vocabulary — `drillInto`, `encodePath`, which tab a level is read on — belongs to the page,
+   * and reaching for a router from here would also break the component's own tests, which render it
+   * with none.
+   *
+   * OPTIONAL, and its own suite is the caller that proves why: a caller with nowhere to send the
+   * reader gets plain text instead of a control that looks like one and goes nowhere, which reads as
+   * a broken drill-down rather than an absent one. `ObjectiveTab` is the only render site today and
+   * always passes one.
+   */
+  onDrill?: (campaignId: string, name: string | null) => void
 }) {
   const ar = locale === 'ar'
 
@@ -181,12 +201,34 @@ export function FamilyDecisionTable({
   ]
 
   const bodyFor = (rows: FamilyRow[]) =>
-    rows.map((row) => [
-      <span key="n" className="block max-w-[220px] truncate font-semibold text-text-primary" title={nameOf(row)}>
-        {nameOf(row)}
-      </span>,
-      ...kpis.map((k) => <span key={k} dir="ltr">{text(row, k)}</span>),
-    ])
+    rows.map((row) => {
+      /*
+       * A row the aggregator could not name has nothing to drill INTO — `campaign_id` is nullable,
+       * and an address carrying `campaign:` with no value is a drill-down scoped to nothing, which
+       * the entity endpoint reads as «every entity of this grain» and answers for the whole project.
+       */
+      const id = row.campaign_id === null || row.campaign_id === undefined ? null : String(row.campaign_id)
+
+      return [
+        onDrill !== undefined && id !== null ? (
+          <button
+            key="n"
+            type="button"
+            data-testid={`family-drill-${id}`}
+            onClick={() => onDrill(id, row.campaign_name === null || row.campaign_name === undefined ? null : String(row.campaign_name))}
+            className="block max-w-[220px] truncate text-start font-semibold text-brand-600 hover:underline"
+            title={nameOf(row)}
+          >
+            {nameOf(row)}
+          </button>
+        ) : (
+          <span key="n" className="block max-w-[220px] truncate font-semibold text-text-primary" title={nameOf(row)}>
+            {nameOf(row)}
+          </span>
+        ),
+        ...kpis.map((k) => <span key={k} dir="ltr">{text(row, k)}</span>),
+      ]
+    })
 
   const valuesFor = (rows: FamilyRow[]) =>
     rows.map((row): SortValues => [
