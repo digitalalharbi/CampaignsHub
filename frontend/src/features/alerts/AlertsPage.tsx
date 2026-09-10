@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, BellRing, CheckCircle2, Clock, ListChecks, Plus, Settings2, Truck } from 'lucide-react'
 import { FilterBar, FilterChips, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
+import { useProject } from '@/stores/project'
 import {
   createAlertRule, createTaskFromAlert, listAlertEvents, listAlertRules,
   resolveAlert, snoozeAlert, type AlertEvent, type AlertRule, type AlertType, type NewAlertRule,
@@ -37,6 +38,7 @@ const COPY = {
     st_awaiting: 'بانتظار اعتماد المزوّد', st_sent: 'مُرسلة', st_suppressed: 'مكبوتة', st_failed: 'فشلت',
     st_quiet: 'مؤجّلة (ساعات الهدوء)', st_pref: 'مكبوتة (تفضيل)',
     minutes_60: 'ساعة', minutes_240: '4 ساعات', minutes_1440: 'يوم',
+    account_wide: 'على مستوى الحساب',
   },
   en: {
     title: 'Alerts', subtitle: 'Watch and act on operational risk — budget, results, sync, tokens, and lead follow-up.',
@@ -58,6 +60,7 @@ const COPY = {
     st_awaiting: 'Awaiting provider credentials', st_sent: 'Sent', st_suppressed: 'Suppressed', st_failed: 'Failed',
     st_quiet: 'Held (quiet hours)', st_pref: 'Suppressed (preference)',
     minutes_60: '1 hour', minutes_240: '4 hours', minutes_1440: '1 day',
+    account_wide: 'Account-wide',
   },
 }
 
@@ -128,6 +131,7 @@ type Copy = (typeof COPY)['ar']
 
 function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   const qc = useQueryClient()
+  const currentProjectId = useProject((s) => s.currentProjectId)
   const [filter, setFilter] = useState<EventFilter>('open')
   const [sev, setSev] = useState<'all' | AlertEvent['severity']>('all')
   const [type, setType] = useState<'all' | string>('all')
@@ -135,7 +139,18 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   // Live update: poll every 20s so newly-raised alerts appear without a manual refresh.
   // One read of the ledger, filtered client-side. The server caps the page at 200 and sends the
   // counts separately, because filtering a capped array is how the summary cards came to be wrong.
-  const q = useQuery({ queryKey: ['alert-events', 'all'], queryFn: () => listAlertEvents(), refetchInterval: 20_000 })
+  /*
+   * ANALYTICS-FILTER-TRUTH-001 — the project is in the KEY as well as in the request.
+   *
+   * Sending it and keying on `'all'` would be the `useEntities` defect again: React Query would
+   * serve the previous project's cached page under the new project's name, and the switch would
+   * look like it had worked. The key and the URL have to narrow together or neither has.
+   */
+  const q = useQuery({
+    queryKey: ['alert-events', 'all', currentProjectId],
+    queryFn: () => listAlertEvents(undefined, currentProjectId),
+    refetchInterval: 20_000,
+  })
   const invalidate = () => qc.invalidateQueries({ queryKey: ['alert-events'] })
 
   const resolveM = useMutation({ mutationFn: resolveAlert, onSuccess: invalidate })
@@ -310,6 +325,19 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
                     <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
                       {c.severity}: {sevLabel(e.severity, c)}
                     </span>
+                    {/*
+                      ANALYTICS-FILTER-TRUTH-001 — why an alert with no project is on a project's page.
+
+                      The list narrows to this project and KEEPS the account-wide rows, because a
+                      token expiring belongs to a connection rather than to any one project. Left
+                      unlabelled that reads as a leak the narrowing missed; labelled, it is the one
+                      row on the page that is deliberately not about this client.
+                    */}
+                    {e.project_id === null && (
+                      <span data-testid={`alert-account-wide-${e.id}`} className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-text-muted">
+                        {c.account_wide}
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-text-secondary">{messageFor(e, locale)}</p>
                   <ContextChips e={e} c={c} />

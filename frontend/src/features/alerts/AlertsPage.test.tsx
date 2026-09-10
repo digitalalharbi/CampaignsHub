@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { AlertsPage } from './AlertsPage'
 import type { Option } from '@/components/forms'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
+import { useProject } from '@/stores/project'
 
 // The alert rule form's type / severity / channel controls must be fed by the taxonomy engine.
 const TAX: Record<string, Option[]> = {
@@ -168,5 +169,71 @@ describe('AlertsPage — the queue counts what exists, not what fitted', () => {
 
     await waitFor(() => expect(screen.getByTestId('alert-summary-open').textContent).toContain('2'))
     expect(screen.queryByTestId('alert-events-capped')).toBeNull()
+  })
+})
+
+/**
+ * ANALYTICS-FILTER-TRUTH-001 — the alerts leg of the propagation clause.
+ *
+ * The ledger is tenant-wide and this page narrowed it by nothing, so an agency holding ten clients
+ * opened one client's workspace and read ten clients' alerts on one screen. The empty state
+ * promised the opposite in as many words — «no active rule has fired for this project».
+ *
+ * Both halves are held here: the project must travel in the REQUEST, and it must be in the query
+ * KEY. Sending it alone is the `useEntities` defect again — React Query would serve the previous
+ * project's cached page under the new project's name, and the switch would look like it worked.
+ */
+describe('AlertsPage — the queue answers for the project the reader is in', () => {
+  const event = (id: string, projectId: string | null): AlertEvent => ({
+    id, project_id: projectId, rule_id: 'r1', type: 'sync_failure', entity_type: null, entity_id: null,
+    status: 'open', severity: 'warning', context: null, notification_id: null, task_id: null,
+    last_triggered_at: '2026-08-20T09:00:00Z', snoozed_until: null, resolved_at: null, created_at: null,
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(listAlertRules).mockResolvedValue({ rules: [], total: 0 })
+    vi.mocked(listAlertEvents).mockResolvedValue({
+      events: [event('a', 'p1')], total: 1, counts: { open: 1, snoozed: 0, resolved: 0, open_critical: 0 },
+    })
+    useProject.setState({ currentProjectId: 'p1' })
+    signInWith(['alerts.view', 'alerts.manage'])
+  })
+  afterEach(() => signOut())
+
+  it('sends the active project to the ledger', async () => {
+    renderWithProviders(<AlertsPage />, { locale: 'en' })
+
+    await waitFor(() => expect(listAlertEvents).toHaveBeenCalledWith(undefined, 'p1'))
+  })
+
+  it('re-asks when the reader switches project, instead of repainting the cached page', async () => {
+    const { rerender } = renderWithProviders(<AlertsPage />, { locale: 'en' })
+    await waitFor(() => expect(listAlertEvents).toHaveBeenCalledWith(undefined, 'p1'))
+
+    useProject.setState({ currentProjectId: 'p2' })
+    rerender(<AlertsPage />)
+
+    await waitFor(() => expect(listAlertEvents).toHaveBeenCalledWith(undefined, 'p2'))
+  })
+
+  /*
+   * The one row on the page that is deliberately NOT about this client says so.
+   *
+   * A token expiring belongs to a connection, so the server keeps those rows through the narrowing.
+   * Unlabelled, they read as a leak the filter missed — and the reader who concludes the filter is
+   * broken stops trusting the nine rows that are correct.
+   */
+  it('marks an account-wide alert as account-wide, and marks nothing else', async () => {
+    vi.mocked(listAlertEvents).mockResolvedValue({
+      events: [event('wide', null), event('mine', 'p1')],
+      total: 2,
+      counts: { open: 2, snoozed: 0, resolved: 0, open_critical: 0 },
+    })
+
+    renderWithProviders(<AlertsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('alert-account-wide-wide')).toHaveTextContent('Account-wide')
+    expect(screen.queryByTestId('alert-account-wide-mine')).toBeNull()
   })
 })
