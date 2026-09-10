@@ -73,6 +73,8 @@ final class ScheduledWorkStatus
                 'last_outcome' => $last?->outcome,
                 'last_started_at' => $last?->started_at?->toIso8601String(),
                 'last_duration_ms' => $last?->duration_ms,
+                // Null when the command does not count what it does — not the same as zero.
+                'last_rows_affected' => $last?->rows_affected,
                 'failure_class' => $last?->failure_class,
                 'failure_message' => $last?->failure_message,
                 /*

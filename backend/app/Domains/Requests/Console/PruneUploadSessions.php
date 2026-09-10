@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Requests\Console;
 
+use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Domains\Requests\Models\RequestFile;
 use App\Domains\Requests\Models\RequestUploadSession;
 use Illuminate\Console\Command;
@@ -33,6 +34,16 @@ final class PruneUploadSessions extends Command
             }
             $session->delete();
         }
+
+        /*
+         * AUTOMATION-FIRST-OPERATIONS-001 — what this sweep actually removed, on the ledger.
+         *
+         * The line below has always said it to whoever was watching a terminal. Nobody is watching a
+         * terminal at 04:00, and the ops page could say the run SUCCEEDED without being able to say
+         * whether it deleted four hundred sessions or none — which is the difference between a sweep
+         * working and a sweep quietly matching nothing.
+         */
+        app(ScheduledRunRows::class)->report($sessions->count() + $files);
 
         $this->info("Pruned {$sessions->count()} expired session(s), {$files} orphan file(s).");
 

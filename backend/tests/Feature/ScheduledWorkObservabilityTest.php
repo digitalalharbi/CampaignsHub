@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Ops\Listeners\RecordScheduledRun;
 use App\Domains\Ops\Models\ScheduledRun;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Domains\Ops\Services\ScheduledWorkStatus;
 use App\Models\User;
 use Illuminate\Console\Events\ScheduledTaskFailed;
@@ -158,6 +159,79 @@ final class ScheduledWorkObservabilityTest extends TestCase
                 "«{$row['command']}» reported a next run in the past: {$row['next_run_at']}",
             );
         }
+    }
+
+    /**
+     * AUTOMATION-FIRST-OPERATIONS-001 — the ledger records how much a run actually did.
+     *
+     * «Succeeded» is not «worked». A nightly sweep that matches nothing and a nightly sweep that is
+     * quietly broken both finish green, and until now the ops page could not tell an operator which
+     * one it had been looking at for a week.
+     */
+    public function test_a_run_records_how_many_rows_it_touched(): void
+    {
+        app(ScheduledRunRows::class)->report(7);
+
+        $run = ScheduledRun::create([
+            'command' => 'requests:prune-uploads', 'started_at' => now(),
+            'outcome' => 'running',
+        ]);
+
+        $this->assertNotNull($run->getKey());
+
+        app(ScheduledRunRows::class)->reset();
+        app(ScheduledRunRows::class)->report(7);
+
+        $run->fill([
+            'finished_at' => now(),
+            'outcome' => ScheduledRun::COMPLETED,
+            'rows_affected' => app(ScheduledRunRows::class)->take(),
+        ])->save();
+
+        $row = collect(app(ScheduledWorkStatus::class)->all())
+            ->firstWhere('command', 'requests:prune-uploads');
+
+        $this->assertNotNull($row, 'the pruning command vanished from the scheduler list');
+        $this->assertSame(7, $row['last_rows_affected'], 'the ledger lost the count the command reported');
+    }
+
+    /**
+     * SILENCE IS NOT ZERO, and this is the assertion that keeps it that way.
+     *
+     * Most commands have no meaningful count and report nothing. Rendering that as «0» would tell an
+     * operator the sweep ran and found nothing, when it may not sweep at all — the same rule this
+     * product applies to a metric a platform never sent.
+     */
+    public function test_a_command_that_counts_nothing_reports_null_rather_than_zero(): void
+    {
+        app(ScheduledRunRows::class)->reset();
+
+        ScheduledRun::create([
+            'command' => 'alerts:evaluate', 'started_at' => now(), 'finished_at' => now(),
+            'outcome' => ScheduledRun::COMPLETED, 'duration_ms' => 10,
+            'rows_affected' => app(ScheduledRunRows::class)->take(),
+        ]);
+
+        $row = collect(app(ScheduledWorkStatus::class)->all())
+            ->firstWhere('command', 'alerts:evaluate');
+
+        $this->assertNull($row['last_rows_affected'], 'a command that said nothing was recorded as having touched zero rows');
+    }
+
+    /** One process runs them in turn, so a count may never be inherited by whatever runs next. */
+    public function test_a_count_does_not_leak_from_one_command_to_the_next(): void
+    {
+        $rows = app(ScheduledRunRows::class);
+
+        $rows->report(12);
+        $this->assertSame(12, $rows->take(), 'the reported count did not come back');
+
+        // `take()` clears, and `reset()` at the next start clears again — belt and braces on purpose.
+        $this->assertNull($rows->take(), 'a count survived being read once');
+
+        $rows->report(3);
+        $rows->reset();
+        $this->assertNull($rows->take(), 'a reset did not clear the previous command’s count');
     }
 
     /**
