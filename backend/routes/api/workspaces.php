@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\ClientWorkspaces\Http\Controllers\ClientWorkspaceController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\FilesLibraryController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
+use App\Domains\ShortLinks\Http\Controllers\ShortLinkController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use App\Domains\Tasks\Http\Controllers\TaskController;
 use Illuminate\Support\Facades\Route;
@@ -58,6 +59,17 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
     Route::get('alerts/events', [AlertController::class, 'events'])->name('alerts.events.index');
     Route::post('alerts/events/{alertEvent}/resolve', [AlertController::class, 'resolve'])->name('alerts.events.resolve');
     Route::post('alerts/events/{alertEvent}/snooze', [AlertController::class, 'snooze'])->name('alerts.events.snooze');
+
+    /*
+     * SHORT-LINKS-001 — workspace-level, like alerts and tasks beside it.
+     *
+     * A short link belongs to the workspace that made it rather than to one project: the owner's
+     * flow is «two fields and a button», and asking which project a WhatsApp number belongs to is
+     * exactly the question the requirement rules out.
+     */
+    Route::get('short-links', [ShortLinkController::class, 'index'])->name('short-links.index');
+    Route::post('short-links', [ShortLinkController::class, 'store'])->name('short-links.store');
+    Route::post('short-links/{link}/disable', [ShortLinkController::class, 'disable'])->name('short-links.disable');
 
     // Tasks.
     Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');

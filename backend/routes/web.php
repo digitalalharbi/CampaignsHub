@@ -2,6 +2,8 @@
 
 use App\Domains\Influencers\Http\Controllers\AttributionController;
 use App\Domains\Reports\Http\Controllers\SharePreviewController;
+use App\Domains\ShortLinks\Http\Controllers\ShortLinkHopController;
+use App\Domains\ShortLinks\Services\ShortLinkHops;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -33,3 +35,17 @@ Route::get('/t/{code}', [AttributionController::class, 'redirect'])
 Route::get('/r/{token}', [SharePreviewController::class, 'show'])
     ->where('token', '[A-Za-z0-9]{16,64}')
     ->name('reports.share.preview');
+
+/*
+ * SHORT-LINKS-001 — the hop a stranger follows.
+ *
+ * A WEB route for the same reason as `/t/{code}` above: it arrives with no session, no tenant and no
+ * JSON, from a WhatsApp message or something printed. The path is one letter because it gets read
+ * aloud and typed off a phone screen.
+ *
+ * The pattern comes from `ShortLinkHops::slugPattern()`, beside the alphabet that mints it, so a slug
+ * this application can produce is a slug this route accepts — two places to change is how they drift.
+ */
+Route::get('/l/{slug}', [ShortLinkHopController::class, 'redirect'])
+    ->where('slug', ShortLinkHops::slugPattern())
+    ->name('short-links.hop');

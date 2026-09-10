@@ -32,13 +32,24 @@ final class MembershipPortalTest extends TestCase
     use AppliesToRegister;
     use RefreshDatabase;
 
-    private function tenant(string $name, ?string $accountType = null): Tenant
+    /**
+     * A tenant that has FINISHED onboarding, because these tests ask a portal question.
+     *
+     * AUTH-SESSION-RACE-OBS made the landing path depend on onboarding as well as membership: a
+     * workspace nobody has configured is not a dashboard yet, whichever portal it belongs to. These
+     * fixtures left `onboarding_completed_at` null and so described accounts mid-setup, which is a
+     * different question from «which portal does this membership open». The one test that is about
+     * a brand-new registration sets it back to null explicitly.
+     */
+    private function tenant(string $name, ?string $accountType = null, bool $onboarded = true): Tenant
     {
         return Tenant::create([
             'name' => $name,
             'slug' => str($name)->slug()->value(),
             'status' => 'active',
             'account_type' => $accountType,
+            'onboarding_step' => $onboarded ? 'done' : 'workspace',
+            'onboarding_completed_at' => $onboarded ? now() : null,
         ]);
     }
 
@@ -210,7 +221,23 @@ final class MembershipPortalTest extends TestCase
         $this->assertSame(Portal::Agency, $membership->portal);
         $this->assertSame('owner', $membership->role);
         $this->assertTrue($membership->is_default);
-        $this->assertSame('/agency', app(PortalResolver::class)->landingPathFor($user));
+
+        /*
+         * A brand-new registration lands on the WIZARD, and the membership is what makes that a
+         * choice rather than a dead end — AUTH-SESSION-RACE-OBS.
+         *
+         * This asserted `/agency`, which is where the resolver sent a paid account whose workspace
+         * had no client, no project and no connection yet. `OnboardingGate` refused that route on
+         * the client, so the person bounced; the E2E registration walk caught it as «signed in and
+         * landed on /app/dashboard rather than the wizard». The membership assertions above are what
+         * this test is actually about, and they are unchanged: the portal is known and recorded, it
+         * is simply not where somebody is sent before they have set the workspace up.
+         */
+        $this->assertSame('/onboarding', app(PortalResolver::class)->landingPathFor($user));
+
+        $user->tenant?->forceFill(['onboarding_completed_at' => now()])->save();
+
+        $this->assertSame('/agency', app(PortalResolver::class)->landingPathFor($user->refresh()));
     }
 
     /** An advertiser signup lands in the campaigns portal, not the agency one. */

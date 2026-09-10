@@ -6,6 +6,7 @@ namespace App\Domains\Tenancy\Services;
 
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Illuminate\Support\Collection;
 
@@ -121,6 +122,41 @@ final class PortalResolver
 
         if ($requested === null && $this->needsSwitcher($user)) {
             return '/switch';
+        }
+
+        /*
+         * AUTH-SESSION-RACE-OBS — a workspace nobody has configured is not a dashboard yet.
+         *
+         * The rule above sends somebody to the wizard only when they hold NO MEMBERSHIP, which was
+         * written when signing up and being granted a workspace were the same event. Paid
+         * registration creates the membership BEFORE onboarding is finished, so that condition
+         * stopped covering the case it exists for: a brand-new paid account was sent to
+         * `/app/dashboard` for a workspace with no client, no project and no connection.
+         *
+         * `OnboardingGate` refuses that route on the client and would correct it, which is exactly
+         * why this read as intermittent rather than broken — the correction lands only if the gate
+         * re-renders before anything else settles, and its own docblock records the case where it
+         * does not. Two deciders, one of them missing a condition, is what produced a failure that
+         * moved between browsers and looked like a session race.
+         *
+         * Asked AFTER the switcher on purpose: «which workspace?» has to be answered before «is that
+         * one ready?» means anything, and picking one on somebody's behalf is the decision the
+         * switcher exists to leave with them.
+         */
+        $tenant = Tenant::query()->withoutGlobalScopes()->find($membership->tenant_id);
+
+        /*
+         * Only a POSITIVE «not finished» sends them to the wizard.
+         *
+         * The first spelling of this asked `$membership->tenant?->onboarding_completed_at === null`,
+         * which reads the same for «onboarding is unfinished» and «the tenant could not be read at
+         * all» — and the second answer sent EVERY user to the wizard, including finished ones. A
+         * missing fact must not lock somebody out of the product they have already set up; where the
+         * tenant cannot be read, the portal it resolved to is still the better answer, and
+         * `OnboardingGate` remains the second check.
+         */
+        if ($tenant !== null && $tenant->onboarding_completed_at === null) {
+            return '/onboarding';
         }
 
         return $membership->portal->landingPath();

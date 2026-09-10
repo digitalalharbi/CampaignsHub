@@ -1,4 +1,5 @@
 import {
+  Link2,
   BarChart3, BellRing, Building2, CreditCard, FolderKanban, FolderOpen, Images, Inbox,
   LayoutDashboard, ListChecks, Megaphone, MessageSquare, Plug, Receipt, Settings, TrendingUp, Users,
 } from 'lucide-react'
@@ -79,6 +80,7 @@ export const agencyNavGroups: readonly NavGroup[] = [
     leaves: [
       { to: '/agency/requests', ar: 'الطلبات', en: 'Requests', icon: Inbox },
       { to: '/agency/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks },
+      { to: '/agency/short-links', ar: 'اختصار الروابط', en: 'Short Links', icon: Link2 },
       { to: '/agency/messages', ar: 'المحادثات', en: 'Conversations', icon: MessageSquare },
       { to: '/agency/alerts', ar: 'التنبيهات', en: 'Alerts', icon: BellRing },
     ],
