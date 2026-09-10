@@ -1702,10 +1702,35 @@ final class MetricsAggregator
         // Metrics not linked to a unified campaign group under a null key — exclude it so we never
         // pass an empty string to a uuid column.
         $campaignIds = $spentByCampaign->keys()->filter(fn ($k) => $k !== null && $k !== '')->values();
-        $campaigns = $campaignIds->isEmpty()
+
+        /*
+         * BUDGET-GOVERNANCE-001 — money COMMITTED but not yet spent is still money.
+         *
+         * This set used to be the campaigns that had SPEND in the window, so a campaign with a budget
+         * allocated and no delivery yet produced no row: invisible on the one screen that exists to
+         * answer «what have we committed», and missing from the portfolio total by exactly its
+         * budget. That is the figure a spreadsheet is kept for — the 50,000 sitting on a campaign
+         * that starts on Sunday belongs in the total now, not on Monday once the first riyal moves.
+         *
+         * So the set is the union: anything with a budget, or anything that spent. A campaign with
+         * neither is still not a row, because there is nothing to say about it.
+         */
+        $budgeted = DB::table('unified_campaigns')
+            /*
+             * The same project bound the spend query above carries. Without it this would reach every
+             * project in the tenant, and a budget view for one client would total another's.
+             */
+            ->when($this->projectIds !== null && $this->projectIds !== [], fn ($q) => $q->whereIn('project_id', $this->projectIds))
+            ->where('total_budget', '>', 0)
+            ->pluck('id')
+            ->map(static fn (mixed $id): string => (string) $id);
+
+        $ids = $campaignIds->map(static fn (mixed $id): string => (string) $id)->merge($budgeted)->unique()->values();
+
+        $campaigns = $ids->isEmpty()
             ? collect()
             : DB::table('unified_campaigns')
-                ->whereIn('id', $campaignIds->all())
+                ->whereIn('id', $ids->all())
                 ->get(['id', 'name', 'total_budget', 'budget_currency', 'status']);
 
         $rows = [];
@@ -1733,6 +1758,22 @@ final class MetricsAggregator
             $spent = $scope->amount();
             $spentCurrency = $scope->currency($reportingCurrency);
             $hasSpend = $spent !== null;
+
+            /*
+             * No delivery at all is a measured ZERO, not an absent measurement.
+             *
+             * The money contract's caution is about sums that CANNOT be stated — a partial
+             * conversion, two currencies at once. A campaign with no metric rows in the window is
+             * not that: nothing was spent, so nothing needed converting, and the figure is zero in
+             * whatever the budget is denominated in. Left as «unknown» it took its whole budget out
+             * of the portfolio's remaining and pacing, which is the opposite of what an operator
+             * planning next week needs to see.
+             */
+            if ($row === null && $budget > 0) {
+                $spent = 0.0;
+                $spentCurrency = $budgetCurrency;
+                $hasSpend = true;
+            }
 
             /*
              * Comparable only when a single spend figure exists AND it is denominated like the budget.
