@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { AUTH, openFilters } from './helpers'
-import { RAIL_PAINT_TIMEOUT, RAIL_PATH_BUDGET } from './railWalkTimeout'
+import { RAIL_PAINT_TIMEOUT, railBudget } from './railWalkTimeout'
 
 /**
  * `/agency` after SIMPLIFY-002 — the rail is grouped by job, and filters fold.
@@ -39,7 +39,7 @@ test.describe('the agency rail', () => {
    * this way, which is the distinction worth knowing.
    */
   test('every destination opens, and none was lost in the regrouping', async ({ page }) => {
-    test.setTimeout(RAIL_PAINT_TIMEOUT + AGENCY_PATHS.length * RAIL_PATH_BUDGET)
+    test.setTimeout(railBudget(AGENCY_PATHS.length))
 
     for (const path of AGENCY_PATHS) {
       await page.goto(path)

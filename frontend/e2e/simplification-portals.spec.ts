@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { AUTH } from './helpers'
-import { RAIL_PAINT_TIMEOUT, RAIL_PATH_BUDGET } from './railWalkTimeout'
+import { RAIL_PAINT_TIMEOUT, railBudget } from './railWalkTimeout'
 
 /**
  * `/app`, `/admin` and `/portal` — UX-FILTERS-001, which narrowed the scope of SIMPLIFY-003/004/005.
@@ -98,15 +98,29 @@ test.describe('the platform console separates daily work from rare tools', () =>
     await expect(advanced).toContainText(/وسائل الدفع|Payment methods/)
   })
 
-  /** Separated is not hidden: they still open. */
+  /**
+   * Separated is not hidden: they still open.
+   *
+   * GATE-WK-001 — the budget, which this was the one walk in the file to go without.
+   *
+   * It asserted three admin pages at `RAIL_PAINT_TIMEOUT` — forty-five seconds each — inside the
+   * runner's thirty-second default, because it never called `test.setTimeout` while both of its
+   * siblings here do. On webkit it died at 30.2 seconds against a wait that had never counted down
+   * from forty-five, and reported «rendered nothing», which reads as a verdict on the page rather
+   * than on the clock.
+   */
   test('the advanced destinations still open', async ({ page }) => {
-    for (const path of [
+    const paths = [
       '/admin/cutover',
       '/admin/settings/integrations/payments',
       // FX-FEED-001 — the rate supply. Advanced because once a source is configured nobody opens it
       // again, and it must still render on an install where no source has ever been configured.
       '/admin/settings/currency-rates',
-    ]) {
+    ]
+
+    test.setTimeout(railBudget(paths.length))
+
+    for (const path of paths) {
       await page.goto(path)
       await expect(page.locator('main'), `${path} rendered nothing`).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
       await expect(page.locator('main'), `${path} is a not-found page`)
@@ -117,7 +131,7 @@ test.describe('the platform console separates daily work from rare tools', () =>
   /** Every daily entry still opens — reordering a rail must not strand a page. */
   test('every daily destination still opens', async ({ page }) => {
     const paths = ['/admin', '/admin/registrations', '/admin/tenants', '/admin/billing', '/admin/audit', '/admin/settings']
-    test.setTimeout(RAIL_PAINT_TIMEOUT + paths.length * RAIL_PATH_BUDGET)
+    test.setTimeout(railBudget(paths.length))
 
     for (const path of paths) {
       await page.goto(path)
@@ -166,7 +180,7 @@ test.describe('the client portal leads with results, not paperwork', () => {
    */
   test('no operator vocabulary reaches the client', async ({ page }) => {
     const paths = ['/portal', '/portal/campaigns', '/portal/reports', '/portal/invoices']
-    test.setTimeout(RAIL_PAINT_TIMEOUT + paths.length * RAIL_PATH_BUDGET)
+    test.setTimeout(railBudget(paths.length))
 
     for (const path of paths) {
       await page.goto(path)

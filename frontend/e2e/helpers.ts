@@ -1,6 +1,6 @@
-import { expect, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { E2E_ORIGIN } from './env'
-import { RAIL_PAINT_TIMEOUT } from './railWalkTimeout'
+import { RAIL_PAINT_TIMEOUT, railBudget } from './railWalkTimeout'
 
 /**
  * Re-exported so a spec that needs the gate's origin has one obvious place to take it from — the
@@ -598,6 +598,21 @@ export async function contentLength(page: Page): Promise<number> {
  * Nothing is retried and no timeout is raised. The assertion is the same assertion.
  */
 export async function walkRail(page: Page, hrefs: string[]): Promise<void> {
+  /*
+   * GATE-WK-001 — the walk claims the budget it is about to spend, so a caller cannot forget it.
+   *
+   * `contentLength()` waits `RAIL_PAINT_TIMEOUT` per page — forty-five seconds — and Playwright
+   * stops a test at thirty by default. Every caller was expected to remember `test.setTimeout`, and
+   * one that hand-rolled its own loop over three admin routes did not: the webkit leg died at 30.2
+   * seconds against a wait that had never counted down from forty-five, and reported «rendered
+   * nothing», which reads as a claim about the product rather than about the clock.
+   *
+   * Claimed here rather than asked for at each call site, because the number belongs to what spends
+   * it. `Math.max` so a caller that already asked for more keeps it — shrinking a budget somebody
+   * set deliberately would be this defect wearing the fix's clothes.
+   */
+  test.setTimeout(Math.max(test.info().timeout, railBudget(hrefs.length)))
+
   const problems: string[] = []
   page.on('console', (m) => {
     if (m.type() === 'error') problems.push(`console: ${m.text()}`)

@@ -27,3 +27,30 @@ export const RAIL_PAINT_TIMEOUT = 45_000
 
 /** Per-path budget for a walk that visits many routes in one test, on the same reasoning. */
 export const RAIL_PATH_BUDGET = 15_000
+
+/**
+ * Playwright's own default test budget, named so the arithmetic below can be checked against it.
+ *
+ * This is the number that made the ceiling above unreachable. `expect(...).toBeVisible({ timeout:
+ * RAIL_PAINT_TIMEOUT })` asks for forty-five seconds inside a test the runner stops at thirty, so a
+ * walk that hand-rolled its own loop and forgot `test.setTimeout` could never spend what this file
+ * argues for. It died at 30.2 seconds on webkit against a wait that had never started counting down
+ * from forty-five.
+ *
+ * The codebase had already met this contradiction from the other side — `contentLength()`'s docblock
+ * records an inner wait of twenty seconds expiring inside a forty-five-second test — and the lesson
+ * is the same either way: the inner wait and the outer budget are one decision, and a file that sets
+ * one without the other has set neither.
+ */
+export const PLAYWRIGHT_DEFAULT_TIMEOUT = 30_000
+
+/**
+ * What a walk over `paths` costs at worst, and never less than one page's paint.
+ *
+ * Callers no longer compute this: {@see walkRail} claims it, so forgetting is not a thing a test can
+ * do. It is exported because the arithmetic is worth checking on its own — a budget that came out
+ * below Playwright's default would reintroduce the defect while looking like a fix.
+ */
+export function railBudget(paths: number): number {
+  return RAIL_PAINT_TIMEOUT + Math.max(paths, 1) * RAIL_PATH_BUDGET
+}
