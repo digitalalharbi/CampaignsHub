@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { StatCard as SharedStatCard } from '@/components/ui/StatCard'
+import { portfolioBudget } from './portfolioBudget'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { BarChart3, GitCompare, LayoutGrid, Plus, Rows, Search, TriangleAlert } from 'lucide-react'
@@ -28,7 +29,7 @@ import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { ChartCard, PlatformDonutChart, ProgressRing, RankingBarChart, SpendRevenueAreaChart } from '@/features/analytics/charts'
-import { useBudget, useCampaigns, usePlatforms, useSummary, useTimeseries } from '@/features/analytics/api'
+import { useBudget, useCampaigns, usePlatforms, useSummary, useTimeseries, type BudgetRow } from '@/features/analytics/api'
 import { useLastNDaysRange } from '@/features/analytics/hooks'
 import { ProvenanceBadge, RangeTabs, TrendPill } from '@/features/analytics/components'
 import { compact, money, num, rowCostPer, rowRoas } from '@/features/analytics/format'
@@ -433,6 +434,19 @@ export function CampaignsPage() {
 
       {view === 'overview' ? (
         <>
+          {/*
+            BUDGET-GOVERNANCE-001 — what is LEFT, where the period ENDS, and whether that is over.
+
+            The page showed a budget and what had been spent and stopped there, while the server had
+            already computed the remaining, the straight-line projection and the pace for every
+            campaign. DATA → VISUAL → COMPARISON → SHORT INTERPRETATION: four figures, a bar against
+            the elapsed budget, and one sentence that names the overrun in money rather than leaving
+            a ratio to be interpreted.
+
+            An incomparable scope reads «—» and says why. It never reads 0%, which an operator takes
+            as «we have spent nothing» when the truth is that nothing here could be added up.
+          */}
+          <BudgetPacingRow rows={budget.data ?? []} ar={ar} />
           {/* Charts — all from the project-scoped metrics API. */}
           <div className="grid gap-4 lg:grid-cols-3">
             <ChartCard title={ar ? 'الإنفاق مقابل الإيرادات' : 'Spend vs revenue'} subtitle={ar ? 'اتجاه المشروع' : 'How the project is trending'} className="lg:col-span-2">
@@ -909,5 +923,85 @@ function CampaignCard({ c, locale, headline, efficiency, state, freshness, trend
       </div>
       {unlinked && <div className="inline-flex items-center gap-1 text-[11px] text-warning"><TriangleAlert size={12} /> {locale === 'ar' ? 'بلا حملات خارجية مرتبطة' : 'No linked platform campaign'}</div>}
     </button>
+  )
+}
+
+
+/**
+ * The portfolio's budget as a decision, not a total.
+ *
+ * `portfolioBudget` owns the arithmetic and the refusals; this owns the reading. The sentence is
+ * deliberately one line and names the overrun in MONEY: «سيتجاوز ٤٬٤٠٠ ر.س» is actionable, «1.1×»
+ * is a ratio somebody has to convert before they can act on it.
+ */
+export function BudgetPacingRow({ rows, ar }: { rows: BudgetRow[]; ar: boolean }) {
+  const b = useMemo(() => portfolioBudget(rows), [rows])
+
+  if (b.budget === null) {
+    // Nothing to pace against is a fact worth stating once, not a row of dashes.
+    if (b.excluded === 0 && b.currencies === 0) return null
+
+    return (
+      <p className="text-xs text-text-muted" data-testid="budget-pacing-unavailable">
+        {b.currencies > 1
+          ? (ar ? `تعذّر جمع الميزانية — ${b.currencies} عملات مختلفة` : `Budget not totalled — ${b.currencies} different currencies`)
+          : (ar ? `لا ميزانية قابلة للمقارنة — ${countedCampaigns(b.excluded, 'ar')} خارج الحساب` : `No comparable budget — ${countedCampaigns(b.excluded, 'en')} excluded`)}
+      </p>
+    )
+  }
+
+  const over = b.pace !== null && b.pace > 1
+  const overBy = b.projected !== null && b.budget !== null ? b.projected - b.budget : null
+
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4" data-testid="budget-pacing">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Figure label={ar ? 'الميزانية' : 'Budget'} value={money(b.budget, b.currency ?? undefined)} />
+        <Figure label={ar ? 'المصروف' : 'Spent'} value={money(b.spent, b.currency ?? undefined)} />
+        <Figure label={ar ? 'المتبقي' : 'Remaining'} value={money(b.remaining, b.currency ?? undefined)} testid="budget-remaining" />
+        <Figure
+          label={ar ? 'المتوقع' : 'Forecast'}
+          value={b.projected === null ? '—' : money(b.projected, b.currency ?? undefined)}
+          testid="budget-forecast"
+        />
+      </div>
+
+      {b.pace !== null && (
+        <div className="flex flex-col gap-1">
+          {/* The bar is against the BUDGET, so «past the end» is visible rather than clamped away. */}
+          <div className="h-2 overflow-hidden rounded-full bg-surface-secondary">
+            <div
+              className={`h-full rounded-full ${over ? 'bg-danger' : 'bg-brand-600'}`}
+              style={{ width: `${Math.min(100, (b.pace ?? 0) * 100)}%` }}
+            />
+          </div>
+          <span className={`text-xs font-semibold ${over ? 'text-danger' : 'text-text-secondary'}`} data-testid="budget-pacing-reading">
+            {over
+              ? (ar
+                  ? `بهذا المعدل سيتجاوز الإنفاق الميزانية بـ ${money(overBy, b.currency ?? undefined)}`
+                  : `At this rate spend will exceed the budget by ${money(overBy, b.currency ?? undefined)}`)
+              : (ar
+                  ? `ضمن الميزانية — متوقع ${money(b.projected, b.currency ?? undefined)} من ${money(b.budget, b.currency ?? undefined)}`
+                  : `Within budget — forecast ${money(b.projected, b.currency ?? undefined)} of ${money(b.budget, b.currency ?? undefined)}`)}
+          </span>
+        </div>
+      )}
+
+      {/* No silent caps: a campaign left out of the total is counted where the total is read. */}
+      {b.excluded > 0 && (
+        <span className="text-[11px] text-text-muted" data-testid="budget-pacing-excluded">
+          {ar ? `${countedCampaigns(b.excluded, 'ar')} خارج الحساب — بلا ميزانية أو بعملة مختلفة` : `${countedCampaigns(b.excluded, 'en')} excluded — no budget, or a different currency`}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function Figure({ label, value, testid }: { label: string; value: string; testid?: string }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-xs text-text-muted">{label}</span>
+      <span className="tnum text-lg font-bold text-text-primary" data-testid={testid}>{value}</span>
+    </div>
   )
 }
