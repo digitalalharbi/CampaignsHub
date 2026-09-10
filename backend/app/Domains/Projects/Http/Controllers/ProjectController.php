@@ -12,6 +12,7 @@ use App\Domains\Projects\Resources\ProjectResource;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,14 +29,9 @@ final class ProjectController extends Controller
         abort_unless($user->hasPermission('projects.view'), 403);
 
         $query = Project::query()->latest();
-        // Agency-wide viewers (projects.view.all) see every project in the tenant; project-scoped
-        // users (e.g. client viewers) see only the projects they are an active member of.
-        if (! $user->hasPermission('projects.view.all')) {
-            $memberProjectIds = ProjectMembership::query()
-                ->where('user_id', $user->id)
-                ->where('status', 'active')
-                ->pluck('project_id');
-            $query->whereIn('id', $memberProjectIds);
+
+        if (($reachable = $this->reachable($user)) !== null) {
+            $query->whereIn('id', $reachable);
         }
         if ($workspace = $request->string('client_workspace_id')->toString()) {
             $query->where('client_workspace_id', $workspace);
@@ -54,8 +50,23 @@ final class ProjectController extends Controller
 
     public function show(Request $request, string $project): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('projects.view'), 403);
+        $user = $request->user();
+        abort_unless($user->hasPermission('projects.view'), 403);
         $model = $this->find($project);
+
+        /*
+         * TEAM-PROJECT-RBAC-001 — the same narrowing the LISTING applies, on the route that names one.
+         *
+         * `index` has filtered to the reader's own projects since it was written, and this asked only
+         * for the tenant permission and then a tenant-scoped `find()`. So a client viewer confined to
+         * one project could read the neighbouring client's record by putting its id in the URL — its
+         * name, its budget window, its status, the workspace it belongs to.
+         *
+         * That the list hides what this route served is the tell, and the id is not a secret: it is
+         * in the address of every project they legitimately open.
+         */
+        $reachable = $this->reachable($user);
+        abort_unless($reachable === null || in_array((string) $model->id, $reachable, true), 403, 'You do not have access to this project.');
 
         return ApiResponse::success(new ProjectResource($model), 'Project retrieved.');
     }
@@ -181,6 +192,34 @@ final class ProjectController extends Controller
         $audit->log(action: $action, entityType: Project::class, entityId: (string) $model->id, after: ['status' => $status]);
 
         return ApiResponse::success(new ProjectResource($model), 'Project status updated.');
+    }
+
+    /**
+     * The projects this reader may reach, or NULL for «every project in the tenant».
+     *
+     * Agency-wide viewers hold `projects.view.all` and are not narrowed — that permission is what
+     * lets an operator open any client in their own workspace. Everybody else reaches the projects
+     * they are an ACTIVE member of, which is the same rule `ResolveProject` applies before the
+     * project-context routes and the same one the listing has always applied.
+     *
+     * Null rather than an all-ids list deliberately: an agency with three hundred projects should
+     * not pay for a query that answers «no narrowing», and a caller reading `null` cannot mistake it
+     * for «reaches nothing», which an empty array would say.
+     *
+     * @return list<string>|null
+     */
+    private function reachable(User $user): ?array
+    {
+        if ($user->hasPermission('projects.view.all')) {
+            return null;
+        }
+
+        return ProjectMembership::query()
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->pluck('project_id')
+            ->map(static fn (mixed $id): string => (string) $id)
+            ->all();
     }
 
     /** Tenant-scoped lookup (global TenantScope makes cross-tenant fail-closed → 404). */
