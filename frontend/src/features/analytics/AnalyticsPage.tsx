@@ -828,8 +828,18 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
         platform is doing over every objective at once. Read as a ranking it compares a platform
         buying awareness against one buying sales, which is a verdict about the work each was given.
       */}
+      {/*
+        ANALYTICS-FILTER-TRUTH-001 — this block is scoped by platform and campaign, never by
+        objective, and the refusal is the point of it: «contribution by objective path» narrowed to
+        one objective is a comparison of one, drawn identically to a comparison of four.
+
+        The server has always named the dropped axis. `useMetric` returned the payload alone, so the
+        statement stopped at the wire — the reader chose one objective, the chip lit, and this block
+        answered for the whole account in silence.
+      */}
+      <ScopeNote scope={byPath.data?.scope} testid="platform-objectives-scope" />
       <PlatformPaths
-        data={byPath.data}
+        data={byPath.data?.value}
         freshness={freshness.data?.rows ?? []}
         currency={summary.data?.currency ?? null}
         loading={byPath.isLoading}
@@ -910,11 +920,12 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
         which campaign inside the path is carrying it, and what the figures say about the distance
         between the two ends.
       */}
+      <ScopeNote scope={leaders.data?.scope} testid="objective-leaders-scope" />
       <PathAnalysis
         locale={ar ? 'ar' : 'en'}
         currency={summary.data?.currency ?? null}
-        leaders={leaders.data?.paths ?? []}
-        explanations={explanations.data?.paths ?? []}
+        leaders={leaders.data?.value?.paths ?? []}
+        explanations={explanations.data?.value?.paths ?? []}
         loading={leaders.isLoading}
         error={leaders.isError}
       />
@@ -3054,18 +3065,20 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
         The blocks below say which campaign inside a path is carrying it; this says whether the path
         itself is going anywhere, which is the question that comes first.
       */}
+      <ScopeNote scope={trend.data?.scope} testid="objective-trend-scope" />
       <PathTrends
-        paths={trend.data?.paths ?? []}
+        paths={trend.data?.value?.paths ?? []}
         locale={ar ? 'ar' : 'en'}
         loading={trend.isLoading}
         error={trend.isError}
       />
 
+      <ScopeNote scope={leaders.data?.scope} testid="objective-leaders-scope" />
       <PathAnalysis
         locale={ar ? 'ar' : 'en'}
         currency={currency}
-        leaders={leaders.data?.paths ?? []}
-        explanations={explanations.data?.paths ?? []}
+        leaders={leaders.data?.value?.paths ?? []}
+        explanations={explanations.data?.value?.paths ?? []}
         loading={leaders.isLoading}
         error={leaders.isError}
       />

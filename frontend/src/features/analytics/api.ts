@@ -577,6 +577,36 @@ function useMetric<T>(key: string, projectId: string | null, range: Range, path:
 }
 
 /**
+ * ANALYTICS-FILTER-TRUTH-001 — the same request, keeping the envelope the panel needs to be honest.
+ *
+ * `useMetric` returns `getData`, which is the payload with the envelope discarded. That is right for
+ * an endpoint that narrows by every axis it is sent: there is nothing to report. It is wrong for one
+ * that DECLINES an axis, because the server states the refusal in `meta.filter_scope` and a reader
+ * who never receives it sits under a lit chip in front of an answer to a wider question.
+ *
+ * `useFreshness` was fixed for exactly this and kept its own copy of the reading. This is that
+ * reading, named, so the next endpoint to decline an axis has somewhere to be plugged in rather than
+ * a third hand-rolled envelope reader.
+ *
+ * `scope` is undefined against an install answering from before the server said anything, which
+ * renders precisely as it did.
+ */
+function useScopedMetric<T>(key: string, projectId: string | null, range: Range, path: string, filters?: MetricFilters) {
+  return useQuery({
+    queryKey: ['metrics', key, projectId, range.from, range.to, ...filterKeyParts(filters)],
+    queryFn: async () => {
+      const envelope = await getEnvelope<T>(`${base(projectId!)}/${path}?${q(range)}${qf(filters)}`)
+
+      return {
+        value: envelope.data ?? undefined,
+        scope: (envelope.meta as { filter_scope?: FilterScope } | null)?.filter_scope,
+      }
+    },
+    enabled: Boolean(projectId),
+  })
+}
+
+/**
  * ANALYTICS-DRILLDOWN-001 — one row per ad squad or ad, from `entity_daily_metrics`.
  *
  * Extends `MoneyProvenance` for the same reason every other row shape does: the canonical money
@@ -858,7 +888,7 @@ export interface PlatformObjectives {
 }
 
 export const usePlatformObjectives = (p: string | null, r: Range, f?: MetricFilters) =>
-  useMetric<PlatformObjectives>('platform-objectives', p, r, 'platform-objectives', f)
+  useScopedMetric<PlatformObjectives>('platform-objectives', p, r, 'platform-objectives', f)
 
 /**
  * ANALYTICS-FILTER-TRUTH-001 — freshness answers for the WHOLE project, and says so.
@@ -941,7 +971,7 @@ export interface PathExplanation {
 }
 
 export const useObjectiveLeaders = (p: string | null, r: Range, f?: MetricFilters) =>
-  useMetric<ObjectiveLeaders>('objective-leaders', p, r, 'objective-leaders', f)
+  useScopedMetric<ObjectiveLeaders>('objective-leaders', p, r, 'objective-leaders', f)
 
 /** One day of a path's trend. A day nobody reported carries nulls and `reported: false`. */
 export interface PathTrendDay {
@@ -971,7 +1001,7 @@ export interface PathTrend {
  * sales falls is a flat line, and the reader concludes the account is doing nothing.
  */
 export const useObjectiveTrend = (p: string | null, r: Range, f?: MetricFilters) =>
-  useMetric<{ paths: PathTrend[] }>('objective-trend', p, r, 'objective-trend', f)
+  useScopedMetric<{ paths: PathTrend[] }>('objective-trend', p, r, 'objective-trend', f)
 
 export const useObjectiveExplanations = (p: string | null, r: Range, f?: MetricFilters) =>
-  useMetric<{ paths: PathExplanation[] }>('objective-explanations', p, r, 'objective-explanations', f)
+  useScopedMetric<{ paths: PathExplanation[] }>('objective-explanations', p, r, 'objective-explanations', f)
