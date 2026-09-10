@@ -2,6 +2,8 @@
 
 use App\Domains\Influencers\Http\Controllers\AttributionController;
 use App\Domains\Reports\Http\Controllers\SharePreviewController;
+use App\Domains\ShortLinks\Http\Controllers\ShortLinkHopController;
+use App\Domains\ShortLinks\Services\ShortLinkHops;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -44,6 +46,6 @@ Route::get('/r/{token}', [SharePreviewController::class, 'show'])
  * The pattern comes from `ShortLinkHops::slugPattern()`, beside the alphabet that mints it, so a slug
  * this application can produce is a slug this route accepts — two places to change is how they drift.
  */
-Route::get('/l/{slug}', [\App\Domains\ShortLinks\Http\Controllers\ShortLinkHopController::class, 'redirect'])
-    ->where('slug', \App\Domains\ShortLinks\Services\ShortLinkHops::slugPattern())
+Route::get('/l/{slug}', [ShortLinkHopController::class, 'redirect'])
+    ->where('slug', ShortLinkHops::slugPattern())
     ->name('short-links.hop');
