@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Ops\Listeners;
 
 use App\Domains\Ops\Models\ScheduledRun;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskSkipped;
@@ -37,6 +38,15 @@ final class RecordScheduledRun
         if ($command === null) {
             return;
         }
+
+        /*
+         * Cleared before the command runs, not after.
+         *
+         * The scheduler runs commands one after another in ONE process, so a count left behind by
+         * the previous command would be attributed to whichever ran next — a night's deletions
+         * credited to a command that deleted nothing.
+         */
+        app(ScheduledRunRows::class)->reset();
 
         $this->guarded(function () use ($command): void {
             ScheduledRun::create([
@@ -100,6 +110,8 @@ final class RecordScheduledRun
             $run->fill([
                 'finished_at' => now(),
                 'duration_ms' => $durationMs,
+                // Null when the command said nothing, which is not the same as «touched nothing».
+                'rows_affected' => app(ScheduledRunRows::class)->take(),
                 'outcome' => $outcome,
                 'failure_class' => $failureClass,
                 'failure_message' => $failureMessage,

@@ -15,6 +15,7 @@ use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
 use App\Domains\Ops\Listeners\RecordScheduledRun;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Subscriptions\Models\Subscription;
@@ -40,6 +41,17 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+
+        /*
+         * AUTOMATION-FIRST-OPERATIONS-001 — one counter per process, or the count never arrives.
+         *
+         * A command reports what it touched and `RecordScheduledRun` reads it when the run closes.
+         * Resolved fresh each time, those are two different objects: the command fills one and the
+         * listener reads an empty one, and the ledger records null for a run that reported seven.
+         * Found by the test that asserts the count survives the trip, which is the only place this
+         * is visible — everything still «works», it just quietly forgets.
+         */
+        $this->app->singleton(ScheduledRunRows::class);
         // Shared per-request tenant context — the authority on "current tenant".
         /*
          * Scope contexts are SCOPED, not singletons: every service inside one request shares the

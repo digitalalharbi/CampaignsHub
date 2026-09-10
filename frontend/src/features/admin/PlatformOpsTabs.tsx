@@ -285,6 +285,19 @@ export function ScheduledWorkTab() {
               {r.last_duration_ms !== null && (
                 <span dir="ltr">{Math.round(r.last_duration_ms / 1000)}s</span>
               )}
+              {/*
+                Null is not zero, and the page must not flatten them.
+
+                Most commands do not count what they do and report nothing; rendering that as «0
+                rows» would tell an operator a sweep ran and matched nothing when it may not sweep at
+                all. Shown only when the run actually reported a figure.
+              */}
+              {r.last_rows_affected !== null && (
+                <span data-testid={`rows-affected-${r.command}`}>
+                  <span dir="ltr">{r.last_rows_affected.toLocaleString('en-US')}</span>
+                  {ar ? ' صفًا' : ' rows'}
+                </span>
+              )}
               {untilNext(r.next_run_at) !== null && (
                 <span data-testid={`next-run-${r.command}`}>
                   {ar ? 'التالي: ' : 'Next: '}

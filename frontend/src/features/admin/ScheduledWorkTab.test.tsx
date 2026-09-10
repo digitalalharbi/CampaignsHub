@@ -35,6 +35,7 @@ const row = (over: Partial<ScheduledWorkRow> = {}): ScheduledWorkRow => ({
   last_duration_ms: 4200,
   // The server always sends the key; null only when its expression could not be parsed.
   next_run_at: new Date(Date.now() + 25 * 60_000).toISOString(),
+  last_rows_affected: null,
   failure_class: null,
   failure_message: null,
   overdue: false,
@@ -80,6 +81,25 @@ describe('the scheduled work surface', () => {
 
     const next = await screen.findByTestId('next-run-notifications:send-digests')
     expect(next).toHaveTextContent(/in 25m/)
+  })
+
+  /**
+   * AUTOMATION-FIRST-OPERATIONS-001 — «succeeded» is not «worked».
+   *
+   * A nightly sweep that matches nothing and one that is quietly broken both finish green. The count
+   * is what separates them, and it is shown only when the run actually reported one: null is not
+   * zero, and a page that flattens them tells an operator a sweep ran and found nothing when it may
+   * not sweep at all.
+   */
+  it('shows how many rows a run touched, and says nothing when it counted none', async () => {
+    vi.mocked(fetchScheduledWork).mockResolvedValue(payload([
+      row({ command: 'requests:prune-uploads', last_rows_affected: 412 }),
+      row({ command: 'alerts:evaluate', last_rows_affected: null }),
+    ]))
+    renderWithProviders(<ScheduledWorkTab />, { locale: 'en' })
+
+    expect(await screen.findByTestId('rows-affected-requests:prune-uploads')).toHaveTextContent('412')
+    expect(screen.queryByTestId('rows-affected-alerts:evaluate')).not.toBeInTheDocument()
   })
 
   /** A command whose expression could not be parsed says nothing rather than guessing. */

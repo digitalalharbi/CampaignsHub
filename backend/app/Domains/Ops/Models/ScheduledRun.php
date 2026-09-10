@@ -25,7 +25,7 @@ final class ScheduledRun extends Model
 
     protected $fillable = [
         'command', 'started_at', 'finished_at', 'duration_ms',
-        'outcome', 'exit_code', 'failure_class', 'failure_message',
+        'outcome', 'exit_code', 'rows_affected', 'failure_class', 'failure_message',
     ];
 
     protected $casts = [

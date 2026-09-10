@@ -349,6 +349,8 @@ export interface ScheduledWorkRow {
   overdue: boolean | null
   /** When the scheduler will run it next, computed from its own expression. Null if unparseable. */
   next_run_at: string | null
+  /** Rows the last run touched. Null when the command does not count what it does — not zero. */
+  last_rows_affected: number | null
   consecutive_failures: number
 }
 

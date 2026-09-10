@@ -23,6 +23,21 @@ test.use({ storageState: { cookies: [], origins: [] } })
  * for the account type or the service a second time: it opens at the workspace step with both
  * already answered. So the caller names the path it wants, and the plan that path is actually sold.
  */
+/**
+ * How long a registration STATE may take to arrive, on a runner several times slower than a laptop.
+ *
+ * Every one of these assertions follows an action that crosses the server: apply, verify the
+ * address, clear the mobile gate. Three of them relied on Playwright's 5s default while their
+ * sibling at the payment step already allowed twenty, and CI's WebKit failed on «element(s) not
+ * found» — the status card had not rendered yet, not a wrong state.
+ *
+ * This is the budget lesson this file already records for its own 90s test timeout: «a budget that
+ * only holds when nothing else is running is a budget that reports the machine, not the product».
+ * It does not weaken anything — a wrong state still fails, at twenty seconds exactly as it did at
+ * five.
+ */
+const STATE_ARRIVES = { timeout: 20000 } as const
+
 async function registerAndVerify(
   page: import('@playwright/test').Page,
   email: string,
@@ -66,7 +81,7 @@ async function registerAndVerify(
    * assertion is about the application's actual state and not about the wording of a label.
    */
   await expect(page).toHaveURL(/\/signup\/status/)
-  await expect(page.getByTestId('registration-status')).toHaveAttribute('data-state', 'email_verification_required')
+  await expect(page.getByTestId('registration-status')).toHaveAttribute('data-state', 'email_verification_required', STATE_ARRIVES)
 
   // No mail provider is configured, so the dev link is what stands in for the message.
   await page.getByTestId('registration-dev-verify').click()
@@ -79,10 +94,10 @@ async function registerAndVerify(
    * …and the phone before the money (PHONE-VERIFY-001). A proven address says nothing about the
    * number, so the mobile gate is what the application is waiting on next.
    */
-  await expect(page.getByTestId('registration-status')).toHaveAttribute('data-state', 'mobile_verification_required')
+  await expect(page.getByTestId('registration-status')).toHaveAttribute('data-state', 'mobile_verification_required', STATE_ARRIVES)
   await verifyMobile(page)
 
-  await expect(page.getByTestId('registration-status')).toHaveAttribute('data-state', 'approved_awaiting_payment')
+  await expect(page.getByTestId('registration-status')).toHaveAttribute('data-state', 'approved_awaiting_payment', STATE_ARRIVES)
   await payThroughSandbox(page)
 
   /*
