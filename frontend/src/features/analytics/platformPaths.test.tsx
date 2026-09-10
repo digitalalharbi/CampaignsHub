@@ -57,13 +57,28 @@ const PATHS = {
   cross_path_reason_en: 'Platforms are not compared across paths: one buying awareness and one buying sales are not better or worse than each other.',
 }
 
-function route() {
-  vi.mocked(getData).mockImplementation((url: string) => {
-    if (url.includes('platform-objectives')) return PATHS as never
-    if (url.includes('disclaimer')) return null as never
-    if (url.includes('/summary')) return { current: {}, previous: {}, delta: {}, currency: 'SAR' } as never
-    return [] as never
-  })
+/*
+ * ANALYTICS-FILTER-TRUTH-001 — `platform-objectives` is read through the ENVELOPE now.
+ *
+ * It declines the objective axis and names it in `meta.filter_scope`; a hook returning the payload
+ * alone could not pass that on. The body is unchanged, so both readers are served here rather than
+ * moving this fixture and leaving the neighbouring endpoints behind.
+ */
+function route(overrides: Record<string, { data: unknown; meta?: unknown }> = {}) {
+  const reply = (url: string) => {
+    for (const [fragment, response] of Object.entries(overrides)) {
+      if (url.includes(fragment)) return response
+    }
+    if (url.includes('platform-objectives')) return { data: PATHS }
+    if (url.includes('disclaimer')) return { data: null }
+    if (url.includes('/summary')) return { data: { current: {}, previous: {}, delta: {}, currency: 'SAR' } }
+    return { data: [] }
+  }
+
+  vi.mocked(getData).mockImplementation((url: string) => reply(url).data as never)
+  vi.mocked(getEnvelope).mockImplementation(
+    (url: string) => ({ meta: null, ...reply(url), message: null, success: true }) as never,
+  )
 }
 
 async function openPlatforms() {
@@ -145,23 +160,13 @@ describe('platform contribution, inside each path', () => {
    */
   it('marks a platform whose window is incomplete, where the comparison is made', async () => {
     // Freshness reads the ENVELOPE — its `meta.filter_scope` is what tells the panel it covers the project.
-    vi.mocked(getEnvelope).mockImplementation((url: string) =>
-      (url.includes('freshness')
-        ? {
-            data: [
-              { kind: 'ad_platform', provider: 'tiktok', account_id: 'a1', name: 'TikTok', latest_metric_date: '2026-08-27', data_freshness_at: null, days_with_data: 27, missing_days: 3, last_sync_status: 'fresh', last_sync_at: null, last_sync_error: null },
-            ],
-            meta: { filter_scope: { applied: [], unapplied: ['provider'] } },
-            message: null,
-            success: true,
-          }
-        : { data: null, meta: null, message: null, success: true }) as never,
-    )
-    vi.mocked(getData).mockImplementation((url: string) => {
-      if (url.includes('platform-objectives')) return PATHS as never
-      if (url.includes('disclaimer')) return null as never
-      if (url.includes('/summary')) return { current: {}, previous: {}, delta: {}, currency: 'SAR' } as never
-      return [] as never
+    route({
+      freshness: {
+        data: [
+          { kind: 'ad_platform', provider: 'tiktok', account_id: 'a1', name: 'TikTok', latest_metric_date: '2026-08-27', data_freshness_at: null, days_with_data: 27, missing_days: 3, last_sync_status: 'fresh', last_sync_at: null, last_sync_error: null },
+        ],
+        meta: { filter_scope: { applied: [], unapplied: ['provider'] } },
+      },
     })
     await openPlatforms()
 
@@ -213,9 +218,9 @@ describe('a path that cannot state a spread', () => {
    * conclusion the missing reason produced, arrived at from the other side.
    */
   it('says so when the platforms cost about the same', async () => {
-    vi.mocked(getData).mockImplementation((url: string) => {
-      if (url.includes('platform-objectives')) {
-        return {
+    route({
+      'platform-objectives': {
+        data: {
           ...PATHS,
           paths: [{
             ...PATHS.paths[0]!,
@@ -227,11 +232,8 @@ describe('a path that cannot state a spread', () => {
               { provider: 'tiktok', spend: 1_000, impressions: 100_000, clicks: 0, landing_page_views: 0, orders: 10, revenue: 0, campaigns: 1, spend_share: 0.5 },
             ],
           }],
-        } as never
-      }
-      if (url.includes('disclaimer')) return null as never
-      if (url.includes('/summary')) return { current: {}, previous: {}, delta: {}, currency: 'SAR' } as never
-      return [] as never
+        },
+      },
     })
     await openPlatforms()
 
