@@ -1,4 +1,5 @@
 import {
+  Link2,
   BarChart3,
   BellRing,
   CreditCard,
@@ -56,6 +57,7 @@ export const appNavGroups: readonly NavGroup[] = [
        */
       { to: '/app/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks, ent: 'tasks' },
       { to: '/app/files', ar: 'الملفات', en: 'Files', icon: FolderOpen, ent: 'files' },
+      { to: '/app/short-links', ar: 'اختصار الروابط', en: 'Short Links', icon: Link2, ent: 'campaigns' },
     ],
   },
   {

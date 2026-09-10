@@ -68,6 +68,7 @@ import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoute
 // Canonical pages (Integrations absorbs Connection Center + Drive connector; Branding lives under Settings).
 import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
 import { DrivePage } from '@/features/drive/DrivePage'
+import { ShortLinksPage } from '@/features/shortLinks/ShortLinksPage'
 import { TasksPage } from '@/features/tasks/TasksPage'
 import { CreativesPage } from '@/features/content/CreativesPage'
 import { CreativeDetailPage } from '@/features/content/CreativeDetailPage'
@@ -387,6 +388,7 @@ export const router = createBrowserRouter(withErrorBoundary([
           { path: 'content/:creativeId', element: <CreativeDetailPage portal="app" /> },
           { path: 'reports', element: <ReportsPage /> },
           { path: 'tasks', element: <TasksPage /> },
+          { path: 'short-links', element: <ShortLinksPage /> },
           /*
            * `approvals`, `tracking`, `optimization` and `opportunities` are GONE (REVIEW-001).
            *
@@ -560,6 +562,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'reports', element: <ReportsPage /> },
             { path: 'alerts', element: <AlertsPage /> },
             { path: 'tasks', element: <TasksPage /> },
+          { path: 'short-links', element: <ShortLinksPage /> },
             { path: 'files', element: <FilesLibraryPage /> },
           /*
            * INTEG-RUNTIME §2 — Drive is a FILE source, not one of the eight providers.
