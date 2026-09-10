@@ -2,7 +2,9 @@ import { Link } from 'react-router-dom'
 import { StatCard, type StatTone } from '@/components/ui/StatCard'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Building2, FolderKanban, Inbox, Megaphone, ShieldCheck } from 'lucide-react'
-import { fetchAgencyDashboard, type AgencyDashboard } from './api'
+import { fetchAgencyDashboard, fetchClientBudgets, type AgencyDashboard, type ClientBudgetRow } from './api'
+import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
+import { money, ratio } from '@/features/analytics/format'
 import { Skeleton } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
@@ -133,6 +135,14 @@ function ObjectiveBreakdown({ data, ar }: { data: AgencyDashboard['campaigns']; 
 export function AgencyDashboardPage() {
   const ar = useUi((s) => s.locale) === 'ar'
   const query = useQuery({ queryKey: ['agency', 'dashboard'], queryFn: fetchAgencyDashboard })
+  /*
+    BUDGET-GOVERNANCE-001 — the CLIENT rung, on the page an agency opens first.
+
+    This dashboard carried counts of clients, projects and campaigns and no money at all, so «which
+    client is overspending» could not be asked anywhere in the product. Its own query, because a
+    budget failing must not take the counts down with it.
+  */
+  const budgets = useQuery({ queryKey: ['agency', 'client-budgets'], queryFn: fetchClientBudgets, retry: false })
 
   if (query.isLoading) {
     return (
@@ -287,6 +297,16 @@ export function AgencyDashboardPage() {
           filters={AGENCY_WINDOW}
         />
       </div>
+
+      {/*
+        BUDGET-GOVERNANCE-001 — the CLIENT rung: «which client is overspending».
+
+        DATA → VISUAL → COMPARISON: one row per client, sorted by committed budget, with the pace
+        against it. Nothing here is a second budget engine — the figures are the same aggregator's,
+        rolled up per client through the same rules the campaigns overview applies per project.
+      */}
+      <ClientBudgets rows={budgets.data ?? []} loading={budgets.isLoading} failed={budgets.isError} ar={ar} />
+
     </div>
   )
 }
@@ -315,5 +335,59 @@ function AttentionRow({ to, label, value, ar }: { to: string; label: string; val
         </span>
       </Link>
     </li>
+  )
+}
+
+
+/**
+ * One client's whole budget, and whether it is going to hold.
+ *
+ * The refusals travel with the figures: a client whose campaigns span two currencies shows «—» and
+ * says so rather than adding riyals to dollars, and `excluded` counts what was left out — a total
+ * that quietly drops a campaign is worse than one that admits it.
+ */
+function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[]; loading: boolean; failed: boolean; ar: boolean }) {
+  if (loading || failed || rows.length === 0) return null
+
+  const dash = '—'
+
+  return (
+    <section className="mt-6" data-testid="client-budgets">
+      <h2 className="mb-2 font-heading text-lg font-bold text-text-primary">
+        {ar ? 'ميزانيات العملاء' : 'Client budgets'}
+      </h2>
+      <MetricTable
+        head={ar
+          ? ['العميل', 'الميزانية', 'المصروف', 'المتبقي', 'المتوقع', 'السرعة']
+          : ['Client', 'Budget', 'Spent', 'Remaining', 'Forecast', 'Pace']}
+        rows={rows.map((r) => [
+          <div key="c" className="flex flex-col">
+            <span className="font-semibold text-text-primary">{r.client_name}</span>
+            {/* No silent caps — what the total left out is said where the total is read. */}
+            {r.excluded > 0 && (
+              <span className="text-[11px] text-text-muted">
+                {ar ? `${r.excluded} خارج الحساب` : `${r.excluded} excluded`}
+              </span>
+            )}
+          </div>,
+          <span key="b" dir="ltr">{r.budget === null ? dash : money(r.budget, r.currency ?? undefined)}</span>,
+          <span key="s" dir="ltr">{r.spent === null ? dash : money(r.spent, r.currency ?? undefined)}</span>,
+          <span key="r" dir="ltr">{r.remaining === null ? dash : money(r.remaining, r.currency ?? undefined)}</span>,
+          <span key="f" dir="ltr">{r.projected === null ? dash : money(r.projected, r.currency ?? undefined)}</span>,
+          <span key="p" dir="ltr" className={r.pace !== null && r.pace > 1 ? 'font-semibold text-danger' : undefined}>
+            {r.pace === null ? dash : ratio(r.pace)}
+          </span>,
+        ])}
+        values={rows.map((r): SortValues => [
+          r.client_name,
+          r.budget,
+          r.spent,
+          r.remaining,
+          r.projected,
+          r.pace,
+        ])}
+        initialSort={{ column: 1, dir: 'desc' }}
+      />
+    </section>
   )
 }
