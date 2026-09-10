@@ -66,7 +66,8 @@ describe('the portfolio budget row', () => {
   it('counts the campaigns it left out', () => {
     render(<BudgetPacingRow ar={false} rows={[row({}), row({ campaign_id: 'c2', pacing_basis: 'no_budget', budget: 0 })]} />)
 
-    expect(screen.getByTestId('budget-pacing-excluded')).toHaveTextContent(/1 campaigns excluded/i)
+    /* «1 campaign», not «1 campaigns» — the noun agrees through . */
+    expect(screen.getByTestId('budget-pacing-excluded')).toHaveTextContent(/1 campaign excluded/i)
   })
 
   /** Nothing at all renders nothing — an empty project is not a budget of zero. */

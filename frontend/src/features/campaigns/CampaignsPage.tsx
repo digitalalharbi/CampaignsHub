@@ -945,7 +945,7 @@ export function BudgetPacingRow({ rows, ar }: { rows: BudgetRow[]; ar: boolean }
       <p className="text-xs text-text-muted" data-testid="budget-pacing-unavailable">
         {b.currencies > 1
           ? (ar ? `تعذّر جمع الميزانية — ${b.currencies} عملات مختلفة` : `Budget not totalled — ${b.currencies} different currencies`)
-          : (ar ? `لا ميزانية قابلة للمقارنة (${b.excluded} حملة خارج الحساب)` : `No comparable budget (${b.excluded} campaigns excluded)`)}
+          : (ar ? `لا ميزانية قابلة للمقارنة — ${countedCampaigns(b.excluded, 'ar')} خارج الحساب` : `No comparable budget — ${countedCampaigns(b.excluded, 'en')} excluded`)}
       </p>
     )
   }
@@ -990,7 +990,7 @@ export function BudgetPacingRow({ rows, ar }: { rows: BudgetRow[]; ar: boolean }
       {/* No silent caps: a campaign left out of the total is counted where the total is read. */}
       {b.excluded > 0 && (
         <span className="text-[11px] text-text-muted" data-testid="budget-pacing-excluded">
-          {ar ? `${b.excluded} حملة خارج الحساب — بلا ميزانية أو بعملة مختلفة` : `${b.excluded} campaigns excluded — no budget, or a different currency`}
+          {ar ? `${countedCampaigns(b.excluded, 'ar')} خارج الحساب — بلا ميزانية أو بعملة مختلفة` : `${countedCampaigns(b.excluded, 'en')} excluded — no budget, or a different currency`}
         </span>
       )}
     </div>
