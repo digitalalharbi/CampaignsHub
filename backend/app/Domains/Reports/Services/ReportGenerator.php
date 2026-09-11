@@ -451,11 +451,50 @@ final class ReportGenerator
      * `avg` equals its own value, so it was always «at or above average» and every report shipped a
      * strength that says nothing. A comparison needs somebody to compare with.
      */
+    /**
+     * Ratios are not summable: adding two ROASes produces a number that is a ratio of nothing. Only
+     * the base figures are pooled, and the ratio is derived from them once.
+     */
+    private const DERIVED_NOT_SUMMABLE = [
+        'roas', 'cpa', 'cpl', 'cpc', 'cpm', 'cpe', 'cpi', 'ctr', 'aov', 'cost_per_view',
+        'consumed_pct', 'pace', 'spend_share', 'frequency', 'conversion_rate', 'completion_rate',
+    ];
+
     private function platformNotes(ReportObjectiveLens $lens, array $platforms, string $currency): array
     {
         $metric = $lens->rankingMetric();
         $rated = array_values(array_filter($platforms, fn ($p) => ($p[$metric['key']] ?? null) !== null && (float) ($p['spend'] ?? 0) > 0));
-        $average = count($rated) > 1 ? $this->avg($rated, $metric['key']) : null;
+
+        /*
+         * AGGREGATION-TRUTH-001 — the comparator is what the ACCOUNT did, not the mean of the
+         * platforms' ratios.
+         *
+         * This was `array_sum(ratios) / count(ratios)`, with every platform weighing the same
+         * whatever it spent. Ten riyals returning twenty times over dragged the mean ROAS to 8.0
+         * across an account actually returning 1.51×, and the solid performer beneath it was written
+         * up as «دون المتوسط» — in the copy a client keeps.
+         *
+         * Summing the base figures and deriving once is the rule the rest of the product already
+         * holds — `ClientBudgetRollup`, `portfolioBudget`, the cross-provider totals — and it reuses
+         * the aggregator's own formulas rather than restating them here, so «the account's CPA»
+         * cannot come to mean two different things on two screens.
+         */
+        $average = null;
+        if (count($rated) > 1) {
+            $pooled = [];
+            foreach ($rated as $p) {
+                foreach ($p as $key => $value) {
+                    if (is_numeric($value) && ! in_array($key, self::DERIVED_NOT_SUMMABLE, true)) {
+                        $pooled[$key] = ($pooled[$key] ?? 0) + (float) $value;
+                    }
+                }
+            }
+
+            $derived = app(MetricsAggregator::class)->derive($pooled);
+            $average = isset($derived[$metric['key']]) && is_numeric($derived[$metric['key']])
+                ? (float) $derived[$metric['key']]
+                : null;
+        }
 
         $notes = [];
         foreach ($platforms as $p) {
@@ -471,13 +510,6 @@ final class ReportGenerator
         }
 
         return $notes;
-    }
-
-    private function avg(array $rows, string $key): ?float
-    {
-        $vals = array_filter(array_map(fn ($r) => $r[$key] ?? null, $rows), fn ($v) => $v !== null);
-
-        return $vals === [] ? null : array_sum($vals) / count($vals);
     }
 
     /**

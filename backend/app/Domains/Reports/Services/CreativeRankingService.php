@@ -31,8 +31,6 @@ final class CreativeRankingService
     public function rank(string $objective, array $items, int $limit = 5): array
     {
         $items = array_values(array_filter($items, fn ($i) => (float) ($i['spend'] ?? 0) > 0));
-        $avgCpa = $this->average($items, 'cpa');
-        $avgCtr = $this->average($items, 'ctr');
 
         [$sortKey, $direction, $reason] = $this->strategy($objective, $items);
 
@@ -62,7 +60,7 @@ final class CreativeRankingService
             return $direction === 'desc' ? $vb <=> $va : $va <=> $vb;
         });
 
-        return array_map(fn ($i) => $i + ['reason' => $reason($i, $avgCpa, $avgCtr)], array_slice($items, 0, $limit));
+        return array_map(fn ($i) => $i + ['reason' => $reason($i)], array_slice($items, 0, $limit));
     }
 
     /**
@@ -99,9 +97,6 @@ final class CreativeRankingService
             return [];
         }
 
-        $avgCpa = $this->average($measured, 'cpa');
-        $avgCtr = $this->average($measured, 'ctr');
-
         // The same order as `rank()`, reversed: worst is the far end of «best».
         usort($measured, function ($a, $b) use ($sortKey, $direction) {
             $cmp = ($a[$sortKey] ?? 0) <=> ($b[$sortKey] ?? 0);
@@ -112,7 +107,7 @@ final class CreativeRankingService
         $reason = $this->weakness($sortKey);
 
         return array_map(
-            fn ($i) => $i + ['reason' => $reason($i, $avgCpa, $avgCtr)],
+            fn ($i) => $i + ['reason' => $reason($i)],
             array_slice($measured, 0, $limit),
         );
     }
@@ -131,7 +126,7 @@ final class CreativeRankingService
      * `RankingMetric` carries the Arabic name and the direction, so the phrasing follows the metric
      * and a metric added to a layout is explained without editing this file.
      *
-     * @return callable(array<string, mixed>, ?float, ?float): string
+     * @return callable(array<string, mixed>): string
      */
     private function weakness(string $metric): callable
     {
@@ -297,13 +292,6 @@ final class CreativeRankingService
         };
 
         return [$key, $direction, $reason];
-    }
-
-    private function average(array $items, string $key): ?float
-    {
-        $vals = array_filter(array_map(fn ($i) => $i[$key] ?? null, $items), fn ($v) => $v !== null);
-
-        return $vals === [] ? null : array_sum($vals) / count($vals);
     }
 
     private function fmt(?float $v): string
