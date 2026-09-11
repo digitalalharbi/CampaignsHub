@@ -454,7 +454,20 @@ export interface AccountSyncRun {
   repeats_since: string | null
 }
 
-export function getAccountLogs(id: string): Promise<{ account: AccountRow; runs: AccountSyncRun[] }> {
+/**
+ * OPS-LEDGER-001 — the log states how much history exists, not how much arrived.
+ *
+ * Two caps stand between a reader and an account's history: two hundred runs are read, collapsed,
+ * then cut to fifty. An account synced every half hour passes two hundred runs in four days, so a
+ * list that simply stops reads as «this is what it has been doing» rather than «this is the most
+ * recent fifty».
+ */
+export function getAccountLogs(id: string): Promise<{
+  account: AccountRow
+  runs: AccountSyncRun[]
+  runs_total?: number
+  runs_withheld?: number
+}> {
   return getData(`/accounts/${id}/logs`)
 }
 
