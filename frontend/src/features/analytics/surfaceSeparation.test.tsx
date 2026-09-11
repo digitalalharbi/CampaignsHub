@@ -82,23 +82,25 @@ describe('the dashboard and the analysis are different surfaces', () => {
   })
 
   /**
-   * The dashboard is CONCISE: it carries the four operational answers and not the analysis.
+   * The dashboard KEEPS the curve, the rate trends and the store ledger — Owner correction.
    *
-   * The spend curve, the ROAS/CPA/CTR trio and the store ledger answer «why», and both surfaces drew
-   * all three — which is what made them one screen with its first panel swapped.
+   * This case asserted their absence. #362 had moved all three to the analysis on the grounds that
+   * they answer «why»; the Owner's reply was that they are also how an operator reads what is
+   * happening now, and that «افتح التحليلات للسبب والتفصيل» is not a substitute for information that
+   * belongs on this page. A guard that still demanded the stripped dashboard would have failed the
+   * corrected product and passed the one the Owner rejected, so it asserts the correction instead.
+   *
+   * What still separates the surfaces is ORDER, not inventory — held by `primaryKpiHierarchy.test.ts`,
+   * which fails if the two ever render the same ordered major sections.
    */
-  it('the dashboard drops the analytical blocks', async () => {
+  it('the dashboard keeps the blocks #362 removed', async () => {
     renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
 
     const overview = await screen.findByTestId('dashboard-overview')
 
-    expect(overview.textContent).not.toMatch(/Spend, results and revenue/i)
-    /*
-      CTR, not ROAS. «ROAS» is also a COLUMN in the best-campaigns table, which is operational content
-      the dashboard keeps — asserting on it would fail for the right page showing the right thing.
-      CTR appears only as a rate-trend panel, so its absence is exactly the claim being made.
-    */
-    expect(overview.textContent).not.toMatch(/CTR/)
+    expect(overview.textContent).toMatch(/Spend, results and revenue/i)
+    /* CTR appears here only as a rate-trend panel, so its presence is exactly the claim being made. */
+    expect(overview.textContent).toMatch(/CTR/)
   })
 
   /* And the analysis keeps them — nothing was deleted, only un-duplicated. */

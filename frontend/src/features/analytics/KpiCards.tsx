@@ -133,6 +133,14 @@ export function KpiCards({
                 type="button"
                 onClick={() => { setPicking(picking === index ? null : index); setTerm('') }}
                 aria-expanded={picking === index}
+                aria-haspopup="listbox"
+                /*
+                  The visible text is the metric's name, which alone reads as a label rather than a
+                  control — a screen reader would announce «Spend, button» and leave the reader to
+                  guess what pressing it does. The action goes in the name; the name still carries the
+                  metric, so the card is still identifiable.
+                */
+                aria-label={ar ? `غيّر المؤشر: ${item.label}` : `Change metric: ${item.label}`}
                 data-testid={`kpi-picker-${index}`}
                 className="inline-flex items-center gap-1 text-start hover:text-text-primary"
               >
