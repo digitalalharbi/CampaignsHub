@@ -1,4 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { ArrowLeftRight } from 'lucide-react'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import {
   Bar,
@@ -261,7 +263,17 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
    * that colleague a different answer to the question they were discussing.
    */
   const [days, setDays] = useUrlNumber('days', 30)
-  const [tab, setTab] = useUrlState('tab', 'performance') as [(typeof TABS)[number]['id'], (v: string) => void]
+  const [urlTab, setTab] = useUrlState('tab', 'performance') as [(typeof TABS)[number]['id'], (v: string) => void]
+
+  /*
+   * SURFACE-SEPARATION-001 — the dashboard is the overview, and only the overview.
+   *
+   * A `?tab=` on the dashboard is a link somebody already holds, from when both routes offered all
+   * twelve. It is not ignored — ignoring it would answer a bookmark for «budget» with the KPI strip
+   * and no explanation — it is CARRIED to the surface that has that tab.
+   */
+  const isAnalysis = surface === 'analytics'
+  const tab = isAnalysis ? urlTab : 'performance'
   const [providers, setProviders] = useUrlList('provider')
   const [campaignIds, setCampaignIds] = useUrlList('campaign')
   /*
@@ -373,15 +385,40 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
       <PageIntro
         testid={`${surface}-intro`}
         title={surface === 'dashboard' ? (ar ? 'لوحة التحكم' : 'Dashboard') : (ar ? 'التحليلات' : 'Analytics')}
+        /*
+          SURFACE-SEPARATION-001 — each surface says what it is FOR, and they are different things.
+
+          Both purposes described the same screen, because the screen was the same. The dashboard
+          promises the operational read; the analysis promises the reason behind it.
+        */
         purpose={surface === 'dashboard'
           ? (ar
-              ? 'حالة الحساب الآن: الإنفاق والنتائج والعائد، ثم المنصات والحملات والقمع — كل رقم بأساسه.'
-              : 'Where the account stands: spend, results and return, then platforms, campaigns and the funnel — every figure with its basis.')
+              ? 'حالة الحساب الآن: ما يحدث، وما تغيّر، وما يحتاج انتباهك — ثم افتح التحليلات للسبب.'
+              : 'Where the account stands right now: what is happening, what changed, and what needs attention — then open Analytics for the reason.')
           : ar
             ? 'استكشاف تفصيلي للأداء: المنصات، الحملات، القمع، المتجر، الميزانيات، وأساس كل رقم.'
             : 'A detailed look at performance — platforms, campaigns, the funnel, the store, budgets, and the basis of every figure.'}
         badges={<ProvenanceBadge provenance={provenanceSummary.data?.provenance} />}
       />
+
+      {/*
+        «What should I open next» is a door, not a dead end.
+
+        A stale `?tab=` is carried across rather than dropped: a bookmark for «budget» that lands on
+        the KPI strip with no explanation is worse than one that lands on the budget.
+      */}
+      {!isAnalysis && (
+        <div className="-mt-1">
+          <Link
+            to={`/app/analytics${urlTab && urlTab !== 'performance' ? `?tab=${urlTab}` : ''}`}
+            data-testid="dashboard-to-analytics"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700"
+          >
+            {ar ? 'افتح التحليلات للسبب والتفصيل' : 'Open Analytics for the reason and the detail'}
+            <ArrowLeftRight size={14} aria-hidden />
+          </Link>
+        </div>
+      )}
 
       <FilterBar
         id={surface}
@@ -484,6 +521,21 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         would add four more lines of text to a bar whose problem was too much text. The gap plus the
         divider is enough to read them as clusters, and the labels stay the only words in the row.
       */}
+      {/*
+        SURFACE-SEPARATION-001 — the tab bar belongs to the ANALYSIS.
+
+        `ANALYTICS-AS-DASHBOARD-001` merged the two surfaces because they had converged: the same
+        filters over the same KPI strip, twice. That fixed the duplication and produced a different
+        problem — both routes rendered these same twelve tabs, so «the dashboard» and «the analysis»
+        were one screen with its first panel swapped, and neither was concise nor deep.
+
+        The depth IS the tabs, so they are the analysis. The dashboard answers what is happening,
+        what changed, what needs attention and what to open next, and hands the «why» to the door it
+        offers. What is NOT split is the arithmetic: both surfaces compose the same canonical
+        components over the same hooks, and no second metric pipeline exists to disagree with the
+        first.
+      */}
+      {isAnalysis && (
       <div
         role="tablist"
         aria-label={ar ? 'أقسام التحليلات' : 'Analytics sections'}
@@ -517,6 +569,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           </div>
         ))}
       </div>
+      )}
 
       {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />}
       {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />}

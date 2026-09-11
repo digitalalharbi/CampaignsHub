@@ -6,7 +6,13 @@ import { useProject } from '@/stores/project'
 import type { CommerceSummary, FreshnessRow } from '../analytics/api'
 
 /**
- * UNIFIED-001 — the connected store's own figures, on the dashboard.
+ * UNIFIED-001 — the connected store's own figures, on the ANALYSIS.
+ *
+ * SURFACE-SEPARATION-001 moved this block off the dashboard. The dashboard answers what is happening,
+ * what changed, what needs attention and what to open next; a merchant's ledger beside a platform's
+ * estimate is «why the two numbers differ», and that question is the analysis. Nothing about the block
+ * changed — the same `commerce` entry, the same labelling and the same refusals — so these tests moved
+ * with it rather than being rewritten.
  *
  * The KPI cards carry `revenue` as the ad platforms report it: a pixel's estimate of what it believes
  * its clicks caused. The store block carries the merchant's ledger. They are different numbers, and
@@ -73,12 +79,14 @@ function summary(commerce: CommerceSummary | null) {
 }
 
 /*
- * Mounted as `<AnalyticsPage surface="dashboard" />` — the component `/app/dashboard` actually
+ * Mounted as `<AnalyticsPage />` — the component `/app/dashboard` actually
  * renders (router.tsx). These cases were written against `features/dashboard/DashboardPage.tsx`,
  * which stopped being routed and was imported by nothing but these four files: coverage aimed at a
  * page no user could open, while the real Dashboard was covered only by inference.
  *
- * The assertions are unchanged. They already addressed the surface by its testids — `dashboard-intro`,
+ * The assertions are unchanged but for the surface's own testid — `analytics-intro` rather than
+ * `dashboard-intro`, since the block reads on the analysis now. They already addressed the surface by
+ * its testids —
  * `dashboard-metrics` — and those come from the `surface` prop, so they read the routed page as
  * literally as they read the retired one.
  */
@@ -100,7 +108,7 @@ describe('the dashboard store strip', () => {
   it('shows the store ledger beside the platforms figures, labelled as the stores', async () => {
     vi.mocked(useSummary).mockReturnValue(summary(STORE) as never)
 
-    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage />, { locale: 'ar' })
 
     const block = await screen.findByTestId('dashboard-store')
     expect(block.textContent).toMatch(/سجل التاجر/)
@@ -117,7 +125,7 @@ describe('the dashboard store strip', () => {
   it('says how many orders arrived with no campaign attribution', async () => {
     vi.mocked(useSummary).mockReturnValue(summary(STORE) as never)
 
-    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage />, { locale: 'ar' })
 
     const note = await screen.findByTestId('dashboard-store-unattributed')
     expect(note.textContent).toMatch(/10/)
@@ -137,7 +145,7 @@ describe('the dashboard store strip', () => {
       ...STORE, filtered_view: true,
     }) as never)
 
-    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage />, { locale: 'ar' })
 
     const note = await screen.findByTestId('dashboard-store-unfiltered')
     expect(note.textContent).toMatch(/لكامل المتجر/)
@@ -149,7 +157,7 @@ describe('the dashboard store strip', () => {
   it('shows no unfiltered warning when nothing is filtered', async () => {
     vi.mocked(useSummary).mockReturnValue(summary(STORE) as never)
 
-    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage />, { locale: 'ar' })
 
     await screen.findByTestId('dashboard-store')
     expect(screen.queryByTestId('dashboard-store-unfiltered')).toBeNull()
@@ -159,11 +167,11 @@ describe('the dashboard store strip', () => {
   it('shows no store strip when the project has no store', async () => {
     vi.mocked(useSummary).mockReturnValue(summary(null) as never)
 
-    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage />, { locale: 'ar' })
 
     // Waits on the page's own header rather than on the applied-filters row: after UX-DASH-001 that
     // row is absent whenever nothing is narrowed, which on a freshly opened dashboard is always.
-    await screen.findByTestId('dashboard-intro')
+    await screen.findByTestId('analytics-intro')
     expect(screen.queryByTestId('dashboard-store')).toBeNull()
   })
 
@@ -177,7 +185,7 @@ describe('the dashboard store strip', () => {
   it('says when an order had its timezone assumed', async () => {
     vi.mocked(useSummary).mockReturnValue(summary({ ...STORE, orders_with_assumed_timezone: 4 }) as never)
 
-    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage />, { locale: 'ar' })
 
     const note = await screen.findByTestId('dashboard-store-assumed-tz')
     expect(note.textContent).toMatch(/4/)
@@ -188,7 +196,7 @@ describe('the dashboard store strip', () => {
   it('shows no timezone warning when every store stated its zone', async () => {
     vi.mocked(useSummary).mockReturnValue(summary(STORE) as never)
 
-    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage />, { locale: 'ar' })
 
     await screen.findByTestId('dashboard-store')
     expect(screen.queryByTestId('dashboard-store-assumed-tz')).toBeNull()
@@ -210,7 +218,7 @@ describe('the dashboard store strip', () => {
     // `useFreshness` now yields the envelope's two halves: the rows, and the scope the endpoint declined.
     vi.mocked(useFreshness).mockReturnValue({ data: { rows: [row], scope: undefined }, isLoading: false, isError: false } as never)
 
-    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage />, { locale: 'ar' })
 
     expect(await screen.findByText(/متجر العميل/)).toBeInTheDocument()
   })

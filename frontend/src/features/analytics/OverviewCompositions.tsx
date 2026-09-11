@@ -253,7 +253,7 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
  * region, and nothing that DRAWS may be rendered below the first block that EXPLAINS.
  */
 export function DashboardOverview(d: OverviewData) {
-  const { ar, s, ts, series, chartCurrency, comparable, drivers, strip, vm, points, objective, reportingCurrency } = d
+  const { ar, s, comparable, drivers, strip, vm, points, objective, reportingCurrency } = d
 
   return (
     <div className="space-y-4" data-testid="dashboard-overview" data-composition="dashboard">
@@ -306,80 +306,24 @@ export function DashboardOverview(d: OverviewData) {
           </p>
         )}
         {/*
-          ANALYTICS-TRUTH-002 — the chart the KPI strip contradicted.
+          SURFACE-SEPARATION-001 — the curve, the rate trends and the store ledger moved to the analysis.
 
-          It plotted `dataKey="spend"` off the raw row and withdrew both money lines whenever the
-          window's money was withheld, leaving a single «النتائج» line under a title naming three. The
-          money was never missing — it was unconverted, and the card above already stated it. Both
-          lines are drawn from the same reading, in whatever currency that reading is honestly in, and
-          the axis says which.
+          The Owner's direction splits the two surfaces by the question each answers. This one answers
+          what is happening, what changed, what needs attention and what to open next; a spend curve, a
+          ROAS/CPA/CTR trio and a store ledger answer «why», and «why» is the analysis.
+
+          None of it was deleted or duplicated: `AnalyticsOverview` draws the same curve and the same
+          three trends from the same `useTimeseries` rows, and the store ledger moved there beside
+          them — with the Store tab still holding the deep version, which is a summary and its detail
+          on one surface rather than two surfaces disagreeing. What is gone from HERE is the
+          duplication that made a dashboard indistinguishable from an analysis.
+
+          The order of what remains is unchanged, because the Owner already fixed it: the KPI row is
+          the first thing on the page, and the reading of «why» is the last.
         */}
-        <Panel
-          title={ar ? 'الإنفاق والنتائج والإيرادات' : 'Spend, results and revenue'}
-          description={
-            series.basis === 'original'
-              ? ar
-                ? `المال معروض بعملة المنصة (${series.currency}) — ${series.note ?? ''}`
-                : `Money shown in the platform's own currency (${series.currency}) — ${series.note ?? ''}`
-              : ar
-                ? 'الاتجاه اليومي للإنفاق والإيرادات والنتائج'
-                : 'Spend, revenue and results, day by day'
-          }
-          loading={ts.isLoading}
-          error={ts.isError}
-          empty={!ts.isLoading && series.rows.length === 0}
-        >
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={series.rows} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="date" tick={axis} tickFormatter={(v) => String(v).slice(5)} minTickGap={24} />
-                {/*
-                  Money and counts are different units, so they get different axes. Drawing 4,787 USD
-                  and 218 results against one scale flattens the smaller series onto the floor — which
-                  is the shape the old chart had even before the money went missing.
-                */}
-                <YAxis yAxisId="money" tick={axis} tickFormatter={(v) => compact(Number(v))} width={52} />
-                <YAxis yAxisId="count" orientation={ar ? 'left' : 'right'} tick={axis} tickFormatter={(v) => compact(Number(v))} width={44} />
-                <Tooltip
-                  {...tooltipProps}
-                  formatter={(v: number, name: string) =>
-                    name === (ar ? 'النتائج' : 'Results') ? num(v) : money(v, chartCurrency)
-                  }
-                />
-                <Legend wrapperStyle={{ fontSize: 13 }} />
-                {series.hasMoney && series.basis !== 'mixed' && (
-                  <Line yAxisId="money" name={ar ? 'الإنفاق' : 'Spend'} type="monotone" dataKey="spend" stroke={SERIES.spend} strokeWidth={2} dot={false} connectNulls />
-                )}
-                {series.hasMoney && series.basis !== 'mixed' && (
-                  <Line yAxisId="money" name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} connectNulls />
-                )}
-                <Line yAxisId="count" name={ar ? 'النتائج' : 'Results'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          {series.basis === 'mixed' && (
-            <p data-testid="series-currency-mixed" className="mt-2 text-xs text-text-secondary">{series.note}</p>
-          )}
-        </Panel>
-
-        {/*
-          Three metrics, three units — «3.20x», «21.96 USD» and «0.72%» share no axis. On one scale the
-          two small numbers lie flat on the floor and the chart says nothing, which is what shipped:
-          a single line at zero under a title naming three metrics, one of which was never plotted.
-
-          Each gets its own panel and its own scale, so each is readable.
-        */}
-        <div className="grid gap-3 lg:grid-cols-3">
-          <RateTrend title="ROAS" data={series.rows} dataKey="roas" color={SERIES.revenue} loading={ts.isLoading} error={ts.isError} format={(v: number) => ratio(v)} />
-          <RateTrend title="CPA" data={series.rows} dataKey="cpa" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => money(v, chartCurrency)} />
-          <RateTrend title="CTR" data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} />
-        </div>
 
         {/* The comparisons, the details and the alerts — «أ», shared with the marketing preview. */}
         <UnifiedCampaignOverview vm={vm} lang={ar ? 'ar' : 'en'} />
-
-        <StoreLedger commerce={s.data?.commerce ?? null} ar={ar} />
 
         {/*
          * ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — kept, and kept BELOW everything that draws.
@@ -517,6 +461,15 @@ export function AnalyticsOverview(d: OverviewData) {
         <RateTrend title="CPA" data={series.rows} dataKey="cpa" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => money(v, chartCurrency)} />
         <RateTrend title="CTR" data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} />
       </div>
+
+      {/*
+        SURFACE-SEPARATION-001 — the store ledger reads here, where «why» is the question.
+
+        It sat on the dashboard, which answers what is happening rather than what caused it. The Store
+        tab still holds the deep version; this is the same `commerce` entry read compactly beside the
+        curve it explains — a summary and its detail on one surface, not two surfaces with two answers.
+      */}
+      <StoreLedger commerce={s.data?.commerce ?? null} ar={ar} />
 
       {/*
         The evidence: the totals the reading above was computed from, and the curve those days were

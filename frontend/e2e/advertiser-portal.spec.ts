@@ -51,6 +51,26 @@ test.describe('the advertiser portal', () => {
     await page.getByRole('button', { name: 'Toggle language' }).first().click()
   }
 
+  /**
+   * SURFACE-SEPARATION-001 — the dashboard and the analysis are different products.
+   *
+   * Both routes rendered the same twelve tabs, so «the dashboard» and «the analysis» were one screen
+   * with its first panel swapped. In a real browser: the dashboard carries no analysis tab bar, the
+   * analysis does, and the dashboard offers a door into it rather than a dead end.
+   */
+  test('the dashboard is concise and the analysis is the deep one', async ({ page }) => {
+    await page.goto('/app/dashboard')
+    await expect(page.locator('main')).toBeVisible()
+
+    await expect(page.getByRole('tablist')).toHaveCount(0)
+    const door = page.getByTestId('dashboard-to-analytics')
+    await expect(door).toBeVisible()
+
+    await door.click()
+    await expect(page).toHaveURL(/\/app\/analytics/)
+    await expect(page.getByRole('tablist')).toBeVisible()
+  })
+
   test('the dashboard is genuinely bilingual, not just re-directed', async ({ page }) => {
     await page.goto('/app/dashboard')
     const main = page.locator('main')
