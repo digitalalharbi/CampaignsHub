@@ -18,11 +18,23 @@ export function TabActivity({ clientId }: { clientId: string }) {
   const t = useT()
   const q = useQuery({ queryKey: ['app', 'client', clientId, 'activity'], queryFn: () => listClientActivity(clientId) })
   const items = q.data?.timeline ?? []
+  const withheld = q.data?.timeline_withheld ?? 0
 
   if (q.isLoading) return <div className="h-24 animate-pulse rounded-xl bg-surface-secondary" />
   if (items.length === 0) return <div className="flex flex-col items-center gap-2 rounded-xl border border-border bg-surface p-10 text-center text-text-muted"><Activity size={22} /><span className="text-sm">{t('ac_empty')}</span></div>
 
   return (
+    <>
+      {/*
+        No silent caps. Three limits stand between the reader and this client's history — two
+        hundred audit rows, two hundred request events, a hundred after the merge — and a list that
+        simply stops reads as «this is what happened» rather than «this is the most recent hundred».
+      */}
+      {withheld > 0 && (
+        <p className="mb-3 text-xs text-text-muted" data-testid="activity-withheld">
+          {`${items.length} / ${q.data?.timeline_total ?? items.length}`}
+        </p>
+      )}
     <ol className="relative ms-3 space-y-4 border-s border-border ps-5">
       {items.map((item) => {
         const d = diff(item)
@@ -43,5 +55,6 @@ export function TabActivity({ clientId }: { clientId: string }) {
         )
       })}
     </ol>
+    </>
   )
 }
