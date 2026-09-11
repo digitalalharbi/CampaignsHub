@@ -164,6 +164,15 @@ export function ProjectIntegrationsPage() {
           </div>
         ) : (
           <div className="mt-3 space-y-2">
+            {/*
+              No silent caps: this card asks for five, and a card that quietly stops at five is
+              indistinguishable from a project that has five tasks.
+            */}
+            {(tasks.data?.total ?? 0) > (tasks.data?.tasks.length ?? 0) && (
+              <p className="text-xs text-text-muted" data-testid="project-tasks-count">
+                {`${tasks.data?.tasks.length} / ${tasks.data?.total}`}
+              </p>
+            )}
             {bindings.data?.map((b) => (
               <div key={b.id} className="flex items-center justify-between rounded-[9px] border border-border p-3">
                 <div>
@@ -213,13 +222,13 @@ export function ProjectIntegrationsPage() {
           <div className="mt-3 space-y-2">
             <Skeleton className="h-8 w-full" />
           </div>
-        ) : (tasks.data?.length ?? 0) === 0 ? (
+        ) : (tasks.data?.tasks.length ?? 0) === 0 ? (
           <div className="mt-3">
             <EmptyState title={t('no_project_tasks')} />
           </div>
         ) : (
           <div className="mt-3 space-y-2">
-            {tasks.data?.map((task) => (
+            {tasks.data?.tasks.map((task) => (
               <div key={task.id} className="flex items-center justify-between rounded-[9px] border border-border p-2.5">
                 <span className="text-sm font-semibold">{task.title}</span>
                 <div className="flex items-center gap-2">

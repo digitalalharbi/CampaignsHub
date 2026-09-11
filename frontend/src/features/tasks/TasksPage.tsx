@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useDebouncedValue } from '@/components/forms/useTypeahead'
 import { StatCard } from '@/components/ui/StatCard'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, LayoutGrid, ListChecks, Plus, Rows3, X } from 'lucide-react'
@@ -70,7 +71,6 @@ export function TasksPage() {
   const ar = locale === 'ar'
   const c = COPY[locale]
   const qc = useQueryClient()
-  const userId = useAuth((s) => s.user?.id)
   const canCreate = useAuth((s) => s.hasPermission('tasks.create'))
   const canUpdate = useAuth((s) => s.hasPermission('tasks.update'))
 
@@ -82,25 +82,56 @@ export function TasksPage() {
   const [creating, setCreating] = useState(false)
   const [selected, setSelected] = useState<Task | null>(null)
 
-  const q = useQuery({ queryKey: ['tasks', 'all'], queryFn: () => listTasks() })
+  /*
+   * TASKS-LEDGER-001 — the filters and the counts are the server's now.
+   *
+   * The endpoint handed over every task — its own comment cites 2,105 in one tenant — and this page
+   * fetched all of them, sifted them in the browser, and computed «open», «overdue» and «done» from
+   * whatever it had. Both halves had to move: paginating alone would leave those three counts
+   * describing the page, which is the defect the alerts queue was fixed for, one screen along.
+   *
+   * The search is debounced into the query key rather than filtering a local array, because the
+   * array is now one page and a match behind it would simply not exist as far as the reader is told.
+   */
+  const needle = useDebouncedValue(term.trim(), 250)
+
+  const [page, setPage] = useState(1)
+
+  const filters = useMemo(
+    () => ({
+      status: status === 'all' ? undefined : status,
+      priority: priority === 'all' ? undefined : priority,
+      q: needle || undefined,
+      mine: mine || undefined,
+    }),
+    [status, priority, needle, mine],
+  )
+
+  /*
+   * «Nothing here» and «nothing matched» are different sentences, and the page can no longer tell
+   * them apart by measuring an array it holds — it holds one page of a filtered query. The filters
+   * themselves answer it: with none applied, an empty result IS an empty workspace.
+   */
+  const unfiltered = Object.values(filters).every((v) => v === undefined)
+
+  /* Any change of filter puts the reader back on page one — page 3 of a narrower list is nowhere. */
+  useEffect(() => setPage(1), [status, priority, needle, mine])
+
+  const q = useQuery({
+    queryKey: ['tasks', 'page', filters, page],
+    queryFn: () => listTasks({ ...filters, page }),
+    placeholderData: (prev) => prev,
+  })
   const invalidate = () => qc.invalidateQueries({ queryKey: ['tasks'] })
-  const all = q.data ?? []
+
+  const tasks = q.data?.tasks ?? []
 
   const summary = {
-    total: all.length,
-    open: all.filter((t) => (OPEN_STATUSES as string[]).includes(t.status)).length,
-    overdue: all.filter((t) => t.is_overdue).length,
-    done: all.filter((t) => t.status === 'completed').length,
+    total: q.data?.total ?? 0,
+    open: q.data?.counts.open ?? 0,
+    overdue: q.data?.counts.overdue ?? 0,
+    done: q.data?.counts.done ?? 0,
   }
-
-  const needle = term.trim().toLowerCase()
-  const tasks = all.filter((t) => {
-    if (status !== 'all' && t.status !== status) return false
-    if (priority !== 'all' && t.priority !== priority) return false
-    if (mine && String(t.assignee_id ?? '') !== String(userId ?? '')) return false
-    if (needle && !`${t.title} ${t.description ?? ''}`.toLowerCase().includes(needle)) return false
-    return true
-  })
 
   return (
     <div className="flex w-full flex-col gap-4">
@@ -218,7 +249,7 @@ export function TasksPage() {
         // sentence here, and only the last of the three is something a Retry button can fix.
         <QueryFailure error={q.error} ar={ar} fallbackTitle={c.error} testId="tasks-failure" onRetry={() => q.refetch()} />
       ) : tasks.length === 0 ? (
-        <StateBox>{all.length === 0 ? c.none : c.no_match}</StateBox>
+        <StateBox>{unfiltered ? c.none : c.no_match}</StateBox>
       ) : view === 'board' ? (
         <BoardView tasks={tasks} ar={ar} canUpdate={canUpdate}
           onStatus={(id, s) => updateStatus(id, s)} />
@@ -229,6 +260,41 @@ export function TasksPage() {
               onStatus={(s) => updateStatus(t.id, s)} onOpen={() => setSelected(t)} />
           ))}
         </ul>
+      )}
+
+      {/*
+        No silent caps: the reader is told what they are looking at out of what exists.
+
+        A page that simply shows twenty-five rows of a hundred, with nothing saying so, is
+        indistinguishable from a workspace that has twenty-five tasks — which is the reason this
+        endpoint was unbounded in the first place.
+      */}
+      {(q.data?.lastPage ?? 1) > 1 && (
+        <nav className="flex items-center justify-between gap-3 text-sm" data-testid="tasks-pager">
+          <span className="text-text-secondary">
+            {ar
+              ? `${tasks.length} من ${summary.total} — صفحة ${q.data?.page ?? 1} من ${q.data?.lastPage ?? 1}`
+              : `${tasks.length} of ${summary.total} — page ${q.data?.page ?? 1} of ${q.data?.lastPage ?? 1}`}
+          </span>
+          <span className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={(q.data?.page ?? 1) <= 1}
+              className="rounded-lg border border-border px-3 py-1.5 font-medium text-text-primary disabled:opacity-40"
+            >
+              {ar ? 'السابق' : 'Previous'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={(q.data?.page ?? 1) >= (q.data?.lastPage ?? 1)}
+              className="rounded-lg border border-border px-3 py-1.5 font-medium text-text-primary disabled:opacity-40"
+            >
+              {ar ? 'التالي' : 'Next'}
+            </button>
+          </span>
+        </nav>
       )}
 
       {selected && (
