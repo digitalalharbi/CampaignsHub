@@ -19,6 +19,7 @@ import { useAuth } from '@/stores/auth'
 import { SidebarNav } from './SidebarNav'
 import { appNavGroups } from './appNav'
 import { PortalFrame } from './PortalFrame'
+import { useSectionTitle } from './sectionTitle'
 import type { MobileTab } from './MobileTabBar'
 import { moreGroupsFrom } from './mobileTabs'
 
@@ -79,6 +80,9 @@ export function AppShell() {
   const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } =
     useUi()
   const nav = useAuth((s) => s.user?.account?.nav)
+
+  /* The tab says which screen it holds — it carried the marketing line on every one of them. */
+  useSectionTitle(appNavGroups)
 
   // The same entitlement filter the rail applies, so the phone offers the same set — never more.
   const moreGroups = moreGroupsFrom(appNavGroups, APP_TABS, (leaf) => !nav || leaf.ent === undefined || nav.includes(leaf.ent))
