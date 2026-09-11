@@ -1,6 +1,11 @@
-import type { BudgetRow } from '@/features/analytics/api'
 
 /**
+ * BUDGET-GOVERNANCE-001 — one budget total, for every surface that needs one.
+ *
+ * Moved out of the campaigns feature because the CLIENT REPORT needs the same arithmetic and was
+ * doing it by hand: it summed a five-row SLICE and coerced a null spend to zero, so the consumption
+ * ring contradicted the pacing table printed directly beneath it — which already refuses both.
+ *
  * BUDGET-GOVERNANCE-001 — the portfolio's budget, from the rows the server already vouched for.
  *
  * The Campaigns overview showed a budget and what had been spent. The three figures an operator
@@ -48,13 +53,40 @@ const EMPTY: PortfolioBudget = {
   pace: null, currency: null, currencies: 0, excluded: 0,
 }
 
-export function portfolioBudget(rows: BudgetRow[]): PortfolioBudget {
+/**
+ * The minimum a row must carry to be added up.
+ *
+ * Structural rather than one feature's `BudgetRow`, because three surfaces hold their own shape for
+ * the same server rows — the analytics row, the client-report row and the platform rung — and the
+ * arithmetic depends on none of the differences. Naming the fields it actually reads is what lets
+ * one rule serve all of them without a cast at each call site.
+ */
+export interface PacedRow {
+  budget: number | null
+  budget_currency?: string | null
+  spent: number | null
+  projected_spend: number | null
+  pacing_basis?: string | null
+}
+
+export function portfolioBudget(rows: PacedRow[]): PortfolioBudget {
   /*
    * `comparable` is the only basis that may be added. The other four each name a reason the row's
    * own figures are not a like-for-like quantity — a currency mismatch, a partial spend, a budget
    * nobody set — and adding any of them produces a number that looks like money and is not.
    */
-  const usable = rows.filter((r) => r.pacing_basis === 'comparable' && r.budget > 0)
+  /*
+   * A row that STATES a refusal is excluded; a row that states nothing is not.
+   *
+   * `pacing_basis` is the aggregator's verdict and every live row carries it. A stored snapshot
+   * generated before the field existed carries none, and reading that absence as «not comparable»
+   * would empty an old client report of findings it used to make — a silent regression on documents
+   * already sent. So the refusals are enumerated and everything else is added, which is also the
+   * direction that cannot invent a figure: an unstated basis on a row with a budget and a spend is
+   * two numbers in one currency, which is all this arithmetic needs.
+   */
+  const refused = ['currency_mismatch', 'no_budget', 'partial', 'mixed_currency']
+  const usable = rows.filter((r) => ! refused.includes(String(r.pacing_basis ?? 'comparable')) && (r.budget ?? 0) > 0)
   const excluded = rows.length - usable.length
 
   if (usable.length === 0) return { ...EMPTY, excluded }
@@ -67,7 +99,7 @@ export function portfolioBudget(rows: BudgetRow[]): PortfolioBudget {
     return { ...EMPTY, currencies: currencies.size, excluded }
   }
 
-  const budget = usable.reduce((a, r) => a + r.budget, 0)
+  const budget = usable.reduce((a, r) => a + (r.budget ?? 0), 0)
   const spent = usable.reduce((a, r) => a + (r.spent ?? 0), 0)
 
   /*
