@@ -9,11 +9,29 @@ every main-branch run succeeded, and each deploy was confirmed by the production
 — `index-CRSBNyzy` → `index-0LC4GDOC` → `index-B7S4T79-` → `index-DZYx8WFU`. `campaignshub.io`
 answers 200 and `/api/v1/health` answers 200.
 
-#360 followed — the files library and the client activity timeline — merged and deployed, asset hash
-`DZYx8WFU` → `DNBW_CaG`, production root and `/api/v1/health` both 200.
+#360 (files library + client activity), #361 (budget export columns) and #362 (both Owner decisions)
+followed. Asset hash across the run: `CRSBNyzy` → `0LC4GDOC` → `B7S4T79-` → `DZYx8WFU` → `DNBW_CaG`
+→ `C4GtgTxb`. #361 left the hash unchanged, correctly — it was backend-only, so the bundle did not
+rebuild. Production root and `/api/v1/health` both 200 throughout.
 
-**PR #361 is open** on `budget-export`: the CSV/XLSX budget sheet, which exported five columns while
-the table showed nine.
+**PR #363 is open** on `ops-caps`: the sync-run summary, the Integration Centre's account log, and
+two ledger clauses corrected against the code.
+
+## The two Owner decisions, implemented
+
+**Dashboard vs Analytics (#362).** Measured first: the two compositions were the same eight blocks
+reordered, and both routes rendered the same twelve tabs. The depth IS the tabs, so the tab bar became
+the analysis; the dashboard drops the spend curve, the rate trends and the store ledger, all of which
+answer «why» and all of which the analysis already draws from the same rows. No second pipeline — the
+split is composition only. The block ORDER was not touched, because the Owner had already fixed it
+(never a diagnostic card above the KPI row; the reading of «why» last) and removal alone leaves exactly
+that. A stale `?tab=` is carried to `/app/analytics` rather than dropped.
+
+**Campaigns pagination (#362).** Paginating alone would have been worse than leaving it unbounded: the
+server cuts by `created_at`, the browser re-orders twenty-five rows, and «the campaigns that need you»
+silently becomes «the most relevant of the twenty-five newest». Relevance ordering moved server-side.
+`CampaignRelevance` mirrors the TS rule and sorts rows `byCampaign()` already produced — no second
+truth about a campaign's spend.
 
 ## What this run found
 
