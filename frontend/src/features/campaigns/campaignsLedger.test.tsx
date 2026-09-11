@@ -72,6 +72,13 @@ describe('the campaigns ledger', () => {
     vi.mocked(listCampaigns).mockResolvedValue(campaignPage([campaign('a')]))
     renderWithProviders(<CampaignsPage />, { locale: 'en' })
 
+    /*
+      The TABLE, chosen — CAMPAIGNS-OVERVIEW-FIRST-001 moved the landing view to Overview.
+      This case is about the campaign LIST, so it opens the list rather than relying on which mode
+      the page happens to start in.
+    */
+    fireEvent.click(await screen.findByTestId('view-table'))
+
     expect(await screen.findByText('Campaign a')).toBeInTheDocument()
     expect(screen.queryByTestId('campaigns-pager')).toBeNull()
   })
