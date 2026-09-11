@@ -827,53 +827,6 @@ export function CampaignsPage() {
               and «nothing could be examined» are separate answers, and a pacing question nobody
               could measure is not answered «no».
             */}
-            {(movement.up.length > 0 || movement.down.length > 0) && (
-              <div data-testid="campaigns-movers" className="grid gap-3 lg:grid-cols-2">
-                {([['up', movement.up], ['down', movement.down]] as const).map(([dir, rows]) => (
-                  <div key={dir} className="rounded-2xl border border-border bg-surface p-4">
-                    <h3 className="mb-2 text-sm font-bold text-text-primary">
-                      {dir === 'up'
-                        ? (ar ? 'الأكثر ارتفاعًا في الإنفاق' : 'Biggest rises in spend')
-                        : (ar ? 'الأكثر انخفاضًا في الإنفاق' : 'Biggest falls in spend')}
-                    </h3>
-
-                    {rows.length === 0 ? (
-                      <p className="py-4 text-center text-xs text-text-muted">
-                        {dir === 'up'
-                          ? (ar ? 'لا حملة ارتفع إنفاقها في هذه الفترة.' : 'No campaign spent more this period.')
-                          : (ar ? 'لا حملة انخفض إنفاقها في هذه الفترة.' : 'No campaign spent less this period.')}
-                      </p>
-                    ) : (
-                      <ul className="space-y-1">
-                        {rows.map((r) => (
-                          <li key={r.id} data-testid={`campaigns-mover-${r.id}`} className="flex items-center justify-between gap-3 text-sm">
-                            <Link to={`/app/campaigns/${r.id}`} className="truncate text-text-primary hover:text-brand-600">{r.name}</Link>
-                            <TrendPill delta={r.spend_change} />
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/*
-              And what could NOT be ranked, said rather than dropped.
-
-              A campaign with no baseline did not «not move» — it did not exist in the comparison
-              window, or nothing was reported for it. Leaving those out silently would make the two
-              lists read as the whole portfolio.
-            */}
-            {movement.withoutBaseline > 0 && (
-              <p data-testid="campaigns-movers-unranked" className="text-xs text-text-muted">
-                {/* Counted through `lib/counted`: «1 حملة» and «3 حملات» are different words. */}
-                {ar
-                  ? `${countedCampaigns(movement.withoutBaseline, 'ar')} بلا أساس للمقارنة — لم تكن تعمل في الفترة السابقة.`
-                  : `${countedCampaigns(movement.withoutBaseline, 'en')} have no baseline to compare against — they were not running in the previous period.`}
-              </p>
-            )}
-
             <LandingAnswer answer={landing} ar={ar} />
               {/*
                 CAMPAIGN-INTELLIGENCE-HUB — what is RUNNING, first.
