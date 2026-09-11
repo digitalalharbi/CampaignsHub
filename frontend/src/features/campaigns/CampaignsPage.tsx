@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { StatCard as SharedStatCard } from '@/components/ui/StatCard'
-import { portfolioBudget } from './portfolioBudget'
+import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { BarChart3, GitCompare, LayoutGrid, Plus, Rows, Search, TriangleAlert } from 'lucide-react'

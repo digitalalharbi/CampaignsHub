@@ -1,4 +1,5 @@
 import { DataMetricTable } from '@/components/ui/MetricTable'
+import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import { useMemo, useState } from 'react'
 import { attributionWindow } from './attributionWindow'
 import { ReportAdDetail } from './ReportAdDetail'
@@ -1233,20 +1234,70 @@ function FunnelSlide({ data }: { data: ReportData }) {
  * never what.
  */
 function BudgetSlide({ data }: { data: ReportData }) {
-  const rows = (data.budget ?? []).slice(0, 5)
-  const totalBudget = rows.reduce((a, b) => a + Number(b.budget ?? 0), 0)
-  const totalSpent = rows.reduce((a, b) => a + Number(b.spent ?? 0), 0)
-  const consumed = totalBudget > 0 ? totalSpent / totalBudget : 0
-  const bars = rows.map((r) => ({ label: providerLabel(canonicalPlatform(String(r.provider ?? '')), 'ar'), budget: Number(r.budget ?? 0), spent: Number(r.spent ?? 0) }))
+  const all = data.budget ?? []
+  const rows = all.slice(0, 5)
+
+  /*
+   * REPORT-ANALYTICAL-DEPTH-001 — the ring contradicted the table printed beneath it.
+   *
+   * This summed the five-row SLICE and coerced a null spend to zero, so an account running six
+   * platforms had a headline consumption computed from five of them, and a spend the money contract
+   * refused to state — withheld, partial, two currencies — counted as «nothing was spent there» and
+   * pulled the ring down. The pacing table below already refuses exactly that, with a dash and a
+   * reason, so the two halves of one slide disagreed on a page a CLIENT reads.
+   *
+   * `portfolioBudget` is the rule the campaigns overview and the client rollup use: every platform
+   * counted, the incomparable ones excluded and COUNTED, and two currencies refusing the total
+   * rather than adding riyals to dollars.
+   */
+  const total = portfolioBudget(all as unknown as Parameters<typeof portfolioBudget>[0])
+  const totalBudget = total.budget ?? 0
+  const totalSpent = total.spent ?? 0
+  const consumed = total.budget !== null && total.budget > 0 && total.spent !== null
+    ? total.spent / total.budget
+    : null
+  /*
+   * A spend the contract withholds is not a bar of length zero.
+   *
+   * This coerced `r.spent ?? 0`, so a platform whose spend cannot be stated got a full budget bar
+   * beside an empty spend bar — «budgeted, spent nothing», which is the claim the ring above it
+   * stopped making. A row that cannot be drawn truthfully is left out and COUNTED, in the same place
+   * and the same words the ring uses for the rows it excluded.
+   */
+  const drawable = rows.filter((r) => typeof r.spent === 'number' && typeof r.budget === 'number')
+  const undrawable = rows.length - drawable.length
+  const bars = drawable.map((r) => ({ label: providerLabel(canonicalPlatform(String(r.provider ?? '')), 'ar'), budget: Number(r.budget), spent: Number(r.spent) }))
   return (
     <div>
       <Title sub="المخطط مقابل المصروف وسرعة الصرف">تحليل الميزانية</Title>
       <div className="grid gap-3 lg:grid-cols-3">
-        <ChartCard title="استهلاك الميزانية" className="flex items-center justify-center">
-          <ProgressRing value={consumed} sublabel={`${compact(totalSpent)} / ${compact(totalBudget)}`} size={128} tone={consumed > 0.95 ? 'danger' : consumed > 0.8 ? 'warning' : 'brand'} />
+        <ChartCard title="استهلاك الميزانية" className="flex flex-col items-center justify-center gap-2">
+          {consumed === null ? (
+            /* A total that cannot be stated says so — a ring at 0% would be read as «nothing spent». */
+            <p className="px-3 text-center text-xs text-text-muted" data-testid="report-budget-unavailable">
+              {total.currencies > 1
+                ? `تعذّر جمع الميزانية — ${total.currencies} عملات مختلفة`
+                : 'لا ميزانية قابلة للمقارنة في هذه الفترة'}
+            </p>
+          ) : (
+            <>
+              <ProgressRing value={consumed} sublabel={`${compact(totalSpent)} / ${compact(totalBudget)}`} size={128} tone={consumed > 0.95 ? 'danger' : consumed > 0.8 ? 'warning' : 'brand'} />
+              {/* No silent caps: what the total left out is said where the total is read. */}
+              {total.excluded > 0 && (
+                <span className="text-[11px] text-text-muted" data-testid="report-budget-excluded">
+                  {`${total.excluded} منصة خارج الحساب`}
+                </span>
+              )}
+            </>
+          )}
         </ChartCard>
         <ChartCard title="المخطط مقابل المصروف" className="lg:col-span-2">
           <RankingBarChart data={bars} bars={[{ key: 'budget', name: 'الميزانية', color: 'var(--border-strong)', kind: 'money' }, { key: 'spent', name: 'المصروف', color: 'var(--brand-600)', kind: 'money' }]} horizontal height={170} currency={data.currency} />
+          {undrawable > 0 && (
+            <p className="mt-1 text-[11px] text-text-muted" data-testid="report-bars-excluded">
+              {`${undrawable} منصة بلا مصروف معلن — غير مرسومة`}
+            </p>
+          )}
         </ChartCard>
       </div>
       {rows.length > 0 && (

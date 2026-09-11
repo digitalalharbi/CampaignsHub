@@ -217,12 +217,29 @@ export function PrintDocument({
 
   // Keyed by PLATFORM since CLIENT-REPORT-ENTITY-BOUNDARY-001; an old snapshot's per-campaign rows
   // never arrive here, because `ClientReportView` empties them rather than printing them anonymous.
+  /*
+   * The server's own verdict is printed, not a second arithmetic.
+   *
+   * These rows come from `budgetPacingByProvider`, which emits `spent` — this read `b.spend`, a key
+   * that is never sent, so `?? 0` applied on EVERY row: the document a client receives showed a
+   * spend of zero against every platform, a remaining equal to the whole budget, and 0% utilization,
+   * for accounts that had spent the money.
+   *
+   * The utilization was recomputed here over `Math.max(1, budget)`, which turned a platform with
+   * spend and no budget into a percentage in the hundreds of thousands rather than a refusal. The
+   * aggregator already states `remaining` and `consumed_pct` and already withholds both — as null —
+   * when the figures are not comparable, so printing that null as a dash is both simpler and the
+   * only version that cannot disagree with the deck and the client's live link.
+   */
+  const budgetCell = (v: unknown) => (v === null || v === undefined ? '—' : money(Number(v), currency))
   const budgetRows = (data.budget ?? []).map((b: Row) => [
     String(b.provider ?? '—'),
-    money(Number(b.budget ?? 0), currency),
-    money(Number(b.spend ?? 0), currency),
-    money(Number(b.budget ?? 0) - Number(b.spend ?? 0), currency),
-    `${nfmt((Number(b.spend ?? 0) / Math.max(1, Number(b.budget ?? 0))) * 100, { maximumFractionDigits: 0 })}%`,
+    budgetCell(b.budget),
+    budgetCell(b.spent),
+    budgetCell(b.remaining),
+    b.consumed_pct === null || b.consumed_pct === undefined
+      ? '—'
+      : `${nfmt(Number(b.consumed_pct) * 100, { maximumFractionDigits: 0 })}%`,
   ])
 
   const recs = (data.recommendations ?? []).filter((r) => (r as { status?: string }).status === 'approved' || !(r as { status?: string }).status)
