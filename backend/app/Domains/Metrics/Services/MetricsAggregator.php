@@ -827,9 +827,21 @@ final class MetricsAggregator
             ->map(fn ($r) => ['provider' => $r->provider] + $this->withDerived((array) $r))
             ->all();
 
-        $totalSpend = array_sum(array_column($rows, 'spend')) ?: 1;
+        /*
+         * AGGREGATION-TRUTH-001 — a share of nothing is not zero.
+         *
+         * The denominator was `array_sum(...) ?: 1`, so a window with no spend recorded — before the
+         * campaigns started, a sync that has not landed, spend the money contract withheld — divided
+         * by one riyal and every platform reported a share of exactly 0%. «This platform contributed
+         * nothing» is a definite claim; the truth is that there is nothing to take a share OF, and
+         * the reader has to be told that rather than shown a bar at zero.
+         *
+         * Same fabricated denominator as the printed budget table's `Math.max(1, budget)`, and the
+         * same lie: an absence dressed as a measurement.
+         */
+        $totalSpend = array_sum(array_column($rows, 'spend'));
         foreach ($rows as &$r) {
-            $r['spend_share'] = round($r['spend'] / $totalSpend, 4);
+            $r['spend_share'] = $totalSpend > 0 ? round(((float) ($r['spend'] ?? 0)) / $totalSpend, 4) : null;
         }
         usort($rows, fn ($a, $b) => $b['spend'] <=> $a['spend']);
 

@@ -135,7 +135,20 @@ export function TabAnalytics({ clientId }: { clientId: string }) {
                 {a.platforms.map((p) => (
                   <li key={p.provider} className="flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm">
                     <span className="w-20 font-medium text-text-primary">{p.provider}</span>
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-secondary"><div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.round(p.spend_share * 100)}%` }} /></div>
+                    {/*
+                      * A share of nothing is not a bar at zero.
+                      *
+                      * This drew `p.spend_share * 100` unguarded, and the server sends null when no
+                      * spend was recorded in the window — so an empty fill appeared beside the «—»
+                      * this same row prints for the figure, one reading «contributed nothing» and the
+                      * other «nothing to take a share of». A dashed, unfilled track cannot be mistaken
+                      * for a measured zero.
+                      */}
+                    {p.spend_share === null ? (
+                      <div className="h-2 flex-1 rounded-full border border-dashed border-border" data-testid="spend-share-unmeasured" />
+                    ) : (
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-secondary"><div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.round(p.spend_share * 100)}%` }} /></div>
+                    )}
                     <span className="tnum w-28 text-end text-text-secondary">{num(p.spend, 2)}{cur}</span>
                     <span className="tnum w-12 text-end text-xs text-text-muted">{pct(p.spend_share)}</span>
                   </li>
