@@ -177,13 +177,15 @@ export const listPortalThreads = async (): Promise<PortalThread[]> =>
  * server sent them must read as UNKNOWN rather than as «nothing was withheld», which is the same
  * false reassurance the old silent cap gave.
  */
-export const getPortalThread = (id: string) =>
+export const getPortalThread = (id: string, before?: string | null) =>
   getData<{
     thread: PortalThread
     messages: PortalMessage[]
     messages_total?: number
     messages_withheld?: number
-  }>(`/client/messages/${encodeURIComponent(id)}`)
+    /** The cursor for the window before this one — `null` at the start of the conversation. */
+    older_before?: string | null
+  }>(`/client/messages/${encodeURIComponent(id)}${before ? `?before=${encodeURIComponent(before)}` : ''}`)
 
 export const openPortalThread = async (subject: string, body: string): Promise<PortalThread> =>
   (await postData<{ thread: PortalThread }>('/client/messages', { subject, body })).thread

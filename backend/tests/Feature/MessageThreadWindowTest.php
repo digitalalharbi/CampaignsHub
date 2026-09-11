@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Messaging\Models\Message;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Messaging\Services\MessagingService;
 use App\Domains\Requests\Models\ExternalRequest;
@@ -182,6 +183,90 @@ final class MessageThreadWindowTest extends TestCase
         $this->assertSame('message 520', end($bodies), 'the team is reading a different end of the conversation from the client');
         $this->assertSame(520, $response->json('data.messages_total'));
         $this->assertGreaterThan(0, $response->json('data.messages_withheld'));
+    }
+
+    /**
+     * The withheld messages are REACHABLE, and the two windows join without a gap or a repeat.
+     *
+     * Naming a count the reader cannot act on is half a fix: «twenty older messages exist» with no way
+     * to open them leaves the conversation just as unreadable, only honestly so.
+     *
+     * The join is the assertion that matters. Paging on `created_at` alone would skip or duplicate
+     * every message sharing a second with the cursor — which a burst routinely produces — so the two
+     * windows are concatenated and checked for BOTH a gap and a repeat, against the whole thread.
+     */
+    public function test_the_older_messages_can_be_opened_and_the_windows_join_exactly(): void
+    {
+        $thread = $this->longThread(520);
+        $user = $this->teamMember();
+
+        $first = $this->actingAs($user, 'sanctum')
+            ->getJson("/api/v1/messaging/threads/{$thread->id}")->assertOk();
+
+        $cursor = $first->json('data.older_before');
+        $this->assertNotNull($cursor, 'the reader is told messages are missing but given no way to reach them');
+
+        $older = $this->actingAs($user, 'sanctum')
+            ->getJson("/api/v1/messaging/threads/{$thread->id}?before={$cursor}")->assertOk();
+
+        $bodies = array_merge(
+            array_column($older->json('data.messages'), 'body'),
+            array_column($first->json('data.messages'), 'body'),
+        );
+
+        $this->assertSame(520, count($bodies), 'the two windows overlap or leave a gap between them');
+        $this->assertSame(range(1, 520), array_map(
+            static fn (string $b): int => (int) str_replace('message ', '', $b),
+            $bodies,
+        ));
+
+        /* At the beginning of the conversation there is nothing older, and it says so. */
+        $this->assertSame(0, $older->json('data.messages_withheld'));
+        $this->assertNull($older->json('data.older_before'));
+    }
+
+    /**
+     * A burst posted inside ONE second still pages exactly — the case the timestamp alone cannot carry.
+     *
+     * Every message here shares a `created_at`, which is what a scripted reply or a fast exchange
+     * actually produces. Ordering or paging on that column alone makes the whole thread one tie: the
+     * window's edge is then arbitrary, and the second page either repeats what the first showed or
+     * steps over it. This is the case that decides whether `(created_at, id)` is load-bearing or
+     * decoration.
+     */
+    public function test_messages_sharing_one_timestamp_still_page_without_a_gap(): void
+    {
+        $thread = $this->longThread(505);
+        $at = now()->subHour();
+        Message::where('thread_id', $thread->getKey())->update(['created_at' => $at]);
+
+        $user = $this->teamMember();
+
+        $first = $this->actingAs($user, 'sanctum')
+            ->getJson("/api/v1/messaging/threads/{$thread->id}")->assertOk();
+        $older = $this->actingAs($user, 'sanctum')
+            ->getJson("/api/v1/messaging/threads/{$thread->id}?before={$first->json('data.older_before')}")->assertOk();
+
+        $ids = array_merge(
+            array_column($older->json('data.messages'), 'id'),
+            array_column($first->json('data.messages'), 'id'),
+        );
+
+        $this->assertCount(505, $ids);
+        $this->assertSame(505, count(array_unique($ids)), 'the two windows repeat messages that share a timestamp');
+    }
+
+    /** An unreadable cursor returns the newest window rather than an empty conversation. */
+    public function test_a_cursor_from_another_thread_is_ignored(): void
+    {
+        $thread = $this->longThread(12);
+        $stranger = $this->longThread(3);
+        $strangerMessage = $stranger->messages()->first();
+
+        $response = $this->actingAs($this->teamMember(), 'sanctum')
+            ->getJson("/api/v1/messaging/threads/{$thread->id}?before={$strangerMessage->id}")->assertOk();
+
+        $this->assertCount(12, $response->json('data.messages'));
     }
 
     /** A short thread is not a truncated one — it must report nothing withheld. */

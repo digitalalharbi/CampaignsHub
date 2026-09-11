@@ -49,6 +49,7 @@ const detail = (shown: number, total: number): ThreadDetail =>
     unread: { client: 0, team: 0 },
     messages_total: total,
     messages_withheld: total - shown,
+    older_before: total > shown ? `m${total - shown + 1}` : null,
   }) as ThreadDetail
 
 describe('a windowed conversation', () => {
@@ -74,7 +75,9 @@ describe('a windowed conversation', () => {
 
     expect(note).toHaveTextContent('500')
     expect(note).toHaveTextContent('520')
-    expect(note.textContent).toMatch(/Older ones are not shown/i)
+    /* The count, and the control that reaches what it counts. */
+    expect(note.textContent).toMatch(/latest 500 of 520/i)
+    expect(screen.getByTestId('thread-older')).toBeInTheDocument()
   })
 
   it('says it in Arabic too, where the client reads it', async () => {
@@ -85,9 +88,37 @@ describe('a windowed conversation', () => {
 
     const note = await screen.findByTestId('thread-window-note')
 
-    expect(note.textContent).toMatch(/الرسائل الأقدم غير معروضة/)
+    expect(note.textContent).toMatch(/هذه أحدث/)
+    expect(screen.getByText('عرض الرسائل الأقدم')).toBeInTheDocument()
     /* Latin digits — the product's numeral rule does not follow the language. */
     expect(note).toHaveTextContent('520')
+  })
+
+
+  /**
+   * And the withheld messages are REACHABLE — the count is a door, not an epitaph.
+   *
+   * The control asks the server for the window before this one, which is the whole point: naming
+   * twenty older messages the reader cannot open leaves the conversation as unreadable as the silent
+   * cap did, only honestly so.
+   */
+  it('opens the older window, and offers the way back', async () => {
+    vi.mocked(getThread).mockImplementation(async (_id: string, before?: string | null) =>
+      before ? detail(20, 20) : detail(500, 520),
+    )
+
+    renderWithProviders(<ThreadsPage />, { locale: 'en' })
+    await openThread()
+
+    const older = await screen.findByTestId('thread-older')
+    older.click()
+
+    /* The oldest window says where it is, and offers the way back to today. */
+    await screen.findByTestId('thread-newest')
+    expect((await screen.findByTestId('thread-window-note')).textContent).toMatch(/start of the conversation/i)
+    expect(screen.queryByTestId('thread-older')).toBeNull()
+
+    expect(vi.mocked(getThread).mock.calls.at(-1)).toEqual(['t1', 'm21'])
   })
 
   it('says nothing when the whole conversation is on the page', async () => {
