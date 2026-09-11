@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { StatCard as SharedStatCard } from '@/components/ui/StatCard'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import { useNavigate } from 'react-router-dom'
@@ -95,6 +95,14 @@ export function CampaignsPage() {
   }, [objective])
 
   // Everything below is PROJECT-SCOPED — cache keys + endpoints carry projectId; disabled without one.
+  /*
+   * A change of scope puts the reader back on page one — page 3 of a narrower list is nowhere, and
+   * the relevance ranking it was cut from no longer exists.
+   */
+  const [page, setPage] = useState(1)
+
+  useEffect(() => setPage(1), [projectId, status, objectiveParam, search])
+
   const campaignsQuery = useQuery({
     /*
      * ANALYTICS-OBJECTIVE-SYSTEM-001 — the reader picks a canonical objective, the server gets the
@@ -104,9 +112,13 @@ export function CampaignsPage() {
      * query, and keying on the canonical label instead would be one cache entry per label over
      * whatever the previous scope fetched.
      */
-    queryKey: ['project', projectId, 'campaigns', { status, objective: objectiveParam, search }],
-    queryFn: () => listCampaigns(projectId!, { status: status || undefined, objective: objectiveParam, search: search || undefined }),
+    queryKey: ['project', projectId, 'campaigns', { status, objective: objectiveParam, search }, page],
+    queryFn: () => listCampaigns(projectId!, {
+      status: status || undefined, objective: objectiveParam, search: search || undefined,
+      page, from: range.from, to: range.to,
+    }),
     enabled: Boolean(projectId),
+    placeholderData: (prev) => prev,
   })
   const summary = useSummary(projectId, range)
   const timeseries = useTimeseries(view === 'overview' ? projectId : null, range)
@@ -114,12 +126,25 @@ export function CampaignsPage() {
   const budget = useBudget(projectId, range)
   const metricCampaigns = useCampaigns(projectId, range)
 
-  const campaigns = campaignsQuery.data ?? []
+  /*
+   * CAMPAIGNS-LEDGER-001 — the rows are a page; the counts are the PROJECT's.
+   *
+   * The endpoint handed over every campaign and these counts were taken from the array it returned.
+   * Campaigns are the one list here that grows without a ceiling, and a donut of the first
+   * twenty-five looks exactly like a donut of the project — which is why the counts could not simply
+   * follow the rows into a page.
+   *
+   * The ordering moved to the server with the page, for the same reason: re-ordering twenty-five rows
+   * in the browser would make «what is running» mean «what is running among the newest twenty-five».
+   */
+  const campaigns = campaignsQuery.data?.campaigns ?? []
   const counts = useMemo(() => {
-    const c: Record<string, number> = { total: campaigns.length }
-    for (const s of CAMPAIGN_STATUSES) c[s] = campaigns.filter((x) => x.status === s).length
+    const server = campaignsQuery.data?.counts ?? {}
+    const c: Record<string, number> = { total: campaignsQuery.data?.total ?? 0 }
+    for (const s of CAMPAIGN_STATUSES) c[s] = server[s] ?? 0
+
     return c
-  }, [campaigns])
+  }, [campaignsQuery.data])
 
   const statusDonut = useMemo(
     () => CAMPAIGN_STATUSES.map((s) => ({ name: campaignStatusLabel(s, locale), value: counts[s] ?? 0 })).filter((d) => d.value > 0),
@@ -681,6 +706,39 @@ export function CampaignsPage() {
             </div>
           )}
         </>
+      )}
+
+      {/*
+        No silent caps. Twenty-five of two hundred with nothing saying so is indistinguishable from a
+        project that has twenty-five campaigns — and the rows are the most RELEVANT twenty-five, not
+        the newest, which is a promise worth stating where it is kept.
+      */}
+      {(campaignsQuery.data?.lastPage ?? 1) > 1 && (
+        <nav className="flex items-center justify-between gap-3 text-sm" data-testid="campaigns-pager">
+          <span className="text-text-secondary">
+            {ar
+              ? `${campaigns.length} من ${counts.total} — صفحة ${campaignsQuery.data?.page ?? 1} من ${campaignsQuery.data?.lastPage ?? 1}`
+              : `${campaigns.length} of ${counts.total} — page ${campaignsQuery.data?.page ?? 1} of ${campaignsQuery.data?.lastPage ?? 1}`}
+          </span>
+          <span className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={(campaignsQuery.data?.page ?? 1) <= 1}
+              className="rounded-lg border border-border px-3 py-1.5 font-medium text-text-primary disabled:opacity-40"
+            >
+              {ar ? 'السابق' : 'Previous'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={(campaignsQuery.data?.page ?? 1) >= (campaignsQuery.data?.lastPage ?? 1)}
+              className="rounded-lg border border-border px-3 py-1.5 font-medium text-text-primary disabled:opacity-40"
+            >
+              {ar ? 'التالي' : 'Next'}
+            </button>
+          </span>
+        </nav>
       )}
 
       <CampaignFormModal open={modalOpen} onClose={() => setModalOpen(false)} projectId={projectId} />

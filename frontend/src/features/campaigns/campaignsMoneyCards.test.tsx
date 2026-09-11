@@ -15,6 +15,7 @@ vi.mock('@/lib/api/client', async (importOriginal) => ({
 import { listCampaigns } from './api'
 import { listProjects, listUsers } from '@/features/projects/api'
 import { getData } from '@/lib/api/client'
+import { campaignPage } from '@/test/campaignPage'
 
 /**
  * CAMP-MONEY-001 — the Campaigns summary row read the aggregator's zero, in an assumed currency.
@@ -67,7 +68,7 @@ describe('the Campaigns summary row', () => {
     signInWith(['campaigns.view'])
     vi.mocked(listProjects).mockResolvedValue([])
     vi.mocked(listUsers).mockResolvedValue([])
-    vi.mocked(listCampaigns).mockResolvedValue([campaign('c1', 'Always-On', 'active')])
+    vi.mocked(listCampaigns).mockResolvedValue(campaignPage([campaign('c1', 'Always-On', 'active')]))
     useProject.getState().setCurrentProjectId('p1')
   })
 

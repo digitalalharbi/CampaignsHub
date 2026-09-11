@@ -32,6 +32,7 @@ vi.mock('@/features/analytics/api', async (importOriginal) => {
 
 import { listCampaigns } from './api'
 import { listProjects, listUsers } from '@/features/projects/api'
+import { campaignPage } from '@/test/campaignPage'
 
 const campaign = (id: string, name: string, status: string): UnifiedCampaign => ({
   id, project_id: 'p1', name, objective: 'sales', status, total_budget: 1000, budget_currency: 'SAR',
@@ -48,10 +49,10 @@ describe('the campaigns workspace, opened cold', () => {
     vi.clearAllMocks()
     vi.mocked(listProjects).mockResolvedValue([])
     vi.mocked(listUsers).mockResolvedValue([])
-    vi.mocked(listCampaigns).mockResolvedValue([
+    vi.mocked(listCampaigns).mockResolvedValue(campaignPage([
       campaign('running', 'Still running', 'active'),
       campaign('finished', 'Last year', 'completed'),
-    ])
+    ]))
     metrics.value = {
       data: [
         { campaign_id: 'running', spend: 10, last_active_on: today },
