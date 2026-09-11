@@ -18,6 +18,18 @@ use Illuminate\Support\Facades\DB;
  */
 final class FilesLibraryController
 {
+    /*
+     * FILES-LIBRARY-001 — the cap is not the defect; a SILENT cap is.
+     *
+     * Both halves of this endpoint stopped at five hundred with no count anywhere in the response,
+     * so a workspace holding eight hundred files was shown five hundred and nothing distinguished
+     * that from a workspace that holds five hundred. The reader concludes «these are my files».
+     *
+     * The limit stays — an unbounded file library is exactly what it was put there to prevent — and
+     * the totals travel beside it so the page can say what it is not showing.
+     */
+    private const CAP = 500;
+
     public function __construct(private readonly TenantContext $tenant) {}
 
     public function index(Request $request): JsonResponse
@@ -34,7 +46,7 @@ final class FilesLibraryController
             ->where('r.tenant_id', $tenantId)
             ->select('f.id', 'f.original_name', 'f.mime', 'f.size', 'f.is_client_visible',
                 'f.created_at', 'u.name as uploader', 'r.reference as related', 'r.client_id')
-            ->orderByDesc('f.created_at')->limit(500)
+            ->orderByDesc('f.created_at')->limit(self::CAP)
             ->get()->map(fn ($f) => [
                 'source' => 'request',
                 'id' => (string) $f->id,
@@ -59,7 +71,7 @@ final class FilesLibraryController
             ->where('p.tenant_id', $tenantId)->whereNotNull('e.path')
             ->select('e.id', 'e.format', 'e.size', 'e.created_at', 'rp.name as report_name', 'rp.audience',
                 'p.client_workspace_id as client_id')
-            ->orderByDesc('e.created_at')->limit(500)
+            ->orderByDesc('e.created_at')->limit(self::CAP)
             ->get()->map(fn ($e) => [
                 'source' => 'report',
                 'id' => (string) $e->id,
@@ -79,8 +91,29 @@ final class FilesLibraryController
 
         $driveLinks = DB::table('drive_links')->where('tenant_id', $tenantId)->count();
 
+        /*
+         * Counted with the SAME predicates the lists use, minus the ordering and the cap. A total
+         * taken from a differently-scoped query would be a second number about the same files.
+         */
+        $requestTotal = DB::table('request_files as f')
+            ->join('external_requests as r', 'r.id', '=', 'f.request_id')
+            ->where('r.tenant_id', $tenantId)
+            ->count();
+
+        $reportTotal = DB::table('report_exports as e')
+            ->join('reports as rp', 'rp.id', '=', 'e.report_id')
+            ->join('projects as p', 'p.id', '=', 'rp.project_id')
+            ->where('p.tenant_id', $tenantId)->whereNotNull('e.path')
+            ->count();
+
+        $files = $requestFiles->concat($reportFiles)->sortByDesc('uploaded_at')->values();
+        $total = $requestTotal + $reportTotal;
+
         return ApiResponse::success([
-            'files' => $requestFiles->concat($reportFiles)->sortByDesc('uploaded_at')->values(),
+            'files' => $files,
+            /* What exists, and what this response is not showing — never left to be inferred. */
+            'files_total' => $total,
+            'files_withheld' => max(0, $total - $files->count()),
             'drive_links' => $driveLinks,
         ], 'Files library.');
     }

@@ -54,13 +54,23 @@ export function FilesLibraryPage() {
   const files = q.data?.files ?? []
   const driveLinks = q.data?.drive_links ?? 0
 
+  /*
+   * FILES-LIBRARY-001 — the total is what EXISTS, not what arrived.
+   *
+   * The endpoint caps its response at five hundred and said nothing about it, so this card counted
+   * the rows it was handed: a workspace holding eight hundred files read «500», indistinguishable
+   * from a workspace that holds five hundred. The reader's conclusion is «these are my files».
+   */
+  const withheld = q.data?.files_withheld ?? 0
+
   const summary = {
-    total: files.length,
+    total: q.data?.files_total ?? files.length,
     requests: files.filter((f) => f.source === 'request').length,
     reports: files.filter((f) => f.source === 'report').length,
   }
 
   const needle = term.trim().toLowerCase()
+
   const items = files.filter((f) => {
     if (source !== 'all' && f.source !== source) return false
     if (visibility !== 'all' && f.visibility !== visibility) return false
@@ -90,6 +100,19 @@ export function FilesLibraryPage() {
         <FileSummaryCard label={c.sum_reports} value={summary.reports} tone="success" />
         <FileSummaryCard label={c.sum_drive} value={driveLinks} tone="muted" />
       </div>
+
+      {/*
+        No silent caps. The endpoint returns at most five hundred files, and a page that shows five
+        hundred rows under a heading saying «800» without explaining the gap is a different lie from
+        the one this fixed — so the gap is stated where the count is read.
+      */}
+      {withheld > 0 && (
+        <p className="text-xs text-text-muted" data-testid="files-withheld">
+          {locale === 'ar'
+            ? `يُعرض أحدث ${files.length} من ${summary.total} — ${withheld} غير معروضة`
+            : `Showing the most recent ${files.length} of ${summary.total} — ${withheld} not listed`}
+        </p>
+      )}
 
       {/*
         Source and visibility, on the page — UX-SWEEP-001.
