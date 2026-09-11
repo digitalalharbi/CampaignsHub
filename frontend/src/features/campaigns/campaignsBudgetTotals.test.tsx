@@ -15,6 +15,7 @@ vi.mock('@/lib/api/client', async (importOriginal) => ({
 import { listCampaigns } from './api'
 import { listProjects, listUsers } from '@/features/projects/api'
 import { getData } from '@/lib/api/client'
+import { campaignPage } from '@/test/campaignPage'
 
 /**
  * PARTIAL-WITHHELD-001 — the project budget card must not sum a withheld spend as a zero.
@@ -74,7 +75,7 @@ describe('the project budget card over withheld spend', () => {
     signInWith(['campaigns.view'])
     vi.mocked(listProjects).mockResolvedValue([])
     vi.mocked(listUsers).mockResolvedValue([])
-    vi.mocked(listCampaigns).mockResolvedValue([campaign('c1')])
+    vi.mocked(listCampaigns).mockResolvedValue(campaignPage([campaign('c1')]))
     useProject.getState().setCurrentProjectId('p1')
   })
 

@@ -35,6 +35,7 @@ vi.mock('@/features/analytics/api', async (importOriginal) => {
 
 import { listCampaigns } from './api'
 import { listProjects, listUsers } from '@/features/projects/api'
+import { campaignPage } from '@/test/campaignPage'
 
 const today = new Date().toISOString().slice(0, 10)
 
@@ -52,14 +53,14 @@ describe('the concise state on a campaign row', () => {
     vi.clearAllMocks()
     vi.mocked(listProjects).mockResolvedValue([])
     vi.mocked(listUsers).mockResolvedValue([])
-    vi.mocked(listCampaigns).mockResolvedValue([
+    vi.mocked(listCampaigns).mockResolvedValue(campaignPage([
       campaign('broken', 'Not delivering'),
       campaign('fine', 'Healthy'),
       campaign('silent', 'Connector sent nothing'),
       // Switched ON, but it has not reported a positive figure in weeks. Status alone calls this
       // «serving»; the shared rule calls it idle, and that difference is the whole point.
       campaign('stale', 'On but quiet'),
-    ])
+    ]))
     metrics.value = {
       data: [
         {
