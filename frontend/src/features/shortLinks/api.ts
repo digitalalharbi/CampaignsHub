@@ -1,4 +1,4 @@
-import { getData, postData } from '@/lib/api/client'
+import { getData, postData, deleteData } from '@/lib/api/client'
 
 /**
  * SHORT-LINKS-001 — the whole contract, which is deliberately two fields.
@@ -28,3 +28,13 @@ export const createShortLink = (kind: ShortLinkKind, value: string) =>
   postData<ShortLink>('/short-links', { kind, value })
 
 export const disableShortLink = (id: string) => postData<ShortLink>(`/short-links/${id}/disable`, {})
+
+/**
+ * SHORT-LINKS-001 — remove it from the library.
+ *
+ * «Disable» stops a link resolving and leaves it on the screen. This takes it off the screen and
+ * stops it resolving, which is what somebody means by «delete that». The server soft-deletes, so the
+ * clicks it counted survive as audit.
+ */
+export const deleteShortLink = (id: string) => deleteData<null>(`/short-links/${id}`)
+
