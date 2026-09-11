@@ -70,6 +70,20 @@ export function TabReports({ d }: { d: ClientDetail }) {
         </form>
       )}
 
+      {/*
+        SAVE-FAILURE-TRUTH-001 — a refused create or share is said, not swallowed.
+
+        Neither mutation had an error surface. A failed «create» left the form filled and the button
+        re-enabled, and a failed «share» left no link and no sentence — so the operator's reading was
+        «I have a link» or «nothing happened», and one of those sends a client nothing while the
+        other sends them looking for a URL that was never minted.
+      */}
+      {(create.isError || share.isError) && (
+        <p className="rounded-lg border border-danger/40 bg-danger/5 px-3 py-2 text-xs font-semibold text-danger" data-testid="client-reports-failed">
+          {create.isError ? t('rp_create_failed') : t('rp_share_failed')}
+        </p>
+      )}
+
       {shareLink && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
           <span className="truncate">{t('rp_shared')} <span className="font-mono text-xs" dir="ltr">{shareLink}</span></span>

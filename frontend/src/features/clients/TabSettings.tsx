@@ -80,6 +80,20 @@ export function TabSettings({ d }: { d: ClientDetail }) {
           <div className="flex items-center gap-2 sm:col-span-2">
             <button type="submit" disabled={save.isPending} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60">{t('cc_save')}</button>
             {saved && <span className="text-xs font-semibold text-success">{t('cc_saved')}</span>}
+            {/*
+              SAVE-FAILURE-TRUTH-001 — a refusal is said where the attempt was made.
+
+              `setSaved(true)` fires only on success, which is right; there was no error surface at
+              all, so a refused save re-enabled the button and left the fields exactly as typed. The
+              screen after a failure was indistinguishable from the screen before the click, and the
+              reader's two readings — «nothing happened» and «it saved» — were both wrong. This is
+              the client's own identity, including the name their REPORTS carry.
+            */}
+            {save.isError && (
+              <span className="text-xs font-semibold text-danger" data-testid="client-settings-failed">
+                {t('cc_save_failed')}
+              </span>
+            )}
           </div>
         )}
       </form>
