@@ -6,6 +6,7 @@ import { CheckCheck, Inbox, MessagesSquare, Plus, Search, Send, X } from 'lucide
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { QueryFailure } from '@/components/ui/QueryFailure'
+import { formatNumber } from '@/lib/numerals'
 import {
   formatDateTime, getThread, listThreads, markThreadRead, openThread, postTeamReply,
   type MessageThread, type ThreadStatus,
@@ -24,6 +25,7 @@ const COPY = {
     new_thread: 'محادثة جديدة', subject: 'الموضوع', body: 'الرسالة الأولى', create: 'بدء المحادثة',
     creating: 'جارٍ الإنشاء…', optional: 'اختياري', close: 'إغلاق', team: 'الفريق', client: 'العميل', system: 'النظام',
     last_activity: 'آخر نشاط', no_messages: 'لا توجد رسائل بعد.',
+    withheld: 'هذه أحدث {shown} رسالة من {total}. الرسائل الأقدم غير معروضة هنا.',
   },
   en: {
     title: 'Conversations', subtitle: 'The team inbox — follow and reply to client conversations.',
@@ -37,6 +39,7 @@ const COPY = {
     new_thread: 'New thread', subject: 'Subject', body: 'Opening message', create: 'Start thread',
     creating: 'Creating…', optional: 'optional', close: 'Close', team: 'Team', client: 'Client', system: 'System',
     last_activity: 'Last activity', no_messages: 'No messages yet.',
+    withheld: 'These are the latest {shown} of {total} messages. Older ones are not shown here.',
   },
 }
 
@@ -249,6 +252,15 @@ function ThreadDetailPanel({
   }
 
   const { thread, messages, unread } = q.data
+  /*
+    MESSAGE-THREAD-TRUTH-001 — a long conversation is windowed, and the reader is told so.
+
+    The window used to be the OLDEST five hundred, so a long thread simply stopped before the message
+    that mattered; it is the newest five hundred now. That is still a window, and a page that ends
+    without saying where it began reads as the whole conversation. `?? 0` on a payload that predates
+    the field, never on a number the server sent — a withheld count of zero is a real answer.
+  */
+  const withheld = q.data.messages_withheld ?? 0
   const authorLabel = (t: string) => (t === 'team' ? c.team : t === 'client' ? c.client : c.system)
 
   return (
@@ -297,6 +309,21 @@ function ThreadDetailPanel({
       </div>
 
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
+        {withheld > 0 && (
+          <p
+            data-testid="thread-window-note"
+            className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-center text-xs text-text-secondary"
+          >
+            {/*
+              «رسالة» rather than the counted-noun machinery in `lib/counted`: a withheld count above
+              zero means the window is FULL, so the shown figure is always the window size and always
+              in the ≥11 band, where the singular tamyiz is the correct form.
+            */}
+            {c.withheld
+              .replace('{shown}', formatNumber(messages.length))
+              .replace('{total}', formatNumber(q.data.messages_total ?? messages.length + withheld))}
+          </p>
+        )}
         {messages.length === 0 ? (
           <p className="p-6 text-center text-sm text-text-secondary">{c.no_messages}</p>
         ) : (

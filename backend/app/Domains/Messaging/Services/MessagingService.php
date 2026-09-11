@@ -8,6 +8,7 @@ use App\Domains\Messaging\Models\Message;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -27,6 +28,9 @@ final class MessagingService
     private const AUTHOR_TYPES = ['client', 'team', 'system'];
 
     private const SIDES = ['client', 'team'];
+
+    /** How many messages either surface renders at once. */
+    public const WINDOW = 500;
 
     public function __construct(private readonly NotificationDispatcher $notifications) {}
 
@@ -117,6 +121,38 @@ final class MessagingService
         return Message::where('thread_id', $thread->getKey())
             ->whereNull($this->readColumn($side))
             ->count();
+    }
+
+    /**
+     * The window of a conversation a reader is shown, and the truth about what is not in it.
+     *
+     * Both surfaces read the thread as `orderBy('created_at')->limit(500)`. Ascending, then capped,
+     * is the OLDEST five hundred: past that length the client opened the conversation on a discussion
+     * from months ago and the reply sent that morning was not on the page — silently, because the
+     * request is 200 and the count is under the cap the code asked for. The client route then marked
+     * the whole thread read, clearing the badge for messages nobody was shown.
+     *
+     * So the window is taken from the END and turned back into reading order, and the caller is given
+     * the total and the number withheld rather than left to infer them from a page that looks whole.
+     *
+     * Ordered by `id` after `created_at`: a burst posted inside the same second ties on the timestamp,
+     * and a tie at the window's edge decides which message is the newest — which is the one thing this
+     * must not get wrong.
+     *
+     * @return array{messages: Collection<int, Message>, total: int, withheld: int}
+     */
+    public function window(MessageThread $thread, int $limit = self::WINDOW): array
+    {
+        $total = Message::where('thread_id', $thread->getKey())->count();
+
+        $messages = Message::where('thread_id', $thread->getKey())
+            ->orderByDesc('created_at')->orderByDesc('id')
+            ->limit($limit)
+            ->get()
+            ->reverse()
+            ->values();
+
+        return ['messages' => $messages, 'total' => $total, 'withheld' => max(0, $total - $messages->count())];
     }
 
     /** Close a thread. Idempotent. */

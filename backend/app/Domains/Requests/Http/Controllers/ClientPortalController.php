@@ -446,13 +446,20 @@ final class ClientPortalController
         $this->bindTenant($token);
         $model = $this->ownedThread($token, $thread);
 
-        $messages = $model->messages()->orderBy('created_at')->limit(500)->get()
-            ->map(fn (Message $m) => $this->messageShape($m));
+        $window = $this->messaging->window($model);
+        $messages = $window['messages']->map(fn (Message $m) => $this->messageShape($m));
         $this->messaging->markRead($model, 'client');
 
         return response()->json(['data' => [
             'thread' => $this->threadShape($model->refresh()),
             'messages' => $messages,
+            /*
+              The read stamp covers the WHOLE thread, including anything the window withheld — so the
+              count has to be said. Marking unseen messages read and showing a page that looks whole
+              is the pair that made this invisible.
+            */
+            'messages_total' => $window['total'],
+            'messages_withheld' => $window['withheld'],
         ]]);
     }
 

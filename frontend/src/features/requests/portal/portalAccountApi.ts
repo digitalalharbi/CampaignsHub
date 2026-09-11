@@ -170,8 +170,20 @@ export interface PortalMessage {
 export const listPortalThreads = async (): Promise<PortalThread[]> =>
   (await getData<{ threads: PortalThread[] }>('/client/messages')).threads
 
+/**
+ * The thread, the window of it this reader is shown, and the truth about what the window left out.
+ *
+ * `messages_total` / `messages_withheld` are optional on purpose: a payload cached from before the
+ * server sent them must read as UNKNOWN rather than as «nothing was withheld», which is the same
+ * false reassurance the old silent cap gave.
+ */
 export const getPortalThread = (id: string) =>
-  getData<{ thread: PortalThread; messages: PortalMessage[] }>(`/client/messages/${encodeURIComponent(id)}`)
+  getData<{
+    thread: PortalThread
+    messages: PortalMessage[]
+    messages_total?: number
+    messages_withheld?: number
+  }>(`/client/messages/${encodeURIComponent(id)}`)
 
 export const openPortalThread = async (subject: string, body: string): Promise<PortalThread> =>
   (await postData<{ thread: PortalThread }>('/client/messages', { subject, body })).thread
