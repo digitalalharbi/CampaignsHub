@@ -14,6 +14,7 @@ import {
 } from 'recharts'
 import {
   useAccountBudgets,
+  useBudgetPlatforms,
   useBudget,
   useBudgetExplanation,
   useAccounts,
@@ -1325,6 +1326,15 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
   const rows = b.data ?? []
   return (
     <div className="space-y-4">
+    {/*
+      BUDGET-GOVERNANCE-001 — the PLATFORM rung, above the accounts and below the project.
+
+      `budgetPacingByProvider()` has fed the daily digest, the generated report and the client's live
+      link since each needed it, and the product had no route to it: «which platform is overspending»
+      was a question a client could answer from their report while the operator responsible could
+      not. It reads through the same table as the campaign rung because it returns the same shape.
+    */}
+    <PlatformBudgets projectId={projectId} range={range} filters={filters} />
     <AccountBudgets projectId={projectId} range={range} filters={filters} />
     {/*
       FUNNEL-ANALYTICAL-PATTERN-001 — the reading ABOVE the table it reads.
@@ -3265,5 +3275,57 @@ function AccountsTab({ projectId, range, filters }: TabProps) {
     </Panel>
 
     </>
+  )
+}
+
+/**
+ * The platform rung of the budget hierarchy.
+ *
+ * Deliberately the same columns as the campaign table below it, in the same order: a reader moving
+ * down the hierarchy should be reading the same figures at a coarser grain, not learning a second
+ * layout. The refusals travel too — a platform whose spend cannot be compared with its budget shows
+ * «—» and the reason rather than a ratio built out of two currencies.
+ */
+function PlatformBudgets({ projectId, range, filters }: TabProps) {
+  const ar = useAr()
+  const q = useBudgetPlatforms(projectId, range, filters)
+  const rows = q.data ?? []
+
+  return (
+    <Panel
+      title={ar ? 'الميزانية حسب المنصة' : 'Budget by platform'}
+      description={ar ? 'المخطط مقابل المصروف لكل منصة' : 'Planned against spent, per platform'}
+      loading={q.isLoading}
+      error={q.isError}
+      empty={!q.isLoading && rows.length === 0}
+    >
+      <MetricTable
+        head={ar
+          ? ['المنصة', 'الميزانية', 'المصروف', 'المتبقي', 'الاستهلاك', 'السرعة', 'المتوقع']
+          : ['Platform', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Pace', 'Projected']}
+        rows={rows.map((r) => [
+          <PlatformCell key="p" provider={r.provider ?? ''} />,
+          <span key="b" dir="ltr">{money(r.budget, r.budget_currency ?? undefined)}</span>,
+          <span key="s" dir="ltr">{r.spent === null ? '—' : money(r.spent, r.spent_currency ?? undefined)}</span>,
+          <span key="r" dir="ltr">{r.remaining === null ? '—' : money(r.remaining, r.budget_currency ?? undefined)}</span>,
+          <span key="c" dir="ltr">{r.consumed_pct === null ? '—' : percent(r.consumed_pct)}</span>,
+          /* A pace is a multiple of the budget: 1.0 lands on it, above overruns. */
+          <span key="pa" dir="ltr" className={r.pace !== null && r.pace > 1 ? 'font-semibold text-danger' : undefined}>
+            {r.pace === null ? '—' : `${ratio(r.pace)}`}
+          </span>,
+          <span key="pr" dir="ltr">{r.projected_spend === null ? '—' : money(r.projected_spend, r.budget_currency ?? undefined)}</span>,
+        ])}
+        values={rows.map((r): SortValues => [
+          r.provider ?? '',
+          r.budget,
+          r.spent,
+          r.remaining,
+          r.consumed_pct,
+          r.pace,
+          r.projected_spend,
+        ])}
+        initialSort={{ column: 1, dir: 'desc' }}
+      />
+    </Panel>
   )
 }

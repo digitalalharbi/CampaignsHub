@@ -51,11 +51,20 @@ const EVIDENCE: Record<string, { ar: string; en: string }> = {
   pace: { ar: 'السرعة', en: 'Pace' },
 }
 
-export function BudgetReading({ reading, locale }: { reading: BudgetExplanationPayload | undefined; locale: Locale }) {
+export function BudgetReading({ reading, locale }: { reading: BudgetExplanationPayload | undefined | null; locale: Locale }) {
   const ar = locale === 'ar'
   // Before the early return: a hook cannot be called conditionally.
   const [open, setOpen] = useState(false)
-  if (reading === undefined) return null
+  /*
+   * `null` as well as `undefined` — an ABSENT reading, however it arrives.
+   *
+   * The guard read `=== undefined`, so a payload of `null` fell through and the next line
+   * dereferenced it: `reading.signal` on null throws, and React unmounts the whole Budget tab
+   * rather than the one panel. An endpoint answering `null` is not hypothetical — `ApiResponse`
+   * carries whatever the service returned, and an install answering from before this panel existed
+   * sends exactly that. A panel with nothing to say renders nothing; it does not take the tab down.
+   */
+  if (reading === undefined || reading === null) return null
 
   const pace = (n: number) => `${n.toFixed(2)}×`
 

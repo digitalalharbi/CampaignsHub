@@ -845,6 +845,34 @@ export const useBudget = (p: string | null, r: Range, f?: MetricFilters) => useM
  */
 export const useBudgetExplanation = (p: string | null, r: Range, f?: MetricFilters) =>
   useMetric<BudgetExplanationPayload>('budget-explanation', p, r, 'budget-explanation', f)
+/**
+ * BUDGET-GOVERNANCE-001 — the PLATFORM rung, between the project total and the accounts.
+ *
+ * `budgetPacingByProvider()` has fed the daily digest, the generated report and the client's live
+ * link since each needed it; the product itself had no route to it, so «which platform is
+ * overspending» was a question the client could answer from their report and the operator could not.
+ *
+ * The same row shape as the campaign rung, deliberately: one table reads both.
+ */
+export interface PlatformBudgetRow {
+  provider: string
+  budget: number
+  budget_currency: string | null
+  spent: number | null
+  spent_currency: string | null
+  spend_withheld: boolean
+  remaining: number | null
+  consumed_pct: number | null
+  pace: number | null
+  projected_spend: number | null
+  /** The server's own verdict on whether these two figures may be compared at all. */
+  pacing_basis: 'comparable' | 'currency_mismatch' | 'no_budget' | 'partial' | 'mixed_currency'
+  refusal: string | null
+}
+
+export const useBudgetPlatforms = (p: string | null, r: Range, f?: MetricFilters) =>
+  useMetric<PlatformBudgetRow[]>('budget-platforms', p, r, 'budget-platforms', f)
+
 export const useAccountBudgets = (p: string | null, r: Range, f?: MetricFilters) =>
   useMetric<AccountBudgetRow[]>('budget-accounts', p, r, 'budget-accounts', f)
 /**
