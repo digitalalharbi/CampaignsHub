@@ -63,8 +63,25 @@ export const CANONICAL_OBJECTIVE_KEYS: CanonicalObjectiveKey[] = [
   'sales',
 ]
 
-export function canonicalObjectiveLabel(key: CanonicalObjectiveKey, locale: 'ar' | 'en'): string {
-  return LABELS[key][locale]
+/**
+ * The product's name for an objective — TOTAL, because the values reaching it are not all canonical.
+ *
+ * This indexed `LABELS[key][locale]` and threw on anything else, which is a blank page rather than a
+ * wrong word: a deep link or a saved view carrying a RAW objective (`conversions`, `purchases`) is a
+ * string this map has never held, and CONTENT-FILTER-TRUTH-001 makes those reachable — the library
+ * accepted raw values for years and a bookmark from last week still carries one.
+ *
+ * A raw value is resolved to the canonical objective that covers it, so «conversions» reads
+ * «المبيعات» rather than crashing; anything unmapped shows as ITSELF, which is the same rule
+ * `creativeKindLabel` follows — a value the product does not recognise is worth seeing.
+ */
+export function canonicalObjectiveLabel(key: string, locale: 'ar' | 'en'): string {
+  const direct = LABELS[key as CanonicalObjectiveKey]
+  if (direct) return direct[locale]
+
+  const fromRaw = canonicalOfRaw(key)
+
+  return fromRaw ? LABELS[fromRaw][locale] : key
 }
 
 /**

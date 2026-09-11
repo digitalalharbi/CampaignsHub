@@ -413,8 +413,15 @@ final class SharedCreativeView
         return [
             'providers' => $options['providers'],
             'campaigns' => $options['campaigns'],
+            /*
+             * CONTENT-FILTER-TRUTH-001 — the canonical five, and no «المسار التسويقي» beside them.
+             *
+             * This surface inherited both controls from the library, so a CLIENT was shown the same
+             * duplication the owner reported internally: one axis asked twice, with «التحويل
+             * والمبيعات» and «المبيعات» selectable at once. The sibling check that found it is the
+             * reason the key is gone here too rather than only where the report came from.
+             */
             'objectives' => $options['objectives'],
-            'paths' => $options['paths'],
             'kinds' => $options['kinds'],
             'earliest' => $ceiling['earliest'],
             'latest' => $ceiling['latest'],

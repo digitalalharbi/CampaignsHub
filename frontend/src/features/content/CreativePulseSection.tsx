@@ -1,3 +1,4 @@
+import { canonicalObjectiveLabel, type CanonicalObjectiveKey } from '@/features/campaigns/canonicalObjectives'
 import { TransposedMetricTable } from '@/components/ui/MetricTable'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
@@ -399,23 +400,24 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
             />
           )}
 
+          {/*
+            CONTENT-FILTER-TRUTH-001 — the same correction as the library, on the same options.
+
+            This section reads the library's own filter payload, so it inherited both the raw
+            objective list and the «المسار التسويقي» control beside it. The path axis is gone; the
+            objectives are the canonical five. A sibling surface left on the old taxonomy would be the
+            duplication re-entering through a different door.
+          */}
           {axes.includes('objectives') && (
             <Select
               label={t.objective}
               all={t.all}
               value={own.objectives?.[0] ?? ''}
               onChange={(v) => narrow('objectives', v)}
-              options={data.filters.objectives.map((o) => ({ value: o, label: objectiveLabel(o, locale) }))}
-            />
-          )}
-
-          {axes.includes('paths') && (
-            <Select
-              label={t.path}
-              all={t.all}
-              value={own.paths?.[0] ?? ''}
-              onChange={(v) => narrow('paths', v)}
-              options={data.filters.paths.map((p) => ({ value: p, label: marketingPathLabel(p, locale) }))}
+              options={data.filters.objectives.map((o) => ({
+                value: o.key,
+                label: canonicalObjectiveLabel(o.key as CanonicalObjectiveKey, ar ? 'ar' : 'en'),
+              }))}
             />
           )}
 
@@ -425,7 +427,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               all={t.all}
               value={own.kinds?.[0] ?? ''}
               onChange={(v) => narrow('kinds', v)}
-              options={data.filters.kinds.map((k) => ({ value: k, label: KIND_LABEL(k, t) }))}
+              options={data.filters.kinds.map((k) => ({ value: k.key, label: KIND_LABEL(k.key, t) }))}
             />
           )}
         </div>
