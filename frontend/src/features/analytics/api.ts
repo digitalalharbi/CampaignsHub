@@ -866,6 +866,12 @@ export interface PlatformBudgetRow {
   consumed_pct: number | null
   pace: number | null
   projected_spend: number | null
+  /** What should have been spent by today — the figure `pace` divides by. Null wherever pacing is refused. */
+  expected_to_date: number | null
+  /** Spend over the days elapsed, for multiplying by the days that remain. */
+  daily_average: number | null
+  /** Projected end spend minus the plan, signed: positive is an overrun. */
+  over_under: number | null
   /** The server's own verdict on whether these two figures may be compared at all. */
   pacing_basis: 'comparable' | 'currency_mismatch' | 'no_budget' | 'partial' | 'mixed_currency'
   refusal: string | null

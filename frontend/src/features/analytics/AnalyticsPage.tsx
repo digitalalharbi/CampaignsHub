@@ -3321,20 +3321,37 @@ function PlatformBudgets({ projectId, range, filters }: TabProps) {
       empty={!q.isLoading && rows.length === 0}
     >
       <MetricTable
+        /*
+          BUDGET-GOVERNANCE-001 — three columns the owner's spreadsheet has.
+
+          «المتوقع حتى اليوم» is the figure `pace` already divides BY: the product knew it and never
+          showed it, so a reader told «1.3×» could not check it or see which of the two had moved.
+          «المعدل اليومي» is what an operator multiplies by the days left. «فوق / تحت» is the overrun
+          in money — «projected 46,000» against a 40,000 plan makes the reader subtract, and that
+          difference is the decision.
+        */
         head={ar
-          ? ['المنصة', 'الميزانية', 'المصروف', 'المتبقي', 'الاستهلاك', 'السرعة', 'المتوقع']
-          : ['Platform', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Pace', 'Projected']}
+          ? ['المنصة', 'الميزانية', 'المصروف', 'المتبقي', 'الاستهلاك', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت']
+          : ['Platform', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Expected to date', 'Daily average', 'Pace', 'Projected', 'Over / under']}
         rows={rows.map((r) => [
           <PlatformCell key="p" provider={r.provider ?? ''} />,
           <span key="b" dir="ltr">{money(r.budget, r.budget_currency ?? undefined)}</span>,
           <span key="s" dir="ltr">{r.spent === null ? '—' : money(r.spent, r.spent_currency ?? undefined)}</span>,
           <span key="r" dir="ltr">{r.remaining === null ? '—' : money(r.remaining, r.budget_currency ?? undefined)}</span>,
           <span key="c" dir="ltr">{r.consumed_pct === null ? '—' : percent(r.consumed_pct)}</span>,
+          <span key="e" dir="ltr">{r.expected_to_date === null || r.expected_to_date === undefined ? '—' : money(r.expected_to_date, r.budget_currency ?? undefined)}</span>,
+          <span key="d" dir="ltr">{r.daily_average === null || r.daily_average === undefined ? '—' : money(r.daily_average, r.budget_currency ?? undefined)}</span>,
           /* A pace is a multiple of the budget: 1.0 lands on it, above overruns. */
           <span key="pa" dir="ltr" className={r.pace !== null && r.pace > 1 ? 'font-semibold text-danger' : undefined}>
             {r.pace === null ? '—' : `${ratio(r.pace)}`}
           </span>,
           <span key="pr" dir="ltr">{r.projected_spend === null ? '—' : money(r.projected_spend, r.budget_currency ?? undefined)}</span>,
+          /* Signed, so one column carries both directions and an overrun reads as one. */
+          <span key="ou" dir="ltr" className={typeof r.over_under === 'number' && r.over_under > 0 ? 'font-semibold text-danger' : undefined}>
+            {r.over_under === null || r.over_under === undefined
+              ? '—'
+              : `${r.over_under > 0 ? '+' : ''}${money(r.over_under, r.budget_currency ?? undefined)}`}
+          </span>,
         ])}
         values={rows.map((r): SortValues => [
           r.provider ?? '',
@@ -3342,8 +3359,11 @@ function PlatformBudgets({ projectId, range, filters }: TabProps) {
           r.spent,
           r.remaining,
           r.consumed_pct,
+          r.expected_to_date ?? null,
+          r.daily_average ?? null,
           r.pace,
           r.projected_spend,
+          r.over_under ?? null,
         ])}
         initialSort={{ column: 1, dir: 'desc' }}
       />
