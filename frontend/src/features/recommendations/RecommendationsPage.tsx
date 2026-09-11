@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useAuth } from '@/stores/auth'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
-import { listRecommendations, type Recommendation, type RecommendationPriority } from './api'
+import { setRecommendationStatus, type RecommendationStatus, listRecommendations, type Recommendation, type RecommendationPriority } from './api'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/States'
 import { FilterBar, FilterSelect } from '@/components/ui/FilterBar'
@@ -44,6 +45,8 @@ export function RecommendationsPage() {
         title: 'التوصيات',
         purpose: 'ما يستحق التنفيذ الآن — مجمَّعًا من حملات المشروع، بأولويته وصاحبه وما بُني عليه.',
         status: 'الحالة', priority: 'الأولوية', all: 'الكل',
+        approve: 'اعتماد', reject: 'رفض', hide: 'إخفاء',
+        decisionFailed: 'تعذّر حفظ القرار.',
         empty: 'لا توجد توصيات في هذا المشروع بعد.',
         emptyFiltered: 'لا توجد توصيات تطابق هذه الفلاتر.',
         noProject: 'اختر مشروعًا', noProjectBody: 'التوصيات مرتبطة بحملات المشروع — اختر مشروعًا لعرضها.',
@@ -56,6 +59,8 @@ export function RecommendationsPage() {
         title: 'Recommendations',
         purpose: 'What is worth doing now — gathered from the project’s campaigns, with its priority, its owner and what it rests on.',
         status: 'Status', priority: 'Priority', all: 'All',
+        approve: 'Approve', reject: 'Reject', hide: 'Hide',
+        decisionFailed: 'The decision could not be saved.',
         empty: 'No recommendations have been written for this project yet.',
         emptyFiltered: 'No recommendations match these filters.',
         noProject: 'Select a project', noProjectBody: 'Recommendations belong to a project’s campaigns — pick one to see them.',
@@ -137,7 +142,7 @@ export function RecommendationsPage() {
       <ul className="grid gap-3" data-testid="recommendations-list">
         {rows.map((r) => (
           <li key={r.id}>
-            <RecommendationRow rec={r} t={t} />
+            <RecommendationRow rec={r} t={t} projectId={currentProjectId!} />
           </li>
         ))}
       </ul>
@@ -145,7 +150,31 @@ export function RecommendationsPage() {
   )
 }
 
-function RecommendationRow({ rec, t }: { rec: Recommendation; t: Record<string, never> | any }) {
+function RecommendationRow({ rec, t, projectId }: { rec: Recommendation; t: Record<string, never> | any; projectId: string }) {
+  /*
+   * RECOMMENDATIONS-ACTION-CENTER-001 — the decision belongs on the card.
+   *
+   * The page listed recommendations with a status badge and no way to act on one, so the operator's
+   * only route to a decision was to leave the product. The server has accepted all four transitions
+   * the whole time, gated on `reports.approve`.
+   *
+   * The permission is the SERVER's and these controls follow it rather than deciding it: showing a
+   * button that will be refused teaches the reader the product is broken, and hiding one is not a
+   * boundary — `CampaignAnnotationController::update()` is.
+   */
+  const qc = useQueryClient()
+  const canDecide = useAuth((s) => s.hasPermission('reports.approve'))
+
+  const decide = useMutation({
+    mutationFn: (status: RecommendationStatus) =>
+      setRecommendationStatus(projectId, String(rec.campaign_id), rec.id, status),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['recommendations'] }),
+  })
+
+  /* A decision already taken is not offered again, and one with no campaign has no route to send it. */
+  const open = rec.status !== 'approved' && rec.status !== 'rejected' && rec.status !== 'hidden'
+  const decidable = canDecide && open && rec.campaign_id !== null
+
   return (
     <article className="rounded-xl border border-border bg-surface p-4" data-testid={`recommendation-${rec.id}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -194,6 +223,41 @@ function RecommendationRow({ rec, t }: { rec: Recommendation; t: Record<string, 
         <p className="mt-1 tnum text-xs text-text-secondary">
           {t.due}: {rec.due_date}
         </p>
+      )}
+
+      {decidable && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={decide.isPending}
+            onClick={() => decide.mutate('approved')}
+            className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"
+          >
+            {t.approve}
+          </button>
+          <button
+            type="button"
+            disabled={decide.isPending}
+            onClick={() => decide.mutate('rejected')}
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-text-primary hover:bg-surface-hover disabled:opacity-50"
+          >
+            {t.reject}
+          </button>
+          <button
+            type="button"
+            disabled={decide.isPending}
+            onClick={() => decide.mutate('hidden')}
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-text-secondary hover:bg-surface-hover disabled:opacity-50"
+          >
+            {t.hide}
+          </button>
+          {/* A refusal is said where the decision was attempted, not swallowed. */}
+          {decide.isError && (
+            <span className="self-center text-xs text-danger" data-testid={`recommendation-${rec.id}-failed`}>
+              {t.decisionFailed}
+            </span>
+          )}
+        </div>
       )}
     </article>
   )

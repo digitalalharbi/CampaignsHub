@@ -4,7 +4,7 @@
  * These are stored `campaign_annotations` of kind `recommendation`. Nothing here derives advice from
  * figures: a recommendation was written by a person, carries their evidence, and is shown with it.
  */
-import { getData } from '@/lib/api/client'
+import { getData, patchData } from '@/lib/api/client'
 
 export type RecommendationStatus = 'draft' | 'reviewed' | 'approved' | 'hidden' | 'rejected'
 export type RecommendationPriority = 'critical' | 'high' | 'medium' | 'low'
@@ -40,4 +40,21 @@ export function listRecommendations(
 
   const suffix = q.toString() ? `?${q}` : ''
   return getData<Recommendation[]>(`/projects/${projectId}/recommendations${suffix}`)
+}
+
+/**
+ * RECOMMENDATIONS-ACTION-CENTER-001 — the decision the server has always accepted.
+ *
+ * `CampaignAnnotationController::update()` validates the status against its own list and gates a
+ * change on `reports.approve`, and nothing in the product ever called it — so a page named for
+ * recommendations could only ever list them. The route is campaign-scoped because the annotation is:
+ * a recommendation belongs to the campaign it is about.
+ */
+export async function setRecommendationStatus(
+  projectId: string,
+  campaignId: string,
+  id: string,
+  status: RecommendationStatus,
+): Promise<void> {
+  await patchData(`/projects/${projectId}/campaigns/${campaignId}/annotations/${id}`, { status })
 }
