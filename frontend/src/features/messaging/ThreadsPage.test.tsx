@@ -51,7 +51,10 @@ describe('ThreadsPage', () => {
     expect(screen.getByText(/1 unread/i)).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/Write a reply as the team/i)).toBeInTheDocument()
 
-    await waitFor(() => expect(getThread).toHaveBeenCalledWith('t1'))
+    /* The second argument is the window cursor: `null` is «the newest window», which is where a
+       thread opens. Asserted rather than loosened to `expect.anything()`, because opening a thread
+       part way up its history would be a regression this case is positioned to catch. */
+    await waitFor(() => expect(getThread).toHaveBeenCalledWith('t1', null))
   })
 
   it('posts a team reply through the real endpoint', async () => {

@@ -139,20 +139,53 @@ final class MessagingService
      * and a tie at the window's edge decides which message is the newest — which is the one thing this
      * must not get wrong.
      *
-     * @return array{messages: Collection<int, Message>, total: int, withheld: int}
+     * @return array{messages: Collection<int, Message>, total: int, withheld: int, older_before: ?string}
      */
-    public function window(MessageThread $thread, int $limit = self::WINDOW): array
+    public function window(MessageThread $thread, ?string $before = null, int $limit = self::WINDOW): array
     {
         $total = Message::where('thread_id', $thread->getKey())->count();
 
-        $messages = Message::where('thread_id', $thread->getKey())
+        $query = Message::where('thread_id', $thread->getKey())
             ->orderByDesc('created_at')->orderByDesc('id')
-            ->limit($limit)
-            ->get()
-            ->reverse()
-            ->values();
+            ->limit($limit);
 
-        return ['messages' => $messages, 'total' => $total, 'withheld' => max(0, $total - $messages->count())];
+        /*
+         * `$before` is a message id, and the step back is taken on the SAME key the order uses.
+         *
+         * Paging on `created_at` alone would skip or repeat every message that shares a second with
+         * the cursor, which a burst routinely does; `(created_at, id) < (cursor)` is the row-value
+         * comparison that makes one page end exactly where the next begins. A cursor naming a message
+         * in another thread — or none at all — is simply ignored, because an unreadable cursor must
+         * return the newest window rather than an empty conversation.
+         */
+        $cursor = $before === null
+            ? null
+            : Message::where('thread_id', $thread->getKey())->whereKey($before)->first();
+
+        if ($cursor !== null) {
+            $query->whereRaw('(created_at, id) < (?, ?)', [$cursor->created_at, $cursor->getKey()]);
+        }
+
+        $messages = $query->get()->reverse()->values();
+
+        /*
+         * `older` counts what lies BEFORE this window, which is not `total - shown` once a reader has
+         * paged back: with a cursor, everything after the window is already behind them.
+         */
+        $oldest = $messages->first();
+        $older = $oldest === null
+            ? 0
+            : Message::where('thread_id', $thread->getKey())
+                ->whereRaw('(created_at, id) < (?, ?)', [$oldest->created_at, $oldest->getKey()])
+                ->count();
+
+        return [
+            'messages' => $messages,
+            'total' => $total,
+            'withheld' => $older,
+            /* The cursor for the window before this one — null when the reader is at the beginning. */
+            'older_before' => $older > 0 ? (string) $oldest?->getKey() : null,
+        ];
     }
 
     /** Close a thread. Idempotent. */

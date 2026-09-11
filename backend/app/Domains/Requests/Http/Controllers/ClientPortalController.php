@@ -446,7 +446,7 @@ final class ClientPortalController
         $this->bindTenant($token);
         $model = $this->ownedThread($token, $thread);
 
-        $window = $this->messaging->window($model);
+        $window = $this->messaging->window($model, $request->query('before') === null ? null : (string) $request->query('before'));
         $messages = $window['messages']->map(fn (Message $m) => $this->messageShape($m));
         $this->messaging->markRead($model, 'client');
 
@@ -460,6 +460,7 @@ final class ClientPortalController
             */
             'messages_total' => $window['total'],
             'messages_withheld' => $window['withheld'],
+            'older_before' => $window['older_before'],
         ]]);
     }
 

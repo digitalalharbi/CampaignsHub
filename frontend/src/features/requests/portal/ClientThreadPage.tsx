@@ -14,12 +14,14 @@ const COPY = {
   ar: {
     title: 'المحادثة', back: 'الرسائل', error: 'تعذّر تحميل المحادثة.',
     none: 'لا توجد رسائل بعد.', reply: 'اكتب ردّك…', send: 'إرسال', you: 'أنت', team: 'الفريق',
-    withheld: 'هذه أحدث {shown} رسالة من {total}. الرسائل الأقدم غير معروضة هنا.',
+    withheld: 'هذه أحدث {shown} رسالة من {total}.', older: 'عرض الرسائل الأقدم',
+    loading_older: 'جارٍ التحميل…', at_start: 'بداية المحادثة.', newest: 'الانتقال إلى الأحدث',
   },
   en: {
     title: 'Conversation', back: 'Messages', error: 'Could not load the conversation.',
     none: 'No messages yet.', reply: 'Write your reply…', send: 'Send', you: 'You', team: 'Team',
-    withheld: 'These are the latest {shown} of {total} messages. Older ones are not shown here.',
+    withheld: 'These are the latest {shown} of {total} messages.', older: 'Show older messages',
+    loading_older: 'Loading…', at_start: 'The start of the conversation.', newest: 'Jump to the newest',
   },
 }
 
@@ -29,7 +31,14 @@ export function ClientThreadPage() {
   const t = ar ? COPY.ar : COPY.en
   const qc = useQueryClient()
   const { id = '' } = useParams()
-  const q = useQuery({ queryKey: ['client', 'thread', id], queryFn: () => getPortalThread(id), retry: false })
+  /* The window the reader has paged back to. A cursor, not an offset — the thread grows as it is read. */
+  const [before, setBefore] = useState<string | null>(null)
+  const q = useQuery({
+    queryKey: ['client', 'thread', id, before],
+    queryFn: () => getPortalThread(id, before),
+    retry: false,
+    placeholderData: (prev) => prev,
+  })
   usePortalGuard(q.isError, q.error)
 
   const [body, setBody] = useState('')
@@ -62,15 +71,42 @@ export function ClientThreadPage() {
         <h1 className="font-heading text-lg font-extrabold text-text-primary">{thread.subject}</h1>
 
         <div className="mt-4 space-y-2">
-          {withheld > 0 && (
-            <p
+          {(withheld > 0 || before !== null) && (
+            <div
               data-testid="portal-thread-window-note"
-              className="rounded-xl border border-border bg-surface-secondary px-3 py-2 text-center text-xs text-text-secondary"
+              className="flex flex-col items-center gap-1 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-center text-xs text-text-secondary"
             >
-              {t.withheld
-                .replace('{shown}', formatNumber(messages.length))
-                .replace('{total}', formatNumber(q.data!.messages_total ?? messages.length + withheld))}
-            </p>
+              <span>
+                {withheld > 0
+                  ? t.withheld
+                      .replace('{shown}', formatNumber(messages.length))
+                      .replace('{total}', formatNumber(q.data!.messages_total ?? messages.length + withheld))
+                  : t.at_start}
+              </span>
+              <div className="flex items-center gap-3">
+                {q.data!.older_before ? (
+                  <button
+                    type="button"
+                    onClick={() => setBefore(q.data!.older_before ?? null)}
+                    disabled={q.isFetching}
+                    data-testid="portal-thread-older"
+                    className="font-semibold text-brand-600 hover:underline disabled:opacity-50"
+                  >
+                    {q.isFetching ? t.loading_older : t.older}
+                  </button>
+                ) : null}
+                {before !== null ? (
+                  <button
+                    type="button"
+                    onClick={() => setBefore(null)}
+                    data-testid="portal-thread-newest"
+                    className="font-semibold text-text-secondary hover:underline"
+                  >
+                    {t.newest}
+                  </button>
+                ) : null}
+              </div>
+            </div>
           )}
           {messages.length === 0 && <p className="text-sm text-text-muted">{t.none}</p>}
           {messages.map((m) => <MessageBubble key={m.id} m={m} you={t.you} team={t.team} />)}
