@@ -125,4 +125,21 @@ describe('the portfolio budget', () => {
     expect(b.projected).toBeNull()
     expect(b.pace).toBeNull()
   })
+
+  /**
+   * A stored snapshot from before `pacing_basis` existed still totals.
+   *
+   * Reading an absent verdict as «not comparable» would empty an old client report of findings it
+   * used to make — a silent regression on documents already sent. The refusals are enumerated; an
+   * unstated basis on a row with a budget and a spend is two numbers in one currency.
+   */
+  it('adds rows from a payload that predates the comparability verdict', () => {
+    const older = [
+      { budget: 1000, spent: 400, projected_spend: 800, budget_currency: 'SAR' },
+      { budget: 2000, spent: 500, projected_spend: 1000, budget_currency: 'SAR' },
+    ]
+
+    expect(portfolioBudget(older).budget).toBe(3000)
+    expect(portfolioBudget(older).excluded).toBe(0)
+  })
 })

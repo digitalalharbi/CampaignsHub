@@ -1,3 +1,4 @@
+import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import { DataMetricTable } from '@/components/ui/MetricTable'
 import { providerLabel } from '@/features/campaigns/labels'
 import type { LivePayload } from './api'
@@ -99,7 +100,19 @@ export function ClientAttention({
    * reach for one running cold. It is what ranks the list and what the bar is measured against, so a
    * finding a client reads is always the one with the most of their money behind it.
    */
-  const plan = rows.reduce((sum, r) => sum + (r.budget ?? 0), 0)
+  /*
+   * The denominator is the COMPARABLE plan, not every row with a number on it.
+   *
+   * `material()` asks «is this finding worth a client's attention», as a share of the money in play.
+   * Summed across rows the aggregator refused to compare — a platform in another currency, a partial
+   * spend — that share is measured against a denominator adding riyals to dollars, and the threshold
+   * then admits or hides findings for a reason nobody chose.
+   *
+   * `portfolioBudget` is the same rule the campaigns overview, the client rollup and the report's own
+   * budget slide use. A plan it cannot state leaves nothing material, which is the honest outcome:
+   * without a denominator there is no share to threshold on.
+   */
+  const plan = portfolioBudget(rows).budget ?? 0
   const material = (stake: number) => plan > 0 && stake / plan >= MATERIAL
 
   const ahead = rows
