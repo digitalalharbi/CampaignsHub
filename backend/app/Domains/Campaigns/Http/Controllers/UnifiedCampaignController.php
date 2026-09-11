@@ -143,6 +143,16 @@ final class UnifiedCampaignController extends Controller
      * @param  list<string>  $ids
      * @return list<string>
      */
+    /**
+     * The columns a reader may order the table by — CAMPAIGNS-TABLE-COMPARISON-001.
+     *
+     * A closed list, and the reason is the same one that made the ordering server-side in the first
+     * place: an arbitrary column name would reach the database, and «sort by whatever the URL says»
+     * is how a typo silently reorders somebody's workspace by `created_at`. Anything not named here
+     * falls back to RELEVANCE, which is the ordering the workspace is designed around.
+     */
+    private const SORTABLE = ['spend', 'results', 'name'];
+
     private function relevanceOrder(Request $request, array $ids): array
     {
         if ($ids === []) {
@@ -154,16 +164,48 @@ final class UnifiedCampaignController extends Controller
         $metrics = collect(app(MetricsAggregator::class)->forProjects([$request->route('project')])->byCampaign($from, $to))
             ->keyBy(fn (array $r): string => (string) $r['campaign_id']);
 
-        $statuses = UnifiedCampaign::query()->whereIn('id', $ids)->pluck('status', 'id');
+        $campaigns = UnifiedCampaign::query()->whereIn('id', $ids)->get(['id', 'status', 'name']);
+        $statuses = $campaigns->pluck('status', 'id');
+        $names = $campaigns->pluck('name', 'id');
 
         $rows = array_map(static fn (string $id): array => [
             'campaign_id' => $id,
             'status' => $statuses[$id] ?? null,
+            'name' => (string) ($names[$id] ?? ''),
             'last_active_on' => $metrics->get($id)['last_active_on'] ?? null,
             'spend' => (float) ($metrics->get($id)['spend'] ?? 0),
+            'results' => (float) ($metrics->get($id)['conversions'] ?? 0),
         ], $ids);
 
-        return app(CampaignRelevance::class)->order($rows, $to->toDateString());
+        $sort = $request->string('sort')->toString();
+
+        if (! in_array($sort, self::SORTABLE, true)) {
+            return app(CampaignRelevance::class)->order($rows, $to->toDateString());
+        }
+
+        /*
+         * Ordered over the WHOLE filtered set, before the page is cut.
+         *
+         * Sorting the twenty-five rows the browser holds would answer «the dearest of the most
+         * relevant twenty-five» while looking exactly like an answer about the project — the same
+         * silent truncation ANALYTICS-FILTER-TRUTH-001 forbids one layer up.
+         */
+        $descending = $request->string('dir')->toString() !== 'asc';
+
+        usort($rows, static function (array $a, array $b) use ($sort, $descending): int {
+            $cmp = $sort === 'name'
+                ? strcmp((string) $a['name'], (string) $b['name'])
+                : ($a[$sort] <=> $b[$sort]);
+
+            /* A tie falls back to the name, so the order cannot reshuffle between identical rows. */
+            if ($cmp === 0) {
+                return strcmp((string) $a['name'], (string) $b['name']);
+            }
+
+            return $descending ? -$cmp : $cmp;
+        });
+
+        return array_map(static fn (array $r): string => (string) $r['campaign_id'], $rows);
     }
 
     /** @return array{0: Carbon, 1: Carbon} the window relevance is judged in — the caller's, or the last 30 days. */

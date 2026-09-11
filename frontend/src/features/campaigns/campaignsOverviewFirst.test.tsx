@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { CampaignsPage } from './CampaignsPage'
 import { campaignPage } from '@/test/campaignPage'
 import type { UnifiedCampaign } from './types'
@@ -112,5 +112,50 @@ describe('the campaigns workspace', () => {
     expect(listBranch).toBeGreaterThan(overview)
     expect(movers, 'the movement block is not rendered at all').toBeGreaterThan(-1)
     expect(movers, 'the movement block sits in the list branch, so the overview never draws it').toBeLessThan(listBranch)
+  })
+
+  /**
+   * CAMPAIGNS-TABLE-COMPARISON-001 — the header sends the column to the SERVER.
+   *
+   * The list is server-paginated and server-ranked, so a header that sorted the rows the browser
+   * holds would answer «the dearest of the most relevant twenty-five» while looking exactly like an
+   * answer about the project. Asserted on the REQUEST, because a page-local sort and a real one look
+   * identical on screen — which is the whole reason this can go wrong unnoticed.
+   */
+  it('sends the chosen column to the server rather than reordering the page', async () => {
+    renderWithProviders(<CampaignsPage />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('view-table'))
+    fireEvent.click(await screen.findByTestId('campaigns-sort-spend'))
+
+    await waitFor(() => {
+      const sent = vi.mocked(listCampaigns).mock.calls.at(-1)?.[1] as { sort?: string; dir?: string } | undefined
+
+      expect(sent?.sort).toBe('spend')
+      /* A figure column opens on «largest first», which is what «show me the biggest» means. */
+      expect(sent?.dir).toBe('desc')
+    })
+
+    /* Clicking the same header turns the direction round rather than re-sorting the same way. */
+    fireEvent.click(screen.getByTestId('campaigns-sort-spend'))
+
+    await waitFor(() => {
+      const sent = vi.mocked(listCampaigns).mock.calls.at(-1)?.[1] as { dir?: string } | undefined
+
+      expect(sent?.dir).toBe('asc')
+    })
+  })
+
+  /** With nothing chosen the list keeps the relevance ranking — «no sort» is not a column. */
+  it('sends no sort at all until a header is clicked', async () => {
+    renderWithProviders(<CampaignsPage />, { locale: 'en' })
+
+    await screen.findByTestId('campaigns-bands')
+
+    await waitFor(() => expect(vi.mocked(listCampaigns)).toHaveBeenCalled())
+
+    const sent = vi.mocked(listCampaigns).mock.calls.at(-1)?.[1] as { sort?: string } | undefined
+
+    expect(sent?.sort).toBeUndefined()
   })
 })
