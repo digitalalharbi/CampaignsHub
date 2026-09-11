@@ -355,13 +355,7 @@ final class ReportExporter
                 $data['funnel'],
             ));
         }
-        if (! empty($data['budget'])) {
-            // Per PLATFORM since CLIENT-REPORT-ENTITY-BOUNDARY-001; `provider` is what the rows carry.
-            $add('Budget', ['Platform', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Pace'], array_map(
-                fn ($b) => [$b['provider'] ?? '', $b['budget'] ?? null, $b['spent'] ?? null, $b['remaining'] ?? null, $b['consumed_pct'] ?? null, $b['pace'] ?? null],
-                $data['budget'],
-            ));
-        }
+        $this->budgetSheet($add, $data);
 
         /*
          * §15.12 — a Creatives sheet, only when the link put creatives in `$data`.
@@ -514,5 +508,50 @@ final class ReportExporter
             'report' => $report,
             'data' => $data,
         ])->setPaper('a4')->output();
+    }
+
+    /**
+     * BUDGET-GOVERNANCE-001 — the sheet carries the same columns the table does.
+     *
+     * The budget rungs gained «expected to date», «daily average» and «over / under», and this kept
+     * exporting five columns. An owner replacing a spreadsheet opens the export and finds fewer
+     * figures than the page they exported it from — so the spreadsheet stays, which is the whole
+     * thing the export exists to end.
+     *
+     * A refused figure exports as an EMPTY cell rather than a zero: the money contract's rule wearing
+     * a spreadsheet's clothes, because `0` is a claim and blank is an absence.
+     *
+     * Extracted so it can be exercised directly — the parity test opens whole workbooks, which tells
+     * you the two formats agree and nothing about which columns are in them.
+     *
+     * @param  callable(string, list<string>, list<list<mixed>>): void  $add
+     * @param  array<string, mixed>  $data
+     */
+    private function budgetSheet(callable $add, array $data): void
+    {
+        if (empty($data['budget'])) {
+            return;
+        }
+
+        // Per PLATFORM since CLIENT-REPORT-ENTITY-BOUNDARY-001; `provider` is what the rows carry.
+        $add(
+            'Budget',
+            ['Platform', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Expected To Date', 'Daily Average', 'Pace', 'Projected', 'Over / Under'],
+            array_map(
+                fn ($b) => [
+                    $b['provider'] ?? '',
+                    $b['budget'] ?? null,
+                    $b['spent'] ?? null,
+                    $b['remaining'] ?? null,
+                    $b['consumed_pct'] ?? null,
+                    $b['expected_to_date'] ?? null,
+                    $b['daily_average'] ?? null,
+                    $b['pace'] ?? null,
+                    $b['projected_spend'] ?? null,
+                    $b['over_under'] ?? null,
+                ],
+                $data['budget'],
+            ),
+        );
     }
 }
