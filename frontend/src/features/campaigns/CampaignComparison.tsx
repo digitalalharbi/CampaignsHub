@@ -210,9 +210,21 @@ function ComparisonTable({ rows, locale, mixed, projectId }: {
             key: 'reach',
             label: 'الظهور / النقرات',
             kind: 'text' as const,
-            values: rows.map((r) => (
-              <>{compact(Number(r.totals.impressions ?? 0))} <span className="text-text-muted">/</span> {compact(Number(r.totals.clicks ?? 0))}</>
-            )),
+            /*
+              The same coalesced zero the spend row above was fixed for, left on the delivery cell.
+              `compact()` refuses a figure the aggregator did not state; `Number(x ?? 0)` handed it a
+              zero first, so a campaign that has reported no impressions sat in a COMPARISON beside
+              one that had, reading «0» — «it ran and got nothing» rather than «it has reported
+              nothing». In a table whose whole purpose is ranking campaigns against each other, that
+              is the cell that decides which one looks worse.
+            */
+            values: rows.map((r) => {
+              const n = (k: string) => (r.totals[k] === null || r.totals[k] === undefined ? null : Number(r.totals[k]))
+
+              return (
+                <>{compact(n('impressions'))} <span className="text-text-muted">/</span> {compact(n('clicks'))}</>
+              )
+            }),
           },
           {
             key: 'budget',
