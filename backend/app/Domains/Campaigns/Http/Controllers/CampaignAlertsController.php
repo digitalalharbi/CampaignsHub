@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\CappedList;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -34,7 +35,14 @@ final class CampaignAlertsController extends Controller
             }
         }
 
-        $rows = $query->limit(100)->get()->map(fn (AppNotification $n) => [
+        /*
+         * OPS-LEDGER-001 — the cap stays; the response says what it left out.
+         *
+         * The direction was already the safe one, newest first. What was wrong is that a reader past
+         * the ceiling saw a full page and was told nothing, which reads as «this is all of them».
+         */
+        $page = CappedList::of($query, 100);
+        $rows = $page['rows']->map(fn (AppNotification $n) => [
             'id' => $n->id,
             'type' => $n->type,
             'severity' => $n->severity,
@@ -57,6 +65,9 @@ final class CampaignAlertsController extends Controller
                 'snoozed' => (int) ($counts['snoozed'] ?? 0),
                 'all' => (int) $counts->sum(),
             ],
+            /* What the hundred-row page left out, beside the counts it already reported. */
+            'total' => $page['total'],
+            'withheld' => $page['withheld'],
         ]);
     }
 }

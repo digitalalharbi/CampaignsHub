@@ -8,6 +8,7 @@ use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Resources\NotificationResource;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\CappedList;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -36,10 +37,19 @@ final class NotificationController extends Controller
 
         $unread = (clone $query)->where('status', 'unread')->count();
 
+        /*
+         * OPS-LEDGER-001 — the cap stays; the response says what it left out.
+         *
+         * The unread COUNT was already honest and the list was not, which is the worst pairing of the
+         * two: a badge reading «140 unread» over a hundred rows invites the reader to conclude the
+         * badge is broken.
+         */
+        $page = CappedList::of($query, 100);
+
         return ApiResponse::success(
-            NotificationResource::collection($query->limit(100)->get()),
+            NotificationResource::collection($page['rows']),
             'Notifications retrieved.',
-            meta: ['unread' => $unread],
+            meta: ['unread' => $unread, 'total' => $page['total'], 'withheld' => $page['withheld']],
         );
     }
 
@@ -68,15 +78,20 @@ final class NotificationController extends Controller
      */
     public function deliveries(Request $request): JsonResponse
     {
-        $rows = DB::table('notification_deliveries')
-            ->join('app_notifications as n', 'n.id', '=', 'notification_deliveries.notification_id')
-            ->where('n.user_id', $request->user()->id)
-            ->orderByDesc('notification_deliveries.created_at')
-            ->limit(100)
-            ->get([
+        /* OPS-LEDGER-001 — the cap stays; the response says what it left out. */
+        $page = CappedList::ofQuery(
+            DB::table('notification_deliveries')
+                ->join('app_notifications as n', 'n.id', '=', 'notification_deliveries.notification_id')
+                ->where('n.user_id', $request->user()->id)
+                ->orderByDesc('notification_deliveries.created_at'),
+            100,
+            [
                 'notification_deliveries.id', 'notification_deliveries.channel', 'notification_deliveries.status',
                 'notification_deliveries.attempts', 'notification_deliveries.created_at', 'n.type', 'n.title',
-            ])
+            ],
+        );
+
+        $rows = $page['rows']
             ->map(fn ($r) => [
                 'id' => $r->id,
                 'channel' => $r->channel,
@@ -87,6 +102,10 @@ final class NotificationController extends Controller
                 'created_at' => optional($r->created_at)->toIso8601String(),
             ]);
 
-        return ApiResponse::success($rows, 'Delivery log retrieved.');
+        return ApiResponse::success(
+            $rows,
+            'Delivery log retrieved.',
+            meta: ['total' => $page['total'], 'withheld' => $page['withheld']],
+        );
     }
 }

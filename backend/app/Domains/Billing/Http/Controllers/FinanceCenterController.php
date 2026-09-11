@@ -9,6 +9,7 @@ use App\Domains\Billing\Models\Payment;
 use App\Domains\Billing\Models\Quote;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\CappedList;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -127,16 +128,24 @@ final class FinanceCenterController extends Controller
             'search' => ['nullable', 'string', 'max:120'],
         ]);
 
-        $rows = Payment::query()
+        $query = Payment::query()
             ->when($filters['status'] ?? null, fn ($q, $v) => $q->where('status', $v))
             ->when($filters['provider'] ?? null, fn ($q, $v) => $q->where('provider', $v))
             ->when($filters['search'] ?? null, fn ($q, $v) => $q->where(fn ($w) => $w
                 ->where('provider_payment_id', 'ilike', "%{$v}%")
                 ->orWhere('provider_session_id', 'ilike', "%{$v}%")))
             ->with('invoice:id,number,client_workspace_id,total,currency')
-            ->orderByDesc('created_at')
-            ->limit(200)
-            ->get();
+            ->orderByDesc('created_at');
+
+        /*
+         * OPS-LEDGER-001 — the cap stays; the response says what it left out.
+         *
+         * The direction was already the safe one, newest first. What was wrong is that a reader past
+         * the ceiling was shown a full page and told nothing, which reads as «this is all of them» —
+         * and a payments ledger that understates itself is worse than one admitting a ceiling.
+         */
+        $page = CappedList::of($query, 200);
+        $rows = $page['rows'];
 
         return ApiResponse::success($rows->map(fn (Payment $p) => [
             'id' => $p->id,
@@ -153,7 +162,7 @@ final class FinanceCenterController extends Controller
                 'number' => $p->invoice->number,
                 'total' => (float) $p->invoice->total,
             ] : null,
-        ])->all(), 'Payments.');
+        ])->all(), 'Payments.', meta: ['total' => $page['total'], 'withheld' => $page['withheld']]);
     }
 
     /**

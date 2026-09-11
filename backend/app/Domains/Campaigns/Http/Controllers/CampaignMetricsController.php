@@ -11,6 +11,7 @@ use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\SyncRunLog;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\CappedList;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -126,19 +127,30 @@ final class CampaignMetricsController extends Controller
             ->unique()
             ->values();
 
-        $runs = $accountIds->isEmpty()
-            ? collect()
-            : MetricSyncRun::query()
-                ->whereIn('external_account_id', $accountIds)
-                ->orderByDesc('started_at')
-                ->orderByDesc('created_at')
-                ->limit(50)
-                ->get();
+        /*
+         * OPS-LEDGER-001 — the cap stays; the response says what it left out.
+         *
+         * Fifty runs, newest first, is the right page for a sync log. What was wrong is that a
+         * campaign with more history showed fifty and said nothing, which reads as «this is the whole
+         * log» — and §8 already collapses repeats, so a reader has no way to tell a short history
+         * from a truncated one.
+         */
+        $page = $accountIds->isEmpty()
+            ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
+            : CappedList::of(
+                MetricSyncRun::query()
+                    ->whereIn('external_account_id', $accountIds)
+                    ->orderByDesc('started_at')
+                    ->orderByDesc('created_at'),
+                50,
+            );
 
         return ApiResponse::success([
             'linked_accounts' => $accountIds->count(),
             // §8 — consecutive identical outcomes are said once, with a count and a since.
-            'runs' => SyncRunLog::collapse($runs->map(fn (MetricSyncRun $r) => $r->logRow())->all()),
+            'runs' => SyncRunLog::collapse($page['rows']->map(fn (MetricSyncRun $r) => $r->logRow())->all()),
+            'runs_total' => $page['total'],
+            'runs_withheld' => $page['withheld'],
         ], 'Campaign sync log.');
     }
 

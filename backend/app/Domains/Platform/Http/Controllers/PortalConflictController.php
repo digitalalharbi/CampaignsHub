@@ -15,6 +15,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
+use App\Support\CappedList;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -53,7 +54,9 @@ final class PortalConflictController extends Controller
             $query->whereNull('resolution');
         }
 
-        $rows = $query->limit(200)->get();
+        /* OPS-LEDGER-001 — the cap stays; the response says what it left out. */
+        $page = CappedList::of($query, 200);
+        $rows = $page['rows'];
         $tenants = Tenant::query()->whereIn('id', $rows->pluck('tenant_id'))->pluck('name', 'id');
 
         return ApiResponse::success([
@@ -71,6 +74,8 @@ final class PortalConflictController extends Controller
             ])->all(),
             // The cutover gate, stated rather than left to be counted by eye.
             'open' => PortalIdentityConflict::query()->whereNull('resolution')->count(),
+            'total' => $page['total'],
+            'withheld' => $page['withheld'],
             'safe_to_retire_legacy_engine' => PortalIdentityConflict::query()->whereNull('resolution')->count() === 0,
         ], 'Portal identity conflicts.');
     }

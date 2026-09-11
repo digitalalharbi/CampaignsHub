@@ -11,6 +11,7 @@ use App\Domains\Requests\Services\RequestSla;
 use App\Domains\Requests\Support\RequestLabels;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Support\CappedList;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -188,10 +189,19 @@ final class RequestsController
 
         $comments = $req->comments()->orderBy('created_at')->get()
             ->map(fn ($c) => ['id' => $c->id, 'visibility' => $c->visibility, 'author' => $c->author_label ?? 'Team', 'body' => $c->body, 'at' => optional($c->created_at)->toIso8601String()]);
-        $events = $req->events()->orderByDesc('created_at')->limit(100)->get()
+        /* OPS-LEDGER-001 — the cap stays; the response says what it left out. */
+        $eventPage = CappedList::of($req->events()->getQuery()->orderByDesc('created_at'), 100);
+        $events = $eventPage['rows']
             ->map(fn ($e) => ['type' => $e->type, 'from' => $e->from_status, 'to' => $e->to_status, 'message' => $e->message, 'client_visible' => $e->is_client_visible, 'at' => optional($e->created_at)->toIso8601String()]);
         $files = $req->files()->whereNotNull('request_id')->get()
             ->map(fn ($f) => ['id' => $f->id, 'name' => $f->original_name, 'size' => $f->size, 'client_visible' => $f->is_client_visible]);
+
+        /*
+         * Read before the response: `billing()` sets its two counts as a side effect, and relying on
+         * the evaluation order of an array literal to sequence that would be true today and silently
+         * wrong after any reordering.
+         */
+        $billing = $this->billing($req);
 
         // Canonical selected services (request_services), resolved to display labels; fall back to the jsonb.
         $serviceKeys = $req->requestServices()->orderBy('position')->pluck('service_key')->all();
@@ -219,12 +229,22 @@ final class RequestsController
             ],
             'comments' => $comments,
             'events' => $events,
+            'events_total' => $eventPage['total'],
+            'events_withheld' => $eventPage['withheld'],
             'files' => $files,
             'archived_at' => optional($req->archived_at)->toIso8601String(),
             'conversion' => $this->conversion($req),
-            'billing' => $this->billing($req),
+            'billing' => $billing,
+            'billing_total' => $this->billingTotal,
+            'billing_withheld' => $this->billingWithheld,
         ])]);
     }
+
+    /** How many quotes this request really has, set by `billing()` and read beside its rows. */
+    private int $billingTotal = 0;
+
+    /** What the ten-row quote page left out. */
+    private int $billingWithheld = 0;
 
     /**
      * Quotes raised FROM this request, each with its issued invoice (if any) — the request's billing thread.
@@ -233,10 +253,24 @@ final class RequestsController
      */
     private function billing(ExternalRequest $req): array
     {
-        return Quote::query()
-            ->where('external_request_id', $req->id)
-            ->with('invoices')
-            ->orderByDesc('created_at')->limit(10)->get()
+        /*
+         * OPS-LEDGER-001 — ten, and a request with more says so.
+         *
+         * The tightest cap in the product and the least likely to be noticed: a request that has been
+         * re-quoted eleven times shows ten and reads as complete. The count travels with the rows.
+         */
+        $page = CappedList::of(
+            Quote::query()
+                ->where('external_request_id', $req->id)
+                ->with('invoices')
+                ->orderByDesc('created_at'),
+            10,
+        );
+
+        $this->billingWithheld = $page['withheld'];
+        $this->billingTotal = $page['total'];
+
+        return $page['rows']
             ->map(fn ($q) => [
                 'quote_id' => (string) $q->getKey(),
                 'number' => $q->number,

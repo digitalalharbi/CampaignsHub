@@ -22,6 +22,7 @@ use App\Domains\Metrics\Services\ContentIntelligence;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
+use App\Support\CappedList;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -602,6 +603,13 @@ final class CreativeAnalysisController extends Controller
 
         $rows = $this->present($members, $from, $to, withFatigue: true, withPrevious: true);
 
+        /*
+         * Read BEFORE the response rather than inside it: `groupAudit()` sets the two counts as a
+         * side effect, and depending on the evaluation order of an array literal to sequence that
+         * would be true today and silently wrong after any reordering.
+         */
+        $audit = $this->groupAudit($model);
+
         return ApiResponse::success(
             $this->groupSummary($model, $rows) + [
                 'members' => $rows,
@@ -609,7 +617,9 @@ final class CreativeAnalysisController extends Controller
                 'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
                 // A group spans platforms and can span projects — see `reachCurrency`.
                 'currency' => $this->reachCurrency($members),
-                'audit' => $this->groupAudit($model),
+                'audit' => $audit,
+                'audit_total' => $this->groupAuditTotal,
+                'audit_withheld' => $this->groupAuditWithheld,
             ],
             'Creative group.',
         );
@@ -1289,13 +1299,27 @@ final class CreativeAnalysisController extends Controller
      */
     private function groupAudit(CreativeGroup $group): array
     {
-        $entries = AuditLog::query()
-            ->where('entity_type', CreativeGroup::class)
-            ->where('entity_id', (string) $group->getKey())
-            ->when($group->tenant_id !== null, fn ($q) => $q->where('tenant_id', $group->tenant_id))
-            ->orderByDesc('created_at')
-            ->limit(50)
-            ->get(['id', 'action', 'user_id', 'after', 'created_at']);
+        /*
+         * OPS-LEDGER-001 — the cap stays; the caller is told what it left out.
+         *
+         * Fifty entries, newest first, is the right page for a group's history. What was wrong is
+         * that a group edited more than fifty times showed fifty and said nothing, which reads as
+         * «this is everything that happened to it» on the one panel somebody opens to find out
+         * exactly that.
+         */
+        $page = CappedList::of(
+            AuditLog::query()
+                ->where('entity_type', CreativeGroup::class)
+                ->where('entity_id', (string) $group->getKey())
+                ->when($group->tenant_id !== null, fn ($q) => $q->where('tenant_id', $group->tenant_id))
+                ->orderByDesc('created_at')
+                ->select(['id', 'action', 'user_id', 'after', 'created_at']),
+            50,
+        );
+
+        $entries = $page['rows'];
+        $this->groupAuditWithheld = $page['withheld'];
+        $this->groupAuditTotal = $page['total'];
 
         $actors = User::query()
             ->whereIn('id', $entries->pluck('user_id')->filter()->unique()->all())
@@ -1310,6 +1334,12 @@ final class CreativeAnalysisController extends Controller
             'group_dissolved' => (bool) ($entry->after['group_dissolved'] ?? false),
         ])->all();
     }
+
+    /** What the group's audit page left out, set by `groupAudit()` and read beside it. */
+    private int $groupAuditWithheld = 0;
+
+    /** How long the group's history actually is. */
+    private int $groupAuditTotal = 0;
 
     /** @return array<string, mixed>|null */
     private function groupShape(ExternalCreative $creative): ?array

@@ -9,6 +9,7 @@ use App\Domains\Subscriptions\Services\SubscriptionInvoicing;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\CappedList;
 use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -38,15 +39,25 @@ final class SubscriptionInvoiceController extends Controller
     {
         $tenantId = $this->tenants->tenantId();
 
-        $invoices = SubscriptionInvoice::query()
-            ->where('tenant_id', $tenantId)
-            ->with('lines')
-            ->orderByDesc('issued_at')
-            ->limit(100)
-            ->get();
+        /*
+         * OPS-LEDGER-001 — the cap stays; the response says what it left out.
+         *
+         * A hundred invoices, newest first, is the right page. What was wrong is that a tenant past
+         * that number was shown a hundred and told nothing — on their own billing history, where
+         * «this is all of them» is a claim about money.
+         */
+        $page = CappedList::of(
+            SubscriptionInvoice::query()
+                ->where('tenant_id', $tenantId)
+                ->with('lines')
+                ->orderByDesc('issued_at'),
+            100,
+        );
 
         return ApiResponse::success([
-            'invoices' => $invoices->map(fn (SubscriptionInvoice $i) => $this->present($i))->all(),
+            'invoices' => $page['rows']->map(fn (SubscriptionInvoice $i) => $this->present($i))->all(),
+            'invoices_total' => $page['total'],
+            'invoices_withheld' => $page['withheld'],
         ], 'Subscription invoices.');
     }
 

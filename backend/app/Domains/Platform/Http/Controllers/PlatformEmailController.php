@@ -48,6 +48,17 @@ final class PlatformEmailController extends Controller
     private const PER_PAGE = 50;
 
     /**
+     * How many rows either ledger contributes to one merged view — OPS-LEDGER-001.
+     *
+     * The two sources are merged and sorted in memory, so each needs a bound. The bound is not the
+     * problem; the problem was that `total` reported the MERGED length, which is itself capped, so a
+     * window holding twelve thousand sends reported two thousand and the page said «2000» with
+     * complete confidence. One is fetched beyond the cap so «there is more» is knowable without a
+     * second count on a screen that already runs two joins.
+     */
+    private const LEDGER_CAP = 1000;
+
+    /**
      * The states either ledger can hold, in the order an operator triages them.
      *
      * `awaiting_provider_credentials` is deliberately absent. It is the older vocabulary on
@@ -74,14 +85,30 @@ final class PlatformEmailController extends Controller
         $since = now()->subDays((int) ($filters['days'] ?? 30));
         $page = max(1, (int) ($filters['page'] ?? 1));
 
-        $rows = $this->transactional($filters, $since)
-            ->concat($this->digests($filters, $since))
+        $transactional = $this->transactional($filters, $since);
+        $digests = $this->digests($filters, $since);
+
+        /*
+         * Each source is fetched one row PAST its cap, so a full page is distinguishable from the end
+         * of the ledger. Those extra rows are dropped before merging — they exist to answer «is there
+         * more», not to be shown.
+         */
+        $truncated = $transactional->count() > self::LEDGER_CAP || $digests->count() > self::LEDGER_CAP;
+
+        $rows = $transactional->take(self::LEDGER_CAP)
+            ->concat($digests->take(self::LEDGER_CAP))
             ->sortByDesc('at')
             ->values();
 
         return ApiResponse::success([
             'deliveries' => $rows->forPage($page, self::PER_PAGE)->values()->all(),
             'total' => $rows->count(),
+            /*
+             * «At least this many», said as a flag rather than as a number nobody can stand behind.
+             * A count across two joined ledgers costs two more queries on an admin screen that
+             * already runs two; what a reader needs here is to know the figure above is a floor.
+             */
+            'withheld' => $truncated,
             'page' => $page,
             'per_page' => self::PER_PAGE,
             // Counted over the whole filtered window, not the page — a page of failures out of ten
@@ -159,7 +186,7 @@ final class PlatformEmailController extends Controller
             ->when($filters['kind'] ?? null, fn ($q, $k) => $q->where('m.kind', $k))
             ->when($filters['recipient'] ?? null, fn ($q, $r) => $q->where('m.recipient', 'ilike', '%'.$r.'%'))
             ->orderByDesc('m.created_at')
-            ->limit(1000)
+            ->limit(self::LEDGER_CAP + 1)
             ->get([
                 'm.id', 'm.kind', 'm.recipient', 'm.locale', 'm.template', 'm.status', 'm.transport',
                 'm.attempts', 'm.error', 'm.sent_at', 'm.created_at', 't.name as tenant_name',
@@ -198,7 +225,7 @@ final class PlatformEmailController extends Controller
             ->when($filters['kind'] ?? null, fn ($q, $k) => $q->where('d.kind', $k))
             ->when($filters['recipient'] ?? null, fn ($q, $r) => $q->where('u.email', 'ilike', '%'.$r.'%'))
             ->orderByDesc('d.created_at')
-            ->limit(1000)
+            ->limit(self::LEDGER_CAP + 1)
             ->get([
                 'd.id', 'd.kind', 'd.status', 'd.reason', 'd.attempts', 'd.last_error', 'd.sent_at',
                 'd.created_at', 'd.period_key', 't.name as tenant_name', 'u.email as recipient',

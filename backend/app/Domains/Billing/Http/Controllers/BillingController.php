@@ -11,6 +11,7 @@ use App\Domains\Billing\Support\TaxTreatment;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\CappedList;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -23,15 +24,29 @@ use Illuminate\Validation\Rule;
  */
 final class BillingController extends Controller
 {
+    /** How many rows these finance lists render at once — see `CappedList`. */
+    private const CAP = 200;
+
     public function __construct(private readonly BillingService $billing) {}
 
     public function quotes(Request $request): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('billing.view'), 403);
 
+        /*
+         * OPS-LEDGER-001 — the cap stays, and the response says what it left out.
+         *
+         * Two hundred quotes, newest first, is the right page for this screen. What was wrong is that
+         * an agency past that number was shown two hundred and told nothing, which reads as «this is
+         * all of them» — and a finance screen that understates the ledger is worse than one that
+         * admits a ceiling.
+         */
+        $page = CappedList::of(Quote::query()->latest('created_at'), self::CAP);
+
         return ApiResponse::success(
-            Quote::query()->latest('created_at')->limit(200)->get()->all(),
+            $page['rows']->all(),
             'Quotes.',
+            meta: ['total' => $page['total'], 'withheld' => $page['withheld']],
         );
     }
 
@@ -84,7 +99,13 @@ final class BillingController extends Controller
             }
         }
 
-        return ApiResponse::success($query->limit(200)->get()->all(), 'Invoices.');
+        $page = CappedList::of($query, self::CAP);
+
+        return ApiResponse::success(
+            $page['rows']->all(),
+            'Invoices.',
+            meta: ['total' => $page['total'], 'withheld' => $page['withheld']],
+        );
     }
 
     public function startPayment(Request $request, Invoice $invoice): JsonResponse

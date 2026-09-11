@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Models\CampaignAnnotation;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\CappedList;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -72,16 +73,24 @@ final class CampaignAnnotationController extends Controller
             ->select('campaign_annotations.*', 'unified_campaigns.name as campaign_name')
             ->orderByRaw("CASE campaign_annotations.priority
                 WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END")
-            ->latest('campaign_annotations.created_at')
-            ->limit(200)
-            ->get()
-            ->map(fn (CampaignAnnotation $a) => $this->shape($a) + [
+            ->latest('campaign_annotations.created_at');
+
+        /*
+         * OPS-LEDGER-001 — the cap stays; the response says what it left out.
+         *
+         * The direction was already the safe one, newest first. What was wrong is that a reader past
+         * the ceiling saw a full page and was told nothing, which reads as «this is all of them».
+         */
+        $page = CappedList::of($rows, 200);
+
+        return ApiResponse::success(
+            $page['rows']->map(fn (CampaignAnnotation $a) => $this->shape($a) + [
                 'campaign_id' => $a->campaign_id,
                 'campaign_name' => $a->getAttribute('campaign_name'),
-            ])
-            ->all();
-
-        return ApiResponse::success($rows, 'Project recommendations.');
+            ])->all(),
+            'Project recommendations.',
+            meta: ['total' => $page['total'], 'withheld' => $page['withheld']],
+        );
     }
 
     public function store(Request $request, string $project, string $campaign, AuditLogger $audit): JsonResponse

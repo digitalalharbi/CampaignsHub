@@ -14,6 +14,7 @@ use App\Domains\Subscriptions\Notifications\SubscriptionNotifier;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\CappedList;
 use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -89,12 +90,21 @@ final class PlatformRegistrationController extends Controller
     {
         $this->tenants->enterPlatformScope();
 
+        /*
+         * Read before the response: `transitions()` sets the two counts as a side effect, and relying
+         * on the evaluation order of an array literal to sequence that would be true today and
+         * silently wrong after any reordering.
+         */
+        $transitions = $this->transitions($registration);
+
         return ApiResponse::success([
             'registration' => $this->row($registration, $request),
             'policy' => $this->policy->for($registration),
             // Every recorded decision about this application, in order. A reviewer deciding whether
             // to approve should be able to see what has already been done and by whom.
-            'transitions' => $this->transitions($registration),
+            'transitions' => $transitions,
+            'transitions_total' => $this->transitionsTotal,
+            'transitions_withheld' => $this->transitionsWithheld,
         ], 'Registration request.');
     }
 
@@ -297,15 +307,42 @@ final class PlatformRegistrationController extends Controller
         return $rows;
     }
 
+    /** How long this application's history actually is, set by `transitions()`. */
+    private int $transitionsTotal = 0;
+
+    /** What the transitions page left out. */
+    private int $transitionsWithheld = 0;
+
     /** @return list<array<string, mixed>> */
     private function transitions(RegistrationRequest $registration): array
     {
-        return AuditLog::query()
-            ->where('entity_type', RegistrationRequest::class)
-            ->where('entity_id', (string) $registration->getKey())
-            ->orderBy('created_at')
-            ->limit(100)
-            ->get()
+        /*
+         * OPS-LEDGER-001 — and this one was the SHARP shape, not the safe one.
+         *
+         * `orderBy('created_at')` ascending, THEN capped, is the OLDEST hundred: a registration with
+         * more history than that showed its first hundred transitions and never its latest, on the
+         * panel an administrator opens to find out what most recently happened to it. Exactly the
+         * defect MESSAGE-THREAD-TRUTH-001 fixed in a conversation, in a second place.
+         *
+         * Taken from the END and turned back into reading order, with the count returned beside it.
+         * Ordered by `id` after `created_at` because transitions written in one request share a
+         * timestamp, and a tie at the window's edge decides which is the newest.
+         */
+        $page = CappedList::of(
+            AuditLog::query()
+                ->where('entity_type', RegistrationRequest::class)
+                ->where('entity_id', (string) $registration->getKey())
+                ->orderByDesc('created_at')
+                ->orderByDesc('id'),
+            100,
+        );
+
+        $this->transitionsTotal = $page['total'];
+        $this->transitionsWithheld = $page['withheld'];
+
+        return $page['rows']
+            ->reverse()
+            ->values()
             ->map(fn (AuditLog $log) => [
                 'action' => $log->action,
                 'at' => $log->created_at?->toIso8601String(),

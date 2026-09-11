@@ -12,6 +12,7 @@ use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\ShareSections;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\CappedList;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -176,9 +177,23 @@ final class ReportShareController extends Controller
         abort_unless($request->user()->hasPermission('reports.share'), 403);
         $this->findReport($report);
         $model = ReportShare::findOrFail($share);
-        $logs = $model->logs()->latest()->limit(100)->get(['action', 'ip', 'user_agent', 'detail', 'created_at']);
+        /*
+         * OPS-LEDGER-001 — the cap stays; the response says what it left out.
+         *
+         * An access log is read to answer «who opened this, and how often». A hundred rows with no
+         * total answers the first question and quietly misleads on the second.
+         */
+        /* `getQuery()`: the relation forwards to a builder but is not one, and the helper takes the builder. */
+        $page = CappedList::of(
+            $model->logs()->getQuery()->latest()->select(['action', 'ip', 'user_agent', 'detail', 'created_at']),
+            100,
+        );
 
-        return ApiResponse::success($logs, 'Access logs.');
+        return ApiResponse::success(
+            $page['rows'],
+            'Access logs.',
+            meta: ['total' => $page['total'], 'withheld' => $page['withheld']],
+        );
     }
 
     /**

@@ -9,6 +9,7 @@ use App\Domains\Drive\Models\DriveLink;
 use App\Domains\Drive\Services\DriveService;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\CappedList;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -28,9 +29,20 @@ final class DriveController extends Controller
     {
         abort_unless($request->user()?->hasPermission('drive.view'), 403);
 
+        /*
+         * OPS-LEDGER-001 — the cap stays; the response says what it left out.
+         *
+         * The direction was already the safe one, newest first. What was wrong is that a workspace
+         * past two hundred linked folders saw two hundred and was told nothing, which reads as «this
+         * is all of them» — and a file library that understates itself sends somebody looking for a
+         * document that is there.
+         */
+        $page = CappedList::of(DriveLink::query()->latest('created_at'), 200);
+
         return ApiResponse::success(
-            DriveLink::query()->latest('created_at')->limit(200)->get()->all(),
+            $page['rows']->all(),
             'Drive links.',
+            meta: ['total' => $page['total'], 'withheld' => $page['withheld']],
         );
     }
 

@@ -9,6 +9,7 @@ use App\Domains\Metrics\Models\CurrencyRate;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use App\Support\CappedList;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -36,11 +37,22 @@ final class PlatformCurrencyRateController extends Controller
     /** GET /admin/fx/rates — the feed's state, what it is costing, and the rates on file. */
     public function index(): JsonResponse
     {
-        $rates = CurrencyRate::query()
-            ->orderByDesc('rate_date')
-            ->orderBy('base_currency')
-            ->limit(100)
-            ->get(['base_currency', 'quote_currency', 'rate', 'rate_date', 'source'])
+        /*
+         * OPS-LEDGER-001 — the cap stays; the response says what it left out.
+         *
+         * A hundred rates, newest first, is the right page. What was wrong is that an install with
+         * more on file showed a hundred and said nothing, on a screen whose whole purpose is to tell
+         * an administrator what this deployment actually holds.
+         */
+        $page = CappedList::of(
+            CurrencyRate::query()
+                ->orderByDesc('rate_date')
+                ->orderBy('base_currency')
+                ->select(['base_currency', 'quote_currency', 'rate', 'rate_date', 'source']),
+            100,
+        );
+
+        $rates = $page['rows']
             ->map(static fn (CurrencyRate $r): array => [
                 'base' => $r->base_currency,
                 'quote' => $r->quote_currency,
@@ -61,6 +73,8 @@ final class PlatformCurrencyRateController extends Controller
              */
             'unmet_pairs' => $this->feed->unmetPairs(),
             'rates' => $rates,
+            'rates_total' => $page['total'],
+            'rates_withheld' => $page['withheld'],
         ], 'Currency rates.');
     }
 
