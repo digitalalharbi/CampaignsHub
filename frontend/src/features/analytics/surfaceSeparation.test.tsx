@@ -82,21 +82,24 @@ describe('the dashboard and the analysis are different surfaces', () => {
   })
 
   /**
-   * OWNER CORRECTION 2026-09-11 — the dashboard keeps its operational picture.
+   * The dashboard KEEPS the curve, the rate trends and the store ledger — Owner correction.
    *
-   * #362 moved the curve, the rate trends and the store ledger to the analysis because they answer
-   * «why». The Owner's correction is that they are ALSO how an operator reads what is happening now,
-   * and that «open Analytics for the reason» is not a substitute for information that belongs here.
+   * This case asserted their absence. #362 had moved all three to the analysis on the grounds that
+   * they answer «why»; the Owner's reply was that they are also how an operator reads what is
+   * happening now, and that «افتح التحليلات للسبب والتفصيل» is not a substitute for information that
+   * belongs on this page. A guard that still demanded the stripped dashboard would have failed the
+   * corrected product and passed the one the Owner rejected, so it asserts the correction instead.
    *
-   * This test previously asserted the opposite. It is rewritten rather than deleted, because the
-   * requirement changed and a test that no longer describes the product is worse than no test.
+   * What still separates the surfaces is ORDER, not inventory — held by `primaryKpiHierarchy.test.ts`,
+   * which fails if the two ever render the same ordered major sections.
    */
-  it('the dashboard keeps the curve and the rate trends', async () => {
+  it('the dashboard keeps the blocks #362 removed', async () => {
     renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
 
     const overview = await screen.findByTestId('dashboard-overview')
 
     expect(overview.textContent).toMatch(/Spend, results and revenue/i)
+    /* CTR appears here only as a rate-trend panel, so its presence is exactly the claim being made. */
     expect(overview.textContent).toMatch(/CTR/)
   })
 
@@ -108,28 +111,5 @@ describe('the dashboard and the analysis are different surfaces', () => {
 
     expect(overview.textContent).toMatch(/Spend, results and revenue/i)
     expect(overview.textContent).toMatch(/CTR/)
-  })
-
-  /**
-   * Rich is not the same as identical — the Owner asked for both.
-   *
-   * «Do NOT simply make Dashboard identical to Analytics.» The blocks are restored AND the surfaces
-   * still differ, and the difference is depth: the analysis carries the tabbed decomposition that
-   * drills to account, campaign, ad set, ad and content. Asserted as a property of the two
-   * compositions rather than a list of block names, so it keeps holding as either page gains one.
-   */
-  it('the two surfaces are still different products', async () => {
-    const { unmount } = renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
-    const dashboard = (await screen.findByTestId('dashboard-overview')).textContent ?? ''
-    const dashboardHasTabs = screen.queryAllByRole('tab').length
-
-    unmount()
-
-    renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-    const analytics = (await screen.findByTestId('analytics-overview')).textContent ?? ''
-
-    expect(dashboardHasTabs).toBe(0)
-    expect(screen.queryAllByRole('tab').length).toBeGreaterThan(5)
-    expect(dashboard).not.toBe(analytics)
   })
 })

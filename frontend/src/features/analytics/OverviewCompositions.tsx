@@ -15,6 +15,7 @@ import { dashboardMetrics } from './metricCatalog'
 import { useBudget, useCampaigns, useDrivers, useFreshness, usePlatforms, useSummary, useTimeseries } from './api'
 import { useUi } from '@/stores/ui'
 import type { CommerceSummary, MetricFilters } from './api'
+import { KpiCards } from './KpiCards'
 
 /**
  * SURFACE-COMPOSITION-001 — one engine, two compositions.
@@ -253,7 +254,7 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
  * region, and nothing that DRAWS may be rendered below the first block that EXPLAINS.
  */
 export function DashboardOverview(d: OverviewData) {
-  const { ar, s, ts, series, chartCurrency, comparable, drivers, strip, vm, points, objective, reportingCurrency } = d
+  const { ar, s, ts, series, chartCurrency, comparable, drivers, vm, points, objective, reportingCurrency } = d
 
   return (
     <div className="space-y-4" data-testid="dashboard-overview" data-composition="dashboard">
@@ -269,19 +270,25 @@ export function DashboardOverview(d: OverviewData) {
           </p>
         )}
 
-        <MetricStrip
-          id="dashboard"
-          ar={ar}
-          primary={strip.primary}
-          secondary={strip.secondary}
-          hasRows={s.data === undefined ? undefined : s.data.rows_in_scope}
-          /*
-            METRICS-REQUEST-STATE-001 — and a request that failed or has not answered says so.
+        {/*
+          KPI-SELECTION-001 — four cards, and the metric on each is the reader's to choose.
 
-            `data` is undefined for a failure and for a load alike, so without these the row rendered with
-            nothing to read and every card printed «لا توجد بيانات» — a confident statement about this
-            account's advertising, made by a request that never came back.
-          */
+          This was `MetricStrip`, whose «مؤشرات إضافية» expanded a second row nobody asked for and hid
+          the ones somebody did. `KpiCards` keeps four and puts a searchable selector on the metric
+          NAME instead — the shape an ads manager uses.
+
+          The cards come from the catalogue's own builder, so a chosen metric carries the same
+          reading, comparison, sparkline, definition and currency as that metric chosen by the
+          objective layout, under the same filters this page already applied. `MetricStrip` is
+          unchanged and still serves the analysis, which is judged on its objective rather than on a
+          reader's four.
+        */}
+        <KpiCards
+          objective={objective}
+          summary={s.data}
+          ar={ar}
+          series={points}
+          comparable={comparable}
           loading={s.isPending}
           error={s.isError ? s.error : undefined}
           onRetry={() => void s.refetch()}
@@ -306,22 +313,21 @@ export function DashboardOverview(d: OverviewData) {
           </p>
         )}
         {/*
-          SURFACE-SEPARATION-001, corrected by the Owner 2026-09-11 — the dashboard stays RICH.
+          SURFACE-SEPARATION-001, corrected — the curve, the rate trends and the store ledger STAY.
 
-          #362 split the two surfaces by the question each answers, and moved the curve, the rate
-          trends and the store ledger to the analysis on the grounds that they answer «why». The
-          Owner's correction is that they are ALSO how an operator reads what is happening now, and
-          that a link saying «open Analytics for the reason» is not a substitute for information that
-          belongs here. They are restored, unchanged, from the composition immediately before #362.
+          #362 moved all three to the analysis on the grounds that they answer «why». The Owner's
+          correction is that they are also how an operator reads what is happening now, and that a
+          link saying «open Analytics for the reason» is not a substitute for information that
+          belongs on this page: «Restore the useful Dashboard blocks that #362 removed.»
 
-          What #362 got right is kept: the tab bar is still the analysis, both surfaces still compose
-          the same canonical components over the same hooks, and no second metric pipeline exists.
-          The split is a matter of DEPTH — the analysis decomposes, drills and attributes — not of
-          withholding the operational picture from the page whose job is to show it.
+          Restored exactly as #362 removed them, from the composition immediately before it, so this
+          page and the analysis draw the same curve from the same `useTimeseries` rows rather than
+          from two components that can drift apart. What separates the surfaces is still the ORDER —
+          the figures lead here and the reasoning is last, while Analytics opens on its decision
+          modules and keeps the figures as evidence.
         */}
         {/*
           ANALYTICS-TRUTH-002 — the chart the KPI strip contradicted.
-
           It plotted `dataKey="spend"` off the raw row and withdrew both money lines whenever the
           window's money was withheld, leaving a single «النتائج» line under a title naming three. The
           money was never missing — it was unconverted, and the card above already stated it. Both
@@ -376,12 +382,10 @@ export function DashboardOverview(d: OverviewData) {
             <p data-testid="series-currency-mixed" className="mt-2 text-xs text-text-secondary">{series.note}</p>
           )}
         </Panel>
-
         {/*
           Three metrics, three units — «3.20x», «21.96 USD» and «0.72%» share no axis. On one scale the
           two small numbers lie flat on the floor and the chart says nothing, which is what shipped:
           a single line at zero under a title naming three metrics, one of which was never plotted.
-
           Each gets its own panel and its own scale, so each is readable.
         */}
         <div className="grid gap-3 lg:grid-cols-3">
@@ -389,10 +393,6 @@ export function DashboardOverview(d: OverviewData) {
           <RateTrend title="CPA" data={series.rows} dataKey="cpa" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => money(v, chartCurrency)} />
           <RateTrend title="CTR" data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} />
         </div>
-
-        {/* The comparisons, the details and the alerts — «أ», shared with the marketing preview. */}
-        <UnifiedCampaignOverview vm={vm} lang={ar ? 'ar' : 'en'} />
-
         <StoreLedger commerce={s.data?.commerce ?? null} ar={ar} />
 
         {/* The comparisons, the details and the alerts — «أ», shared with the marketing preview. */}
