@@ -8,15 +8,18 @@ import { QueryFailure } from '@/components/ui/QueryFailure'
 import { usePortalGuard } from './usePortalGuard'
 import { useUi } from '@/stores/ui'
 import { useClientSpacePath } from './clientSpace'
+import { formatNumber } from '@/lib/numerals'
 
 const COPY = {
   ar: {
     title: 'المحادثة', back: 'الرسائل', error: 'تعذّر تحميل المحادثة.',
     none: 'لا توجد رسائل بعد.', reply: 'اكتب ردّك…', send: 'إرسال', you: 'أنت', team: 'الفريق',
+    withheld: 'هذه أحدث {shown} رسالة من {total}. الرسائل الأقدم غير معروضة هنا.',
   },
   en: {
     title: 'Conversation', back: 'Messages', error: 'Could not load the conversation.',
     none: 'No messages yet.', reply: 'Write your reply…', send: 'Send', you: 'You', team: 'Team',
+    withheld: 'These are the latest {shown} of {total} messages. Older ones are not shown here.',
   },
 }
 
@@ -43,6 +46,13 @@ export function ClientThreadPage() {
   if (q.isLoading) return <PortalShell title={t.title} nav showLogout><div className="h-64 animate-pulse rounded-2xl bg-surface-secondary" /></PortalShell>
   if (q.isError) return <PortalShell title={t.title} nav showLogout><QueryFailure error={q.error} ar={ar} onRetry={() => void q.refetch()} fallbackTitle={t.error} testId="portal-failure" /></PortalShell>
   const { thread, messages } = q.data!
+  /*
+    MESSAGE-THREAD-TRUTH-001 — this page used to show the OLDEST five hundred messages of a long
+    conversation, so the reply sent this morning was simply not on it, and the route marked the whole
+    thread read on the way out. It shows the newest now, and says when the window hid older ones —
+    a windowed page that ends without saying where it began reads as the whole conversation.
+  */
+  const withheld = q.data!.messages_withheld ?? 0
 
   return (
     <PortalShell title={t.title} nav showLogout>
@@ -52,6 +62,16 @@ export function ClientThreadPage() {
         <h1 className="font-heading text-lg font-extrabold text-text-primary">{thread.subject}</h1>
 
         <div className="mt-4 space-y-2">
+          {withheld > 0 && (
+            <p
+              data-testid="portal-thread-window-note"
+              className="rounded-xl border border-border bg-surface-secondary px-3 py-2 text-center text-xs text-text-secondary"
+            >
+              {t.withheld
+                .replace('{shown}', formatNumber(messages.length))
+                .replace('{total}', formatNumber(q.data!.messages_total ?? messages.length + withheld))}
+            </p>
+          )}
           {messages.length === 0 && <p className="text-sm text-text-muted">{t.none}</p>}
           {messages.map((m) => <MessageBubble key={m.id} m={m} you={t.you} team={t.team} />)}
         </div>

@@ -43,6 +43,14 @@ export interface ThreadDetail {
   thread: MessageThread
   messages: Message[]
   unread: { client: number; team: number }
+  /**
+   * How long the conversation actually is, and how much of it this window left out.
+   *
+   * Optional because a cached payload from before the field existed must not be read as «nothing was
+   * withheld» — `undefined` means unknown, and the panel says nothing rather than something false.
+   */
+  messages_total?: number
+  messages_withheld?: number
 }
 
 export async function listThreads(status?: ThreadStatus): Promise<MessageThread[]> {

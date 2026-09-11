@@ -69,9 +69,14 @@ final class MessagingController extends Controller
         abort_unless($request->user()?->hasPermission('messaging.view'), 403);
         abort_unless($this->reachable($request, $messageThread), 403);
 
+        $window = $this->messaging->window($messageThread);
+
         return ApiResponse::success([
             'thread' => $messageThread,
-            'messages' => $messageThread->messages()->orderBy('created_at')->limit(500)->get()->all(),
+            'messages' => $window['messages']->all(),
+            /* What the window left out, said rather than implied by a page that looks whole. */
+            'messages_total' => $window['total'],
+            'messages_withheld' => $window['withheld'],
             'unread' => [
                 'client' => $this->messaging->unreadCountFor($messageThread, 'client'),
                 'team' => $this->messaging->unreadCountFor($messageThread, 'team'),
