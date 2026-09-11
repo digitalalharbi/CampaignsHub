@@ -54,12 +54,19 @@ describe('the recommendations page is an action centre', () => {
     })
   })
 
-  it('offers reject and hide beside it', async () => {
+  /**
+   * The same four transitions the Campaign Command Centre already offers on this annotation.
+   *
+   * A decision that exists on one screen and not the other is how two operators come to disagree
+   * about what a recommendation's state means.
+   */
+  it('offers the same decisions the campaign surface does', async () => {
     signInWith(['campaigns.view', 'reports.approve'])
     renderWithProviders(<RecommendationsPage />, { locale: 'en' })
 
-    expect(await screen.findByRole('button', { name: /Reject/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Hide/i })).toBeInTheDocument()
+    for (const label of [/Approve/i, /Review/i, /Reject/i, /Hide/i]) {
+      expect(await screen.findByRole('button', { name: label })).toBeInTheDocument()
+    }
   })
 
   /**

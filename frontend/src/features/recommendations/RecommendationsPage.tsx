@@ -45,7 +45,7 @@ export function RecommendationsPage() {
         title: 'التوصيات',
         purpose: 'ما يستحق التنفيذ الآن — مجمَّعًا من حملات المشروع، بأولويته وصاحبه وما بُني عليه.',
         status: 'الحالة', priority: 'الأولوية', all: 'الكل',
-        approve: 'اعتماد', reject: 'رفض', hide: 'إخفاء',
+        approve: 'اعتماد', review: 'مراجعة', reject: 'رفض', hide: 'إخفاء',
         decisionFailed: 'تعذّر حفظ القرار.',
         empty: 'لا توجد توصيات في هذا المشروع بعد.',
         emptyFiltered: 'لا توجد توصيات تطابق هذه الفلاتر.',
@@ -59,7 +59,7 @@ export function RecommendationsPage() {
         title: 'Recommendations',
         purpose: 'What is worth doing now — gathered from the project’s campaigns, with its priority, its owner and what it rests on.',
         status: 'Status', priority: 'Priority', all: 'All',
-        approve: 'Approve', reject: 'Reject', hide: 'Hide',
+        approve: 'Approve', review: 'Review', reject: 'Reject', hide: 'Hide',
         decisionFailed: 'The decision could not be saved.',
         empty: 'No recommendations have been written for this project yet.',
         emptyFiltered: 'No recommendations match these filters.',
@@ -234,6 +234,19 @@ function RecommendationRow({ rec, t, projectId }: { rec: Recommendation; t: Reco
             className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"
           >
             {t.approve}
+          </button>
+          {/*
+            «Reviewed» is here because the Campaign Command Centre already offers it on the SAME
+            annotation. A decision that exists on one screen and not the other is how two operators
+            come to disagree about what a recommendation's state means.
+          */}
+          <button
+            type="button"
+            disabled={decide.isPending}
+            onClick={() => decide.mutate('reviewed')}
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-text-primary hover:bg-surface-hover disabled:opacity-50"
+          >
+            {t.review}
           </button>
           <button
             type="button"
