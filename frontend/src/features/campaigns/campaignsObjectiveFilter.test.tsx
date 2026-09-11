@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { CampaignsPage } from './CampaignsPage'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 import { useProject } from '@/stores/project'
@@ -65,7 +65,23 @@ describe('the campaigns list narrowed to a canonical objective', () => {
   it('arrives already narrowed when the link carries the objective', async () => {
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/campaigns?objective=sales' })
 
-    await waitFor(() => expect(vi.mocked(listCampaigns)).toHaveBeenCalled())
+    /*
+      The REQUEST first — CAMPAIGNS-OVERVIEW-FIRST-001 moved the landing view to the overview, where
+      the filter row is not drawn: «filters must support analysis, not dominate the first screen».
+      Asserting the control alone would have said nothing about whether the deep link reached the
+      server, which is the half that matters — and it is the stronger claim, because a control
+      showing «Sales» over an unnarrowed query is exactly the frontend-only filtering this product
+      forbids.
+    */
+    await waitFor(() => {
+      const sent = vi.mocked(listCampaigns).mock.calls.at(-1)?.[1] as { objective?: string } | undefined
+
+      /* Comma-joined RAW objectives — the canonical key expanded, never the key itself. */
+      expect(sent?.objective).toBe('sales,conversions,add_to_cart,purchases')
+    })
+
+    /* And the control carries it, where the control lives. */
+    fireEvent.click(screen.getByTestId('view-table'))
     await waitFor(() => expect(screen.getByDisplayValue('Sales')).toBeInTheDocument())
   })
 })

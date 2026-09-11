@@ -14,6 +14,7 @@ import { CANONICAL_OBJECTIVE_KEYS, canonicalObjectiveLabel, canonicalOfRaw, rawO
 import { LIFECYCLE_KEYS, lifecycleView, type Lifecycle } from './campaignLifecycleView'
 import { campaignEfficiency, campaignHeadline, type CampaignHeadline } from './campaignHeadline'
 import { campaignRelevance, type CampaignRelevance } from './campaignRelevance'
+import { bandCounts, byPriority, type CampaignBand } from './campaignPriority'
 import { campaignState } from './campaignState'
 import { landingAnswer } from './campaignsLanding'
 
@@ -49,10 +50,36 @@ const STATUS_COLORS: Record<string, string> = {
 /** The five ways to look at a project's campaigns (CAMPAIGN-010). */
 type ViewMode = 'overview' | 'cards' | 'table' | 'compare' | 'attention'
 
+/**
+ * CAMPAIGNS-OVERVIEW-FIRST-001 — the order the owner asked for, and the reason it is an order at all.
+ *
+ * «Overview first, then Analytics / deeper analysis, then Table / list, optional Cards, optional
+ * Comparison. Do NOT let cards/grid feel like the main default analytical surface.»
+ *
+ * The list already opened with Overview and the page still landed on CARDS, because the default was
+ * hard-coded past it — so the first thing anybody saw was a grid of tiles, one campaign each, with no
+ * portfolio answer anywhere. «Needs attention» keeps its own entry at the end: it is a filtered
+ * TABLE rather than a mode of reading the portfolio, and the count beside it is what makes it
+ * findable without competing with the first screen.
+ */
+/**
+ * The five bands the portfolio is classified into — the owner's own words, in the owner's own order.
+ *
+ * Kept beside `VIEWS` rather than inside the component: these are the product's vocabulary, and a
+ * label defined at a call site is a label the next surface will spell differently.
+ */
+const BANDS: Array<{ id: CampaignBand; ar: string; en: string }> = [
+  { id: 'attention', ar: 'تحتاج تدخلًا', en: 'Needs attention' },
+  { id: 'spending', ar: 'نشطة وتنفق', en: 'Active and spending' },
+  { id: 'weak', ar: 'نشطة وضعيفة', en: 'Active but weak' },
+  { id: 'paused', ar: 'متوقفة مؤخرًا', en: 'Paused recently' },
+  { id: 'ended', ar: 'منتهية', en: 'Ended' },
+]
+
 const VIEWS: Array<{ id: ViewMode; ar: string; en: string; icon: typeof LayoutGrid }> = [
   { id: 'overview', ar: 'نظرة عامة', en: 'Overview', icon: BarChart3 },
-  { id: 'cards', ar: 'بطاقات', en: 'Cards', icon: LayoutGrid },
   { id: 'table', ar: 'جدول', en: 'Table', icon: Rows },
+  { id: 'cards', ar: 'بطاقات', en: 'Cards', icon: LayoutGrid },
   { id: 'compare', ar: 'مقارنة', en: 'Comparison', icon: GitCompare },
   { id: 'attention', ar: 'تحتاج تدخلًا', en: 'Needs attention', icon: TriangleAlert },
 ]
@@ -69,7 +96,15 @@ export function CampaignsPage() {
   // PERF-CAMPAIGNS-001: the page opens on the CARD LIST, not the chart-heavy overview. Four charts plus
   // five metric queries on first paint made the page slow to become interactive on Firefox under load —
   // and a page called "campaigns" should show campaigns first anyway. Overview is one click away.
-  const [view, setView] = useState<ViewMode>('cards')
+  /*
+    OVERVIEW, not cards — CAMPAIGNS-OVERVIEW-FIRST-001.
+
+    «The first thing the user sees on entering Campaigns must be a strong campaign portfolio
+    overview.» It was a grid of tiles: one campaign per card, no portfolio total, no pacing, nothing
+    ranked. A reader arriving to answer «what needs me today» had to find the control that would tell
+    them before they could start.
+  */
+  const [view, setView] = useState<ViewMode>('overview')
   const [compareIds, setCompareIds] = useState<string[]>([])
   /*
    * ANALYTICS-FILTER-TRUTH-001 — these live in the URL, so a refresh, Back and a shared link all
@@ -325,6 +360,43 @@ export function CampaignsPage() {
     [campaigns, metricsByCampaign, summary.data?.currency],
   )
 
+  /*
+   * CAMPAIGNS-OVERVIEW-FIRST-001 — the portfolio in the order the owner asked to read it in.
+   *
+   * «Needs attention, active and spending, active but weak, paused recently, ended.» The lifecycle
+   * view already separates running from stopped; what it cannot express is whether the reader has
+   * something to DO about a row. The attention set is computed just above from the same flags the
+   * «تحتاج تدخلًا» list is built from, so the first campaign in this list and the first campaign in
+   * that one are the same campaign — two rankings over one set of flags would drift the moment
+   * either changed.
+   */
+  const attentionIds = useMemo(() => new Set(attention.map((a) => a.id)), [attention])
+
+  const orderedCampaigns = useMemo(
+    () => byPriority(
+      visibleCampaigns.map((c) => ({
+        ...c,
+        campaign_id: c.id,
+        needs_attention: attentionIds.has(c.id),
+        /*
+         * Efficiency is left UNJUDGED here rather than guessed.
+         *
+         * The server has no per-campaign efficiency verdict on this payload, and inventing one from
+         * a ratio would be a score — which this product does not draw. An unjudged campaign bands as
+         * «spending», not as «weak»: a verdict conjured from an absence is the coalesced zero again.
+         */
+        efficient: null,
+      })),
+      range.to,
+    ),
+    [visibleCampaigns, attentionIds, range.to],
+  )
+
+  const bands = useMemo(
+    () => bandCounts(orderedCampaigns, range.to),
+    [orderedCampaigns, range.to],
+  )
+
   const toggleCompare = (id: string) =>
     setCompareIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= 5 ? prev : [...prev, id]))
 
@@ -412,6 +484,7 @@ export function CampaignsPage() {
           tone={(counts.paused ?? 0) > 0 ? 'warning' : undefined}
         />
         <StatCard
+          testid="campaigns-budget-total"
           label={ar ? 'الميزانية' : 'Budget'}
           value={!budgetTotals.known
             ? '—'
@@ -459,6 +532,38 @@ export function CampaignsPage() {
 
       {view === 'overview' ? (
         <>
+          {/*
+            CAMPAIGNS-OVERVIEW-FIRST-001 — the portfolio's SHAPE, before any one campaign.
+
+            «Segment campaigns visually by active, needs attention, healthy, paused, ended.» Five
+            counts, in the order the list below them is ranked, so the strip and the list are the
+            same statement read twice rather than two answers a reader has to reconcile. Each band is
+            a door: clicking one narrows the list to it.
+
+            A band holding nothing is shown at zero rather than hidden — «no campaigns need
+            attention» is the answer somebody came for, and a strip that silently loses its most
+            important word when the news is good is a strip that cannot be trusted when it is bad.
+          */}
+          <div data-testid="campaigns-bands" className="flex flex-wrap gap-2">
+            {BANDS.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                data-testid={`campaigns-band-${b.id}`}
+                data-count={bands[b.id]}
+                onClick={() => { setView('table'); setLifecycle('all') }}
+                className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
+                  b.id === 'attention' && bands[b.id] > 0
+                    ? 'border-warning/40 bg-warning/10 text-text-primary'
+                    : 'border-border bg-surface text-text-secondary hover:border-brand-400'
+                }`}
+              >
+                <span className="font-semibold">{ar ? b.ar : b.en}</span>
+                <span className="tnum font-bold text-text-primary" dir="ltr">{bands[b.id]}</span>
+              </button>
+            ))}
+          </div>
+
           {/*
             BUDGET-GOVERNANCE-001 — what is LEFT, where the period ENDS, and whether that is over.
 
@@ -652,7 +757,7 @@ export function CampaignsPage() {
             />
           ) : view === 'cards' ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {visibleCampaigns.map((c) => (
+              {orderedCampaigns.map((c) => (
                 <CampaignCard
                   key={c.id}
                   c={c}
@@ -692,7 +797,7 @@ export function CampaignsPage() {
               <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                 <thead><tr className="border-b border-border text-text-muted"><th className="p-3 text-start">{ar ? 'الحملة' : 'Campaign'}</th><th className="p-3 text-start">{ar ? 'الهدف' : 'Objective'}</th><th className="p-3 text-start">{ar ? 'الحالة' : 'Status'}</th><th className="p-3 text-end">{ar ? 'الميزانية' : 'Budget'}</th><th className="p-3 text-end">{ar ? 'مرتبطة' : 'Linked'}</th></tr></thead>
                 <tbody>
-                  {visibleCampaigns.map((c) => (
+                  {orderedCampaigns.map((c) => (
                     <tr key={c.id} data-testid="campaign-row" className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-hover" onClick={() => navigate(`/campaigns/${projectId}/${c.id}`)}>
                       <td className="p-3 font-semibold text-text-primary">{c.name}</td>
                       <td className="p-3 text-text-secondary">{objectiveLabel(c.objective, locale)}</td>
@@ -774,13 +879,22 @@ function Chip({ active, onClick, children, testid = 'taxonomy-chip' }: { active:
  * This one drew its value with no `dir`, which in an Arabic layout lets the bidi algorithm reorder
  * «1.2K SAR» into «SAR 1.2K» and move a minus sign to the wrong end of a delta.
  */
-function StatCard({ label, value, sub, delta, invert, tone }: { label: string; value: string; sub?: string; delta?: number | null; invert?: boolean; tone?: 'success' | 'warning' }) {
+/**
+ * This page's shorthand over the shared card — `testid` included, deliberately.
+ *
+ * It was dropped here, which made the PROJECT total unaddressable: a test asserting «the subset is
+ * not shown as the whole» could only search the whole document, and the moment the overview drew a
+ * truthful per-campaign figure on the same screen the two became indistinguishable. A wrapper that
+ * silently discards a prop is a wrapper that decides what may be asserted.
+ */
+function StatCard({ label, value, sub, delta, invert, tone, testid }: { label: string; value: string; sub?: string; delta?: number | null; invert?: boolean; tone?: 'success' | 'warning'; testid?: string }) {
   return (
     <SharedStatCard
       label={label}
       value={value}
       hint={sub}
       tone={tone ?? 'neutral'}
+      testid={testid}
       trailing={delta !== undefined ? <TrendPill delta={delta} invertGood={invert} /> : undefined}
     />
   )
