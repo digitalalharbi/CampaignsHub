@@ -52,6 +52,17 @@ export default defineConfig({
       '/api': { target: API_TARGET, changeOrigin: true },
       '/sanctum': { target: API_TARGET, changeOrigin: true },
       /*
+       * SHORT-LINK-PRODUCTION-001 — the hop belongs to Laravel here too.
+       *
+       * `/l/{slug}` is a web route. Without this the dev server answers it from the SPA fallback,
+       * which is EXACTLY the production defect — a minted link rendering the app's not-found page —
+       * and it would make the gate's hop test unable to tell a fixed edge from a broken one.
+       *
+       * The trailing slash is load-bearing. A Vite proxy key is a PREFIX, so `'/l'` also captures
+       * `/login` — every auth setup timed out on a sign-in page that was being proxied to Laravel.
+       */
+      '/l/': { target: API_TARGET, changeOrigin: true },
+      /*
        * AD-MEDIA-RECOVERY-001 — the app's OWN media, served by the app.
        *
        * A creative asset we host is stored as a path so it survives a port, a host and a deploy

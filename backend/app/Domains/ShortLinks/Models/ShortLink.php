@@ -7,6 +7,7 @@ namespace App\Domains\ShortLinks\Models;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * SHORT-LINKS-001 — one short link: what was chosen, what it resolves to, what it measured.
@@ -19,6 +20,14 @@ final class ShortLink extends Model
 {
     use BelongsToTenant;
     use HasUuidKey;
+    /*
+     * SHORT-LINKS-001 — delete removes it from the library and stops it resolving.
+     *
+     * Soft, so the clicks it counted survive as audit. The scope this adds is what makes the public
+     * hop stop serving a deleted slug: `resolveAndCount()` removes the TENANT scope for a stranger
+     * with no session and nothing else, so the soft-delete scope still applies there.
+     */
+    use SoftDeletes;
 
     public const KIND_WHATSAPP = 'whatsapp';
 

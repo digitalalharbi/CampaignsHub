@@ -88,6 +88,27 @@ final class ShortLinkController extends Controller
         return ApiResponse::success($this->shape($model->refresh()), 'Short link disabled.');
     }
 
+    /**
+     * DELETE short-links/{link} — remove it from the library.
+     *
+     * «Disable» stops a link resolving and leaves it on the screen; this takes it off the screen and
+     * stops it resolving, which is what somebody means by «delete that». It is a SOFT delete, so the
+     * clicks the platform counted survive as audit — removing the link and losing the record that it
+     * existed are different things.
+     *
+     * `findOrFail` runs through the tenant scope, so another tenant's link is a 404 rather than a
+     * refusal that confirms the id exists. The permission is checked first, and both are the
+     * SERVER's: the row's delete control is presentation.
+     */
+    public function destroy(Request $request, string $link): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.update'), 403);
+
+        ShortLink::query()->findOrFail($link)->delete();
+
+        return ApiResponse::success(null, 'Short link deleted.');
+    }
+
     /** @return array<string, mixed> */
     private function shape(ShortLink $link): array
     {

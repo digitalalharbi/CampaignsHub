@@ -71,6 +71,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
     Route::get('short-links', [ShortLinkController::class, 'index'])->name('short-links.index');
     Route::post('short-links', [ShortLinkController::class, 'store'])->name('short-links.store');
     Route::post('short-links/{link}/disable', [ShortLinkController::class, 'disable'])->name('short-links.disable');
+    /* Delete removes it from the library; disable only stops it resolving — see the controller. */
+    Route::delete('short-links/{link}', [ShortLinkController::class, 'destroy'])->name('short-links.destroy');
 
     /*
      * BUDGET-GOVERNANCE-001 — the CLIENT rung of the budget hierarchy.

@@ -45,7 +45,8 @@ describe('the short-link utility', () => {
   it('offers exactly two kinds, and nothing technical', async () => {
     renderWithProviders(<ShortLinksPage />, { locale: 'en' })
 
-    fireEvent.click(await screen.findByTestId('short-link-create'))
+    /* The form is open on arrival — the Owner removed the step that used to gate it. */
+    await screen.findByRole('button', { name: /إنشاء الرابط|Create the link/ })
 
     expect(await screen.findByTestId('short-link-kind-whatsapp')).toBeVisible()
     expect(screen.getByTestId('short-link-kind-link')).toBeVisible()
@@ -60,7 +61,8 @@ describe('the short-link utility', () => {
     vi.mocked(createShortLink).mockResolvedValue(LINK)
     renderWithProviders(<ShortLinksPage />, { locale: 'en' })
 
-    fireEvent.click(await screen.findByTestId('short-link-create'))
+    /* The form is open on arrival — the Owner removed the step that used to gate it. */
+    await screen.findByRole('button', { name: /إنشاء الرابط|Create the link/ })
     fireEvent.click(await screen.findByTestId('short-link-kind-link'))
     fireEvent.change(screen.getByLabelText(/Link/i, { selector: 'input' }), { target: { value: 'https://example.com/offer' } })
     fireEvent.click(screen.getByTestId('short-link-submit'))
@@ -83,7 +85,8 @@ describe('the short-link utility', () => {
     vi.mocked(createShortLink).mockResolvedValue({ ...LINK, kind: 'whatsapp', shows: '966500000009' })
     renderWithProviders(<ShortLinksPage />, { locale: 'en' })
 
-    fireEvent.click(await screen.findByTestId('short-link-create'))
+    /* The form is open on arrival — the Owner removed the step that used to gate it. */
+    await screen.findByRole('button', { name: /إنشاء الرابط|Create the link/ })
     fireEvent.change(screen.getByLabelText(/Phone number/i), { target: { value: '500000009' } })
     fireEvent.click(screen.getByTestId('short-link-submit'))
 
@@ -107,7 +110,8 @@ describe('the short-link utility', () => {
     })
     renderWithProviders(<ShortLinksPage />, { locale: 'en' })
 
-    fireEvent.click(await screen.findByTestId('short-link-create'))
+    /* The form is open on arrival — the Owner removed the step that used to gate it. */
+    await screen.findByRole('button', { name: /إنشاء الرابط|Create the link/ })
     fireEvent.click(await screen.findByTestId('short-link-kind-link'))
     fireEvent.change(screen.getByLabelText(/Link/i, { selector: 'input' }), { target: { value: 'http://example.com' } })
     fireEvent.click(screen.getByTestId('short-link-submit'))
