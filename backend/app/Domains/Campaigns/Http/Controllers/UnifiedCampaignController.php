@@ -15,6 +15,8 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Resources\ExternalCampaignResource;
 use App\Domains\Campaigns\Resources\UnifiedCampaignResource;
 use App\Domains\Campaigns\Services\CampaignLinker;
+use App\Domains\Campaigns\Services\CampaignRelevance;
+use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Taxonomy\Services\TaxonomyService;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -22,6 +24,7 @@ use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 
 /**
@@ -69,7 +72,112 @@ final class UnifiedCampaignController extends Controller
             $query->where('name', 'ilike', "%{$search}%");
         }
 
-        return ApiResponse::success(UnifiedCampaignResource::collection($query->get()), 'Unified campaigns retrieved.');
+        /*
+         * CAMPAIGNS-LEDGER-001 — bounded, ordered by relevance, and counted over the PROJECT.
+         *
+         * This ended in `$query->get()`. Campaigns are the one list here that grows without a
+         * ceiling, and the page fetched every one of them on every visit, then derived its status
+         * counts, its donut and its «what is running» ordering from the array it held.
+         *
+         * Paginating alone would have been worse than leaving it: the server would cut by
+         * `created_at` and the browser would re-order the twenty-five rows it received, so «the
+         * campaigns that need you» would silently mean «the most relevant of the twenty-five
+         * newest», with everything behind the boundary invisible. So the ordering moves here with
+         * the page.
+         *
+         * `CampaignRelevance` sorts rows the CANONICAL aggregator produced — `byCampaign()` already
+         * carries the `status` and `last_active_on` this reads, and its own docblock says relevance
+         * ordering belongs to the surface that asks for it. Nothing is re-aggregated and no metric
+         * is recomputed, so no second truth about a campaign's spend can exist.
+         */
+        $counting = clone $query;
+
+        $counts = (clone $counting)->reorder()
+            ->getQuery()
+            ->select('status')
+            ->selectRaw('count(*) as c')
+            ->groupBy('status')
+            ->pluck('c', 'status')
+            ->map(static fn (mixed $c): int => (int) $c)
+            ->all();
+
+        $ids = (clone $counting)->reorder()->pluck('id')->map(static fn (mixed $i): string => (string) $i)->all();
+        $total = count($ids);
+
+        $ordered = $this->relevanceOrder($request, $ids);
+
+        $perPage = min(max($request->integer('per_page', 25), 1), 100);
+        $page = max($request->integer('page', 1), 1);
+        $slice = array_slice($ordered, ($page - 1) * $perPage, $perPage);
+
+        /*
+         * Fetched by id, then put back into the ORDER the ranking decided — `whereIn` returns rows in
+         * whatever order the database finds them, which would undo the ranking silently.
+         */
+        $byId = UnifiedCampaign::query()->withCount('externalCampaigns')
+            ->whereIn('id', $slice)->get()->keyBy(fn ($c): string => (string) $c->id);
+
+        $rows = array_values(array_filter(array_map(static fn (string $id) => $byId->get($id), $slice)));
+
+        return ApiResponse::success(
+            UnifiedCampaignResource::collection($rows),
+            'Unified campaigns retrieved.',
+            meta: [
+                'total' => $total,
+                'per_page' => $perPage,
+                'current_page' => $page,
+                'last_page' => max(1, (int) ceil($total / $perPage)),
+                'counts' => $counts,
+            ],
+        );
+    }
+
+    /**
+     * Campaign ids, most relevant first — «what is running» before «what is finished».
+     *
+     * The two facts the rule reads come from `MetricsAggregator::byCampaign()`, the canonical
+     * per-campaign metrics, over the window the caller is looking at. A campaign the aggregator has
+     * no row for keeps its place in the id order and is judged on its status alone, which is what
+     * `CampaignRelevance` does with a null `last_active_on`.
+     *
+     * @param  list<string>  $ids
+     * @return list<string>
+     */
+    private function relevanceOrder(Request $request, array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        [$from, $to] = $this->relevanceWindow($request);
+
+        $metrics = collect(app(MetricsAggregator::class)->forProjects([$request->route('project')])->byCampaign($from, $to))
+            ->keyBy(fn (array $r): string => (string) $r['campaign_id']);
+
+        $statuses = UnifiedCampaign::query()->whereIn('id', $ids)->pluck('status', 'id');
+
+        $rows = array_map(static fn (string $id): array => [
+            'campaign_id' => $id,
+            'status' => $statuses[$id] ?? null,
+            'last_active_on' => $metrics->get($id)['last_active_on'] ?? null,
+            'spend' => (float) ($metrics->get($id)['spend'] ?? 0),
+        ], $ids);
+
+        return app(CampaignRelevance::class)->order($rows, $to->toDateString());
+    }
+
+    /** @return array{0: Carbon, 1: Carbon} the window relevance is judged in — the caller's, or the last 30 days. */
+    private function relevanceWindow(Request $request): array
+    {
+        $to = $request->string('to')->toString() !== ''
+            ? Carbon::parse($request->string('to')->toString())
+            : Carbon::today();
+
+        $from = $request->string('from')->toString() !== ''
+            ? Carbon::parse($request->string('from')->toString())
+            : $to->copy()->subDays(29);
+
+        return [$from, $to];
     }
 
     public function show(Request $request, string $project, string $campaign): JsonResponse

@@ -10,10 +10,56 @@ export interface CampaignListParams {
   search?: string
 }
 
-export function listCampaigns(projectId: string, params: CampaignListParams = {}): Promise<UnifiedCampaign[]> {
+export interface CampaignPage {
+  campaigns: UnifiedCampaign[]
+  total: number
+  page: number
+  lastPage: number
+  /** Per status, over the whole FILTERED project — never over the rows that fitted on this page. */
+  counts: Record<string, number>
+}
+
+/**
+ * CAMPAIGNS-LEDGER-001 — a page, ordered by relevance on the server, with the project's own counts.
+ *
+ * The endpoint handed over every campaign in the project and this page derived its status counts,
+ * its donut and its «what is running» ordering from the array it held. Campaigns are the one list
+ * here that grows without a ceiling.
+ *
+ * The ordering had to move with the page: cutting by `created_at` and re-ordering twenty-five rows
+ * in the browser would make «the campaigns that need you» mean «the most relevant of the twenty-five
+ * newest». The server ranks the whole filtered set first — see `CampaignRelevance`, which sorts rows
+ * the canonical aggregator produced rather than aggregating anything itself.
+ */
+export function listCampaigns(
+  projectId: string,
+  params: CampaignListParams & { page?: number; per_page?: number; from?: string; to?: string } = {},
+): Promise<CampaignPage> {
   return api
-    .get<ApiEnvelope<UnifiedCampaign[]>>(base(projectId), { params })
-    .then((r) => r.data.data)
+    .get<ApiEnvelope<UnifiedCampaign[]>>(base(projectId), { params: { per_page: 25, ...params } })
+    .then((r) => {
+      const campaigns = r.data.data ?? []
+      const meta = r.data.meta as
+        | { total?: number; current_page?: number; last_page?: number; counts?: Record<string, number> }
+        | undefined
+
+      return {
+        campaigns,
+        total: Number(meta?.total ?? campaigns.length),
+        page: Number(meta?.current_page ?? 1),
+        lastPage: Number(meta?.last_page ?? 1),
+        /*
+         * Counting the rows we hold is the honest fallback for an older server that sends no counts:
+         * it is what the page did before, and it can only under-count a bounded list rather than
+         * invent campaigns that do not exist.
+         */
+        counts: meta?.counts ?? campaigns.reduce<Record<string, number>>((acc, c) => {
+          acc[c.status] = (acc[c.status] ?? 0) + 1
+
+          return acc
+        }, {}),
+      }
+    })
 }
 
 export function getCampaign(projectId: string, campaignId: string): Promise<UnifiedCampaign> {
