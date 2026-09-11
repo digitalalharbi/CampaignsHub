@@ -26,7 +26,7 @@ const dashboard = (): AgencyDashboard => ({
 const row = (over: Partial<ClientBudgetRow>): ClientBudgetRow => ({
   client_id: 'c1', client_name: 'Big Spender', projects: 2, campaigns: 3,
   budget: 60_000, spent: 10_000, remaining: 50_000, projected: 72_000,
-  pace: 1.2, currency: 'SAR', currencies: 1, excluded: 0,
+  pace: 1.2, currency: 'SAR', currencies: 1, excluded: 0, projects_breakdown: [],
   ...over,
 })
 

@@ -99,6 +99,28 @@ export interface ClientBudgetRow {
   currency: string | null
   currencies: number
   excluded: number
+  /**
+   * BUDGET-GOVERNANCE-001 — the PROJECT rung: which of the client's projects the money is in.
+   *
+   * The client row carried a project COUNT, so a client pacing at 1.4× named nothing responsible for
+   * it. These are the same roll-up at a finer grain, so the parts add up to the row above them. A
+   * project holding no campaigns is absent rather than listed empty.
+   */
+  projects_breakdown: ProjectBudgetRow[]
+}
+
+export interface ProjectBudgetRow {
+  project_id: string
+  project_name: string
+  campaigns: number
+  budget: number | null
+  spent: number | null
+  remaining: number | null
+  projected: number | null
+  pace: number | null
+  currency: string | null
+  currencies: number
+  excluded: number
 }
 
 export const fetchClientBudgets = () => getData<ClientBudgetRow[]>('/agency/client-budgets')
