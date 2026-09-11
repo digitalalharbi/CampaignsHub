@@ -445,10 +445,22 @@ final class SubscriptionCheckout
         return "{$purpose}:{$subscription?->getKey()}:{$period}";
     }
 
+    /**
+     * What the customer reads while paying, and on their statement afterwards — PAY-AUDIT-003.
+     *
+     * `trial` is this codebase's word for the FIRST PAID period, and it is the right word in the
+     * column: it is the gateways' own vocabulary and the value `purpose` has always carried. It was
+     * the wrong word here, which is the one place the customer sees it — the gateway's checkout page
+     * while a card is being entered, and the bank statement that follows.
+     *
+     * The owner's decision is «no free tier, no free trial, no 7 free days — a paid first month at an
+     * introductory price on EVERY plan». A charge described as a trial contradicts the thing being
+     * charged for, and it is the most expensive place in the product to use the word.
+     */
     private function describe(string $purpose, ?string $planCode): string
     {
         return match ($purpose) {
-            'trial' => "CampaignsHub trial — {$planCode}",
+            'trial' => "CampaignsHub introductory month — {$planCode}",
             'reactivation' => "CampaignsHub reactivation — {$planCode}",
             'plan_change' => "CampaignsHub plan change — {$planCode}",
             default => "CampaignsHub subscription — {$planCode}",
