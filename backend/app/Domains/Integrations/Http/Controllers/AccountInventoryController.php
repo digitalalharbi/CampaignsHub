@@ -57,6 +57,11 @@ use Illuminate\Validation\Rule;
  */
 final class AccountInventoryController extends Controller
 {
+    /** How many runs are read before collapsing, and how many survive to the response. */
+    private const RUNS_READ = 200;
+
+    private const RUNS_SHOWN = 50;
+
     /** §3 — the most history one request may pull, so a backfill cannot quietly become a year. */
     private const MAX_BACKFILL_DAYS = 90;
 
@@ -233,11 +238,24 @@ final class AccountInventoryController extends Controller
 
         $account = $this->accountOr404($accountId);
 
-        $runs = MetricSyncRun::withoutGlobalScopes()
+        /*
+         * OPS-LEDGER-001 — two caps stacked here, and neither said so.
+         *
+         * Two hundred runs are read, collapsed, and then cut to fifty. An account synced every half
+         * hour passes two hundred runs in four days, so an operator asking «what has this account
+         * been doing» was shown a few days of it with nothing distinguishing that from an account
+         * with a short history. The caps stay — an unbounded run log is what they prevent — and the
+         * response states how many runs exist.
+         */
+        $scope = fn () => MetricSyncRun::withoutGlobalScopes()
             ->where('tenant_id', $this->tenant->tenantId())
-            ->where('external_account_id', $account->id)
+            ->where('external_account_id', $account->id);
+
+        $total = $scope()->count();
+
+        $runs = $scope()
             ->orderByDesc('started_at')
-            ->limit(200)
+            ->limit(self::RUNS_READ)
             ->get()
             ->map(fn (MetricSyncRun $r): array => $r->logRow())
             ->values()
@@ -248,9 +266,18 @@ final class AccountInventoryController extends Controller
         // are said once, with a count and a since.
         $runs = SyncRunLog::collapse($runs);
 
+        $shown = array_slice($runs, 0, self::RUNS_SHOWN);
+
         return ApiResponse::success([
             'account' => $this->present([$account], (string) $this->tenant->tenantId())[0],
-            'runs' => array_slice($runs, 0, 50),
+            'runs' => $shown,
+            /*
+             * The total counts RUNS, not collapsed rows: «4,212 runs, showing the most recent 50»
+             * is the honest pair. Counting collapsed rows would report a number that depends on how
+             * repetitive the log happened to be.
+             */
+            'runs_total' => $total,
+            'runs_withheld' => max(0, $total - count($shown)),
         ], __('api.ok'));
     }
 

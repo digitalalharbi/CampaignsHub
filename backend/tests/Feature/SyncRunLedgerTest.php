@@ -7,6 +7,9 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -15,6 +18,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -121,5 +125,49 @@ final class SyncRunLedgerTest extends TestCase
 
         $this->assertSame(1, (int) $data['runs_total']);
         $this->assertSame(0, (int) $data['runs_withheld']);
+    }
+
+    /**
+     * The Integration Centre's per-account log had TWO stacked caps and neither said so.
+     *
+     * Two hundred runs are read, collapsed, then cut to fifty. An account synced every half hour
+     * passes two hundred runs in four days, so «what has this account been doing» showed a few days
+     * of it, indistinguishable from an account with a short history.
+     */
+    public function test_the_account_log_states_how_many_runs_exist(): void
+    {
+        $credential = IntegrationCredential::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'provider' => 'meta',
+            'credential_scope' => 'tenant', 'credential_type' => 'oauth',
+            'encrypted_payload' => json_encode(['access_token' => 'tok']), 'status' => 'active',
+        ]);
+        $connection = ProviderConnection::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'credential_id' => $credential->id, 'provider' => 'meta',
+            'connection_name' => 'meta', 'scope' => 'project_only', 'status' => 'connected',
+        ]);
+
+        $account = ExternalAccount::withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id,
+            'provider_connection_id' => $connection->id, 'provider' => 'meta', 'account_type' => 'ad_account',
+            'external_id' => 'act-1', 'name' => 'Acct', 'status' => 'active',
+        ]);
+
+        for ($i = 0; $i < 260; $i++) {
+            MetricSyncRun::create([
+                'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+                'external_account_id' => $account->id, 'provider' => 'meta',
+                'status' => $i % 2 === 0 ? 'success' : 'failed',
+                'window_start' => '2026-08-01', 'window_end' => '2026-08-30',
+                'started_at' => now()->subMinutes($i), 'finished_at' => now()->subMinutes($i),
+            ]);
+        }
+
+        $data = (array) $this->actingAs($this->user, 'sanctum')
+            ->getJson("/api/v1/accounts/{$account->id}/logs")
+            ->assertOk()->json('data');
+
+        $this->assertSame(260, (int) $data['runs_total'], 'the total counts RUNS, not collapsed rows');
+        $this->assertGreaterThan(0, (int) $data['runs_withheld']);
+        $this->assertLessThanOrEqual(50, count($data['runs']));
     }
 }
