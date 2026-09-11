@@ -12,7 +12,8 @@ import { campaignStatusLabel, campaignStatusTone, objectiveLabel } from './label
 import { CAMPAIGN_STATUSES, type UnifiedCampaign } from './types'
 import { CANONICAL_OBJECTIVE_KEYS, canonicalObjectiveLabel, canonicalOfRaw, rawObjectivesFor, type CanonicalObjectiveKey } from './canonicalObjectives'
 import { LIFECYCLE_KEYS, lifecycleView, type Lifecycle } from './campaignLifecycleView'
-import { campaignEfficiency, campaignHeadline, type CampaignHeadline } from './campaignHeadline'
+import { campaignEfficiency, campaignHeadline, campaignSpendReading, type CampaignHeadline } from './campaignHeadline'
+import type { MetricReading } from '@/components/ui/MetricStrip'
 import { campaignRelevance, type CampaignRelevance } from './campaignRelevance'
 import { bandCounts, byPriority, type CampaignBand } from './campaignPriority'
 import { movers } from './campaignMovers'
@@ -116,6 +117,29 @@ export function CampaignsPage() {
   const [status, setStatus] = useUrlState('status', '')
   const [objective, setObjective] = useUrlState('objective', '')
   const [search, setSearch] = useState('')
+  /*
+   * CAMPAIGNS-TABLE-COMPARISON-001 — the chosen column travels to the SERVER.
+   *
+   * `''` means «no column chosen», which is not the same as a default column: with nothing chosen
+   * the list keeps the relevance ranking the workspace is designed around, and the server falls back
+   * to it for any name it does not recognise. Clicking the same header twice turns the direction
+   * round rather than re-sorting the same way.
+   */
+  const [sort, setSort] = useState('')
+  const [dir, setDir] = useState<'asc' | 'desc'>('desc')
+
+  const applySort = (column: string) => {
+    if (sort === column) {
+      setDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+
+      return
+    }
+
+    setSort(column)
+    /* Names read A→Z; figures read largest first, which is what «show me the biggest» means. */
+    setDir(column === 'name' ? 'asc' : 'desc')
+  }
+
   const [modalOpen, setModalOpen] = useState(false)
   const range = useLastNDaysRange(days)
 
@@ -148,9 +172,11 @@ export function CampaignsPage() {
      * query, and keying on the canonical label instead would be one cache entry per label over
      * whatever the previous scope fetched.
      */
-    queryKey: ['project', projectId, 'campaigns', { status, objective: objectiveParam, search }, page],
+    queryKey: ['project', projectId, 'campaigns', { status, objective: objectiveParam, search, sort, dir }, page],
     queryFn: () => listCampaigns(projectId!, {
       status: status || undefined, objective: objectiveParam, search: search || undefined,
+      /* Undefined when nothing is chosen — an empty string is a value, and «no sort» is not one. */
+      sort: sort || undefined, dir: sort ? dir : undefined,
       page, from: range.from, to: range.to,
     }),
     enabled: Boolean(projectId),
@@ -870,18 +896,53 @@ export function CampaignsPage() {
             </div>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-small)]">
-              <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
-                <thead><tr className="border-b border-border text-text-muted"><th className="p-3 text-start">{ar ? 'الحملة' : 'Campaign'}</th><th className="p-3 text-start">{ar ? 'الهدف' : 'Objective'}</th><th className="p-3 text-start">{ar ? 'الحالة' : 'Status'}</th><th className="p-3 text-end">{ar ? 'الميزانية' : 'Budget'}</th><th className="p-3 text-end">{ar ? 'مرتبطة' : 'Linked'}</th></tr></thead>
+              <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm">
+                {/*
+                  CAMPAIGNS-TABLE-COMPARISON-001 — «use tables when comparison is the job».
+
+                  It carried name, objective, status, budget and a link count, and nothing a reader
+                  could compare two campaigns ON: no spend, no result, no cost per result. Comparing
+                  what two campaigns cost meant opening both.
+
+                  The three sortable columns order the WHOLE filtered set on the server, before the
+                  page is cut. Sorting the twenty-five rows the browser holds would answer «the
+                  dearest of the most relevant twenty-five» while looking like an answer about the
+                  project — which is why the header sends `sort` rather than reordering an array.
+                */}
+                <thead>
+                  <tr className="border-b border-border text-text-muted">
+                    <SortableHeader id="name" label={ar ? 'الحملة' : 'Campaign'} sort={sort} dir={dir} onSort={applySort} ar={ar} />
+                    <th className="p-3 text-start">{ar ? 'الهدف' : 'Objective'}</th>
+                    <th className="p-3 text-start">{ar ? 'الحالة' : 'Status'}</th>
+                    <SortableHeader id="spend" label={ar ? 'الإنفاق' : 'Spend'} sort={sort} dir={dir} onSort={applySort} ar={ar} align="end" />
+                    <SortableHeader id="results" label={ar ? 'النتائج' : 'Results'} sort={sort} dir={dir} onSort={applySort} ar={ar} align="end" />
+                    <th className="p-3 text-end">{ar ? 'تكلفة النتيجة' : 'Cost per result'}</th>
+                    <th className="p-3 text-end">{ar ? 'الميزانية' : 'Budget'}</th>
+                    <th className="p-3 text-end">{ar ? 'مرتبطة' : 'Linked'}</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {orderedCampaigns.map((c) => (
-                    <tr key={c.id} data-testid="campaign-row" className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-hover" onClick={() => navigate(`/campaigns/${projectId}/${c.id}`)}>
-                      <td className="p-3 font-semibold text-text-primary">{c.name}</td>
-                      <td className="p-3 text-text-secondary">{objectiveLabel(c.objective, locale)}</td>
-                      <td className="p-3"><Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge></td>
-                      <td className="p-3 text-end"><span className="tnum">{money(c.total_budget, c.budget_currency)}</span></td>
-                      <td className="p-3 text-end"><span className="tnum">{c.external_campaigns_count ?? 0}</span></td>
-                    </tr>
-                  ))}
+                  {orderedCampaigns.map((c) => {
+                    const m = metricsByCampaign.get(c.id) as Record<string, unknown> | undefined
+
+                    return (
+                      <tr key={c.id} data-testid="campaign-row" className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-hover" onClick={() => navigate(`/campaigns/${projectId}/${c.id}`)}>
+                        <td className="p-3 font-semibold text-text-primary">{c.name}</td>
+                        <td className="p-3 text-text-secondary">{objectiveLabel(c.objective, locale)}</td>
+                        <td className="p-3"><Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge></td>
+                        {/*
+                          The campaign's OWN reading, through the shared catalogue — a sales campaign
+                          is judged on what it sold and an awareness one on who it reached, and a
+                          column that printed «conversions» for both would price the wrong thing.
+                        */}
+                        <td className="p-3 text-end"><MetricCell reading={campaignSpendReading(m, ar)} locale={locale} /></td>
+                        <td className="p-3 text-end"><MetricCell reading={campaignHeadline(c.objective, m, ar)?.reading ?? null} locale={locale} /></td>
+                        <td className="p-3 text-end"><MetricCell reading={campaignEfficiency(c.objective, m, ar)?.reading ?? null} locale={locale} /></td>
+                        <td className="p-3 text-end"><span className="tnum">{money(c.total_budget, c.budget_currency)}</span></td>
+                        <td className="p-3 text-end"><span className="tnum">{c.external_campaigns_count ?? 0}</span></td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table></div>
             </div>
@@ -974,6 +1035,59 @@ function StatCard({ label, value, sub, delta, invert, tone, testid }: { label: s
       trailing={delta !== undefined ? <TrendPill delta={delta} invertGood={invert} /> : undefined}
     />
   )
+}
+
+/**
+ * A column header that orders the whole SET, not the page.
+ *
+ * `aria-sort` because a sortable table that only signals with an arrow is a table a screen-reader
+ * user cannot navigate — and the arrow is drawn from the same state, so the two cannot disagree.
+ */
+function SortableHeader({
+  id, label, sort, dir, onSort, ar, align = 'start',
+}: {
+  id: string
+  label: string
+  sort: string
+  dir: 'asc' | 'desc'
+  onSort: (column: string) => void
+  ar: boolean
+  align?: 'start' | 'end'
+}) {
+  const on = sort === id
+
+  return (
+    <th
+      className={`p-0 text-${align}`}
+      aria-sort={on ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <button
+        type="button"
+        data-testid={`campaigns-sort-${id}`}
+        onClick={() => onSort(id)}
+        className={`flex w-full items-center gap-1 p-3 text-${align} ${on ? 'font-bold text-text-primary' : 'text-text-muted hover:text-text-secondary'} ${align === 'end' ? 'justify-end' : ''}`}
+        aria-label={ar ? `رتّب حسب ${label}` : `Sort by ${label}`}
+      >
+        <span>{label}</span>
+        {on && <span aria-hidden className="text-[10px]">{dir === 'asc' ? '▲' : '▼'}</span>}
+      </button>
+    </th>
+  )
+}
+
+/**
+ * One figure in a comparison column, or nothing where the product has no answer.
+ *
+ * `null` is «this campaign's objective has no such figure» — a brand campaign has no cost per order
+ * — and it renders as «—» rather than as a zero or a blank. `ReadingCell` below is the richer card
+ * version; this is the compact one a table needs.
+ */
+function MetricCell({ reading, locale }: { reading: MetricReading | null; locale: 'ar' | 'en' }) {
+  if (reading === null) {
+    return <span className="text-text-muted">—</span>
+  }
+
+  return <ReadingCell reading={{ key: '', label: '', reading }} locale={locale} />
 }
 
 /** One named figure, or the honest reason there is not one. Never a score. */

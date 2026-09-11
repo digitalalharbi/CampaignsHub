@@ -8,6 +8,16 @@ export interface CampaignListParams {
   status?: string
   objective?: string
   search?: string
+  /**
+   * The column the reader chose, ordered SERVER-side over the whole filtered set.
+   *
+   * Sorting the page the browser holds would answer «the dearest of the most relevant twenty-five»
+   * while looking like an answer about the project — the silent truncation this list already moved
+   * its relevance ranking to the server to avoid. An unrecognised value falls back to relevance
+   * there rather than reaching a column name from a URL.
+   */
+  sort?: string
+  dir?: 'asc' | 'desc'
 }
 
 export interface CampaignPage {

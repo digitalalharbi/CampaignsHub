@@ -92,3 +92,17 @@ export function campaignEfficiency(
 
   return key === undefined ? null : reading(key, row, ar)
 }
+
+/**
+ * What this campaign SPENT, read through the same catalogue as every other figure on the row.
+ *
+ * A comparison table needs the money beside the result, and «spend» is the one column that means the
+ * same thing for every objective — which is why it is a function of its own rather than an entry in
+ * the objective layout. It still goes through `reading()`, so a withheld or never-reported spend
+ * says so instead of printing a coalesced zero beside a real one.
+ */
+export function campaignSpendReading(row: Record<string, unknown> | undefined, ar: boolean): CampaignHeadline['reading'] | null {
+  if (row === undefined) return null
+
+  return reading('spend', row, ar)?.reading ?? null
+}
