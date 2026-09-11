@@ -28,6 +28,9 @@ use Illuminate\Support\Carbon;
  */
 final class SyncRunController extends Controller
 {
+    /** How many runs the log shows. A cap that says so is not a silent one. */
+    private const SHOWN = 100;
+
     public function __construct(
         private readonly AdvertisingConnectorRegistry $registry,
         private readonly AuditLogger $audit,
@@ -44,12 +47,36 @@ final class SyncRunController extends Controller
             'status' => ['nullable', 'string', 'max:32'],
         ]);
 
-        $runs = MetricSyncRun::query()
+        /*
+         * OPS-LEDGER-001 — the summary describes every run, not the hundred that fitted.
+         *
+         * `summary` is the per-status count an operator reads to judge whether the pipeline is
+         * healthy, and it was taken from this capped collection. A workspace with four hundred runs
+         * in the window was told about a hundred, so «12 failed» meant «12 failed among the most
+         * recent hundred» — a different and much more comforting claim, and the failures are exactly
+         * the rows an aging log pushes out first.
+         *
+         * The cap stays: an unbounded run log is what it prevents. The counts are taken over the
+         * whole filtered set in one grouped query, and the response says what it is not showing.
+         */
+        $scope = fn () => MetricSyncRun::query()
             ->when($filters['provider'] ?? null, fn ($q, $v) => $q->where('provider', $v))
-            ->when($filters['status'] ?? null, fn ($q, $v) => $q->where('status', $v))
+            ->when($filters['status'] ?? null, fn ($q, $v) => $q->where('status', $v));
+
+        $summary = $scope()->reorder()
+            ->getQuery()
+            ->select('status')
+            ->selectRaw('count(*) as c')
+            ->groupBy('status')
+            ->pluck('c', 'status')
+            ->map(static fn (mixed $c): int => (int) $c);
+
+        $total = (int) $summary->sum();
+
+        $runs = $scope()
             ->orderByDesc('started_at')
             ->orderByDesc('created_at')
-            ->limit(100)
+            ->limit(self::SHOWN)
             ->get();
 
         $accounts = ExternalAccount::withoutGlobalScopes()
@@ -64,7 +91,10 @@ final class SyncRunController extends Controller
                 $accounts->get($r->external_account_id)?->name,
                 $accounts->get($r->external_account_id)?->external_id,
             ))->all()),
-            'summary' => $runs->groupBy('status')->map->count(),
+            'summary' => $summary,
+            /* What exists, and what this response is not showing — never left to be inferred. */
+            'runs_total' => $total,
+            'runs_withheld' => max(0, $total - $runs->count()),
         ], 'Sync runs.');
     }
 

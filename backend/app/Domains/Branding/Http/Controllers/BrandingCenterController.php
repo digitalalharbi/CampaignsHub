@@ -106,9 +106,15 @@ final class BrandingCenterController extends Controller
             $query->where('scope_id', $scopeId);
         }
 
+        /* OPS-LEDGER-001 — the cap stays, and the caller is told how many assets exist. */
+        $total = (clone $query)->count();
+
+        $assets = array_map($this->present(...), $query->limit(200)->get()->all());
+
         return ApiResponse::success(
-            array_map($this->present(...), $query->limit(200)->get()->all()),
+            $assets,
             'Branding assets.',
+            meta: ['total' => $total, 'withheld' => max(0, $total - count($assets))],
         );
     }
 

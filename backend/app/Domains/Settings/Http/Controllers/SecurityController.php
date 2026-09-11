@@ -28,9 +28,14 @@ final class SecurityController extends Controller
     /** Sign-in activity + distinct recent devices, from real audit events for the current user. */
     public function activity(Request $request): JsonResponse
     {
-        $events = AuditLog::query()
+        /* OPS-LEDGER-001 — the cap stays, and the response says what it left out. */
+        $scope = fn () => AuditLog::query()
             ->where('user_id', $request->user()->id)
-            ->whereIn('action', ['user.login', 'user.logout'])
+            ->whereIn('action', ['user.login', 'user.logout']);
+
+        $total = $scope()->count();
+
+        $events = $scope()
             ->latest()->limit(50)
             ->get(['action', 'ip_address', 'user_agent', 'created_at']);
 
@@ -46,6 +51,8 @@ final class SecurityController extends Controller
                 'user_agent' => $e->user_agent, 'at' => $e->created_at?->toIso8601String(),
             ])->values(),
             'devices' => $devices,
+            'history_total' => $total,
+            'history_withheld' => max(0, $total - $events->count()),
             'two_factor_enabled' => (bool) $request->user()->two_factor_enabled,
         ], 'Security activity retrieved.');
     }
