@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, ExternalLink, Link2, MessageCircle, Plus } from 'lucide-react'
+import { Check, Copy, ExternalLink, Link2, MessageCircle, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/States'
@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/Badge'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { DEFAULT_DIAL_CODE, PhoneField, phoneFieldValue } from '@/components/ui/PhoneField'
 import { useUi } from '@/stores/ui'
-import { createShortLink, disableShortLink, listShortLinks, type ShortLink, type ShortLinkKind } from './api'
+import { createShortLink, deleteShortLink, disableShortLink, listShortLinks, type ShortLink, type ShortLinkKind } from './api'
 
 /**
  * SHORT-LINKS-001 — a utility a non-technical person finishes in two fields.
@@ -26,7 +26,6 @@ const COPY = {
   ar: {
     title: 'اختصار الروابط',
     subtitle: 'رابط قصير تشاركه في الإعلان أو الرسالة، ونحن نحسب النقرات.',
-    create: '+ إنشاء رابط مختصر',
     whatsapp: 'واتساب',
     link: 'رابط',
     phone: 'رقم الجوال',
@@ -44,12 +43,15 @@ const COPY = {
     clicks: 'نقرة',
     disabled: 'موقوف',
     disable: 'إيقاف',
+    delete: 'حذف',
+    delete_confirm: 'تأكيد الحذف',
+    delete_cancel: 'إلغاء',
+    delete_failed: 'تعذّر الحذف — لم يُحذف الرابط.',
     destination: 'الوجهة',
   },
   en: {
     title: 'Short Links',
     subtitle: 'A short link to share in an ad or a message. We count the clicks.',
-    create: '+ Create short link',
     whatsapp: 'WhatsApp',
     link: 'Link',
     phone: 'Phone number',
@@ -67,6 +69,10 @@ const COPY = {
     clicks: 'clicks',
     disabled: 'Disabled',
     disable: 'Disable',
+    delete: 'Delete',
+    delete_confirm: 'Confirm delete',
+    delete_cancel: 'Cancel',
+    delete_failed: 'The delete was refused — the link is still here.',
     destination: 'Destination',
   },
 }
@@ -98,7 +104,14 @@ export function ShortLinksPage() {
   const client = useQueryClient()
   const { copied, copy } = useCopy()
 
-  const [open, setOpen] = useState(false)
+  /*
+   * SHORT-LINKS-001, Owner correction observed in Production — the form is the page.
+   *
+   * The creation card sat behind «+ إنشاء رابط مختصر», so making a link — the only thing this screen
+   * is for — cost a click before the first field. A step that always leads to the same place is a
+   * step for nothing.
+   */
+  const [open, setOpen] = useState(true)
   const [kind, setKind] = useState<ShortLinkKind>('whatsapp')
   const [phone, setPhone] = useState('')
   const [dial, setDial] = useState(DEFAULT_DIAL_CODE)
@@ -140,6 +153,26 @@ export function ShortLinksPage() {
   const disable = useMutation({
     mutationFn: (id: string) => disableShortLink(id),
     onSuccess: () => void client.invalidateQueries({ queryKey: ['short-links'] }),
+  })
+
+  /*
+   * SHORT-LINKS-001, Owner correction — delete, not only disable.
+   *
+   * Disable stops a link resolving and leaves it on the screen; the library then grows forever and
+   * «I made that by mistake» has no answer. Delete takes it off the screen AND stops it resolving.
+   *
+   * Confirmed first, because a short link is an address somebody may already have sent: deleting one
+   * is not undoable from here, whatever the server keeps for audit.
+   */
+  const [confirming, setConfirming] = useState<string | null>(null)
+
+  const remove = useMutation({
+    mutationFn: (id: string) => deleteShortLink(id),
+    onSuccess: () => {
+      setConfirming(null)
+
+      return client.invalidateQueries({ queryKey: ['short-links'] })
+    },
   })
 
   const rows = links.data ?? []
@@ -236,12 +269,7 @@ export function ShortLinksPage() {
             </div>
           </div>
         </Card>
-      ) : (
-        <Button onClick={() => setOpen(true)} data-testid="short-link-create">
-          <Plus size={15} />
-          {t.create}
-        </Button>
-      )}
+      ) : null}
 
       <Card>
         {rows.length === 0 ? (
@@ -265,7 +293,36 @@ export function ShortLinksPage() {
                   {l.is_active && (
                     <Button variant="secondary" onClick={() => disable.mutate(l.id)}>{t.disable}</Button>
                   )}
+                  {confirming === l.id ? (
+                    <>
+                      <Button
+                        variant="secondary"
+                        onClick={() => remove.mutate(l.id)}
+                        disabled={remove.isPending}
+                        data-testid="short-link-delete-confirm"
+                        className="text-danger"
+                      >
+                        {t.delete_confirm}
+                      </Button>
+                      <Button variant="secondary" onClick={() => setConfirming(null)}>{t.delete_cancel}</Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      onClick={() => { remove.reset(); setConfirming(l.id) }}
+                      aria-label={t.delete}
+                      data-testid={`short-link-delete-${l.id}`}
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  )}
                 </div>
+                {/* A refusal is said on the row it was refused for, not swallowed. */}
+                {remove.isError && confirming === l.id && (
+                  <span className="w-full text-xs font-semibold text-danger" data-testid="short-link-delete-failed">
+                    {t.delete_failed}
+                  </span>
+                )}
               </div>
             ))}
           </div>

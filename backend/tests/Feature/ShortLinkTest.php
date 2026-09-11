@@ -318,4 +318,91 @@ final class ShortLinkTest extends TestCase
             'the copied link named the API host rather than the one customers know',
         );
     }
+
+    // ---- Delete: the Owner's own correction, observed in Production -----------------------------
+
+    /**
+     * «Disable» was never the answer to «I made that by mistake».
+     *
+     * A disabled link stays in the library forever, and the library is the whole surface. Delete
+     * removes it from what the user sees and stops it resolving; the row is soft-deleted so the click
+     * history it accumulated is still there to audit, which is the difference between removing a link
+     * and losing the record that it existed.
+     */
+    public function test_a_deleted_link_leaves_the_library(): void
+    {
+        $id = $this->create('link', 'https://example.com/a')->assertCreated()->json('data.id');
+
+        $this->actingAs($this->operator, 'sanctum')
+            ->deleteJson('/api/v1/short-links/'.$id)->assertOk();
+
+        $this->assertSame([], $this->actingAs($this->operator, 'sanctum')
+            ->getJson('/api/v1/short-links')->assertOk()->json('data'));
+    }
+
+    /** And it stops resolving — a link removed from the library must not keep working in a chat. */
+    public function test_a_deleted_link_no_longer_resolves(): void
+    {
+        $created = $this->create('link', 'https://example.com/a')->assertCreated();
+        $slug = $created->json('data.slug');
+
+        $this->get('/l/'.$slug)->assertRedirect('https://example.com/a');
+
+        $this->actingAs($this->operator, 'sanctum')
+            ->deleteJson('/api/v1/short-links/'.$created->json('data.id'))->assertOk();
+
+        /* The site, not a 404 the reader reached from a chat message — the same rule a disabled one follows. */
+        $this->get('/l/'.$slug)->assertRedirect(Frontend::origin().'/');
+    }
+
+    /** The click history survives the delete, which is the reason it is a soft delete. */
+    public function test_the_click_history_survives_a_delete(): void
+    {
+        $created = $this->create('link', 'https://example.com/a')->assertCreated();
+        $this->get('/l/'.$created->json('data.slug'));
+
+        $this->actingAs($this->operator, 'sanctum')
+            ->deleteJson('/api/v1/short-links/'.$created->json('data.id'))->assertOk();
+
+        $this->assertDatabaseHas('short_links', ['slug' => $created->json('data.slug'), 'clicks' => 1]);
+    }
+
+    /** Another tenant's link is not theirs to delete, and the refusal is the server's. */
+    public function test_a_stranger_cannot_delete_another_tenants_link(): void
+    {
+        $id = $this->create('link', 'https://example.com/a')->assertCreated()->json('data.id');
+
+        $other = Tenant::create(['name' => 'O', 'slug' => 'o-'.uniqid(), 'status' => 'active']);
+        $role = Role::create(['tenant_id' => $other->id, 'name' => 'R', 'slug' => 'r-'.uniqid()]);
+        $role->givePermissionTo(...Permission::pluck('key')->all());
+        $stranger = User::create([
+            'name' => 'X', 'email' => 'x-'.uniqid().'@s.test',
+            'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
+        ]);
+        $this->grantMembership($stranger, $other);
+        $stranger->assignRole($role);
+
+        $this->actingAs($stranger, 'sanctum')->deleteJson('/api/v1/short-links/'.$id)->assertNotFound();
+
+        $this->assertDatabaseHas('short_links', ['id' => $id, 'deleted_at' => null]);
+    }
+
+    /** And an operator without the permission is refused. */
+    public function test_deleting_requires_the_permission(): void
+    {
+        $id = $this->create('link', 'https://example.com/a')->assertCreated()->json('data.id');
+
+        $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'RO', 'slug' => 'ro-'.uniqid()]);
+        $role->givePermissionTo('campaigns.view');
+        $reader = User::create([
+            'name' => 'RO', 'email' => 'ro-'.uniqid().'@s.test',
+            'password' => Hash::make('secret1234'), 'email_verified_at' => now(),
+        ]);
+        $this->grantMembership($reader, $this->tenant);
+        $reader->assignRole($role);
+
+        $this->actingAs($reader, 'sanctum')->deleteJson('/api/v1/short-links/'.$id)->assertForbidden();
+
+        $this->assertDatabaseHas('short_links', ['id' => $id, 'deleted_at' => null]);
+    }
 }
