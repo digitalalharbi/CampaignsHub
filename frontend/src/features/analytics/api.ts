@@ -182,7 +182,8 @@ export interface TimePoint extends MetricTotals {
 }
 export interface PlatformRow extends MetricTotals, MoneyProvenance {
   provider: string
-  spend_share: number
+  /** Null when no spend was recorded in the window: a share of nothing is not zero. */
+  spend_share: number | null
 }
 export interface CampaignRow extends MetricTotals {
   campaign_id: string

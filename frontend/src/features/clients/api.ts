@@ -146,7 +146,7 @@ export interface ClientAnalytics {
   previous: Record<string, number | null> | null
   delta: Record<string, number | null> | null
   counts?: { impressions: number; clicks: number; conversions: number }
-  platforms: { provider: string; spend: number; spend_share: number; impressions: number; clicks: number; conversions: number; revenue: number; roas: number | null; ctr: number | null; cpc: number | null; cpm: number | null; cpa: number | null }[]
+  platforms: { provider: string; spend: number; /** Null when no spend was recorded: a share of nothing is not zero. */ spend_share: number | null; impressions: number; clicks: number; conversions: number; revenue: number; roas: number | null; ctr: number | null; cpc: number | null; cpm: number | null; cpa: number | null }[]
   projects: { project_id: string; name: string; spend: number; currency: string | null }[]
   timeseries: { date: string; spend: number; clicks: number; impressions: number; conversions: number; revenue: number }[]
   best_campaign: Record<string, unknown> | null
