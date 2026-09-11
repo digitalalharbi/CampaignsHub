@@ -9,7 +9,11 @@ every main-branch run succeeded, and each deploy was confirmed by the production
 — `index-CRSBNyzy` → `index-0LC4GDOC` → `index-B7S4T79-` → `index-DZYx8WFU`. `campaignshub.io`
 answers 200 and `/api/v1/health` answers 200.
 
-**PR #360 is open** on `files-truncation`: the files library and the client activity timeline.
+#360 followed — the files library and the client activity timeline — merged and deployed, asset hash
+`DZYx8WFU` → `DNBW_CaG`, production root and `/api/v1/health` both 200.
+
+**PR #361 is open** on `budget-export`: the CSV/XLSX budget sheet, which exported five columns while
+the table showed nine.
 
 ## What this run found
 
@@ -55,6 +59,21 @@ boundaries, trading an over-fetch for a silent truncation. Doing it properly nee
 subquery inside the structural query, which is the second analytics pipeline the architecture forbids.
 The active/inactive split itself is status-only (`paused` / `completed` / `archived`), so it IS
 tractable — as a designed unit, not a bolt-on.
+
+## Two claims of mine that were wrong, and how
+
+Both were inferred from a grep that found nothing, and both were caught before shipping. The lesson
+is the same each time: **the absence of a string I guessed at is not the absence of the thing.**
+
+- `ClientActivityController` looked unauthorized because it has no `abort_unless`. It calls
+  `$this->access->assertView()`, which my pattern did not match.
+- The ACCOUNT budget rung looked unrendered because nothing calls `useBudgetAccounts`. The component
+  is `AccountBudgets`, it calls `useAccountBudgets`, and it has been wired into the Budget tab all
+  along. I built a duplicate panel, hit «Duplicate function implementation» at typecheck, and
+  reverted it. `useBudgetAccounts` is an unused twin of the live hook — dead code, left alone.
+
+So the Owner's hierarchy is COMPLETE: Client → Project → Platform → Account → Campaign, all five
+rungs rendered, the Project rung being #357's addition.
 
 ## Method notes worth keeping
 
