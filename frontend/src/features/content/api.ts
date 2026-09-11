@@ -190,13 +190,28 @@ export interface LibraryFilterOptions {
   providers: string[]
   formats: string[]
   statuses: string[]
-  kinds: string[]
   campaigns: Array<{ id: string; name: string; objective: string | null }>
   ad_sets: string[]
   /** Labelled, because a select of provider ids is not a control somebody can use. */
   ads: Array<{ value: string; label: string }>
-  objectives: string[]
-  paths: string[]
+  /** Every shape the product can name, with how many rows each reaches under the other filters. */
+  kinds: Array<{ key: string; count: number }>
+  /**
+   * The five PRODUCT objectives, each with what it can reach under the other filters.
+   *
+   * This was `string[]` of RAW provider objectives, so the picker offered «التحويلات» beside
+   * «المبيعات» as if a reader had to choose between a conversion and a sale — and «المبيعات» narrowed
+   * to the single raw value, silently excluding every conversions campaign. Analytics has used the
+   * canonical five since ANALYTICS-OBJECTIVE-SYSTEM-001; this is Content catching up.
+   */
+  objectives: Array<{ key: string; count: number }>
+  /**
+   * `paths` is GONE, not empty.
+   *
+   * «المسار التسويقي» was a second primary control over the same server axis — it never filtered
+   * anything itself, it expanded into objectives. The key is absent so a control built from it cannot
+   * render at all, rather than rendering empty and reading as «this account has no paths».
+   */
   projects: Array<{ id: string; name: string; client_id: string | null }>
   clients: Array<{ id: string; name: string }>
   health: FatigueStatus[]

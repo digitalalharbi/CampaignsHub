@@ -34,6 +34,7 @@ export interface AppliedCreativeFilters {
   providers: string[]
   campaign_ids: string[]
   objectives: string[]
+  /** The operator's own stored narrowing — never a control the client is offered. */
   paths: string[]
   kinds: string[]
   search: string
@@ -47,7 +48,13 @@ export interface SharedCreativeLibraryPage {
   total: number
   period: { from: string; to: string }
   applied: AppliedCreativeFilters
-  available: Pick<LibraryFilterOptions, 'providers' | 'campaigns' | 'objectives' | 'paths' | 'kinds'> & {
+  /*
+    CONTENT-FILTER-TRUTH-001 — «paths» is not among them any more.
+
+    The client's own creative library inherited both controls from the internal one, so a CLIENT was
+    offered the same duplicated axis the owner reported: «التحويل والمبيعات» and «المبيعات» at once.
+  */
+  available: Pick<LibraryFilterOptions, 'providers' | 'campaigns' | 'objectives' | 'kinds'> & {
     earliest: string
     latest: string
   }

@@ -118,12 +118,11 @@ const page = (over: Partial<LibraryPage> = {}): LibraryPage => ({
     providers: ['meta', 'tiktok'],
     formats: ['image', 'video'],
     statuses: ['active'],
-    kinds: ['image', 'video', 'carousel'],
+    kinds: [{ key: 'image', count: 3 }, { key: 'video', count: 5 }, { key: 'carousel', count: 1 }, { key: 'collection', count: 0 }, { key: 'catalog', count: 0 }],
     campaigns: [{ id: 'c1', name: 'National Day Sale', objective: 'sales' }],
     ad_sets: ['set-1'],
     ads: [{ value: 'ad-1', label: 'ad-1' }],
-    objectives: ['sales', 'awareness'],
-    paths: ['awareness', 'traffic', 'leads', 'sales'],
+    objectives: [{ key: 'sales', count: 4 }, { key: 'awareness_engagement', count: 2 }, { key: 'traffic', count: 0 }, { key: 'leads', count: 1 }, { key: 'app_promotion', count: 0 }],
     projects: [{ id: 'p1', name: 'Q3 Launch', client_id: 'cl1' }],
     clients: [{ id: 'cl1', name: 'Acme' }],
     health: ['improving', 'stable', 'watch', 'fatigued', 'insufficient_data'],
@@ -205,9 +204,22 @@ describe('CreativesPage', () => {
      * «Content type», not «Ad type», since CONTENT-TERMINOLOGY-001: this filter narrows the LIBRARY,
      * and the library holds the asset rather than the ad that carried it.
      */
-    for (const axis of ['Client', 'Project', 'Platform', 'Campaign', 'Objective', 'Marketing path', 'Content type', 'Fatigue']) {
+    /*
+     * «Marketing path» is NOT in this list any more — CONTENT-FILTER-TRUTH-001.
+     *
+     * It was a second primary control over the same server axis: it never filtered anything itself,
+     * it expanded into objectives and sent them on the objective filter. A reader was asked one
+     * question twice and could be shown «Conversion & Sales» and «Sales» at once, as if they were
+     * alternatives — which is what the owner reported seeing in production. Analytics removed it
+     * under ANALYTICS-OBJECTIVE-SYSTEM-001; this case had frozen Content's copy of it as a
+     * requirement, so it would have failed the correction and passed the defect.
+     */
+    for (const axis of ['Client', 'Project', 'Platform', 'Campaign', 'Objective', 'Content type', 'Fatigue']) {
       expect(bar.getByText(axis)).toBeInTheDocument()
     }
+
+    /* And the control that used to follow «Objective» is GONE, not merely unused. */
+    expect(bar.queryByText('Marketing path')).toBeNull()
     // Reachable without opening anything.
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 

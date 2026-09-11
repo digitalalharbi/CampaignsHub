@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace App\Domains\Campaigns\Services;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
-use App\Domains\Campaigns\Enums\MarketingPath;
+use App\Domains\Campaigns\Enums\CanonicalObjective;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Support\CreativeKind;
 use App\Domains\Campaigns\Support\Relevance;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
@@ -199,22 +200,32 @@ final class CreativeRows
         }
 
         /*
-         * Creative TYPE, not the provider's format string.
+         * Creative TYPE, not the provider's format string — and now the SAME rule the card reads.
          *
-         * «image», «video» and «carousel» are what an operator filters by; the column holds whatever
-         * each platform calls it (`VIDEO`, `single_video`, `carousel_ad`, …). Matched with the same
-         * `str_contains` rule `CreativePresenter::kind()` uses, so the filter and the badge on the
-         * card can never disagree about what a creative is.
+         * This claimed to use «the same `str_contains` rule `CreativePresenter::kind()` uses» and did
+         * not: it matched the format column alone, while the presenter falls back to the ASSETS when
+         * the format is unhelpful. A Snapchat `SNAP_AD` carrying a film was «فيديو» on its card and
+         * was removed by the Video filter — the owner's «no ads match this selection» over an estate
+         * full of Snapchat videos. `CreativeKind` is that rule, once, in both spellings.
          */
         if (($kinds = $list('kinds')) !== []) {
-            $query->where(function ($q) use ($kinds): void {
-                foreach ($kinds as $kind) {
-                    $q->orWhere('format', 'ilike', '%'.$kind.'%');
-                }
-            });
+            CreativeKind::scope($query, $kinds);
         }
 
-        $objectives = $list('objectives');
+        /*
+         * CONTENT-FILTER-TRUTH-001 — a canonical objective expands into the raw ones it covers.
+         *
+         * The picker offered RAW provider objectives, so «المبيعات» meant the single raw value
+         * `sales` and silently excluded every `conversions`, `add_to_cart` and `purchases` campaign —
+         * while offering «التحويلات» as a competing choice beside it. Analytics moved to the five
+         * product objectives long ago; Content never did, so the two surfaces disagreed about what an
+         * objective is.
+         *
+         * Raw values still pass through untouched. Other callers send them — `CreativeAnalysisController`
+         * builds peer sets from a campaign's own objective — and a canonical-only reader would break
+         * them for no gain.
+         */
+        $objectives = self::expandObjectives($list('objectives'));
         $paths = $list('paths');
 
         if ($paths !== []) {
@@ -242,6 +253,87 @@ final class CreativeRows
                 $sub->select('id')->from('unified_campaigns')->whereIn('objective', $objectives);
             });
         }
+    }
+
+    /**
+     * One entry per selectable objective, with how many rows it reaches in the scope given.
+     *
+     * @return list<array{key: string, count: int}>
+     */
+    private static function objectiveFacets(Builder $scope): array
+    {
+        $counts = [];
+
+        foreach (CanonicalObjective::selectable() as $canonical) {
+            $counts[] = [
+                'key' => $canonical->value,
+                'count' => (clone $scope)
+                    ->whereIn('campaign_id', function ($sub) use ($canonical): void {
+                        $sub->select('id')->from('unified_campaigns')
+                            ->whereIn('objective', $canonical->rawObjectives());
+                    })
+                    ->count(),
+            ];
+        }
+
+        return $counts;
+    }
+
+    /**
+     * One entry per creative shape, with how many rows it reaches in the scope given.
+     *
+     * The vocabulary is closed — `CreativeKind::ALL` — rather than distinct over what happens to be
+     * synced: a filter that cannot NAME a shape hides every ad of it, and an operator would conclude
+     * the account has no collection ads rather than that the picker has no word for them. The COUNT
+     * is what says whether anything is behind each one.
+     *
+     * @return list<array{key: string, count: int}>
+     */
+    private static function kindFacets(Builder $scope): array
+    {
+        return array_map(
+            static fn (string $kind): array => [
+                'key' => $kind,
+                'count' => (clone $scope)->where(fn ($q) => CreativeKind::scope($q, [$kind]))->count(),
+            ],
+            CreativeKind::ALL,
+        );
+    }
+
+    /**
+     * Canonical objectives become the raw values they cover; raw values are left alone.
+     *
+     * @param  list<string>  $objectives
+     * @return list<string>
+     */
+    public static function expandObjectives(array $objectives): array
+    {
+        if ($objectives === []) {
+            return [];
+        }
+
+        $out = [];
+
+        foreach ($objectives as $value) {
+            $canonical = CanonicalObjective::tryFrom((string) $value);
+
+            /*
+             * `Unknown` is a canonical case but not a selectable one, and expanding it here would let
+             * a hand-written query reach every unclassified campaign through a word the picker never
+             * offers. It is left to fall through as a raw value, which matches nothing.
+             */
+            if ($canonical !== null && in_array($canonical, CanonicalObjective::selectable(), true)) {
+                foreach ($canonical->rawObjectives() as $raw) {
+                    $out[] = $raw;
+                }
+
+                continue;
+            }
+
+            $out[] = (string) $value;
+        }
+
+        return array_values(array_unique($out));
     }
 
     /**
@@ -546,8 +638,22 @@ final class CreativeRows
      *                                    would accumulate their clauses onto each other.
      * @return array<string, mixed>
      */
-    public function filterOptions(Closure $base): array
+    public function filterOptions(Closure $base, array $active = []): array
     {
+        /*
+         * CONTENT-FILTER-TRUTH-001 — an axis is counted under the OTHER filters, never its own.
+         *
+         * «Never show a selectable option that is known to have zero matching rows without clearly
+         * disabling or stating it.» A count that included the axis's own filter would read 0 for every
+         * choice the reader has not made, which is the opposite of useful; excluding it answers the
+         * question a picker is actually asked — «if I chose this instead, what would I get».
+         */
+        $scoped = function (string $without) use ($base, $active) {
+            $q = $base();
+            $this->applyFilters($q, array_diff_key($active, [$without => null]));
+
+            return $q;
+        };
         $distinct = static fn (string $column): array => $base()
             ->whereNotNull($column)
             ->distinct()->orderBy($column)->pluck($column)->map(static fn ($v): string => (string) $v)->all();
@@ -577,7 +683,7 @@ final class CreativeRows
              * an operator would conclude the account has no collection ads rather than that the
              * picker has no word for them.
              */
-            'kinds' => ['image', 'video', 'carousel', 'collection', 'catalog'],
+            'kinds' => self::kindFacets($scoped('kinds')),
             'campaigns' => $campaigns->map(static fn ($c): array => [
                 'id' => (string) $c->id, 'name' => $c->name, 'objective' => $c->objective,
             ])->all(),
@@ -590,8 +696,25 @@ final class CreativeRows
              * where 5,706 ads exist, and every ad but the last of each creative was unselectable.
              */
             'ads' => $this->adExternalIds($base),
-            'objectives' => $campaigns->pluck('objective')->filter()->unique()->sort()->values()->all(),
-            'paths' => array_map(static fn (MarketingPath $p): string => $p->value, MarketingPath::cases()),
+            /*
+             * The five PRODUCT objectives, each with what it can actually reach — never the raw
+             * provider values.
+             *
+             * This was `distinct('objective')`, so the picker offered whatever the platforms happened
+             * to write: «التحويلات» stood beside «المبيعات» as though a reader had to choose between
+             * a conversion and a sale. Raw objectives are an internal normalisation fact; the
+             * vocabulary a person filters by is the one Analytics already uses.
+             */
+            'objectives' => self::objectiveFacets($scoped('objectives')),
+            /*
+             * «المسار التسويقي» is GONE from this surface — ANALYTICS-OBJECTIVE-SYSTEM-001.
+             *
+             * It was a second primary control over the same server axis: it never filtered anything
+             * itself, it expanded into objectives and sent them on the objective filter. A reader was
+             * asked one question twice and could be shown «التحويل والمبيعات» and «المبيعات» at once,
+             * as if they were alternatives. The key is absent rather than empty, so a control built
+             * from it cannot render at all.
+             */
             'projects' => $projects->map(static fn ($p): array => [
                 'id' => (string) $p->id, 'name' => $p->name,
                 'client_id' => $p->client_workspace_id === null ? null : (string) $p->client_workspace_id,

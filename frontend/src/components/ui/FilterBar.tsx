@@ -300,7 +300,16 @@ export function FilterMulti({
 }: {
   label: string
   values: string[]
-  options: Array<{ value: string; label: string }>
+  /**
+   * `count`, where the caller knows it, is how many rows this option reaches under the OTHER filters.
+   *
+   * Optional on purpose: most axes are distinct-over-what-exists, so every option has something
+   * behind it by construction and a count would be noise. Where the vocabulary is CLOSED — creative
+   * shapes, the five product objectives — an option can be offered with nothing behind it, and
+   * «never show a selectable option that is known to have zero matching rows without clearly
+   * disabling or stating it» is what this carries.
+   */
+  options: Array<{ value: string; label: string; count?: number }>
   onChange: (next: string[]) => void
   testid?: string
   /** Above this many options the popover grows a search box. */
@@ -516,14 +525,31 @@ export function FilterMulti({
 
             {visible.map((o) => {
               const on = values.includes(o.value)
+              /*
+                An option that reaches nothing is shown, disabled, with its zero — not hidden.
+                Hiding it would make the vocabulary itself look smaller than it is, which is the
+                failure «a filter that cannot name a shape hides every ad of it» already records. An
+                option already CHOSEN stays operable whatever its count, or a reader could not undo
+                their own narrowing.
+              */
+              const empty = o.count === 0 && ! on
               return (
                 <button
                   key={o.value}
                   type="button"
                   role="option"
                   aria-selected={on}
+                  aria-disabled={empty || undefined}
+                  disabled={empty}
+                  data-count={o.count}
                   onClick={() => toggle(o.value)}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-sm ${on ? 'bg-brand-500/10 font-semibold text-text-primary' : 'text-text-secondary hover:bg-surface-hover'}`}
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-sm ${
+                    empty
+                      ? 'cursor-not-allowed text-text-muted opacity-60'
+                      : on
+                        ? 'bg-brand-500/10 font-semibold text-text-primary'
+                        : 'text-text-secondary hover:bg-surface-hover'
+                  }`}
                 >
                   <span
                     aria-hidden
@@ -532,6 +558,11 @@ export function FilterMulti({
                     {on && <Check size={11} />}
                   </span>
                   <span className="truncate">{o.label}</span>
+                  {o.count !== undefined && (
+                    <span className="tnum ms-auto shrink-0 text-xs text-text-muted" dir="ltr">
+                      {o.count}
+                    </span>
+                  )}
                 </button>
               )
             })}
