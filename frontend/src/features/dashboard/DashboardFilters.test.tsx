@@ -90,8 +90,13 @@ describe('the dashboard filter bar', () => {
     useProject.getState().setCurrentProjectId('p1')
     vi.mocked(useSummary).mockReturnValue(summary() as never)
     vi.mocked(useCampaigns).mockReturnValue(EMPTY as never)
+    /* The Dashboard's four KPI choices persist by design — start every case from the defaults. */
+    window.localStorage.clear()
   })
-  afterEach(() => signOut())
+  afterEach(() => {
+    signOut()
+    window.localStorage.clear()
+  })
 
   /** The claim, plainly: nothing has to be opened to reach the filters this product is used through. */
   it('puts the period, platform and objective controls on the page', async () => {
@@ -128,26 +133,49 @@ describe('the dashboard filter bar', () => {
   })
 
   /**
-   * §14.6, on the dashboard: the cards are the ones this money is judged on.
+   * §14.6: the cards are the ones this money is judged on — now proved on the ANALYSIS.
    *
-   * A sales campaign leads with what it sold and what that cost. An awareness campaign leads with
-   * how many people it reached — and a cost per order on it is not an extra column, it is an
-   * inflated number a client would set next month's budget on.
+   * A sales campaign leads with what it sold and what that cost. An awareness campaign leads with how
+   * many people it reached — and a cost per order on it is not an extra column, it is an inflated
+   * number a client would set next month's budget on.
+   *
+   * This used to be asserted on the Dashboard, whose KPI row was objective-led. The Owner's
+   * correction replaced that row with four cards the user picks, defaulting to Spend / Impressions /
+   * Clicks / CTR. The objective rule did not go away: `AnalyticsOverview` still renders the
+   * objective-led strip from the same catalogue, so the guarantee is asserted where it still holds
+   * rather than deleted along with the row that used to carry it. The Dashboard's own half of it —
+   * that the objective's metrics remain REACHABLE, not merely absent — is the case below.
    */
   it('leads with the metrics the objective is judged on', async () => {
-    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
-    await screen.findByTestId('dashboard-intro')
+    renderWithProviders(<AnalyticsPage surface="analytics" />, { locale: 'en' })
+    await screen.findByTestId('analytics-intro')
 
-    fireEvent.change(screen.getByTestId('dashboard-objective'), { target: { value: 'sales' } })
+    fireEvent.change(screen.getByTestId('analytics-objective'), { target: { value: 'sales' } })
     expect(screen.getByTestId('metric-purchases')).toBeInTheDocument()
     expect(screen.getByTestId('metric-roas')).toBeInTheDocument()
     // Reach is a secondary concern for a sales campaign — folded, not deleted.
     expect(screen.queryByTestId('metric-reach')).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByTestId('dashboard-objective'), { target: { value: 'awareness_engagement' } })
+    fireEvent.change(screen.getByTestId('analytics-objective'), { target: { value: 'awareness_engagement' } })
     expect(screen.getByTestId('metric-reach')).toBeInTheDocument()
     // …and no cost per order on money that was never meant to sell anything.
     expect(screen.queryByTestId('metric-cpa')).not.toBeInTheDocument()
+  })
+
+  /**
+   * And on the Dashboard, the objective's metrics are one click away rather than gone.
+   *
+   * «Each KPI card must have a metric dropdown … Search for a metric…» — the selector is what makes
+   * the fixed default honest. If ROAS stopped being offered, the fixed four would have quietly
+   * narrowed what a sales account can see on its own overview.
+   */
+  it('still offers the objective\'s own metrics in the Dashboard picker', async () => {
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('kpi-picker-0'))
+    fireEvent.change(screen.getByTestId('kpi-search'), { target: { value: 'roas' } })
+
+    expect(screen.getByTestId('kpi-option-roas')).toBeInTheDocument()
   })
 
   /**
@@ -159,9 +187,14 @@ describe('the dashboard filter bar', () => {
    */
   it('says a metric was never reported instead of printing its coalesced zero', async () => {
     renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
-    await screen.findByTestId('dashboard-intro')
 
-    fireEvent.change(screen.getByTestId('dashboard-objective'), { target: { value: 'awareness_engagement' } })
+    /*
+      Reach is now REACHED FOR rather than handed over by the objective — which tests more, not less:
+      a card the reader chose must carry the same «never reported» honesty as one the objective chose.
+    */
+    /* Card 3 — CTR's slot, so the Impressions card asserted below is still the one the page shipped. */
+    fireEvent.click(await screen.findByTestId('kpi-picker-3'))
+    fireEvent.click(screen.getByTestId('kpi-option-reach'))
 
     const reach = screen.getByTestId('metric-reach')
     expect(reach).toHaveAttribute('data-state', 'not_provided')

@@ -656,8 +656,28 @@ export function dashboardMetrics(
   const layout = layoutFor(objective, summary?.objective_families_in_scope)
 
   const build = (keys: string[], lead: boolean): MetricItem[] =>
-    keys
-      .filter((key) => SPECS[key])
+    buildItems(keys, lead, objective, summary, ar, series)
+
+  return { primary: build(layout.primary, true), secondary: build(layout.secondary, false) }
+}
+
+/**
+ * One card builder, for the objective layout and for a reader's own choice alike.
+ *
+ * Extracted rather than duplicated: every part of a card — the reading, the comparison, the
+ * sparkline, the definition, the currency — is decided here, and a second copy is how a selected
+ * metric would come to disagree with the same metric chosen by the layout.
+ */
+function buildItems(
+  keys: string[],
+  lead: boolean,
+  objective: string,
+  summary: Summary | undefined,
+  ar: boolean,
+  series?: readonly TimePoint[],
+): MetricItem[] {
+  return keys
+    .filter((key) => SPECS[key])
       .map((key, index) => {
         const spec = SPECS[key]
 
@@ -688,6 +708,31 @@ export function dashboardMetrics(
           spark: sparkFor(key, series, summary?.reported),
         }
       })
+}
 
-  return { primary: build(layout.primary, true), secondary: build(layout.secondary, false) }
+/**
+ * KPI-SELECTION-001 — the same cards, for keys the reader chose.
+ *
+ * The Owner replaced «مؤشرات إضافية» with four cards whose metric is selectable, and every part of a
+ * card has to follow the choice: the value, the comparison, the trend, the sparkline, the definition
+ * and the unit. All of that already happens inside `dashboardMetrics`' own `build`, so this calls
+ * THAT rather than assembling a second kind of card — a selector with its own arithmetic is how the
+ * dashboard would come to disagree with Analytics about a figure they both read from one payload.
+ *
+ * Unknown keys are dropped rather than rendered empty: the catalogue is the contract, and a card for
+ * a metric this product does not define would be a promise with nothing behind it.
+ */
+export function metricsForKeys(
+  keys: readonly string[],
+  objective: string,
+  summary: Summary | undefined,
+  ar: boolean,
+  series?: readonly TimePoint[],
+): MetricItem[] {
+  return buildItems([...keys], false, objective, summary, ar, series)
+}
+
+/** Every metric a reader may put on a card, in the catalogue's own order. */
+export function selectableMetrics(ar: boolean): { key: string; label: string }[] {
+  return Object.entries(SPECS).map(([key, spec]) => ({ key, label: ar ? spec.label.ar : spec.label.en }))
 }

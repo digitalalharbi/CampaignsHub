@@ -43,7 +43,7 @@ const SOURCES = import.meta.glob('/src/features/**/*.tsx', {
  * other's composition and report a violation that is the requirement.
  */
 const GUARDED = [
-  { file: 'OverviewCompositions.tsx', scope: 'export function DashboardOverview(', region: '<MetricStrip' },
+  { file: 'OverviewCompositions.tsx', scope: 'export function DashboardOverview(', region: '<KpiCards' },
 ]
 
 /**
@@ -160,6 +160,7 @@ describe('the primary KPI region is the first analytical block on the page', () 
 
     /* The major sections, in the order the file renders them, deduplicated to first appearance. */
     const MAJOR = [
+      'KpiCards',
       'MetricStrip',
       'Panel',
       'RateTrend',
@@ -184,11 +185,18 @@ describe('the primary KPI region is the first analytical block on the page', () 
   it('the Dashboard opens on its figures and closes on its reasoning', () => {
     const order = sectionsOf('DashboardOverview')
 
-    expect(order[0], `the Dashboard opens on ${order[0]}, not its KPI row`).toBe('MetricStrip')
+    /*
+      `KpiCards`, not `MetricStrip`: the Dashboard's four cards are now selectable, so the region is
+      composed one layer up. It renders THROUGH the strip — the strip's loading, refusal, never-
+      reported and empty-scope states are still the ones the reader gets — and the ordering rule this
+      file exists for is unchanged: whatever the primary KPI region is called, nothing analytical may
+      precede it.
+    */
+    expect(order[0], `the Dashboard opens on ${order[0]}, not its KPI row`).toBe('KpiCards')
     expect(order.at(-1), `the Dashboard closes on ${order.at(-1)}, not its diagnosis`).toBe('ChangeDiagnosis')
 
     const lastDrawing = Math.max(
-      ...['MetricStrip', 'Panel', 'RateTrend', 'UnifiedCampaignOverview'].map((t) => order.indexOf(t)),
+      ...['KpiCards', 'Panel', 'RateTrend', 'UnifiedCampaignOverview'].map((t) => order.indexOf(t)),
     )
     const firstReasoning = Math.min(...['DiagnosticPanel', 'ChangeDiagnosis'].map((t) => order.indexOf(t)))
 
@@ -211,6 +219,7 @@ describe('the primary KPI region is the first analytical block on the page', () 
     const order = sectionsOf('AnalyticsOverview')
 
     expect(order[0], `Analytics opens on ${order[0]} — the Dashboard's headline, not a decision module`).not.toBe('MetricStrip')
+    expect(order, 'Analytics renders the Dashboard\'s selectable KPI region — its figures are evidence, not a headline').not.toContain('KpiCards')
     expect(order, 'Analytics renders no decision module before its figures').toContain('DiagnosticPanel')
     expect(order, 'Analytics renders no distribution — «where the money sits» is its own question').toContain('DistributionBars')
 

@@ -15,6 +15,7 @@ import { dashboardMetrics } from './metricCatalog'
 import { useBudget, useCampaigns, useDrivers, useFreshness, usePlatforms, useSummary, useTimeseries } from './api'
 import { useUi } from '@/stores/ui'
 import type { CommerceSummary, MetricFilters } from './api'
+import { KpiCards } from './KpiCards'
 
 /**
  * SURFACE-COMPOSITION-001 — one engine, two compositions.
@@ -253,7 +254,7 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
  * region, and nothing that DRAWS may be rendered below the first block that EXPLAINS.
  */
 export function DashboardOverview(d: OverviewData) {
-  const { ar, s, comparable, drivers, strip, vm, points, objective, reportingCurrency } = d
+  const { ar, s, comparable, drivers, vm, points, objective, reportingCurrency } = d
 
   return (
     <div className="space-y-4" data-testid="dashboard-overview" data-composition="dashboard">
@@ -269,19 +270,25 @@ export function DashboardOverview(d: OverviewData) {
           </p>
         )}
 
-        <MetricStrip
-          id="dashboard"
-          ar={ar}
-          primary={strip.primary}
-          secondary={strip.secondary}
-          hasRows={s.data === undefined ? undefined : s.data.rows_in_scope}
-          /*
-            METRICS-REQUEST-STATE-001 — and a request that failed or has not answered says so.
+        {/*
+          KPI-SELECTION-001 — four cards, and the metric on each is the reader's to choose.
 
-            `data` is undefined for a failure and for a load alike, so without these the row rendered with
-            nothing to read and every card printed «لا توجد بيانات» — a confident statement about this
-            account's advertising, made by a request that never came back.
-          */
+          This was `MetricStrip`, whose «مؤشرات إضافية» expanded a second row nobody asked for and hid
+          the ones somebody did. `KpiCards` keeps four and puts a searchable selector on the metric
+          NAME instead — the shape an ads manager uses.
+
+          The cards come from the catalogue's own builder, so a chosen metric carries the same
+          reading, comparison, sparkline, definition and currency as that metric chosen by the
+          objective layout, under the same filters this page already applied. `MetricStrip` is
+          unchanged and still serves the analysis, which is judged on its objective rather than on a
+          reader's four.
+        */}
+        <KpiCards
+          objective={objective}
+          summary={s.data}
+          ar={ar}
+          series={points}
+          comparable={comparable}
           loading={s.isPending}
           error={s.isError ? s.error : undefined}
           onRetry={() => void s.refetch()}

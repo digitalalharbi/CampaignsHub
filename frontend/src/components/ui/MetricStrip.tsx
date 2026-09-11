@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { Area, AreaChart, ResponsiveContainer } from 'recharts'
 import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Info, Minus } from 'lucide-react'
 import { QueryFailure } from './QueryFailure'
@@ -181,7 +181,7 @@ function Delta({
   )
 }
 
-export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
+export function MetricCard({ item, ar, labelControl }: { item: MetricItem; ar: boolean; labelControl?: ReactNode }) {
   /*
    * A withheld figure is NOT missing. It has a real number to show, so it must not take the muted
    * «nothing here» treatment that `not_provided` and `no_data` share — that treatment is what made
@@ -232,7 +232,13 @@ export function MetricCard({ item, ar }: { item: MetricItem; ar: boolean }) {
           className={`inline-flex items-start gap-1 text-text-secondary ${METRIC_LABEL}`}
           title={typeof item.label === 'string' ? item.label : undefined}
         >
-          <span className="line-clamp-2">{item.label}</span>
+          {/*
+            KPI-SELECTION-001 — where the name is also the control.
+            The dashboard's four cards let the reader change the metric, and the name is what they
+            already read to know which card is which. Every other caller passes nothing and keeps the
+            plain label, so this cannot alter a strip that does not opt in.
+          */}
+          {labelControl ?? <span className="line-clamp-2">{item.label}</span>}
           {item.hint && <InfoHint text={item.hint} label={`${t('definition', ar)}: ${item.label}`} />}
         </span>
         {/*
@@ -336,9 +342,18 @@ export function MetricStrip({
   loading = false,
   error,
   onRetry,
+  labelControl,
 }: {
   id: string
   ar: boolean
+  /**
+   * KPI-SELECTION-001 — an optional control rendered in place of a primary card's label.
+   *
+   * Given only by the dashboard, whose four cards are selectable. It lives here rather than in a
+   * second strip component so the selectable cards keep every state this one already owns: the
+   * request in flight, the refusal, the metric a platform never reported, and the empty scope.
+   */
+  labelControl?: (index: number) => ReactNode
   /** What this objective is judged on — four to six, never fourteen. */
   primary: MetricItem[]
   /** Everything else, one visible click away and still on the page. */
@@ -473,8 +488,8 @@ export function MetricStrip({
       )}
 
       <div className={`grid grid-cols-2 ${CARD_GAP} lg:grid-cols-3 xl:grid-cols-4`}>
-        {primary.map((item) => (
-          <MetricCard key={item.key} item={item} ar={ar} />
+        {primary.map((item, index) => (
+          <MetricCard key={`${item.key}-${index}`} item={item} ar={ar} labelControl={labelControl?.(index)} />
         ))}
       </div>
 
