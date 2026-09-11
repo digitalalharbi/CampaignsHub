@@ -155,13 +155,22 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
       <KpiCard label={costLabel(campaign.objective)} value={rowCostPer(k, 'cpa', 'conversions', cur)} delta={spendRead.withheld ? null : d.cpa} deltaKey="cpa" spark={spendRead.withheld ? undefined : sparks(perf.data, 'cpa')} />
       <KpiCard label="الإيرادات" value={revenueRead.text} sub={revenueRead.note ?? undefined} delta={revenueRead.withheld ? null : d.revenue} deltaKey="revenue" spark={revenueRead.withheld ? undefined : sparks(perf.data, 'revenue')} />
       <KpiCard label="ROAS" value={roasRead.value === null ? '—' : ratio(roasRead.value)} sub={roasRead.note ?? undefined} delta={roasRead.kind === 'converted' || roasRead.kind === 'zero' ? d.roas : null} deltaKey="roas" spark={roasRead.kind === 'converted' ? sparks(perf.data, 'roas') : undefined} />
-      <KpiCard label="CTR" value={percent(k?.ctr ?? 0)} delta={d.ctr} deltaKey="ctr" spark={sparks(perf.data, 'ctr')} />
+      {/*
+        * AGGREGATION-TRUTH-001 — `percent()` and `num()` already return «—» for a figure the
+        * aggregator did not state, and every call on this screen passed `x ?? 0` first. A CTR that
+        * was never reported printed «0.0%» and results that were never reported printed «0», on the
+        * screen an operator uses to decide whether to pause a campaign — and a campaign that has not
+        * delivered an impression yet is not a campaign nobody clicks. The inconsistency was visible
+        * inside one row: spend, CPA, ROAS and «المساهمة» refuse correctly, and the cells between them
+        * claimed zero.
+        */}
+      <KpiCard label="CTR" value={percent(k?.ctr)} delta={d.ctr} deltaKey="ctr" spark={sparks(perf.data, 'ctr')} />
       <KpiCard label="CPC" value={rowCostPer(k, 'cpc', 'clicks', cur)} delta={spendRead.withheld ? null : d.cpc} deltaKey="cpc" />
       {/* CPM divides by impressions per THOUSAND. The factor lives here, visible, rather than in a
           generic reader — and rather than as a field name no payload carries. */}
       <KpiCard label="CPM" value={rowCostPer(k, 'cpm', (k?.impressions ?? 0) / 1000, cur)} delta={spendRead.withheld ? null : d.cpm} deltaKey="cpm" />
       <KpiCard label="معدل التحويل" value={convRate != null ? percent(convRate) : '—'} />
-      <KpiCard label="مرات الظهور" value={compact(k?.impressions ?? 0)} delta={d.impressions} deltaKey="impressions" />
+      <KpiCard label="مرات الظهور" value={compact(k?.impressions)} delta={d.impressions} deltaKey="impressions" />
     </div>
   )
 }
@@ -396,7 +405,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
             <ul className="space-y-2 text-sm">
               {budgetChanges.map((e) => (
                 <li key={e.id} className="flex items-center justify-between gap-2 border-b border-border pb-1.5 last:border-0">
-                  <span className="tnum">{money(Number(e.before?.total_budget ?? 0), cur)} → {money(Number(e.after?.total_budget ?? 0), cur)}</span>
+                  <span className="tnum">{e.before?.total_budget == null ? '—' : money(Number(e.before.total_budget), cur)} → {e.after?.total_budget == null ? '—' : money(Number(e.after.total_budget), cur)}</span>
                   <span className="text-xs text-text-muted">{e.actor} · {e.at ? fmtDate(e.at) : ''}</span>
                 </li>
               ))}
@@ -450,7 +459,7 @@ export function CampaignFunnelTab({ campaign, projectId, range }: { campaign: Un
       </div>
       {bottleneck && (
         <div className="rounded-xl border border-warning/40 bg-warning/5 p-3 text-sm">
-          <span className="font-semibold text-warning">أكبر تسرّب:</span> {bottleneck.label} — {percent(bottleneck.drop_off ?? 0, 0)}؛ الإجراء المقترح: مراجعة هذه المرحلة (استهداف/محتوى/صفحة الهبوط).
+          <span className="font-semibold text-warning">أكبر تسرّب:</span> {bottleneck.label} — {percent(bottleneck.drop_off, 0)}؛ الإجراء المقترح: مراجعة هذه المرحلة (استهداف/محتوى/صفحة الهبوط).
         </div>
       )}
     </div>
@@ -556,11 +565,11 @@ export function CampaignPlatformsTab({
                   Platforms tab reads, and it carries the provenance; these are its readers.
                 */}
                 <MiniStat label="الإنفاق" value={rowMoney(m, 'spend')} />
-                <MiniStat label="النتائج" value={num(m?.conversions ?? 0)} />
+                <MiniStat label="النتائج" value={num(m?.conversions)} />
                 <MiniStat label="CPA" value={rowCostPer(m, 'cpa', 'conversions')} />
                 <MiniStat label="ROAS" value={rowRoas(m)} />
                 <MiniStat label="المساهمة" value={m?.spend_share != null ? percent(m.spend_share, 0) : '—'} />
-                <MiniStat label="CTR" value={percent(m?.ctr ?? 0)} />
+                <MiniStat label="CTR" value={percent(m?.ctr)} />
                 <MiniStat label="حملات خارجية" value={String(externals.length)} />
                 <MiniStat label="الحساب" value={externals[0]?.external_account_id?.slice(0, 8) ?? '—'} />
               </div>
@@ -860,7 +869,7 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
                 <MiniStat label="ROAS" value={ratio(c.metrics.roas)} />
                 {/* Never compacted — a cost per result's decimals are the decision. */}
                 <MiniStat label="CPA" value={moneyExact(c.metrics.cpa, cur ?? null)} />
-                <MiniStat label="CTR" value={percent(c.metrics.ctr ?? 0)} />
+                <MiniStat label="CTR" value={percent(c.metrics.ctr)} />
                 <MiniStat label="مشاهدة" value={c.metrics.view_rate != null ? percent(c.metrics.view_rate, 0) : '—'} />
               </div>
               <p className="text-[11px] text-text-muted">{c.ranking_reason}</p>
@@ -886,7 +895,7 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
                   <td className="p-2"><span className="tnum">{num(c.metrics.conversions)}</span></td>
                   <td className="p-2"><span className="tnum">{moneyExact(c.metrics.cpa, cur ?? null)}</span></td>
                   <td className="p-2"><span className="tnum">{ratio(c.metrics.roas)}</span></td>
-                  <td className="p-2"><span className="tnum">{percent(c.metrics.ctr ?? 0)}</span></td>
+                  <td className="p-2"><span className="tnum">{percent(c.metrics.ctr)}</span></td>
                   <td className="p-2"><span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${cls(c.classification).tone}`}>{cls(c.classification).label}</span></td>
                 </tr>
               ))}
