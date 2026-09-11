@@ -19,6 +19,36 @@ test.describe('the agency portal', () => {
     await page.getByRole('button', { name: 'Toggle language' }).first().click()
   }
 
+  /**
+   * BUDGET-GOVERNANCE-001 — the PROJECT rung, in a real browser against real seeded money.
+   *
+   * The client table said a client was pacing and named no project responsible for it. The rung is
+   * the same roll-up at a finer grain, and a component test cannot tell whether the server actually
+   * sends `projects_breakdown` — which is the half of this that was missing.
+   *
+   * Skipped, not failed, when the seed has no client carrying a budget: an empty dataset is not a
+   * regression in the drill-down, and a test that cannot tell the two apart reports the wrong one.
+   */
+  test('a client budget names the projects the money is in', async ({ page }) => {
+    await page.goto('/agency')
+
+    const table = page.getByTestId('client-budgets')
+    if (await table.count() === 0) test.skip(true, 'no client carries a budget in this dataset')
+    await expect(table).toBeVisible()
+
+    const drill = table.getByRole('button').first()
+    if (await drill.count() === 0) test.skip(true, 'no client has a project holding money')
+
+    const name = (await drill.textContent())?.trim() ?? ''
+    await drill.click()
+
+    const projects = page.getByTestId('project-budgets')
+    await expect(projects).toBeVisible()
+    /* The panel names the client it decomposes, so two open panels cannot be confused. */
+    await expect(projects).toContainText(name)
+    await expect(projects.locator('tbody tr')).not.toHaveCount(0)
+  })
+
   test('every rail link opens a page that is not empty', async ({ page }) => {
     await page.goto('/agency')
     await expect(page.getByRole('navigation').first()).toBeVisible()

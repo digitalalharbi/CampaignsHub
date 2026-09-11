@@ -1731,7 +1731,7 @@ final class MetricsAggregator
             ? collect()
             : DB::table('unified_campaigns')
                 ->whereIn('id', $ids->all())
-                ->get(['id', 'name', 'total_budget', 'budget_currency', 'status']);
+                ->get(['id', 'project_id', 'name', 'total_budget', 'budget_currency', 'status']);
 
         $rows = [];
         foreach ($campaigns as $c) {
@@ -1791,6 +1791,12 @@ final class MetricsAggregator
 
             $rows[] = [
                 'campaign_id' => $c->id,
+                /*
+                 * The grain the caller groups by. A roll-up over several projects — the client rung —
+                 * would otherwise have to run this query once per project to learn which project a
+                 * campaign's money sits in, and the cost would grow with the agency.
+                 */
+                'project_id' => (string) $c->project_id,
                 'campaign_name' => $c->name,
                 'status' => $c->status,
                 'budget' => round($budget, 2),

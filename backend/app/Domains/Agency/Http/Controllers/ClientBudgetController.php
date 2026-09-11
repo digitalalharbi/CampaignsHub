@@ -53,30 +53,66 @@ final class ClientBudgetController extends Controller
          * One query for every project, grouped in memory — a per-client lookup would make this cost
          * grow with the number of clients, which is exactly what an agency has a lot of.
          */
-        $projectsByClient = Project::query()
+        $projects = Project::query()
             ->whereIn('client_workspace_id', $clients->pluck('id')->all())
-            ->get(['id', 'client_workspace_id'])
-            ->groupBy('client_workspace_id');
+            ->get(['id', 'client_workspace_id', 'name']);
+
+        /*
+         * ONE pacing query for the whole screen, grouped by the `project_id` the rows now carry.
+         *
+         * This ran once per client, under a comment claiming the opposite — an agency with forty
+         * clients paid forty times over for a screen that answers one question, and the per-project
+         * decomposition below would have multiplied that again. The campaigns of every client are
+         * paced together and split in memory afterwards.
+         */
+        $allProjectIds = $projects->pluck('id')->map(static fn (mixed $id): string => (string) $id)->all();
+
+        $pacingByProject = $allProjectIds === []
+            ? collect()
+            : collect(app(MetricsAggregator::class)->forProjects($allProjectIds)->budgetPacing($from, $to, Carbon::today()))
+                ->groupBy(static fn (array $r): string => (string) ($r['project_id'] ?? ''));
+
+        $projectsByClient = $projects->groupBy('client_workspace_id');
 
         $rows = [];
 
         foreach ($clients as $client) {
-            $projectIds = ($projectsByClient[$client->id] ?? collect())
-                ->pluck('id')->map(static fn (mixed $id): string => (string) $id)->all();
+            $clientProjects = $projectsByClient[$client->id] ?? collect();
 
             /*
              * A client with no projects reports itself with nothing rather than being dropped: an
              * agency reading this list is checking every client, and one that silently vanishes is
              * indistinguishable from one that is fine.
              */
-            $pacing = $projectIds === []
-                ? []
-                : app(MetricsAggregator::class)->forProjects($projectIds)->budgetPacing($from, $to, Carbon::today());
+            $pacing = $clientProjects
+                ->flatMap(static fn ($p): array => ($pacingByProject[(string) $p->id] ?? collect())->all())
+                ->all();
+
+            /*
+             * BUDGET-GOVERNANCE-001 — the PROJECT rung, the middle of the owner's hierarchy.
+             *
+             * The client rung reported a project COUNT and nothing else, so a client pacing at 1.4×
+             * named no project responsible for it. It is the SAME roll-up at a finer grain, so a
+             * client's total and the projects printed beneath it cannot disagree about the money.
+             *
+             * A project with no campaigns is left out: it is not a share of the client's budget, and
+             * a list of empty rows is what made the count useless in the first place.
+             */
+            $breakdown = $clientProjects
+                ->map(fn ($p): array => [
+                    'project_id' => (string) $p->id,
+                    'project_name' => $p->name,
+                ] + $this->rollup->of(($pacingByProject[(string) $p->id] ?? collect())->all()))
+                ->filter(static fn (array $r): bool => $r['campaigns'] > 0)
+                ->sortByDesc(static fn (array $r): float => (float) ($r['budget'] ?? -1))
+                ->values()
+                ->all();
 
             $rows[] = [
                 'client_id' => (string) $client->id,
                 'client_name' => $client->name,
-                'projects' => count($projectIds),
+                'projects' => $clientProjects->count(),
+                'projects_breakdown' => $breakdown,
             ] + $this->rollup->of($pacing);
         }
 
