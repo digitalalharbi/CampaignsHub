@@ -91,4 +91,26 @@ describe('the campaigns workspace', () => {
     expect(strip.getByText('تحتاج تدخلًا')).toBeInTheDocument()
     expect(strip.getByText('نشطة وتنفق')).toBeInTheDocument()
   })
+
+  /**
+   * And the movement block is on the OVERVIEW — where the reader is.
+   *
+   * It was written into the list branch, beside the filters, so the page this unit exists to
+   * strengthen never drew it. A full green suite said nothing, because no case rendered the overview
+   * and looked for it. This is that case, and it reads the source rather than a mocked payload for
+   * one reason: whether the block is INSIDE the overview branch is a property of the composition,
+   * true in every data state, and a render test would prove it only for the state it mocked.
+   */
+  it('draws the movement block inside the overview, not beside the filters', async () => {
+    const source = (await import('./CampaignsPage.tsx?raw')).default as string
+
+    const overview = source.indexOf("view === 'overview' ? (")
+    const listBranch = source.indexOf('Filters — search + taxonomy chips')
+    const movers = source.indexOf('data-testid="campaigns-movers"')
+
+    expect(overview).toBeGreaterThan(-1)
+    expect(listBranch).toBeGreaterThan(overview)
+    expect(movers, 'the movement block is not rendered at all').toBeGreaterThan(-1)
+    expect(movers, 'the movement block sits in the list branch, so the overview never draws it').toBeLessThan(listBranch)
+  })
 })
