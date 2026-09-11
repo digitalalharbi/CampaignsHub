@@ -43,7 +43,11 @@ final class InvitationController extends Controller
     public function index(Request $request): JsonResponse
     {
         abort_unless($request->user()->hasPermission('users.invite'), 403);
-        $rows = DB::table('workspace_invitations')->where('tenant_id', (string) $this->context->tenantId())
+        /* OPS-LEDGER-001 — the cap stays, and the response says what it left out. */
+        $scope = fn () => DB::table('workspace_invitations')->where('tenant_id', (string) $this->context->tenantId());
+        $total = $scope()->count();
+
+        $rows = $scope()
             ->orderByDesc('created_at')->limit(100)
             ->get(['id', 'email', 'role_slug', 'accepted_at', 'expires_at', 'created_at'])
             ->map(fn ($r) => [
@@ -52,7 +56,11 @@ final class InvitationController extends Controller
                 'expires_at' => $r->expires_at, 'created_at' => $r->created_at,
             ]);
 
-        return ApiResponse::success(['invitations' => $rows], 'Invitations retrieved.');
+        return ApiResponse::success([
+            'invitations' => $rows,
+            'invitations_total' => $total,
+            'invitations_withheld' => max(0, $total - $rows->count()),
+        ], 'Invitations retrieved.');
     }
 
     /** GET /invitations/{token} — public preview of an invitation. */

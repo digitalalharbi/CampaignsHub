@@ -382,6 +382,16 @@ function LogsDialog({
               </li>
             )
           })}
+          {/*
+            No silent caps. Two hundred runs are read, collapsed, then cut to fifty — and a list that
+            simply stops reads as «this is what the account has been doing» rather than «this is the
+            most recent fifty».
+          */}
+          {(logs.data?.runs_withheld ?? 0) > 0 && (
+            <li className="px-4 py-2 text-[11px] text-text-muted" data-testid="account-runs-withheld">
+              {`${logs.data?.runs.length} / ${logs.data?.runs_total}`}
+            </li>
+          )}
         </ul>
       )}
     </Dialog>
