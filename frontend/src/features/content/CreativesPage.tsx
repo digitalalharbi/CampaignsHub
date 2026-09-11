@@ -30,6 +30,7 @@ import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
 import { campaignStatusLabel, marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
+import { canonicalObjectiveLabel, type CanonicalObjectiveKey } from '@/features/campaigns/canonicalObjectives'
 
 /**
  * §15.2 — the Creative Library, in `/app` and `/agency`.
@@ -298,7 +299,7 @@ function primaryEfficiencyKey(headline: string[]): string | null {
  */
 const AXIS_KEYS = [
   'client_ids', 'project_ids', 'providers', 'campaign_ids', 'ad_set_ids',
-  'ad_ids', 'objectives', 'paths', 'kinds', 'statuses',
+  'ad_ids', 'objectives', 'kinds', 'statuses',
 ] as const
 
 const isoDaysAgo = (days: number) => {
@@ -444,7 +445,6 @@ export function CreativesPage() {
       ad_set_ids: axes.ad_set_ids,
       ad_ids: axes.ad_ids,
       objectives: axes.objectives,
-      paths: axes.paths,
       kinds: axes.kinds,
       statuses: axes.statuses,
     }),
@@ -570,8 +570,7 @@ export function CreativesPage() {
     const out: AppliedFilter[] = [
       ...forAxis('providers', t.platform, (p) => providerLabel(p, locale)),
       ...forAxis('kinds', t.kind, (k) => KIND_LABEL[k]?.[ar ? 'ar' : 'en'] ?? k),
-      ...forAxis('objectives', t.objective, (o) => objectiveLabel(o, locale)),
-      ...forAxis('paths', t.path, (p) => marketingPathLabel(p, locale)),
+      ...forAxis('objectives', t.objective, (o) => canonicalObjectiveLabel(o as CanonicalObjectiveKey, ar ? 'ar' : 'en')),
       ...forAxis('client_ids', t.client, (id) => nameOf(options?.clients, id)),
       ...forAxis('project_ids', t.project, (id) => nameOf(options?.projects, id)),
       ...forAxis('campaign_ids', t.campaign, (id) => nameOf(options?.campaigns, id)),
@@ -787,9 +786,24 @@ export function CreativesPage() {
             />
           </div>
             {multi('campaign_ids', t.campaign, (options?.campaigns ?? []).map((c) => ({ value: c.id, label: c.name })))}
-            {multi('objectives', t.objective, (options?.objectives ?? []).map((o) => ({ value: o, label: objectiveLabel(o, locale) })))}
-            {multi('paths', t.path, (options?.paths ?? []).map((p) => ({ value: p, label: marketingPathLabel(p, locale) })))}
-            {multi('kinds', t.kind, (options?.kinds ?? []).map((k) => ({ value: k, label: KIND_LABEL[k]?.[ar ? 'ar' : 'en'] ?? k })))}
+            {/*
+              CONTENT-FILTER-TRUTH-001 — the five PRODUCT objectives, with what each can reach.
+
+              This rendered the RAW list the server sent, so «التحويلات» sat beside «المبيعات» as a
+              competing choice and «المبيعات» narrowed to one raw value out of four. The «المسار
+              التسويقي» control that used to follow it is GONE: it was the same axis asked twice, and
+              Analytics removed it under ANALYTICS-OBJECTIVE-SYSTEM-001 while Content kept it.
+            */}
+            {multi('objectives', t.objective, (options?.objectives ?? []).map((o) => ({
+              value: o.key,
+              label: canonicalObjectiveLabel(o.key as CanonicalObjectiveKey, ar ? 'ar' : 'en'),
+              count: o.count,
+            })))}
+            {multi('kinds', t.kind, (options?.kinds ?? []).map((k) => ({
+              value: k.key,
+              label: KIND_LABEL[k.key]?.[ar ? 'ar' : 'en'] ?? k.key,
+              count: k.count,
+            })))}
 
             {/* Single-valued: a creative is in exactly one fatigue state, so «watch AND fatigued» is
                 not a question the server can be asked. */}
