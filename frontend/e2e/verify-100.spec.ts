@@ -378,8 +378,18 @@ test.describe('UX-DASH-001 — the advertiser dashboard', () => {
     const chip = page.getByTestId('dashboard-applied-objective:sales')
     await expect(chip, 'the page does not say what is narrowing it').toBeVisible({ timeout: 20000 })
 
-    // The KPI row follows the objective: a sales dashboard leads with what it sold.
-    await expect(page.getByTestId('metric-purchases')).toBeVisible({ timeout: 20000 })
+    /*
+      The narrowing reaches the FIGURES, not only the chip — asserted on the spend curve rather than
+      on an objective-led KPI card.
+
+      This read `metric-purchases`, on the rule that a sales dashboard leads with what it sold. The
+      Owner's correction replaced that row with four cards the reader picks, defaulting to Spend /
+      Impressions / Clicks / CTR, so the card is no longer there to find and the objective rule is
+      asserted on the analysis, where it still holds. What this case is actually for — that a chosen
+      filter changes the page and can be taken back — is unchanged, and the panel below the KPI row
+      is scoped by the same filters.
+    */
+    await expect(page.getByTestId('dashboard-overview')).toContainText(/الإنفاق والنتائج والإيرادات|Spend, results and revenue/i, { timeout: 20000 })
 
     await page.getByTestId('dashboard-reset').click()
     await expect(page.getByTestId('dashboard-applied')).toHaveCount(0)
