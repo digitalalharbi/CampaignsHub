@@ -19,6 +19,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class ClientActivityController
 {
+    /** How many entries the timeline shows after the merge. A cap that says so is not a silent one. */
+    private const SHOWN = 100;
+
     public function __construct(
         private readonly ClientAccess $access,
         private readonly TenantContext $tenant,
@@ -73,8 +76,33 @@ final class ClientActivityController
                 'related_entity' => ['type' => 'request', 'id' => $e->reference],
             ]);
 
-        $timeline = $audit->concat($events)->sortByDesc('time')->values()->take(100);
+        $timeline = $audit->concat($events)->sortByDesc('time')->values()->take(self::SHOWN);
 
-        return response()->json(['data' => ['timeline' => $timeline]]);
+        /*
+         * FILES-LIBRARY-001, on the sibling surface — how much history exists, not how much fitted.
+         *
+         * Three caps stood between the reader and the answer: two hundred audit rows, two hundred
+         * request events, and a hundred after the merge, with no count anywhere in the response. A
+         * client with four years of history showed a hundred entries and nothing said so, which
+         * reads as «this is what happened» rather than «this is the most recent hundred».
+         *
+         * Counted with the same predicates the lists use, minus the ordering and the caps.
+         */
+        $auditTotal = DB::table('audit_logs as a')
+            ->where('a.tenant_id', $tenantId)
+            ->whereIn('a.entity_id', $entityIds)
+            ->count();
+
+        $eventTotal = $requestIds === [] ? 0 : DB::table('request_events as e')
+            ->whereIn('e.request_id', $requestIds)
+            ->count();
+
+        $total = $auditTotal + $eventTotal;
+
+        return response()->json(['data' => [
+            'timeline' => $timeline,
+            'timeline_total' => $total,
+            'timeline_withheld' => max(0, $total - $timeline->count()),
+        ]]);
     }
 }

@@ -239,4 +239,10 @@ export interface ActivityItem {
   new: Record<string, unknown> | null
   related_entity: { type: string | null; id: string | null }
 }
-export const listClientActivity = (id: string) => getData<{ timeline: ActivityItem[] }>(`/app/clients/${id}/activity`)
+export const listClientActivity = (id: string) =>
+  getData<{
+    timeline: ActivityItem[]
+    /** How much history exists, which is not how much arrived — the endpoint shows the most recent hundred. */
+    timeline_total?: number
+    timeline_withheld?: number
+  }>(`/app/clients/${id}/activity`)

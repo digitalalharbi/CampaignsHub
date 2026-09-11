@@ -18,6 +18,10 @@ export interface LibraryFile {
 
 export interface FilesLibrary {
   files: LibraryFile[]
+  /** How many files exist, which is not how many arrived — the endpoint caps its response. */
+  files_total?: number
+  /** How many the cap left out. Zero when everything fitted. */
+  files_withheld?: number
   drive_links: number
 }
 
