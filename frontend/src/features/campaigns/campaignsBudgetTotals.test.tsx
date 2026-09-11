@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { CampaignsPage } from './CampaignsPage'
 import type { UnifiedCampaign } from './types'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
@@ -93,10 +93,21 @@ describe('the project budget card over withheld spend', () => {
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
 
     expect(await screen.findByText(/Spend unavailable — partial or multi-currency/)).toBeInTheDocument()
-    // Every wrong answer: the subset as the whole, the naive sum, and the coalesced zero.
-    expect(screen.queryByText(/1\.0K SAR spent/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/1\.5K SAR/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/0 SAR spent/)).not.toBeInTheDocument()
+
+    /*
+      Scoped to the TOTAL card, not the document — CAMPAIGNS-OVERVIEW-FIRST-001.
+
+      The page now opens on the overview, which draws the per-campaign pacing table beside this card,
+      and «1.0K SAR» is a correct figure THERE: it is what that one campaign spent. The claim being
+      guarded was always about the PROJECT total — «the subset as the whole, the naive sum, the
+      coalesced zero» — and a document-wide search stopped distinguishing the two the moment a
+      truthful per-row figure appeared on the same screen.
+    */
+    const total = within(await screen.findByTestId('campaigns-budget-total'))
+
+    expect(total.queryByText(/1\.0K SAR spent/)).not.toBeInTheDocument()
+    expect(total.queryByText(/1\.5K SAR/)).not.toBeInTheDocument()
+    expect(total.queryByText(/0 SAR spent/)).not.toBeInTheDocument()
   })
 
   it('states the platform figure in its own currency when every row is withheld and agrees', async () => {
