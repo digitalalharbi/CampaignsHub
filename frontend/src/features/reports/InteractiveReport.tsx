@@ -1256,7 +1256,17 @@ function BudgetSlide({ data }: { data: ReportData }) {
   const consumed = total.budget !== null && total.budget > 0 && total.spent !== null
     ? total.spent / total.budget
     : null
-  const bars = rows.map((r) => ({ label: providerLabel(canonicalPlatform(String(r.provider ?? '')), 'ar'), budget: Number(r.budget ?? 0), spent: Number(r.spent ?? 0) }))
+  /*
+   * A spend the contract withholds is not a bar of length zero.
+   *
+   * This coerced `r.spent ?? 0`, so a platform whose spend cannot be stated got a full budget bar
+   * beside an empty spend bar — «budgeted, spent nothing», which is the claim the ring above it
+   * stopped making. A row that cannot be drawn truthfully is left out and COUNTED, in the same place
+   * and the same words the ring uses for the rows it excluded.
+   */
+  const drawable = rows.filter((r) => typeof r.spent === 'number' && typeof r.budget === 'number')
+  const undrawable = rows.length - drawable.length
+  const bars = drawable.map((r) => ({ label: providerLabel(canonicalPlatform(String(r.provider ?? '')), 'ar'), budget: Number(r.budget), spent: Number(r.spent) }))
   return (
     <div>
       <Title sub="المخطط مقابل المصروف وسرعة الصرف">تحليل الميزانية</Title>
@@ -1283,6 +1293,11 @@ function BudgetSlide({ data }: { data: ReportData }) {
         </ChartCard>
         <ChartCard title="المخطط مقابل المصروف" className="lg:col-span-2">
           <RankingBarChart data={bars} bars={[{ key: 'budget', name: 'الميزانية', color: 'var(--border-strong)', kind: 'money' }, { key: 'spent', name: 'المصروف', color: 'var(--brand-600)', kind: 'money' }]} horizontal height={170} currency={data.currency} />
+          {undrawable > 0 && (
+            <p className="mt-1 text-[11px] text-text-muted" data-testid="report-bars-excluded">
+              {`${undrawable} منصة بلا مصروف معلن — غير مرسومة`}
+            </p>
+          )}
         </ChartCard>
       </div>
       {rows.length > 0 && (
