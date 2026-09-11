@@ -1651,6 +1651,14 @@ final class MetricsAggregator
                 'consumed_pct' => $hasCap ? round($spent / $cap, 4) : null,
                 'pace' => $hasCap && $elapsed > 0 ? round(($spent / $elapsed) / $cap, 3) : null,
                 'projected_spend' => $elapsed > 0 ? round($spent / $elapsed, 2) : round($spent, 2),
+                /*
+                 * The same three as the other rungs. The account rung paces against a CAP rather than
+                 * a plan, so they are withheld when no cap is set — «over by 4,000» against nothing
+                 * is not a figure.
+                 */
+                'expected_to_date' => $hasCap ? round($cap * $elapsed, 2) : null,
+                'daily_average' => $days > 0 ? round($spent / max(1, (int) round($elapsed * $days)), 2) : null,
+                'over_under' => $hasCap && $elapsed > 0 ? round(($spent / $elapsed) - $cap, 2) : null,
                 'campaigns' => (int) ($caps[$r->account_id]->campaigns ?? 0),
                 'capped_campaigns' => $cappedCampaigns,
             ];
@@ -1822,6 +1830,24 @@ final class MetricsAggregator
                 'pace' => $comparable && $expected > 0 ? round($spent / $expected, 3) : null, // >1 over-pacing
                 'projected_spend' => $projected !== null ? round($projected, 2) : null,
                 /*
+                 * BUDGET-GOVERNANCE-001 — three figures the owner's spreadsheet has, each answering
+                 * something the others cannot.
+                 *
+                 * `expected_to_date` is the number `pace` already divides BY: the product knew it and
+                 * never showed it, so a reader told «1.3×» could not check it or see which of the two
+                 * figures had moved. `daily_average` is what an operator multiplies by the days left
+                 * when deciding whether to intervene today or on Thursday. `over_under` is the overrun
+                 * in money — «projected 46,000» against a 40,000 plan makes the reader subtract, and
+                 * the difference IS the decision.
+                 *
+                 * All three withhold exactly where the row withholds. They are derived from the same
+                 * two figures, and a column stating a number the cell beside it refuses would be the
+                 * money contract broken by a new door.
+                 */
+                'expected_to_date' => $comparable ? round($expected, 2) : null,
+                'daily_average' => $comparable ? round($spent / $elapsedDays, 2) : null,
+                'over_under' => $comparable && $projected !== null ? round($projected - $budget, 2) : null,
+                /*
                  * Why pacing is absent, when it is. `comparable` — computed. `currency_mismatch` —
                  * the spend is real but denominated differently from the plan. `no_budget` — nobody
                  * set one. `partial`/`mixed_currency` — there is no single spend figure to pace at all.
@@ -1985,6 +2011,12 @@ final class MetricsAggregator
                 'projected_spend' => $spent !== null && $elapsedFraction > 0
                     ? round($spent / $elapsedFraction, 2)
                     : $spent,
+                /* The same three as the campaign rung, withheld on the same verdict — see there. */
+                'expected_to_date' => $comparable ? round($expected, 2) : null,
+                'daily_average' => $comparable ? round($spent / $elapsedDays, 2) : null,
+                'over_under' => $comparable && $elapsedFraction > 0
+                    ? round(($spent / $elapsedFraction) - $budget, 2)
+                    : null,
                 'pacing_basis' => $comparable
                     ? 'comparable'
                     : ($bucket['refusal'] ?? ($budget > 0 ? 'currency_mismatch' : 'no_budget')),
