@@ -338,22 +338,88 @@ final class AlertEvaluator
         $from = $now->copy()->subDays(30);
         $out = [];
 
-        UnifiedCampaign::query()->where('total_budget', '>', 0)
+        $campaigns = UnifiedCampaign::query()->where('total_budget', '>', 0)
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get()->each(function (UnifiedCampaign $c) use ($from, $now, $ratio, &$out) {
-                $spend = (float) $this->totalsFor((string) $c->id, $from, $now)['spend'];
-                $budget = (float) $c->total_budget;
-                if ($budget > 0 && $spend / $budget >= $ratio) {
-                    $out[] = [
-                        'entity_type' => UnifiedCampaign::class,
-                        'entity_id' => (string) $c->id,
-                        'project_id' => (string) $c->project_id,
-                        'title' => 'Budget at risk',
-                        'message' => $c->name.' has spent '.round($spend / $budget * 100).'% of its budget.',
-                        'context' => ['spend' => $spend, 'budget' => $budget, 'ratio' => round($spend / $budget, 4)],
-                    ];
-                }
-            });
+            ->get();
+
+        if ($campaigns->isEmpty()) {
+            return $out;
+        }
+
+        /*
+         * ALERTS-TRUTH-001 — the alert reads the money contract's verdict instead of dividing.
+         *
+         * This was `(float) $totals['spend'] / $c->total_budget`, and two failures sat in that one
+         * line, both already answered everywhere else in the product:
+         *
+         *   1. A spend the contract WITHHELD is null, and `(float) null` is 0.0 — so a campaign whose
+         *      platform reported in a currency with no dated rate could burn its whole budget in
+         *      silence. A missed warning reports nothing, which is exactly why it survived: nobody
+         *      sees an alert that was never raised.
+         *
+         *   2. The spend is in the PROJECT's currency and `total_budget` is in the CAMPAIGN's.
+         *      Dividing them divides riyals by dollars: 3,750 SAR against a 1,000 USD budget is
+         *      roughly on plan and reads as 375%.
+         *
+         * `budgetPacing()` states `consumed_pct` and REFUSES it, under a named `pacing_basis`, in
+         * precisely these cases — and it is one query for the whole scope rather than one per
+         * campaign. An unmeasurable budget raises its own alert rather than being silently skipped:
+         * the operator's budget protection does not cover that campaign, and that is the fact they
+         * need, not a percentage nobody can stand behind.
+         */
+        $projectIds = $campaigns->pluck('project_id')->unique()->map(fn (mixed $id): string => (string) $id)->values()->all();
+
+        $pacing = collect($this->metrics->forProjects($projectIds)->budgetPacing($from, $now, $now->copy()))
+            ->keyBy(fn (array $row): string => (string) $row['campaign_id']);
+
+        foreach ($campaigns as $c) {
+            $row = $pacing->get((string) $c->id);
+            if ($row === null) {
+                continue;
+            }
+
+            $consumed = $row['consumed_pct'] ?? null;
+            $basis = (string) ($row['pacing_basis'] ?? '');
+
+            if ($basis === 'no_budget') {
+                continue;
+            }
+
+            if ($consumed === null) {
+                $out[] = [
+                    'entity_type' => UnifiedCampaign::class,
+                    'entity_id' => (string) $c->id,
+                    'project_id' => (string) $c->project_id,
+                    'title' => 'Budget cannot be monitored',
+                    'message' => $c->name.' has a budget that cannot be compared to its spend ('.$basis.'), so it is not being watched.',
+                    'context' => [
+                        'basis_class' => 'unmeasurable',
+                        'pacing_basis' => $basis,
+                        'budget' => (float) $c->total_budget,
+                        'budget_currency' => $c->budget_currency,
+                        'message' => $c->name.' has a budget that cannot be compared to its spend ('.$basis.'), so it is not being watched.',
+                    ],
+                ];
+
+                continue;
+            }
+
+            if ((float) $consumed >= $ratio) {
+                $out[] = [
+                    'entity_type' => UnifiedCampaign::class,
+                    'entity_id' => (string) $c->id,
+                    'project_id' => (string) $c->project_id,
+                    'title' => 'Budget at risk',
+                    'message' => $c->name.' has spent '.round((float) $consumed * 100).'% of its budget.',
+                    'context' => [
+                        'basis_class' => 'measured',
+                        'spend' => $row['spent'],
+                        'budget' => $row['budget'],
+                        'ratio' => round((float) $consumed, 4),
+                    ],
+                ];
+            }
+        }
 
         return array_merge($out, $this->internalSpendLimits($rule, $now));
     }
