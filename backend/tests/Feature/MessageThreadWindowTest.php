@@ -269,6 +269,48 @@ final class MessageThreadWindowTest extends TestCase
         $this->assertCount(12, $response->json('data.messages'));
     }
 
+    /**
+     * The portal's LISTS carry the same honesty — a ceiling nobody is told about is a lie of omission.
+     *
+     * Every client-facing list was `->limit(200)->get()` and said nothing. The direction is the safe
+     * one, newest first, so what a client most likely wants is what they get; what was missing is any
+     * way to know the list had an end the server chose. A client with two hundred and forty invoices
+     * was shown two hundred and told they had two hundred.
+     *
+     * Threads are the list used here because this file already builds them, and the rule is the
+     * helper's rather than any one endpoint's: `capped()` counts on a clone of the query, so the total
+     * is the client's real total and not the length of the page.
+     */
+    public function test_a_client_list_reports_its_real_total_and_what_the_ceiling_withheld(): void
+    {
+        for ($i = 0; $i < 205; $i++) {
+            app(MessagingService::class)->openThread([
+                'tenant_id' => $this->tenant->id,
+                'client_workspace_id' => $this->client->id,
+                'subject' => "Thread {$i}",
+            ]);
+        }
+
+        $response = $this->withHeader('X-Client-Token', $this->portalLogin($this->contactEmail()))
+            ->getJson('/api/v1/client/messages')->assertOk();
+
+        $this->assertCount(200, $response->json('data.threads'));
+        $this->assertSame(205, $response->json('data.total'), 'the total is the page length, not the client\'s own total');
+        $this->assertSame(5, $response->json('data.withheld'));
+    }
+
+    /** And a list inside the ceiling withholds nothing — the note must not appear on every short list. */
+    public function test_a_short_client_list_withholds_nothing(): void
+    {
+        $this->longThread(1);
+
+        $response = $this->withHeader('X-Client-Token', $this->portalLogin($this->contactEmail()))
+            ->getJson('/api/v1/client/messages')->assertOk();
+
+        $this->assertSame(1, $response->json('data.total'));
+        $this->assertSame(0, $response->json('data.withheld'));
+    }
+
     /** A short thread is not a truncated one — it must report nothing withheld. */
     public function test_a_short_thread_withholds_nothing(): void
     {

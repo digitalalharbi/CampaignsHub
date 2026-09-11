@@ -42,9 +42,14 @@ export function ClientDashboardPage() {
 
   const requestRows = requests.data?.requests ?? []
   const openRequests = requestRows.filter((r) => !OPEN_REQUEST_CLOSED.includes(r.status)).length
-  const pendingQuotes = (quotes.data ?? []).filter((q) => ['draft', 'sent'].includes(q.status)).length
-  const unpaidInvoices = (invoices.data ?? []).filter((i) => ['unpaid', 'partially_paid'].includes(i.payment_status)).length
-  const unreadMessages = (threads.data ?? []).reduce((sum, th) => sum + (th.unread ?? 0), 0)
+  /*
+    `.items`, because each list now arrives with what the server's two-hundred-row ceiling withheld.
+    These counts are read off the page the client was actually shown, which is the honest thing for a
+    summary tile to say: «four unpaid invoices» means four in what you can see.
+  */
+  const pendingQuotes = (quotes.data?.items ?? []).filter((q) => ['draft', 'sent'].includes(q.status)).length
+  const unpaidInvoices = (invoices.data?.items ?? []).filter((i) => ['unpaid', 'partially_paid'].includes(i.payment_status)).length
+  const unreadMessages = (threads.data?.items ?? []).reduce((sum, th) => sum + (th.unread ?? 0), 0)
 
   const recent = requestRows.slice(0, 5)
   const loading = requests.isLoading || quotes.isLoading || invoices.isLoading || threads.isLoading

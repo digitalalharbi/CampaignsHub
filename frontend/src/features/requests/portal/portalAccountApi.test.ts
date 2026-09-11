@@ -20,10 +20,19 @@ describe('portalAccountApi — response mapping', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('unwraps the quotes list from its envelope key', async () => {
-    mockGet.mockResolvedValue({ quotes: [{ id: 'q1' }] })
+    /*
+      The rows AND the ceiling: the server caps every portal list at two hundred, and the counts now
+      travel with the page so the client can be told when their history is longer than what they see.
+      `undefined` for a response that carries no counts, never `0` — a page that cannot tell must say
+      nothing rather than «nothing was withheld».
+    */
+    mockGet.mockResolvedValue({ quotes: [{ id: 'q1' }], total: 205, withheld: 5 })
     const out = await listPortalQuotes()
     expect(getData).toHaveBeenCalledWith('/client/quotes')
-    expect(out).toEqual([{ id: 'q1' }])
+    expect(out).toEqual({ items: [{ id: 'q1' }], total: 205, withheld: 5 })
+
+    mockGet.mockResolvedValue({ quotes: [{ id: 'q1' }] })
+    expect(await listPortalQuotes()).toEqual({ items: [{ id: 'q1' }], total: undefined, withheld: undefined })
   })
 
   it('unwraps a single quote and encodes the id', async () => {
@@ -48,8 +57,8 @@ describe('portalAccountApi — response mapping', () => {
   })
 
   it('unwraps invoices list', async () => {
-    mockGet.mockResolvedValue({ invoices: [{ id: 'i1' }] })
-    expect(await listPortalInvoices()).toEqual([{ id: 'i1' }])
+    mockGet.mockResolvedValue({ invoices: [{ id: 'i1' }], total: 1, withheld: 0 })
+    expect(await listPortalInvoices()).toEqual({ items: [{ id: 'i1' }], total: 1, withheld: 0 })
   })
 
   it('unwraps the payment and preserves the HONEST awaiting-provider state', async () => {
@@ -60,8 +69,8 @@ describe('portalAccountApi — response mapping', () => {
   })
 
   it('unwraps threads list and posts new thread / reply with the right bodies', async () => {
-    mockGet.mockResolvedValue({ threads: [{ id: 't1' }] })
-    expect(await listPortalThreads()).toEqual([{ id: 't1' }])
+    mockGet.mockResolvedValue({ threads: [{ id: 't1' }], total: 1, withheld: 0 })
+    expect(await listPortalThreads()).toEqual({ items: [{ id: 't1' }], total: 1, withheld: 0 })
 
     mockPost.mockResolvedValue({ thread: { id: 't2' } })
     expect(await openPortalThread('Hi', 'Body')).toEqual({ id: 't2' })
