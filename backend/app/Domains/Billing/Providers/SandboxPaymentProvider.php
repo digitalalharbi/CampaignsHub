@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Billing\Providers;
 
+use App\Support\Frontend;
 use Illuminate\Support\Str;
 
 /**
@@ -78,7 +79,23 @@ final class SandboxPaymentProvider implements PaymentProvider
              * parameter — the charge was then looked up by a key that did not exist and the page
              * answered 404 for a payment that was perfectly real.
              */
-            'checkout_url' => rtrim((string) config('app.url'), '/')
+            /*
+             * AUTH-SESSION-RACE-OBS — the SPA's origin, not the API's.
+             *
+             * This was `config('app.url')`, and a customer NAVIGATES here: the «Pay now» button is
+             * rendered by `SandboxCheckoutController`, not by the SPA. Where the API and the SPA are
+             * different hosts — the deployed shape, and the gate's — that navigation handed the
+             * browser a session cookie on the API's host and brought it back, so one journey ended
+             * holding two sessions and `/auth/me` carried whichever the jar offered. The observation
+             * read as a race for weeks because the symptom moved between browsers; the cookie
+             * DOMAINS are what turned it into a mechanism.
+             *
+             * The SPA proxies `/api`, so the endpoint is reached either way. What changes is whose
+             * cookie jar is written — the same correction `ShortLinkHops::shareUrl()` already
+             * carries, for the same reason: a URL a PERSON follows belongs on the origin the person
+             * is already on.
+             */
+            'checkout_url' => Frontend::origin()
                 .'/api/v1/payments/sandbox?ref='.rawurlencode($reference),
             'error' => null,
         ];

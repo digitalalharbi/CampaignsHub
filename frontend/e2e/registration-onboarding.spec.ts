@@ -246,6 +246,33 @@ async function payThroughSandbox(page: import('@playwright/test').Page) {
   await page.getByTestId('registration-pay').click()
   await page.getByTestId('sandbox-pay').click({ timeout: 20000 })
 
+  /*
+   * AUTH-SESSION-RACE-OBS — and the journey is still on ONE host afterwards.
+   *
+   * The gateway page is server-rendered, so this step is a real navigation. It used to be built
+   * from `APP_URL`, which in this gate is the API's host while the SPA is another — so paying wrote
+   * a second session cookie on a second host, and `/auth/me` afterwards carried whichever the jar
+   * offered. That is the mechanism behind the «401 on a login that answered 200» signature, and it
+   * read as a race for weeks because the symptom moved between browsers.
+   *
+   * Asserted on the COOKIE JAR rather than on the URL: the URL is one spelling of the cause, and a
+   * future link built from the wrong origin would break this the same way. One session name on more
+   * than one host is the defect, whatever produced it.
+   */
+  const jars = new Map<string, Set<string>>()
+  for (const c of await page.context().cookies()) {
+    if (!/session|XSRF/i.test(c.name)) continue
+    if (!jars.has(c.name)) jars.set(c.name, new Set())
+    jars.get(c.name)!.add(c.domain)
+  }
+
+  for (const [name, domains] of jars) {
+    expect(
+      [...domains],
+      `${name} is held for more than one host — paying moved the browser off the SPA's origin, so this journey now has two sessions`,
+    ).toHaveLength(1)
+  }
+
   // The gateway sends the customer back to their own status page, which reads the state from the
   // server — so an event that had been refused would land them on an unpaid application, not a
   // page telling them it worked.
