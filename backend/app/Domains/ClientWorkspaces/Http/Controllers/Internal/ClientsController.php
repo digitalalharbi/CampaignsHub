@@ -44,6 +44,33 @@ final class ClientsController
             ->when($request->boolean('needs_attention'), fn ($q) => $q->where('client_status', 'needs_attention'))
             ->when($request->filled('q'), fn ($q) => $q->where('name', 'like', '%'.$request->string('q').'%'));
 
+        /*
+         * FILTER-DATA-TRUTH-001 — these two narrow the QUERY, not the page.
+         *
+         * They ran after `paginate()`, over the twenty-four rows already returned, so they did not
+         * select clients: they selected among whichever clients page one happened to hold. A client
+         * with active campaigns at position 30 was invisible, and paging forward showed a different
+         * arbitrary subset because the cut came first. `meta.total` stayed the UNFILTERED count, so
+         * the screen read «137 clients» above a list of three and offered pages that render empty.
+         *
+         * `whereExists` keeps it to one query — the counts these filters read are the same rows
+         * `ClientPortfolioStats` groups for display, so no N+1 is introduced and the page, the count
+         * and the pager now describe one set of clients.
+         */
+        if ($request->boolean('has_active_campaigns')) {
+            $query->whereExists(fn ($q) => $q->from('unified_campaigns')
+                ->whereColumn('unified_campaigns.client_workspace_id', 'client_workspaces.id')
+                ->where('unified_campaigns.status', '!=', 'draft')
+                ->whereNull('unified_campaigns.deleted_at'));
+        }
+
+        if ($request->boolean('has_open_requests')) {
+            $query->whereExists(fn ($q) => $q->from('external_requests as r')
+                ->join('request_statuses as s', 's.id', '=', 'r.status_id')
+                ->whereColumn('r.client_id', 'client_workspaces.id')
+                ->where('s.is_terminal', false));
+        }
+
         // Archived are hidden unless explicitly requested (archive is a pause, not a delete).
         if (! $request->boolean('include_archived')) {
             $query->whereNull('archived_at');
@@ -61,14 +88,7 @@ final class ClientsController
         $items = collect($page->items())->all();
         $statsMap = $this->stats->forClients(array_map(fn (ClientWorkspace $c) => (string) $c->id, $items));
 
-        // Post-filters that depend on computed stats (open requests / active campaigns present).
         $rows = collect($items)->map(fn (ClientWorkspace $c) => $this->card($c, $statsMap[$c->id] ?? []));
-        if ($request->boolean('has_open_requests')) {
-            $rows = $rows->filter(fn ($r) => $r['open_requests'] > 0)->values();
-        }
-        if ($request->boolean('has_active_campaigns')) {
-            $rows = $rows->filter(fn ($r) => $r['active_campaigns'] > 0)->values();
-        }
 
         return response()->json([
             'data' => $rows->all(),
