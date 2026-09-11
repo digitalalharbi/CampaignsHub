@@ -1,4 +1,4 @@
-import { ensureCsrfCookie, getData, postData } from '@/lib/api/client'
+import { ensureCsrfCookie, getData, getEnvelope, postData } from '@/lib/api/client'
 import { api } from '@/lib/api/client'
 import type { ApiEnvelope } from '@/lib/api/types'
 
@@ -128,9 +128,24 @@ export async function removeProjectMember(projectId: string, membershipId: strin
   return res.data.data
 }
 
-/** Project-scoped tasks (change when the active project changes). */
-export function listProjectTasks(projectId: string): Promise<ProjectTask[]> {
-  return getData<ProjectTask[]>(`/projects/${projectId}/tasks`)
+export interface ProjectTaskCard {
+  tasks: ProjectTask[]
+  /** How many the project actually has, so a card showing five never reads as a project with five. */
+  total: number
+}
+
+/**
+ * Project-scoped tasks (change when the active project changes).
+ *
+ * TASKS-LEDGER-001 — the tasks endpoint is paginated now, and this is a CARD, not the ledger. It
+ * asks for a handful deliberately and is told the total, because a list that quietly stops at the
+ * page boundary is indistinguishable from a project with that many tasks.
+ */
+export async function listProjectTasks(projectId: string): Promise<ProjectTaskCard> {
+  const res = await getEnvelope<ProjectTask[]>(`/projects/${projectId}/tasks?per_page=5`)
+  const tasks = res.data ?? []
+
+  return { tasks, total: Number((res.meta as { total?: number } | undefined)?.total ?? tasks.length) }
 }
 
 export function listClientWorkspaces(): Promise<ClientWorkspace[]> {
