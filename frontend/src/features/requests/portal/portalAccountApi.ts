@@ -89,8 +89,25 @@ export interface PortalQuote {
   created_at: string | null
 }
 
-export const listPortalQuotes = async (): Promise<PortalQuote[]> =>
-  (await getData<{ quotes: PortalQuote[] }>('/client/quotes')).quotes
+/**
+ * A client-facing list, and the truth about the ceiling the server renders it under.
+ *
+ * Every portal list is capped at two hundred rows, newest first. The direction is the safe one, but
+ * the cap used to be invisible: a client with two hundred and forty invoices was shown two hundred
+ * and given no way to know there were more. `withheld` is what the ceiling kept back, and it is
+ * OPTIONAL because a response cached from before the server sent it must read as unknown rather than
+ * as «nothing withheld» — the same false reassurance the silent cap gave.
+ */
+export interface PortalList<T> {
+  items: T[]
+  total?: number
+  withheld?: number
+}
+
+export const listPortalQuotes = async (): Promise<PortalList<PortalQuote>> => {
+  const d = await getData<{ quotes: PortalQuote[]; total?: number; withheld?: number }>('/client/quotes')
+  return { items: d.quotes, total: d.total, withheld: d.withheld }
+}
 
 export const getPortalQuote = async (id: string): Promise<PortalQuote> =>
   (await getData<{ quote: PortalQuote }>(`/client/quotes/${encodeURIComponent(id)}`)).quote
@@ -123,8 +140,10 @@ export interface PortalInvoice {
   paid_at: string | null
 }
 
-export const listPortalInvoices = async (): Promise<PortalInvoice[]> =>
-  (await getData<{ invoices: PortalInvoice[] }>('/client/invoices')).invoices
+export const listPortalInvoices = async (): Promise<PortalList<PortalInvoice>> => {
+  const d = await getData<{ invoices: PortalInvoice[]; total?: number; withheld?: number }>('/client/invoices')
+  return { items: d.invoices, total: d.total, withheld: d.withheld }
+}
 
 export const getPortalInvoice = async (id: string): Promise<PortalInvoice> =>
   (await getData<{ invoice: PortalInvoice }>(`/client/invoices/${encodeURIComponent(id)}`)).invoice
@@ -167,8 +186,10 @@ export interface PortalMessage {
   read_by_client_at: string | null
 }
 
-export const listPortalThreads = async (): Promise<PortalThread[]> =>
-  (await getData<{ threads: PortalThread[] }>('/client/messages')).threads
+export const listPortalThreads = async (): Promise<PortalList<PortalThread>> => {
+  const d = await getData<{ threads: PortalThread[]; total?: number; withheld?: number }>('/client/messages')
+  return { items: d.threads, total: d.total, withheld: d.withheld }
+}
 
 /**
  * The thread, the window of it this reader is shown, and the truth about what the window left out.

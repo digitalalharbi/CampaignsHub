@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, ScrollText } from 'lucide-react'
 import { listPortalQuotes, formatDate, formatMoney, type PortalQuote } from './portalAccountApi'
 import { PortalShell } from './PortalShell'
+import { PortalListCeiling } from './PortalListCeiling'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { usePortalGuard } from './usePortalGuard'
 import { useUi } from '@/stores/ui'
@@ -41,7 +42,7 @@ export function ClientQuotesPage() {
   const q = useQuery({ queryKey: ['client', 'quotes'], queryFn: listPortalQuotes, retry: false })
   usePortalGuard(q.isError, q.error)
 
-  const rows = q.data ?? []
+  const rows = q.data?.items ?? []
 
   return (
     <PortalShell title={t.title} nav showLogout>
@@ -61,6 +62,8 @@ export function ClientQuotesPage() {
           {rows.map((quote) => <QuoteCard key={quote.id} quote={quote} ar={ar} t={t} />)}
         </div>
       )}
+
+      <PortalListCeiling withheld={q.data?.withheld} total={q.data?.total} ar={ar} />
     </PortalShell>
   )
 }

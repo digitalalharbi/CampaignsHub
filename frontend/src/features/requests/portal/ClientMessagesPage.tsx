@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowRight, Loader2, MessagesSquare, Plus, Send, X } from 'lucide-react'
 import { listPortalThreads, openPortalThread, formatDate, type PortalThread } from './portalAccountApi'
 import { PortalShell } from './PortalShell'
+import { PortalListCeiling } from './PortalListCeiling'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { usePortalGuard } from './usePortalGuard'
 import { toApiError } from '@/lib/api/client'
@@ -48,7 +49,7 @@ export function ClientMessagesPage() {
     onError: (e) => setCreateError(toApiError(e).message || t.create_error),
   })
 
-  const rows = q.data ?? []
+  const rows = q.data?.items ?? []
 
   return (
     <PortalShell title={t.title} nav showLogout>
@@ -93,6 +94,8 @@ export function ClientMessagesPage() {
           {rows.map((th) => <ThreadRow key={th.id} th={th} unreadLabel={t.unread} />)}
         </ul>
       )}
+
+      <PortalListCeiling withheld={q.data?.withheld} total={q.data?.total} ar={ar} />
     </PortalShell>
   )
 }
