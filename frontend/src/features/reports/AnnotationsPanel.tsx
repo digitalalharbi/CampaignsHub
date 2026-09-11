@@ -54,6 +54,18 @@ export function AnnotationsPanel({ projectId, reportId }: { projectId: string; r
           )
         })}
       </div>
+      {/*
+        SAVE-FAILURE-TRUTH-001 — a refused decision is said where it was taken.
+
+        The approve / reject / hide buttons had no error surface: a refusal re-enabled them and left
+        the badge showing the OLD status, which reads as «I mis-clicked» rather than «the server said
+        no». On a panel that decides what a client sees, that is the wrong thing to leave ambiguous.
+      */}
+      {set.isError && (
+        <p className="mt-2 text-xs font-semibold text-danger" data-testid="annotation-decision-failed">
+          تعذّر حفظ القرار — لم تتغيّر الحالة.
+        </p>
+      )}
     </div>
   )
 }
