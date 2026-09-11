@@ -320,13 +320,24 @@ final class SignedMediaUrlTest extends TestCase
             static fn () => ExternalCreative::withoutGlobalScopes()->whereRaw('1 = 0'),
         );
 
+        /*
+         * The KEYS — each option now carries its reachable count beside it (CONTENT-FILTER-TRUTH-001),
+         * so «never show a selectable option known to reach nothing without disabling or stating it»
+         * has something to state. The vocabulary claim this case makes is unchanged: the list is
+         * closed and complete, whatever happens to be synced.
+         */
+        $keys = array_column($options['kinds'], 'key');
+
         foreach (['image', 'video', 'carousel', 'collection', 'catalog'] as $kind) {
             $this->assertContains(
                 $kind,
-                $options['kinds'],
+                $keys,
                 "the picker has no word for «{$kind}», so every ad of that shape is invisible to it",
             );
         }
+
+        /* And on an empty scope every one of them reaches nothing, said rather than implied. */
+        $this->assertSame([0, 0, 0, 0, 0], array_column($options['kinds'], 'count'));
     }
 
     /** @return array<string, mixed> */
