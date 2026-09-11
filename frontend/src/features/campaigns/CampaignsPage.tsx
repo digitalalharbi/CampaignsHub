@@ -17,6 +17,7 @@ import type { MetricReading } from '@/components/ui/MetricStrip'
 import { campaignRelevance, type CampaignRelevance } from './campaignRelevance'
 import { bandCounts, byPriority, type CampaignBand } from './campaignPriority'
 import { movers } from './campaignMovers'
+import { objectiveMix } from './objectiveMix'
 import { campaignState } from './campaignState'
 import { landingAnswer } from './campaignsLanding'
 
@@ -447,6 +448,23 @@ export function CampaignsPage() {
     [visibleCampaigns, metricsByCampaign],
   )
 
+  /*
+   * CAMPAIGNS-OVERVIEW-FIRST-001 — how the portfolio's money splits across what it is FOR.
+   *
+   * The overview could say what was spent and which platform took it; it could not say how much was
+   * buying sales and how much was buying awareness, which is the composition question a review
+   * actually asks. Deliberately NOT the conversion funnel — Analytics draws that, and «Analytics must
+   * go materially deeper, not the same blocks reordered» is a standing rule. A funnel decomposes one
+   * journey; this decomposes the portfolio.
+   */
+  const mix = useMemo(
+    () => objectiveMix(
+      (metricCampaigns.data ?? []) as Parameters<typeof objectiveMix>[0],
+      summary.data?.currency ?? null,
+    ),
+    [metricCampaigns.data, summary.data?.currency],
+  )
+
   const bands = useMemo(
     () => bandCounts(orderedCampaigns, range.to),
     [orderedCampaigns, range.to],
@@ -678,6 +696,52 @@ export function CampaignsPage() {
                     : <div className="flex h-[190px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'استهلاك الميزانية غير متاح — المصروف بمبالغ جزئية أو بعملة مختلفة عن الميزانية' : 'Budget consumption unavailable — spend is partial or in a different currency'}</div>}
             </ChartCard>
           </div>
+          {mix !== null && mix.rows.length > 0 && (
+            <div data-testid="campaigns-objective-mix" className="rounded-2xl border border-border bg-surface p-4">
+              <h3 className="mb-3 text-sm font-bold text-text-primary">{ar ? 'الإنفاق حسب الهدف' : 'Spend by objective'}</h3>
+
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-xs text-text-muted">
+                    <th className="p-2 text-start">{ar ? 'الهدف' : 'Objective'}</th>
+                    <th className="p-2 text-end">{ar ? 'الحملات' : 'Campaigns'}</th>
+                    <th className="p-2 text-end">{ar ? 'الإنفاق' : 'Spend'}</th>
+                    <th className="p-2 text-end">{ar ? 'النتائج' : 'Results'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mix.rows.map((r) => (
+                    <tr key={r.key} data-testid={`campaigns-objective-${r.key}`} className="border-b border-border last:border-0">
+                      <td className="p-2 font-semibold text-text-primary">{canonicalObjectiveLabel(r.key, ar ? 'ar' : 'en')}</td>
+                      {/* `tnum` on the SPAN, not the cell: on the cell it sets the direction too, and
+                          RTL figures slide out from under their own heading. */}
+                      <td className="p-2 text-end text-text-secondary"><span className="tnum" dir="ltr">{r.campaigns}</span></td>
+                      {/* «—», never a zero: a total nobody could compute is not a total of nothing. */}
+                      <td className="p-2 text-end text-text-primary">
+                        {r.spend === null
+                          ? <span className="text-text-muted">—</span>
+                          : <span className="tnum" dir="ltr">{money(r.spend, mix.currency ?? undefined)}</span>}
+                      </td>
+                      <td className="p-2 text-end text-text-secondary"><span className="tnum" dir="ltr">{num(r.results)}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {(mix.dropped > 0 || mix.unclassified > 0) && (
+                <p data-testid="campaigns-objective-mix-note" className="mt-2 text-xs text-text-muted">
+                  {/*
+                    What this table could NOT place, said rather than dropped. A composition that
+                    quietly omits rows reads as the whole portfolio.
+                  */}
+                  {ar
+                    ? `${mix.dropped > 0 ? `${countedCampaigns(mix.dropped, 'ar')} بمبالغ غير قابلة للجمع. ` : ''}${mix.unclassified > 0 ? `${countedCampaigns(mix.unclassified, 'ar')} بهدف خارج التصنيف.` : ''}`
+                    : `${mix.dropped > 0 ? `${countedCampaigns(mix.dropped, 'en')} could not be added to this total. ` : ''}${mix.unclassified > 0 ? `${countedCampaigns(mix.unclassified, 'en')} carry an objective outside the taxonomy.` : ''}`}
+                </p>
+              )}
+            </div>
+          )}
+
           {(movement.up.length > 0 || movement.down.length > 0) && (
             <div data-testid="campaigns-movers" className="grid gap-3 lg:grid-cols-2">
               {([['up', movement.up], ['down', movement.down]] as const).map(([dir, rows]) => (
