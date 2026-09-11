@@ -2324,6 +2324,9 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
    * the CAMPAIGN's objective through its own axis, and mapping the metric filter onto it would
    * narrow twice for one choice.
    */
+  /* The content item whose preview is open — one at a time, closed by the dialog itself. */
+  const [openCreative, setOpenCreative] = useState<CreativeCard | null>(null)
+
   const q = useQuery({
     queryKey: [
       'analytics', 'creatives', projectId, range.from, range.to, filters.provider, filters.campaign,
@@ -2438,7 +2441,34 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
               ar ? 'آخر نشاط' : 'Last active',
             ]}
             rows={rows.map((cr) => [
-              <span key={cr.id} className="block max-w-56 truncate font-medium text-text-primary">{cr.name}</span>,
+              /*
+                ANALYTICS-CONTENT-PREVIEW-001 — the content item, SHOWN.
+                *
+                * The column printed a name. On the one tab whose entire question is «which creative
+                * did best», a reader could not see the creative — and this row already arrives from
+                * the LIBRARY's own payload (`listCreatives`), so the poster was in hand and simply
+                * never drawn.
+                *
+                * `AdPoster` reads the row's OWN `preview` — the envelope the server already computed
+                * through `CreativePresenter` — and the dialog below is the one the Content library
+                * opens. A second preview reader here would be a second answer to «what does this ad
+                * look like», which is the defect AD-PREVIEW-001 spent three units removing.
+              */
+              <button
+                key={cr.id}
+                type="button"
+                data-testid={`analytics-creative-${cr.id}`}
+                onClick={() => setOpenCreative(cr)}
+                className="flex items-center gap-2 text-start hover:text-brand-600"
+              >
+                <AdPoster
+                  preview={cr.preview}
+                  name={cr.name ?? ''}
+                  className="h-9 w-9 shrink-0 rounded-md"
+                  testid={`analytics-creative-poster-${cr.id}`}
+                />
+                <span className="block max-w-44 truncate font-medium text-text-primary">{cr.name}</span>
+              </button>,
               <span key={`${cr.id}-c`} className="block max-w-40 truncate text-text-secondary">{cr.campaign_name ?? '—'}</span>,
               cr.objective ?? '—',
               rowMoney(cr.metrics ?? undefined, 'spend', currency),
@@ -2461,6 +2491,35 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
             initialSort={{ column: 3, dir: 'desc' }}
           />
         </div>
+
+        {/*
+          The canonical dialog, with THIS table's own figures.
+
+          `figures` is the row as the surface already formatted it, so the modal cannot disagree with
+          the line the reader clicked — the dialog does not re-derive a single number.
+        */}
+        {openCreative !== null && (
+          <AdPreviewDialog
+            creative={openCreative}
+            locale={ar ? 'ar' : 'en'}
+            figures={[
+              { label: ar ? 'الإنفاق' : 'Spend', value: rowMoney(openCreative.metrics ?? undefined, 'spend', currency) },
+              { label: ar ? 'الظهور' : 'Impressions', value: countCell(openCreative.metrics?.impressions ?? null).text },
+              { label: ar ? 'النقرات' : 'Clicks', value: countCell(openCreative.metrics?.clicks ?? null).text },
+              { label: 'CTR', value: rateOrDash(openCreative.metrics?.ctr ?? null) },
+              /*
+                CPC and CPM go through the same `rateOrDash`/money readers the row uses, and a figure
+                the provider never sent stays «—». `rowMoney` is deliberately not used for them: it
+                reads the money CONTRACT's spend/revenue envelope, and a cost-per is a derived ratio
+                rather than an amount with its own withheld provenance.
+              */
+              { label: 'CPC', value: rateOrDash(openCreative.metrics?.cpc ?? null) },
+              { label: 'CPM', value: rateOrDash(openCreative.metrics?.cpm ?? null) },
+            ]}
+            detailsTo={`/app/content/${openCreative.id}`}
+            onClose={() => setOpenCreative(null)}
+          />
+        )}
       </Panel>
 
       {/*
