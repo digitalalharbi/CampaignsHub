@@ -818,6 +818,19 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
   const leaders = useObjectiveLeaders(projectId, range, filters)
   const explanations = useObjectiveExplanations(projectId, range, filters)
   const summary = useSummary(projectId, range, filters)
+  /*
+   * ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — «what moved between the platforms», on the platforms tab.
+   *
+   * Every other drill-down tab leads with its own decomposition — campaigns, ad squads, objectives,
+   * accounts — and the one tab actually about platforms did not have it, while the endpoint has
+   * answered `by=provider` all along. A platform total that is flat can hide one platform collapsing
+   * as another rises, which is the thing this reader opened the tab to see.
+   *
+   * It reads the page's filters like every other panel, so setting the objective chip turns it into
+   * «within this path, which platform moved» — the per-path reading, through composition rather than
+   * a second endpoint that would answer the same question differently.
+   */
+  const platformDrivers = useDrivers(projectId, range, 'provider', 'spend', filters)
   /* The same rows the data-quality tab reads — the comparison is made here, so the gaps are said here. */
   const freshness = useFreshness(projectId, range, filters)
 
@@ -839,6 +852,14 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
         answered for the whole account in silence.
       */}
       <ScopeNote scope={byPath.data?.scope} testid="platform-objectives-scope" />
+      <ChangeDiagnosis
+        data={platformDrivers.data}
+        currency={summary.data?.currency ?? null}
+        loading={platformDrivers.isPending}
+        error={platformDrivers.isError}
+        title={ar ? 'ما الذي تغيّر بين المنصات' : 'What moved between the platforms'}
+      />
+
       <PlatformPaths
         data={byPath.data?.value}
         freshness={freshness.data?.rows ?? []}
