@@ -128,9 +128,8 @@ const empty = { items: [], total: 0, shown: 0 }
 const available = {
   providers: ['meta', 'tiktok'],
   campaigns: [{ id: 'c1', name: 'National Day Sale', objective: 'sales' }],
-  objectives: ['sales', 'awareness'],
-  paths: ['awareness', 'traffic', 'conversion'],
-  kinds: ['image', 'video', 'carousel'],
+  objectives: [{ key: 'sales', count: 4 }, { key: 'awareness_engagement', count: 2 }, { key: 'traffic', count: 0 }, { key: 'leads', count: 1 }, { key: 'app_promotion', count: 0 }],
+  kinds: [{ key: 'image', count: 3 }, { key: 'video', count: 5 }, { key: 'carousel', count: 1 }, { key: 'collection', count: 0 }, { key: 'catalog', count: 0 }],
   earliest: '2026-07-08',
   latest: '2026-08-06',
 }
@@ -141,6 +140,7 @@ const applied = {
   providers: [],
   campaign_ids: [],
   objectives: [],
+  /* The operator's stored narrowing is still part of the applied set — it is only no longer a control. */
   paths: [],
   kinds: [],
   search: '',

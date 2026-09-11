@@ -1342,14 +1342,28 @@ final class CreativeAnalysisController extends Controller
     /** The values the filters can actually take for THIS project, under THIS caller's reach. */
     private function filterOptions(Request $request, ?string $project): array
     {
-        return $this->rows->filterOptions(function () use ($request, $project) {
-            $q = ExternalCreative::query();
-            if ($project !== null) {
-                $q->where('project_id', $project);
-            }
-            $this->applyReach($q, $request);
+        return $this->rows->filterOptions(
+            function () use ($request, $project) {
+                $q = ExternalCreative::query();
+                if ($project !== null) {
+                    $q->where('project_id', $project);
+                }
+                $this->applyReach($q, $request);
 
-            return $q;
-        });
+                return $q;
+            },
+            /*
+             * CONTENT-FILTER-TRUTH-001 — the options describe the CURRENT scope, not the project.
+             *
+             * «Snapchat selected → Objective choices/counts must describe Snapchat rows in scope.»
+             * Each axis is counted with the other filters applied and its own excluded, which is the
+             * question a picker is really asked: «if I chose this instead, what would I get».
+             */
+            $request->only([
+                'provider', 'providers', 'format', 'formats', 'status', 'statuses',
+                'campaign_ids', 'ad_set_ids', 'ad_ids', 'project_ids', 'client_ids',
+                'search', 'kinds', 'objectives',
+            ]),
+        );
     }
 }

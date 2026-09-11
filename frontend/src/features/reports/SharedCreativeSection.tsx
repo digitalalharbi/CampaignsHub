@@ -1,3 +1,4 @@
+import { canonicalObjectiveLabel, type CanonicalObjectiveKey } from '@/features/campaigns/canonicalObjectives'
 import { aspectClass } from '@/features/content/adPreview'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -307,18 +308,22 @@ export function SharedCreativeSection({
             options={available.campaigns.map((c) => ({ value: c.id, label: c.name }))}
             all={t.all}
           />
+          {/*
+            CONTENT-FILTER-TRUTH-001 — the canonical five, LABELLED, and no path control beside them.
+
+            Two defects on a client-facing surface. The objective picker offered raw provider values
+            as their own labels, so a client read «sales», «conversions» and «add_to_cart» in English
+            regardless of their language — and the «المسار التسويقي» picker under it asked the same
+            question a second time, which is the duplication the owner reported internally.
+          */}
           <Picker
             label={t.objective}
             value={filters.objectives?.[0] ?? ''}
             onChange={(v) => narrow({ objectives: v ? [v] : [] })}
-            options={available.objectives.map((o) => ({ value: o, label: o }))}
-            all={t.all}
-          />
-          <Picker
-            label={t.path}
-            value={filters.paths?.[0] ?? ''}
-            onChange={(v) => narrow({ paths: v ? [v] : [] })}
-            options={available.paths.map((p) => ({ value: p, label: p }))}
+            options={available.objectives.map((o) => ({
+              value: o.key,
+              label: canonicalObjectiveLabel(o.key as CanonicalObjectiveKey, ar ? 'ar' : 'en'),
+            }))}
             all={t.all}
           />
         </div>

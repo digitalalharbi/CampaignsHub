@@ -7,6 +7,7 @@ namespace App\Domains\Campaigns\Services;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Support\CreativeKind;
 
 /**
  * What a creative may safely show, and what it must admit it cannot (§15.1, §15.15).
@@ -475,55 +476,16 @@ final class CreativePresenter
         };
     }
 
+    /**
+     * What this creative IS — delegated to `CreativeKind`, which the FILTER reads too.
+     *
+     * The rule used to live here alone, and `CreativeRows` had its own shorter version, so a Snapchat
+     * row labelled `SNAP_AD` carrying a film rendered as «فيديو» on this card and was removed by the
+     * Video filter. One rule, two spellings, a parity test over real provider formats.
+     */
     private function kind(ExternalCreative $creative): string
     {
-        $format = strtolower((string) $creative->format);
-
-        /*
-         * CONTENT-PREVIEW-SHAPES-001 — the shapes a real ad actually takes.
-         *
-         * Two more, and both were reading as something they are not. A COLLECTION ad is a hero asset
-         * over a grid of tiles: rendering the hero alone shows a reader one sixth of the ad and calls
-         * it the ad. A CATALOG ad — Meta's dynamic product ads, Snapchat's and TikTok's equivalents —
-         * has no single creative at all: the platform composes one per product at delivery, so there
-         * is nothing to show and «no media» was the wrong sentence, because it implies something is
-         * missing rather than that the shape has no fixed asset.
-         *
-         * Ordered before the generic `image`/`video` contains-checks: a format string like
-         * «collection_video» names a collection whose hero is a film, and the collection is the more
-         * specific truth.
-         */
-        /*
-         * CONTENT-PREVIEW-SHAPES-001 — the label loses to the asset when the two disagree.
-         *
-         * The first-page census on the live estate found «[snapchat/image] available  image=no
-         * thumb=no video=yes»: a row the platform labelled an image whose ONLY resolved asset is a
-         * film. `format` used to win outright, so the reading was `image`, the card looked for a
-         * still, found none, and drew «the platform sent no file» over a video that had arrived and
-         * would play. That is one of the owner's blank rectangles, and the format string is the
-         * weaker evidence — a label the platform wrote about the ad, against a file it actually
-         * handed over.
-         *
-         * Narrow on purpose: only when nothing still-shaped resolved at all. A row with both an image
-         * and a video is exactly what an image ad with a preview clip looks like, and the label is
-         * the right tie-breaker there.
-         */
-        $onlyFilmResolved = $creative->video_url !== null
-            && $creative->asset_url === null
-            && $creative->thumbnail_url === null
-            && $creative->preview_url === null;
-
-        return match (true) {
-            str_contains($format, 'collection') => 'collection',
-            str_contains($format, 'catalog') || str_contains($format, 'dynamic_product') || str_contains($format, 'dpa') => 'catalog',
-            str_contains($format, 'video') => 'video',
-            str_contains($format, 'image') && $onlyFilmResolved => 'video',
-            str_contains($format, 'carousel') => 'carousel',
-            str_contains($format, 'image') => 'image',
-            $creative->video_url !== null => 'video',
-            $creative->asset_url !== null || $creative->thumbnail_url !== null => 'image',
-            default => 'other',
-        };
+        return CreativeKind::of($creative);
     }
 
     /** True when the row HAS a link but every one of them was withheld for carrying a credential. */
