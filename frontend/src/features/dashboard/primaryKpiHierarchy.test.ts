@@ -43,7 +43,7 @@ const SOURCES = import.meta.glob('/src/features/**/*.tsx', {
  * other's composition and report a violation that is the requirement.
  */
 const GUARDED = [
-  { file: 'OverviewCompositions.tsx', scope: 'export function DashboardOverview(', region: '<MetricStrip' },
+  { file: 'OverviewCompositions.tsx', scope: 'export function DashboardOverview(', region: '<KpiCards' },
 ]
 
 /**
@@ -160,6 +160,7 @@ describe('the primary KPI region is the first analytical block on the page', () 
 
     /* The major sections, in the order the file renders them, deduplicated to first appearance. */
     const MAJOR = [
+      'KpiCards',
       'MetricStrip',
       'Panel',
       'RateTrend',
@@ -184,11 +185,18 @@ describe('the primary KPI region is the first analytical block on the page', () 
   it('the Dashboard opens on its figures and closes on its reasoning', () => {
     const order = sectionsOf('DashboardOverview')
 
-    expect(order[0], `the Dashboard opens on ${order[0]}, not its KPI row`).toBe('MetricStrip')
+    /*
+      `KpiCards`, not `MetricStrip`: the Dashboard's four cards are now selectable, so the region is
+      composed one layer up. It renders THROUGH the strip — the strip's loading, refusal, never-
+      reported and empty-scope states are still the ones the reader gets — and the ordering rule this
+      file exists for is unchanged: whatever the primary KPI region is called, nothing analytical may
+      precede it.
+    */
+    expect(order[0], `the Dashboard opens on ${order[0]}, not its KPI row`).toBe('KpiCards')
     expect(order.at(-1), `the Dashboard closes on ${order.at(-1)}, not its diagnosis`).toBe('ChangeDiagnosis')
 
     const lastDrawing = Math.max(
-      ...['MetricStrip', 'Panel', 'RateTrend', 'UnifiedCampaignOverview'].map((t) => order.indexOf(t)),
+      ...['KpiCards', 'Panel', 'RateTrend', 'UnifiedCampaignOverview'].map((t) => order.indexOf(t)),
     )
     const firstReasoning = Math.min(...['DiagnosticPanel', 'ChangeDiagnosis'].map((t) => order.indexOf(t)))
 
@@ -211,6 +219,7 @@ describe('the primary KPI region is the first analytical block on the page', () 
     const order = sectionsOf('AnalyticsOverview')
 
     expect(order[0], `Analytics opens on ${order[0]} — the Dashboard's headline, not a decision module`).not.toBe('MetricStrip')
+    expect(order, 'Analytics renders the Dashboard\'s selectable KPI region — its figures are evidence, not a headline').not.toContain('KpiCards')
     expect(order, 'Analytics renders no decision module before its figures').toContain('DiagnosticPanel')
     expect(order, 'Analytics renders no distribution — «where the money sits» is its own question').toContain('DistributionBars')
 
@@ -242,6 +251,44 @@ describe('the primary KPI region is the first analytical block on the page', () 
       analytics.join(' → '),
       'the Dashboard and Analytics render the same ordered sections — one information architecture for two questions',
     ).not.toBe(dashboard.join(' → '))
+  })
+
+  /**
+   * And no composition renders the same block twice — REGRESSION, shipped.
+   *
+   * `DashboardOverview` went out with two `<UnifiedCampaignOverview>`s: the comparisons, the
+   * best-campaigns table, the attention list and the alerts all drew a second time, one screen
+   * apart. Nothing failed. It typechecks, it renders, the props are identical, and every existing
+   * guard here asks about ORDER — where a block sits relative to another — so a block sitting in two
+   * places satisfied all of them. It reached production and was found by reading the running page.
+   *
+   * Counted on the source rather than a rendered tree for the same reason the ordering cases are:
+   * the duplication is a property of the composition, true in every data state at once.
+   */
+  it.each(['DashboardOverview', 'AnalyticsOverview'])('%s renders each major block once', (fn) => {
+    const entry = Object.entries(SOURCES).find(([path]) => path.endsWith('/OverviewCompositions.tsx'))
+    expect(entry, 'OverviewCompositions.tsx was not found — the guard would pass having read nothing').toBeTruthy()
+
+    const whole = bodyOf(entry![1])
+    const start = whole.indexOf(`export function ${fn}(`)
+    expect(start, `${fn} was not found — the guard would pass having read nothing`).toBeGreaterThan(-1)
+
+    const next = whole.indexOf('\nexport function ', start + 10)
+    const body = whole.slice(start, next === -1 ? undefined : next)
+
+    const rendered = [...body.matchAll(/<([A-Z][A-Za-z]*)[\s/>]/g)].map((m) => m[1])
+    expect(rendered.length, `${fn} renders nothing — the guard would pass having read nothing`).toBeGreaterThan(3)
+
+    /*
+      Chart primitives are legitimately repeated — two `<YAxis>`, three `<Line>`, several `<RateTrend>`
+      each plotting a different key. What may not repeat is a whole SECTION, which is what a reader
+      meets twice.
+    */
+    const SECTIONS = ['UnifiedCampaignOverview', 'KpiCards', 'MetricStrip', 'DiagnosticPanel', 'ChangeDiagnosis', 'DistributionBars', 'StoreLedger']
+
+    const twice = SECTIONS.filter((name) => rendered.filter((r) => r === name).length > 1)
+
+    expect(twice, `${fn} renders ${twice.join(', ')} more than once — the reader meets the same block twice`).toEqual([])
   })
 
   /** The guard must have read real files, not an empty glob. */
