@@ -4,11 +4,12 @@ _Reconciled from Git, the Matrix and Production evidence on 2026-09-11._
 
 ## Where Git is
 
-`origin/main` carries #355 (analytics platform decomposition) and #356 (the client report's budget
-ring). Both merged, both main-branch runs green, both deployed — `campaignshub.io` answers 200 and
-serves a built SPA.
+`origin/main` carries #355 · #356 · #357 · #358 · #359. Every one merged with all five checks green,
+every main-branch run succeeded, and each deploy was confirmed by the production asset hash changing
+— `index-CRSBNyzy` → `index-0LC4GDOC` → `index-B7S4T79-` → `index-DZYx8WFU`. `campaignshub.io`
+answers 200 and `/api/v1/health` answers 200.
 
-**PR #357 is open** with nine units on `budget-project-rung`, rebased onto main.
+**PR #360 is open** on `files-truncation`: the files library and the client activity timeline.
 
 ## What this run found
 
@@ -37,6 +38,24 @@ rendered cell — and none of them by reading the source or this ledger.
 - **Authenticated `/app` Production verification** — unavailable; no unit here is marked VERIFIED on
   Production strength.
 
+## Two things left for the Owner, not done unilaterally
+
+**Analytics vs Dashboard.** Priority 5 asks for Analytics to be materially deeper than Dashboard. It
+structurally cannot be: `ANALYTICS-AS-DASHBOARD-001` merged them into one board, and both routes
+render the same component with the same twelve tabs and the same filters — only the FIRST TAB's
+composition differs (`StoreLedger` on one, `DistributionBars` on the other). Either the requirement is
+already satisfied (the depth exists and is reachable from both routes) or the two are to be
+re-separated, which reverses a recorded decision and redesigns the product's two main screens.
+Re-splitting the main workspace unprompted is not a call to make on the Owner's behalf.
+
+**Campaigns pagination.** Written, then discarded rather than shipped half-done. The list endpoint is
+unbounded and campaigns are the one list that grows without a ceiling, but the page's lifecycle
+ORDERING depends on per-campaign metrics — so paginating would hide relevant campaigns behind page
+boundaries, trading an over-fetch for a silent truncation. Doing it properly needs a `last_active_on`
+subquery inside the structural query, which is the second analytics pipeline the architecture forbids.
+The active/inactive split itself is status-only (`paused` / `completed` / `archived`), so it IS
+tractable — as a designed unit, not a bolt-on.
+
 ## Method notes worth keeping
 
 - Two fixtures were corrected rather than the guards they broke, both describing conditions no sync
@@ -46,3 +65,13 @@ rendered cell — and none of them by reading the source or this ledger.
   and the re-run went green. Reproduced before re-running, not assumed.
 - A matrix note of mine carried literal pipes into a table cell. The width guard caught it, which is
   what it is for.
+- **Two of my own guards passed under injection before they were right.** `toMatch(/5K SAR/)` against
+  a table row matches the SPEND cell's «7.5K SAR», so blanking the column the assertion was about left
+  it green; it asserts cell by cell now. And a first ranking fixture where the mean and the pooled
+  figure happened to agree proved nothing until it was rebuilt to make them disagree.
+- **I introduced a silent cap and caught it before merge.** Paginating tasks also bounded a card on the
+  project integrations page that had been listing every task with no count — found by checking every
+  consumer of the endpoint, not only the page the unit was about. It cost a CI cycle, which is the
+  right trade.
+- Eleven more literal caps remain — sync runs, invitations, branding, security events, platform email.
+  Same shape, none client-facing.
