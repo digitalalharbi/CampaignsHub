@@ -2019,6 +2019,23 @@ final class MetricsAggregator
     }
 
     /** Adds ROAS/CPA/CTR/CPC/CPM to a row of base sums. */
+    /**
+     * The one place a derived ratio is computed, from the base figures it is a ratio OF.
+     *
+     * Public because a caller outside this class needs the same rule for a POOLED comparator: the
+     * report's platform notes were comparing each platform to the unweighted mean of the platforms'
+     * ratios, which one tiny budget with a freak return drags far above anything the account
+     * achieved. Handing this the summed base metrics answers «what did the account actually do»
+     * without a second formula existing anywhere.
+     *
+     * @param  array<string, mixed>  $row  summed BASE metrics — not ratios
+     * @return array<string, mixed>
+     */
+    public function derive(array $row): array
+    {
+        return $this->withDerived($row);
+    }
+
     private function withDerived(array $row): array
     {
         $impr = (float) ($row['impressions'] ?? 0);
