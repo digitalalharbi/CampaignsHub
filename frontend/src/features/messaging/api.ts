@@ -43,6 +43,16 @@ export interface ThreadDetail {
   thread: MessageThread
   messages: Message[]
   unread: { client: number; team: number }
+  /**
+   * How long the conversation actually is, and how much of it this window left out.
+   *
+   * Optional because a cached payload from before the field existed must not be read as «nothing was
+   * withheld» — `undefined` means unknown, and the panel says nothing rather than something false.
+   */
+  messages_total?: number
+  messages_withheld?: number
+  /** The cursor for the window before this one — `null` at the start of the conversation. */
+  older_before?: string | null
 }
 
 export async function listThreads(status?: ThreadStatus): Promise<MessageThread[]> {
@@ -52,8 +62,17 @@ export async function listThreads(status?: ThreadStatus): Promise<MessageThread[
   return res.data.data ?? []
 }
 
-export const getThread = (id: string) =>
-  getData<ThreadDetail>(`/messaging/threads/${encodeURIComponent(id)}`)
+/**
+ * One window of a thread. `before` is the cursor for the window OLDER than the one in hand.
+ *
+ * A cursor rather than a page number, because a conversation grows while it is being read: the third
+ * page of a thread somebody is still replying to is not the same three hundred messages it was a
+ * minute ago, and a cursor keeps the boundary attached to a message instead of to an offset.
+ */
+export const getThread = (id: string, before?: string | null) =>
+  getData<ThreadDetail>(
+    `/messaging/threads/${encodeURIComponent(id)}${before ? `?before=${encodeURIComponent(before)}` : ''}`,
+  )
 
 export interface NewThread {
   subject: string

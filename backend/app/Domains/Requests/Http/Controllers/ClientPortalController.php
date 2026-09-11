@@ -61,6 +61,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 final class ClientPortalController
 {
+    /** The ceiling on every list this portal renders — see `capped()`. */
+    private const LIST_CAP = 200;
+
     private const COOKIE = 'client_portal';
 
     /**
@@ -329,12 +332,15 @@ final class ClientPortalController
         $this->bindTenant($token);
         $ids = $this->ownedWorkspaceIds($token);
 
-        $quotes = $ids === [] ? collect() : Quote::query()
-            ->whereIn('client_workspace_id', $ids)
-            ->latest('created_at')->limit(200)->get()
-            ->map(fn (Quote $q) => $this->quoteShape($q));
+        $page = $ids === []
+            ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
+            : $this->capped(Quote::query()->whereIn('client_workspace_id', $ids)->latest('created_at'));
 
-        return response()->json(['data' => ['quotes' => $quotes]]);
+        return response()->json(['data' => [
+            'quotes' => $page['rows']->map(fn (Quote $q) => $this->quoteShape($q)),
+            'total' => $page['total'],
+            'withheld' => $page['withheld'],
+        ]]);
     }
 
     /** GET /client/quotes/{quote} — a single owned quote (client-safe). */
@@ -387,12 +393,17 @@ final class ClientPortalController
         $this->bindTenant($token);
         $ids = $this->ownedWorkspaceIds($token);
 
-        $invoices = $ids === [] ? collect() : Invoice::query()
-            ->whereIn('client_workspace_id', $ids)
-            ->latest('created_at')->limit(200)->get()
-            ->map(fn (Invoice $i) => $this->invoiceShape($i));
+        $page = $ids === []
+            ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
+            : $this->capped(Invoice::query()->whereIn('client_workspace_id', $ids)->latest('created_at'));
 
-        return response()->json(['data' => ['invoices' => $invoices]]);
+        $invoices = $page['rows']->map(fn (Invoice $i) => $this->invoiceShape($i));
+
+        return response()->json(['data' => [
+            'invoices' => $invoices,
+            'total' => $page['total'],
+            'withheld' => $page['withheld'],
+        ]]);
     }
 
     /** GET /client/invoices/{invoice} — a single owned invoice (client-safe). */
@@ -431,12 +442,15 @@ final class ClientPortalController
         $this->bindTenant($token);
         $ids = $this->ownedWorkspaceIds($token);
 
-        $threads = $ids === [] ? collect() : MessageThread::query()
-            ->whereIn('client_workspace_id', $ids)
-            ->orderByDesc('last_message_at')->limit(200)->get()
-            ->map(fn (MessageThread $t) => $this->threadShape($t));
+        $page = $ids === []
+            ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
+            : $this->capped(MessageThread::query()->whereIn('client_workspace_id', $ids)->orderByDesc('last_message_at'));
 
-        return response()->json(['data' => ['threads' => $threads]]);
+        return response()->json(['data' => [
+            'threads' => $page['rows']->map(fn (MessageThread $t) => $this->threadShape($t)),
+            'total' => $page['total'],
+            'withheld' => $page['withheld'],
+        ]]);
     }
 
     /** GET /client/messages/{thread} — an owned thread with its messages; marks the client side read. */
@@ -446,13 +460,21 @@ final class ClientPortalController
         $this->bindTenant($token);
         $model = $this->ownedThread($token, $thread);
 
-        $messages = $model->messages()->orderBy('created_at')->limit(500)->get()
-            ->map(fn (Message $m) => $this->messageShape($m));
+        $window = $this->messaging->window($model, $request->query('before') === null ? null : (string) $request->query('before'));
+        $messages = $window['messages']->map(fn (Message $m) => $this->messageShape($m));
         $this->messaging->markRead($model, 'client');
 
         return response()->json(['data' => [
             'thread' => $this->threadShape($model->refresh()),
             'messages' => $messages,
+            /*
+              The read stamp covers the WHOLE thread, including anything the window withheld — so the
+              count has to be said. Marking unseen messages read and showing a page that looks whole
+              is the pair that made this invisible.
+            */
+            'messages_total' => $window['total'],
+            'messages_withheld' => $window['withheld'],
+            'older_before' => $window['older_before'],
         ]]);
     }
 
@@ -572,12 +594,15 @@ final class ClientPortalController
         $this->bindTenant($token);
         $ids = $this->ownedWorkspaceIds($token);
 
-        $campaigns = $ids === [] ? collect() : UnifiedCampaign::query()
-            ->whereIn('client_workspace_id', $ids)
-            ->orderByDesc('created_at')->limit(200)->get()
-            ->map(fn (UnifiedCampaign $c) => $this->campaignShape($c));
+        $page = $ids === []
+            ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
+            : $this->capped(UnifiedCampaign::query()->whereIn('client_workspace_id', $ids)->orderByDesc('created_at'));
 
-        return response()->json(['data' => ['campaigns' => $campaigns->values()->all()]]);
+        return response()->json(['data' => [
+            'campaigns' => $page['rows']->map(fn (UnifiedCampaign $c) => $this->campaignShape($c))->values()->all(),
+            'total' => $page['total'],
+            'withheld' => $page['withheld'],
+        ]]);
     }
 
     /**
@@ -600,14 +625,22 @@ final class ClientPortalController
             return response()->json(['data' => ['reports' => []]]);
         }
 
-        $reports = Report::query()
-            ->whereIn('project_id', $projectIds)
-            ->where('audience', 'client') // internal/executive reports are never client-facing
-            ->whereIn('id', $sharedReportIds)
-            ->orderByDesc('created_at')->limit(200)->get()
+        $page = $this->capped(
+            Report::query()
+                ->whereIn('project_id', $projectIds)
+                ->where('audience', 'client') // internal/executive reports are never client-facing
+                ->whereIn('id', $sharedReportIds)
+                ->orderByDesc('created_at')
+        );
+
+        $reports = $page['rows']
             ->map(fn (Report $r) => $this->reportShape($r));
 
-        return response()->json(['data' => ['reports' => $reports->values()->all()]]);
+        return response()->json(['data' => [
+            'reports' => $reports->values()->all(),
+            'total' => $page['total'],
+            'withheld' => $page['withheld'],
+        ]]);
     }
 
     // ---- client-facing scoping + shapes ----
@@ -995,6 +1028,35 @@ final class ClientPortalController
         ]);
 
         return $session;
+    }
+
+    /**
+     * How many rows the portal's own lists render at once, and the honesty that has to travel with it.
+     *
+     * Every list below was `->limit(200)->get()` and said nothing about it. The direction is the safe
+     * one — newest first, so what a client most likely wants is what they get — but a client with more
+     * than two hundred invoices was shown two hundred and told they had two hundred. A ceiling nobody
+     * is told about is indistinguishable from the whole truth, which is the same failure the message
+     * window had in a sharper form.
+     *
+     * So the count comes back beside the rows. Reaching PAST the ceiling is deliberately not built
+     * here: no client in this product is near it, and four paged lists would be a feature the Owner
+     * has not asked for. What changes is that the ceiling can no longer hide — if a client ever meets
+     * it, the page says so instead of quietly shortening their history.
+     *
+     * @template TModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  Builder<TModel>  $query
+     * @return array{rows: \Illuminate\Database\Eloquent\Collection<int, TModel>, total: int, withheld: int}
+     */
+    private function capped(Builder $query): array
+    {
+        /* Counted on a clone: `->get()` on the capped builder cannot tell a full page from the end. */
+        $total = (clone $query)->toBase()->getCountForPagination();
+        /** @var \Illuminate\Database\Eloquent\Collection<int, TModel> $rows */
+        $rows = $query->limit(self::LIST_CAP)->get();
+
+        return ['rows' => $rows, 'total' => $total, 'withheld' => max(0, $total - $rows->count())];
     }
 
     private function requireSession(Request $request): ClientPortalToken

@@ -8,6 +8,7 @@ use App\Domains\Messaging\Models\Message;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -27,6 +28,9 @@ final class MessagingService
     private const AUTHOR_TYPES = ['client', 'team', 'system'];
 
     private const SIDES = ['client', 'team'];
+
+    /** How many messages either surface renders at once. */
+    public const WINDOW = 500;
 
     public function __construct(private readonly NotificationDispatcher $notifications) {}
 
@@ -117,6 +121,71 @@ final class MessagingService
         return Message::where('thread_id', $thread->getKey())
             ->whereNull($this->readColumn($side))
             ->count();
+    }
+
+    /**
+     * The window of a conversation a reader is shown, and the truth about what is not in it.
+     *
+     * Both surfaces read the thread as `orderBy('created_at')->limit(500)`. Ascending, then capped,
+     * is the OLDEST five hundred: past that length the client opened the conversation on a discussion
+     * from months ago and the reply sent that morning was not on the page — silently, because the
+     * request is 200 and the count is under the cap the code asked for. The client route then marked
+     * the whole thread read, clearing the badge for messages nobody was shown.
+     *
+     * So the window is taken from the END and turned back into reading order, and the caller is given
+     * the total and the number withheld rather than left to infer them from a page that looks whole.
+     *
+     * Ordered by `id` after `created_at`: a burst posted inside the same second ties on the timestamp,
+     * and a tie at the window's edge decides which message is the newest — which is the one thing this
+     * must not get wrong.
+     *
+     * @return array{messages: Collection<int, Message>, total: int, withheld: int, older_before: ?string}
+     */
+    public function window(MessageThread $thread, ?string $before = null, int $limit = self::WINDOW): array
+    {
+        $total = Message::where('thread_id', $thread->getKey())->count();
+
+        $query = Message::where('thread_id', $thread->getKey())
+            ->orderByDesc('created_at')->orderByDesc('id')
+            ->limit($limit);
+
+        /*
+         * `$before` is a message id, and the step back is taken on the SAME key the order uses.
+         *
+         * Paging on `created_at` alone would skip or repeat every message that shares a second with
+         * the cursor, which a burst routinely does; `(created_at, id) < (cursor)` is the row-value
+         * comparison that makes one page end exactly where the next begins. A cursor naming a message
+         * in another thread — or none at all — is simply ignored, because an unreadable cursor must
+         * return the newest window rather than an empty conversation.
+         */
+        $cursor = $before === null
+            ? null
+            : Message::where('thread_id', $thread->getKey())->whereKey($before)->first();
+
+        if ($cursor !== null) {
+            $query->whereRaw('(created_at, id) < (?, ?)', [$cursor->created_at, $cursor->getKey()]);
+        }
+
+        $messages = $query->get()->reverse()->values();
+
+        /*
+         * `older` counts what lies BEFORE this window, which is not `total - shown` once a reader has
+         * paged back: with a cursor, everything after the window is already behind them.
+         */
+        $oldest = $messages->first();
+        $older = $oldest === null
+            ? 0
+            : Message::where('thread_id', $thread->getKey())
+                ->whereRaw('(created_at, id) < (?, ?)', [$oldest->created_at, $oldest->getKey()])
+                ->count();
+
+        return [
+            'messages' => $messages,
+            'total' => $total,
+            'withheld' => $older,
+            /* The cursor for the window before this one — null when the reader is at the beginning. */
+            'older_before' => $older > 0 ? (string) $oldest?->getKey() : null,
+        ];
     }
 
     /** Close a thread. Idempotent. */

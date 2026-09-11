@@ -1,11 +1,12 @@
 import { StatCard } from '@/components/ui/StatCard'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCheck, Inbox, MessagesSquare, Plus, Search, Send, X } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { QueryFailure } from '@/components/ui/QueryFailure'
+import { formatNumber } from '@/lib/numerals'
 import {
   formatDateTime, getThread, listThreads, markThreadRead, openThread, postTeamReply,
   type MessageThread, type ThreadStatus,
@@ -24,6 +25,8 @@ const COPY = {
     new_thread: 'محادثة جديدة', subject: 'الموضوع', body: 'الرسالة الأولى', create: 'بدء المحادثة',
     creating: 'جارٍ الإنشاء…', optional: 'اختياري', close: 'إغلاق', team: 'الفريق', client: 'العميل', system: 'النظام',
     last_activity: 'آخر نشاط', no_messages: 'لا توجد رسائل بعد.',
+    withheld: 'هذه أحدث {shown} رسالة من {total}.', older: 'عرض الرسائل الأقدم',
+    loading_older: 'جارٍ التحميل…', at_start: 'بداية المحادثة.', newest: 'الانتقال إلى الأحدث',
   },
   en: {
     title: 'Conversations', subtitle: 'The team inbox — follow and reply to client conversations.',
@@ -37,6 +40,8 @@ const COPY = {
     new_thread: 'New thread', subject: 'Subject', body: 'Opening message', create: 'Start thread',
     creating: 'Creating…', optional: 'optional', close: 'Close', team: 'Team', client: 'Client', system: 'System',
     last_activity: 'Last activity', no_messages: 'No messages yet.',
+    withheld: 'These are the latest {shown} of {total} messages.', older: 'Show older messages',
+    loading_older: 'Loading…', at_start: 'The start of the conversation.', newest: 'Jump to the newest',
   },
 }
 
@@ -228,10 +233,25 @@ function ThreadDetailPanel({
   threadId, c, ar, canManage, onChanged,
 }: { threadId: string; c: Copy; ar: boolean; canManage: boolean; onChanged: () => void }) {
   const qc = useQueryClient()
-  const q = useQuery({ queryKey: ['messaging', 'thread', threadId], queryFn: () => getThread(threadId) })
+  /*
+    `before` is the cursor for the window the reader has paged BACK to, and it is reset whenever the
+    thread changes — carrying one thread's cursor into another would open the new conversation part
+    way up someone else's history.
+  */
+  const [before, setBefore] = useState<string | null>(null)
+  useEffect(() => setBefore(null), [threadId])
+
+  const q = useQuery({
+    queryKey: ['messaging', 'thread', threadId, before],
+    queryFn: () => getThread(threadId, before),
+    /* Keeping the previous window mounted stops the panel blanking out on each step back. */
+    placeholderData: (prev) => prev,
+  })
   const [draft, setDraft] = useState('')
 
   const invalidate = () => {
+    /* A reply belongs at the newest end, so posting one returns the reader there. */
+    setBefore(null)
     qc.invalidateQueries({ queryKey: ['messaging', 'thread', threadId] })
     onChanged()
   }
@@ -249,6 +269,15 @@ function ThreadDetailPanel({
   }
 
   const { thread, messages, unread } = q.data
+  /*
+    MESSAGE-THREAD-TRUTH-001 — a long conversation is windowed, and the reader is told so.
+
+    The window used to be the OLDEST five hundred, so a long thread simply stopped before the message
+    that mattered; it is the newest five hundred now. That is still a window, and a page that ends
+    without saying where it began reads as the whole conversation. `?? 0` on a payload that predates
+    the field, never on a number the server sent — a withheld count of zero is a real answer.
+  */
+  const withheld = q.data.messages_withheld ?? 0
   const authorLabel = (t: string) => (t === 'team' ? c.team : t === 'client' ? c.client : c.system)
 
   return (
@@ -297,6 +326,50 @@ function ThreadDetailPanel({
       </div>
 
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
+        {(withheld > 0 || before !== null) && (
+          <div
+            data-testid="thread-window-note"
+            className="flex flex-col items-center gap-1 rounded-lg border border-border bg-surface-secondary px-3 py-2 text-center text-xs text-text-secondary"
+          >
+            {/*
+              «رسالة» rather than the counted-noun machinery in `lib/counted`: a withheld count above
+              zero means the window is FULL, so the shown figure is always the window size and always
+              in the ≥11 band, where the singular tamyiz is the correct form.
+            */}
+            <span>
+              {withheld > 0
+                ? c.withheld
+                    .replace('{shown}', formatNumber(messages.length))
+                    .replace('{total}', formatNumber(q.data.messages_total ?? messages.length + withheld))
+                : c.at_start}
+            </span>
+            <div className="flex items-center gap-3">
+              {q.data.older_before ? (
+                <button
+                  type="button"
+                  onClick={() => setBefore(q.data.older_before ?? null)}
+                  disabled={q.isFetching}
+                  data-testid="thread-older"
+                  className="font-semibold text-brand-600 hover:underline disabled:opacity-50"
+                >
+                  {q.isFetching ? c.loading_older : c.older}
+                </button>
+              ) : null}
+              {/* Getting BACK is as much the feature as getting there — a reader paged into last
+                  spring should not have to reopen the thread to reach today. */}
+              {before !== null ? (
+                <button
+                  type="button"
+                  onClick={() => setBefore(null)}
+                  data-testid="thread-newest"
+                  className="font-semibold text-text-secondary hover:underline"
+                >
+                  {c.newest}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        )}
         {messages.length === 0 ? (
           <p className="p-6 text-center text-sm text-text-secondary">{c.no_messages}</p>
         ) : (

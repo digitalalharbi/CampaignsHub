@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, Receipt } from 'lucide-react'
 import { listPortalInvoices, formatDate, formatMoney, type PortalInvoice } from './portalAccountApi'
 import { PortalShell } from './PortalShell'
+import { PortalListCeiling } from './PortalListCeiling'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { usePortalGuard } from './usePortalGuard'
 import { useUi } from '@/stores/ui'
@@ -40,7 +41,7 @@ export function ClientInvoicesPage() {
   const q = useQuery({ queryKey: ['client', 'invoices'], queryFn: listPortalInvoices, retry: false })
   usePortalGuard(q.isError, q.error)
 
-  const rows = q.data ?? []
+  const rows = q.data?.items ?? []
 
   return (
     <PortalShell title={t.title} nav showLogout>
@@ -60,6 +61,8 @@ export function ClientInvoicesPage() {
           {rows.map((invoice) => <InvoiceCard key={invoice.id} invoice={invoice} ar={ar} t={t} />)}
         </div>
       )}
+
+      <PortalListCeiling withheld={q.data?.withheld} total={q.data?.total} ar={ar} />
     </PortalShell>
   )
 }
