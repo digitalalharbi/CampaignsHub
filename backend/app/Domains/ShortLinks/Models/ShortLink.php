@@ -20,6 +20,7 @@ final class ShortLink extends Model
 {
     use BelongsToTenant;
     use HasUuidKey;
+
     /*
      * SHORT-LINKS-001 — delete removes it from the library and stops it resolving.
      *
