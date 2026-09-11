@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
-import { AUTH } from './helpers'
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { AUTH, seededProject, selectProject } from './helpers'
 
 /**
  * KPI-SELECTION-001 — four cards, and the metric on each is the reader's to choose.
@@ -22,15 +22,26 @@ test.describe('the dashboard KPI cards', () => {
   /** Every card's picker, in the order they are rendered. */
   const pickers = (page: Page) => page.locator('[data-testid^="kpi-picker-"]')
 
-  async function openDashboard(page: Page) {
+  /**
+   * A project that HAS data, chosen rather than inherited — and that is a product fact, not a fixture
+   * convenience.
+   *
+   * METRICS-EMPTY-SCOPE-001 says a scope matching nothing renders one sentence about the filter
+   * instead of a row of cards, so on an empty scope there are no cards and therefore no pickers. The
+   * gate opened on «E2E Linking», whose window holds nothing, and these cases spent sixty seconds
+   * waiting for a control that correctly was not there. The interaction between the two rules is
+   * asserted below rather than left as a surprise for the next reader.
+   */
+  async function openDashboard(page: Page, request: APIRequestContext) {
+    await selectProject(page, await seededProject(request, 'Growth — Acquisition'))
     await page.goto('/app/dashboard')
     await expect(page.getByTestId('kpi-picker-0')).toBeVisible({ timeout: 60000 })
   }
 
-  test('four cards, no «more metrics», and a metric chosen through search', async ({ page }) => {
+  test('four cards, no «more metrics», and a metric chosen through search', async ({ page, request }) => {
     test.setTimeout(180_000)
 
-    await openDashboard(page)
+    await openDashboard(page, request)
 
     /* Exactly four — «keep exactly 4 primary KPI cards visible by default». */
     await expect(pickers(page)).toHaveCount(4)
@@ -65,10 +76,10 @@ test.describe('the dashboard KPI cards', () => {
    * One test rather than three: the claim is that ONE stored choice outlives all of it, and splitting
    * it would let each half pass while the sequence a reader actually performs still lost the card.
    */
-  test('the chosen metric survives a reload and a language switch', async ({ page }) => {
+  test('the chosen metric survives a reload and a language switch', async ({ page, request }) => {
     test.setTimeout(180_000)
 
-    await openDashboard(page)
+    await openDashboard(page, request)
 
     await page.getByTestId('kpi-picker-0').click()
     await page.getByTestId('kpi-search').fill('reach')
@@ -96,15 +107,34 @@ test.describe('the dashboard KPI cards', () => {
    * tell a block that renders from a block swallowed by an unclosed JSX comment — which is exactly
    * how the first restoration shipped nothing.
    */
-  test('the dashboard draws the curve and the rate trends', async ({ page }) => {
+  test('the dashboard draws the curve and the rate trends', async ({ page, request }) => {
     test.setTimeout(180_000)
 
-    await openDashboard(page)
+    await openDashboard(page, request)
 
     const overview = page.getByTestId('dashboard-overview')
 
     await expect(overview).toContainText(/Spend, results and revenue|الإنفاق والنتائج والإيرادات/i, { timeout: 60000 })
     /* CTR appears here only as a rate-trend panel, so its presence is the claim. */
     await expect(overview).toContainText(/CTR/)
+  })
+
+  /**
+   * And a scope with nothing in it keeps its sentence — the selector does not override that rule.
+   *
+   * The obvious «fix» for the gate failure this spec caused would have been to render four cards on
+   * an empty scope so the pickers exist. That is METRICS-EMPTY-SCOPE-001 undone: a filter matching
+   * nothing would go back to making four claims about what the platforms reported. The reader gets
+   * out of an empty scope by changing the FILTER, not the metric, and this pins that.
+   */
+  test('an empty scope keeps its sentence instead of four empty cards', async ({ page, request }) => {
+    test.setTimeout(180_000)
+
+    await openDashboard(page, request)
+
+    await page.getByTestId('dashboard-objective').selectOption('awareness_engagement')
+
+    await expect(page.getByTestId('dashboard-metrics-empty-scope')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByTestId('kpi-picker-0')).toHaveCount(0)
   })
 })

@@ -96,7 +96,16 @@ test.describe('the advertiser portal', () => {
    * translated and the numbers beside it did not, which is the most confusing half-state of all.
    */
   test('the objective KPIs re-label when the language changes', async ({ page }) => {
-    await page.goto('/app/dashboard')
+    /*
+      The ANALYSIS, not the dashboard — Owner correction, 2026-09-11.
+
+      The dashboard's KPI row was objective-led, and this case rode on that. It is four cards the
+      reader picks now, defaulting to Spend / Impressions / Clicks / CTR, so a ROAS card is not there
+      to find. The objective rule did not go away with the row: `AnalyticsOverview` still renders the
+      objective's own metrics, so the claim this case makes — that labels re-render in the reader's
+      language rather than freezing in whichever one loaded first — is asserted where it still holds.
+    */
+    await page.goto('/app/analytics')
     await expect(page.locator('main')).toBeVisible()
 
     /*
@@ -122,7 +131,7 @@ test.describe('the advertiser portal', () => {
      * and not the other. Asking the card directly cannot be answered by a control that happens to
      * share a word.
      */
-    await page.getByTestId('dashboard-objective').selectOption('sales')
+    await page.getByTestId('analytics-objective').selectOption('sales')
 
     const roas = page.getByTestId('metric-roas')
 
@@ -135,7 +144,7 @@ test.describe('the advertiser portal', () => {
      * message means the next sighting arrives with the fact instead of needing a fourth reproduction.
      */
     await expect(async () => {
-      const state = await page.getByTestId('dashboard-metrics').getAttribute('data-strip-state')
+      const state = await page.getByTestId('analytics-metrics').getAttribute('data-strip-state')
 
       expect(await roas.count(), `the ROAS card is absent and the strip is in «${state}»`).toBeGreaterThan(0)
     }).toPass({ timeout: 20000 })
@@ -161,12 +170,12 @@ test.describe('the advertiser portal', () => {
      * If this never fires, the row closes with evidence. If it does, it arrives with the sequence.
      */
     await page.evaluate(() => {
-      const strip = document.querySelector('[data-testid="dashboard-metrics"]')
+      const strip = document.querySelector('[data-testid="analytics-metrics"]')
       const w = window as unknown as { __stripStates?: string[] }
       w.__stripStates = strip ? [strip.getAttribute('data-strip-state') ?? 'none'] : []
 
       new MutationObserver(() => {
-        const el = document.querySelector('[data-testid="dashboard-metrics"]')
+        const el = document.querySelector('[data-testid="analytics-metrics"]')
         const state = el?.getAttribute('data-strip-state') ?? 'none'
 
         if (w.__stripStates![w.__stripStates!.length - 1] !== state) w.__stripStates!.push(state)
