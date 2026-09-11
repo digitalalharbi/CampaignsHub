@@ -423,9 +423,30 @@ function ContextChips({ e, c }: { e: AlertEvent; c: Copy }) {
   const ctx = e.context ?? {}
   const chips: string[] = []
   const num = (v: unknown) => (typeof v === 'number' ? Math.round(v * 100) / 100 : v)
-  if ('spend' in ctx) chips.push(`${c.value}: ${num(ctx.spend)}`)
+
+  /*
+    A money chip carries the unit the money is in.
+
+    These printed bare numbers — «الحد: 1000» — while the event's own context names the currency
+    beside the figure. On a screen whose whole subject is how much of a budget is gone, a number
+    with no unit is the shape the budget-pacing surfaces refuse everywhere else.
+  */
+  const unit = typeof ctx.budget_currency === 'string' ? ` ${ctx.budget_currency}` : ''
+  /* Named for what it does, not `money` — that name belongs to the shared formatter the
+     MONEY-CURRENCY guard scans for, and a local one wearing it defeats the scan. */
+  const withUnit = (v: unknown) => `${num(v)}${unit}`
+
+  if ('spend' in ctx) chips.push(`${c.value}: ${withUnit(ctx.spend)}`)
   if ('ratio' in ctx) chips.push(`${c.value}: ${Math.round(Number(ctx.ratio) * 100)}%`)
-  if ('budget' in ctx) chips.push(`${c.threshold}: ${num(ctx.budget)}`)
+  if ('budget' in ctx) chips.push(`${c.threshold}: ${withUnit(ctx.budget)}`)
+
+  /*
+    An alert that says the budget cannot be monitored says WHY, where the percentage would have been.
+    A chip strip that simply omits the ratio reads as a missing figure rather than a refused one.
+  */
+  if (ctx.basis_class === 'unmeasurable' && typeof ctx.pacing_basis === 'string') {
+    chips.push(`${c.value}: ${ctx.pacing_basis}`)
+  }
   if ('roas_current' in ctx) chips.push(`ROAS: ${num(ctx.roas_current)} ← ${num(ctx.roas_previous)}`)
   if ('conversions' in ctx) chips.push(`${c.value}: ${num(ctx.conversions)}`)
   if ('expires_at' in ctx && ctx.expires_at) chips.push(`${c.threshold}: ${fmt(String(ctx.expires_at))}`)

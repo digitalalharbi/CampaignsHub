@@ -21,6 +21,7 @@ import { SidebarNav } from './SidebarNav'
 import { agencyNavGroups } from './agencyNav'
 import { useProjectCapabilities } from '@/features/projects/capabilities'
 import { PortalFrame } from './PortalFrame'
+import { useSectionTitle } from './sectionTitle'
 import type { MobileTab } from './MobileTabBar'
 import { moreGroupsFrom } from './mobileTabs'
 
@@ -117,6 +118,9 @@ export function AgencyShell() {
   const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } =
     useUi()
   const ar = locale === 'ar'
+
+  /* The tab says which screen it holds — it carried the marketing line on every one of them. */
+  useSectionTitle(agencyNavGroups)
 
   return (
     <PortalFrame

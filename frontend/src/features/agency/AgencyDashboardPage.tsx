@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { StatCard, type StatTone } from '@/components/ui/StatCard'
 import { useQuery } from '@tanstack/react-query'
@@ -347,9 +348,15 @@ function AttentionRow({ to, label, value, ar }: { to: string; label: string; val
  * that quietly drops a campaign is worse than one that admits it.
  */
 function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[]; loading: boolean; failed: boolean; ar: boolean }) {
-  if (loading || failed || rows.length === 0) return null
+  /* Declared before the early return: a hook after a conditional return is a hook that sometimes runs. */
+  const [openClient, setOpenClient] = useState<string | null>(null)
 
   const dash = '—'
+
+  if (loading || failed || rows.length === 0) return null
+
+  /* Resolved from the rows each render, so a refetch that drops a client closes its panel with it. */
+  const open = rows.find((r) => r.client_id === openClient) ?? null
 
   return (
     <section className="mt-6" data-testid="client-budgets">
@@ -362,7 +369,24 @@ function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[];
           : ['Client', 'Budget', 'Spent', 'Remaining', 'Forecast', 'Pace']}
         rows={rows.map((r) => [
           <div key="c" className="flex flex-col">
-            <span className="font-semibold text-text-primary">{r.client_name}</span>
+            {/*
+              * The row that raises «which client is overspending» is where «which project» is asked.
+              *
+              * A client with no project holding money is plain text: a control that opens an empty
+              * panel teaches the reader that the control means nothing.
+              */}
+            {(r.projects_breakdown ?? []).length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setOpenClient((c) => (c === r.client_id ? null : r.client_id))}
+                aria-expanded={openClient === r.client_id}
+                className="text-start font-semibold text-text-primary underline decoration-dotted underline-offset-4 hover:text-brand-600"
+              >
+                {r.client_name}
+              </button>
+            ) : (
+              <span className="font-semibold text-text-primary">{r.client_name}</span>
+            )}
             {/* No silent caps — what the total left out is said where the total is read. */}
             {r.excluded > 0 && (
               <span className="text-[11px] text-text-muted">
@@ -388,6 +412,39 @@ function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[];
         ])}
         initialSort={{ column: 1, dir: 'desc' }}
       />
+      {open && (
+        <div className="mt-3" data-testid="project-budgets">
+          <h3 className="mb-2 text-sm font-semibold text-text-primary">
+            {ar ? `مشاريع ${open.client_name}` : `Projects in ${open.client_name}`}
+          </h3>
+          <MetricTable
+            head={ar
+              ? ['المشروع', 'الميزانية', 'المصروف', 'المتبقي', 'المتوقع', 'السرعة']
+              : ['Project', 'Budget', 'Spent', 'Remaining', 'Forecast', 'Pace']}
+            rows={(open.projects_breakdown ?? []).map((p) => [
+              <div key="n" className="flex flex-col">
+                <span className="text-text-primary">{p.project_name}</span>
+                {p.excluded > 0 && (
+                  <span className="text-[11px] text-text-muted">
+                    {ar ? `${p.excluded} خارج الحساب` : `${p.excluded} excluded`}
+                  </span>
+                )}
+              </div>,
+              <span key="b" dir="ltr">{p.budget === null ? dash : money(p.budget, p.currency ?? undefined)}</span>,
+              <span key="s" dir="ltr">{p.spent === null ? dash : money(p.spent, p.currency ?? undefined)}</span>,
+              <span key="r" dir="ltr">{p.remaining === null ? dash : money(p.remaining, p.currency ?? undefined)}</span>,
+              <span key="f" dir="ltr">{p.projected === null ? dash : money(p.projected, p.currency ?? undefined)}</span>,
+              <span key="p" dir="ltr" className={p.pace !== null && p.pace > 1 ? 'font-semibold text-danger' : undefined}>
+                {p.pace === null ? dash : ratio(p.pace)}
+              </span>,
+            ])}
+            values={(open.projects_breakdown ?? []).map((p): SortValues => [
+              p.project_name, p.budget, p.spent, p.remaining, p.projected, p.pace,
+            ])}
+            initialSort={{ column: 1, dir: 'desc' }}
+          />
+        </div>
+      )}
     </section>
   )
 }

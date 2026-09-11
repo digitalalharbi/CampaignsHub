@@ -41,6 +41,31 @@ test.describe('the advertiser portal', () => {
    * Walked from the RAIL rather than from a list in the test, so a link added later is audited
    * without anybody remembering to add it here.
    */
+  /**
+   * REPORT-TITLE-METADATA-001 — the tab tells the operator which screen it holds.
+   *
+   * Every authenticated screen carried `index.html`'s marketing sentence, so six open tabs were six
+   * identical labels and the browser history a column of the same row. Asserted in a real browser
+   * because a component test cannot tell whether the shell is actually mounted around the route.
+   */
+  test('each section names itself in the tab title', async ({ page }) => {
+    /*
+      `toHaveTitle` rather than `await page.title()`: the portal root redirects client-side, so the
+      first title a navigation resolves with is still the document's, and reading it once races the
+      effect that renames it.
+    */
+    await page.goto('/app/dashboard')
+    await expect(page.locator('main')).toBeVisible()
+    await expect(page).not.toHaveTitle(/كل حملاتك/)
+    const dashboard = await page.title()
+
+    await page.goto('/app/campaigns')
+    await expect(page.locator('main')).toBeVisible()
+    await expect(page).toHaveTitle(/CampaignsHub/)
+    /* Two sections must not share one tab label — that is the whole defect. */
+    await expect(page).not.toHaveTitle(dashboard)
+  })
+
   test('every rail link opens a page that is not empty', async ({ page }) => {
     await page.goto('/app/dashboard')
     await expect(page.getByRole('navigation').first()).toBeVisible()
