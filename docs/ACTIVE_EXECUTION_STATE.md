@@ -110,5 +110,15 @@ rungs rendered, the Project rung being #357's addition.
   project integrations page that had been listing every task with no count — found by checking every
   consumer of the endpoint, not only the page the unit was about. It cost a CI cycle, which is the
   right trade.
-- Eleven more literal caps remain — sync runs, invitations, branding, security events, platform email.
-  Same shape, none client-facing.
+- **The «eleven more literal caps» line was checked, and most of them were already honest.** Security
+  events carry `history_total`/`history_withheld`, branding carries a total and a withheld count,
+  invitations count what they left out, and the `DiagnoseSyncCommand` caps are deliberate CLI
+  sampling rather than a list anybody reads as complete. The one that was genuinely silent was
+  `CampaignAlertsController`: a hundred rows with no statement of how many the filter holds.
+  Its `meta.counts` looked like coverage and is not — that is a status breakdown of every alert the
+  campaign ever had, and it ignores the `status` filter the list was narrowed by, so a campaign with
+  250 unread alerts asked for its unread ones returned a hundred rows beside «active: 250». Two true
+  numbers, neither an answer to «is this list complete». It now carries `meta.total` and
+  `meta.withheld` scoped to the filter, the hook reads them through `getEnvelope` instead of
+  throwing `meta` away, and the tab says «تُعرض 100 من 250». Proved by injection: counting without
+  the filter fails the one case that is about the filter.
