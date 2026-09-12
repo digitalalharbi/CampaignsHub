@@ -141,7 +141,18 @@ export function DataTable<T>({
               ))
             ) : pageRows.length === 0 ? null : (
               pageRows.map((row) => (
-                <tr key={rowKey(row)} className="border-b border-border last:border-0 hover:bg-surface-secondary">
+                /*
+                  The row's own key on the element — LEAD-DEDUP-001.
+
+                  A cell that wants to point at ANOTHER row (a duplicate naming the lead it
+                  duplicates) needs a way to find it. Without this the only route was to re-render
+                  the whole table from outside, which is a lot of machinery to answer «which one».
+                */
+                <tr
+                  key={rowKey(row)}
+                  data-row-key={rowKey(row)}
+                  className="border-b border-border last:border-0 hover:bg-surface-secondary target:bg-brand-500/10"
+                >
                   {columns.map((c) => (
                     <td key={c.key} className={`px-3.5 py-3 text-text-primary ${alignClass(c.align)}`}>
                       {c.render ? c.render(row) : String(raw(c, row))}

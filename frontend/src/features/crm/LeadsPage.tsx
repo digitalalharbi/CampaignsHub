@@ -30,6 +30,40 @@ export function LeadsPage() {
   const [uniqueOnly, setUniqueOnly] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [trail, setTrail] = useState<Lead | null>(null)
+  /*
+   * LEAD-DEDUP-001 — «not in this view» is an answer, and the honest one.
+   *
+   * The canonical lead is in this table whenever the list is not narrowed to canonicals, and on
+   * another page or behind a filter when it is not. A control that scrolled to nothing would be the
+   * worse half of that: the reader would read it as «there is no original».
+   */
+  const [missingCanonical, setMissingCanonical] = useState<string | null>(null)
+
+  const revealCanonical = (canonicalId: string) => {
+    const row = document.querySelector(`[data-row-key="${CSS.escape(canonicalId)}"]`)
+
+    if (row === null) {
+      setMissingCanonical(canonicalId)
+
+      return
+    }
+
+    setMissingCanonical(null)
+
+    /*
+      Guarded because scrolling is the optional half.
+      
+      The highlight is what answers «which row»; the scroll only saves the reader looking for it.
+      An environment without `scrollIntoView` — jsdom is one, and it threw here — would otherwise
+      take the whole control down and leave the badge inert again.
+    */
+    if (typeof row.scrollIntoView === 'function') {
+      row.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }
+    /* A colour the eye can follow back after a scroll — removed so it cannot become permanent. */
+    row.classList.add('bg-brand-500/10')
+    window.setTimeout(() => row.classList.remove('bg-brand-500/10'), 2500)
+  }
 
   const leadsQuery = useQuery({
     queryKey: ['leads', { status, source, uniqueOnly }],
@@ -142,9 +176,27 @@ export function LeadsPage() {
             {locale === 'ar' ? 'هوية متضاربة' : 'Conflicting identity'}
           </Badge>
         ) : r.canonical_lead_id != null ? (
-          <Badge tone="neutral" data-testid={`lead-duplicate-${r.id}`}>
-            {locale === 'ar' ? 'تكرار' : 'Duplicate'}
-          </Badge>
+          /*
+            LEAD-DEDUP-001 — the badge says «duplicate» and now says OF WHAT.
+
+            «The duplicate badge still does not link to the canonical row» has been the row's stated
+            gap since it was written. A reader was told this person arrived twice and given no way to
+            reach the arrival it was folded into — so «counted once» stayed a claim about the
+            database rather than something they could check.
+
+            It points at the row in THIS list, because that is where the canonical lead is when the
+            list is not narrowed to canonicals. When it is not here, the control says so rather than
+            scrolling to nothing: a button that silently does nothing is worse than a label.
+          */
+          <button
+            type="button"
+            data-testid={`lead-duplicate-${r.id}`}
+            data-canonical={r.canonical_lead_id}
+            onClick={() => revealCanonical(r.canonical_lead_id as string)}
+            className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-text-secondary underline-offset-2 hover:text-brand-600 hover:underline"
+          >
+            {locale === 'ar' ? 'تكرار — اعرض الأصل' : 'Duplicate — show the original'}
+          </button>
         ) : (r.duplicate_count ?? 0) > 0 ? (
           <span className="tnum text-text-secondary" data-testid={`lead-absorbed-${r.id}`}>
             {locale === 'ar' ? `+${r.duplicate_count} وصول` : `+${r.duplicate_count} arrivals`}
@@ -284,6 +336,20 @@ export function LeadsPage() {
         onRetry={() => leadsQuery.refetch()}
         emptyTitle={t('no_leads')}
       />
+
+      {/*
+        The canonical row is not on this page — said plainly, with what to do about it.
+
+        It happens when «canonicals only» is on, or when the original sits on another page of a long
+        list. Both are ordinary, and neither means the original does not exist.
+      */}
+      {missingCanonical !== null && (
+        <p data-testid="canonical-not-in-view" className="rounded-xl bg-surface-secondary px-3 py-2 text-xs text-text-secondary">
+          {locale === 'ar'
+            ? 'الأصل ليس في هذه الصفحة — أوقف تصفية «الفريدة فقط» أو ابحث عنه لعرضه.'
+            : 'The original is not on this page — turn off «unique only», or search for it.'}
+        </p>
+      )}
 
       <NewLeadModal open={modalOpen} onClose={() => setModalOpen(false)} />
       <Modal
