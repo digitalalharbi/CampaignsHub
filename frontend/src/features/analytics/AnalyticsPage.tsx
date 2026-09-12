@@ -128,6 +128,7 @@ import { StoreFunnelTab } from './StoreFunnelTab'
 import { AttributionPanel } from './AttributionPanel'
 import { AdPoster } from '@/features/content/AdPoster'
 import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
+import { CreativeTrend } from '@/features/content/CreativeTrend'
 import { creativeScope, decodePath, drillInto, drillUpTo, encodePath, nextLevel, parentFor, rememberName,
   stepLabel, withNames,
   type DrillLevel, type DrillStep,
@@ -2516,6 +2517,18 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
               { label: 'CPC', value: rateOrDash(openCreative.metrics?.cpc ?? null) },
               { label: 'CPM', value: rateOrDash(openCreative.metrics?.cpm ?? null) },
             ]}
+            trend={projectId
+              ? (
+                <CreativeTrend
+                  projectId={projectId}
+                  creativeId={openCreative.id}
+                  window={{ from: range.from, to: range.to }}
+                  locale={ar ? 'ar' : 'en'}
+                  currency={currency ?? 'SAR'}
+                  height={180}
+                />
+              )
+              : undefined}
             detailsTo={`/app/content/${openCreative.id}`}
             onClose={() => setOpenCreative(null)}
           />

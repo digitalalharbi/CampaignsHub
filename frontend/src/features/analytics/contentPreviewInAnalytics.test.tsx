@@ -67,4 +67,20 @@ describe('the Analytics content table', () => {
     expect(source).toMatch(/figures=\{\[/)
     expect(source).toContain("{ label: 'CTR', value: rateOrDash(openCreative.metrics?.ctr ?? null) }")
   })
+
+  /**
+   * And the modal draws the SHARED trend component, not a series of its own.
+   *
+   * «The modal must include a performance trend chart … do NOT create another metrics pipeline.»
+   * `CreativeTrend` is the block `CreativeDetailPage` has drawn since it shipped, moved so it can be
+   * asked for from anywhere; a second series derived from whatever this surface happened to hold
+   * would differ from the detail page by whatever the two windows disagreed about.
+   */
+  it('draws the shared creative trend inside the modal', () => {
+    expect(source).toContain("from '@/features/content/CreativeTrend'")
+    expect(source).toContain('<CreativeTrend')
+
+    /* The surface's OWN window and currency — the component never decides what «this period» means. */
+    expect(source).toContain('window={{ from: range.from, to: range.to }}')
+  })
 })

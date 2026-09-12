@@ -44,6 +44,7 @@ export function AdPreviewDialog({
   creative,
   locale,
   figures,
+  trend,
   detailsTo,
   onClose,
 }: {
@@ -51,6 +52,15 @@ export function AdPreviewDialog({
   locale: Locale
   /** The row's own numbers, already formatted by the surface that owns them. */
   figures?: { label: string; value: string }[]
+  /**
+   * This creative's movement over the window, as a NODE the caller supplies.
+   *
+   * A node rather than data: the dialog is opened from surfaces with different project scopes and
+   * different windows, and each already knows its own. Fetching here would make the dialog decide
+   * what «this period» means — a second answer to a question the surface above it has already
+   * answered, which is exactly the second pipeline the requirement forbids.
+   */
+  trend?: ReactNode
   /** Where the full page is, when the reader does want to leave. */
   detailsTo?: string
   onClose: () => void
@@ -181,6 +191,13 @@ export function AdPreviewDialog({
                 <div dir="ltr" className="tnum text-sm font-bold text-text-primary">{f.value}</div>
               </div>
             ))}
+          </div>
+        )}
+
+        {trend && (
+          <div data-testid="ad-preview-dialog-trend" className="mt-4">
+            <h4 className="mb-1 text-xs font-bold text-text-secondary">{ar ? 'الاتجاه الزمني' : 'Trend over time'}</h4>
+            {trend}
           </div>
         )}
 
