@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { creativeDialogFigures } from './creativeDialogFigures'
 import { rowCostPer, rowRoas } from '@/features/analytics/format'
+import { creativeMoney } from './creativeMoney'
 
 /**
  * AD-PREVIEW-FIGURES-001 — a cost is money and a return is a multiple. Neither is a percentage.
@@ -159,6 +160,32 @@ describe('the figures a creative’s dialog carries', () => {
     })
 
     expect(find(creativeDialogFigures(mixed, 'USD', false), 'CTR')).toMatch(/%$/)
+  })
+
+  /**
+   * AD-PREVIEW-FIGURES-003 — the popup's money is the CARD's money, character for character.
+   *
+   * «The same creative and same scope must reconcile across card → popup → Content Analytics →
+   * Analytics table → Report.» The card and the popup are one click apart and were using two
+   * readers: `creativeMoney` formats exactly and `rowMoney` compacts, both from the same provenance
+   * decision. A creative whose card read «1,284,663 SAR» opened a panel reading «1.28M SAR» — the
+   * defect the observation register already carries as row 14, recurring one click away.
+   *
+   * Asserted against `creativeMoney` itself rather than a literal, so the two cannot drift apart
+   * again without this failing, whatever either of them later decides to print.
+   */
+  it('states spend exactly as the card that opened it does', () => {
+    const row = metrics({ spend: 1_284_663 })
+
+    expect(find(creativeDialogFigures(row, 'SAR', false), 'Spend'))
+      .toBe(creativeMoney(row as never, 'spend', 'SAR', 'en').text)
+  })
+
+  it('states revenue the same way', () => {
+    const row = metrics({ revenue: 4_200_500, roas: 3.1 })
+
+    expect(find(creativeDialogFigures(row, 'SAR', false), 'Revenue'))
+      .toBe(creativeMoney(row as never, 'revenue', 'SAR', 'en').text)
   })
 
   /** Arabic labels the money figures in Arabic and leaves the acronyms alone — they are read as-is. */

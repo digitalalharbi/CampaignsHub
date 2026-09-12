@@ -1,5 +1,8 @@
-import { percent, rowCostPer, rowMoney, rowRoas } from '@/features/analytics/format'
+import { percent, rowCostPer, rowRoas } from '@/features/analytics/format'
+import { creativeMoney } from './creativeMoney'
 import { readMetricValue } from '@/lib/metricValue'
+import type { CreativeMetrics } from './api'
+import type { Locale } from '@/stores/ui'
 import type { MoneyTotals } from '@/lib/money/contract'
 
 /**
@@ -31,6 +34,7 @@ export type DialogFigure = { label: string; value: string }
  * @param currency the surface's reporting currency; null prints an amount bare
  */
 export function creativeDialogFigures(metrics: MoneyTotals, currency: string | null, ar: boolean): DialogFigure[] {
+  const locale: Locale = ar ? 'ar' : 'en'
   const bag = (metrics ?? {}) as Record<string, unknown>
   const n = (key: string): number => {
     const v = bag[key]
@@ -44,7 +48,20 @@ export function creativeDialogFigures(metrics: MoneyTotals, currency: string | n
   }
 
   const figures: DialogFigure[] = [
-    { label: ar ? 'الإنفاق' : 'Spend', value: rowMoney(metrics, 'spend', currency) },
+    /*
+     * AD-PREVIEW-FIGURES-003 — the same money reader the CARD uses, not the table's.
+     *
+     * `creativeMoney` and `rowMoney` make the same provenance decisions — both go through
+     * `readMoney` — and format them differently: the first exact, the second compact. So a creative
+     * whose card read «1,284,663 SAR» opened a popup reading «1.28M SAR», which is the defect the
+     * observation register already carries as row 14, recurring between two surfaces one click
+     * apart.
+     *
+     * Exact is right for both: a card and a detail panel have the room, and the reader opened the
+     * panel to look closely. The tables keep the compact reader with the exact figure a hover away,
+     * which is the same rule stated for a surface that has to fit forty rows on a screen.
+     */
+    { label: ar ? 'الإنفاق' : 'Spend', value: creativeMoney(metrics as CreativeMetrics | null, 'spend', currency, locale).text },
     { label: ar ? 'الظهور' : 'Impressions', value: readMetricValue('number', bag.impressions ?? null).text },
     { label: ar ? 'النقرات' : 'Clicks', value: readMetricValue('number', bag.clicks ?? null).text },
     { label: 'CTR', value: rate('ctr') },
@@ -67,7 +84,10 @@ export function creativeDialogFigures(metrics: MoneyTotals, currency: string | n
    * the row, and the row is where the sales creatives state theirs.
    */
   if (typeof bag.revenue === 'number') {
-    figures.push({ label: ar ? 'الإيرادات' : 'Revenue', value: rowMoney(metrics, 'revenue', currency) })
+    figures.push({
+      label: ar ? 'الإيرادات' : 'Revenue',
+      value: creativeMoney(metrics as CreativeMetrics | null, 'revenue', currency, locale).text,
+    })
   }
 
   if (typeof bag.roas === 'number') {
