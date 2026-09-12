@@ -628,7 +628,7 @@ function StreamsTab({ ar }: { ar: boolean }) {
             <ul className="mt-3 grid gap-2 sm:grid-cols-2">
               {s.amounts.map((a) => (
                 <li key={a.currency} className="rounded-xl border border-border bg-surface-secondary px-4 py-3">
-                  <span className="tnum block font-heading text-xl font-extrabold text-text-primary" dir="ltr">
+                  <span className="text-start tnum block font-heading text-xl font-extrabold text-text-primary" dir="ltr">
                     {a.monthly !== undefined
                       ? `${a.monthly.toLocaleString('en-US')} ${a.currency}`
                       : `${(a.invoiced ?? 0).toLocaleString('en-US')} ${a.currency}`}
@@ -639,7 +639,7 @@ function StreamsTab({ ar }: { ar: boolean }) {
                       : (ar ? `مُفوتر · ${a.invoices} فاتورة` : `invoiced · ${count(a.invoices ?? 0, 'invoice', 'invoices')}`)}
                   </span>
                   {a.collected !== undefined && (
-                    <span className="tnum mt-1 block text-xs text-text-muted" dir="ltr">
+                    <span className="text-start tnum mt-1 block text-xs text-text-muted" dir="ltr">
                       {(a.collected).toLocaleString('en-US')} {a.currency} {ar ? 'محصَّل' : 'collected'}
                     </span>
                   )}

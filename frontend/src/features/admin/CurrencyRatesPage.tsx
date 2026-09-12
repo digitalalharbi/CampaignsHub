@@ -159,7 +159,7 @@ export function CurrencyRatesPage() {
           <ul data-testid="fx-unmet" className="mt-3 grid gap-2">
             {unmet.map((p) => (
               <li key={`${p.base}-${p.quote}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface-secondary px-3 py-2 text-[13px]">
-                <span className="flex items-center gap-2 font-bold text-text-primary" dir="ltr">
+                <span className="text-start flex items-center gap-2 font-bold text-text-primary" dir="ltr">
                   <AlertTriangle size={14} className="text-warning" aria-hidden />
                   {p.base} → {p.quote}
                 </span>

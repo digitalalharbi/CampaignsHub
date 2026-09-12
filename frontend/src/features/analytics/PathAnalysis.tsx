@@ -159,7 +159,7 @@ export function PathAnalysis({
                     >
                       <span className={`block text-text-secondary ${METRIC_LABEL}`}>{t(kind, ar)}</span>
                       <span className="mt-0.5 block truncate text-sm font-bold text-text-primary">{campaign.name}</span>
-                      <span dir="ltr" className="tnum mt-1 block text-xs text-text-secondary">
+                      <span dir="ltr" className="text-start tnum mt-1 block text-xs text-text-secondary">
                         {metricName(campaign.metric, ar)}: {metricValue(campaign.metric, campaign.value, currency)}
                       </span>
                     </div>

@@ -184,7 +184,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             <Link2 size={16} /> {ar ? 'تم إنشاء الرابط — انسخه الآن، لن يُعرض مرة أخرى' : 'Link created — copy it now, it is shown only once'}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <input readOnly value={created} data-testid="live-link-url" className="tnum min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs" dir="ltr" />
+            <input readOnly value={created} data-testid="live-link-url" className="text-start tnum min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs" dir="ltr" />
             <Button size="sm" onClick={copy}>
               {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? (ar ? 'نُسخ' : 'Copied') : (ar ? 'نسخ' : 'Copy')}
             </Button>

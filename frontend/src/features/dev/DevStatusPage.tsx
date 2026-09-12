@@ -58,7 +58,7 @@ export function DevStatusPage() {
   ]
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-5 p-6" dir="ltr">
+    <div className="text-start mx-auto flex max-w-2xl flex-col gap-5 p-6" dir="ltr">
       <header className="flex items-baseline justify-between">
         <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">Dev Environment Status</h1>
         <span className="text-xs text-text-muted">{at && `updated ${at}`}</span>

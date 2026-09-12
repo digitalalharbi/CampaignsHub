@@ -487,7 +487,7 @@ export function LiveSharedReport({
                       */}
                       <dd
                         dir="ltr"
-                        className="tnum font-semibold text-text-primary"
+                        className="text-start tnum font-semibold text-text-primary"
                         title={revealed(block.spend)}
                       >
                         {asMoney(block.spend)}
