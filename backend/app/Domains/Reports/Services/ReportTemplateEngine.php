@@ -78,15 +78,17 @@ final class ReportTemplateEngine
      * Depth belongs to the report rather than to a reader's toggle, so a summary is a summary
      * wherever it is opened — in the deck, in the print document, in a scheduled email.
      *
-     * Unknown and unspecified both mean FULL. Every report that exists was authored under the old
-     * single shape, and re-reading those as summaries would silently delete sections from decks
-     * people already send.
+     * The parameter is the report's own `form` column — `executive_summary` or `detailed` — which
+     * the product has recorded since reports shipped and which nothing read. Unknown and unspecified
+     * both mean DETAILED: every report that exists was generated as the full deck whatever it was
+     * created as, and re-reading those as summaries would silently delete sections from decks people
+     * already send.
      */
-    public function defaultConfig(string $objective, array $platforms, string $depth = 'full'): array
+    public function defaultConfig(string $objective, array $platforms, string $form = 'detailed'): array
     {
         $objective = array_key_exists($objective, self::METRIC_SETS) ? $objective : 'custom';
         $ordered = $this->orderPlatforms($platforms);
-        $summary = $depth === 'summary';
+        $summary = $form === 'executive_summary';
 
         $slides = [
             ['id' => 'cover', 'type' => 'cover', 'order' => 1, 'visible' => true],
@@ -110,7 +112,18 @@ final class ReportTemplateEngine
              * this money did not buy sales — which the section states, rather than leaving the
              * question to be answered by a blended figure elsewhere.
              */
-            ...($summary ? [] : [['id' => 'objective_performance', 'type' => 'objective_performance', 'order' => 4, 'visible' => true]]),
+            /*
+             * Kept in the SUMMARY too — REPORT-OBJECTIVE-003/004, and `ObjectivePerformanceTest`
+             * says so in its own words: «it survives into the five-page summary a client is sent,
+             * which is the version that gets forwarded and quoted with no per-platform pages behind
+             * it to argue with».
+             *
+             * Dropping it from the executive form was the first thing I wrote, and it would have
+             * reversed a decided product rule: the blended cost per order is exactly the figure a
+             * forwarded summary gets quoted on, and this section is what stops it being read as the
+             * price of a sale.
+             */
+            ['id' => 'objective_performance', 'type' => 'objective_performance', 'order' => 4, 'visible' => true],
         ];
         $order = 5; // 1–4 are the fixed opening: cover, recommendations, summary, objective split.
         /*

@@ -31,7 +31,7 @@ use PHPUnit\Framework\TestCase;
  * Every report that exists was authored under the old single shape, and quietly re-reading those as
  * summaries would delete sections from decks people already send.
  */
-final class ReportDepthTest extends TestCase
+final class ReportFormShapeTest extends TestCase
 {
     private function engine(): ReportTemplateEngine
     {
@@ -49,18 +49,18 @@ final class ReportDepthTest extends TestCase
 
     public function test_a_full_report_keeps_every_section_it_has_always_had(): void
     {
-        $types = $this->types($this->engine()->defaultConfig('sales', ['meta', 'snapchat'], 'full'));
+        $types = $this->types($this->engine()->defaultConfig('sales', ['meta', 'snapchat'], 'detailed'));
 
         foreach (['cover', 'executive_summary', 'objective_performance', 'platform_performance', 'platform_comparison', 'funnel', 'budget', 'ads'] as $type) {
             $this->assertContains($type, $types, "a full report lost «{$type}»");
         }
     }
 
-    /** Unspecified is FULL — every existing report was authored under that shape. */
+    /** Unspecified is DETAILED — every existing report was generated as the full deck. */
     public function test_depth_defaults_to_full(): void
     {
         $this->assertSame(
-            $this->types($this->engine()->defaultConfig('sales', ['meta', 'snapchat'], 'full')),
+            $this->types($this->engine()->defaultConfig('sales', ['meta', 'snapchat'], 'detailed')),
             $this->types($this->engine()->defaultConfig('sales', ['meta', 'snapchat'])),
         );
     }
@@ -74,8 +74,8 @@ final class ReportDepthTest extends TestCase
      */
     public function test_a_summary_is_materially_shorter_than_a_full_report(): void
     {
-        $full = $this->types($this->engine()->defaultConfig('sales', ['meta', 'snapchat', 'tiktok'], 'full'));
-        $summary = $this->types($this->engine()->defaultConfig('sales', ['meta', 'snapchat', 'tiktok'], 'summary'));
+        $full = $this->types($this->engine()->defaultConfig('sales', ['meta', 'snapchat', 'tiktok'], 'detailed'));
+        $summary = $this->types($this->engine()->defaultConfig('sales', ['meta', 'snapchat', 'tiktok'], 'executive_summary'));
 
         $this->assertLessThan(count($full), count($summary));
 
@@ -88,7 +88,8 @@ final class ReportDepthTest extends TestCase
          * ceiling would have deleted a section the requirement names. «Materially shorter» is the
          * claim, so that is what this asserts.
          */
-        $this->assertLessThanOrEqual(count($full) / 2, count($summary), 'a «concise» summary grew into a second full deck');
+        /* Two thirds, not half: the objective split stays in the summary by REPORT-OBJECTIVE-003/004. */
+        $this->assertLessThan(count($full) * 0.7, count($summary), 'a «concise» summary grew into a second full deck');
     }
 
     /**
@@ -101,9 +102,14 @@ final class ReportDepthTest extends TestCase
      */
     public function test_a_summary_keeps_the_headline_the_budget_and_the_creatives(): void
     {
-        $summary = $this->types($this->engine()->defaultConfig('sales', ['meta', 'snapchat'], 'summary'));
+        $summary = $this->types($this->engine()->defaultConfig('sales', ['meta', 'snapchat'], 'executive_summary'));
 
-        foreach (['cover', 'executive_summary', 'budget', 'ads'] as $type) {
+        /*
+         * `objective_performance` is in this list because REPORT-OBJECTIVE-003/004 puts it there:
+         * the blended cost per order is what a forwarded summary gets quoted on, and this section is
+         * what stops it being read as the price of a sale.
+         */
+        foreach (['cover', 'executive_summary', 'objective_performance', 'budget', 'ads'] as $type) {
             $this->assertContains($type, $summary, "an executive summary without «{$type}» is not a summary of anything");
         }
     }
@@ -116,17 +122,17 @@ final class ReportDepthTest extends TestCase
      */
     public function test_a_summary_carries_no_per_platform_slide(): void
     {
-        $summary = $this->types($this->engine()->defaultConfig('sales', ['meta', 'snapchat', 'tiktok', 'google'], 'summary'));
+        $summary = $this->types($this->engine()->defaultConfig('sales', ['meta', 'snapchat', 'tiktok', 'google'], 'executive_summary'));
 
         $this->assertNotContains('platform_performance', $summary);
     }
 
-    /** An unknown depth is FULL, never an empty deck — a typo must not delete somebody's report. */
+    /** An unknown form is DETAILED, never an empty deck — a typo must not delete somebody's report. */
     public function test_an_unknown_depth_falls_back_to_full(): void
     {
         $this->assertSame(
-            $this->types($this->engine()->defaultConfig('sales', ['meta'], 'full')),
-            $this->types($this->engine()->defaultConfig('sales', ['meta'], 'not_a_depth')),
+            $this->types($this->engine()->defaultConfig('sales', ['meta'], 'detailed')),
+            $this->types($this->engine()->defaultConfig('sales', ['meta'], 'not_a_form')),
         );
     }
 }

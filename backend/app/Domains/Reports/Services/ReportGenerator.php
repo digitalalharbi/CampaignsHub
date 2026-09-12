@@ -104,14 +104,18 @@ final class ReportGenerator
         $config = $report->config;
         if (empty($config['slides'])) {
             /*
-             * REPORT-DEPTH-001 — the report's own depth decides its shape.
+             * REPORT-DEPTH-001 — the report's own FORM decides its shape.
              *
-             * `summary` yields the executive deck, anything else the full one. Read from the stored
-             * config rather than from a request, so the same report is the same shape in the deck,
-             * the print document and a scheduled email — a depth that lived on the viewer would make
-             * «the report I sent» and «the report they opened» two different documents.
+             * `form` has been a column since reports shipped, validated as `executive_summary` or
+             * `detailed`, with a comment at the call site explaining that it «defaults to the FULL
+             * report, never the summary». Nothing read it. Every report was generated as the full
+             * deck whatever it had been created as, and the two words meant nothing to the renderer.
+             *
+             * So this is not a new axis: it is the one the product already records, finally
+             * consulted. Adding a second `config['depth']` beside it — which is what I wrote first —
+             * would have been the duplicate taxonomy this product has spent several units removing.
              */
-            $config = $this->template->defaultConfig($objective, $providerList, (string) ($config['depth'] ?? 'full'));
+            $config = $this->template->defaultConfig($objective, $providerList, (string) $report->form);
             $report->forceFill(['config' => $config, 'campaign_objective' => $objective])->saveQuietly();
         }
 
@@ -356,7 +360,7 @@ final class ReportGenerator
         $data['data_source'] = $report->data_source;
         $data['mode'] = $report->config['mode'] ?? 'snapshot';
         /* Stated in the payload so every renderer, and the reader, know which shape this is. */
-        $data['depth'] = $report->config['depth'] ?? 'full';
+        $data['form'] = $report->form;
         $data['generated_at'] = Carbon::now()->toIso8601String();
         $data['checksum'] = ExportReadinessGate::checksum($data);
 
