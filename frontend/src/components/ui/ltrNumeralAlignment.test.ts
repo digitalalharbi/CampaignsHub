@@ -103,6 +103,27 @@ describe('a figure reads in Latin order without moving its block', () => {
       const isBlock = NATIVE_BLOCK.test(element) || BLOCK_CLASS.test(tag)
 
       if (CONTROL.test(element) || INLINE_BOX.test(tag) || !isBlock) continue
+
+      /*
+       * A TABLE CELL is in scope whatever it holds — and «whatever it holds» is the correction.
+       *
+       * `IS_A_FIGURE` asks for a tabular-numeral class, which is how the six `CreativeDetailPage`
+       * cells were caught. It is also why eight more shipped: an invoice total, an outstanding
+       * balance, an invoice number, three dates, a session id and an error string, none of them
+       * carrying `tabular-nums`, all of them `<td … dir="ltr">` in production. `PaymentsPage` had
+       * both patterns two lines apart — the span-wrapped one above, the cell-based one below.
+       *
+       * The figure test is the wrong question for a cell. A column's header inherits the page's
+       * direction and a cell that re-bases its own resolves `start` to the opposite edge, so the
+       * header sits at one side of the column and every value at the other — whether the value is a
+       * number, a date, an id or a sentence. There is no content for which that is right, and the
+       * remedy is the same one: keep the cell in the page's direction and isolate the run inline.
+       */
+      if (/^(td|th)$/.test(element)) {
+        offenders.push(`${path}: ${tag.slice(0, 90).replace(/\s+/g, ' ')}`)
+        continue
+      }
+
       if (!IS_A_FIGURE.test(tag) && element !== 'dd') continue
 
       offenders.push(`${path}: ${tag.slice(0, 90).replace(/\s+/g, ' ')}`)
