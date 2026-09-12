@@ -749,6 +749,7 @@ export function CreativesPage() {
         figures={summaryFigures}
         formats={intelligence.data?.by_format.formats}
         creativesRead={intelligence.data?.creatives_read ?? null}
+        loading={libraryQuery.isPending}
         currency={data?.currency ?? null}
         locale={locale}
       />

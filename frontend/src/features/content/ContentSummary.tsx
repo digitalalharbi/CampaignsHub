@@ -35,6 +35,7 @@ export function ContentSummary({
   creativesRead,
   currency,
   locale,
+  loading = false,
 }: {
   /** The four headline figures, already formatted by the page that owns the money contract. */
   figures: { key: string; label: string; value: string }[]
@@ -42,9 +43,47 @@ export function ContentSummary({
   creativesRead: number | null
   currency: string | null
   locale: Locale
+  /**
+   * KPI-STRIP-RESERVE-001, again — a block that appears after the page has painted moves everything
+   * under it.
+   *
+   * The thirteen-card strip this replaced had exactly this bug and exactly this fix, and dropping
+   * the prop while shrinking the block reintroduced it: `creative-analysis` measured the library's
+   * view toggle jumping 53px once the figures landed, which a person meets as reaching for «list»
+   * and hitting the search box.
+   */
+  loading?: boolean
 }) {
   const ar = locale === 'ar'
   const mix = formatMix(formats)
+
+  /*
+   * While the request is in flight the block holds its own shape and says nothing about the figures.
+   *
+   * Four blocks because the key list is a constant — the page knows how many it will draw before it
+   * has a single number.
+   */
+  if (loading) {
+    return (
+      <section data-testid="content-summary" data-state="loading" className="rounded-2xl border border-border bg-surface p-4">
+        <div className="h-5 w-40 animate-pulse rounded bg-surface-secondary" />
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex flex-col gap-1.5">
+              <div className="h-3 w-16 animate-pulse rounded bg-surface-secondary" />
+              <div className="h-6 w-24 animate-pulse rounded bg-surface-secondary" />
+            </div>
+          ))}
+        </div>
+        {/* The mix reserves its own height too — it is why the block moved 73px when it did not. */}
+        <div className="mt-4">
+          <div className="h-3 w-44 animate-pulse rounded bg-surface-secondary" />
+          <div className="mt-1.5 h-2.5 w-full animate-pulse rounded-full bg-surface-secondary" />
+          <div className="mt-2 h-3 w-64 animate-pulse rounded bg-surface-secondary" />
+        </div>
+      </section>
+    )
+  }
 
   /*
    * Nothing to summarise is a SENTENCE, never an empty shell.
@@ -89,11 +128,18 @@ export function ContentSummary({
 
       {/*
         The split of spend by format — the one comparison this page owes that Analytics does not.
+
+        Drawn whenever anything can be priced, INCLUDING a single format. A first version drew it
+        only for two or more, on the reasoning that one format is not a mix — true, and it made the
+        block's height depend on the data, which moved the toolbar underneath it by 73px once the
+        figures landed. `creative-analysis` measures exactly that, and a reader meets it as reaching
+        for «list» and hitting the search box.
         
-        Drawn only where it says something: one format is not a mix, and a bar with a single full-width
-        slice is a decoration that looks like a finding.
+        A single slice with «video · 100% · 12,400 SAR» beside it is not the decoration that worry
+        was about: it states which shape the whole budget went to, which is a fact about the account
+        and the same fact the bar states when there are four.
       */}
-      {mix.shares.length > 1 && (
+      {mix.shares.length > 0 && (
         <div data-testid="content-summary-mix" className="mt-4">
           <div className="mb-1.5 flex items-baseline justify-between gap-2">
             <span className="text-[11px] font-semibold text-text-muted">
