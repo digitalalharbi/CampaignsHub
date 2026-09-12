@@ -528,7 +528,7 @@ final class CreativeRows
      * @param  Collection<int, ExternalCreative>  $creatives
      * @return list<array<string, mixed>>
      */
-    public function lean(mixed $creatives, Carbon $from, Carbon $to): array
+    public function lean(mixed $creatives, Carbon $from, Carbon $to, bool $withPreview = false): array
     {
         $ids = array_map('strval', $creatives->modelKeys());
 
@@ -558,6 +558,28 @@ final class CreativeRows
                 'objective' => $objective,
                 'metrics' => $figures[$id] ?? null,
             ];
+
+            /*
+             * REPORT-CREATIVE-MEDIA-001 — the media, only where it is not being STORED.
+             *
+             * The paragraph above explains why this list carries no preview: a snapshot outlives a
+             * signed URL and must not carry a credential into a client's document. That reasoning
+             * is about STORING one, and the live link stores nothing — it is built on every open.
+             *
+             * Resolving it here rather than afterwards avoids loading every creative a SECOND time:
+             * they are already in hand at this point, and attaching the media after the fact
+             * re-queried and re-hydrated all of them — 1,539 rows on the owner's own report, every
+             * open.
+             *
+             * On the sixty-creative seed nothing here is measurable: 701ms with no media, 770ms
+             * attaching it afterwards, 778ms doing it in the builder, against a within-run spread
+             * of 60-70ms. So this is a removed redundancy and NOT a speed-up — sixty rows cannot
+             * show one either way, and the first draft of this comment claimed a per-creative cost
+             * that the numbers do not support.
+             */
+            if ($withPreview) {
+                $out[count($out) - 1]['preview'] = $this->presenter->preview($creative);
+            }
         }
 
         return $out;

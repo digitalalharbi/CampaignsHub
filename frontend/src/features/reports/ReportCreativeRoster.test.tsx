@@ -297,4 +297,61 @@ describe('the roster of everything that ran', () => {
     expect(screen.getByTestId('report-roster-poster-0-absent')).toBeInTheDocument()
     expect(screen.queryByTestId('report-roster-poster-0')).toBeNull()
   })
+
+  /**
+   * Pressing a roster row opens THAT creative — the owner's «clicking report/content preview opens
+   * the correct creative».
+   *
+   * The row hands `asReportAd(row)` to the caller, which flattens the figures into the shape
+   * `ReportAdDetail` reads, and the risk in a flattener is that it drops or crosses a field: a panel
+   * opening on the right name with the wrong picture, or with the row above's numbers, is worse than
+   * one that fails to open, because nothing on screen says it is wrong.
+   */
+  it('opens the creative that was pressed, with its own media and figures', () => {
+    const opened: Array<Record<string, unknown>> = []
+
+    renderWithProviders(
+      <ReportCreativeRoster
+        roster={[
+          row({ id: 'first', name: 'First film' }),
+          row({
+            id: 'second',
+            name: 'Second film',
+            preview: {
+              state: 'available',
+              kind: 'image',
+              aspect: 'square',
+              image_url: 'https://cdn.test/second.jpg',
+              video_url: null,
+              thumbnail_url: null,
+              expires_at: null,
+              note_ar: null,
+              note_en: null,
+            },
+            metrics: { spend: 11, impressions: 22, clicks: 33, conversions: 44, ctr: 0.55 },
+          }),
+        ]}
+        inScope={2}
+        withheld={0}
+        currency="USD"
+        locale="en"
+        form="detailed"
+        onOpen={(ad) => opened.push(ad as unknown as Record<string, unknown>)}
+      />,
+      { locale: 'en' },
+    )
+
+    fireEvent.click(screen.getAllByTestId('report-roster-open')[1])
+
+    expect(opened).toHaveLength(1)
+    expect(opened[0]).toMatchObject({
+      id: 'second',
+      name: 'Second film',
+      spend: 11,
+      impressions: 22,
+      clicks: 33,
+      conversions: 44,
+    })
+    expect((opened[0].preview as { image_url?: string }).image_url).toBe('https://cdn.test/second.jpg')
+  })
 })
