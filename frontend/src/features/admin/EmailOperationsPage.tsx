@@ -151,7 +151,7 @@ export function EmailOperationsPage() {
               <tbody>
                 {ledger.data.deliveries.map((row: EmailDelivery) => (
                   <tr key={`${row.source}-${row.id}`} className="border-b border-border align-top last:border-0">
-                    <td className="p-3 text-[13px] text-text-primary" dir="ltr">{row.at.slice(0, 16).replace('T', ' ')}</td>
+                    <td className="p-3 text-[13px] text-text-primary"><span dir="ltr">{row.at.slice(0, 16).replace('T', ' ')}</span></td>
                     <td className="p-3">
                       <div className="text-text-primary">{row.kind}</div>
                       <div className="text-[13px] text-text-muted">
@@ -160,7 +160,7 @@ export function EmailOperationsPage() {
                         {row.transport ? ` · ${row.transport}` : ''}
                       </div>
                     </td>
-                    <td className="p-3 text-[13px] text-text-primary" dir="ltr">{row.recipient ?? '—'}</td>
+                    <td className="p-3 text-[13px] text-text-primary"><span dir="ltr">{row.recipient ?? '—'}</span></td>
                     <td className="p-3 text-[13px] text-text-primary">{row.tenant_name ?? '—'}</td>
                     <td className={`p-3 text-[13px] font-semibold ${word(row.status).tone}`}>
                       {ar ? word(row.status).ar : word(row.status).en}
