@@ -241,6 +241,15 @@ export interface LibraryPage {
    */
   currency: string | null
   /**
+   * CONTENT-KPI-TOTALS-001 — the headline figures for the FILTERED library, not for this page.
+   *
+   * `null` when the scope holds no reported day at all, which is a different fact from every figure
+   * being zero — the strip says «not reported» rather than drawing a row of zeros over an account
+   * that has never sent one. Shaped exactly like a card's `metrics`, by the same server reader, so
+   * the strip and the cards under it cannot derive a rate differently.
+   */
+  totals: CreativeMetrics | null
+  /**
    * CONTENT-STATE-SEMANTICS-001 — why an empty card is empty, keyed by provider.
    *
    * Written by the sync at the moment it knew, because an absent metrics object looks identical

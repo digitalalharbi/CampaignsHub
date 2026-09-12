@@ -26,6 +26,22 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { FilterBar, FilterMulti, FilterSearch, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro } from '@/components/ui/PageIntro'
+import { MetricStrip } from '@/components/ui/MetricStrip'
+import { metricsForKeys } from '@/features/analytics/metricCatalog'
+import type { Summary } from '@/features/analytics/api'
+
+/**
+ * The figures a content library is read on — «provider-available» in the Owner's own list.
+ *
+ * Spend, reach and impressions, clicks and their rate, the cost of each, the result and what it
+ * cost, revenue and its return, and the video figures this surface exists for. Every one of them is
+ * a catalogue key: a metric named here that the platform never sent still renders «لم ترسله
+ * المنصة», which is the requirement's «never turn unavailable data into zero».
+ */
+const CONTENT_KPI_KEYS = [
+  'spend', 'impressions', 'reach', 'clicks', 'ctr', 'cpc', 'cpm',
+  'conversions', 'cpa', 'revenue', 'roas', 'video_views', 'completion_rate',
+] as const
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
@@ -508,6 +524,37 @@ export function CreativesPage() {
   }
 
   const data = libraryQuery.data
+
+  /*
+   * The library's headline figures, as catalogue items.
+   *
+   * `metricsForKeys` is the same builder the dashboard's KPI cards use, and it wants the summary
+   * envelope: `current` for the figures and `reported` for which of their zeros are measurements.
+   * The server's totals already carry both — this only names them in the shape the catalogue reads,
+   * rather than re-deriving a single number.
+   *
+   * `previous` is empty and `delta` is absent on purpose: the library has no comparison window, and
+   * a card drawn with a delta of zero would say a figure held steady when nothing was compared.
+   */
+  const contentKpis = useMemo(() => {
+    const totals = data?.totals
+
+    if (!totals) {
+      return []
+    }
+
+    const summary = {
+      current: totals as unknown as Summary['current'],
+      previous: {} as Summary['previous'],
+      delta: {},
+      reported: (totals as unknown as { reported?: Record<string, boolean> }).reported ?? {},
+      rows_in_scope: data?.total ?? 0,
+      currency: data?.currency ?? null,
+    } as unknown as Summary
+
+    return metricsForKeys(CONTENT_KPI_KEYS, 'all', summary, ar)
+  }, [data, ar])
+
   const creatives = data?.creatives ?? []
 
   /**
@@ -646,6 +693,28 @@ export function CreativesPage() {
             </Link>
           </>
         }
+      />
+
+      {/*
+        CONTENT-KPI-TOTALS-001 — the figures for the library the reader is looking at.
+
+        «The Content area does not visibly expose the required KPI figures consistently … never turn
+        unavailable data into zero.» There was no totals row at all: a card per creative, and no way
+        to ask what the current filter cost.
+
+        Drawn through `MetricStrip` over the canonical catalogue, so these cards are the same cards
+        the dashboard and the analysis draw — same formatting, same «لم ترسله المنصة» for a metric
+        the platform never sent, same refusal when the money cannot be added. The server totals over
+        the FILTERED set, never the page, so the strip and the cards beneath it describe one scope.
+      */}
+      <MetricStrip
+        id="content"
+        ar={ar}
+        primary={contentKpis}
+        hasRows={data === undefined ? undefined : data.total > 0}
+        loading={libraryQuery.isPending}
+        error={libraryQuery.isError ? libraryQuery.error : undefined}
+        onRetry={() => void libraryQuery.refetch()}
       />
 
       <FilterBar

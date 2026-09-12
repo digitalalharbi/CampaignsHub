@@ -99,6 +99,21 @@ final class CreativeAnalysisController extends Controller
 
         if ($health === '') {
             $total = (clone $query)->count();
+
+            /*
+             * CONTENT-KPI-TOTALS-001 — the ids the FILTER matched, read BEFORE the page is taken.
+             *
+             * A strip totalled over the twenty-four cards a page happens to hold would describe one
+             * screen while sitting above a library of thousands — the same «the page as the whole»
+             * defect `total` was fixed for one line up.
+             *
+             * And the order of these two lines is the fix, not a preference: a query builder is
+             * MUTABLE, and `$sorted` is `$query`. Cloning after `forPage()` has run clones the limit
+             * with it, so the «whole library» ids were the page's three — which is exactly what this
+             * was written to prevent, arrived at by writing it the other way round first.
+             */
+            $scopeIds = (clone $query)->pluck('external_creatives.id')->map(static fn (mixed $id): string => (string) $id)->all();
+
             $creatives = $sorted->forPage($page, $perPage)->get();
         } else {
             /*
@@ -121,6 +136,8 @@ final class CreativeAnalysisController extends Controller
             $matching = $this->rows->idsWithFatigueStatus($candidates, $from, $to, $health);
 
             $total = count($matching);
+            /* The health-filtered set is already the answer — the totals describe exactly it. */
+            $scopeIds = $matching;
             $pageIds = array_slice($matching, ($page - 1) * $perPage, $perPage);
 
             /*
@@ -149,6 +166,13 @@ final class CreativeAnalysisController extends Controller
              * told the library held what one screen happened to show.
              */
             'total' => $total,
+            /*
+             * CONTENT-KPI-TOTALS-001 — the headline figures for the filtered library.
+             *
+             * `null` when the scope reported nothing, so the strip says «not reported» rather than
+             * drawing a row of zeros over an account that has never sent a figure.
+             */
+            'totals' => app(CreativeMetrics::class)->totalsFor($scopeIds, $from, $to),
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             /*
              * CREATIVE-MONEY-TRUTH-001 — what the money on these cards is IN.
