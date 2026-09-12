@@ -50,7 +50,19 @@ export interface NewQuote {
   notes?: string | null
 }
 
-export const listQuotes = () => getData<Quote[]>('/billing/quotes')
+/**
+ * Quotes, with what the server left out — OPS-LEDGER-001.
+ *
+ * The list is bounded at two hundred. `getData` throws `meta` away, so the count the server now
+ * sends would have sat unread while the page presented a truncated list as the whole set.
+ */
+export async function listQuotes(): Promise<{ items: Quote[]; total: number; withheld: number }> {
+  const res = await api.get<ApiEnvelope<Quote[]>>('/billing/quotes')
+  const meta = res.data.meta as { total?: number; withheld?: number } | undefined
+  const items = res.data.data ?? []
+
+  return { items, total: meta?.total ?? items.length, withheld: meta?.withheld ?? 0 }
+}
 
 export const createQuote = (body: NewQuote) => postData<Quote>('/billing/quotes', body)
 
@@ -90,11 +102,25 @@ export function isPayable(invoice: Invoice): boolean {
   return invoice.status === 'issued' || invoice.status === 'partially_paid'
 }
 
-export async function listInvoices(status?: InvoiceStatus): Promise<Invoice[]> {
+/**
+ * Invoices, with what the server left out — OPS-LEDGER-001.
+ *
+ * This is the list a customer reads to answer «have I been billed for everything». A silently
+ * truncated one answers it wrongly in the direction that costs them nothing to believe, so the
+ * count travels with the rows and the page states it.
+ */
+export async function listInvoices(status?: InvoiceStatus): Promise<{
+  items: Invoice[]
+  total: number
+  withheld: number
+}> {
   const res = await api.get<ApiEnvelope<Invoice[]>>('/billing/invoices', {
     params: status ? { status } : {},
   })
-  return res.data.data ?? []
+  const meta = res.data.meta as { total?: number; withheld?: number } | undefined
+  const items = res.data.data ?? []
+
+  return { items, total: meta?.total ?? items.length, withheld: meta?.withheld ?? 0 }
 }
 
 // ---------------------------------------------------------------------------

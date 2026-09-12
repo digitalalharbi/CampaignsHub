@@ -142,3 +142,15 @@ rungs rendered, the Project rung being #357's addition.
   alerts shipped silent, then the notification centre, then these four, each written by somebody who
   had not read the others. Console sampling is deliberately out of scope: taking three payloads for
   a diagnostic is not a list anybody reads as complete.
+- **And the consumers, because a count nobody renders is not a fix.** That is the same trap the
+  report media defect turned on: the envelope existed and nothing read it. `listQuotes` and
+  `listInvoices` used `getData`, which throws `meta` away, so the totals would have sat unread.
+  **`InvoicesPage` was the serious one**: its summary cards — including «Outstanding», which is money
+  somebody is owed — are reduced over the rows that ARRIVED, so past the bound they described the
+  most recent two hundred invoices while wearing the label of the whole ledger, and understating a
+  debt is the expensive direction. The page now says so above the cards. `PaymentsPage` distinguishes
+  «nothing to pay» from «nothing to pay among the most recent shown», which are different sentences
+  and only one is safe to show somebody who owes money. `TabBilling` filters one client out of a
+  bounded fetch of every client's invoices, so a client whose invoices are older than the bound
+  simply did not appear; it says that too. Computing these summaries server-side is the better
+  answer and is a larger change — what could not wait is the claim.
