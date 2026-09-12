@@ -131,3 +131,14 @@ rungs rendered, the Project rung being #357's addition.
   something is actually held back. Built inline from the locale rather than by adding interpolation
   to `useT`, which takes a key and no values — a much larger blast radius than the defect.
   One defect, two routes, one unit: the campaign tab and the centre, each proved by injection.
+- **Four more at two hundred, and a guard so the next one cannot ship silent.** Quotes, invoices,
+  campaign annotations and Drive links all capped at 200 with no count. Invoices is the one that
+  matters most — it is the list a customer reads to answer «have I been billed for everything», and
+  a silently truncated one answers it wrongly in the direction that costs them nothing to believe.
+  All four now count after their filters and before the bound.
+  `BoundedListsStateTheirBoundTest` reads the controllers rather than testing each endpoint again,
+  because what no feature test can say is «and the next one somebody writes will do this too» —
+  which is exactly how this defect kept returning: security events were made honest, then campaign
+  alerts shipped silent, then the notification centre, then these four, each written by somebody who
+  had not read the others. Console sampling is deliberately out of scope: taking three payloads for
+  a diagnostic is not a list anybody reads as complete.
