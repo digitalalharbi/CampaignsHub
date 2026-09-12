@@ -229,6 +229,55 @@ export function absenceLabel(reading: PreviewReading, ar: boolean): string {
 }
 
 /**
+ * CONTENT-MEDIA-ABSENCE-COMPACT-001 — the same absence, in three or four words.
+ *
+ * ## Why a second label rather than a shorter one
+ *
+ * `absenceLabel` is right, and it is a SENTENCE — «A collection ad — the platform exposes the tiles;
+ * this product does not fetch them yet.» In a 128-pixel poster box that sentence is eight lines of
+ * 11px grey text where a picture belongs, repeated down a grid of twenty-four cards. The owner's
+ * word for it was a «large explanatory paragraph occupying the creative image area», and they are
+ * right that it reads worse than the absence it describes.
+ *
+ * Shortening the sentence itself was the wrong fix: it is the sentence an operator needs in order to
+ * know whether to re-sync, to wait, or to do nothing, and every clause in it was added because
+ * somebody acted on a vaguer one. So the box gets the label and keeps the sentence in its `title`,
+ * where the reader who wants it can get it without the grid paying for it.
+ *
+ * The two are built from the same reading, so they cannot describe different absences.
+ */
+export function absenceShort(reading: PreviewReading, ar: boolean): string {
+  if (reading.kind === 'video' && reading.poster === null) {
+    return ar ? 'فيديو بلا غلاف' : 'Video, no cover'
+  }
+
+  if (reading.kind === 'catalog') {
+    return ar ? 'كتالوج' : 'Catalog ad'
+  }
+
+  if (reading.kind === 'collection' && reading.src === null) {
+    return ar ? 'تشكيلة بلا غلاف' : 'Collection, no hero'
+  }
+
+  if (reading.kind !== 'none') {
+    return ''
+  }
+
+  const words: Record<string, [string, string]> = {
+    withheld: ['محجوب', 'Withheld'],
+    expired: ['انتهت الصلاحية', 'Link expired'],
+    unavailable: ['لا يوجد ملف', 'No file'],
+    never_fetched: ['لم يُجلب', 'Never fetched'],
+    shape_not_fetched: ['بطاقات لم تُجلب', 'Tiles not fetched'],
+    no_media: ['لا يوجد ملف', 'No file'],
+  }
+
+  const pair = words[reading.reason] ?? words.unavailable
+
+  return ar ? pair[0] : pair[1]
+}
+
+/**
  * CONTENT-PREVIEW-SHAPES-001 — the shape of the asset, so a story is not shown as a crop of itself.
  *
  * A 9:16 story rendered with `object-cover` into a landscape card keeps the middle third and throws

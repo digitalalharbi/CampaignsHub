@@ -1,5 +1,6 @@
 import { useUi } from '@/stores/ui'
-import { absenceLabel, posterSource, previewShape, readPreview } from './adPreview'
+import { ImageOff } from 'lucide-react'
+import { absenceLabel, absenceShort, posterSource, previewShape, readPreview } from './adPreview'
 import type { CreativePreview } from './api'
 import { PosterImage } from './PosterImage'
 
@@ -42,20 +43,43 @@ export function AdPoster({
    * The stated absence, drawn either because there was never a still to draw or because the browser
    * could not draw the one there was. `data-absence` names which, so the two never blur together.
    */
-  const absent = (reason: string) => (
-    <span
-      data-testid={testid ? `${testid}-absent` : undefined}
-      /* Which of the reasons this is, so a surface can tell «there is a film here» from «there is nothing». */
-      data-absence={reason}
-      className={`flex items-center justify-center rounded-lg bg-surface-secondary p-2 text-center text-[11px] leading-tight text-text-muted ${className}`}
-    >
-      {reason === 'fetch_failed'
-        ? ar
-          ? 'تعذّر تحميل أصل هذا الإعلان من المنصة — قد يكون الرابط انتهت صلاحيته. يحتاج مزامنة جديدة.'
-          : 'This ad’s asset could not be loaded from the platform — the link may have expired. It needs a fresh sync.'
-        : absenceLabel(reading, ar)}
-    </span>
-  )
+  const absent = (reason: string) => {
+    /*
+     * CONTENT-MEDIA-ABSENCE-COMPACT-001 — the reason in three words, the sentence on hover.
+     *
+     * This box printed the full explanation: in a 128-pixel poster that is eight lines of 11px grey
+     * text where the picture belongs, repeated down a grid of twenty-four cards. The sentence is not
+     * wrong — an operator needs it to know whether to re-sync, to wait, or to do nothing — so it
+     * moves to the `title` rather than being cut down. Both come from the same reading, so the label
+     * and the sentence cannot describe different absences.
+     */
+    const sentence = reason === 'fetch_failed'
+      ? ar
+        ? 'تعذّر تحميل أصل هذا الإعلان من المنصة — قد يكون الرابط انتهت صلاحيته. يحتاج مزامنة جديدة.'
+        : 'This ad’s asset could not be loaded from the platform — the link may have expired. It needs a fresh sync.'
+      : absenceLabel(reading, ar)
+    const label = reason === 'fetch_failed'
+      ? (ar ? 'تعذّر التحميل' : 'Could not load')
+      : absenceShort(reading, ar)
+
+    return (
+      <span
+        data-testid={testid ? `${testid}-absent` : undefined}
+        /* Which of the reasons this is, so a surface can tell «there is a film here» from «there is nothing». */
+        data-absence={reason}
+        title={sentence}
+        className={`flex flex-col items-center justify-center gap-1 rounded-lg bg-surface-secondary p-2 text-center text-[11px] leading-tight text-text-muted ${className}`}
+      >
+        <ImageOff size={16} aria-hidden className="shrink-0 opacity-60" />
+        <span data-testid={testid ? `${testid}-absent-label` : undefined} className="font-semibold">{label}</span>
+        {/*
+          The sentence is still IN the DOM, for a screen reader and for anything that reads the page
+          rather than hovers it — `sr-only`, so it costs the grid no space.
+        */}
+        <span className="sr-only">{sentence}</span>
+      </span>
+    )
+  }
 
   if (!src) {
     /*
