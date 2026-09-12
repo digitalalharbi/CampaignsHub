@@ -11,6 +11,7 @@ use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
 use App\Domains\Reports\Services\ExportReadinessGate;
+use App\Domains\Reports\Services\ReportCreativeMedia;
 use App\Domains\Reports\Services\ReportDeliveryAudienceGuard;
 use App\Domains\Reports\Services\ReportTemplateEngine;
 use App\Domains\Reports\Support\ReportScope;
@@ -265,7 +266,15 @@ final class ReportController extends Controller
                 : [],
         ];
         if ($withData) {
-            $out['data'] = $r->data;
+            /*
+             * REPORT-CREATIVE-MEDIA-001 — the operator's own copy gets the same fresh media.
+             *
+             * The shared link, the PDF and this all render `ads_roster` through one component. If
+             * only the client's copy resolved its pictures, the operator checking the report before
+             * sending it would see «no cover» on the very rows the client is about to see correctly
+             * — and would reasonably conclude the report was broken and not send it.
+             */
+            $out['data'] = app(ReportCreativeMedia::class)->refresh($r->data ?? []);
         }
 
         return $out;

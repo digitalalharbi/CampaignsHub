@@ -10,6 +10,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ClientReportView;
 use App\Domains\Reports\Services\LiveReportService;
+use App\Domains\Reports\Services\ReportCreativeMedia;
 use App\Domains\Reports\Services\ReportExporter;
 use App\Domains\Reports\Services\SharedCreativeView;
 use App\Domains\Reports\Services\ShareService;
@@ -78,9 +79,29 @@ final class PublicReportController extends Controller
          * answers to the same question.
          */
         $form = $share->formOr($report->form);
+
+        /*
+         * REPORT-CREATIVE-MEDIA-001 — the pictures are resolved now; the figures stay the snapshot's.
+         *
+         * The owner opened a production Detailed Report and found rows claiming «لا يوجد غلاف» for
+         * creatives the Content library shows. The roster never carried a preview at all, and the
+         * ranked cards carried one stored months ago, by which time a signed platform URL has
+         * expired. Neither is a rendering bug and neither is fixed by storing more: a snapshot
+         * outlives any signed media link, which is exactly why `CreativeRows::lean()` refuses to
+         * write one into it.
+         *
+         * A report's figures are a claim about a PERIOD and must not move. Its media is not — «what
+         * does this creative look like» has one true answer, now — so it is resolved on every open
+         * through the same `CreativePresenter` the library uses.
+         *
+         * BEFORE the client view, because the resolution is keyed on the creative id and the client
+         * boundary strips exactly that.
+         */
+        $fresh = app(ReportCreativeMedia::class)->refresh($report->data ?? []);
+
         $data = $form === 'executive_summary'
-            ? $view->executive($report->data ?? [])
-            : $view->filter($report->data ?? []);
+            ? $view->executive($fresh)
+            : $view->filter($fresh);
         $data = $this->shares->sanitize($data, $share);
 
         return ApiResponse::success([
@@ -155,6 +176,16 @@ final class PublicReportController extends Controller
         }
 
         $payload = $live->build($share, $request->query(), (string) $report->currency);
+
+        /*
+         * The live link has the SAME gap and needs the same answer — REPORT-CREATIVE-MEDIA-001.
+         *
+         * It is tempting to think a live payload is fresh by definition, but its roster is built by
+         * the same `CreativeRows::lean()`, which carries no preview for the same good reason. A
+         * client whose link happens to be live would otherwise see «no cover» beside a client whose
+         * link is a snapshot seeing the picture, from one report.
+         */
+        $payload = app(ReportCreativeMedia::class)->refresh($payload);
 
         // Sanitised with the same hide-flags as the snapshot path: a live link that leaks spend a
         // snapshot link would have hidden is the same disclosure, arriving by a newer route.
@@ -361,7 +392,14 @@ final class PublicReportController extends Controller
         // (spend/revenue/names). replicate() keeps the audience so the exporter filters correctly.
         $sanitized = $report->replicate();
         $sanitized->setAttribute('id', $report->id); // replicate() drops the key; the gate needs it
-        $data = $this->shares->sanitize($report->data ?? [], $share);
+        /*
+         * The PDF is the copy a client KEEPS, so it is the last place to print «no cover» over an
+         * ad whose picture the product can resolve — REPORT-CREATIVE-MEDIA-001.
+         */
+        $data = $this->shares->sanitize(
+            app(ReportCreativeMedia::class)->refresh($report->data ?? []),
+            $share,
+        );
 
         /*
          * §15.12 — the creative rows reach the file only if the link may show them.
