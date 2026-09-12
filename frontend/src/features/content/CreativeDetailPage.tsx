@@ -642,7 +642,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
                 <tr>
                   <th className="p-2 text-start">{t.platform}</th>
                   {['spend', 'impressions', 'clicks', 'conversions'].map((k) => (
-                    <th key={k} className="p-2 text-start">{metricLabel(k, locale)}</th>
+                    <th key={k} className="p-2 text-center">{metricLabel(k, locale)}</th>
                   ))}
                   <th className="p-2 text-start">{t.source}</th>
                 </tr>
@@ -652,8 +652,8 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
                   <tr key={row.creative_id} className="border-t border-border">
                     <td className="p-2">{providerLabel(row.provider, locale)}</td>
                     {['spend', 'impressions', 'clicks', 'conversions'].map((k) => (
-                      <td key={k} className="p-2 tabular-nums" dir="ltr">
-                        {formatMetric(metricState(row.metrics, k), k, locale, currency)}
+                      <td key={k} className="p-2 text-center tabular-nums">
+                        <Num>{formatMetric(metricState(row.metrics, k), k, locale, currency)}</Num>
                       </td>
                     ))}
                     {/*
@@ -687,7 +687,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
                   <tr>
                     <th className="p-2 text-start" />
                     {['ctr', 'cpc', 'cpm', 'roas'].map((k) => (
-                      <th key={k} className="p-2 text-start">{metricLabel(k, locale)}</th>
+                      <th key={k} className="p-2 text-center">{metricLabel(k, locale)}</th>
                     ))}
                   </tr>
                 </thead>
@@ -695,18 +695,20 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
                   <tr className="border-t border-border">
                     <td className="p-2 font-medium">{t.mine}</td>
                     {['ctr', 'cpc', 'cpm', 'roas'].map((k) => (
-                      <td key={k} className="p-2 tabular-nums" dir="ltr">
-                        {formatMetric(metricState(metrics, k), k, locale, currency)}
+                      <td key={k} className="p-2 text-center tabular-nums">
+                        <Num>{formatMetric(metricState(metrics, k), k, locale, currency)}</Num>
                       </td>
                     ))}
                   </tr>
                   <tr className="border-t border-border text-text-secondary">
                     <td className="p-2">{t.average}</td>
                     {['ctr', 'cpc', 'cpm', 'roas'].map((k) => (
-                      <td key={k} className="p-2 tabular-nums" dir="ltr">
-                        {typeof data.peers?.[k] === 'number'
-                          ? formatMetric({ kind: 'value', value: data.peers[k] as number }, k, locale, currency)
-                          : t.notProvided}
+                      <td key={k} className="p-2 text-center tabular-nums">
+                        <Num>
+                          {typeof data.peers?.[k] === 'number'
+                            ? formatMetric({ kind: 'value', value: data.peers[k] as number }, k, locale, currency)
+                            : t.notProvided}
+                        </Num>
                       </td>
                     ))}
                   </tr>
@@ -893,9 +895,9 @@ function FunnelTable({
         <thead className="bg-surface-hover text-xs text-text-secondary">
           <tr>
             <th className="p-2 text-start">{t.stage}</th>
-            <th className="p-2 text-start">{t.count}</th>
-            <th className="p-2 text-start">{t.rate}</th>
-            <th className="p-2 text-start">{t.costPer}</th>
+            <th className="p-2 text-center">{t.count}</th>
+            <th className="p-2 text-center">{t.rate}</th>
+            <th className="p-2 text-center">{t.costPer}</th>
             <th className="p-2 text-start">{t.source}</th>
           </tr>
         </thead>
@@ -903,20 +905,22 @@ function FunnelTable({
           {stages.map((stage) => (
             <tr key={stage.key} className="border-t border-border">
               <td className="p-2">{ar ? stage.label_ar : stage.label_en}</td>
-              <td className="p-2 tabular-nums" dir="ltr">
-                {stage.count === null ? t.notProvided : stage.count.toLocaleString('en-US')}
+              <td className="p-2 text-center tabular-nums">
+                <Num>{stage.count === null ? t.notProvided : stage.count.toLocaleString('en-US')}</Num>
               </td>
-              <td className="p-2 tabular-nums" dir="ltr">
-                {stage.rate_from_previous === null ? '—' : `${(stage.rate_from_previous * 100).toFixed(1)}%`}
+              <td className="p-2 text-center tabular-nums">
+                <Num>{stage.rate_from_previous === null ? '—' : `${(stage.rate_from_previous * 100).toFixed(1)}%`}</Num>
               </td>
-              <td className="p-2 tabular-nums" dir="ltr">
+              <td className="p-2 text-center tabular-nums">
                 {/* Three different sentences: withheld by the link, no spend reported, and a real
                     figure. Collapsing the first two into «—» tells the reader the wrong story. */}
-                {stage.cost_hidden
-                  ? t.costHidden
-                  : stage.cost_per === null
-                    ? t.notProvided
-                    : formatMetric({ kind: 'value', value: stage.cost_per }, 'cpa', locale, currency)}
+                <Num>
+                  {stage.cost_hidden
+                    ? t.costHidden
+                    : stage.cost_per === null
+                      ? t.notProvided
+                      : formatMetric({ kind: 'value', value: stage.cost_per }, 'cpa', locale, currency)}
+                </Num>
               </td>
               <td className="p-2 text-xs text-text-secondary">{stage.source}</td>
             </tr>
