@@ -42,7 +42,14 @@ test('alerts page renders all sections and a rule created in the UI persists', a
 
   // Preferences tab → channels + quiet hours render.
   await page.getByRole('button', { name: /Preferences|التفضيلات/ }).click()
-  await expect(page.getByText(/Quiet hours|ساعات الهدوء/).first()).toBeVisible()
+  /*
+    Case-insensitive, because the English heading is «Notification channels & quiet hours».
+    
+    This case only ever ran in Arabic — `switchToEnglish` was a no-op that swallowed its own failure
+    — and «ساعات الهدوء» is a substring of the Arabic heading, so it matched. Under a switch that
+    actually switches, the capital «Quiet hours» matches nothing on the page.
+  */
+  await expect(page.getByText(/quiet hours|ساعات الهدوء/i).first()).toBeVisible()
 
   // Delivery log tab → honest note renders (never "sent" without a provider).
   await page.getByRole('button', { name: /Delivery log|سجل التسليم/ }).click()

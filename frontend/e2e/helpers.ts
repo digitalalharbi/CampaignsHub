@@ -71,28 +71,57 @@ export async function openFilters(page: Page, id: string) {
  * ## What this was
  *
  * `getByRole('button', { name: /Toggle language|EN|اللغة/ }).first()`, clicked inside a
- * `.catch(() => {})`. Three problems compounding: the pattern is loose enough to match any button
- * whose accessible name happens to contain «EN», `.first()` then takes whichever of those comes
- * first in the DOM, and the swallowed rejection means a click on the wrong control — or no click at
- * all — reads exactly like a successful switch.
+ * `.catch(() => {})`. Three problems compounding: the pattern matched any button whose accessible
+ * name contained «EN», `.first()` took whichever came first in the DOM, and the swallowed rejection
+ * meant a click on the wrong control — or no click at all — read exactly like a success.
  *
- * Forty-nine specs call this. On `/agency/content` it silently did nothing: `html[dir]` stayed
- * `rtl` through the whole test, so every «in English…» assertion in those specs was being made
- * about an Arabic page. A helper that cannot fail is not a helper; it is a hole with a name.
+ * Forty-nine specs call this. On `/agency/content` it silently did nothing: `html[dir]` stayed `rtl`
+ * for the whole test, so every «in English…» assertion in those specs was made about an Arabic page.
  *
- * The switch is the app's own control, addressed by its exact label, and the OUTCOME is waited for.
+ * ## Why it does not press the button
+ *
+ * The first repair did press it, exactly, and waited for `dir="ltr"`. That failed eight specs across
+ * three browsers with «no language control on this page» — and the failures were the useful part:
+ * the alerts page, the client portal, the request tracking page and the advertiser's connector
+ * surface have no toggle in their chrome at all, so those specs had NEVER been in English and the
+ * strict version merely said so out loud.
+ *
+ * Making them English by pressing a control that is not there is impossible; making them English is
+ * not. The locale is a remembered choice in `localStorage` under a key the store reads at module
+ * load, so setting it and reloading puts ANY page into English — including one whose chrome offers
+ * no way to ask. That is what a reader who has chosen English would actually see.
+ *
+ * The outcome is still asserted. A page that does not end up `dir="ltr"` fails here, which is the
+ * property the old helper could not hold.
  */
 export async function switchToEnglish(page: Page) {
   const html = page.locator('html')
 
   if ((await html.getAttribute('dir')) === 'ltr') return
 
+  /*
+   * The app's own control first, and it is the fast path: no navigation, so nothing in flight is
+   * interrupted. Most surfaces have it.
+   */
   const toggle = page.getByRole('button', { name: 'Toggle language', exact: true }).first()
-  await expect(toggle, 'no language control on this page').toBeVisible({ timeout: 15000 })
-  await toggle.click()
 
-  await expect(html, 'the language control did not put the page into English').toHaveAttribute('dir', 'ltr', {
-    timeout: 10000,
+  if (await toggle.count() > 0) {
+    await toggle.click()
+  } else {
+    /*
+     * And where the chrome offers none — the alerts page, the client portal, the request tracking
+     * page, the advertiser's connector surface — the remembered choice, then a reload.
+     *
+     * A reload rather than a click because there is nothing to click, and it is the SECOND branch
+     * rather than the only one because reloading mid-test is not free: doing it unconditionally
+     * raced the session on this very spec and produced nine 403s on requests that had been fine.
+     */
+    await page.evaluate(() => localStorage.setItem('campaign-hub-locale', 'en'))
+    await page.reload()
+  }
+
+  await expect(html, 'the page did not come back in English').toHaveAttribute('dir', 'ltr', {
+    timeout: 15000,
   })
 }
 
