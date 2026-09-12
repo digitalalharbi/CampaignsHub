@@ -215,6 +215,59 @@ final class ReportRosterMediaTest extends TestCase
     }
 
     /**
+     * A COLLECTION whose hero is empty and whose tiles hold the media.
+     *
+     * Listed separately from the carousel because it is a different shape with the same rescue, and
+     * because `CreativeCarousel`'s own docblock records that a caller once gated the tiles on
+     * `kind === 'carousel'` and dropped a collection's products. One case per shape is what stops
+     * that being rediscovered from a client's report.
+     */
+    public function test_a_collection_falls_back_to_its_first_usable_tile(): void
+    {
+        $this->creative([
+            'format' => 'collection',
+            'asset_url' => null,
+            'cards' => [
+                ['image_url' => null],
+                ['image_url' => 'https://cdn.test/tile-2.jpg'],
+            ],
+        ]);
+
+        $preview = $this->sharedRoster()[0]['preview'] ?? null;
+
+        $this->assertIsArray($preview);
+        $this->assertSame('https://cdn.test/tile-2.jpg', $preview['image_url']);
+    }
+
+    /**
+     * A STORY keeps its own shape in the report — «Story → proper vertical preview».
+     *
+     * The aspect travels with the envelope because a 9:16 story cropped into a landscape frame
+     * keeps the middle third and throws away the top and the bottom, which on a story is the logo
+     * and the call to action. A client comparing two creatives in a report would then be comparing
+     * two crops this product invented. The roster's row is small, but it is the same envelope the
+     * card and the popup read, so the shape has to survive the trip rather than be re-guessed at
+     * the far end.
+     */
+    public function test_a_vertical_story_carries_its_shape(): void
+    {
+        $this->creative([
+            'format' => 'video',
+            'asset_url' => null,
+            'video_url' => 'https://cdn.test/story.mp4',
+            'thumbnail_url' => 'https://cdn.test/story-frame.jpg',
+            'width' => 1080,
+            'height' => 1920,
+        ]);
+
+        $preview = $this->sharedRoster()[0]['preview'] ?? null;
+
+        $this->assertIsArray($preview);
+        $this->assertSame('vertical', $preview['aspect'], 'the story arrived without its shape and will be letterboxed');
+        $this->assertSame('https://cdn.test/story-frame.jpg', $preview['thumbnail_url']);
+    }
+
+    /**
      * And a creative with genuinely nothing says so — the absence state is not removed, it is
      * earned. A test that only proved pictures appear would be satisfied by inventing one.
      */
@@ -285,5 +338,63 @@ final class ReportRosterMediaTest extends TestCase
 
         // And the media still came through, so the figure did not stay still by the refresh failing.
         $this->assertSame('https://cdn.test/hero.jpg', $after['preview']['image_url'] ?? null);
+    }
+
+    /**
+     * THE LIVE LINK — the path the owner's own report actually uses, and the one my first fix missed.
+     *
+     * `PublicReportController::live()` was given the same refresh, and it did nothing. The call sat
+     * after `LiveReportService::build()`, and `build()` applies `ClientEntityBoundary::roster()` and
+     * `::ads()` INSIDE itself — so by the time the refresh ran, the creative ids it resolves by had
+     * already been stripped and it walked over rows it could not key. The suite went green because
+     * every case above exercises the SNAPSHOT route.
+     *
+     * Measured against the owner's real report afterwards: `ads_roster` 60 rows, every one still
+     * missing the preview key, on the deployed fix. A test that never asked the live path could not
+     * have told me, and I had asserted the path was covered on the strength of having edited it.
+     *
+     * The media is therefore attached where the ids still exist — inside `build()`, before the
+     * boundary — and this case asks the live endpoint rather than the service.
+     */
+    public function test_a_live_link_carries_the_media_too(): void
+    {
+        $this->creative();
+
+        $this->report = Report::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'name' => 'R', 'type' => 'performance', 'status' => 'completed', 'form' => 'detailed',
+            'audience' => 'client', 'generated_at' => now(),
+            'period_start' => now()->subDays(30)->toDateString(),
+            'period_end' => now()->toDateString(),
+            'currency' => 'SAR', 'scope' => [],
+        ]);
+
+        [, $raw] = app(ShareService::class)->create($this->report, [
+            'mode' => 'live',
+            'settings' => ['creatives' => CreativeVisibility::fromArray([
+                'creatives' => true, 'video' => true, 'image_zoom' => true,
+            ])->toArray()],
+            'scope' => [
+                'project_id' => (string) $this->project->getKey(),
+                'earliest' => now()->subDays(30)->toDateString(),
+                'latest' => now()->toDateString(),
+            ],
+        ], null);
+
+        $payload = $this->getJson("/api/v1/reports/shared/{$raw}/live")->assertOk()->json('data');
+
+        $roster = $payload['ads_roster'] ?? [];
+        $this->assertNotEmpty($roster, 'the live link listed no creatives at all');
+
+        $preview = $roster[0]['preview'] ?? null;
+
+        $this->assertIsArray($preview, 'the LIVE link carried no preview envelope — the client sees «no cover»');
+        $this->assertSame('https://cdn.test/hero.jpg', $preview['image_url']);
+
+        // And the boundary still holds on this path, which is why the refresh had to move rather than the boundary.
+        foreach (['id', 'campaign_id', 'campaign_name'] as $key) {
+            $this->assertArrayNotHasKey($key, $roster[0], "the live client roster carried «{$key}»");
+        }
     }
 }

@@ -68,7 +68,7 @@ final class LiveReportService
             'project_ids' => $scope['project_id'] === '' ? [] : [$scope['project_id']],
             'providers' => $applied['providers'] !== [] ? $applied['providers'] : $scope['providers'],
             'campaign_ids' => $applied['campaigns'] !== [] ? $applied['campaigns'] : $scope['campaign_ids'],
-        ], (string) $share->report->form);
+        ], (string) $share->report->form, liveMedia: true);
 
         return [
             /*
@@ -77,6 +77,24 @@ final class LiveReportService
              * These rows carried `id` and `campaign_id` — our own UUIDs — to a link whose whole
              * point is that it names nothing internal. The snapshot path has stripped `campaign_id`
              * since it was written; this one never did.
+             */
+            /*
+             * REPORT-CREATIVE-MEDIA-001 — the media arrives with the rows, not after them.
+             *
+             * The first version of this fix put a refresh in `PublicReportController::live()`,
+             * after this method returned, and it did nothing at all: the boundary calls here strip
+             * the creative `id` the resolution is keyed on, so it walked rows it could not match.
+             * The whole backend suite stayed green because every case exercised the SNAPSHOT route,
+             * and the owner's own report — a LIVE share — went on printing «لا يوجد غلاف».
+             *
+             * The second version attached it here, before the boundary. That was correct, and it
+             * re-loaded creatives `ReportAds` had just read — on a 1,539-creative report, every one
+             * of them queried and hydrated twice per open. `liveMedia` asks the builder to resolve
+             * it while the models are in hand instead. On the sixty-row seed the two measure the
+             * same, so this is a removed redundancy rather than a demonstrated speed-up.
+             *
+             * The ranked lists below need nothing: `present()` has always carried a preview. The
+             * ROSTER was the only section without one, which is exactly what the owner saw.
              */
             'ads' => ClientEntityBoundary::ads($built['ads']),
             'ads_level' => $built['level'],
