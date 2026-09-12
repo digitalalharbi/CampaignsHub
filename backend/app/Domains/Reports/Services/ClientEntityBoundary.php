@@ -110,6 +110,49 @@ final class ClientEntityBoundary
     }
 
     /**
+     * Roster rows with everything internal taken out — REPORT-CREATIVE-TRUTH-001 §C.
+     *
+     * ## Why `ads()` above is the wrong function for these
+     *
+     * The roster is the PRESENTED creative row, not the ranker's flattened one, and they are not the
+     * same shape. A presented row carries `campaign_name`, `ad_set_id` and — this is the trap — its
+     * own `ads` key holding every ExternalAd on the creative, each with `external_id`,
+     * `external_campaign_id` and `external_ad_set_id`.
+     *
+     * `ads()` has an `isset($ad['ads'])` branch, written for an objective GROUP whose `ads` are more
+     * ad rows. Handed a roster row it would take that branch, walk into the platform ads, strip the
+     * two keys it knows and hand the other three straight to the link. Nothing would have failed:
+     * one key name meaning two things, and the boundary quietly passing through the door it was
+     * built to close.
+     *
+     * ## And the campaign name
+     *
+     * «Never restore campaign names into client reports where they were removed.» `ads()` never had
+     * to strip it because the ranked rows never carried it; the presented row does, on every entry
+     * of the longest list in the document.
+     *
+     * @param  list<array<string,mixed>>  $rows
+     * @return list<array<string,mixed>>
+     */
+    public static function roster(array $rows): array
+    {
+        return array_map(static function (array $row): array {
+            unset(
+                $row['id'],
+                $row['campaign_id'],
+                $row['campaign_name'],
+                $row['ad_set_id'],
+                $row['external_account_id'],
+                $row['client_display_name'],
+                /* The platform's own ad objects — internal ids end to end, and nothing here shows them. */
+                $row['ads'],
+            );
+
+            return $row;
+        }, $rows);
+    }
+
+    /**
      * A coverage block with the operator's EVIDENCE taken out and its verdict left behind.
      *
      * `AggregateCoverage::reasons` is documented as «contributor → human-readable evidence for its

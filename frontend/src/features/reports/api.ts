@@ -1,4 +1,5 @@
 import type { AdGroup, AdsReading, ReportAd } from './ReportAdsSection'
+import type { RosterRow } from './ReportCreativeRoster'
 import type { ObjectivePerformance } from './InteractiveReport'
 import type { PathLeaders } from '@/features/analytics/api'
 
@@ -253,6 +254,18 @@ export interface LivePayload {
   ads_level?: string | null
   ads_absent_reason?: string | null
   ads_reading?: AdsReading
+  /**
+   * REPORT-CREATIVE-TRUTH-001 §B — every creative that ran, beside the ones that worked.
+   *
+   * `ads` is a ranking and `ads_roster` is an inventory. The two counts beside it are what let the
+   * page say «65 ran, 60 listed» instead of showing six and leaving the reader to assume that is
+   * all there was.
+   */
+  ads_roster?: RosterRow[]
+  creatives_in_scope?: number | null
+  creatives_withheld?: number | null
+  /** `executive_summary` or `detailed` — the report's own depth, decided when it was created. */
+  form?: string | null
   /**
    * REPORT-OBJECTIVE-003/004 — Direct against Blended, on the surface where it matters most.
    *

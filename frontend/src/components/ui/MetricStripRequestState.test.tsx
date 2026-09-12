@@ -69,6 +69,31 @@ describe('the metric strip while the request is in flight or has failed', () => 
     expect(screen.queryByTestId('t-metrics-empty-scope')).not.toBeInTheDocument()
   })
 
+  /**
+   * KPI-STRIP-RESERVE-001 — the skeleton reserves the row even when it has no items to map.
+   *
+   * The loading branch mapped `primary`, and on nearly every surface `primary` is derived from the
+   * response — so while the request was in flight it was EMPTY and the skeleton reserved nothing.
+   * The strip rendered a zero-height box, then a full row of cards, and everything under it jumped:
+   * `creative-analysis.spec.ts` measured the Content library's view toggle dropping 482px, which a
+   * person meets as reaching for «list» and hitting the search box.
+   *
+   * The comment above the branch said it «holds the row's shape so the page does not jump» the whole
+   * time. This is the case that makes the comment checkable.
+   */
+  it('reserves a row of cards even before it knows what they are', () => {
+    renderStrip({ loading: true, primary: [] })
+
+    expect(screen.getByTestId('t-metrics-loading').children.length).toBeGreaterThan(0)
+  })
+
+  /* And a surface that knows its own card count reserves exactly that many. */
+  it('reserves the count the caller declares', () => {
+    renderStrip({ loading: true, primary: [], loadingCards: 13 })
+
+    expect(screen.getByTestId('t-metrics-loading').children).toHaveLength(13)
+  })
+
   /* And the states that were already right stay right. */
   it('still renders the cards when the request succeeded', () => {
     renderStrip({ loading: false, hasRows: true })

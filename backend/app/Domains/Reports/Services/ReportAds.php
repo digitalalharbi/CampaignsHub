@@ -26,8 +26,7 @@ use Illuminate\Support\Carbon;
  *
  * ## What it guarantees
  *
- * The same ranker (`CreativeRankingService`) on the same objective, the same 60-row bound before
- * ranking, and the same canonical preview from `CreativePresenter` — so an ad whose media was
+ * The same ranker (`CreativeRankingService`) on the same objective, the same bound before ranking, and the same canonical preview from `CreativePresenter` — so an ad whose media was
  * withheld, expired or never sent says the same sentence in the deck, in the link and in the PDF.
  *
  * ## An absent section, not an empty one
@@ -38,8 +37,24 @@ use Illuminate\Support\Carbon;
  */
 final class ReportAds
 {
-    /** The most creatives presented before ranking — a scheduled report must not become 4,000 calls. */
-    private const MAX_ROWS = 60;
+    /**
+     * The most creatives a FIVE-PAGE SUMMARY presents — a deck is a curated document by definition.
+     *
+     * This was `MAX_ROWS`, applied to every report equally, and the count below is what makes it
+     * honest: a summary that shows a handful now says how many it left out.
+     */
+    private const SUMMARY_ROWS = 60;
+
+    /**
+     * And the most a FULL report presents, which is meant to hold the whole estate.
+     *
+     * «Full reports must be able to show ALL promoted creatives truthfully.» `present()` is fully
+     * batched — one query for the figures, one for the campaigns, one for the ads, one for delivery —
+     * so five hundred rows cost the same round trips as sixty and only the per-row card differs. The
+     * bound stays because a payload has to end somewhere, and `creatives_withheld` states it when an
+     * estate is large enough to reach it, rather than the page pretending it is the whole account.
+     */
+    private const FULL_ROWS = 500;
 
     public function __construct(
         private readonly CreativeRows $creatives,
@@ -48,9 +63,10 @@ final class ReportAds
 
     /**
      * @param  array<string, mixed>  $filters  `project_ids`, `providers`, `campaign_ids` — the scope
-     * @return array{ads: list<array<string,mixed>>, worst: list<array<string,mixed>>, groups: list<array<string,mixed>>, level: string, reason: string|null}
+     * @param  string  $form  `executive_summary` curates; anything else is the full report
+     * @return array{ads: list<array<string,mixed>>, worst: list<array<string,mixed>>, groups: list<array<string,mixed>>, roster: list<array<string,mixed>>, level: string, reason: string|null, creatives_in_scope: int, creatives_withheld: int}
      */
-    public function for(string $objective, Carbon $from, Carbon $to, array $filters = []): array
+    public function for(string $objective, Carbon $from, Carbon $to, array $filters = [], string $form = 'detailed'): array
     {
         $query = ExternalCreative::query();
         $this->creatives->applyFilters($query, $filters + [
@@ -58,15 +74,36 @@ final class ReportAds
             'to' => $to->toDateString(),
         ]);
 
+        /*
+         * REPORT-CREATIVE-TRUTH-001 — how many creatives the scope holds, before the cap.
+         *
+         * «Full reports must be able to show all promoted creatives truthfully.» The row bound exists
+         * for a real reason — a payload has to end somewhere — but it was SILENT, so a report showed a
+         * curated handful and said nothing about the rest, which reads as «these are the ads that
+         * ran».
+         *
+         * Counted on a clone, before the limit is applied: the builder is mutable and `->limit()`
+         * below would otherwise cap the count too, which is the same mistake the content library's
+         * totals made one unit ago.
+         */
+        $inScope = (clone $query)->count();
+
+        $limit = $form === 'executive_summary' ? self::SUMMARY_ROWS : self::FULL_ROWS;
+
         $rows = $this->creatives->present(
-            $this->creatives->applySort($query, 'spend', $from, $to)->limit(self::MAX_ROWS)->get(),
+            $this->creatives->applySort($query, 'spend', $from, $to)->limit($limit)->get(),
             $from,
             $to,
             withFatigue: false,
         );
 
         if ($rows === []) {
-            return ['ads' => [], 'worst' => [], 'groups' => [], 'level' => 'campaign', 'reason' => 'no_creatives_in_window'];
+            return [
+                'ads' => [], 'worst' => [], 'groups' => [], 'roster' => [], 'level' => 'campaign',
+                'reason' => 'no_creatives_in_window',
+                'creatives_in_scope' => $inScope,
+                'creatives_withheld' => $inScope,
+            ];
         }
 
         // The same ranker the campaign leaders use, on the same objective — one definition of «best».
@@ -115,9 +152,20 @@ final class ReportAds
          */
         $groups = $this->groupsByObjective($rankable);
 
+        /*
+         * REPORT-CREATIVE-TRUTH-001 §B — what did we RUN, beside what worked.
+         *
+         * `ads`, `worst` and `groups` are three curated answers to «which of these performed». None of
+         * them is an answer to «what did you run for me», and a client paying for forty creatives who
+         * can see six asks the second question. The roster is every presented creative in spend order:
+         * the same rows, the same presenter, the same figures — no second pipeline, and nothing here
+         * is ranked, so it makes no claim the lists above have not already earned.
+         */
+        $withheld = max(0, $inScope - count($rows));
+
         return $ranked === []
-            ? ['ads' => [], 'worst' => [], 'groups' => $groups, 'level' => 'ad', 'reason' => 'no_rankable_metric_for_this_objective']
-            : ['ads' => $ranked, 'worst' => $weakest, 'groups' => $groups, 'level' => 'ad', 'reason' => null];
+            ? ['ads' => [], 'worst' => [], 'groups' => $groups, 'roster' => $rows, 'level' => 'ad', 'reason' => 'no_rankable_metric_for_this_objective', 'creatives_in_scope' => $inScope, 'creatives_withheld' => $withheld]
+            : ['ads' => $ranked, 'worst' => $weakest, 'groups' => $groups, 'roster' => $rows, 'level' => 'ad', 'reason' => null, 'creatives_in_scope' => $inScope, 'creatives_withheld' => $withheld];
     }
 
     /**

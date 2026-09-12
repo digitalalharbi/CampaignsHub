@@ -40,7 +40,7 @@ import type { Summary } from '@/features/analytics/api'
  */
 const CONTENT_KPI_KEYS = [
   'spend', 'impressions', 'reach', 'clicks', 'ctr', 'cpc', 'cpm',
-  'conversions', 'cpa', 'revenue', 'roas', 'video_views', 'completion_rate',
+  'conversions', 'cpa', 'revenue', 'roas', 'video_views', 'video_completion_rate',
 ] as const
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
@@ -711,6 +711,14 @@ export function CreativesPage() {
         id="content"
         ar={ar}
         primary={contentKpis}
+        /*
+          KPI-STRIP-RESERVE-001 — the card count is known before any figure is.
+
+          `contentKpis` is derived from the response and is empty until it lands, so the skeleton
+          reserved nothing and the toolbar under it dropped 482px when thirteen cards appeared. The
+          key list is a constant; the page has always known how tall this row would be.
+        */
+        loadingCards={CONTENT_KPI_KEYS.length}
         hasRows={data === undefined ? undefined : data.total > 0}
         loading={libraryQuery.isPending}
         error={libraryQuery.isError ? libraryQuery.error : undefined}
