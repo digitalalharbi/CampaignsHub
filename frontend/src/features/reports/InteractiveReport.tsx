@@ -3,6 +3,7 @@ import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import { useMemo, useState } from 'react'
 import { attributionWindow } from './attributionWindow'
 import { ReportAdDetail } from './ReportAdDetail'
+import { ReportCreativeRoster, type RosterRow } from './ReportCreativeRoster'
 import { ReportAdsSection, type AdGroup, type AdsReading, type ReportAd } from './ReportAdsSection'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
@@ -86,6 +87,18 @@ export interface ReportData {
   ads_absent_reason?: string | null
   /** REPORT-AD-PREVIEW-001 §A — ranked inside each objective, with the metric that ordered it. */
   ads_groups?: AdGroup[]
+  /**
+   * REPORT-CREATIVE-TRUTH-001 §B — every creative that ran, beside the ones that worked.
+   *
+   * `ads` above is a ranking; this is an inventory, and they answer different questions. The two
+   * counts are taken from the SCOPE before any bound was applied, so a curated list can never
+   * report its own length as the whole account.
+   */
+  ads_roster?: RosterRow[]
+  creatives_in_scope?: number | null
+  creatives_withheld?: number | null
+  /** `executive_summary` or `detailed` — the report's own depth, decided when it was created. */
+  form?: string | null
   /** The five-step reading of the ranked grid — absent where no range could be read. */
   ads_reading?: AdsReading
   /** REPORT-WORST-CREATIVES-001 — measured underperformers, never merely unmeasured ones. */
@@ -855,6 +868,23 @@ function AdsSlide({ data }: { data: ReportData }) {
         level={data.ads_level}
         reading={data.ads_reading}
         locale={ar ? 'ar' : 'en'}
+        onOpen={setOpen}
+      />
+
+      {/*
+        REPORT-CREATIVE-TRUTH-001 §B — and then everything that ran.
+
+        The section above ranks; this one inventories. A client paying for sixty-five creatives who
+        can see six has no way to tell whether the other fifty-nine exist, and the report was not
+        saying. It opens the SAME detail as the cards — one reader for one creative.
+      */}
+      <ReportCreativeRoster
+        roster={data.ads_roster}
+        inScope={data.creatives_in_scope}
+        withheld={data.creatives_withheld}
+        currency={data.currency ?? null}
+        locale={ar ? 'ar' : 'en'}
+        form={data.form}
         onOpen={setOpen}
       />
 

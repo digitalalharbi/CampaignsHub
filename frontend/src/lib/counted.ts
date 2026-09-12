@@ -102,3 +102,19 @@ export function days(n: number, locale: Locale): string {
     ? countedAr(n, { one: 'يوم', two: 'يومان', few: 'أيام', many: 'يومًا' })
     : countedEn(n, 'day', 'days')
 }
+
+/**
+ * «3 مواد إعلانية» · «1 creative» — the noun AND its adjective, as `adAccounts` does.
+ *
+ * «مادة» alone is any material; the report is counting the ADS that ran, and the adjective is what
+ * says so. Unlike `adAccounts` the adjective moves on only ONE of the four boundaries — the dual —
+ * because «إعلانية» serves the singular, the plural and the accusative alike, so the branch is a
+ * pair rather than the four-way chain that would look symmetrical and mean nothing.
+ */
+export function creatives(n: number, locale: Locale): string {
+  if (locale !== 'ar') return countedEn(n, 'creative', 'creatives')
+
+  const noun = countedAr(n, { one: 'مادة', two: 'مادتان', few: 'مواد', many: 'مادة' })
+
+  return `${noun} ${Math.abs(Math.trunc(n)) === 2 ? 'إعلانيتان' : 'إعلانية'}`
+}

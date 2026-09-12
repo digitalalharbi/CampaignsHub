@@ -58,7 +58,7 @@ final class LiveReportService
      *
      * @param  array<string, mixed>  $applied
      * @param  array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}  $scope
-     * @return array{ads: list<array<string,mixed>>, ads_level: string, ads_absent_reason: string|null}
+     * @return array<string, mixed>
      */
     private function adsFor(ReportShare $share, array $applied, array $scope, Carbon $from, Carbon $to): array
     {
@@ -68,7 +68,7 @@ final class LiveReportService
             'project_ids' => $scope['project_id'] === '' ? [] : [$scope['project_id']],
             'providers' => $applied['providers'] !== [] ? $applied['providers'] : $scope['providers'],
             'campaign_ids' => $applied['campaigns'] !== [] ? $applied['campaigns'] : $scope['campaign_ids'],
-        ]);
+        ], (string) $share->report->form);
 
         return [
             /*
@@ -84,6 +84,18 @@ final class LiveReportService
             'ads_absent_reason' => $built['reason'],
             // The same reading the generated deck carries, from the same two ranked lists.
             'ads_reading' => (new AdsExplanation)->explain($built['ads'], $built['worst'], $objective),
+            /*
+             * REPORT-CREATIVE-TRUTH-001 §B — the inventory, and how much of it this link holds.
+             *
+             * Through its OWN boundary, not the ranked lists'. A presented row is a different shape:
+             * it carries the campaign NAME, and its own `ads` key holds the platform's ad objects —
+             * which `ads()` would have walked into as though they were group members. See
+             * {@see ClientEntityBoundary::roster()}.
+             */
+            'ads_roster' => ClientEntityBoundary::roster($built['roster']),
+            'creatives_in_scope' => $built['creatives_in_scope'],
+            'creatives_withheld' => $built['creatives_withheld'],
+            'form' => (string) $share->report->form,
         ];
     }
 

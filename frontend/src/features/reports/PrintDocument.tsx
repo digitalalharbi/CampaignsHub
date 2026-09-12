@@ -215,6 +215,31 @@ export function PrintDocument({
 
   const adsAbsence = PRINT_ADS_ABSENT[String(data.ads_absent_reason ?? 'no_ads_to_show')] ?? PRINT_ADS_ABSENT.no_ads_to_show
 
+  /*
+   * REPORT-CREATIVE-TRUTH-001 §B — the inventory, beside the ranking, in the forwarded document.
+   *
+   * The table above is the TOP twelve and is meant to be: the section is «Ads» and it answers which
+   * ones worked. What the printed report had no answer for at all was «what did we run», and a PDF
+   * is the copy that gets forwarded, quoted and filed — the worst surface on which to leave a client
+   * assuming twelve was the whole month.
+   *
+   * A summary prints the count and not the list: the deck form is curated on purpose, and sixty-five
+   * rows in a five-page document would be the opposite of what it is for.
+   */
+  const isSummary = String(data.form ?? 'detailed') === 'executive_summary'
+  const inScope = Number(data.creatives_in_scope ?? 0)
+  const withheld = Number(data.creatives_withheld ?? 0)
+  const rosterRows = isSummary
+    ? []
+    : (data.ads_roster ?? []).map((row) => ({
+      name: String(row.name ?? '—'),
+      provider: String(row.provider ?? '—'),
+      spend: row.metrics?.spend === null || row.metrics?.spend === undefined ? '—' : money(Number(row.metrics.spend), currency),
+      impressions: row.metrics?.impressions === null || row.metrics?.impressions === undefined ? '—' : nfmt(Number(row.metrics.impressions)),
+      clicks: row.metrics?.clicks === null || row.metrics?.clicks === undefined ? '—' : nfmt(Number(row.metrics.clicks)),
+      results: row.metrics?.conversions === null || row.metrics?.conversions === undefined ? '—' : nfmt(Number(row.metrics.conversions)),
+    }))
+
   // Keyed by PLATFORM since CLIENT-REPORT-ENTITY-BOUNDARY-001; an old snapshot's per-campaign rows
   // never arrive here, because `ClientReportView` empties them rather than printing them anonymous.
   /*
@@ -417,6 +442,26 @@ export function PrintDocument({
           <h2>{section('ads')?.title_en ?? 'Ads'}</h2>
           {/* The generator's own reason, not this file's guess at one. */}
           <p>{section('ads')?.absent_reason_en ?? adsAbsence}</p>
+        </section>
+      )}
+
+      {/*
+        REPORT-CREATIVE-TRUTH-001 §B — everything that ran, under the twelve that worked best.
+      */}
+      {inScope > 0 && (
+        <section className="doc-section">
+          <h2>Everything That Ran</h2>
+          <p>
+            {inScope} {inScope === 1 ? 'creative' : 'creatives'} ran in this period
+            {withheld > 0 ? ` — ${inScope - withheld} listed here, ${withheld} not shown` : ''}
+            {isSummary ? '. This is an executive summary; the full list is in the detailed report.' : '.'}
+          </p>
+          {rosterRows.length > 0 && (
+            <Table
+              head={['Creative', 'Platform', 'Spend', 'Impressions', 'Clicks', 'Results']}
+              rows={rosterRows.map((r) => [r.name, r.provider, r.spend, r.impressions, r.clicks, r.results])}
+            />
+          )}
         </section>
       )}
 

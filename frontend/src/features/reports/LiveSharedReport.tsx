@@ -5,6 +5,7 @@ import { ClientAttention } from './ClientAttention'
 import { readMetricValue, type MetricValue } from '@/lib/metricValue'
 import { LiveDetailTables } from './LiveDetailTables'
 import { ReportAdDetail } from './ReportAdDetail'
+import { ReportCreativeRoster } from './ReportCreativeRoster'
 import { ReportAdsSection, type ReportAd } from './ReportAdsSection'
 import { canonicalPlatform } from '@/lib/platforms'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
@@ -623,6 +624,24 @@ export function LiveSharedReport({
             level={payload.ads_level}
             reading={payload.ads_reading}
             locale={ar ? 'ar' : 'en'}
+            onOpen={setOpenAd}
+          />
+
+          {/*
+            REPORT-CREATIVE-TRUTH-001 §B — the live link inventories what ran, as the deck does.
+
+            This surface computes its figures from the same engine deliberately, «so an operator's
+            dashboard and a client's link cannot disagree about one number». A roster on one and not
+            the other would be that disagreement in its largest form: two documents about one month,
+            one saying six creatives ran and the other sixty-five.
+          */}
+          <ReportCreativeRoster
+            roster={payload.ads_roster}
+            inScope={payload.creatives_in_scope}
+            withheld={payload.creatives_withheld}
+            currency={currency}
+            locale={ar ? 'ar' : 'en'}
+            form={payload.form}
             onOpen={setOpenAd}
           />
         </div>
