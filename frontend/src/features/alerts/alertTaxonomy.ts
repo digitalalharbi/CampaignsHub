@@ -43,6 +43,17 @@ const CATEGORY: Partial<Record<AlertType, AlertCategory>> = {
   lead_no_contact: 'follow_up',
   lead_follow_up_overdue: 'follow_up',
   sla_warning: 'follow_up',
+  /*
+   * Performance, not `data` — and the distinction is the reader's, not the implementation's.
+   *
+   * It is tempting to file it under data and integrations, because it is derived rather than
+   * configured and because a collapse in reported spend often IS a broken feed. But the reader this
+   * column serves asks «whose problem is this», and an unusual day is the media buyer's to look at:
+   * the answer is a campaign, a figure and a baseline, which is the same shape as a CPA rise. The
+   * `no_results` type already carries the other case — «this can be broken measurement» — in its
+   * own next action rather than in its category.
+   */
+  metric_anomaly: 'performance',
 }
 
 export function alertCategory(type: string): AlertCategory {
@@ -119,6 +130,18 @@ const NEXT_ACTION: Partial<Record<AlertType, { ar: string; en: string }>> = {
   lead_follow_up_overdue: {
     ar: 'أنجز المتابعة المتأخرة أو أعد جدولتها بوعد جديد.',
     en: 'Complete the overdue follow-up, or reschedule it with a new promise.',
+  },
+  /*
+   * «Was it you» first, because most of the time it was.
+   *
+   * This type states that a figure departed from its own baseline and nothing more — it does not
+   * know about the budget somebody raised on Thursday or the creative they swapped. An anomaly
+   * explained by a decision is not a problem, and an action line that skipped straight to
+   * diagnosing the platform would have the reader chasing their own change.
+   */
+  metric_anomaly: {
+    ar: 'تأكّد أولًا إن كان التغيير مقصودًا — ميزانية أو محتوى أو استهداف — قبل البحث عن خلل.',
+    en: 'Check first whether the change was intended — budget, creative or targeting — before looking for a fault.',
   },
 }
 

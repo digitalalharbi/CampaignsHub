@@ -606,6 +606,9 @@ final class TaxonomyEngineSeeder extends Seeder
                     ['key' => 'lead_unassigned', 'label_ar' => 'عميل محتمل بلا مسؤول', 'label_en' => 'Lead with no owner', 'color' => '#f59e0b', 'icon' => 'user-x'],
                     ['key' => 'lead_no_contact', 'label_ar' => 'لم يُتواصل مع العميل المحتمل', 'label_en' => 'Lead not contacted', 'color' => '#ef4444', 'icon' => 'phone-off'],
                     ['key' => 'lead_follow_up_overdue', 'label_ar' => 'متابعة متأخرة', 'label_en' => 'Follow-up overdue', 'color' => '#dc2626', 'icon' => 'clock-alert'],
+                    // AUTOMATION-FIRST-OPERATIONS-001 — anomaly detection, which had a detector and
+                    // no way to be told about it.
+                    ['key' => 'metric_anomaly', 'label_ar' => 'يوم غير معتاد', 'label_en' => 'Unusual day', 'color' => '#8b5cf6', 'icon' => 'activity'],
                 ],
             ],
             [
