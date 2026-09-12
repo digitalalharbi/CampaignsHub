@@ -1058,9 +1058,17 @@ export function CreativesPage() {
                 <th className="p-2 text-start">{t.platform}</th>
                 <th className="p-2 text-start">{t.campaign}</th>
                 <th className="p-2 text-start">{t.objective}</th>
-                <th className="p-2 text-start">{metricLabel('spend', locale)}</th>
-                <th className="p-2 text-start">{t.result}</th>
-                <th className="p-2 text-start">{t.efficiency}</th>
+                {/*
+                  TABLE-NUMERIC-ALIGNMENT-001 §58 — these three are the NUMERIC columns, so they
+                  take the primitive's convention rather than the page's. `MetricTable` centres
+                  every column after the first and says why: under `dir="rtl"` an end-aligned figure
+                  sits against the left edge of its own column, which reads as the wrong column.
+                  Start-aligning them agreed with their headers and was not wrong — it was a third
+                  answer in a product that now has one.
+                */}
+                <th className="p-2 text-center">{metricLabel('spend', locale)}</th>
+                <th className="p-2 text-center">{t.result}</th>
+                <th className="p-2 text-center">{t.efficiency}</th>
                 <th className="p-2 text-start">{t.health}</th>
                 <th className="p-2 text-start">{t.lastSync}</th>
               </tr>
@@ -1154,7 +1162,7 @@ export function CreativesPage() {
                       *
                       * The numerals still need LTR bidi, so it moves inwards to the text it is about.
                       */}
-                    <td className="p-2 tabular-nums">
+                    <td className="p-2 text-center tabular-nums">
                       {/*
                         * CONTENT-MONEY-VISIBLE-001 — through the canonical reader, not `metricState`.
                         *
@@ -1164,7 +1172,7 @@ export function CreativesPage() {
                         */}
                       <span dir="ltr">{creativeMoney(creative.metrics, 'spend', data?.currency ?? null, locale).text}</span>
                     </td>
-                    <td className="p-2">
+                    <td className="p-2 text-center">
                       {resultKey === null ? (
                         <span className="text-text-muted">—</span>
                       ) : (
@@ -1174,7 +1182,7 @@ export function CreativesPage() {
                         </span>
                       )}
                     </td>
-                    <td className="p-2">
+                    <td className="p-2 text-center">
                       {efficiencyKey === null ? (
                         <span className="text-text-muted">—</span>
                       ) : (
