@@ -5,6 +5,11 @@ import { Link } from 'react-router-dom'
 
 import { setRecommendationStatus, type RecommendationStatus, listRecommendations, type Recommendation, type RecommendationPriority } from './api'
 import { Badge } from '@/components/ui/Badge'
+import { buildActionCentre } from './actionCenter'
+import { OperationalSignals } from './OperationalSignals'
+import { listAlertEvents } from '@/features/alerts/api'
+import { useSpendLimits } from '@/features/budget/spendLimitsApi'
+import { getCreativePulse } from '@/features/content/pulse'
 import { EmptyState } from '@/components/ui/States'
 import { FilterBar, FilterSelect } from '@/components/ui/FilterBar'
 import { PageIntro } from '@/components/ui/PageIntro'
@@ -79,6 +84,40 @@ export function RecommendationsPage() {
   const rows = useMemo(() => query.data ?? [], [query.data])
   const filtersTouched = status !== 'all' || priority !== 'all'
 
+  /*
+   * The three engines that already know something, read where they are.
+   *
+   * None of them is derived here: `AlertEvaluator` raised the alerts, `SpendLimitGovernor` read the
+   * limits, `CreativeFatigue` judged the creatives. This page joins and orders what they said.
+   *
+   * `retry: false` on each, and no error surfaced: these are a sidecar to the list below, and a page
+   * that fails to render because a signal source is unreachable is worse than one missing a signal.
+   */
+  const alerts = useQuery({
+    queryKey: ['action-centre-alerts', currentProjectId],
+    queryFn: () => listAlertEvents('open', currentProjectId ?? undefined),
+    enabled: Boolean(currentProjectId),
+    retry: false,
+  })
+
+  const limits = useSpendLimits(currentProjectId ?? null)
+
+  const pulse = useQuery({
+    queryKey: ['action-centre-pulse', currentProjectId],
+    queryFn: () => getCreativePulse({}, currentProjectId),
+    enabled: Boolean(currentProjectId),
+    retry: false,
+  })
+
+  const signals = useMemo(
+    () => buildActionCentre({
+      alerts: alerts.data?.events,
+      limits: limits.data?.limits,
+      fatigued: pulse.data?.fatigue.fatigued.items,
+    }),
+    [alerts.data, limits.data, pulse.data],
+  )
+
   /** How many are waiting on somebody, by urgency — the reason to open this page at all. */
   const counts = useMemo(() => {
     const open = rows.filter((r) => r.status !== 'hidden' && r.status !== 'rejected')
@@ -109,6 +148,19 @@ export function RecommendationsPage() {
             ))}
         </div>
       )}
+
+      {/*
+        RECOMMENDATIONS-ACTION-CENTER-002 — what the PRODUCT noticed, above what people wrote.
+
+        This page listed written recommendations only, so an account where nobody had written one
+        showed nothing to do — while the product knew at that moment that a budget was breached, a
+        creative had fatigued and a token was about to expire. Above rather than below: a signal
+        nobody has triaged is the thing a reader opened this page for.
+
+        Every source fails independently and silently. An action centre that shows nothing because
+        one of three sidecars is down is a worse outcome than one that shows two of them.
+      */}
+      <OperationalSignals items={signals} locale={ar ? 'ar' : 'en'} />
 
       <FilterBar
         id="recommendations"
