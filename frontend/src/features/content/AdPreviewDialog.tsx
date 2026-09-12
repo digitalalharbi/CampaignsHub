@@ -69,6 +69,15 @@ export function AdPreviewDialog({
   const reading = readPreview(creative.preview, ar)
 
   /*
+   * «No figures of its own» — the same test the card makes, from the same field.
+   *
+   * `metrics` null is the platform having answered nothing for this creative in this window. A
+   * creative with a metrics object HAS figures, even where some of them are absent, so it gets the
+   * figures and no sentence.
+   */
+  const metricsAbsent = (creative.metrics ?? null) === null
+
+  /*
    * The objective, through the canonical map — and the RAW value when the map has not been taught it.
    *
    * `creative.objective` is a raw `CampaignObjective`, not a canonical key, and the label lookup
@@ -190,6 +199,34 @@ export function AdPreviewDialog({
             />
           )}
         </dl>
+
+        {/*
+          CONTENT-METRIC-ABSENCE-DETAIL-001 — why the figures are dashes, in the panel that shows them.
+          
+          The grid card has said this since it shipped: a creative with no figures of its own is
+          «لم يعمل خلال هذه الفترة» only when the AD did not run either. When the ad DID run and the
+          platform declined to break the result down per creative — 35 creatives on the owner's own
+          account — that sentence is false, and it is false in the expensive direction: an operator
+          reads it and turns off a creative that is running.
+          
+          The popup is the default detail surface now, and it inherited none of that. It drew six
+          dashes and said nothing, which is the weakest of the three true statements. The rule is the
+          card's, read from the same two fields, so the two cannot say different things about one ad.
+        */}
+        {metricsAbsent && (
+          <p
+            data-testid="ad-preview-dialog-absence"
+            className="mt-3 rounded-lg bg-surface-secondary px-3 py-2 text-[11px] leading-relaxed text-text-secondary"
+          >
+            {creative.ad_delivered
+              ? (ar
+                  ? 'هذا الإعلان عمل خلال الفترة، لكن المنصة لم تُرجع مؤشرات على مستوى المحتوى — الأرقام موجودة على مستوى الإعلان.'
+                  : 'This ad ran during the period, but the platform returned no metrics at content level — the figures exist at ad level.')
+              : (ar
+                  ? 'لم يعمل هذا المحتوى خلال هذه الفترة.'
+                  : 'This content item did not run in this period.')}
+          </p>
+        )}
 
         {figures && figures.length > 0 && (
           <div data-testid="ad-preview-dialog-figures" className="mt-3 grid grid-cols-3 gap-1.5 text-center">
