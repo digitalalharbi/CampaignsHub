@@ -263,4 +263,89 @@ describe('AlertsPage — the queue says whose alert each row is, and can be narr
 
     await waitFor(() => expect(listAlertEvents).toHaveBeenCalledWith(undefined, 'p1'))
   })
+
+  /**
+   * AUTOMATION-FIRST-OPERATIONS-001 — the empty rule list is the monitoring being OFF.
+   *
+   * It rendered «Nothing here.», the same sentence the events list carries a comment explaining is
+   * wrong because it reads as a page that failed to load. This is the worse of the two places for
+   * it: an empty EVENT ledger is good news, and an empty RULE list means no alert can ever arrive.
+   *
+   * The offer is `metric_anomaly` because it is the only type that can be handed over finished —
+   * every other one needs a number somebody has to justify. Asserting the PAYLOAD rather than the
+   * click: a button that creates a `budget_risk` rule with an invented threshold would satisfy any
+   * test that only checked something was posted.
+   */
+  it('offers the threshold-free rule when nothing is watching the account', async () => {
+    vi.mocked(createAlertRule).mockResolvedValue({} as never)
+    renderWithProviders(<AlertsPage />, { locale: 'en' })
+    await openRulesTab()
+
+    const empty = await screen.findByTestId('alert-rules-empty')
+    expect(empty).toHaveTextContent(/No rule is watching this account/i)
+    expect(empty).not.toHaveTextContent(/Nothing here/i)
+    expect(empty).toHaveTextContent(/no threshold to choose/i)
+
+    fireEvent.click(screen.getByTestId('alert-rules-suggest-anomaly'))
+
+    await waitFor(() => expect(createAlertRule).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(createAlertRule).mock.calls[0][0]).toMatchObject({
+      type: 'metric_anomaly',
+      active: true,
+      channels: ['in_app'],
+    })
+    /* No threshold invented on the operator's behalf — that is the property that makes it offerable. */
+    expect(vi.mocked(createAlertRule).mock.calls[0][0]).not.toHaveProperty('threshold')
+  })
+
+  /**
+   * And it works with the taxonomy unavailable, which is when it matters most.
+   *
+   * The type picker is fed by the engine. A new workspace whose taxonomy request failed would see a
+   * form it cannot submit and an empty list telling it nothing — no route into monitoring at all.
+   * The suggestion carries its own payload and does not read the picker.
+   */
+  it('still offers the rule when the type picker has no options', async () => {
+    vi.mocked(createAlertRule).mockResolvedValue({} as never)
+    const saved = TAX['alert.type']
+    TAX['alert.type'] = []
+
+    try {
+      renderWithProviders(<AlertsPage />, { locale: 'en' })
+      fireEvent.click(screen.getByRole('button', { name: /Rules/i }))
+
+      fireEvent.click(await screen.findByTestId('alert-rules-suggest-anomaly'))
+      await waitFor(() => expect(createAlertRule).toHaveBeenCalledTimes(1))
+    } finally {
+      TAX['alert.type'] = saved
+    }
+  })
+
+  /**
+   * The rule row names its channels instead of printing their keys.
+   *
+   * Found in a real browser, not in a test: creating the anomaly rule through the suggestion showed
+   * a row reading «in_app» directly under a control that had offered «داخل التطبيق». The engine's
+   * options are already loaded on this tab for the picker, so the row was printing raw keys beside
+   * a named type and a named severity.
+   */
+  it('names the channels on a rule row rather than printing their keys', async () => {
+    vi.mocked(listAlertRules).mockResolvedValue({
+      rules: [{
+        id: 'r1', type: 'metric_anomaly', name: 'Unusual day', severity: 'warning',
+        cooldown_minutes: 1440, channels: ['in_app', 'email'], create_task: false,
+        active: true, threshold: null, project_id: null,
+      }] as never,
+      total: 1,
+    })
+
+    renderWithProviders(<AlertsPage />, { locale: 'en' })
+    await openRulesTab()
+
+    const row = await screen.findByText('Unusual day')
+    const card = row.closest('div')?.parentElement as HTMLElement
+    expect(card).toHaveTextContent('In-app')
+    expect(card).toHaveTextContent('Email')
+    expect(card).not.toHaveTextContent('in_app')
+  })
 })

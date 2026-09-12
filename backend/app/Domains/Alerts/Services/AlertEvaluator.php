@@ -13,6 +13,7 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Models\SpendLimitEvent;
+use App\Domains\Metrics\Services\ChangeTimeline;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Notifications\Services\NotificationDispatcher;
@@ -55,7 +56,28 @@ final class AlertEvaluator
         'no_results', 'sync_failure', 'token_expiry',
         // LEAD-SLA-NOTIFICATION-001 — the follow-up promises, swept on the same schedule.
         'lead_unassigned', 'lead_no_contact', 'lead_follow_up_overdue',
+        // AUTOMATION-FIRST-OPERATIONS-001 — the detector that existed and was never swept.
+        'metric_anomaly',
     ];
+
+    /**
+     * How recent an anomalous day must be for `metric_anomaly` to send anything.
+     *
+     * Two days rather than one because providers land a day late and some land two: «yesterday» is
+     * frequently the newest day that exists at all, and a one-day window would make the type fire
+     * only on the accounts whose platform happens to report fastest.
+     */
+    private const ANOMALY_RECENCY_DAYS = 2;
+
+    /**
+     * The shortest window `metric_anomaly` will read, whatever the rule asks for.
+     *
+     * `ChangeTimeline` needs five prior days before it will judge a sixth and returns
+     * `window_too_short_to_have_a_baseline` otherwise — so a rule saved with `days: 3` would be a
+     * rule that can never fire, which is the exact silent no-op this class's PERIODIC list exists to
+     * prevent. The floor leaves it able to answer instead of quietly answering nothing.
+     */
+    private const ANOMALY_MIN_WINDOW_DAYS = 14;
 
     /** Raised by the thing that failed, not by a sweep — a report failing is an event, not a threshold. */
     public const EVENT_DRIVEN = ['report_failed'];
@@ -149,6 +171,17 @@ final class AlertEvaluator
             'lead_unassigned' => $this->leadsUnassigned($rule, $now),
             'lead_no_contact' => $this->leadsNotContacted($rule, $now),
             'lead_follow_up_overdue' => $this->leadFollowUpsOverdue($rule, $now),
+            /*
+             * AUTOMATION-FIRST-OPERATIONS-001 — the one threshold nobody has to choose.
+             *
+             * Every other type above needs a number from a person: how many percent, how many days.
+             * That works for the campaign somebody is watching and fails at the scale this product
+             * is for — nobody sets a CPA threshold on four hundred campaigns, so the ones nobody set
+             * one for are the ones that go wrong quietly. This type asks a different question: did
+             * this figure depart from ITS OWN recent behaviour. No threshold to maintain, and it
+             * applies to an account the day it connects.
+             */
+            'metric_anomaly' => $this->metricAnomalies($rule, $now),
             default => $this->unevaluated($rule),
         };
 
@@ -578,6 +611,111 @@ final class AlertEvaluator
             });
 
         return $out;
+    }
+
+    /**
+     * The campaigns whose latest reported day departed from their own baseline.
+     *
+     * ## One detector, called — not a second one written
+     *
+     * {@see ChangeTimeline} has found these days since it shipped: each day against the MEDIAN and
+     * the median absolute deviation of the days BEFORE it, so one spike cannot hide the next and no
+     * finding rests on hindsight the reader could not have acted on. Its only caller was
+     * `MetricsController` — a page somebody had to open. Re-deriving the arithmetic here would give
+     * the product two answers to «was Tuesday unusual», differing by whatever the two copies
+     * drifted, and the reader who noticed would have no way to tell which was the real one. So this
+     * calls it, on the same aggregator, and formats what it returns.
+     *
+     * ## Recency is the difference between a chart and an alert
+     *
+     * `ChangeTimeline` answers «which days in this window were unusual», which is exactly right for
+     * a chart and wrong for a sweep that runs every fifteen minutes: over a three-week window, a
+     * spike on the 2nd is still an answer on the 21st. An alert is a claim that somebody should look
+     * NOW, so only a day inside {@see self::ANOMALY_RECENCY_DAYS} qualifies, and a campaign whose
+     * only strange day is a fortnight old stays quiet.
+     *
+     * ## Active campaigns only
+     *
+     * Two reasons, and the second is the one that matters. A paused campaign costs a timeseries
+     * query for a verdict nobody can act on; and when a provider keeps reporting zeros after the
+     * pause, every campaign anybody stops becomes a «spend collapsed» alert. Pausing a campaign is
+     * a decision, not an anomaly, and a sweep that pages you for your own action is the noise this
+     * type would otherwise be dismissed for.
+     *
+     * One timeseries query per active campaign, on the same per-campaign shape {@see roasDrops()}
+     * and {@see costPerIncreases()} already use.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function metricAnomalies(AlertRule $rule, Carbon $now): array
+    {
+        $days = max(self::ANOMALY_MIN_WINDOW_DAYS, (int) ($rule->threshold['days'] ?? 21));
+        $from = $now->copy()->subDays($days);
+        $earliest = $now->copy()->subDays(self::ANOMALY_RECENCY_DAYS)->toDateString();
+
+        $out = [];
+
+        UnifiedCampaign::query()
+            ->where('status', 'active')
+            ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
+            ->get()
+            ->each(function (UnifiedCampaign $c) use ($from, $now, $earliest, &$out) {
+                $timeline = new ChangeTimeline($this->metrics->acrossProjects()->forCampaign((string) $c->id));
+
+                $points = array_values(array_filter(
+                    $timeline->build($from, $now)['points'],
+                    static fn (array $p): bool => $p['date'] >= $earliest,
+                ));
+
+                if ($points === []) {
+                    return;
+                }
+
+                $out[] = [
+                    'entity_type' => UnifiedCampaign::class,
+                    'entity_id' => (string) $c->id,
+                    'project_id' => (string) $c->project_id,
+                    'title' => 'Unusual day',
+                    'message' => $this->anomalySentence($c->name, $points),
+                    /*
+                     * The evidence, not a verdict. «Unusual» is a claim, and a reader who cannot see
+                     * the figure it was measured against has been told to worry without being told
+                     * why — so the value, the baseline and how far apart they are all travel with
+                     * the alert, which is what the alerts surface renders as context chips.
+                     */
+                    'context' => ['points' => $points, 'window_days' => $from->diffInDays($now)],
+                ];
+            });
+
+        return $out;
+    }
+
+    /**
+     * «Ramadan push: spend rose sharply against its own baseline on 2026-08-19 (1,200 vs 100).»
+     *
+     * Several metrics moving on one day is ONE incident and reads as one sentence. The engine's
+     * dedup key is (rule, entity) — deliberately, because «this campaign is in trouble» is one fact
+     * however many ways you notice it — so raising per metric would need a second dedup vocabulary
+     * or would page somebody three times for one bad Tuesday.
+     *
+     * @param  list<array<string, mixed>>  $points
+     */
+    private function anomalySentence(string $campaign, array $points): string
+    {
+        $parts = array_map(static function (array $p): string {
+            $direction = $p['direction'] === 'up' ? 'rose sharply' : 'fell sharply';
+
+            return sprintf(
+                '%s %s on %s (%s vs a baseline of %s)',
+                $p['metric'],
+                $direction,
+                $p['date'],
+                number_format((float) $p['value'], 2),
+                number_format((float) $p['baseline'], 2),
+            );
+        }, $points);
+
+        return $campaign.': '.implode('; ', $parts).'.';
     }
 
     /**

@@ -40,6 +40,8 @@ export const ALERT_TYPES = [
   'sync_failure', 'token_expiry', 'report_failed', 'sla_warning',
   // LEAD-SLA-NOTIFICATION-001 — three follow-up promises, kept in step with the server's own list.
   'lead_unassigned', 'lead_no_contact', 'lead_follow_up_overdue',
+  // AUTOMATION-FIRST-OPERATIONS-001 — the type with no threshold to set.
+  'metric_anomaly',
 ] as const
 
 export type AlertType = (typeof ALERT_TYPES)[number]
