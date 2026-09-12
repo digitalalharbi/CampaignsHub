@@ -225,4 +225,76 @@ describe('the roster of everything that ran', () => {
     )
     expect(screen.getByTestId('report-roster-scope')).toHaveTextContent('65 مادة إعلانية')
   })
+
+  /**
+   * REPORT-CREATIVE-MEDIA-001 — the picture arrives, and the row draws it.
+   *
+   * The owner opened a production Detailed Report and found rows reading «لا يوجد غلاف» for
+   * creatives the Content library shows. The renderer was never the fault: it draws
+   * `<AdPoster preview={row.preview ?? null} />`, and `AdPoster` reads the envelope through
+   * `readPreview` — the same reader the library uses, which is what makes the two agree.
+   *
+   * The fault was that `preview` never arrived. `CreativeRows::lean()` does not write one (rightly:
+   * a stored snapshot outlives a signed media URL), and `RosterRow.preview` is OPTIONAL, so the
+   * absent field type-checked, the poster was handed `null`, and every row claimed no cover. The
+   * server now resolves the media when the report is READ.
+   *
+   * This pins the renderer's half of that contract: given the envelope, the picture is drawn.
+   */
+  it('draws the creative’s media when the preview arrives', () => {
+    renderWithProviders(
+      <ReportCreativeRoster
+        roster={[row({
+          format: 'image',
+          preview: {
+            state: 'available',
+            kind: 'image',
+            aspect: 'square',
+            image_url: 'https://cdn.test/hero.jpg',
+            video_url: null,
+            thumbnail_url: null,
+            expires_at: null,
+            note_ar: null,
+            note_en: null,
+          },
+        })]}
+        inScope={1}
+        withheld={0}
+        currency="USD"
+        locale="en"
+        form="detailed"
+      />,
+      { locale: 'en' },
+    )
+
+    const poster = screen.getByTestId('report-roster-poster-0')
+
+    expect(poster.tagName, 'the row drew no image for a creative whose media the server resolved').toBe('IMG')
+    expect(poster).toHaveAttribute('src', 'https://cdn.test/hero.jpg')
+    expect(screen.queryByTestId('report-roster-poster-0-absent')).toBeNull()
+  })
+
+  /**
+   * And a creative with genuinely no media still says so, compactly.
+   *
+   * The fix must not be «always draw something»: an absence the product cannot resolve is a fact
+   * the reader needs, and a blank rectangle in its place is what the compact absence state exists
+   * to replace.
+   */
+  it('keeps the compact absence state when there is truly no media', () => {
+    renderWithProviders(
+      <ReportCreativeRoster
+        roster={[row({ preview: null })]}
+        inScope={1}
+        withheld={0}
+        currency="USD"
+        locale="en"
+        form="detailed"
+      />,
+      { locale: 'en' },
+    )
+
+    expect(screen.getByTestId('report-roster-poster-0-absent')).toBeInTheDocument()
+    expect(screen.queryByTestId('report-roster-poster-0')).toBeNull()
+  })
 })
