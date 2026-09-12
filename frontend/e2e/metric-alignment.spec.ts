@@ -129,6 +129,73 @@ test.describe('a metric card’s title and figure share one edge', () => {
   })
 
   /**
+   * The content CARD — the first surface the owner named, and a different mechanism entirely.
+   *
+   * The strip above is `MetricCard`. This is a plain `<dl>`: a `<dt>` label with its `<dd>` value
+   * directly beneath. A `<dd>` is a block because of what it IS rather than what its class list
+   * says, which is how the first version of the source guard walked straight past the reported
+   * defect — it only recognised a block when `block`, `grid` or `flex` appeared in the className.
+   */
+  test('Arabic: a content card’s value sits under its own label', async ({ page, request }) => {
+    await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
+    await page.goto('/agency/content')
+
+    const card = page.getByRole('article').first()
+    await expect(card.locator('dl div').first()).toBeVisible({ timeout: 30000 })
+
+    /*
+     * EVERY pair on the card, not the first.
+     *
+     * A figure that happens to fill its column measures the same whichever edge it is aligned to, so
+     * one pair is not a test — the injected defect passed a version of this that looked at the first
+     * one only. The widest drift across the card is what a reader sees.
+     */
+    const drifts = await card.locator('dl div').evaluateAll((nodes) => {
+      const runOf = (node: Element | null) => {
+        if (node === null) return null
+
+        const doc = node.ownerDocument
+        const walker = doc.createTreeWalker(node, NodeFilter.SHOW_TEXT)
+        let left = Infinity
+        let right = -Infinity
+
+        for (let t = walker.nextNode(); t !== null; t = walker.nextNode()) {
+          if ((t.textContent ?? '').trim() === '') continue
+
+          const range = doc.createRange()
+          range.selectNodeContents(t)
+          const r = range.getBoundingClientRect()
+
+          if (r.width === 0 && r.height === 0) continue
+
+          left = Math.min(left, r.left)
+          right = Math.max(right, r.right)
+        }
+
+        return left === Infinity ? null : { left, right }
+      }
+
+      return nodes.flatMap((n) => {
+        const label = runOf(n.querySelector('dt'))
+        const value = runOf(n.querySelector('dd'))
+
+        if (label === null || value === null) return []
+
+        return [{ label: n.querySelector('dt')?.textContent ?? '', drift: Math.abs(label.right - value.right) }]
+      })
+    })
+
+    expect(drifts.length, 'the card drew no label/value pair to measure').toBeGreaterThan(0)
+
+    const worst = drifts.reduce((a, b) => (a.drift >= b.drift ? a : b))
+
+    expect(
+      worst.drift,
+      `«${worst.label}» has its figure ${Math.round(worst.drift)}px from its own label's edge`,
+    ).toBeLessThan(EDGE_TOLERANCE)
+  })
+
+  /**
    * And the dashboard's strip, which is the same primitive on a different surface.
    *
    * One card fixed and another not is how this defect survived the first attempt: the rule lives in

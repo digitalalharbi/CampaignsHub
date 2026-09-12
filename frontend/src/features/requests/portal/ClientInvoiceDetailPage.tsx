@@ -11,6 +11,7 @@ import { usePortalGuard } from './usePortalGuard'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { useClientSpacePath } from './clientSpace'
+import { Num } from '@/components/ui/Num'
 
 const COPY = {
   ar: {
@@ -83,7 +84,7 @@ export function ClientInvoiceDetailPage() {
           <Row label={t.discount} value={formatMoney(invoice.discount, invoice.currency)} />
           <div className="flex items-center justify-between border-t border-border pt-2">
             <dt className="font-bold text-text-primary">{t.total}</dt>
-            <dd className="tnum text-lg font-extrabold text-text-primary" dir="ltr">{formatMoney(invoice.total, invoice.currency)}</dd>
+            <dd className="tnum text-lg font-extrabold text-text-primary"><Num>{formatMoney(invoice.total, invoice.currency)}</Num></dd>
           </div>
           <Row label={t.paid_amount} value={formatMoney(invoice.amount_paid, invoice.currency)} />
         </dl>
@@ -127,7 +128,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between">
       <dt className="text-text-secondary">{label}</dt>
-      <dd className="tnum text-text-primary" dir="ltr">{value}</dd>
+      <dd className="tnum text-text-primary"><Num>{value}</Num></dd>
     </div>
   )
 }

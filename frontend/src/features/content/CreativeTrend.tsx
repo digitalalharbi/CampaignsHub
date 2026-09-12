@@ -4,6 +4,7 @@ import { metricLabel } from './metrics'
 import { getCreative } from './api'
 import { Skeleton } from '@/components/ui/States'
 import type { Locale } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 /**
  * ANALYTICS-CONTENT-PREVIEW-001 — one creative's trend, drawn wherever it is asked for.
@@ -161,11 +162,8 @@ export function CreativeComparison({
         {rows.map((r) => (
           <div key={r.key} data-testid={`creative-comparison-${r.key}`} className="rounded-lg bg-surface-secondary p-2 text-center">
             <div className="text-[11px] font-semibold leading-tight text-text-muted">{metricLabel(r.key, locale)}</div>
-            <div
-              dir="ltr"
-              className={`tnum text-sm font-bold ${r.change >= 0 ? 'text-success' : 'text-danger'}`}
-            >
-              {r.change >= 0 ? '+' : ''}{(r.change * 100).toFixed(1)}%
+            <div className={`tnum text-start text-sm font-bold ${r.change >= 0 ? 'text-success' : 'text-danger'}`}>
+              <Num>{r.change >= 0 ? '+' : ''}{(r.change * 100).toFixed(1)}%</Num>
             </div>
           </div>
         ))}

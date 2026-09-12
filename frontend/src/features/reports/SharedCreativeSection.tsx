@@ -29,6 +29,7 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import type { CreativeCard } from '@/features/content/api'
 import type { CreativePulse, FatigueAlert, PulseList } from '@/features/content/pulse'
+import { Num } from '@/components/ui/Num'
 
 /** A winner card takes either shape; only `objective` distinguishes them, and only one of them has it. */
 type SharedWinner = SharedObjectiveWinner | SharedKindWinner
@@ -277,8 +278,8 @@ export function SharedCreativeSection({
     <section className="mt-8 grid gap-4" data-testid="shared-creative-section" aria-label={t.heading}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-heading text-lg font-extrabold tracking-tight">{t.heading}</h2>
-        <p className="tnum text-xs text-text-secondary" dir="ltr">
-          {data.period.from} → {data.period.to}
+        <p className="tnum text-xs text-text-secondary">
+          <Num>{data.period.from} → {data.period.to}</Num>
         </p>
       </div>
 
@@ -450,8 +451,8 @@ export function SharedCreativeSection({
           )}
 
           {openId === null && (
-            <p className="tnum text-xs text-text-muted" dir="ltr">
-              {t.showing} {rows.length} {t.of} {library.data?.total ?? rows.length}
+            <p className="tnum text-xs text-text-muted">
+              <Num>{t.showing} {rows.length} {t.of} {library.data?.total ?? rows.length}</Num>
             </p>
           )}
         </div>
@@ -1042,8 +1043,8 @@ function CreativeTile({
         {creative.headline_metrics.slice(0, 3).map((key) => (
           <div key={key} className="flex justify-between gap-1">
             <dt className="truncate text-text-muted">{metricLabel(key, locale)}</dt>
-            <dd className="tnum shrink-0 font-semibold" dir="ltr">
-              {formatMetric(metricState(creative.metrics, key), key, locale, currency)}
+            <dd className="tnum shrink-0 font-semibold">
+              <Num>{formatMetric(metricState(creative.metrics, key), key, locale, currency)}</Num>
             </dd>
           </div>
         ))}

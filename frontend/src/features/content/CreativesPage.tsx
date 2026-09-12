@@ -49,6 +49,7 @@ import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
 import { campaignStatusLabel, marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 import { canonicalObjectiveLabel, type CanonicalObjectiveKey } from '@/features/campaigns/canonicalObjectives'
+import { Num } from '@/components/ui/Num'
 
 /**
  * §15.2 — the Creative Library, in `/app` and `/agency`.
@@ -1516,8 +1517,8 @@ function CreativeGridCard({
             {creative.headline_metrics.slice(0, 4).map((key) => (
               <div key={key} className="flex flex-col">
                 <dt className="text-text-secondary">{metricLabel(key, locale)}</dt>
-                <dd className="tabular-nums text-text-primary" dir="ltr">
-                  {/*
+                <dd className="tabular-nums text-text-primary">
+                  <Num>{/*
                     * CONTENT-MONEY-VISIBLE-001 — money through the canonical reader, everything
                     * else through `metricState`.
                     *
@@ -1528,7 +1529,7 @@ function CreativeGridCard({
                     */}
                   {key === 'spend' || key === 'revenue'
                     ? creativeMoney(creative.metrics, key, currency, locale).text
-                    : formatMetric(metricState(creative.metrics, key), key, locale, currency)}
+                    : formatMetric(metricState(creative.metrics, key), key, locale, currency)}</Num>
                 </dd>
               </div>
             ))}

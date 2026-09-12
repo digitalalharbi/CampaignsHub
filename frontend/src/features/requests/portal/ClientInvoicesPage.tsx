@@ -8,6 +8,7 @@ import { QueryFailure } from '@/components/ui/QueryFailure'
 import { usePortalGuard } from './usePortalGuard'
 import { useUi } from '@/stores/ui'
 import { useClientSpacePath } from './clientSpace'
+import { Num } from '@/components/ui/Num'
 
 const COPY = {
   ar: {
@@ -76,7 +77,7 @@ function InvoiceCard({ invoice, ar, t }: { invoice: PortalInvoice; ar: boolean; 
         <div className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{invoice.number}</div>
         <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${status.tone}`}>{status.label}</span>
       </div>
-      <div className="tnum text-xl font-extrabold text-text-primary" dir="ltr">{formatMoney(invoice.total, invoice.currency)}</div>
+      <div className="tnum text-xl font-extrabold text-text-primary"><Num>{formatMoney(invoice.total, invoice.currency)}</Num></div>
       <div className="flex items-center justify-between text-[11px] text-text-muted">
         <span>{t.due}: <span className="tnum">{formatDate(invoice.due_date)}</span></span>
         <span className="flex items-center gap-1 font-semibold text-brand-600">{t.details} <ArrowRight size={13} className="rtl:rotate-180" /></span>

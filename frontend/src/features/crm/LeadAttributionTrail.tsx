@@ -1,4 +1,5 @@
 import type { AttributionRung, LeadAttribution } from './types'
+import { Num } from '@/components/ui/Num'
 
 /**
  * LEAD-SOURCE-ATTRIBUTION-001 — the chain behind one lead, and what it cannot say.
@@ -124,8 +125,8 @@ export function LeadAttributionTrail({
                 <dt className="text-text-secondary">
                   {ar ? (WEB_LABEL[key]?.ar ?? key) : (WEB_LABEL[key]?.en ?? key)}
                 </dt>
-                <dd className="min-w-0 truncate" dir="ltr">
-                  {value}
+                <dd className="min-w-0 truncate">
+                  <Num>{value}</Num>
                 </dd>
               </div>
             ))}

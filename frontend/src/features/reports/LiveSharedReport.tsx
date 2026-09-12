@@ -497,8 +497,8 @@ export function LiveSharedReport({
                     </div>
                     <div>
                       <dt className="text-text-muted">{ar ? 'تكلفة الطلب' : 'Cost per order'}</dt>
-                      <dd dir="ltr" className="tnum font-semibold text-text-primary">
-                        {/*
+                      <dd className="tnum font-semibold text-text-primary">
+                        <Num>{/*
                           Null stays «—». A cost per order that nobody could compute is not a cost of
                           zero, and this is the figure a client acts on.
                         */}
@@ -522,7 +522,7 @@ export function LiveSharedReport({
                             : asExactMoney((block as typeof payload.objective_performance.direct).cpa)
                           : (block as typeof payload.objective_performance.blended).blended_cpa === null
                             ? '—'
-                            : asExactMoney((block as typeof payload.objective_performance.blended).blended_cpa)}
+                            : asExactMoney((block as typeof payload.objective_performance.blended).blended_cpa)}</Num>
                       </dd>
                     </div>
                   </dl>

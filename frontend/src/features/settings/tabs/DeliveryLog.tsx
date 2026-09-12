@@ -3,6 +3,7 @@ import { summariseDeliveries, type DeliveryRow } from '../deliveryLog'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 /**
  * EMAIL-SETTINGS-DEPTH-001 — what actually left the building.
@@ -107,7 +108,7 @@ export function DeliveryLog() {
             ] as const).map(([key, label, value, tone]) => (
               <li key={key} data-testid={`delivery-count-${key}`} className="rounded-xl border border-border bg-surface-secondary px-4 py-3">
                 <div className="text-[12px] text-text-secondary">{label}</div>
-                <div className={`tnum text-xl font-extrabold ${tone}`} dir="ltr">{value}</div>
+                <div className={`tnum text-xl font-extrabold ${tone}`}><Num>{value}</Num></div>
               </li>
             ))}
           </ul>

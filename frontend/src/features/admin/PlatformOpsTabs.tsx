@@ -4,6 +4,7 @@ import { fetchIntegrations, fetchPermissions, fetchScheduledWork, fetchStatus, t
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { days as countedDays } from '@/lib/counted'
+import { Num } from '@/components/ui/Num'
 
 /**
  * The three read surfaces of ADMIN-003, mounted as tabs on `/admin/settings` rather than given rail
@@ -92,8 +93,8 @@ export function IntegrationsTab() {
           {query.data.providers.map((p) => (
             <li key={p.provider} data-testid={`provider-${p.provider}`} className="rounded-2xl border border-border bg-surface p-5">
               <p className="font-heading text-[15px] font-bold text-text-primary" dir="ltr">{p.provider}</p>
-              <p className="tnum mt-0.5 text-[12px] text-text-muted" dir="ltr">
-                {p.tenants} {ar ? 'مستأجرًا' : 'tenants'}
+              <p className="tnum mt-0.5 text-[12px] text-text-muted">
+                <Num>{p.tenants} {ar ? 'مستأجرًا' : 'tenants'}</Num>
               </p>
               <ul className="mt-3 flex flex-wrap gap-1.5">
                 {Object.entries(p.by_status).map(([status, count]) => (
@@ -160,7 +161,7 @@ function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-[11px] uppercase tracking-wide text-text-muted">{label}</dt>
-      <dd className="truncate font-semibold text-text-primary" dir="ltr">{value}</dd>
+      <dd className="truncate font-semibold text-text-primary"><Num>{value}</Num></dd>
     </div>
   )
 }
@@ -259,7 +260,7 @@ export function ScheduledWorkTab() {
         ] as const).map(([key, label, value, tone]) => (
           <li key={key} data-testid={`scheduled-count-${key}`} className="rounded-xl border border-border bg-surface px-4 py-3">
             <div className="text-[12px] text-text-secondary">{label}</div>
-            <div className={`tnum text-xl font-extrabold ${tone}`} dir="ltr">{value}</div>
+            <div className={`tnum text-xl font-extrabold ${tone}`}><Num>{value}</Num></div>
           </li>
         ))}
       </ul>

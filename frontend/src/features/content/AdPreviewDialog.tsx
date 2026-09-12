@@ -8,6 +8,7 @@ import { canonicalObjectiveLabel, canonicalOfRaw } from '@/features/campaigns/ca
 import { providerLabel } from '@/features/campaigns/labels'
 import type { CreativeCard } from './api'
 import type { Locale } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 /**
  * AD-PREVIEW-001 — one ad, opened where the reader is standing.
@@ -233,7 +234,7 @@ export function AdPreviewDialog({
             {figures.map((f) => (
               <div key={f.label} className="rounded-lg bg-surface-secondary p-2">
                 <div className="text-[11px] font-semibold leading-tight text-text-muted">{f.label}</div>
-                <div dir="ltr" className="tnum text-sm font-bold text-text-primary">{f.value}</div>
+                <div className="tnum text-sm font-bold text-text-primary"><Num>{f.value}</Num></div>
               </div>
             ))}
           </div>

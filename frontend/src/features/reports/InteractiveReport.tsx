@@ -30,6 +30,7 @@ import { SPECS } from '@/features/analytics/metricCatalog'
 import { type ReportMetric, type ResultPart, creativeReadings, mixedResultsNote, previousReading, reportMetrics, trendSeries } from './reportMetrics'
 import { useUi } from '@/stores/ui'
 import { ReportOutline } from './ReportOutline'
+import { Num } from '@/components/ui/Num'
 
 export interface Slide { id: string; type: string; platform?: string; order: number; visible: boolean }
 type Row = Record<string, number | string | null>
@@ -1111,8 +1112,8 @@ function ObjectiveSplitSlide({ data }: { data: ReportData }) {
             <Highlight label="CPA" value={moneyExact(op.direct.cpa, c ?? null)} />
             <Highlight label="ROAS" value={ratio(op.direct.roas)} />
           </div>
-          <p className="tnum mt-2 text-[11px] text-text-muted" dir="ltr">{op.direct.formula.cpa}</p>
-          <p className="tnum text-[11px] text-text-muted" dir="ltr">{op.direct.formula.roas}</p>
+          <p className="tnum mt-2 text-[11px] text-text-muted"><Num>{op.direct.formula.cpa}</Num></p>
+          <p className="tnum text-[11px] text-text-muted"><Num>{op.direct.formula.roas}</Num></p>
         </div>
 
         <div data-testid="blended-block" className="rounded-2xl border border-border bg-surface-secondary p-4">

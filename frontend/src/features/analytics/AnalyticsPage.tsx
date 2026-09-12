@@ -1,3 +1,4 @@
+import { Num } from '@/components/ui/Num'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeftRight } from 'lucide-react'
@@ -3173,7 +3174,7 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                         {(() => {
                           if (total === null) {
                             /* Null stays «—»: an unavailable figure is not a figure of zero. */
-                            return <dd className="tnum text-text-primary" dir="ltr">—</dd>
+                            return <dd className="tnum text-text-primary"><Num>—</Num></dd>
                           }
 
                           /*
@@ -3201,8 +3202,8 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                           const exact = 'exact' in read ? read.exact : (read.exact ?? undefined)
 
                           return (
-                            <dd className="tnum text-text-primary" dir="ltr" title={exact ?? undefined}>
-                              {read.text}
+                            <dd className="tnum text-text-primary" title={exact ?? undefined}>
+                              <Num>{read.text}</Num>
                             </dd>
                           )
                         })()}

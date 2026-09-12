@@ -17,6 +17,7 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 import { CANONICAL_CURRENCY } from '@/lib/money/contract'
+import { Num } from '@/components/ui/Num'
 
 /**
  * §15.6 — one creative, on its own page.
@@ -527,7 +528,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
                   credential of ours — but it is still an address chosen by whoever wrote the ad, and
                   a page that made it clickable would be offering to follow it on the reader's behalf.
                 */}
-                <dd className="break-all font-mono text-xs text-text-primary" dir="ltr">{creative.destination_url}</dd>
+                <dd className="break-all font-mono text-xs text-text-primary"><Num>{creative.destination_url}</Num></dd>
               </div>
             )}
           </dl>
@@ -846,8 +847,8 @@ function MetricBlock({
   return (
     <div className="rounded-md border border-border p-3">
       <p className="text-xs text-text-secondary">{metricLabel(metricKey, locale)}</p>
-      <p className="mt-1 text-lg font-semibold tabular-nums text-text-primary" dir="ltr">
-        {formatMetric(now, metricKey, locale, currency)}
+      <p className="mt-1 text-lg font-semibold tabular-nums text-text-primary">
+        <Num>{formatMetric(now, metricKey, locale, currency)}
         {overWhole && (
           <span
             className="ms-1 cursor-help text-xs font-normal text-text-muted"
@@ -857,7 +858,7 @@ function MetricBlock({
           >
             ⓘ
           </span>
-        )}
+        )}</Num>
       </p>
       {change !== null && (
         <p

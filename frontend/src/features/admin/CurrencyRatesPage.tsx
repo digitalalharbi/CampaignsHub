@@ -141,11 +141,11 @@ export function CurrencyRatesPage() {
         <dl className="mt-3 grid gap-3 sm:grid-cols-2">
           <div>
             <dt className="text-xs text-text-secondary">{t.lastRate}</dt>
-            <dd className="tnum font-bold text-text-primary" dir="ltr">{feed.last_rate_date ?? t.none}</dd>
+            <dd className="tnum font-bold text-text-primary"><Num>{feed.last_rate_date ?? t.none}</Num></dd>
           </div>
           <div>
             <dt className="text-xs text-text-secondary">{t.ratesOnFile}</dt>
-            <dd className="tnum font-bold text-text-primary" dir="ltr">{feed.rates}</dd>
+            <dd className="tnum font-bold text-text-primary"><Num>{feed.rates}</Num></dd>
           </div>
         </dl>
       </section>

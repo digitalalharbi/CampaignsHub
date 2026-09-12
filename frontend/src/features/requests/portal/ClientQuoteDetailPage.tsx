@@ -12,6 +12,7 @@ import { usePortalGuard } from './usePortalGuard'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { useClientSpacePath } from './clientSpace'
+import { Num } from '@/components/ui/Num'
 
 const COPY = {
   ar: {
@@ -91,7 +92,7 @@ export function ClientQuoteDetailPage() {
           <Row label={t.discount} value={formatMoney(quote.discount, quote.currency)} />
           <div className="flex items-center justify-between border-t border-border pt-2">
             <dt className="font-bold text-text-primary">{t.total}</dt>
-            <dd className="tnum text-lg font-extrabold text-text-primary" dir="ltr">{formatMoney(quote.total, quote.currency)}</dd>
+            <dd className="tnum text-lg font-extrabold text-text-primary"><Num>{formatMoney(quote.total, quote.currency)}</Num></dd>
           </div>
         </dl>
 
@@ -126,7 +127,7 @@ export function ClientQuoteDetailPage() {
             <div>
               <div className="text-[11px] text-text-muted">{t.invoice}</div>
               <div className="font-mono text-sm font-semibold text-brand-600" dir="ltr">{issuedInvoice.number}</div>
-              <div className="tnum mt-0.5 text-sm font-bold text-text-primary" dir="ltr">{formatMoney(issuedInvoice.total, issuedInvoice.currency)}</div>
+              <div className="tnum mt-0.5 text-sm font-bold text-text-primary"><Num>{formatMoney(issuedInvoice.total, issuedInvoice.currency)}</Num></div>
             </div>
             <button onClick={() => navigate(`/client/invoices/${issuedInvoice.id}`)} className="flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">
               <Receipt size={15} /> {t.view_invoice}
@@ -142,7 +143,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between">
       <dt className="text-text-secondary">{label}</dt>
-      <dd className="tnum text-text-primary" dir="ltr">{value}</dd>
+      <dd className="tnum text-text-primary"><Num>{value}</Num></dd>
     </div>
   )
 }

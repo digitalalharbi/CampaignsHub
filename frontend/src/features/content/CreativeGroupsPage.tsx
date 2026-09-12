@@ -19,6 +19,7 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
+import { Num } from '@/components/ui/Num'
 
 /**
  * §15.8 and §15.13 — the same asset across platforms, as one thing.
@@ -324,8 +325,8 @@ function GroupFigures({ group, locale, currency }: { group: CreativeGroupSummary
       {keys.map((key) => (
         <div key={key} className="rounded-md border border-border p-2">
           <dt className="text-[11px] text-text-secondary">{metricLabel(key, locale)}</dt>
-          <dd className="mt-0.5 text-sm font-medium text-text-primary" dir="ltr">
-            {formatMetric(metricState(group.metrics, key), key, locale, currency)}
+          <dd className="mt-0.5 text-sm font-medium text-text-primary">
+            <Num>{formatMetric(metricState(group.metrics, key), key, locale, currency)}</Num>
           </dd>
         </div>
       ))}

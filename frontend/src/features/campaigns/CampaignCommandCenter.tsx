@@ -41,6 +41,7 @@ import { providerLabel } from './labels'
 import { AdPoster } from '@/features/content/AdPoster'
 import type { Locale } from '@/stores/ui'
 import { StatCard } from '@/components/ui/StatCard'
+import { Num } from '@/components/ui/Num'
 
 type Sparkable = keyof MetricTotals
 
@@ -618,7 +619,7 @@ function MiniStat({ label, value, exact }: { label: string; value: string; exact
   return (
     <div className="rounded-lg bg-surface-secondary p-2">
       <div className="text-[11px] font-semibold leading-tight text-text-muted">{label}</div>
-      <div className="tnum text-sm font-bold text-text-primary" dir="ltr" title={exact}>{value}</div>
+      <div className="tnum text-sm font-bold text-text-primary" title={exact}><Num>{value}</Num></div>
     </div>
   )
 }

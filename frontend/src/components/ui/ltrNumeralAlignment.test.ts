@@ -41,30 +41,48 @@ const SOURCES = import.meta.glob('/src/**/*.tsx', {
 /** Any opening tag that carries `dir="ltr"`. */
 const TAGGED = /<([a-zA-Z][a-zA-Z0-9]*)\b[^>]{0,900}?dir="ltr"[^>]{0,900}?>/gs
 
-/** Lays out as a block — so `dir` on it re-bases the alignment of everything inside. */
-const BLOCK_BOX = /className=[^>]*\b(block|grid|flex)\b/
+/**
+ * Lays out as a block — so `dir` on it re-bases the alignment of everything inside.
+ *
+ * Two ways to be one, and the first draft of this guard only knew the second. A `<dd>`, a `<div>`, a
+ * `<p>` is a block because of what it IS; `block`/`grid`/`flex` in the class list is a block because
+ * of what it was told to be. Checking only the class list missed the Content card's own figure —
+ * `<dd className="tabular-nums" dir="ltr">` under a `<dt>` — which is the first surface the owner
+ * named. A guard that knows one of the two ways is a guard that passes the reported defect.
+ */
+const NATIVE_BLOCK = /^(div|p|dd|dt|dl|li|ul|ol|section|article|header|footer|main|aside|figure|figcaption|blockquote|h[1-6])$/
+const BLOCK_CLASS = /className=[^>]*\b(block|grid|flex)\b/
 const INLINE_BOX = /\b(inline-flex|inline-grid|inline-block)\b/
+
+/**
+ * A FIGURE, which is what the owner's contract is about — not every block that reads left to right.
+ *
+ * «Every metric is one logical block: label, value + unit, optional trend. They must share the same
+ * alignment edge.» That is a rule about figures under labels. An English paragraph inside an Arabic
+ * admin page is a different thing: it is prose in the other language, and left-aligning it is
+ * correct rather than a defect, so sweeping it would be changing something that is already right.
+ *
+ * Two ways to be a figure here. A tabular-numeral class says so outright. A `<dd>` says so
+ * structurally: it is the VALUE half of a definition list, and its `<dt>` is the label sitting
+ * directly above it — which is exactly the pair the owner reported sitting on opposite edges.
+ */
+const IS_A_FIGURE = /\b(tnum|tabular-nums)\b/
 
 /** A typing context of its own, not a figure aligned against a label. */
 const CONTROL = /^(input|textarea|select|code|pre|bdi)$/
 
-/**
- * Blocks that carry `dir="ltr"` for a reason that is not this defect, and the reason.
+/*
+ * There is no exemption list any more, and that is the narrowing rather than a relaxation.
  *
- * Each is asserted below to still contain one, so the list cannot be satisfied by deleting an entry
- * whose file has already been fixed — the same rule the table contract follows. Anything not here is
- * a figure sitting across the card from its own label.
+ * There used to be four: `PhoneField`, `DateField`, `OtpField` and the dev status page. Each was a
+ * control group or an English-only internal page — real reasons, and none of them a figure under a
+ * label. Once the rule asks «is this a FIGURE», none of the four is in scope at all, so the list
+ * describing why they are allowed describes nothing. A list that has stopped doing work is the kind
+ * a later reader trusts and a later author extends.
  */
-const EXEMPT: Record<string, string> = {
-  '/src/components/ui/PhoneField.tsx': 'a control GROUP: the country code is typed before the number, and a caret that starts at the right edge is wrong for a phone number in any language',
-  '/src/components/ui/DateField.tsx': 'the same, for a date whose segments run year → month → day whatever the page direction is',
-  '/src/features/auth/OtpField.tsx': 'six boxes filled left to right — the order a person reads a code out of an SMS',
-  '/src/features/dev/DevStatusPage.tsx': 'an internal build-status page with no Arabic copy and no metric cards on it',
-}
 
 describe('a figure reads in Latin order without moving its block', () => {
   const offenders: string[] = []
-  const exempted = new Set<string>()
 
   for (const [path, raw] of Object.entries(SOURCES)) {
     if (path.includes('.test.')) continue
@@ -75,11 +93,10 @@ describe('a figure reads in Latin order without moving its block', () => {
     for (const match of code.matchAll(TAGGED)) {
       const [tag, element] = match
 
-      if (CONTROL.test(element) || INLINE_BOX.test(tag) || !BLOCK_BOX.test(tag)) continue
-      if (path in EXEMPT) {
-        exempted.add(path)
-        continue
-      }
+      const isBlock = NATIVE_BLOCK.test(element) || BLOCK_CLASS.test(tag)
+
+      if (CONTROL.test(element) || INLINE_BOX.test(tag) || !isBlock) continue
+      if (!IS_A_FIGURE.test(tag) && element !== 'dd') continue
 
       offenders.push(`${path}: ${tag.slice(0, 90).replace(/\s+/g, ' ')}`)
     }
@@ -87,11 +104,6 @@ describe('a figure reads in Latin order without moving its block', () => {
 
   it('read the source it claims to guard', () => {
     expect(Object.keys(SOURCES).length).toBeGreaterThan(50)
-  })
-
-  /* An exemption whose file no longer carries one is a line nobody can act on — see the list. */
-  it('has no exemption that has already been fixed', () => {
-    expect([...Object.keys(EXEMPT)].filter((p) => !exempted.has(p))).toEqual([])
   })
 
   it('puts no dir="ltr" on a block box', () => {

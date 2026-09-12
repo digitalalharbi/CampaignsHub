@@ -6,6 +6,7 @@ import { readPreview } from '@/features/content/adPreview'
 import { providerLabel, objectiveLabel } from '@/features/campaigns/labels'
 import type { ReportAd } from './ReportAdsSection'
 import type { Locale } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 /**
  * REPORT-AD-PREVIEW-001 §C — an ad in a client's report opens its own detail.
@@ -158,8 +159,8 @@ export function ReportAdDetail({
             {figures.map((f) => (
               <div key={f.label} className="rounded-lg bg-surface-secondary p-2 text-center">
                 <dt className="text-[11px] font-semibold leading-tight text-text-muted">{f.label}</dt>
-                <dd dir="ltr" className="tnum text-sm font-bold text-text-primary">
-                  {f.value}
+                <dd className="tnum text-sm font-bold text-text-primary">
+                  <Num>{f.value}</Num>
                 </dd>
               </div>
             ))}
