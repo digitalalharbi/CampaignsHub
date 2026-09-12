@@ -179,6 +179,76 @@ final class CreativeMetrics
     }
 
     /**
+     * CONTENT-KPI-TOTALS-001 — the figures for a whole filtered scope, not one creative.
+     *
+     * «The Content area currently does not visibly expose the required KPI figures consistently …
+     * never turn unavailable data into zero.» The library could show a card per creative and had no
+     * row of totals at all, so «what did this filter cost» was a question the page could not answer.
+     *
+     * Read over the SAME ids the list was narrowed to, in ONE query, and shaped by the same `shape()`
+     * every card uses — so the strip and the cards beneath it cannot derive a rate differently. The
+     * obvious alternative, calling the project SUMMARY endpoint, would have answered a different
+     * question: that scope knows nothing about creative kinds, ad ids or fatigue, so the headline
+     * would have described a wider set than the cards under it.
+     *
+     * Derived ratios are recomputed from the pooled sums inside `shape()`, never averaged across
+     * creatives — the rule CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 holds everywhere else in this
+     * product, and a CTR that is the mean of per-creative CTRs is a different number from the
+     * account's CTR.
+     *
+     * @param  list<string>  $creativeIds
+     * @return array<string, mixed>|null null when the scope holds no reported day at all
+     */
+    public function totalsFor(array $creativeIds, Carbon $from, Carbon $to): ?array
+    {
+        if ($creativeIds === []) {
+            return null;
+        }
+
+        /*
+         * The SAME projection `forCreatives()` builds, minus the grouping key.
+         *
+         * `shape()` reads more than `SUMS` — the averaged video seconds, the active-day count and the
+         * money-provenance expressions — and a select that carried only the sums produced a row
+         * `shape()` indexed straight into an undefined key. The columns are listed once, here, for
+         * exactly that reason.
+         */
+        $select = [];
+        foreach (self::SUMS as $alias => $column) {
+            $select[] = "SUM({$column}) AS {$alias}";
+        }
+        $select[] = 'AVG(frequency) AS frequency';
+        $select[] = 'AVG(video_avg_watch_seconds) AS video_avg_watch_seconds';
+        $select[] = 'COUNT(DISTINCT metric_date) AS active_days';
+
+        foreach (self::MONEY_TRUTH as $alias => $expression) {
+            $select[] = "{$expression} AS {$alias}";
+        }
+
+        $row = DB::table('creative_daily_metrics')
+            ->whereIn('creative_id', $creativeIds)
+            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->selectRaw(implode(', ', $select))
+            ->first();
+
+        if ($row === null) {
+            return null;
+        }
+
+        $shaped = $this->shape((array) $row);
+
+        /*
+         * A scope where the provider reported NOTHING is «no figures», not a row of zeros.
+         *
+         * `SUM()` over no rows returns null per column, which `shape()` carries through honestly —
+         * but a strip drawn from it would still read as an answer. The caller gets null and says so.
+         */
+        return ($shaped['reported'] ?? []) === [] || ! in_array(true, (array) ($shaped['reported'] ?? []), true)
+            ? null
+            : $shaped;
+    }
+
+    /**
      * One row's figures: the raw sums, the derived KPIs, and what the provider actually reported.
      *
      * @param  array<string, mixed>  $row
