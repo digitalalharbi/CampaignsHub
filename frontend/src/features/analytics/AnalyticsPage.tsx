@@ -128,7 +128,7 @@ import { StoreFunnelTab } from './StoreFunnelTab'
 import { AttributionPanel } from './AttributionPanel'
 import { AdPoster } from '@/features/content/AdPoster'
 import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
-import { CreativeTrend } from '@/features/content/CreativeTrend'
+import { CreativeComparison, CreativeTrend } from '@/features/content/CreativeTrend'
 import { creativeScope, decodePath, drillInto, drillUpTo, encodePath, nextLevel, parentFor, rememberName,
   stepLabel, withNames,
   type DrillLevel, type DrillStep,
@@ -2516,17 +2516,38 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
               */
               { label: 'CPC', value: rateOrDash(openCreative.metrics?.cpc ?? null) },
               { label: 'CPM', value: rateOrDash(openCreative.metrics?.cpm ?? null) },
+              /*
+                «Revenue / ROAS when available» — and ABSENT when not, rather than «—».
+                *
+                * A brand campaign has no revenue, and a tile reading «الإيرادات —» on every awareness
+                * creative in the account trains a reader to ignore the row. The pair appears only
+                * where the provider actually sent a figure.
+              */
+              ...(typeof openCreative.metrics?.revenue === 'number'
+                ? [{ label: ar ? 'الإيرادات' : 'Revenue', value: rowMoney(openCreative.metrics ?? undefined, 'revenue', currency) }]
+                : []),
+              ...(typeof openCreative.metrics?.roas === 'number'
+                ? [{ label: 'ROAS', value: rateOrDash(openCreative.metrics.roas) }]
+                : []),
             ]}
             trend={projectId
               ? (
-                <CreativeTrend
-                  projectId={projectId}
-                  creativeId={openCreative.id}
-                  window={{ from: range.from, to: range.to }}
-                  locale={ar ? 'ar' : 'en'}
-                  currency={currency ?? 'SAR'}
-                  height={180}
-                />
+                <>
+                  <CreativeComparison
+                    projectId={projectId}
+                    creativeId={openCreative.id}
+                    window={{ from: range.from, to: range.to }}
+                    locale={ar ? 'ar' : 'en'}
+                  />
+                  <CreativeTrend
+                    projectId={projectId}
+                    creativeId={openCreative.id}
+                    window={{ from: range.from, to: range.to }}
+                    locale={ar ? 'ar' : 'en'}
+                    currency={currency ?? 'SAR'}
+                    height={180}
+                  />
+                </>
               )
               : undefined}
             detailsTo={`/app/content/${openCreative.id}`}

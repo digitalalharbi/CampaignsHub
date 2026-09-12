@@ -90,3 +90,86 @@ export function CreativeTrend({
     </div>
   )
 }
+
+/**
+ * How this creative moved against the window before it — the server's own comparison.
+ *
+ * «Comparison against the previous period where truthfully available.» `getCreative` already returns
+ * `previous` and the dates it covers, so this asks the SAME query as `CreativeTrend` — React Query
+ * dedupes on the key, so a modal showing both fires one request — and reads the figures the server
+ * computed rather than differencing two windows here.
+ *
+ * ## «Where truthfully available» is the whole contract
+ *
+ * `previous` is null when the creative did not exist in that window, or when the caller asked for no
+ * comparison. A percentage against a baseline of zero is infinite, and a metric neither window
+ * reported has no change to state. Each of those renders as nothing rather than as «0%», which would
+ * be a claim that it held steady.
+ */
+export function CreativeComparison({
+  projectId,
+  creativeId,
+  window,
+  locale,
+  metrics = ['spend', 'impressions', 'clicks', 'conversions'],
+}: {
+  projectId: string
+  creativeId: string
+  window: { from?: string; to?: string }
+  locale: Locale
+  /** Which figures to compare, in the order they should read. */
+  metrics?: string[]
+}) {
+  const ar = locale === 'ar'
+
+  const q = useQuery({
+    queryKey: ['creative', projectId, creativeId, window.from, window.to],
+    queryFn: () => getCreative(projectId, creativeId, window),
+    enabled: Boolean(projectId && creativeId),
+  })
+
+  const previous = q.data?.previous ?? null
+  const current = q.data?.metrics ?? null
+
+  if (q.isPending || q.isError || previous === null || current === null) {
+    return null
+  }
+
+  const rows = metrics.flatMap((key) => {
+    const now = (current as Record<string, number | null | undefined>)[key]
+    const before = (previous as Record<string, number | null | undefined>)[key]
+
+    /* Both windows must have REPORTED it — a missing figure has no movement, and zero is not a base. */
+    if (typeof now !== 'number' || typeof before !== 'number' || before === 0) {
+      return []
+    }
+
+    return [{ key, change: (now - before) / before }]
+  })
+
+  if (rows.length === 0) {
+    return null
+  }
+
+  return (
+    <div data-testid="creative-comparison" className="mt-3">
+      <h4 className="mb-1 text-xs font-bold text-text-secondary">
+        {ar ? 'مقارنة بالفترة السابقة' : 'Against the previous period'}
+      </h4>
+
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+        {rows.map((r) => (
+          <div key={r.key} data-testid={`creative-comparison-${r.key}`} className="rounded-lg bg-surface-secondary p-2 text-center">
+            <div className="text-[11px] font-semibold leading-tight text-text-muted">{metricLabel(r.key, locale)}</div>
+            <div
+              dir="ltr"
+              className={`tnum text-sm font-bold ${r.change >= 0 ? 'text-success' : 'text-danger'}`}
+            >
+              {r.change >= 0 ? '+' : ''}{(r.change * 100).toFixed(1)}%
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
