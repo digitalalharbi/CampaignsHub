@@ -181,6 +181,38 @@ function Delta({
   )
 }
 
+/**
+ * The card's outer box, shared with the skeleton below it — KPI-STRIP-RESERVE-001.
+ *
+ * A skeleton whose height is a number somebody typed drifts the moment the card changes, and it
+ * drifts silently: the row still looks like a row, and the page under it jumps by the difference.
+ * The two share this string and the three reserved rows, so they measure the same by construction.
+ */
+const CARD_SHELL = `flex h-full flex-col gap-1.5 rounded-2xl border bg-surface ${CARD_PAD_DENSE}`
+
+/**
+ * One card's placeholder, built from the card's OWN reserved rows.
+ *
+ * `MetricCard` reserves three: two lines for the label, one for the figure whatever state it is in,
+ * and the chart row whether or not there is a line to draw. Every one of those floors exists so a
+ * card's height does not depend on its content — which means a skeleton that repeats them is the
+ * same height as the card that replaces it, and stays that way when the card is next changed.
+ *
+ * The previous skeleton was a single `h-[96px]` box. The real card measures 150, so a thirteen-card
+ * strip reserved 432px where 482 was coming and the toolbar under it still moved 50px.
+ */
+function MetricCardSkeleton() {
+  return (
+    <div className={`${CARD_SHELL} border-border`} aria-hidden="true">
+      <div className="min-h-[2.75rem] animate-pulse rounded-lg bg-surface-secondary/60" />
+      <div className="min-h-[1.75rem] animate-pulse rounded-lg bg-surface-secondary/60" />
+      <div className="mt-auto h-8 w-full pt-1">
+        <div className="h-full w-full animate-pulse rounded-lg bg-surface-secondary/40" />
+      </div>
+    </div>
+  )
+}
+
 export function MetricCard({ item, ar, labelControl }: { item: MetricItem; ar: boolean; labelControl?: ReactNode }) {
   /*
    * A withheld figure is NOT missing. It has a real number to show, so it must not take the muted
@@ -212,7 +244,7 @@ export function MetricCard({ item, ar, labelControl }: { item: MetricItem; ar: b
        * result is that a card's height depends on the ROW, not on how long its own label happens to
        * be in the reader's language.
        */
-      className={`flex h-full flex-col gap-1.5 rounded-2xl border bg-surface ${CARD_PAD_DENSE} ${
+      className={`${CARD_SHELL} ${
         item.lead
           ? 'border-brand-500/50 ring-1 ring-brand-500/20 shadow-[var(--shadow-small)]'
           : 'border-border'
@@ -340,6 +372,7 @@ export function MetricStrip({
   note,
   hasRows,
   loading = false,
+  loadingCards,
   error,
   onRetry,
   labelControl,
@@ -376,6 +409,14 @@ export function MetricStrip({
    * printed «لا توجد بيانات» — an absence of evidence rendered as evidence of absence.
    */
   loading?: boolean
+  /**
+   * How many cards to reserve while the figures are in flight — see KPI-STRIP-RESERVE-001.
+   *
+   * Pass it wherever the card count is known before the data is: a page built from a fixed list of
+   * metric keys knows it will draw thirteen long before it has one figure, and the skeleton cannot
+   * work that out from a `primary` the response has not filled yet.
+   */
+  loadingCards?: number
   /** The failed request, passed straight to `QueryFailure` so a refusal reads as a refusal. */
   error?: unknown
   onRetry?: () => void
@@ -421,6 +462,23 @@ export function MetricStrip({
    * not jump when the figures land, and says nothing about them.
    */
   if (loading) {
+    /*
+     * KPI-STRIP-RESERVE-001 — the skeleton above promises to hold the row's shape, and mapping
+     * `primary` is how it stopped doing so.
+     *
+     * On nearly every surface `primary` is DERIVED from the response, so while the request is in
+     * flight it is empty — and `[].map()` reserves nothing. The comment stayed true and the code
+     * stopped being: the strip rendered a zero-height box, then thirteen cards, and everything
+     * beneath it jumped. `creative-analysis.spec.ts` measured the Content library's view toggle
+     * moving 482px on chromium, which is a reader aiming at «list» and hitting the search box.
+     *
+     * The count comes from the caller where the caller knows it — a page with a fixed key list knows
+     * how many cards it will draw before it has a single figure. Four is the fallback because it is
+     * the row this product's strips are built on, and reserving a plausible row is strictly better
+     * than reserving nothing.
+     */
+    const reserved = Math.max(1, loadingCards ?? (primary.length || 4))
+
     return (
       <section data-testid={`${id}-metrics`} data-strip-state="loading" className="space-y-2">
         <div
@@ -429,9 +487,7 @@ export function MetricStrip({
           aria-label={t('loading', ar)}
           className={`grid grid-cols-2 ${CARD_GAP} lg:grid-cols-3 xl:grid-cols-4`}
         >
-          {primary.map((item) => (
-            <div key={item.key} className="h-[96px] animate-pulse rounded-2xl border border-border bg-surface-secondary/40" />
-          ))}
+          {Array.from({ length: reserved }, (_, i) => <MetricCardSkeleton key={i} />)}
         </div>
       </section>
     )
