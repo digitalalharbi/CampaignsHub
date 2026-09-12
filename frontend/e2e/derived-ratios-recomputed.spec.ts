@@ -53,9 +53,28 @@ async function figure(page: import('@playwright/test').Page, key: string): Promi
       if (/\d/.test(title)) return numeric(title)
     }
 
+    /*
+     * The card's own value row, and NOT «the last line of the card».
+     *
+     * That heuristic held only while the value happened to be last. KPI-ALIGNMENT-002 moved the
+     * change badge beside the figure it describes — the owner's contract is that label, value and
+     * trend share one edge — so the last line became «12%» and this read a ROAS of 8.37 as 12. The
+     * identity then missed by an order of magnitude and accused the product of averaging its ratios.
+     *
+     * `metric-value` is the row the primitive puts the figure in, so this reads the figure whatever
+     * else the card later grows.
+     */
+    const value = el.querySelector('[data-testid="metric-value"]')
+
+    if (value !== null) {
+      const first = (value as HTMLElement).innerText.split('\n').map((l) => l.trim()).filter((l) => l !== '')[0]
+
+      if (first !== undefined) return numeric(first)
+    }
+
     const lines = (el as HTMLElement).innerText.split('\n').map((l) => l.trim()).filter((l) => l !== '')
 
-    return lines.length > 0 ? numeric(lines[lines.length - 1]) : null
+    return lines.length > 0 ? numeric(lines[0]) : null
   })
 }
 
