@@ -56,7 +56,11 @@ const EXEMPT: Record<string, string> = {
   'src/features/content/CreativesPage.tsx': 'the list view of a grid: selection checkboxes and media previews per row',
   'src/features/content/CreativeDetailPage.tsx': 'three tables, one of which is a per-day series that wants a chart rather than a migration',
   'src/features/campaigns/CampaignCommandCenter.tsx': 'inline editing per row — the cells are controls, and the spec API needs an editable kind first',
-  'src/features/campaigns/CampaignsPage.tsx': 'row selection and bulk actions live inside the table',
+  'src/features/campaigns/CampaignsPage.tsx': 'the campaigns table orders by PRIORITY BAND before any column sort, '
+    + 'drives that sort from the page rather than from the table, and navigates on a row press. The objective-mix '
+    + 'table that used to sit beside it is a consumer now — it needed none of the three. The recorded reason used '
+    + 'to be «row selection and bulk actions live inside the table», and neither table on this page has ever had a '
+    + 'checkbox: a false reason sends the next reader to build selection support nobody is waiting for',
   'src/features/campaigns/CampaignDepthTabs.tsx': 'nested expansion rows, which the primitive does not model',
   'src/features/campaigns/overview/UnifiedCampaignOverview.tsx': 'per-row sparklines and a drag handle',
 }
