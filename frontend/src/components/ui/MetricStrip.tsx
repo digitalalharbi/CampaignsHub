@@ -3,6 +3,7 @@ import { Area, AreaChart, ResponsiveContainer } from 'recharts'
 import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Info, Minus } from 'lucide-react'
 import { QueryFailure } from './QueryFailure'
 import { TOUCH_CONTROL, TOUCH_TARGET } from './touch'
+import { Num } from './Num'
 import { CARD_GAP, CARD_PAD_DENSE, METRIC_HINT, METRIC_LABEL, METRIC_VALUE, METRIC_VALUE_DENSE } from '@/styles/scale'
 
 /**
@@ -250,7 +251,16 @@ export function MetricCard({ item, ar, labelControl }: { item: MetricItem; ar: b
           : 'border-border'
       }`}
     >
-      <div className="flex min-h-[2.75rem] items-start justify-between gap-1">
+      {/*
+        KPI-ALIGNMENT-002 — the label owns this row alone.
+
+        It was `justify-between` with the change badge, which put the two at OPPOSITE edges of the
+        card: «الإنفاق» at the right and «+12%» at the left, in Arabic. The owner's contract is that
+        label, value and trend share one edge — «never label on the right ← card space → value on the
+        left» — and a trend across the card from its own label is that same split one row up. The
+        badge now sits beside the figure it describes.
+      */}
+      <div className="flex min-h-[2.75rem] items-start gap-1">
         {/*
           Two lines reserved and at most two lines drawn.
 
@@ -261,6 +271,7 @@ export function MetricCard({ item, ar, labelControl }: { item: MetricItem; ar: b
           two lines are not enough.
         */}
         <span
+          data-testid="metric-label"
           className={`inline-flex items-start gap-1 text-text-secondary ${METRIC_LABEL}`}
           title={typeof item.label === 'string' ? item.label : undefined}
         >
@@ -273,13 +284,6 @@ export function MetricCard({ item, ar, labelControl }: { item: MetricItem; ar: b
           {labelControl ?? <span className="line-clamp-2">{item.label}</span>}
           {item.hint && <InfoHint text={item.hint} label={`${t('definition', ar)}: ${item.label}`} />}
         </span>
-        {/*
-          A delta only where there is a figure to compare. «+12%» beside «Not provided» would be a
-          comparison of two absences, printed as a change.
-        */}
-        {!missing && item.delta !== null && item.delta !== undefined && (
-          <Delta delta={item.delta} invertGood={item.invertGood} neutral={item.neutral} ar={ar} />
-        )}
       </div>
 
       {/*
@@ -289,34 +293,43 @@ export function MetricCard({ item, ar, labelControl }: { item: MetricItem; ar: b
         it stood taller than its neighbours — the absence was visible in the LAYOUT before it was
         read, which is the opposite of what UX-METRICS-001 wants from it.
       */}
-      <div className="flex min-h-[1.75rem] flex-col justify-center">
+      {/*
+        The figure and its change, on one line, at the SAME edge as the label above them.
+
+        `items-baseline` so the badge sits on the figure's baseline rather than floating beside it,
+        and the row keeps its floor so a card carrying an absence is no taller than its neighbours.
+      */}
+      <div data-testid="metric-value" className="flex min-h-[1.75rem] flex-wrap items-baseline gap-x-2 gap-y-0.5">
       {item.reading.kind === 'value' ? (
         <span
-          dir="ltr"
           // `title` rather than a custom tooltip: it is the one hover that also works for a keyboard
           // user's screen reader and survives being inside a chart card, a table cell or a PDF print.
           title={item.reading.exact}
           /*
-           * `dir="ltr"` and `text-start` are two different settings and the card needs both. The
-           * first keeps «56.3K SAR» in digit order inside an Arabic page; without the second the
-           * span inherits its own LTR alignment, so the figure drifts to the left edge while its
-           * label stays at the right — the pair stops reading as one thing.
+           * KPI-ALIGNMENT-002 — the BLOCK keeps the page's direction; only the number is isolated.
+           *
+           * This carried `dir="ltr"` as well, and `dir` re-bases logical properties on the element
+           * it sits on: `text-start` inside an LTR box means LEFT. On an Arabic page the label sat
+           * at the right edge and its own figure at the left, a card's width apart — and the earlier
+           * fix, adding `text-start`, was that same left-alignment spelled out. `<Num>` isolates the
+           * digits inline instead, so `text-start` here finally resolves against the PAGE.
            */
           className={`block text-start text-text-primary ${item.lead ? METRIC_VALUE : METRIC_VALUE_DENSE}`}
         >
-          {item.reading.text}
+          <Num>{item.reading.text}</Num>
         </span>
       ) : item.reading.kind === 'withheld' ? (
         /*
           FX-WITHHELD-UI-001 — the real figure, at full weight, with the reason underneath.
 
           It reads at the same size as a converted number because it IS the number the platform
-          reported; only the currency is not the reader's. `dir="ltr"` keeps «3,465.33 USD» in Latin
-          order inside an RTL page, exactly as a converted figure is kept.
+          reported; only the currency is not the reader's. `<Num>` keeps «3,465.33 USD» in Latin
+          order inside an RTL page, exactly as a converted figure is kept — without moving the block
+          it sits in to the other edge.
         */
         <span className="flex flex-col gap-0.5">
-          <span dir="ltr" className={`block text-start text-text-primary ${item.lead ? METRIC_VALUE : METRIC_VALUE_DENSE}`}>
-            {item.reading.original}
+          <span className={`block text-start text-text-primary ${item.lead ? METRIC_VALUE : METRIC_VALUE_DENSE}`}>
+            <Num>{item.reading.original}</Num>
           </span>
           <span className={`inline-flex items-center gap-1 font-medium text-text-muted ${METRIC_HINT}`}>
             {t('withheldNote', ar)}
@@ -328,6 +341,13 @@ export function MetricCard({ item, ar, labelControl }: { item: MetricItem; ar: b
           {missingText}
           <InfoHint text={missingHint} label={missingText} />
         </span>
+      )}
+      {/*
+        A delta only where there is a figure to compare. «+12%» beside «Not provided» would be a
+        comparison of two absences, printed as a change.
+      */}
+      {!missing && item.delta !== null && item.delta !== undefined && (
+        <Delta delta={item.delta} invertGood={item.invertGood} neutral={item.neutral} ar={ar} />
       )}
       </div>
 

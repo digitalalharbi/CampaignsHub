@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/form'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 /**
  * The registration review queue (SIGNUP-003).
@@ -158,7 +159,7 @@ export function RegistrationsPage() {
                   >
                     <td className="p-3">
                       <span className="block font-semibold text-text-primary">{r.name}</span>
-                      <span className="text-start block text-xs text-text-muted" dir="ltr">{r.email}</span>
+                      <span className="text-start block text-xs text-text-muted"><Num>{r.email}</Num></span>
                     </td>
                     <td className="p-3 text-text-secondary">{r.tenant_name}</td>
                     <td className="p-3">

@@ -65,9 +65,35 @@ export async function openFilters(page: Page, id: string) {
 }
 
 /** Flip the app to English for stable selectors (default locale is Arabic). */
+/**
+ * Put the page into English, and FAIL if it did not go.
+ *
+ * ## What this was
+ *
+ * `getByRole('button', { name: /Toggle language|EN|اللغة/ }).first()`, clicked inside a
+ * `.catch(() => {})`. Three problems compounding: the pattern is loose enough to match any button
+ * whose accessible name happens to contain «EN», `.first()` then takes whichever of those comes
+ * first in the DOM, and the swallowed rejection means a click on the wrong control — or no click at
+ * all — reads exactly like a successful switch.
+ *
+ * Forty-nine specs call this. On `/agency/content` it silently did nothing: `html[dir]` stayed
+ * `rtl` through the whole test, so every «in English…» assertion in those specs was being made
+ * about an Arabic page. A helper that cannot fail is not a helper; it is a hole with a name.
+ *
+ * The switch is the app's own control, addressed by its exact label, and the OUTCOME is waited for.
+ */
 export async function switchToEnglish(page: Page) {
-  const toggle = page.getByRole('button', { name: /Toggle language|EN|اللغة/ }).first()
-  if (await toggle.count()) await toggle.click().catch(() => {})
+  const html = page.locator('html')
+
+  if ((await html.getAttribute('dir')) === 'ltr') return
+
+  const toggle = page.getByRole('button', { name: 'Toggle language', exact: true }).first()
+  await expect(toggle, 'no language control on this page').toBeVisible({ timeout: 15000 })
+  await toggle.click()
+
+  await expect(html, 'the language control did not put the page into English').toHaveAttribute('dir', 'ltr', {
+    timeout: 10000,
+  })
 }
 
 /**

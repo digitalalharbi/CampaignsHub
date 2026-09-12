@@ -5,6 +5,7 @@ import { fetchPlans, type BillingInterval, type Plan } from './api'
 import { useUi } from '@/stores/ui'
 import { Modal } from '@/components/ui/Modal'
 import { comparisonFor, plansForJourney, whyUpgrade, type ComparisonGroup, type Journey } from './planFit'
+import { Num } from '@/components/ui/Num'
 
 /**
  * Choosing a plan and a term, as part of signing up (PLAN-001).
@@ -358,8 +359,8 @@ function ComparisonTable({
         )}
       </span>
       {/* The price for the term currently chosen, so the table and the cards never disagree. */}
-      <span className="text-start mt-0.5 flex items-baseline gap-1 font-bold text-text-primary" dir="ltr">
-        {priceOf(plan) === null ? (
+      <span className="text-start mt-0.5 block font-bold text-text-primary">
+        <Num className="inline-flex items-baseline gap-1">{priceOf(plan) === null ? (
           <span className="text-xs font-normal text-text-muted">{copy.noAnnual}</span>
         ) : (
           <>
@@ -367,7 +368,7 @@ function ComparisonTable({
             <span className="text-[11px] font-semibold text-text-secondary">{plan.currency}</span>
             <span className="text-[11px] font-normal text-text-muted">{per}</span>
           </>
-        )}
+        )}</Num>
       </span>
       {(ar ? plan.summary_ar : plan.summary_en) && (
         <span className="mt-0.5 block text-[11px] font-normal leading-snug text-text-muted">
@@ -548,12 +549,12 @@ function PlanCard({
       {unavailable ? (
         <span className="text-xs text-text-muted">{copy.noAnnual}</span>
       ) : (
-        <span className="text-start flex items-baseline gap-1 font-bold text-text-primary" dir="ltr">
-          <span className="tnum text-[clamp(1.0625rem,1.4vw,1.25rem)]">{price}</span>
+        <span className="text-start block font-bold text-text-primary">
+          <Num className="inline-flex items-baseline gap-1"><span className="tnum text-[clamp(1.0625rem,1.4vw,1.25rem)]">{price}</span>
           <span className="text-xs font-semibold text-text-secondary">{plan.currency}</span>
           <span className="text-xs font-normal text-text-muted">
             {interval === 'annual' ? copy.perYear : copy.perMonth}
-          </span>
+          </span></Num>
         </span>
       )}
 

@@ -128,6 +128,7 @@ import { StoreFunnelTab } from './StoreFunnelTab'
 import { AttributionPanel } from './AttributionPanel'
 import { AdPoster } from '@/features/content/AdPoster'
 import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
+import { creativeDialogFigures } from '@/features/content/creativeDialogFigures'
 import { CreativeComparison, CreativeTrend } from '@/features/content/CreativeTrend'
 import { creativeScope, decodePath, drillInto, drillUpTo, encodePath, nextLevel, parentFor, rememberName,
   stepLabel, withNames,
@@ -2503,33 +2504,16 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
           <AdPreviewDialog
             creative={openCreative}
             locale={ar ? 'ar' : 'en'}
-            figures={[
-              { label: ar ? 'الإنفاق' : 'Spend', value: rowMoney(openCreative.metrics ?? undefined, 'spend', currency) },
-              { label: ar ? 'الظهور' : 'Impressions', value: countCell(openCreative.metrics?.impressions ?? null).text },
-              { label: ar ? 'النقرات' : 'Clicks', value: countCell(openCreative.metrics?.clicks ?? null).text },
-              { label: 'CTR', value: rateOrDash(openCreative.metrics?.ctr ?? null) },
-              /*
-                CPC and CPM go through the same `rateOrDash`/money readers the row uses, and a figure
-                the provider never sent stays «—». `rowMoney` is deliberately not used for them: it
-                reads the money CONTRACT's spend/revenue envelope, and a cost-per is a derived ratio
-                rather than an amount with its own withheld provenance.
-              */
-              { label: 'CPC', value: rateOrDash(openCreative.metrics?.cpc ?? null) },
-              { label: 'CPM', value: rateOrDash(openCreative.metrics?.cpm ?? null) },
-              /*
-                «Revenue / ROAS when available» — and ABSENT when not, rather than «—».
-                *
-                * A brand campaign has no revenue, and a tile reading «الإيرادات —» on every awareness
-                * creative in the account trains a reader to ignore the row. The pair appears only
-                * where the provider actually sent a figure.
-              */
-              ...(typeof openCreative.metrics?.revenue === 'number'
-                ? [{ label: ar ? 'الإيرادات' : 'Revenue', value: rowMoney(openCreative.metrics ?? undefined, 'revenue', currency) }]
-                : []),
-              ...(typeof openCreative.metrics?.roas === 'number'
-                ? [{ label: 'ROAS', value: rateOrDash(openCreative.metrics.roas) }]
-                : []),
-            ]}
+            /*
+              AD-PREVIEW-FIGURES-001 — read by the SAME readers the row above is read by.
+
+              This list was inline here and had drifted: CPC and CPM went through `rateOrDash`,
+              which multiplies by a hundred and appends a percent sign, so production printed «CPC
+              125.38%» over a row that said «1.25 USD» about the same click. ROAS printed «420.00%».
+              The dialog's own docblock promises it «cannot disagree with the line the reader
+              clicked», and this was the one place it did.
+            */
+            figures={creativeDialogFigures(openCreative.metrics ?? undefined, currency, ar)}
             trend={projectId
               ? (
                 <>

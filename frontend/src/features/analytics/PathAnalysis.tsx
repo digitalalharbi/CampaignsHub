@@ -2,6 +2,7 @@ import { Panel } from './components'
 import { compact, money, percent, ratio } from './format'
 import type { Locale } from '@/stores/ui'
 import type { PathExplanation, PathLeaders } from './api'
+import { Num } from '@/components/ui/Num'
 
 /**
  * OBJECTIVE-ANALYTICS-DEPTH-001 · PLATFORM-DECISION-ANALYTICS-001 · FUNNEL-ANALYTICAL-PATTERN-001
@@ -159,8 +160,8 @@ export function PathAnalysis({
                     >
                       <span className={`block text-text-secondary ${METRIC_LABEL}`}>{t(kind, ar)}</span>
                       <span className="mt-0.5 block truncate text-sm font-bold text-text-primary">{campaign.name}</span>
-                      <span dir="ltr" className="text-start tnum mt-1 block text-xs text-text-secondary">
-                        {metricName(campaign.metric, ar)}: {metricValue(campaign.metric, campaign.value, currency)}
+                      <span className="text-start tnum mt-1 block text-xs text-text-secondary">
+                        <Num>{metricName(campaign.metric, ar)}: {metricValue(campaign.metric, campaign.value, currency)}</Num>
                       </span>
                     </div>
                   ))}

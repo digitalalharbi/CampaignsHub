@@ -1,30 +1,36 @@
 import { describe, expect, it } from 'vitest'
 
 /**
- * KPI-ALIGNMENT-001 — a figure sits on the same side as the label above it.
+ * KPI-ALIGNMENT-002 — reading order is inline; alignment is block. `dir` does both, so it goes inline.
  *
- * «Arabic / RTL: label + value + trend must align to the RIGHT. English / LTR: to the LEFT. The
- * NUMBER must visually sit on the same logical side as its title, not on the opposite side.»
+ * ## What KPI-ALIGNMENT-001 got wrong
  *
- * ## The mechanism, because it is not obvious
+ * «56.3K SAR» inside an Arabic page needs Latin reading order, and the product got it by putting
+ * `dir="ltr"` on the element holding the figure. But `dir` also re-bases every logical property on
+ * that element: `text-align: start` inside a `dir="ltr"` box resolves to LEFT, whatever the page
+ * direction is.
  *
- * `dir="ltr"` is how this product keeps «3,465.33 USD» in Latin reading order inside an Arabic page —
- * without it the currency jumps to the wrong end of the amount. But `dir` also resets the default
- * text alignment of the box it is on: a BLOCK element with `dir="ltr"` and no explicit alignment
- * aligns LEFT, whatever the page direction. So in Arabic the label sits right and its own figure
- * sits left, with the width of the card between them.
+ * So in Arabic the label sat at the right edge of its card and its own figure at the left, a card's
+ * width apart. The previous guard concluded that the missing piece was `text-start` and made
+ * twenty-four surfaces declare it — which is the SAME left alignment, written explicitly. Every
+ * check passed and the screen did not change. The owner reported the defect again from a screenshot,
+ * which is the only place it was ever visible.
  *
- * `MetricStrip` has carried `dir="ltr"` AND `text-start` together since it was written, and its own
- * comment says why. Everything built after it copied the `dir` and not the alignment.
+ * ## The rule this holds instead
  *
- * ## What this flags, and what it deliberately does not
+ * A block that contains a figure keeps the PAGE's direction, so its `text-start` means the right
+ * edge in Arabic and the left in English — label, value and trend on one edge. The digits are
+ * isolated inline, with `<Num>` (a `<bdi dir="ltr">`), which fixes reading order and changes no
+ * alignment.
  *
- * Only BLOCK-level numerals — `block`, `flex`, `grid`. An inline `<span dir="ltr">` inside a sentence
- * inherits the paragraph's alignment and is correct as it stands; flagging those would be 379 false
- * positives over 31 real ones, and a guard that cries wolf gets an exemption list instead of a fix.
+ * So: no `dir="ltr"` on anything that lays out as a block.
  *
- * `<td>` and `<th>` are skipped for the same reason: the cell decides, and `tnumOnCells` already
- * holds that rule from the other side.
+ * ## The exceptions, and why each is not this defect
+ *
+ * A form CONTROL is its own typing context — a phone number, a URL, an ad-account id are typed left
+ * to right and a caret that starts at the right edge is wrong for them. `<code>`/`<pre>` are the
+ * same argument for a payload nobody is aligning against a label. An `inline-*` box does not
+ * establish its own alignment, so `dir` on it reorders and nothing moves.
  */
 const SOURCES = import.meta.glob('/src/**/*.tsx', {
   query: '?raw',
@@ -32,36 +38,50 @@ const SOURCES = import.meta.glob('/src/**/*.tsx', {
   eager: true,
 }) as Record<string, string>
 
-/** An element carrying `dir="ltr"`, its own alignment box, and no alignment. */
-const OFFENDER = /<[a-zA-Z][^>]{0,700}?dir="ltr"[^>]{0,700}?>/gs
-const ALIGNED = /\b(text-start|text-end|text-center|text-right|text-left)\b/
-/**
- * What counts as «its own alignment box» for this rule.
- *
- * `block` and `grid` establish one. A bare `flex` does too — but `inline-flex` does not, and a flex
- * row that places its children with `justify-*` has already SAID where they go, so `dir` changes
- * nothing about it. Those two exclusions are what separate a KPI card from a form field: `PhoneField`
- * and `DateField` are `flex` rows in Latin order by design, and neither is a label above a figure.
- */
-const OWN_BOX = /className=[^>]*\b(block|grid|flex)\b/
-const NOT_A_TEXT_BOX = /\b(inline-flex|inline-grid|justify-)/
-const CELL = /^<(td|th)\b/
+/** Any opening tag that carries `dir="ltr"`. */
+const TAGGED = /<([a-zA-Z][a-zA-Z0-9]*)\b[^>]{0,900}?dir="ltr"[^>]{0,900}?>/gs
 
-describe('a figure in Latin reading order still sits under its own label', () => {
+/** Lays out as a block — so `dir` on it re-bases the alignment of everything inside. */
+const BLOCK_BOX = /className=[^>]*\b(block|grid|flex)\b/
+const INLINE_BOX = /\b(inline-flex|inline-grid|inline-block)\b/
+
+/** A typing context of its own, not a figure aligned against a label. */
+const CONTROL = /^(input|textarea|select|code|pre|bdi)$/
+
+/**
+ * Blocks that carry `dir="ltr"` for a reason that is not this defect, and the reason.
+ *
+ * Each is asserted below to still contain one, so the list cannot be satisfied by deleting an entry
+ * whose file has already been fixed — the same rule the table contract follows. Anything not here is
+ * a figure sitting across the card from its own label.
+ */
+const EXEMPT: Record<string, string> = {
+  '/src/components/ui/PhoneField.tsx': 'a control GROUP: the country code is typed before the number, and a caret that starts at the right edge is wrong for a phone number in any language',
+  '/src/components/ui/DateField.tsx': 'the same, for a date whose segments run year → month → day whatever the page direction is',
+  '/src/features/auth/OtpField.tsx': 'six boxes filled left to right — the order a person reads a code out of an SMS',
+  '/src/features/dev/DevStatusPage.tsx': 'an internal build-status page with no Arabic copy and no metric cards on it',
+}
+
+describe('a figure reads in Latin order without moving its block', () => {
   const offenders: string[] = []
+  const exempted = new Set<string>()
 
   for (const [path, raw] of Object.entries(SOURCES)) {
     if (path.includes('.test.')) continue
 
-    /* Comments explain this rule in several files; reading them back would report the documentation. */
+    /* Several files explain this rule in prose; reading it back would report the documentation. */
     const code = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
 
-    for (const match of code.matchAll(OFFENDER)) {
-      const tag = match[0]
+    for (const match of code.matchAll(TAGGED)) {
+      const [tag, element] = match
 
-      if (CELL.test(tag) || ALIGNED.test(tag) || !OWN_BOX.test(tag) || NOT_A_TEXT_BOX.test(tag)) continue
+      if (CONTROL.test(element) || INLINE_BOX.test(tag) || !BLOCK_BOX.test(tag)) continue
+      if (path in EXEMPT) {
+        exempted.add(path)
+        continue
+      }
 
-      offenders.push(`${path}: ${tag.slice(0, 80).replace(/\s+/g, ' ')}`)
+      offenders.push(`${path}: ${tag.slice(0, 90).replace(/\s+/g, ' ')}`)
     }
   }
 
@@ -69,11 +89,17 @@ describe('a figure in Latin reading order still sits under its own label', () =>
     expect(Object.keys(SOURCES).length).toBeGreaterThan(50)
   })
 
-  it('has no block-level numeral that aligns opposite its label', () => {
+  /* An exemption whose file no longer carries one is a line nobody can act on — see the list. */
+  it('has no exemption that has already been fixed', () => {
+    expect([...Object.keys(EXEMPT)].filter((p) => !exempted.has(p))).toEqual([])
+  })
+
+  it('puts no dir="ltr" on a block box', () => {
     expect(
       offenders,
-      `these elements set dir="ltr" on their own box without an alignment, so under RTL the figure `
-      + `sits on the opposite side from its label — add text-start (or the alignment the design wants):\n  `
+      'These elements lay out as blocks and carry dir="ltr", which re-bases their alignment: under\n'
+      + 'RTL the figure lands on the opposite edge from its label. Keep the block in the page\'s\n'
+      + 'direction and wrap the value in <Num> from @/components/ui/Num instead:\n  '
       + offenders.join('\n  '),
     ).toEqual([])
   })

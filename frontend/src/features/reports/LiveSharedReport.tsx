@@ -20,6 +20,7 @@ import { money, moneyExact, moneyFromTotals, ratio, wholeMoney } from '@/feature
 import { formatMoneyReading, moneyState, rankableMoney, readCostPer, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import { fetchLiveShared, type LivePayload } from './api'
 import { useUi } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 /**
  * LIVEREP-001 — the client's own view of a live shared link.
@@ -487,11 +488,11 @@ export function LiveSharedReport({
                         direct against blended is doing arithmetic on figures the page rounded.
                       */}
                       <dd
-                        dir="ltr"
+                       
                         className="text-start tnum font-semibold text-text-primary"
                         title={revealed(block.spend)}
                       >
-                        {asMoney(block.spend)}
+                        <Num>{asMoney(block.spend)}</Num>
                       </dd>
                     </div>
                     <div>
