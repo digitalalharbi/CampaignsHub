@@ -118,8 +118,8 @@ export function CampaignEventsTab({ campaign, projectId, range }: { campaign: Un
             <thead>
               <tr className="border-b border-border text-text-muted">
                 <th className="p-3 text-start">الحدث</th>
-                <th className="p-3 text-end">العدد</th>
-                <th className="p-3 text-end">التكلفة لكل حدث</th>
+                <th className="p-3 text-center">العدد</th>
+                <th className="p-3 text-center">التكلفة لكل حدث</th>
               </tr>
             </thead>
             <tbody>
@@ -134,8 +134,8 @@ export function CampaignEventsTab({ campaign, projectId, range }: { campaign: Un
                         {e.key === purpose && <Badge tone="success">الغرض المعلن</Badge>}
                       </span>
                     </td>
-                    <td className="p-3 text-end font-semibold text-text-primary"><span className="tnum">{num(e.count)}</span></td>
-                    <td className="p-3 text-end text-text-secondary"><span className="tnum">{e.cost_per !== null ? moneyExact(e.cost_per, cur ?? null) : '—'}</span></td>
+                    <td className="p-3 text-center font-semibold text-text-primary"><span className="tnum">{num(e.count)}</span></td>
+                    <td className="p-3 text-center text-text-secondary"><span className="tnum">{e.cost_per !== null ? moneyExact(e.cost_per, cur ?? null) : '—'}</span></td>
                   </tr>
                 )
               })}

@@ -57,7 +57,7 @@ const TAGGED = /<([a-zA-Z][a-zA-Z0-9]*)\b[^>]{0,900}?(?:dir="ltr"|\bdirection-lt
  * `<dd className="tabular-nums" dir="ltr">` under a `<dt>` — which is the first surface the owner
  * named. A guard that knows one of the two ways is a guard that passes the reported defect.
  */
-const NATIVE_BLOCK = /^(div|p|dd|dt|dl|li|ul|ol|section|article|header|footer|main|aside|figure|figcaption|blockquote|h[1-6])$/
+const NATIVE_BLOCK = /^(div|p|dd|dt|dl|li|ul|ol|section|article|header|footer|main|aside|figure|figcaption|blockquote|td|th|h[1-6])$/
 const BLOCK_CLASS = /className=[^>]*\b(block|grid|flex)\b/
 const INLINE_BOX = /\b(inline-flex|inline-grid|inline-block)\b/
 
