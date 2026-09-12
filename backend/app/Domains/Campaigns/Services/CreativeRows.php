@@ -545,12 +545,11 @@ final class CreativeRows
              * re-queried and re-hydrated all of them — 1,539 rows on the owner's own report, every
              * open.
              *
-             * Measured honestly: on the sixty-creative seed the two versions are the same speed
-             * (778ms against 770ms, which is noise). The ~70ms both pay over the no-media baseline
-             * is `preview()` itself, about 1.1ms a creative, and that cost is unavoidable if the
-             * pictures are to be right. The double load is what this removes, and sixty rows is too
-             * small to see it — which is a reason to state the measurement rather than dress the
-             * change as a speed-up it has not been shown to be.
+             * On the sixty-creative seed nothing here is measurable: 701ms with no media, 770ms
+             * attaching it afterwards, 778ms doing it in the builder, against a within-run spread
+             * of 60-70ms. So this is a removed redundancy and NOT a speed-up — sixty rows cannot
+             * show one either way, and the first draft of this comment claimed a per-creative cost
+             * that the numbers do not support.
              */
             if ($withPreview) {
                 $out[count($out) - 1]['preview'] = $this->presenter->preview($creative);
