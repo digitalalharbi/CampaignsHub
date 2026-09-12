@@ -113,3 +113,77 @@ describe('the leads list and its duplicates', () => {
     expect(screen.getByTestId('lead-counts')).toHaveTextContent('1 distinct people')
   })
 })
+
+/**
+ * LEAD-DEDUP-001 — the badge said «duplicate» and never said of WHAT.
+ *
+ * «The duplicate badge still does not link to the canonical row» has been this row's stated gap
+ * since it was written. A reader was told this person had arrived twice and given no way to reach
+ * the arrival it was folded into — so «counted once» stayed a claim about the database rather than
+ * something anybody could check.
+ *
+ * The canonical lead is in the same table whenever the list is not narrowed to canonicals, so the
+ * control points at it there. The case that matters more is the other one: when it is NOT here, the
+ * control has to say so. A button that scrolls to nothing reads as «there is no original».
+ */
+describe('reaching the lead a duplicate duplicates', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('offers a way to the original, naming which row that is', async () => {
+    vi.mocked(listLeads).mockResolvedValue(
+      result([
+        lead({ id: 'orig', name: 'Noura' }),
+        lead({ id: 'dup', name: 'Noura', canonical_lead_id: 'orig', duplicate_reason: 'email' }),
+      ], { received: 2, unique: 1 }) as never,
+    )
+    renderWithProviders(<LeadsPage />, { locale: 'en' })
+
+    const control = await screen.findByTestId('lead-duplicate-dup')
+    expect(control.tagName.toLowerCase(), 'the badge is still inert').toBe('button')
+    expect(control).toHaveAttribute('data-canonical', 'orig')
+  })
+
+  /** It finds the row, rather than pointing at an id nothing renders. */
+  it('reaches a row that is on this page', async () => {
+    vi.mocked(listLeads).mockResolvedValue(
+      result([
+        lead({ id: 'orig', name: 'Noura' }),
+        lead({ id: 'dup', name: 'Noura', canonical_lead_id: 'orig', duplicate_reason: 'email' }),
+      ], { received: 2, unique: 1 }) as never,
+    )
+    renderWithProviders(<LeadsPage />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('lead-duplicate-dup'))
+
+    expect(document.querySelector('[data-row-key="orig"]'), 'the table rows carry no key to find').not.toBeNull()
+    expect(screen.queryByTestId('canonical-not-in-view')).toBeNull()
+  })
+
+  /**
+   * And when the original is not on this page, it says so.
+   *
+   * Ordinary: «unique only» hides it, or it sits on another page of a long list. Neither means the
+   * original does not exist, and a control that did nothing would say exactly that.
+   */
+  it('says the original is elsewhere rather than scrolling to nothing', async () => {
+    vi.mocked(listLeads).mockResolvedValue(
+      result([lead({ id: 'dup', name: 'Noura', canonical_lead_id: 'not-on-this-page', duplicate_reason: 'email' })], null) as never,
+    )
+    renderWithProviders(<LeadsPage />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('lead-duplicate-dup'))
+
+    expect(await screen.findByTestId('canonical-not-in-view')).toHaveTextContent(/not on this page/i)
+  })
+
+  /** A conflicting identity is NOT a duplicate and keeps its own badge — no control, nothing to reach. */
+  it('offers nothing to reach for a lead that was linked to neither', async () => {
+    vi.mocked(listLeads).mockResolvedValue(
+      result([lead({ id: 'amb', canonical_lead_id: null, duplicate_reason: 'ambiguous' })], null) as never,
+    )
+    renderWithProviders(<LeadsPage />, { locale: 'en' })
+
+    await screen.findByTestId('lead-ambiguous-amb')
+    expect(screen.queryByTestId('lead-duplicate-amb')).toBeNull()
+  })
+})
