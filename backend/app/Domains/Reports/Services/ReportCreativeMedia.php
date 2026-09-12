@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Services;
 
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativePresenter;
+use Illuminate\Support\Collection;
 
 /**
  * REPORT-CREATIVE-MEDIA-001 — the report's pictures are resolved when it is READ, not when it is stored.
@@ -61,43 +62,57 @@ final class ReportCreativeMedia
      */
     public function refresh(array $data): array
     {
-        $ids = [];
-        $this->walk($data, function (array $row) use (&$ids): array {
-            if (is_string($row['id'] ?? null) && $row['id'] !== '') {
-                $ids[$row['id']] = true;
-            }
+        /*
+         * Section by section, through the one implementation — {@see attach()}.
+         *
+         * A creative that no longer exists keeps whatever the snapshot held: deleting a stored
+         * preview would turn «here is what it looked like» into «no cover» for an ad whose only
+         * remaining record IS this document, which is the defect applied to the one case where the
+         * stored copy is the better answer. `attach()` leaves such a row untouched.
+         */
+        return $this->walkSections($data, fn (array $rows): array => $this->attach($rows));
+    }
 
-            return $row;
-        });
-
-        if ($ids === []) {
-            return $data;
+    /**
+     * One list of creative rows, given the media the library would show them with.
+     *
+     * Public because the LIVE path cannot use {@see refresh()} and the difference is not a detail.
+     * `LiveReportService::build()` applies {@see ClientEntityBoundary} to each section INSIDE
+     * itself, so a refresh placed after it walks over rows whose `id` has already been stripped and
+     * silently changes nothing — which is exactly what the first version of this fix did, on the
+     * one path the owner's own report uses. The live builder therefore attaches the media where the
+     * ids still exist, section by section, and the boundary runs afterwards as it always did.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    public function attach(array $rows): array
+    {
+        if ($rows === []) {
+            return $rows;
         }
 
-        /*
-         * One query for the whole document, however many sections mention the same creative — the
-         * roster, the ranked list and an objective group routinely name the same ad three times.
-         *
-         * `withoutGlobalScopes` is deliberate and safe here: a SHARED report is read with no tenant
-         * context at all (the reader is a stranger with a token), and the ids come from the report's
-         * own stored payload, which the generator already built under the tenant's scope. Resolving
-         * only what the document itself names cannot reach another tenant's creative.
-         */
-        $creatives = ExternalCreative::withoutGlobalScopes()
-            ->whereIn('id', array_keys($ids))
-            ->get()
-            ->keyBy(static fn (ExternalCreative $c): string => (string) $c->getKey());
+        $ids = [];
 
-        return $this->walk($data, function (array $row) use ($creatives): array {
+        foreach ($rows as $row) {
+            if (is_array($row) && is_string($row['id'] ?? null) && $row['id'] !== '') {
+                $ids[$row['id']] = true;
+            }
+        }
+
+        if ($ids === []) {
+            return $rows;
+        }
+
+        $creatives = $this->load(array_keys($ids));
+
+        return array_map(function ($row) use ($creatives) {
+            if (! is_array($row)) {
+                return $row;
+            }
+
             $creative = $creatives->get((string) ($row['id'] ?? ''));
 
-            /*
-             * A creative that no longer exists keeps whatever the snapshot held.
-             *
-             * Deleting the stored preview would turn «here is what it looked like» into «no cover»
-             * for an ad whose only remaining record IS this document — which is the defect, applied
-             * to the one case where the stored copy is the better answer.
-             */
             if ($creative === null) {
                 return $row;
             }
@@ -105,7 +120,26 @@ final class ReportCreativeMedia
             $row['preview'] = $this->presenter->preview($creative);
 
             return $row;
-        });
+        }, $rows);
+    }
+
+    /**
+     * The creatives a document names, in one query.
+     *
+     * `withoutGlobalScopes` is deliberate and safe: a SHARED report is read with no tenant context
+     * at all — the reader is a stranger with a token — and the ids come from the report's own
+     * payload, which was built under the tenant's scope. Resolving only what the document itself
+     * names cannot reach another tenant's creative.
+     *
+     * @param  list<string>  $ids
+     * @return Collection<string, ExternalCreative>
+     */
+    private function load(array $ids)
+    {
+        return ExternalCreative::withoutGlobalScopes()
+            ->whereIn('id', $ids)
+            ->get()
+            ->keyBy(static fn (ExternalCreative $c): string => (string) $c->getKey());
     }
 
     /**
@@ -116,33 +150,23 @@ final class ReportCreativeMedia
      * is known; guessing at it is how a report comes to carry a picture of something else.
      *
      * @param  array<string, mixed>  $data
-     * @param  callable(array<string, mixed>): array<string, mixed>  $each
+     * @param  callable(list<array<string, mixed>>): list<array<string, mixed>>  $each
      * @return array<string, mixed>
      */
-    private function walk(array $data, callable $each): array
+    private function walkSections(array $data, callable $each): array
     {
         foreach (['ads', 'ads_roster', 'worst_creatives', 'top_creatives'] as $key) {
-            if (! is_array($data[$key] ?? null)) {
-                continue;
+            if (is_array($data[$key] ?? null)) {
+                $data[$key] = $each(array_values($data[$key]));
             }
-
-            $data[$key] = array_map(
-                static fn ($row) => is_array($row) ? $each($row) : $row,
-                $data[$key],
-            );
         }
 
         // The objective groups nest their own ranked ads — REPORT-AD-PREVIEW-001 §A.
         if (is_array($data['ads_groups'] ?? null)) {
             $data['ads_groups'] = array_map(static function ($group) use ($each) {
-                if (! is_array($group) || ! is_array($group['ads'] ?? null)) {
-                    return $group;
+                if (is_array($group) && is_array($group['ads'] ?? null)) {
+                    $group['ads'] = $each(array_values($group['ads']));
                 }
-
-                $group['ads'] = array_map(
-                    static fn ($row) => is_array($row) ? $each($row) : $row,
-                    $group['ads'],
-                );
 
                 return $group;
             }, $data['ads_groups']);

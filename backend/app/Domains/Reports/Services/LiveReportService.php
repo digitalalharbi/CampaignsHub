@@ -51,6 +51,7 @@ final class LiveReportService
         private readonly TenantContext $tenants,
         private readonly ProjectContext $projects,
         private readonly ReportAds $ads,
+        private readonly ReportCreativeMedia $media,
     ) {}
 
     /**
@@ -78,9 +79,29 @@ final class LiveReportService
              * point is that it names nothing internal. The snapshot path has stripped `campaign_id`
              * since it was written; this one never did.
              */
-            'ads' => ClientEntityBoundary::ads($built['ads']),
+            /*
+             * REPORT-CREATIVE-MEDIA-001 — the media is attached HERE, before the boundary.
+             *
+             * The first version of this fix put the refresh in `PublicReportController::live()`,
+             * after this method returned, and it did nothing at all: the boundary calls below strip
+             * the creative `id` the resolution is keyed on, so the refresh walked rows it could not
+             * match and changed none of them. The whole backend suite stayed green, because every
+             * case exercised the SNAPSHOT route — and the owner's own report, which is a LIVE
+             * share, went on printing «لا يوجد غلاف» on the deployed fix.
+             *
+             * Attaching inside the builder is what makes the two paths the same document: the
+             * media goes on while the ids exist, and the boundary removes the ids afterwards
+             * exactly as it always did.
+             */
+            'ads' => ClientEntityBoundary::ads($this->media->attach($built['ads'])),
             'ads_level' => $built['level'],
-            'ads_groups' => ClientEntityBoundary::ads($built['groups']),
+            'ads_groups' => ClientEntityBoundary::ads(array_map(function (array $group): array {
+                if (is_array($group['ads'] ?? null)) {
+                    $group['ads'] = $this->media->attach(array_values($group['ads']));
+                }
+
+                return $group;
+            }, $built['groups'])),
             'ads_absent_reason' => $built['reason'],
             // The same reading the generated deck carries, from the same two ranked lists.
             'ads_reading' => (new AdsExplanation)->explain($built['ads'], $built['worst'], $objective),
@@ -92,7 +113,7 @@ final class LiveReportService
              * which `ads()` would have walked into as though they were group members. See
              * {@see ClientEntityBoundary::roster()}.
              */
-            'ads_roster' => ClientEntityBoundary::roster($built['roster']),
+            'ads_roster' => ClientEntityBoundary::roster($this->media->attach($built['roster'])),
             'creatives_in_scope' => $built['creatives_in_scope'],
             'creatives_withheld' => $built['creatives_withheld'],
             'form' => (string) $share->report->form,

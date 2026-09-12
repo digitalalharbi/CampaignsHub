@@ -178,14 +178,14 @@ final class PublicReportController extends Controller
         $payload = $live->build($share, $request->query(), (string) $report->currency);
 
         /*
-         * The live link has the SAME gap and needs the same answer — REPORT-CREATIVE-MEDIA-001.
+         * No refresh here — REPORT-CREATIVE-MEDIA-001.
          *
-         * It is tempting to think a live payload is fresh by definition, but its roster is built by
-         * the same `CreativeRows::lean()`, which carries no preview for the same good reason. A
-         * client whose link happens to be live would otherwise see «no cover» beside a client whose
-         * link is a snapshot seeing the picture, from one report.
+         * It WAS here, and it did nothing. `LiveReportService::build()` applies the client boundary
+         * to each of its sections inside itself, so by this line the creative ids the resolution is
+         * keyed on are already stripped: the call walked rows it could not match and changed none
+         * of them, while the whole suite stayed green because every case exercised the snapshot
+         * route. The media is attached inside that builder instead, where the ids still exist.
          */
-        $payload = app(ReportCreativeMedia::class)->refresh($payload);
 
         // Sanitised with the same hide-flags as the snapshot path: a live link that leaks spend a
         // snapshot link would have hidden is the same disclosure, arriving by a newer route.

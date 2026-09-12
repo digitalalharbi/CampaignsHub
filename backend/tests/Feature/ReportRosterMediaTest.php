@@ -286,4 +286,62 @@ final class ReportRosterMediaTest extends TestCase
         // And the media still came through, so the figure did not stay still by the refresh failing.
         $this->assertSame('https://cdn.test/hero.jpg', $after['preview']['image_url'] ?? null);
     }
+
+    /**
+     * THE LIVE LINK — the path the owner's own report actually uses, and the one my first fix missed.
+     *
+     * `PublicReportController::live()` was given the same refresh, and it did nothing. The call sat
+     * after `LiveReportService::build()`, and `build()` applies `ClientEntityBoundary::roster()` and
+     * `::ads()` INSIDE itself — so by the time the refresh ran, the creative ids it resolves by had
+     * already been stripped and it walked over rows it could not key. The suite went green because
+     * every case above exercises the SNAPSHOT route.
+     *
+     * Measured against the owner's real report afterwards: `ads_roster` 60 rows, every one still
+     * missing the preview key, on the deployed fix. A test that never asked the live path could not
+     * have told me, and I had asserted the path was covered on the strength of having edited it.
+     *
+     * The media is therefore attached where the ids still exist — inside `build()`, before the
+     * boundary — and this case asks the live endpoint rather than the service.
+     */
+    public function test_a_live_link_carries_the_media_too(): void
+    {
+        $this->creative();
+
+        $this->report = Report::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'name' => 'R', 'type' => 'performance', 'status' => 'completed', 'form' => 'detailed',
+            'audience' => 'client', 'generated_at' => now(),
+            'period_start' => now()->subDays(30)->toDateString(),
+            'period_end' => now()->toDateString(),
+            'currency' => 'SAR', 'scope' => [],
+        ]);
+
+        [, $raw] = app(ShareService::class)->create($this->report, [
+            'mode' => 'live',
+            'settings' => ['creatives' => CreativeVisibility::fromArray([
+                'creatives' => true, 'video' => true, 'image_zoom' => true,
+            ])->toArray()],
+            'scope' => [
+                'project_id' => (string) $this->project->getKey(),
+                'earliest' => now()->subDays(30)->toDateString(),
+                'latest' => now()->toDateString(),
+            ],
+        ], null);
+
+        $payload = $this->getJson("/api/v1/reports/shared/{$raw}/live")->assertOk()->json('data');
+
+        $roster = $payload['ads_roster'] ?? [];
+        $this->assertNotEmpty($roster, 'the live link listed no creatives at all');
+
+        $preview = $roster[0]['preview'] ?? null;
+
+        $this->assertIsArray($preview, 'the LIVE link carried no preview envelope — the client sees «no cover»');
+        $this->assertSame('https://cdn.test/hero.jpg', $preview['image_url']);
+
+        // And the boundary still holds on this path, which is why the refresh had to move rather than the boundary.
+        foreach (['id', 'campaign_id', 'campaign_name'] as $key) {
+            $this->assertArrayNotHasKey($key, $roster[0], "the live client roster carried «{$key}»");
+        }
+    }
 }
