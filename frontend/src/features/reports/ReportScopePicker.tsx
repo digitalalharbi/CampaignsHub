@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { isClientAudience } from './InteractiveReport'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, Info, Trash2 } from 'lucide-react'
@@ -8,6 +8,7 @@ import {
   explainScope,
   listScopeTemplates,
   scopeOptions,
+  searchScopeAxis,
   type ReportScopeShape,
   type ScopeOptions,
   type ScopeTemplate,
@@ -267,6 +268,8 @@ export function ReportScopePicker({
       {namesInternalEntities && <ScopeSelect
         label={t.campaigns}
         truncated={o.truncated?.campaigns}
+        axis="campaigns"
+        projectId={projectId}
         limit={o.limit}
         items={o.campaigns.map((c) => ({ id: c.id, label: c.name }))}
         selected={value.campaign_ids ?? []}
@@ -298,6 +301,8 @@ export function ReportScopePicker({
           label={t.adSets}
           note={t.grainCampaign}
           truncated={o.truncated?.ad_sets}
+        axis="ad_sets"
+        projectId={projectId}
           limit={o.limit}
           items={o.ad_sets.map((s) => ({ id: s.id, label: s.name }))}
           selected={value.ad_set_ids ?? []}
@@ -312,6 +317,8 @@ export function ReportScopePicker({
           label={t.ads}
           note={t.grainCampaign}
           truncated={o.truncated?.ads}
+        axis="ads"
+        projectId={projectId}
           limit={o.limit}
           items={o.ads.map((a) => ({ id: a.id, label: a.name }))}
           selected={value.ad_ids ?? []}
@@ -326,6 +333,8 @@ export function ReportScopePicker({
           label={t.creatives}
           note={t.grainCreatives}
           truncated={o.truncated?.creatives}
+        axis="creatives"
+        projectId={projectId}
           limit={o.limit}
           items={o.creatives.map((c) => ({ id: c.id, label: c.name }))}
           selected={value.creative_ids ?? []}
@@ -423,6 +432,8 @@ function ScopeSelect({
   limit,
   ar,
   t,
+  axis,
+  projectId,
 }: {
   label: string
   /**
@@ -440,8 +451,66 @@ function ScopeSelect({
   limit?: number
   ar: boolean
   t: typeof COPY.ar
+  /**
+   * UX-MULTISELECT-SCALE-001 — the axis to SEARCH on the server, where its rows are too many to send.
+   *
+   * Absent for the axes that are small and closed — objectives, paths, metrics — where the whole set
+   * fits and a round trip per keystroke would buy nothing.
+   */
+  axis?: string
+  projectId?: string
 }) {
-  if (items.length === 0) return null
+  const [term, setTerm] = useState('')
+
+  /*
+   * The server's answer for what the reader typed, and only once they have typed something.
+   *
+   * Three characters rather than one: a single letter matches most of a large account and the
+   * request it costs answers a question nobody asked. Below that the local filter inside
+   * `MultiSelectField` is still working on the list already in hand, which is the common case.
+   */
+  const remote = useQuery({
+    queryKey: ['scope-axis-search', projectId, axis, term],
+    queryFn: () => searchScopeAxis(projectId ?? '', axis ?? '', term),
+    enabled: Boolean(projectId) && Boolean(axis) && term.trim().length >= 3,
+  })
+
+  const found = (remote.data?.[axis ?? ''] as Array<{ id: string; name: string }> | undefined) ?? null
+
+  /*
+   * What the control offers: the server's matches when it has any, the page's own list otherwise.
+   *
+   * The SELECTED ids are merged in either way. A chip whose option is missing renders as a raw id —
+   * so an operator who picks an ad set by search and then clears the box would watch their own
+   * selection turn into a UUID.
+   */
+  const offered = found === null ? items : found.map((r) => ({ id: r.id, label: r.name }))
+
+  /*
+   * Every name this control has ever shown, kept for as long as the picker is open.
+   *
+   * `items` is the page's bounded list and `found` is one search's answer. A selection made from a
+   * search is in NEITHER once the box is cleared — so a first version of this merge fell back to
+   * `{ id, label: id }` and the chip turned into a UUID the moment the reader deleted what they had
+   * typed. The test caught it, which is what it was written for.
+   *
+   * A ref rather than state: remembering a label changes nothing on screen by itself, and making it
+   * state would re-render the control on every answer that taught it a name it already had.
+   */
+  const known = useRef(new Map<string, string>())
+  for (const i of [...items, ...offered]) {
+    known.current.set(i.id, i.label)
+  }
+
+  const byId = new Map(offered.map((i) => [i.id, i]))
+  for (const id of selected) {
+    if (!byId.has(id)) {
+      byId.set(id, { id, label: known.current.get(id) ?? id })
+    }
+  }
+  const options = [...byId.values()]
+
+  if (items.length === 0 && selected.length === 0) return null
 
   return (
     <div data-testid={`scope-select-${label}`}>
@@ -466,9 +535,15 @@ function ScopeSelect({
           className="mb-1.5 flex items-start gap-1 text-[10px] font-semibold text-warning"
         >
           <Info size={11} className="mt-px shrink-0" />
+          {/*
+            The sentence changed with the capability. It used to say «narrow the scope to reach the
+            rest», which was the honest instruction while there was no other way — and it asked an
+            operator to change the thing they were building in order to see it. Searching now reaches
+            past the bound, so that is what it says.
+          */}
           {ar
-            ? `يُعرض ${limit ?? items.length} فقط — استخدم البحث أو ضيّق النطاق للوصول إلى البقية`
-            : `Showing ${limit ?? items.length} only — narrow the scope to reach the rest`}
+            ? `يُعرض ${limit ?? items.length} فقط — ابحث بالاسم للوصول إلى البقية`
+            : `Showing ${limit ?? items.length} only — search by name to reach the rest`}
         </p>
       )}
 
@@ -476,7 +551,9 @@ function ScopeSelect({
         label=""
         value={selected}
         onChange={onChange}
-        options={items.map((i) => ({ value: i.id, label: i.label }))}
+        options={options.map((i) => ({ value: i.id, label: i.label }))}
+        /* Typed into the box, answered by the server — see the note on `axis`. */
+        onSearchChange={axis === undefined ? undefined : setTerm}
         /*
          * Always searchable on these axes. `MultiSelectField` decides for itself above seven
          * options, and that is the right default elsewhere — here the axis is known to be large

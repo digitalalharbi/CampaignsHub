@@ -19,6 +19,7 @@ use App\Domains\Reports\Models\ReportScopeTemplate;
 use App\Domains\Reports\Support\ReportScope;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -58,6 +59,32 @@ final class ReportScopeController extends Controller
     public function options(Request $request, string $project): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('reports.view'), 403);
+
+        /*
+         * UX-MULTISELECT-SCALE-001 — reaching the rows that did not fit.
+         *
+         * The bound below is honestly STATED — `truncated.ad_sets` is a fact the picker can print
+         * rather than letting a short list read as a complete one. What it could not do is let
+         * anybody reach past it: the picker's search box filters what it was SENT, so on a project
+         * with five hundred ad sets, number four hundred could not be selected by any route. An
+         * operator meets that as «my ad set is not in the system», and the report they build omits
+         * it silently.
+         *
+         * One axis per search, because a search is a question about the list being searched.
+         * Re-filtering the other nine by a term typed into this control would empty lists nobody
+         * touched, and re-sending them all on every keystroke would be slower than the problem.
+         */
+        $request->validate([
+            'axis' => ['nullable', Rule::in(array_keys(self::SEARCHABLE))],
+            'q' => ['nullable', 'string', 'max:200'],
+        ]);
+
+        $axis = $request->string('axis')->toString();
+        $term = trim($request->string('q')->toString());
+
+        if ($axis !== '') {
+            return $this->searchAxis($axis, $project, $term);
+        }
 
         /*
          * REPORT-SCOPE-SELECTION-001 — the builder's lists are BOUNDED, and every bound is stated.
@@ -207,6 +234,100 @@ final class ReportScopeController extends Controller
      * @param  list<string>  $columns
      * @return array{0: list<array<string,mixed>>, 1: bool}
      */
+    /**
+     * The four axes a person searches by name, and how each one is read.
+     *
+     * `client_display_name` first for the two that have one: an operator searching a client report's
+     * builder is looking for the name that report will PRINT, and matching only the internal name
+     * would fail on exactly the rows where the two differ — which is the case the display name exists
+     * for.
+     *
+     * @var array<string, array{model: class-string, columns: list<string>, search: list<string>}>
+     */
+    private const SEARCHABLE = [
+        'campaigns' => [
+            'model' => UnifiedCampaign::class,
+            'columns' => ['id', 'name', 'client_display_name', 'status', 'objective'],
+            'search' => ['client_display_name', 'name'],
+        ],
+        'ad_sets' => [
+            'model' => ExternalAdSet::class,
+            'columns' => ['id', 'name', 'provider', 'unified_campaign_id', 'status'],
+            'search' => ['name'],
+        ],
+        'ads' => [
+            'model' => ExternalAd::class,
+            'columns' => ['id', 'name', 'provider', 'unified_campaign_id', 'status'],
+            'search' => ['name'],
+        ],
+        'creatives' => [
+            'model' => ExternalCreative::class,
+            'columns' => ['id', 'name', 'client_display_name', 'provider', 'format', 'campaign_id'],
+            'search' => ['client_display_name', 'name'],
+        ],
+    ];
+
+    /**
+     * One axis, filtered where the rows live — UX-MULTISELECT-SCALE-001.
+     *
+     * The truncation flag is recomputed against the FILTERED set, so «there are more» keeps meaning
+     * «more that match this». A flag left over from the unfiltered list would tell somebody who has
+     * just narrowed to one result that their list is incomplete.
+     */
+    private function searchAxis(string $axis, string $project, string $term): JsonResponse
+    {
+        $spec = self::SEARCHABLE[$axis];
+
+        /** @var Builder $query */
+        $query = $spec['model']::query()->where('project_id', $project);
+
+        if ($term !== '') {
+            $query->where(function ($q) use ($spec, $term): void {
+                foreach ($spec['search'] as $column) {
+                    $q->orWhere($column, 'ILIKE', '%'.$term.'%');
+                }
+            });
+        }
+
+        [$rows, $more] = $this->bounded(
+            $query->orderBy('name')->orderBy('id'),
+            $spec['columns'],
+            fn ($row): array => $this->shapeOption($axis, $row),
+        );
+
+        return ApiResponse::success([
+            $axis => $rows,
+            'truncated' => [$axis => $more],
+            'limit' => self::OPTION_LIMIT,
+        ], 'Scope options.');
+    }
+
+    /** One row, in the shape the full payload already sends for that axis. */
+    private function shapeOption(string $axis, mixed $row): array
+    {
+        return match ($axis) {
+            'campaigns' => [
+                'id' => (string) $row->getKey(),
+                'name' => (string) ($row->client_display_name ?: $row->name),
+                'status' => $row->status,
+                'objective' => $row->objective,
+            ],
+            'creatives' => [
+                'id' => (string) $row->getKey(),
+                'name' => (string) ($row->client_display_name ?: $row->name),
+                'provider' => $row->provider,
+                'format' => $row->format,
+                'campaign_id' => (string) $row->campaign_id,
+            ],
+            default => [
+                'id' => (string) $row->getKey(),
+                'name' => $row->name,
+                'provider' => $row->provider,
+                'campaign_id' => (string) $row->unified_campaign_id,
+            ],
+        };
+    }
+
     private function bounded(mixed $query, array $columns, callable $shape): array
     {
         $rows = $query->limit(self::OPTION_LIMIT + 1)->get($columns);

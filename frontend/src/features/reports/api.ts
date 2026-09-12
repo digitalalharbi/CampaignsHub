@@ -489,6 +489,19 @@ export interface ScopeTemplate {
 export const scopeOptions = (p: string) => getData<ScopeOptions>(`${base(p)}/scope/options`)
 
 /**
+ * One axis of the scope options, searched where the rows live — UX-MULTISELECT-SCALE-001.
+ *
+ * The full payload is bounded and says so, which stops a short list reading as a complete one. It
+ * does not let anybody REACH past the bound: the picker's search box filters what it was sent, so on
+ * a project with five hundred ad sets the five-hundred-and-first cannot be selected by any route.
+ * An operator meets that as «my ad set is not in the system».
+ */
+export const searchScopeAxis = (p: string, axis: string, q: string) =>
+  getData<{ truncated: Record<string, boolean>; limit: number } & Record<string, unknown>>(
+    `${base(p)}/scope/options?axis=${encodeURIComponent(axis)}&q=${encodeURIComponent(q)}`,
+  )
+
+/**
  * What a scope being BUILT would cover — REPORT-SCOPE-SELECTION-001 §C.
  *
  * The rule about what each axis REACHES belongs to the server: an ad-set bound resolves up to the
