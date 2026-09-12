@@ -23,6 +23,10 @@ const COPY = {
     title: 'التنبيهات', subtitle: 'راقب المخاطر التشغيلية وتصرّف عليها — الميزانية، النتائج، المزامنة، التوكنات، ومتابعة العملاء المحتملين.',
     tab_alerts: 'التنبيهات', tab_rules: 'القواعد', tab_prefs: 'التفضيلات', tab_deliveries: 'سجل التسليم',
     all: 'الكل', active: 'نشِطة', snoozed: 'مؤجّلة', resolved: 'مُغلقة', none: 'لا يوجد شيء هنا.',
+    no_rules: 'لا توجد قاعدة مراقبة في هذا الحساب — لن يصل أي تنبيه حتى تُضاف واحدة.',
+    suggest_anomaly: 'ابدأ بـ«يوم غير معتاد»',
+    suggest_anomaly_why: 'يقارن كل رقم بسلوكه في الأيام السابقة، فلا يحتاج منك حدًّا رقميًّا — ويشمل الحملات التي لم تكتب لها قاعدة.',
+    suggest_anomaly_name: 'يوم غير معتاد',
     no_match: 'لا نتائج تطابق البحث أو الفلاتر.', search_ph: 'ابحث في التنبيهات…',
     category: 'النوع', all_categories: 'كل الأنواع',
     sum_open: 'مفتوحة', sum_critical: 'حرِجة', sum_snoozed: 'مؤجّلة', sum_resolved: 'مُغلقة', sum_open_hint: 'تحتاج إجراء', sum_open_clear: 'لا شيء مفتوح',
@@ -48,6 +52,10 @@ const COPY = {
     title: 'Alerts', subtitle: 'Watch and act on operational risk — budget, results, sync, tokens, and lead follow-up.',
     tab_alerts: 'Alerts', tab_rules: 'Rules', tab_prefs: 'Preferences', tab_deliveries: 'Delivery log',
     all: 'All', active: 'Active', snoozed: 'Snoozed', resolved: 'Resolved', none: 'Nothing here.',
+    no_rules: 'No rule is watching this account — no alert can arrive until one exists.',
+    suggest_anomaly: 'Start with “Unusual day”',
+    suggest_anomaly_why: 'It compares each figure against its own recent behaviour, so there is no threshold to choose — and it covers the campaigns nobody wrote a rule for.',
+    suggest_anomaly_name: 'Unusual day',
     no_match: 'No alerts match your search or filters.', search_ph: 'Search alerts…',
     category: 'Kind', all_categories: 'Every kind',
     sum_open: 'Open', sum_critical: 'Critical', sum_snoozed: 'Snoozed', sum_resolved: 'Resolved', sum_open_hint: 'Need action', sum_open_clear: 'Nothing open',
@@ -84,6 +92,8 @@ const TYPE_LABEL: Record<AlertType, { ar: string; en: string }> = {
   lead_unassigned: { ar: 'عميل محتمل بلا مسؤول', en: 'Lead with no owner' },
   lead_no_contact: { ar: 'لم يُتواصل مع العميل المحتمل', en: 'Lead not contacted' },
   lead_follow_up_overdue: { ar: 'متابعة متأخرة', en: 'Follow-up overdue' },
+  /* Same wording as the taxonomy option the picker reads — one name for one type. */
+  metric_anomaly: { ar: 'يوم غير معتاد', en: 'Unusual day' },
 }
 
 const sevClass: Record<AlertEvent['severity'], string> = {
@@ -563,11 +573,16 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   const typeTax = useTaxonomyOptions('alert.type')
   const severityTax = useTaxonomyOptions('alert.severity')
   const channelTax = useTaxonomyOptions('alert.channel')
+  /*
+   * One create path, two ways to reach it — the form, and the suggestion below the empty list.
+   *
+   * The preset is not a second endpoint or a second default: it is the same `createAlertRule` with a
+   * payload nobody had to fill in, which is only possible because `metric_anomaly` needs no
+   * threshold. A second mutation would have been a second place for the channels or the cooldown to
+   * drift from what the form produces.
+   */
   const createM = useMutation({
-    mutationFn: () => {
-      const threshold = parseThreshold(thresholdRaw, form.type)
-      return createAlertRule({ ...form, threshold })
-    },
+    mutationFn: (rule: NewAlertRule) => createAlertRule(rule),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['alert-rules'] }); setForm((f) => ({ ...f, name: '' })); setThresholdRaw('') },
   })
   const rules = q.data?.rules ?? []
@@ -594,7 +609,44 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
         )}
 
         {rules.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">{c.none}</p>
+          /*
+           * AUTOMATION-FIRST-OPERATIONS-001 — «Nothing here.» was the whole empty state.
+           *
+           * The events list three hundred lines above carries a comment saying exactly why that
+           * sentence is wrong — it reads as a page that failed to load — and this list was the one
+           * still using it. It is the worse of the two places to use it, because an empty EVENT
+           * ledger is good news and an empty RULE list means the monitoring is off. A workspace
+           * seeing this has never been told that.
+           *
+           * The suggestion is the one type that can be offered as a finished rule: everything else
+           * needs a number somebody has to justify. It creates on a click rather than on load —
+           * enrolling an account into notifications it did not ask for is not a default anybody
+           * should get silently.
+           */
+          <div
+            data-testid="alert-rules-empty"
+            className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border p-8 text-center"
+          >
+            <p className="text-sm text-text-secondary">{c.no_rules}</p>
+            <p className="max-w-prose text-xs text-text-muted">{c.suggest_anomaly_why}</p>
+            <button
+              type="button"
+              data-testid="alert-rules-suggest-anomaly"
+              disabled={createM.isPending}
+              onClick={() => createM.mutate({
+                type: 'metric_anomaly',
+                name: c.suggest_anomaly_name,
+                severity: 'warning',
+                cooldown_minutes: 1440,
+                channels: ['in_app'],
+                create_task: false,
+                active: true,
+              })}
+              className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {c.suggest_anomaly}
+            </button>
+          </div>
         ) : (
           rules.map((r: AlertRule) => (
             <div key={r.id} className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-3.5">
@@ -613,7 +665,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
       </div>
 
       <form
-        onSubmit={(ev) => { ev.preventDefault(); createM.mutate() }}
+        onSubmit={(ev) => { ev.preventDefault(); createM.mutate({ ...form, threshold: parseThreshold(thresholdRaw, form.type) }) }}
         className="flex h-fit flex-col gap-3 rounded-2xl border border-border bg-surface p-4"
       >
         <h3 className="flex items-center gap-2 text-sm font-bold text-text-primary"><Plus size={15} /> {c.new_rule}</h3>
