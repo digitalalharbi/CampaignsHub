@@ -103,7 +103,15 @@ final class ReportGenerator
         // Initialise the slide layout once (from the objective + connected platforms) if not authored yet.
         $config = $report->config;
         if (empty($config['slides'])) {
-            $config = $this->template->defaultConfig($objective, $providerList);
+            /*
+             * REPORT-DEPTH-001 — the report's own depth decides its shape.
+             *
+             * `summary` yields the executive deck, anything else the full one. Read from the stored
+             * config rather than from a request, so the same report is the same shape in the deck,
+             * the print document and a scheduled email — a depth that lived on the viewer would make
+             * «the report I sent» and «the report they opened» two different documents.
+             */
+            $config = $this->template->defaultConfig($objective, $providerList, (string) ($config['depth'] ?? 'full'));
             $report->forceFill(['config' => $config, 'campaign_objective' => $objective])->saveQuietly();
         }
 
@@ -347,6 +355,8 @@ final class ReportGenerator
         $data['attribution_window'] = $report->attribution_window;
         $data['data_source'] = $report->data_source;
         $data['mode'] = $report->config['mode'] ?? 'snapshot';
+        /* Stated in the payload so every renderer, and the reader, know which shape this is. */
+        $data['depth'] = $report->config['depth'] ?? 'full';
         $data['generated_at'] = Carbon::now()->toIso8601String();
         $data['checksum'] = ExportReadinessGate::checksum($data);
 
