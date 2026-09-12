@@ -353,7 +353,15 @@ export function ReportsPage() {
                   <th className="p-3 text-start font-semibold">{ar ? 'الفترة' : 'Period'}</th>
                   <th className="p-3 text-start font-semibold">{ar ? 'الحالة' : 'Status'}</th>
                   <th className="p-3 text-start font-semibold">{ar ? 'أُنشئ' : 'Created'}</th>
-                  <th className="p-3 text-end font-semibold">{ar ? 'إجراءات' : 'Actions'}</th>
+                  {/*
+                    TABLE-NUMERIC-ALIGNMENT-001 §58 — a CONTROL column, declaring itself as one.
+                    End-aligning it is right: buttons belong on the trailing edge, away from the
+                    text somebody is reading. The marker is what lets the guard below say «no
+                    numeric column is end-aligned» without keeping a list of the tables where
+                    end-alignment happens to be correct — a list of allowed exceptions is the
+                    exemption list this requirement exists to retire.
+                  */}
+                  <th data-col="actions" className="p-3 text-end font-semibold">{ar ? 'إجراءات' : 'Actions'}</th>
                 </tr>
               </thead>
               <tbody>

@@ -117,6 +117,67 @@ const handRolled = () =>
     .filter(([, source]) => /<table[\s>]/.test(withoutComments(source)))
     .map(([path]) => path)
 
+/**
+ * TABLE-NUMERIC-ALIGNMENT-001 §58 — one convention for a numeric column, across every table.
+ *
+ * ## Why the owner has reported this six times
+ *
+ * The product had three answers at once. `CampaignsPage`, `CampaignDepthTabs` and
+ * `UnifiedCampaignOverview` ended their figures; `CreativesPage` and `CreativeDetailPage` started
+ * them; `CampaignCommandCenter` centred them; and `MetricTable` — the primitive all of them are
+ * supposed to become — centres them and states the reason: under `dir="rtl"` an end-aligned figure
+ * sits against the LEFT edge of its own column, which reads as belonging to the column beside it.
+ *
+ * ## Why this is a source rule and not a measurement
+ *
+ * The obvious guard is geometric: measure the header's text and the column's text and require one
+ * edge. It was written, and `CreativesPage`'s own comment records what it found — «the centre-to-
+ * centre sweep read zero throughout, because a `th` and its cells share one column BOX however the
+ * text inside them sits». A header and its cells that are BOTH `text-end` are perfectly aligned in
+ * the DOM and still wrong, because the complaint is about which edge, and no measurement can call
+ * an edge wrong. So the rule is the convention itself.
+ *
+ * ## `data-col="actions"` instead of a list of allowed tables
+ *
+ * A control column SHOULD end-align: buttons belong on the trailing edge, away from what somebody
+ * is reading. Recording that as «these three tables may use `text-end`» would be a second exemption
+ * list, which is the thing §58 exists to retire. So the column declares what it is, once, where it
+ * is written — and a numeric column cannot acquire the exception by being added to a list.
+ */
+describe('a numeric column is centred, in every table', () => {
+  const offenders: string[] = []
+
+  for (const [path, raw] of Object.entries(TREE)) {
+    if (/\.test\.tsx?$/.test(path)) continue
+
+    const code = withoutComments(raw)
+
+    for (const match of code.matchAll(/<(th|td)\b[^>]{0,600}?>/gs)) {
+      const [tag] = match
+
+      if (!/\btext-end\b/.test(tag)) continue
+      /* A control column, declaring itself — see the note above. */
+      if (/data-col="actions"/.test(tag)) continue
+
+      offenders.push(`${path}: ${tag.slice(0, 100).replace(/\s+/g, ' ')}`)
+    }
+  }
+
+  it('read the source it claims to guard', () => {
+    expect(Object.keys(TREE).length).toBeGreaterThan(20)
+  })
+
+  it('end-aligns no cell that is not a declared control column', () => {
+    expect(
+      offenders,
+      'A table cell is end-aligned. Under dir="rtl" that puts a figure against the LEFT edge of its\n'
+      + 'own column, which reads as the column beside it — `MetricTable` centres every numeric column\n'
+      + 'for exactly this reason. If this is a controls column, add data-col="actions" to say so:\n  '
+      + offenders.join('\n  '),
+    ).toEqual([])
+  })
+})
+
 describe('the analytical table contract', () => {
   it('has no surface outside the primitive that is not written down', () => {
     const offenders = handRolled().filter((path) => !(path in EXEMPT))
