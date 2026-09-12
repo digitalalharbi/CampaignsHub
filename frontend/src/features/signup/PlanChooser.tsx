@@ -358,7 +358,7 @@ function ComparisonTable({
         )}
       </span>
       {/* The price for the term currently chosen, so the table and the cards never disagree. */}
-      <span className="mt-0.5 flex items-baseline gap-1 font-bold text-text-primary" dir="ltr">
+      <span className="text-start mt-0.5 flex items-baseline gap-1 font-bold text-text-primary" dir="ltr">
         {priceOf(plan) === null ? (
           <span className="text-xs font-normal text-text-muted">{copy.noAnnual}</span>
         ) : (
@@ -548,7 +548,7 @@ function PlanCard({
       {unavailable ? (
         <span className="text-xs text-text-muted">{copy.noAnnual}</span>
       ) : (
-        <span className="flex items-baseline gap-1 font-bold text-text-primary" dir="ltr">
+        <span className="text-start flex items-baseline gap-1 font-bold text-text-primary" dir="ltr">
           <span className="tnum text-[clamp(1.0625rem,1.4vw,1.25rem)]">{price}</span>
           <span className="text-xs font-semibold text-text-secondary">{plan.currency}</span>
           <span className="text-xs font-normal text-text-muted">

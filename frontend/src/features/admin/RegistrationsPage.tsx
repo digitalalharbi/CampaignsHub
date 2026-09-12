@@ -158,7 +158,7 @@ export function RegistrationsPage() {
                   >
                     <td className="p-3">
                       <span className="block font-semibold text-text-primary">{r.name}</span>
-                      <span className="block text-xs text-text-muted" dir="ltr">{r.email}</span>
+                      <span className="text-start block text-xs text-text-muted" dir="ltr">{r.email}</span>
                     </td>
                     <td className="p-3 text-text-secondary">{r.tenant_name}</td>
                     <td className="p-3">

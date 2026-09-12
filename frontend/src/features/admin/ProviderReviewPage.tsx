@@ -87,7 +87,7 @@ export function ProviderReviewPage() {
           <p className="mt-1 text-[13px] leading-relaxed text-text-secondary">{ar ? item.why_ar : item.why_en}</p>
 
           {item.value && (
-            <code className="mt-2 block overflow-x-auto rounded-lg bg-surface-secondary px-2.5 py-1.5 text-[12px] text-text-primary" dir="ltr">
+            <code className="text-start mt-2 block overflow-x-auto rounded-lg bg-surface-secondary px-2.5 py-1.5 text-[12px] text-text-primary" dir="ltr">
               {item.value}
             </code>
           )}

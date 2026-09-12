@@ -113,7 +113,7 @@ function Ad({ ad }: { ad: AdRow }) {
         )}
         <span className="min-w-0">
           <span className="block truncate font-semibold text-text-primary">{ad.name}</span>
-          <span className="tnum block text-[11px] text-text-muted" dir="ltr">{ad.external_id}</span>
+          <span className="text-start tnum block text-[11px] text-text-muted" dir="ltr">{ad.external_id}</span>
         </span>
       </span>
       <span className="flex flex-wrap items-center gap-1.5">
@@ -257,7 +257,7 @@ export function CampaignStructureTab({ campaign, projectId }: { campaign: Unifie
                       <Badge tone={st.tone}>{st.ar}</Badge>
                       {s.is_demo && <Badge tone="warning">تجريبية</Badge>}
                     </span>
-                    <span className="tnum mt-0.5 block text-[11px] text-text-muted" dir="ltr">{s.external_id}</span>
+                    <span className="text-start tnum mt-0.5 block text-[11px] text-text-muted" dir="ltr">{s.external_id}</span>
                   </span>
                 </span>
                 <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary">

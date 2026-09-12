@@ -36,7 +36,7 @@ const money = (amount: string | null, currency: string) =>
  */
 function Ltr({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <span dir="ltr" className={`inline-block ${className}`}>
+    <span dir="ltr" className={`text-start inline-block ${className}`}>
       {children}
     </span>
   )

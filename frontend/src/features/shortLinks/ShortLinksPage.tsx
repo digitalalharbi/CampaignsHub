@@ -279,9 +279,9 @@ export function ShortLinksPage() {
             {rows.map((l) => (
               <div key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3" data-testid={`short-link-${l.slug}`}>
                 <div className="min-w-0">
-                  <code dir="ltr" className="block truncate text-sm font-bold">{l.short_url}</code>
+                  <code dir="ltr" className="text-start block truncate text-sm font-bold">{l.short_url}</code>
                   {/* What they typed — a phone number stays a phone number. */}
-                  <span dir="ltr" className="block truncate text-xs text-text-muted">{l.shows}</span>
+                  <span dir="ltr" className="text-start block truncate text-xs text-text-muted">{l.shows}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge tone="info">{l.kind === 'whatsapp' ? t.whatsapp : t.link}</Badge>

@@ -191,7 +191,7 @@ export function CutoverPage() {
             {d.parity.mismatches.map((m) => (
               <li key={m.contact} className="rounded-xl bg-surface-secondary px-3.5 py-2.5 text-[13px]">
                 <span className="font-semibold text-text-primary" dir="ltr">{m.contact}</span>
-                <span className="tnum mt-1 block text-text-secondary" dir="ltr">
+                <span className="text-start tnum mt-1 block text-text-secondary" dir="ltr">
                   {ar ? 'العضوية' : 'membership'}: {m.membership.length} · {ar ? 'التوكن' : 'token'}: {m.token.length}
                 </span>
               </li>

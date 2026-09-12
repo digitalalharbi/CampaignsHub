@@ -101,7 +101,7 @@ export function DateField({
   return (
     // The field box is internally LTR (like a professional accounting date field): calendar icon pinned to the
     // right, the YYYY-MM-DD value left-aligned with a fixed gap — icon and text never overlap.
-    <div ref={root} dir="ltr" className="relative flex w-full items-center">
+    <div ref={root} dir="ltr" className="text-start relative flex w-full items-center">
       <input
         id={id}
         type="text"

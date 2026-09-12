@@ -150,7 +150,7 @@ function Row({
         </div>
 
         {invoice.share_url && (
-          <span data-testid={`invoice-share-url-${invoice.number}`} className="mt-1 block break-all text-[11px] text-text-muted" dir="ltr">
+          <span data-testid={`invoice-share-url-${invoice.number}`} className="text-start mt-1 block break-all text-[11px] text-text-muted" dir="ltr">
             {invoice.share_url}
           </span>
         )}
