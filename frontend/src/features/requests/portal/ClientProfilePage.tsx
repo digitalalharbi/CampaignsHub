@@ -5,6 +5,7 @@ import { PortalShell } from './PortalShell'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { usePortalGuard } from './usePortalGuard'
 import { useUi } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 const COPY = {
   ar: {
@@ -59,7 +60,7 @@ function Field({ icon: Icon, label, value, none }: {
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-secondary text-text-secondary"><Icon size={17} /></span>
       <div>
         <dt className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{label}</dt>
-        <dd className={`text-sm font-semibold ${value ? 'text-text-primary' : 'text-text-muted'}`} dir="ltr">{value || none}</dd>
+        <dd className={`text-sm font-semibold ${value ? 'text-text-primary' : 'text-text-muted'}`}><Num>{value || none}</Num></dd>
       </div>
     </div>
   )

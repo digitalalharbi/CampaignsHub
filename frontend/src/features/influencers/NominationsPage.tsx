@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { toApiError } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 /**
  * The shortlist, and what was decided about it (INFL-003).
@@ -258,7 +259,7 @@ function NominationCard({
 
       {n.rationale && <p className="text-[13px] leading-relaxed text-text-secondary">{n.rationale}</p>}
       {n.proposed_fee && (
-        <p className="tnum text-sm font-semibold text-text-primary" dir="ltr">{n.proposed_fee} {n.currency ?? ''}</p>
+        <p className="tnum text-sm font-semibold text-text-primary"><Num>{n.proposed_fee} {n.currency ?? ''}</Num></p>
       )}
 
       {/* A rejection is shown WITH its reason. Hiding it is what makes the same creator come back. */}

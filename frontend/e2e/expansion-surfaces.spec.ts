@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { AUTH, switchToEnglish } from './helpers'
+import { AUTH } from './helpers'
 
 /**
  * The expansion surfaces render, with a heading and no console errors — each one signed in as an
@@ -50,7 +50,22 @@ async function surfaceRenders(page: Page, path: string) {
   })
 
   await page.goto(path)
-  await switchToEnglish(page)
+  /*
+   * No language switch here, and the reason is worth keeping.
+   *
+   * This asked for English out of habit — the assertions below are language-agnostic alternations,
+   * and the surface renders identically either way. For a long time it was free, because
+   * `switchToEnglish` was a no-op that swallowed its own failure. Once it actually switched, every
+   * surface in this file failed on WEBKIT with «XMLHttpRequest cannot load /sanctum/csrf-cookie due
+   * to access control checks»: changing the locale re-renders, something then needs a CSRF token,
+   * and webkit refuses the proxied credentialed request that chromium and firefox accept.
+   *
+   * Proved by isolation — stubbing the helper to a no-op makes every case here pass on webkit.
+   *
+   * That refusal is recorded as its own observation rather than hidden behind a helper that shrugs:
+   * it is a dev-proxy shape (in production the SPA and the API share an origin), and it belongs to
+   * whoever owns that, not to a test about whether a page renders.
+   */
   await expect(page).toHaveURL(new RegExp(path.replace(/\//g, '\\/')))
   await expect(page.getByRole('heading').first()).toBeVisible({ timeout: 10_000 })
 

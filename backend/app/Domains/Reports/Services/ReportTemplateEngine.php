@@ -63,14 +63,42 @@ final class ReportTemplateEngine
     private const PER_PLATFORM_SLIDES = ['platform_performance'];
 
     /** @param list<string> $platforms providers present in the data */
-    public function defaultConfig(string $objective, array $platforms): array
+    /**
+     * REPORT-DEPTH-001 — the two shapes a report is read in.
+     *
+     * «A. Summary / Executive — concise KPI dashboard, trend, platform distribution, strongest
+     * results, key budget/spend, top creatives, a few concise findings only. B. Full / Detailed —
+     * complete KPIs, deeper trend charts, platform/objective breakdown, funnel, budget, comparisons,
+     * ALL promoted contents.»
+     *
+     * The deck had ONE shape: the report going to a client's inbox and the one an operator reads
+     * before a call carried the same fourteen sections. «Reduce prose aggressively» cannot be
+     * answered by a template with one setting.
+     *
+     * Depth belongs to the report rather than to a reader's toggle, so a summary is a summary
+     * wherever it is opened — in the deck, in the print document, in a scheduled email.
+     *
+     * The parameter is the report's own `form` column — `executive_summary` or `detailed` — which
+     * the product has recorded since reports shipped and which nothing read. Unknown and unspecified
+     * both mean DETAILED: every report that exists was generated as the full deck whatever it was
+     * created as, and re-reading those as summaries would silently delete sections from decks people
+     * already send.
+     */
+    public function defaultConfig(string $objective, array $platforms, string $form = 'detailed'): array
     {
         $objective = array_key_exists($objective, self::METRIC_SETS) ? $objective : 'custom';
         $ordered = $this->orderPlatforms($platforms);
+        $summary = $form === 'executive_summary';
 
         $slides = [
             ['id' => 'cover', 'type' => 'cover', 'order' => 1, 'visible' => true],
-            ['id' => 'recommendations', 'type' => 'recommendations', 'order' => 2, 'visible' => true],
+            /*
+             * Recommendations are what an operator DOES next; an executive summary states what
+             * happened. A summary deck keeps the second and drops the first, which is also the
+             * «reduce prose aggressively» half of the requirement — this is the most text-heavy
+             * section in the template.
+             */
+            ...($summary ? [] : [['id' => 'recommendations', 'type' => 'recommendations', 'order' => 2, 'visible' => true]]),
             ['id' => 'executive_summary', 'type' => 'executive_summary', 'order' => 3, 'visible' => true],
             /*
              * Direct against Blended, immediately after the summary (REPORT-OBJECTIVE-003/004).
@@ -84,10 +112,26 @@ final class ReportTemplateEngine
              * this money did not buy sales — which the section states, rather than leaving the
              * question to be answered by a blended figure elsewhere.
              */
+            /*
+             * Kept in the SUMMARY too — REPORT-OBJECTIVE-003/004, and `ObjectivePerformanceTest`
+             * says so in its own words: «it survives into the five-page summary a client is sent,
+             * which is the version that gets forwarded and quoted with no per-platform pages behind
+             * it to argue with».
+             *
+             * Dropping it from the executive form was the first thing I wrote, and it would have
+             * reversed a decided product rule: the blended cost per order is exactly the figure a
+             * forwarded summary gets quoted on, and this section is what stops it being read as the
+             * price of a sale.
+             */
             ['id' => 'objective_performance', 'type' => 'objective_performance', 'order' => 4, 'visible' => true],
         ];
         $order = 5; // 1–4 are the fixed opening: cover, recommendations, summary, objective split.
-        foreach ($ordered as $platform) {
+        /*
+         * The per-platform slides are the section that grows without a ceiling — six connected
+         * platforms is six slides — and they are the operator's view of money the distribution chart
+         * already shows an executive. A summary carries the comparison instead.
+         */
+        foreach ($summary ? [] : $ordered as $platform) {
             foreach (self::PER_PLATFORM_SLIDES as $type) {
                 $slides[] = [
                     'id' => "{$platform}-{$type}",
@@ -111,7 +155,7 @@ final class ReportTemplateEngine
          * funnel is the smaller and more durable list: an objective added later gets one by default
          * rather than being forgotten.
          */
-        if (! in_array($objective, ['awareness', 'video'], true)) {
+        if (! $summary && ! in_array($objective, ['awareness', 'video'], true)) {
             $slides[] = ['id' => 'funnel', 'type' => 'funnel', 'order' => $order++, 'visible' => true];
         }
         $slides[] = ['id' => 'budget', 'type' => 'budget', 'order' => $order++, 'visible' => true];
@@ -136,10 +180,19 @@ final class ReportTemplateEngine
          * because they INTERPRET what the reader has just been shown; put first, they would be
          * conclusions about figures nobody had seen yet.
          */
+        /* The period comparison IS «what changed», which is half of what an executive came for. */
         $slides[] = ['id' => 'comparison', 'type' => 'comparison', 'order' => $order++, 'visible' => true];
         $slides[] = ['id' => 'observations', 'type' => 'observations', 'order' => $order++, 'visible' => true];
         // Client-facing action plan — rendered only when there are approved recommendations.
-        $slides[] = ['id' => 'next_steps', 'type' => 'next_steps', 'order' => $order++, 'visible' => true];
+        /*
+         * «Next steps» and the data-quality appendix are the operator's two most text-heavy closings.
+         * A summary ends on the observations — «a few concise findings only» — and the quality
+         * appendix is already withheld from a client audience by CLIENT-DIAGNOSTIC-SEPARATION-001,
+         * so keeping it in a summary would put it in front of exactly the reader it was taken from.
+         */
+        if (! $summary) {
+            $slides[] = ['id' => 'next_steps', 'type' => 'next_steps', 'order' => $order++, 'visible' => true];
+        }
         /*
          * Data quality LAST, and always present.
          *
@@ -147,7 +200,9 @@ final class ReportTemplateEngine
          * that omits it when everything is healthy teaches its reader that its absence means
          * nothing — so when it does appear, they have no baseline to read it against.
          */
-        $slides[] = ['id' => 'data_quality', 'type' => 'data_quality', 'order' => $order++, 'visible' => true];
+        if (! $summary) {
+            $slides[] = ['id' => 'data_quality', 'type' => 'data_quality', 'order' => $order++, 'visible' => true];
+        }
 
         return [
             'version' => self::VERSION,

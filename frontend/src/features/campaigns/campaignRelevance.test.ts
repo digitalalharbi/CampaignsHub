@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { CAMPAIGN_RELEVANCE_ORDER, campaignRelevance, orderByRelevance, type RelevanceRow } from './campaignRelevance'
+import { CAMPAIGN_RELEVANCE_ORDER, campaignRelevance, orderByRelevance, orderByReportability, reportability, type RelevanceRow } from './campaignRelevance'
 
 /**
  * ENTITY-RELEVANCE-ORDERING-001 — the operational ordering, in one place.
@@ -114,5 +114,56 @@ describe('the order an operator reads them in', () => {
     const rows = [row({ campaign_id: 'a', status: 'archived' }), row({ campaign_id: 'b' })]
 
     expect(orderByRelevance(rows, WINDOW_END)).toHaveLength(2)
+  })
+})
+
+/**
+ * REPORT-SCOPE-SELECTION-001 — reportability is a different question, and gives a different answer.
+ *
+ * The rule above answers «what can an operator act on now» and files anything completed as stopped
+ * however much it spent, deliberately. A report builder asks «what contributed to the period I am
+ * reporting on», and for a July report a campaign completed in August is one of the most important
+ * rows on the screen. Reusing the operational rule would bury it under campaigns running today that
+ * contributed nothing to that month — which is the clause the matrix states outright.
+ */
+describe('reportability, which relevance is not', () => {
+  const period = { from: '2026-07-01', to: '2026-07-31' }
+
+  it('calls a completed campaign that ran in the window «ran»', () => {
+    expect(reportability({ last_active_on: '2026-07-28' }, period)).toBe('ran')
+  })
+
+  it('calls one with nothing in the window «silent»', () => {
+    expect(reportability({ last_active_on: null }, period)).toBe('silent')
+  })
+
+  /** With no period asked about, no claim is made either way. */
+  it('makes no claim when nobody asked about a period', () => {
+    expect(reportability({ last_active_on: null }, {})).toBe('unknown')
+  })
+
+  it('reads the ones that ran first, most recent at the top', () => {
+    const rows = [
+      { id: 'quiet', last_active_on: null },
+      { id: 'early', last_active_on: '2026-07-03' },
+      { id: 'late', last_active_on: '2026-07-28' },
+    ]
+
+    expect(orderByReportability(rows, period).map((r) => r.id)).toEqual(['late', 'early', 'quiet'])
+  })
+
+  /** And it orders — it never removes. An operator may have a reason this rule does not know. */
+  it('keeps every campaign in the list', () => {
+    const rows = [{ id: 'a', last_active_on: null }, { id: 'b', last_active_on: '2026-07-02' }]
+
+    expect(orderByReportability(rows, period)).toHaveLength(2)
+  })
+
+  /** The operational rule would have answered differently, which is why both exist. */
+  it('disagrees with relevance about a completed campaign, on purpose', () => {
+    const row = { campaign_id: 'c', status: 'completed', last_active_on: '2026-07-28', spend: 900 }
+
+    expect(campaignRelevance(row, '2026-07-31')).toBe('stopped')
+    expect(reportability(row, period)).toBe('ran')
   })
 })

@@ -64,7 +64,37 @@ describe('the Analytics content table', () => {
    * re-derived spend would be a second metrics pipeline, which the requirement names explicitly.
    */
   it('hands the dialog the row’s own figures', () => {
-    expect(source).toMatch(/figures=\{\[/)
-    expect(source).toContain("{ label: 'CTR', value: rateOrDash(openCreative.metrics?.ctr ?? null) }")
+    expect(source).toContain('creativeDialogFigures(openCreative.metrics')
+  })
+
+  /**
+   * AD-PREVIEW-FIGURES-001 — and it does not read a cost with a percentage reader.
+   *
+   * `rateOrDash` multiplies by a hundred and appends «%». It is correct for CTR and wrong for
+   * every money figure, and production printed «CPM 65.65%» and «CPC 125.38%» because the dialog's
+   * figure list reached for it. The list is a module now, tested against the same readers the table
+   * rows use; this pins that the page does not grow a second inline copy of it.
+   */
+  it('builds the dialog’s figures through the shared module, not inline', () => {
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+
+    expect(code).not.toMatch(/label: 'CP[CM]'/)
+    expect(code).not.toMatch(/label: 'ROAS'/)
+  })
+
+  /**
+   * And the modal draws the SHARED trend component, not a series of its own.
+   *
+   * «The modal must include a performance trend chart … do NOT create another metrics pipeline.»
+   * `CreativeTrend` is the block `CreativeDetailPage` has drawn since it shipped, moved so it can be
+   * asked for from anywhere; a second series derived from whatever this surface happened to hold
+   * would differ from the detail page by whatever the two windows disagreed about.
+   */
+  it('draws the shared creative trend inside the modal', () => {
+    expect(source).toContain("from '@/features/content/CreativeTrend'")
+    expect(source).toContain('<CreativeTrend')
+
+    /* The surface's OWN window and currency — the component never decides what «this period» means. */
+    expect(source).toContain('window={{ from: range.from, to: range.to }}')
   })
 })

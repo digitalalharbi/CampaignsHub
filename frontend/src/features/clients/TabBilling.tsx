@@ -5,6 +5,7 @@ import { TaxTreatmentChip } from '@/features/billing/QuotesPage'
 import { useUi } from '@/stores/ui'
 import { usePortalPath } from '@/app/portalPath'
 import { QueryFailure } from '@/components/ui/QueryFailure'
+import { Num } from '@/components/ui/Num'
 
 /**
  * Client billing tab — this client's quotes + invoices, filtered from the tenant billing ledger
@@ -35,7 +36,7 @@ export function TabBilling({ clientId }: { clientId: string }) {
       <div className="grid grid-cols-3 gap-3">
         {[[ar ? 'عروض الأسعار' : 'Quotes', quotes.length], [ar ? 'الفواتير' : 'Invoices', invoices.length], [ar ? 'المتبقي' : 'Outstanding', `${outstanding.toLocaleString('en-US')} SAR`]].map(([l, v]) => (
           <div key={String(l)} className="rounded-xl border border-border bg-surface-secondary p-4 text-center">
-            <div className="tnum text-xl font-extrabold text-text-primary" dir="ltr">{v as string}</div>
+            <div className="tnum text-xl font-extrabold text-text-primary"><Num>{v as string}</Num></div>
             <div className="mt-1 text-xs text-text-muted">{l as string}</div>
           </div>
         ))}

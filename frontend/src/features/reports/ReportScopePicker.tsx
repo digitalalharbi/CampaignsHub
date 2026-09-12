@@ -1,12 +1,15 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { isClientAudience } from './InteractiveReport'
+import { orderByReportability } from '@/features/campaigns/campaignRelevance'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, Info, Trash2 } from 'lucide-react'
 import {
   createScopeTemplate,
   deleteScopeTemplate,
+  explainScope,
   listScopeTemplates,
   scopeOptions,
+  searchScopeAxis,
   type ReportScopeShape,
   type ScopeOptions,
   type ScopeTemplate,
@@ -41,6 +44,10 @@ const COPY = {
   ar: {
     title: 'نطاق التقرير',
     subtitle: 'اختر ما يغطيه هذا التقرير. كل ما لا تختاره يبقى بلا تحديد — أي كل المشروع.',
+    covers: 'ما سيغطيه هذا التقرير',
+    ranInPeriod: 'مرتّبة حسب ما عمل خلال فترة التقرير — الحالة اليوم لا تقرّر ما إذا كانت الحملة قد عملت وقتها.',
+    coversAll: 'لم تُحدَّد أي فلترة — سيغطي التقرير المشروع كاملًا خلال فترته.',
+    axisCount: (n: number) => `${n} محدَّد`,
     platforms: 'المنصات',
     accounts: 'الحسابات الإعلانية',
     campaigns: 'الحملات',
@@ -77,6 +84,10 @@ const COPY = {
   },
   en: {
     title: 'Report scope',
+    covers: 'What this report will cover',
+    ranInPeriod: 'Ordered by what ran during the report’s period — today’s status does not decide whether a campaign ran then.',
+    coversAll: 'Nothing is narrowed — the report covers the whole project for its period.',
+    axisCount: (n: number) => `${n} selected`,
     subtitle: 'Choose what this report covers. Anything you leave alone stays unbounded — the whole project.',
     platforms: 'Platforms',
     accounts: 'Ad accounts',
@@ -149,7 +160,19 @@ export function ReportScopePicker({
    */
   const namesInternalEntities = !isClientAudience(audience ?? 'client')
 
-  const options = useQuery({ queryKey: ['report-scope-options', projectId], queryFn: () => scopeOptions(projectId), retry: false })
+  /*
+   * REPORT-SCOPE-SELECTION-001 — the campaign list knows which period it is being asked about.
+   *
+   * The period is in the query KEY as well as in the request. Serving June's answer from cache for a
+   * July report is how a campaign that ran all July ends up filed under «did not run» — the same
+   * mistake as reading today's status, arriving by a different route.
+   */
+  const period = { from: value.from, to: value.to }
+  const options = useQuery({
+    queryKey: ['report-scope-options', projectId, period.from, period.to],
+    queryFn: () => scopeOptions(projectId, period),
+    retry: false,
+  })
   const templates = useQuery({ queryKey: ['report-scope-templates', projectId], queryFn: () => listScopeTemplates(projectId), retry: false })
 
   const [templateName, setTemplateName] = useState('')
@@ -212,6 +235,33 @@ export function ReportScopePicker({
     [value],
   )
 
+  /*
+   * The campaigns, ordered by what ran in the REPORT'S window — ENTITY-RELEVANCE-ORDERING-001.
+   *
+   * Through `orderByReportability` and NOT `orderByRelevance`, and the difference is the whole
+   * clause. The relevance rule answers «what can an operator act on now», and its first move is to
+   * file anything completed as stopped however much it spent — right for the campaigns workspace and
+   * wrong here, because a campaign completed in August may have been the largest spender in the July
+   * report being built, and it would be buried under campaigns running today that contributed
+   * nothing to that month.
+   *
+   * With no period the server states no `last_active_on` and this returns the list untouched: an
+   * absence of a question is not an answer.
+   */
+  const campaignItems = useMemo(() => {
+    const rows = (options.data?.campaigns ?? []).map((c) => ({
+      campaign_id: c.id,
+      status: c.status,
+      last_active_on: c.last_active_on ?? null,
+      spend: null,
+      name: c.name,
+    }))
+
+    const ordered = orderByReportability(rows, period)
+
+    return ordered.map((c) => ({ id: c.campaign_id, label: c.name }))
+  }, [options.data, period.to])
+
   if (options.isLoading) return <Skeleton className="h-40 w-full" />
   if (options.isError) {
     return <ErrorState title={t.loadError} error={options.error} onRetry={() => void options.refetch()} ar={ar} />
@@ -224,6 +274,20 @@ export function ReportScopePicker({
         <span className="block text-sm font-bold text-text-primary">{t.title}</span>
         <span className="mt-0.5 block text-[11px] text-text-secondary">{t.subtitle}</span>
       </div>
+
+      {/*
+        REPORT-SCOPE-SELECTION-001 §C — what this scope actually covers, before it is exported.
+
+        `explain()` has been on the server since the scope object existed, and three endpoints
+        returned it — a saved scope, a template, the result of saving. None of them was the BUILDER,
+        so the one sentence that matters while somebody is choosing — «selecting two ad sets does not
+        narrow to ad-set grain, because no metric is stored there» — was reachable everywhere except
+        the screen where the choice is made.
+
+        Asked of the server rather than derived here: the rule is the generator's, and a second copy
+        would disagree with it the first time an axis changed depth.
+      */}
+      <ScopeStatement projectId={projectId} value={value} t={t} ar={ar} />
 
       <Chips
         label={t.platforms}
@@ -245,9 +309,20 @@ export function ReportScopePicker({
 
       {namesInternalEntities && <ScopeSelect
         label={t.campaigns}
+        /*
+          REPORT-SCOPE-SELECTION-001 — «ran in this period» first, and said in words.
+
+          «Reportability = campaign lifecycle + selected period + canonical status — NOT a simplistic
+          `status === active` frontend filter», because a campaign inactive today may have been
+          active during the window being reported on. The heading decides ORDER and emphasis, never
+          membership: nothing is hidden, and with no period asked about no claim is made either way.
+        */
+        note={period.from && period.to ? t.ranInPeriod : undefined}
         truncated={o.truncated?.campaigns}
+        axis="campaigns"
+        projectId={projectId}
         limit={o.limit}
-        items={o.campaigns.map((c) => ({ id: c.id, label: c.name }))}
+        items={campaignItems}
         selected={value.campaign_ids ?? []}
         onChange={(next) => set('campaign_ids', next)}
         ar={ar}
@@ -277,6 +352,8 @@ export function ReportScopePicker({
           label={t.adSets}
           note={t.grainCampaign}
           truncated={o.truncated?.ad_sets}
+        axis="ad_sets"
+        projectId={projectId}
           limit={o.limit}
           items={o.ad_sets.map((s) => ({ id: s.id, label: s.name }))}
           selected={value.ad_set_ids ?? []}
@@ -291,6 +368,8 @@ export function ReportScopePicker({
           label={t.ads}
           note={t.grainCampaign}
           truncated={o.truncated?.ads}
+        axis="ads"
+        projectId={projectId}
           limit={o.limit}
           items={o.ads.map((a) => ({ id: a.id, label: a.name }))}
           selected={value.ad_ids ?? []}
@@ -305,6 +384,8 @@ export function ReportScopePicker({
           label={t.creatives}
           note={t.grainCreatives}
           truncated={o.truncated?.creatives}
+        axis="creatives"
+        projectId={projectId}
           limit={o.limit}
           items={o.creatives.map((c) => ({ id: c.id, label: c.name }))}
           selected={value.creative_ids ?? []}
@@ -402,6 +483,8 @@ function ScopeSelect({
   limit,
   ar,
   t,
+  axis,
+  projectId,
 }: {
   label: string
   /**
@@ -419,8 +502,66 @@ function ScopeSelect({
   limit?: number
   ar: boolean
   t: typeof COPY.ar
+  /**
+   * UX-MULTISELECT-SCALE-001 — the axis to SEARCH on the server, where its rows are too many to send.
+   *
+   * Absent for the axes that are small and closed — objectives, paths, metrics — where the whole set
+   * fits and a round trip per keystroke would buy nothing.
+   */
+  axis?: string
+  projectId?: string
 }) {
-  if (items.length === 0) return null
+  const [term, setTerm] = useState('')
+
+  /*
+   * The server's answer for what the reader typed, and only once they have typed something.
+   *
+   * Three characters rather than one: a single letter matches most of a large account and the
+   * request it costs answers a question nobody asked. Below that the local filter inside
+   * `MultiSelectField` is still working on the list already in hand, which is the common case.
+   */
+  const remote = useQuery({
+    queryKey: ['scope-axis-search', projectId, axis, term],
+    queryFn: () => searchScopeAxis(projectId ?? '', axis ?? '', term),
+    enabled: Boolean(projectId) && Boolean(axis) && term.trim().length >= 3,
+  })
+
+  const found = (remote.data?.[axis ?? ''] as Array<{ id: string; name: string }> | undefined) ?? null
+
+  /*
+   * What the control offers: the server's matches when it has any, the page's own list otherwise.
+   *
+   * The SELECTED ids are merged in either way. A chip whose option is missing renders as a raw id —
+   * so an operator who picks an ad set by search and then clears the box would watch their own
+   * selection turn into a UUID.
+   */
+  const offered = found === null ? items : found.map((r) => ({ id: r.id, label: r.name }))
+
+  /*
+   * Every name this control has ever shown, kept for as long as the picker is open.
+   *
+   * `items` is the page's bounded list and `found` is one search's answer. A selection made from a
+   * search is in NEITHER once the box is cleared — so a first version of this merge fell back to
+   * `{ id, label: id }` and the chip turned into a UUID the moment the reader deleted what they had
+   * typed. The test caught it, which is what it was written for.
+   *
+   * A ref rather than state: remembering a label changes nothing on screen by itself, and making it
+   * state would re-render the control on every answer that taught it a name it already had.
+   */
+  const known = useRef(new Map<string, string>())
+  for (const i of [...items, ...offered]) {
+    known.current.set(i.id, i.label)
+  }
+
+  const byId = new Map(offered.map((i) => [i.id, i]))
+  for (const id of selected) {
+    if (!byId.has(id)) {
+      byId.set(id, { id, label: known.current.get(id) ?? id })
+    }
+  }
+  const options = [...byId.values()]
+
+  if (items.length === 0 && selected.length === 0) return null
 
   return (
     <div data-testid={`scope-select-${label}`}>
@@ -445,9 +586,15 @@ function ScopeSelect({
           className="mb-1.5 flex items-start gap-1 text-[10px] font-semibold text-warning"
         >
           <Info size={11} className="mt-px shrink-0" />
+          {/*
+            The sentence changed with the capability. It used to say «narrow the scope to reach the
+            rest», which was the honest instruction while there was no other way — and it asked an
+            operator to change the thing they were building in order to see it. Searching now reaches
+            past the bound, so that is what it says.
+          */}
           {ar
-            ? `يُعرض ${limit ?? items.length} فقط — استخدم البحث أو ضيّق النطاق للوصول إلى البقية`
-            : `Showing ${limit ?? items.length} only — narrow the scope to reach the rest`}
+            ? `يُعرض ${limit ?? items.length} فقط — ابحث بالاسم للوصول إلى البقية`
+            : `Showing ${limit ?? items.length} only — search by name to reach the rest`}
         </p>
       )}
 
@@ -455,7 +602,9 @@ function ScopeSelect({
         label=""
         value={selected}
         onChange={onChange}
-        options={items.map((i) => ({ value: i.id, label: i.label }))}
+        options={options.map((i) => ({ value: i.id, label: i.label }))}
+        /* Typed into the box, answered by the server — see the note on `axis`. */
+        onSearchChange={axis === undefined ? undefined : setTerm}
         /*
          * Always searchable on these axes. `MultiSelectField` decides for itself above seven
          * options, and that is the right default elsewhere — here the axis is known to be large
@@ -466,6 +615,82 @@ function ScopeSelect({
       />
     </div>
   )
+}
+
+/**
+ * The scope in words, kept live with the choices above it.
+ *
+ * Keyed on the scope, so React Query dedupes while an operator toggles the same chip twice and does
+ * not re-ask for an answer it already holds. A failure is silent: this explains a choice, it does
+ * not gate one, and an error panel over a builder would be a worse outcome than no sentence.
+ */
+function ScopeStatement({
+  projectId,
+  value,
+  t,
+  ar,
+}: {
+  projectId: string
+  value: ReportScopeShape
+  t: typeof COPY.en
+  ar: boolean
+}) {
+  const q = useQuery({
+    queryKey: ['report-scope-explain', projectId, value],
+    queryFn: () => explainScope(projectId, value),
+    enabled: Boolean(projectId),
+  })
+
+  if (q.isError || q.data === undefined) {
+    return null
+  }
+
+  const rows = q.data.explain
+
+  return (
+    <div data-testid="scope-statement" className="rounded-xl border border-border bg-surface-secondary/40 p-3">
+      <span className="block text-[11px] font-bold text-text-secondary">{t.covers}</span>
+
+      {rows.length === 0 ? (
+        <p data-testid="scope-statement-all" className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+          {t.coversAll}
+        </p>
+      ) : (
+        <ul className="mt-1 space-y-1">
+          {rows.map((row) => (
+            <li key={row.axis} data-testid={`scope-statement-${row.axis}`} className="text-[11px] leading-relaxed">
+              <span className="font-semibold text-text-primary">
+                {AXIS_LABEL[row.axis] ? (ar ? AXIS_LABEL[row.axis].ar : AXIS_LABEL[row.axis].en) : row.axis}
+              </span>
+              <span className="text-text-muted"> · {t.axisCount(row.count)}</span>
+              {/*
+                The GRAIN note, always — including where it is the reassuring one.
+                
+                «Narrows every figure» and «no metrics are stored at this level» are both facts a
+                reader needs, and showing only the warning would teach an operator that the absence
+                of a note means nothing was worth saying.
+              */}
+              <span className="block text-text-secondary">{ar ? row.note_ar : row.note_en}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/** The axes, named as the controls above name them, so the statement reads as a summary of them. */
+const AXIS_LABEL: Record<string, { ar: string; en: string }> = {
+  client_ids: { ar: 'العملاء', en: 'Clients' },
+  project_ids: { ar: 'المشاريع', en: 'Projects' },
+  providers: { ar: 'المنصات', en: 'Platforms' },
+  account_ids: { ar: 'الحسابات الإعلانية', en: 'Ad accounts' },
+  campaign_ids: { ar: 'الحملات', en: 'Campaigns' },
+  ad_set_ids: { ar: 'المجموعات الإعلانية', en: 'Ad sets' },
+  ad_ids: { ar: 'الإعلانات', en: 'Ads' },
+  creative_ids: { ar: 'المحتويات', en: 'Content' },
+  objectives: { ar: 'الأهداف', en: 'Objectives' },
+  paths: { ar: 'المسارات التسويقية', en: 'Marketing paths' },
 }
 
 function Chips({

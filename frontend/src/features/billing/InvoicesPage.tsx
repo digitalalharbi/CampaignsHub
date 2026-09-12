@@ -7,6 +7,7 @@ import { BillingTabs } from './BillingTabs'
 import { TaxTreatmentChip } from './QuotesPage'
 import { taxTreatmentLabel } from './taxTreatment'
 import { formatDate, formatMoney, isPayable, listInvoices, type Invoice, type InvoiceStatus } from './api'
+import { Num } from '@/components/ui/Num'
 
 const COPY = {
   ar: {
@@ -198,7 +199,7 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
   return (
     <div className="flex items-center justify-between gap-3">
       <dt className="text-text-secondary">{label}</dt>
-      <dd className={`tnum ${strong ? 'text-base font-extrabold text-text-primary' : 'text-text-primary'}`} dir="ltr">{value}</dd>
+      <dd className={`tnum ${strong ? 'text-base font-extrabold text-text-primary' : 'text-text-primary'}`}><Num>{value}</Num></dd>
     </div>
   )
 }

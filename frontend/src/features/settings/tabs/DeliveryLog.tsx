@@ -3,6 +3,7 @@ import { summariseDeliveries, type DeliveryRow } from '../deliveryLog'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 /**
  * EMAIL-SETTINGS-DEPTH-001 — what actually left the building.
@@ -63,7 +64,8 @@ export function DeliveryLog() {
   }
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
+    /* The handle an acceptance test needs to ask whether this surface reaches a reader at all. */
+    <div data-testid="delivery-log" className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
       <h2 className="text-xl font-bold text-text-primary">{ar ? 'سجل الإرسال' : 'Delivery log'}</h2>
       <p className="mt-1 max-w-2xl text-sm leading-7 text-text-secondary">
         {ar
@@ -107,7 +109,7 @@ export function DeliveryLog() {
             ] as const).map(([key, label, value, tone]) => (
               <li key={key} data-testid={`delivery-count-${key}`} className="rounded-xl border border-border bg-surface-secondary px-4 py-3">
                 <div className="text-[12px] text-text-secondary">{label}</div>
-                <div className={`tnum text-xl font-extrabold ${tone}`} dir="ltr">{value}</div>
+                <div className={`tnum text-xl font-extrabold ${tone}`}><Num>{value}</Num></div>
               </li>
             ))}
           </ul>

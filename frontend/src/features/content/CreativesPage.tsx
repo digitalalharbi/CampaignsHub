@@ -3,7 +3,9 @@ import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { GitCompare, Layers, LayoutGrid, Rows3 } from 'lucide-react'
 import { PosterImage } from './PosterImage'
-import { CreativeViewer } from './CreativeViewer'
+import { AdPreviewDialog } from './AdPreviewDialog'
+import { creativeDialogFigures } from './creativeDialogFigures'
+import { CreativeTrend } from './CreativeTrend'
 import { CreativeCompare } from './CreativeCompare'
 import { formatMetric, metricLabel, metricState } from './metrics'
 import { creativeGrainMissing, emptyReason, noDisplayableMetrics, type EmptyReason, type MetricsAvailability } from './availability'
@@ -26,11 +28,28 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { FilterBar, FilterMulti, FilterSearch, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro } from '@/components/ui/PageIntro'
+import { MetricStrip } from '@/components/ui/MetricStrip'
+import { metricsForKeys } from '@/features/analytics/metricCatalog'
+import type { Summary } from '@/features/analytics/api'
+
+/**
+ * The figures a content library is read on — «provider-available» in the Owner's own list.
+ *
+ * Spend, reach and impressions, clicks and their rate, the cost of each, the result and what it
+ * cost, revenue and its return, and the video figures this surface exists for. Every one of them is
+ * a catalogue key: a metric named here that the platform never sent still renders «لم ترسله
+ * المنصة», which is the requirement's «never turn unavailable data into zero».
+ */
+const CONTENT_KPI_KEYS = [
+  'spend', 'impressions', 'reach', 'clicks', 'ctr', 'cpc', 'cpm',
+  'conversions', 'cpa', 'revenue', 'roas', 'video_views', 'video_completion_rate',
+] as const
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
 import { campaignStatusLabel, marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 import { canonicalObjectiveLabel, type CanonicalObjectiveKey } from '@/features/campaigns/canonicalObjectives'
+import { Num } from '@/components/ui/Num'
 
 /**
  * §15.2 — the Creative Library, in `/app` and `/agency`.
@@ -508,6 +527,37 @@ export function CreativesPage() {
   }
 
   const data = libraryQuery.data
+
+  /*
+   * The library's headline figures, as catalogue items.
+   *
+   * `metricsForKeys` is the same builder the dashboard's KPI cards use, and it wants the summary
+   * envelope: `current` for the figures and `reported` for which of their zeros are measurements.
+   * The server's totals already carry both — this only names them in the shape the catalogue reads,
+   * rather than re-deriving a single number.
+   *
+   * `previous` is empty and `delta` is absent on purpose: the library has no comparison window, and
+   * a card drawn with a delta of zero would say a figure held steady when nothing was compared.
+   */
+  const contentKpis = useMemo(() => {
+    const totals = data?.totals
+
+    if (!totals) {
+      return []
+    }
+
+    const summary = {
+      current: totals as unknown as Summary['current'],
+      previous: {} as Summary['previous'],
+      delta: {},
+      reported: (totals as unknown as { reported?: Record<string, boolean> }).reported ?? {},
+      rows_in_scope: data?.total ?? 0,
+      currency: data?.currency ?? null,
+    } as unknown as Summary
+
+    return metricsForKeys(CONTENT_KPI_KEYS, 'all', summary, ar)
+  }, [data, ar])
+
   const creatives = data?.creatives ?? []
 
   /**
@@ -646,6 +696,36 @@ export function CreativesPage() {
             </Link>
           </>
         }
+      />
+
+      {/*
+        CONTENT-KPI-TOTALS-001 — the figures for the library the reader is looking at.
+
+        «The Content area does not visibly expose the required KPI figures consistently … never turn
+        unavailable data into zero.» There was no totals row at all: a card per creative, and no way
+        to ask what the current filter cost.
+
+        Drawn through `MetricStrip` over the canonical catalogue, so these cards are the same cards
+        the dashboard and the analysis draw — same formatting, same «لم ترسله المنصة» for a metric
+        the platform never sent, same refusal when the money cannot be added. The server totals over
+        the FILTERED set, never the page, so the strip and the cards beneath it describe one scope.
+      */}
+      <MetricStrip
+        id="content"
+        ar={ar}
+        primary={contentKpis}
+        /*
+          KPI-STRIP-RESERVE-001 — the card count is known before any figure is.
+
+          `contentKpis` is derived from the response and is empty until it lands, so the skeleton
+          reserved nothing and the toolbar under it dropped 482px when thirteen cards appeared. The
+          key list is a constant; the page has always known how tall this row would be.
+        */
+        loadingCards={CONTENT_KPI_KEYS.length}
+        hasRows={data === undefined ? undefined : data.total > 0}
+        loading={libraryQuery.isPending}
+        error={libraryQuery.isError ? libraryQuery.error : undefined}
+        onRetry={() => void libraryQuery.refetch()}
       />
 
       <FilterBar
@@ -1125,19 +1205,40 @@ export function CreativesPage() {
         </nav>
       )}
 
+      {/*
+        AD-PREVIEW-DEFAULT-001 — a thumbnail opens the quick popup, and the popup opens the page.
+
+        «Cancel this page for viewing content and adopt the direct, simple popup — and from it go to
+        the content's own analytics page.» The full-screen viewer carried a rail of figures that the
+        creative's own page already draws better — identity, copy, figures, funnel, trend, by
+        platform, peers, fatigue, evidence, insights against that rail's four blocks — so the reader
+        met a shallower copy of the page and had no route from it to the real one.
+
+        The popup answers «which ad is this, and did it work»; the page answers everything else, and
+        `detailsTo` is the way there. Paging between creatives goes with the viewer: the grid behind
+        the popup is the way to the next one, and it keeps the reader's filters and scroll position.
+      */}
       {viewerIndex !== null && creatives[viewerIndex] && (
-        <CreativeViewer
-          creatives={creatives}
-          index={viewerIndex}
-          onIndexChange={setViewerIndex}
+        <AdPreviewDialog
+          creative={creatives[viewerIndex]}
+          locale={ar ? 'ar' : 'en'}
+          /* This library's own window and currency — the popup never decides what «this period» is. */
+          figures={creativeDialogFigures(creatives[viewerIndex].metrics ?? undefined, data?.currency ?? null, ar)}
+          trend={currentProjectId
+            ? (
+              <CreativeTrend
+                projectId={currentProjectId}
+                creativeId={creatives[viewerIndex].id}
+                window={{ from, to }}
+                locale={ar ? 'ar' : 'en'}
+                currency={data?.currency ?? 'SAR'}
+                height={180}
+              />
+            )
+            : undefined}
+          /* The library's address travels with the link, so Back rebuilds the shelf as it was. */
+          detailsTo={`${creatives[viewerIndex].id}${libraryAddress}`}
           onClose={() => setViewerIndex(null)}
-          /*
-           * The panel, with the figures beside the asset — so «should we keep running this» is
-           * answerable here rather than four navigations away. It carries THIS library's window, so
-           * the pane can never quote a different period from the row that opened it, and the
-           * details link carries the library's address so Back rebuilds the shelf.
-           */
-          analysis={{ window: { from, to }, detailsTo: (c) => `${c.id}${libraryAddress}` }}
         />
       )}
 
@@ -1416,8 +1517,8 @@ function CreativeGridCard({
             {creative.headline_metrics.slice(0, 4).map((key) => (
               <div key={key} className="flex flex-col">
                 <dt className="text-text-secondary">{metricLabel(key, locale)}</dt>
-                <dd className="tabular-nums text-text-primary" dir="ltr">
-                  {/*
+                <dd className="tabular-nums text-text-primary">
+                  <Num>{/*
                     * CONTENT-MONEY-VISIBLE-001 — money through the canonical reader, everything
                     * else through `metricState`.
                     *
@@ -1428,7 +1529,7 @@ function CreativeGridCard({
                     */}
                   {key === 'spend' || key === 'revenue'
                     ? creativeMoney(creative.metrics, key, currency, locale).text
-                    : formatMetric(metricState(creative.metrics, key), key, locale, currency)}
+                    : formatMetric(metricState(creative.metrics, key), key, locale, currency)}</Num>
                 </dd>
               </div>
             ))}

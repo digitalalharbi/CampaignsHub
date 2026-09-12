@@ -7,6 +7,7 @@ import {
 import { toApiError } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 /**
  * The customer's own CampaignsHub invoices (SUBINV-001).
@@ -150,8 +151,8 @@ function Row({
         </div>
 
         {invoice.share_url && (
-          <span data-testid={`invoice-share-url-${invoice.number}`} className="mt-1 block break-all text-[11px] text-text-muted" dir="ltr">
-            {invoice.share_url}
+          <span data-testid={`invoice-share-url-${invoice.number}`} className="text-start mt-1 block break-all text-[11px] text-text-muted">
+            <Num>{invoice.share_url}</Num>
           </span>
         )}
       </td>

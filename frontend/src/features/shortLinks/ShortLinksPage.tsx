@@ -10,6 +10,7 @@ import { PageIntro } from '@/components/ui/PageIntro'
 import { DEFAULT_DIAL_CODE, PhoneField, phoneFieldValue } from '@/components/ui/PhoneField'
 import { useUi } from '@/stores/ui'
 import { createShortLink, deleteShortLink, disableShortLink, listShortLinks, type ShortLink, type ShortLinkKind } from './api'
+import { Num } from '@/components/ui/Num'
 
 /**
  * SHORT-LINKS-001 — a utility a non-technical person finishes in two fields.
@@ -279,9 +280,9 @@ export function ShortLinksPage() {
             {rows.map((l) => (
               <div key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3" data-testid={`short-link-${l.slug}`}>
                 <div className="min-w-0">
-                  <code dir="ltr" className="block truncate text-sm font-bold">{l.short_url}</code>
+                  <code dir="ltr" className="text-start block truncate text-sm font-bold">{l.short_url}</code>
                   {/* What they typed — a phone number stays a phone number. */}
-                  <span dir="ltr" className="block truncate text-xs text-text-muted">{l.shows}</span>
+                  <span className="text-start block truncate text-xs text-text-muted"><Num>{l.shows}</Num></span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge tone="info">{l.kind === 'whatsapp' ? t.whatsapp : t.link}</Badge>

@@ -217,6 +217,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * the picker would ask for a report whose id is the word "scope".
      */
     Route::get('reports/scope/options', [ReportScopeController::class, 'options'])->middleware('project.can:reports.view')->name('reports.scope.options');
+    // What a scope being BUILT would cover, in words — REPORT-SCOPE-SELECTION-001 §C. Reads nothing.
+    Route::post('reports/scope/explain', [ReportScopeController::class, 'explain'])->middleware('project.can:reports.view')->name('reports.scope.explain');
     Route::get('reports/scope-templates', [ReportScopeController::class, 'templates'])->middleware('project.can:reports.view')->name('reports.scope-templates.index');
     Route::post('reports/scope-templates', [ReportScopeController::class, 'storeTemplate'])->middleware('project.can:reports.manage')->name('reports.scope-templates.store');
     Route::match(['put', 'patch'], 'reports/scope-templates/{template}', [ReportScopeController::class, 'updateTemplate'])->middleware('project.can:reports.manage')->name('reports.scope-templates.update');

@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/Modal'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 /**
  * `/admin/cutover` — is it safe to retire the legacy client-portal engine yet? (PORTAL-AUTH-001)
@@ -191,8 +192,8 @@ export function CutoverPage() {
             {d.parity.mismatches.map((m) => (
               <li key={m.contact} className="rounded-xl bg-surface-secondary px-3.5 py-2.5 text-[13px]">
                 <span className="font-semibold text-text-primary" dir="ltr">{m.contact}</span>
-                <span className="tnum mt-1 block text-text-secondary" dir="ltr">
-                  {ar ? 'العضوية' : 'membership'}: {m.membership.length} · {ar ? 'التوكن' : 'token'}: {m.token.length}
+                <span className="text-start tnum mt-1 block text-text-secondary">
+                  <Num>{ar ? 'العضوية' : 'membership'}: {m.membership.length} · {ar ? 'التوكن' : 'token'}: {m.token.length}</Num>
                 </span>
               </li>
             ))}

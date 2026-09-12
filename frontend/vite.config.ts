@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
@@ -39,6 +40,26 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    /*
+     * WORKTREE-NODE-MODULES-001 — serve the packages this checkout actually resolves.
+     *
+     * Vite refuses to serve files outside the project root, and rightly. A git WORKTREE commonly
+     * symlinks `node_modules` at a sibling checkout to avoid installing the tree four times, and the
+     * fonts then resolve to a real path outside this root: Vite answers 403, the browser logs
+     * «downloadable font: download failed», and every spec that asserts a clean console fails for a
+     * reason that has nothing to do with the product. It cost a full three-browser verification run
+     * to tell those apart from real defects.
+     *
+     * `realpathSync` on the directory rather than a hard-coded sibling: an ordinary checkout resolves
+     * to its own root and this adds nothing, and a worktree resolves to wherever its packages really
+     * are. Dev server only — it has no bearing on what is built or shipped.
+     */
+    fs: {
+      allow: [
+        fileURLToPath(new URL('.', import.meta.url)),
+        realpathSync(fileURLToPath(new URL('./node_modules', import.meta.url))),
+      ],
+    },
     proxy: {
       /*
        * Proxy API calls to the Laravel backend during development.

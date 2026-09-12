@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Building2, FileText, Palette, ShieldCheck, Users, Briefcase, FolderKanban, Bell } from 'lucide-react'
 import { GeneralTab } from './tabs/GeneralTab'
 import { DisclaimerTab } from './tabs/DisclaimerTab'
@@ -37,7 +37,32 @@ interface Props {
 export function SettingsPage({ only, title, subtitle }: Props = {}) {
   const ar = useUi((u) => u.locale) === 'ar'
   const shown = only ? TABS.filter((t) => only.includes(t.id)) : TABS
-  const [tab, setTab] = useState<TabId>(shown[0]?.id ?? 'general')
+
+  /*
+   * SETTINGS-TAB-ADDRESS-001 — which tab is open is part of the ADDRESS.
+   *
+   * This was `useState` alone, so `?tab=notifications` did nothing: the page always opened on its
+   * first tab, whatever the link said. Three consequences, all of them ordinary things people do —
+   * a link to «the notifications settings» sent to a colleague opens somewhere else, the browser's
+   * Back button walks out of the page instead of back a tab, and a reload loses the reader's place.
+   *
+   * `AnalyticsPage` has kept its tab in the query string since it was written, and the campaigns
+   * spec asserts `tab=platforms` precisely because a click that does not reach the URL is a click
+   * nothing can check.
+   *
+   * An unknown or unavailable tab falls back to the first one rather than rendering nothing: a stale
+   * link is a normal thing to follow, and an empty settings page is a worse answer than the wrong
+   * tab.
+   */
+  const [params, setParams] = useSearchParams()
+  const asked = params.get('tab') as TabId | null
+  const tab: TabId = shown.some((t) => t.id === asked) ? (asked as TabId) : (shown[0]?.id ?? 'general')
+  const setTab = (next: TabId) => {
+    const out = new URLSearchParams(params)
+    out.set('tab', next)
+    /* Replace, so a tab walk does not bury the page the reader came from under ten history entries. */
+    setParams(out, { replace: true })
+  }
   const single = shown.length === 1
 
   return (

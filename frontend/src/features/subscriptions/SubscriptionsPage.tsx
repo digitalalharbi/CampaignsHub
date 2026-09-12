@@ -9,6 +9,7 @@ import {
   type CurrentSubscription, type RenewalMode, type SubscriptionPlan, type UsageMetric,
 } from './api'
 import { PolicyNote } from '@/features/legal/PolicyFooter'
+import { Num } from '@/components/ui/Num'
 
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
 export const COPY = {
@@ -431,7 +432,7 @@ function PlanCard({
         <span className="font-bold text-text-primary">{plan.name}</span>
         {isCurrent && <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-brand-500/15 px-2 py-0.5 text-[11px] font-semibold text-brand-600"><CheckCircle2 size={12} /> {c.current_badge}</span>}
       </div>
-      <div className="tnum text-xl font-extrabold text-text-primary" dir="ltr">{plan.price_monthly} {plan.currency}<span className="ms-1 text-xs font-normal text-text-muted">{c.per_month}</span></div>
+      <div className="tnum text-xl font-extrabold text-text-primary"><Num>{plan.price_monthly} {plan.currency}<span className="ms-1 text-xs font-normal text-text-muted">{c.per_month}</span></Num></div>
 
       {features.length > 0 && (
         <ul className="flex flex-col gap-1 border-t border-border pt-3 text-xs text-text-secondary">
@@ -551,8 +552,8 @@ function ProrationReview({
             <Row label={c.credit} value={`− ${money(quote.credit, quote.currency)}`} />
             <div className="mt-1 flex items-center justify-between border-t border-border pt-2">
               <dt className="text-sm font-bold text-text-primary">{c.due_now}</dt>
-              <dd data-testid="due-now" className="tnum text-lg font-extrabold text-text-primary" dir="ltr">
-                {money(quote.due_now, quote.currency)}
+              <dd data-testid="due-now" className="tnum text-lg font-extrabold text-text-primary">
+                <Num>{money(quote.due_now, quote.currency)}</Num>
               </dd>
             </div>
           </dl>
@@ -590,7 +591,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <dt className="text-text-secondary">{label}</dt>
-      <dd className="tnum font-semibold text-text-primary" dir="ltr">{value}</dd>
+      <dd className="tnum font-semibold text-text-primary"><Num>{value}</Num></dd>
     </div>
   )
 }

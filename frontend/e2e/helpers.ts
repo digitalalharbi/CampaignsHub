@@ -65,9 +65,72 @@ export async function openFilters(page: Page, id: string) {
 }
 
 /** Flip the app to English for stable selectors (default locale is Arabic). */
+/**
+ * Put the page into English, and FAIL if it did not go.
+ *
+ * ## What this was
+ *
+ * `getByRole('button', { name: /Toggle language|EN|اللغة/ }).first()`, clicked inside a
+ * `.catch(() => {})`. Three problems compounding: the pattern matched any button whose accessible
+ * name contained «EN», `.first()` took whichever came first in the DOM, and the swallowed rejection
+ * meant a click on the wrong control — or no click at all — read exactly like a success.
+ *
+ * Forty-nine specs call this. On `/agency/content` it silently did nothing: `html[dir]` stayed `rtl`
+ * for the whole test, so every «in English…» assertion in those specs was made about an Arabic page.
+ *
+ * ## Why it does not press the button
+ *
+ * The first repair did press it, exactly, and waited for `dir="ltr"`. That failed eight specs across
+ * three browsers with «no language control on this page» — and the failures were the useful part:
+ * the alerts page, the client portal, the request tracking page and the advertiser's connector
+ * surface have no toggle in their chrome at all, so those specs had NEVER been in English and the
+ * strict version merely said so out loud.
+ *
+ * Making them English by pressing a control that is not there is impossible; making them English is
+ * not. The locale is a remembered choice in `localStorage` under a key the store reads at module
+ * load, so setting it and reloading puts ANY page into English — including one whose chrome offers
+ * no way to ask. That is what a reader who has chosen English would actually see.
+ *
+ * The outcome is still asserted. A page that does not end up `dir="ltr"` fails here, which is the
+ * property the old helper could not hold.
+ */
 export async function switchToEnglish(page: Page) {
-  const toggle = page.getByRole('button', { name: /Toggle language|EN|اللغة/ }).first()
-  if (await toggle.count()) await toggle.click().catch(() => {})
+  const html = page.locator('html')
+
+  if ((await html.getAttribute('dir')) === 'ltr') return
+
+  /*
+   * The app's own control, WAITED FOR — and that wait is the whole of the second repair.
+   *
+   * The first version asked `count()` the instant it was called, which is immediately after a
+   * `goto`: the shell had not painted, the count was 0, and every caller fell through to the
+   * fallback below. On webkit that reload then produced «XMLHttpRequest cannot load
+   * /sanctum/csrf-cookie due to access control checks» and failed nine specs that assert console
+   * cleanliness — a browser-specific break caused entirely by a race in a test helper.
+   *
+   * Measured afterwards: every `/agency/*` route renders the control within a second. Only the
+   * advertiser portal genuinely has none, which is its own finding and not this one.
+   */
+  const toggle = page.getByRole('button', { name: 'Toggle language', exact: true }).first()
+
+  if (await toggle.isVisible({ timeout: 10000 }).catch(() => false)) {
+    await toggle.click()
+  } else {
+    /*
+     * And where the chrome offers none — the alerts page, the client portal, the request tracking
+     * page, the advertiser's connector surface — the remembered choice, then a reload.
+     *
+     * A reload rather than a click because there is nothing to click, and it is the SECOND branch
+     * rather than the only one because reloading mid-test is not free: doing it unconditionally
+     * raced the session on this very spec and produced nine 403s on requests that had been fine.
+     */
+    await page.evaluate(() => localStorage.setItem('campaign-hub-locale', 'en'))
+    await page.reload()
+  }
+
+  await expect(html, 'the page did not come back in English').toHaveAttribute('dir', 'ltr', {
+    timeout: 15000,
+  })
 }
 
 /**

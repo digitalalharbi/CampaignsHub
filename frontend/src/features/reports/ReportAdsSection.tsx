@@ -3,6 +3,7 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { objectiveLabel } from '@/features/campaigns/labels'
 import type { CreativePreview } from '@/features/content/api'
 import type { Locale } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 /**
  * REPORT-AD-PREVIEW-001 — the ads that ran, in the document the client keeps.
@@ -270,7 +271,7 @@ function AdCard({
         {figuresFor(ad, ar, currency).map((f) => (
           <div key={f.label} className="rounded-lg bg-surface-secondary p-1.5">
             <dt className="text-[10px] font-semibold text-text-muted">{f.label}</dt>
-            <dd dir="ltr" className="tnum text-xs font-bold text-text-primary">{f.value}</dd>
+            <dd className="tnum text-xs font-bold text-text-primary"><Num>{f.value}</Num></dd>
           </div>
         ))}
       </dl>

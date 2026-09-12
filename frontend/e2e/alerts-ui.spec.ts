@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, csrfHeaders, E2E_ORIGIN, switchToEnglish } from './helpers'
+import { AUTH, csrfHeaders, E2E_ORIGIN } from './helpers'
 
 /**
  * Alerts management UI (/agency/alerts) on Chromium/Firefox/WebKit: the page renders the operator surface for the
@@ -14,7 +14,12 @@ test('alerts page renders all sections and a rule created in the UI persists', a
   page.on('pageerror', (e) => errors.push(String(e)))
 
   await page.goto('/agency/alerts')
-  await switchToEnglish(page)
+  /*
+   * No language switch — every assertion below is a language-agnostic alternation, and asking for
+   * English here costs a webkit failure for nothing. See the note in `expansion-surfaces.spec.ts`:
+   * changing the locale makes webkit refuse the proxied CSRF request, and this case is about whether
+   * the alerts surface renders and persists a rule.
+   */
 
   // Page + entitlement nav link.
   await expect(page.getByRole('heading', { level: 1, name: /Alerts|التنبيهات/ })).toBeVisible()
@@ -42,7 +47,14 @@ test('alerts page renders all sections and a rule created in the UI persists', a
 
   // Preferences tab → channels + quiet hours render.
   await page.getByRole('button', { name: /Preferences|التفضيلات/ }).click()
-  await expect(page.getByText(/Quiet hours|ساعات الهدوء/).first()).toBeVisible()
+  /*
+    Case-insensitive, because the English heading is «Notification channels & quiet hours».
+    
+    This case only ever ran in Arabic — `switchToEnglish` was a no-op that swallowed its own failure
+    — and «ساعات الهدوء» is a substring of the Arabic heading, so it matched. Under a switch that
+    actually switches, the capital «Quiet hours» matches nothing on the page.
+  */
+  await expect(page.getByText(/quiet hours|ساعات الهدوء/i).first()).toBeVisible()
 
   // Delivery log tab → honest note renders (never "sent" without a provider).
   await page.getByRole('button', { name: /Delivery log|سجل التسليم/ }).click()
@@ -64,7 +76,7 @@ test('the notification bell links to the alerts page', async ({ browser, page })
   // Start in the operator's OWN portal. Going to `/dashboard` lands in the advertiser shell,
   // whose Alerts leaf points at `/app/alerts` — a different portal's copy of the same page.
   await page.goto('/agency')
-  await switchToEnglish(page)
+  /* Language-agnostic below, and asking for English costs a webkit failure — see the note above. */
   // The alerts entry is reachable from the sidebar (the bell's items deep-link to the same page).
   await page.getByRole('link', { name: /^Alerts$|^التنبيهات$/ }).first().click()
   await expect(page).toHaveURL(/\/agency\/alerts/)

@@ -1123,6 +1123,44 @@ final class MetricsAggregator
      *
      * @return array<string,float>
      */
+    /**
+     * ENTITY-RELEVANCE-ORDERING-001 — the last day a campaign actually DID something.
+     *
+     * Filtered on a positive value, because a day of zeros is not a day the campaign ran. A campaign
+     * dark all month still has a row for every day of it, and reading those as activity would rank
+     * it alongside one serving right now — the same confusion between «no data» and «zero» the money
+     * contract exists to prevent, one grain up.
+     *
+     * The expression is a constant because `byCampaign()` needs the same answer inside its own much
+     * larger select, and two spellings of «did this campaign run» is how two screens come to disagree
+     * about which campaigns are live.
+     */
+    public const LAST_ACTIVE_EXPRESSION = 'MAX(daily_metrics.metric_date) FILTER (WHERE daily_metrics.value > 0)';
+
+    /**
+     * Campaign id → the last day inside the window it ran, for callers that need only that.
+     *
+     * The report builder is the case: it groups four hundred campaigns by whether they ran in the
+     * period being reported on, and asking `byCampaign()` for that would compute every money figure,
+     * every withheld-currency expression and a previous-period comparison to read one date per row.
+     *
+     * @return array<string, string> campaign id → `YYYY-MM-DD`
+     */
+    public function lastActiveByCampaign(Carbon $from, Carbon $to): array
+    {
+        return $this->base($from, $to)
+            ->select('daily_metrics.unified_campaign_id as campaign_id')
+            ->selectRaw(self::LAST_ACTIVE_EXPRESSION.' AS last_active_on')
+            ->whereNotNull('daily_metrics.unified_campaign_id')
+            ->groupBy('daily_metrics.unified_campaign_id')
+            ->get()
+            ->reject(static fn ($r): bool => $r->last_active_on === null)
+            ->mapWithKeys(static fn ($r): array => [
+                (string) $r->campaign_id => Carbon::parse((string) $r->last_active_on)->toDateString(),
+            ])
+            ->all();
+    }
+
     public function spendByCampaign(Carbon $from, Carbon $to): array
     {
         return $this->base($from, $to)
@@ -1219,7 +1257,7 @@ final class MetricsAggregator
              * activity would rank it alongside one serving right now — the same confusion between
              * «no data» and «zero» the money contract exists to prevent, one grain up.
              */
-            ->selectRaw('MAX(daily_metrics.metric_date) FILTER (WHERE daily_metrics.value > 0) AS last_active_on')
+            ->selectRaw(self::LAST_ACTIVE_EXPRESSION.' AS last_active_on')
             /*
              * MONEY-TRUTH-002 — the same provenance, qualified for the join.
              *

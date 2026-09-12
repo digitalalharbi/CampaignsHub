@@ -52,6 +52,21 @@ async function openCampaignLinkedTab(page: Page, name: string) {
 }
 
 test('link → 409 move-confirmation → confirm move → unlink (full path)', async ({ page }) => {
+  /*
+   * This one path gets longer than the default budget, and the budget is the only thing wrong.
+   *
+   * It seeds a project, imports externals, opens the link modal twice, drives a 409 move
+   * confirmation and then unlinks — nine round trips end to end. It measures ~13s on firefox on a
+   * developer machine and timed out at 30s in CI, where three browser projects share one runner.
+   * Chromium and webkit passed the same path on the same commit, which is the signature of a budget
+   * that does not fit the slowest browser under load rather than of a defect.
+   *
+   * Raised HERE rather than globally: the default is what catches a page that hangs, and a spec
+   * suite with a generous global timeout stops reporting hangs as hangs. The individual waits inside
+   * this test are untouched, so anything that actually stalls still fails on its own assertion.
+   */
+  test.setTimeout(90_000)
+
   // Fresh project + imported Sandbox externals (set up via the authenticated page.request context).
   /*
    * A project this spec names, not `projects[1]`.

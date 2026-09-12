@@ -98,7 +98,7 @@ export function PhoneField({
         puts the dial code on the right of the digits — which reads as a different number. The LABEL
         above stays in the page's direction; only the number itself is pinned.
       */}
-      <div dir="ltr" className="flex items-stretch gap-2">
+      <div dir="ltr" className="text-start flex items-stretch gap-2">
         {/*
           The width lives on a WRAPPER, not on the control.
 

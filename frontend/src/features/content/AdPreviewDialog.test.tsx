@@ -242,3 +242,52 @@ describe('the in-place ad preview', () => {
     expect(screen.queryByText('Objective')).not.toBeInTheDocument()
   })
 })
+
+/**
+ * CONTENT-METRIC-ABSENCE-DETAIL-001 — the popup says WHY its figures are dashes.
+ *
+ * The grid card has distinguished these two since it shipped, and the popup — which is the default
+ * detail surface now — inherited none of it: six dashes and no sentence. «Did not run» is FALSE of a
+ * creative whose ad ran while the platform declined to break the result down per creative, and false
+ * in the expensive direction, because an operator reads it and turns off something that is running.
+ */
+describe('a creative with no figures of its own', () => {
+  const silent = (adDelivered: boolean) => ({
+    ...creative(),
+    metrics: null,
+    ad_delivered: adDelivered,
+  })
+
+  it('says the ad ran when the ad ran', () => {
+    renderWithProviders(
+      <AdPreviewDialog creative={silent(true) as never} locale="en" onClose={() => {}} />,
+      { locale: 'en' },
+    )
+
+    expect(screen.getByTestId('ad-preview-dialog-absence')).toHaveTextContent(/ran during the period/i)
+    expect(screen.getByTestId('ad-preview-dialog-absence')).not.toHaveTextContent(/did not run/i)
+  })
+
+  it('says it did not run when the ad did not run either', () => {
+    renderWithProviders(
+      <AdPreviewDialog creative={silent(false) as never} locale="en" onClose={() => {}} />,
+      { locale: 'en' },
+    )
+
+    expect(screen.getByTestId('ad-preview-dialog-absence')).toHaveTextContent(/did not run/i)
+  })
+
+  /* And a creative that HAS figures gets the figures, with no sentence over them. */
+  it('says nothing at all when the platform answered', () => {
+    renderWithProviders(
+      <AdPreviewDialog
+        creative={{ ...creative(), metrics: { spend: 10, clicks: 2 } } as never}
+        locale="en"
+        onClose={() => {}}
+      />,
+      { locale: 'en' },
+    )
+
+    expect(screen.queryByTestId('ad-preview-dialog-absence')).toBeNull()
+  })
+})

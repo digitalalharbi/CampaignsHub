@@ -5,6 +5,7 @@ import { ClientAttention } from './ClientAttention'
 import { readMetricValue, type MetricValue } from '@/lib/metricValue'
 import { LiveDetailTables } from './LiveDetailTables'
 import { ReportAdDetail } from './ReportAdDetail'
+import { ReportCreativeRoster } from './ReportCreativeRoster'
 import { ReportAdsSection, type ReportAd } from './ReportAdsSection'
 import { canonicalPlatform } from '@/lib/platforms'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
@@ -19,6 +20,7 @@ import { money, moneyExact, moneyFromTotals, ratio, wholeMoney } from '@/feature
 import { formatMoneyReading, moneyState, rankableMoney, readCostPer, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import { fetchLiveShared, type LivePayload } from './api'
 import { useUi } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 /**
  * LIVEREP-001 — the client's own view of a live shared link.
@@ -486,17 +488,17 @@ export function LiveSharedReport({
                         direct against blended is doing arithmetic on figures the page rounded.
                       */}
                       <dd
-                        dir="ltr"
-                        className="tnum font-semibold text-text-primary"
+                       
+                        className="text-start tnum font-semibold text-text-primary"
                         title={revealed(block.spend)}
                       >
-                        {asMoney(block.spend)}
+                        <Num>{asMoney(block.spend)}</Num>
                       </dd>
                     </div>
                     <div>
                       <dt className="text-text-muted">{ar ? 'تكلفة الطلب' : 'Cost per order'}</dt>
-                      <dd dir="ltr" className="tnum font-semibold text-text-primary">
-                        {/*
+                      <dd className="tnum font-semibold text-text-primary">
+                        <Num>{/*
                           Null stays «—». A cost per order that nobody could compute is not a cost of
                           zero, and this is the figure a client acts on.
                         */}
@@ -520,7 +522,7 @@ export function LiveSharedReport({
                             : asExactMoney((block as typeof payload.objective_performance.direct).cpa)
                           : (block as typeof payload.objective_performance.blended).blended_cpa === null
                             ? '—'
-                            : asExactMoney((block as typeof payload.objective_performance.blended).blended_cpa)}
+                            : asExactMoney((block as typeof payload.objective_performance.blended).blended_cpa)}</Num>
                       </dd>
                     </div>
                   </dl>
@@ -623,6 +625,24 @@ export function LiveSharedReport({
             level={payload.ads_level}
             reading={payload.ads_reading}
             locale={ar ? 'ar' : 'en'}
+            onOpen={setOpenAd}
+          />
+
+          {/*
+            REPORT-CREATIVE-TRUTH-001 §B — the live link inventories what ran, as the deck does.
+
+            This surface computes its figures from the same engine deliberately, «so an operator's
+            dashboard and a client's link cannot disagree about one number». A roster on one and not
+            the other would be that disagreement in its largest form: two documents about one month,
+            one saying six creatives ran and the other sixty-five.
+          */}
+          <ReportCreativeRoster
+            roster={payload.ads_roster}
+            inScope={payload.creatives_in_scope}
+            withheld={payload.creatives_withheld}
+            currency={currency}
+            locale={ar ? 'ar' : 'en'}
+            form={payload.form}
             onOpen={setOpenAd}
           />
         </div>

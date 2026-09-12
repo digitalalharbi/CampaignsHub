@@ -13,12 +13,14 @@ use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportScopeTemplate;
 use App\Domains\Reports\Support\ReportScope;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -60,6 +62,34 @@ final class ReportScopeController extends Controller
         abort_unless($request->user()?->hasPermission('reports.view'), 403);
 
         /*
+         * UX-MULTISELECT-SCALE-001 — reaching the rows that did not fit.
+         *
+         * The bound below is honestly STATED — `truncated.ad_sets` is a fact the picker can print
+         * rather than letting a short list read as a complete one. What it could not do is let
+         * anybody reach past it: the picker's search box filters what it was SENT, so on a project
+         * with five hundred ad sets, number four hundred could not be selected by any route. An
+         * operator meets that as «my ad set is not in the system», and the report they build omits
+         * it silently.
+         *
+         * One axis per search, because a search is a question about the list being searched.
+         * Re-filtering the other nine by a term typed into this control would empty lists nobody
+         * touched, and re-sending them all on every keystroke would be slower than the problem.
+         */
+        $request->validate([
+            'axis' => ['nullable', Rule::in(array_keys(self::SEARCHABLE))],
+            'q' => ['nullable', 'string', 'max:200'],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date'],
+        ]);
+
+        $axis = $request->string('axis')->toString();
+        $term = trim($request->string('q')->toString());
+
+        if ($axis !== '') {
+            return $this->searchAxis($axis, $project, $term);
+        }
+
+        /*
          * REPORT-SCOPE-SELECTION-001 — the builder's lists are BOUNDED, and every bound is stated.
          *
          * Campaigns had no limit at all: a project with four hundred of them sent four hundred rows
@@ -69,6 +99,19 @@ final class ReportScopeController extends Controller
          * omits it. The same rule the campaign filter already follows: fetch one past the cap so
          * «there are more» is a FACT, and say it.
          */
+        /*
+         * The window the report is about, where the caller named one.
+         *
+         * One aggregate for the whole project rather than a query per campaign: a project with four
+         * hundred campaigns is exactly the cardinality this requirement exists for, and four hundred
+         * round trips to decide a heading is not a grouping, it is an outage.
+         */
+        $from = $request->date('from');
+        $to = $request->date('to');
+        $lastActive = $from !== null && $to !== null
+            ? app(MetricsAggregator::class)->forProjects([$project])->lastActiveByCampaign($from, $to)
+            : [];
+
         [$campaigns, $campaignsMore] = $this->bounded(
             UnifiedCampaign::query()
                 ->where('project_id', $project)
@@ -80,6 +123,18 @@ final class ReportScopeController extends Controller
                 'name' => (string) ($c->client_display_name ?: $c->name),
                 'status' => $c->status,
                 'objective' => $c->objective,
+                /*
+                 * REPORT-SCOPE-SELECTION-001 — did this campaign RUN in the period being reported on?
+                 *
+                 * «Reportability = campaign lifecycle + selected period + canonical status — NOT a
+                 * simplistic `status === active` frontend filter», because a campaign inactive today
+                 * may have been active during a historical report window. Filtering on today's status
+                 * would silently drop its spend from a report about last month.
+                 *
+                 * Null where no period was asked about, which the picker reads as «no claim made»
+                 * rather than as «did not run» — an absence of a question is not an answer.
+                 */
+                'last_active_on' => $lastActive[(string) $c->getKey()] ?? null,
             ],
         );
 
@@ -207,6 +262,100 @@ final class ReportScopeController extends Controller
      * @param  list<string>  $columns
      * @return array{0: list<array<string,mixed>>, 1: bool}
      */
+    /**
+     * The four axes a person searches by name, and how each one is read.
+     *
+     * `client_display_name` first for the two that have one: an operator searching a client report's
+     * builder is looking for the name that report will PRINT, and matching only the internal name
+     * would fail on exactly the rows where the two differ — which is the case the display name exists
+     * for.
+     *
+     * @var array<string, array{model: class-string, columns: list<string>, search: list<string>}>
+     */
+    private const SEARCHABLE = [
+        'campaigns' => [
+            'model' => UnifiedCampaign::class,
+            'columns' => ['id', 'name', 'client_display_name', 'status', 'objective'],
+            'search' => ['client_display_name', 'name'],
+        ],
+        'ad_sets' => [
+            'model' => ExternalAdSet::class,
+            'columns' => ['id', 'name', 'provider', 'unified_campaign_id', 'status'],
+            'search' => ['name'],
+        ],
+        'ads' => [
+            'model' => ExternalAd::class,
+            'columns' => ['id', 'name', 'provider', 'unified_campaign_id', 'status'],
+            'search' => ['name'],
+        ],
+        'creatives' => [
+            'model' => ExternalCreative::class,
+            'columns' => ['id', 'name', 'client_display_name', 'provider', 'format', 'campaign_id'],
+            'search' => ['client_display_name', 'name'],
+        ],
+    ];
+
+    /**
+     * One axis, filtered where the rows live — UX-MULTISELECT-SCALE-001.
+     *
+     * The truncation flag is recomputed against the FILTERED set, so «there are more» keeps meaning
+     * «more that match this». A flag left over from the unfiltered list would tell somebody who has
+     * just narrowed to one result that their list is incomplete.
+     */
+    private function searchAxis(string $axis, string $project, string $term): JsonResponse
+    {
+        $spec = self::SEARCHABLE[$axis];
+
+        /** @var Builder $query */
+        $query = $spec['model']::query()->where('project_id', $project);
+
+        if ($term !== '') {
+            $query->where(function ($q) use ($spec, $term): void {
+                foreach ($spec['search'] as $column) {
+                    $q->orWhere($column, 'ILIKE', '%'.$term.'%');
+                }
+            });
+        }
+
+        [$rows, $more] = $this->bounded(
+            $query->orderBy('name')->orderBy('id'),
+            $spec['columns'],
+            fn ($row): array => $this->shapeOption($axis, $row),
+        );
+
+        return ApiResponse::success([
+            $axis => $rows,
+            'truncated' => [$axis => $more],
+            'limit' => self::OPTION_LIMIT,
+        ], 'Scope options.');
+    }
+
+    /** One row, in the shape the full payload already sends for that axis. */
+    private function shapeOption(string $axis, mixed $row): array
+    {
+        return match ($axis) {
+            'campaigns' => [
+                'id' => (string) $row->getKey(),
+                'name' => (string) ($row->client_display_name ?: $row->name),
+                'status' => $row->status,
+                'objective' => $row->objective,
+            ],
+            'creatives' => [
+                'id' => (string) $row->getKey(),
+                'name' => (string) ($row->client_display_name ?: $row->name),
+                'provider' => $row->provider,
+                'format' => $row->format,
+                'campaign_id' => (string) $row->campaign_id,
+            ],
+            default => [
+                'id' => (string) $row->getKey(),
+                'name' => $row->name,
+                'provider' => $row->provider,
+                'campaign_id' => (string) $row->unified_campaign_id,
+            ],
+        };
+    }
+
     private function bounded(mixed $query, array $columns, callable $shape): array
     {
         $rows = $query->limit(self::OPTION_LIMIT + 1)->get($columns);
@@ -270,6 +419,36 @@ final class ReportScopeController extends Controller
             'explain' => $scope->explain(),
             'status' => $model->status,
         ], 'Report scope updated; regenerating.');
+    }
+
+    /**
+     * What a scope being BUILT would actually cover — REPORT-SCOPE-SELECTION-001 §C.
+     *
+     * `explain()` has been returned by three endpoints since it was written: a report's saved scope,
+     * a saved template, and the result of saving one. None of them is the builder, so the one
+     * sentence that says «selecting two ad sets does not narrow to ad-set grain» was reachable
+     * everywhere except the screen where an operator makes that selection.
+     *
+     * A POST rather than a GET because a scope is twelve arrays and belongs in a body, not in a
+     * query string that a proxy will truncate at the first project with two hundred campaigns.
+     *
+     * It reads and stores nothing, so `reports.view` is the whole of what it needs — an operator who
+     * may look at a report may ask what a scope would cover. The ids still go through `validated()`,
+     * which drops what does not belong to this project and fills an emptied axis with the impossible
+     * id: an explanation of a scope that quietly widened back to «everything» would be worse than no
+     * explanation at all.
+     */
+    public function explain(Request $request, string $project): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('reports.view'), 403);
+
+        $scope = $this->validated($request, $project);
+
+        return ApiResponse::success([
+            'scope' => $scope->toArray(),
+            'bound_axes' => $scope->boundAxes(),
+            'explain' => $scope->explain(),
+        ]);
     }
 
     /** The scope on a report, with what each bound axis actually reaches. */

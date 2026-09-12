@@ -23,6 +23,7 @@ import { DateField } from '@/components/ui/DateField'
 import { toApiError } from '@/lib/api/client'
 import { DEFAULT_DIAL_CODE, PhoneField, phoneFieldValue } from '@/components/ui/PhoneField'
 import { useUi } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 interface UploadFile {
   localId: string
@@ -686,7 +687,7 @@ function PaidSuccessView({ reference, type, trackUrl, ar, dir }: { reference: st
           <button type="button" onClick={() => copyTo('ref', reference)} className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-brand-600 hover:bg-brand-primary-soft">{copied === 'ref' ? <Check size={13} /> : <Copy size={13} />}{ar ? 'نسخ' : 'Copy'}</button>
         </div>
         <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-surface px-4 py-3">
-          <span className="min-w-0"><span className="block text-xs text-text-muted">{ar ? 'رابط التتبع' : 'Tracking link'}</span><span className="block truncate font-mono text-xs" dir="ltr">{trackUrl}</span></span>
+          <span className="min-w-0"><span className="block text-xs text-text-muted">{ar ? 'رابط التتبع' : 'Tracking link'}</span><span className="text-start block truncate font-mono text-xs"><Num>{trackUrl}</Num></span></span>
           <button type="button" onClick={() => copyTo('url', trackUrl)} className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-brand-600 hover:bg-brand-primary-soft">{copied === 'url' ? <Check size={13} /> : <Copy size={13} />}{ar ? 'نسخ' : 'Copy'}</button>
         </div>
         <div className="rounded-xl bg-surface-secondary px-4 py-2.5 text-xs text-text-muted">{ar ? 'الخدمة' : 'Service'}: <span className="font-semibold text-text-secondary">{type}</span></div>

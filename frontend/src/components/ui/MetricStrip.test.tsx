@@ -180,7 +180,11 @@ describe('the compact value keeps the exact one within reach', () => {
       />,
     )
 
-    expect(screen.getByText('4.85M SAR')).toHaveAttribute('title', '4,850,321 SAR')
+    /*
+      `closest('[title]')` rather than the text node's own element: the digits are wrapped in a bidi
+      isolate now (KPI-ALIGNMENT-002), and the title belongs on the value, not on the isolate.
+    */
+    expect(screen.getByText('4.85M SAR').closest('[title]')).toHaveAttribute('title', '4,850,321 SAR')
   })
 
   it('attaches no title when nothing was abbreviated', () => {
@@ -193,21 +197,30 @@ describe('the compact value keeps the exact one within reach', () => {
       />,
     )
 
-    expect(screen.getByText('940 SAR')).not.toHaveAttribute('title')
+    expect(screen.getByText('940 SAR').closest('span[class*="text-start"]')).not.toHaveAttribute('title')
   })
 })
 
 /**
- * UX-KPI-PRESENTATION-001 — the figure sits under its own label, in every language.
+ * KPI-ALIGNMENT-002 — the figure sits under its own label, in every language.
  *
- * `dir="ltr"` and `text-start` are two different settings. The first keeps «56.3K SAR» in digit
- * order inside an Arabic page and is not optional; on its own it also makes the span align its
- * contents to the LEFT, so on a phone — where a card is the full width of the screen — the figure
- * drifted to the far edge while its Arabic label stayed at the near one, and the pair stopped
- * reading as one thing.
+ * ## What this case used to assert, and why it was the bug
+ *
+ * It required the value element to carry BOTH `dir="ltr"` and `text-start`, on the reasoning that
+ * the first keeps «56.3K SAR» in digit order and the second stops it drifting. The reasoning is
+ * wrong in its second half: `text-align: start` inside a `dir="ltr"` box means LEFT. Measured in a
+ * real browser on an Arabic page, that pairing puts the text run 72px from where the label ends —
+ * and this test demanded it. The owner reported the misalignment twice while it passed.
+ *
+ * ## The rule now
+ *
+ * `dir` is an INLINE concern: only the digits are isolated, and the block keeps the page's
+ * direction. jsdom lays nothing out, so what is asserted here is the STRUCTURE — the isolate is
+ * inside, and the block does not override its own direction. The geometry is measured in
+ * `e2e/metric-alignment.spec.ts`, in three browsers, which is where this defect was ever visible.
  */
 describe('the value is placed by the reader’s direction, not by its own', () => {
-  it('keeps digit order and starts where the label starts', () => {
+  it('isolates the digits without re-basing the block', () => {
     render(
       <MetricStrip
         id="t"
@@ -216,9 +229,14 @@ describe('the value is placed by the reader’s direction, not by its own', () =
       />,
     )
 
-    const value = screen.getByText('56.3K SAR')
-    expect(value).toHaveAttribute('dir', 'ltr')
-    expect(value.className).toContain('text-start')
+    const isolate = screen.getByText('56.3K SAR')
+    expect(isolate.tagName.toLowerCase(), 'the digits are not in a bidi isolate').toBe('bdi')
+    expect(isolate).toHaveAttribute('dir', 'ltr')
+
+    /* And nothing between the isolate and the card re-bases the alignment. */
+    const block = isolate.closest('span[class*="text-start"]')
+    expect(block, 'the value has no aligned block around it').not.toBeNull()
+    expect(block).not.toHaveAttribute('dir')
   })
 })
 

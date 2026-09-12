@@ -7,6 +7,7 @@ import { usePortalGuard } from './usePortalGuard'
 import { PortalShell } from './PortalShell'
 import { useUi } from '@/stores/ui'
 import { AccessRecovery } from '@/features/auth/AccessRecovery'
+import { Num } from '@/components/ui/Num'
 
 /**
  * `/portal` — which of the agency's clients am I looking at? (PORTAL-CLIENT-001)
@@ -77,7 +78,7 @@ export function ClientSpacePickerPage() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-[15px] font-bold text-text-primary">{space.name}</span>
-                    <span className="mt-0.5 block truncate text-[12px] text-text-muted" dir="ltr">{space.slug}</span>
+                    <span className="text-start mt-0.5 block truncate text-[12px] text-text-muted"><Num>{space.slug}</Num></span>
                   </span>
                   <Arrow size={16} className="shrink-0 text-text-muted" />
                 </Link>

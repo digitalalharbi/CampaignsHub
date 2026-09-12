@@ -16,7 +16,7 @@ import {
   type SharedKindWinner,
   type SharedObjectiveWinner,
 } from './sharedCreatives'
-import { CreativeViewer } from '@/features/content/CreativeViewer'
+import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
 import { CreativeVideoPlayer } from '@/features/content/CreativeVideoPlayer'
 import { CreativeCarousel } from '@/features/content/CreativeCarousel'
 import { imageLoading } from '@/features/content/format'
@@ -29,6 +29,7 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import type { CreativeCard } from '@/features/content/api'
 import type { CreativePulse, FatigueAlert, PulseList } from '@/features/content/pulse'
+import { Num } from '@/components/ui/Num'
 
 /** A winner card takes either shape; only `objective` distinguishes them, and only one of them has it. */
 type SharedWinner = SharedObjectiveWinner | SharedKindWinner
@@ -277,8 +278,8 @@ export function SharedCreativeSection({
     <section className="mt-8 grid gap-4" data-testid="shared-creative-section" aria-label={t.heading}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-heading text-lg font-extrabold tracking-tight">{t.heading}</h2>
-        <p className="tnum text-xs text-text-secondary" dir="ltr">
-          {data.period.from} → {data.period.to}
+        <p className="tnum text-xs text-text-secondary">
+          <Num>{data.period.from} → {data.period.to}</Num>
         </p>
       </div>
 
@@ -450,20 +451,25 @@ export function SharedCreativeSection({
           )}
 
           {openId === null && (
-            <p className="tnum text-xs text-text-muted" dir="ltr">
-              {t.showing} {rows.length} {t.of} {library.data?.total ?? rows.length}
+            <p className="tnum text-xs text-text-muted">
+              <Num>{t.showing} {rows.length} {t.of} {library.data?.total ?? rows.length}</Num>
             </p>
           )}
         </div>
       )}
 
-      {viewerIndex !== null && rows.length > 0 && (
-        <CreativeViewer
-          creatives={rows}
-          index={viewerIndex}
-          onIndexChange={setViewerIndex}
+      {/*
+        AD-PREVIEW-DEFAULT-001 — one popup, on the client's link too.
+
+        No `detailsTo`: a client holding a share link has no Content page to reach and no account to
+        reach it with, so the control the operator gets is simply absent here rather than present and
+        refusing. The media itself is the whole of what this surface owes them.
+      */}
+      {viewerIndex !== null && rows[viewerIndex] && (
+        <AdPreviewDialog
+          creative={rows[viewerIndex]}
+          locale={ar ? 'ar' : 'en'}
           onClose={() => setViewerIndex(null)}
-          canZoom={permissions.image_zoom}
         />
       )}
 
@@ -1037,8 +1043,8 @@ function CreativeTile({
         {creative.headline_metrics.slice(0, 3).map((key) => (
           <div key={key} className="flex justify-between gap-1">
             <dt className="truncate text-text-muted">{metricLabel(key, locale)}</dt>
-            <dd className="tnum shrink-0 font-semibold" dir="ltr">
-              {formatMetric(metricState(creative.metrics, key), key, locale, currency)}
+            <dd className="tnum shrink-0 font-semibold">
+              <Num>{formatMetric(metricState(creative.metrics, key), key, locale, currency)}</Num>
             </dd>
           </div>
         ))}

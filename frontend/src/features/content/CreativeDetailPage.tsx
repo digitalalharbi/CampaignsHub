@@ -4,7 +4,7 @@ import { creativeKindLabel } from './CreativesPage'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Maximize2, Minus, Plus, RotateCcw } from 'lucide-react'
-import { CreativeViewer } from './CreativeViewer'
+import { AdPreviewDialog } from './AdPreviewDialog'
 import { CreativeVideoPlayer } from './CreativeVideoPlayer'
 import { CreativeInsightCard } from './CreativeInsightCard'
 import { CreativeCarousel } from './CreativeCarousel'
@@ -17,6 +17,7 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 import { CANONICAL_CURRENCY } from '@/lib/money/contract'
+import { Num } from '@/components/ui/Num'
 
 /**
  * §15.6 — one creative, on its own page.
@@ -527,7 +528,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
                   credential of ours — but it is still an address chosen by whoever wrote the ad, and
                   a page that made it clickable would be offering to follow it on the reader's behalf.
                 */}
-                <dd className="break-all font-mono text-xs text-text-primary" dir="ltr">{creative.destination_url}</dd>
+                <dd className="break-all font-mono text-xs text-text-primary"><Num>{creative.destination_url}</Num></dd>
               </div>
             )}
           </dl>
@@ -760,13 +761,18 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
         )}
       </section>
 
-      {/* Reused rather than rebuilt: the viewer already owns zoom, the arrow keys and Escape, and
-          it unmounts the player on close — which is what stops a video that was playing. */}
+      {/*
+        AD-PREVIEW-DEFAULT-001 — the same popup every other surface opens.
+
+        No `detailsTo`: the reader IS on the creative's page, and a link back to the page they are
+        standing on is a control that cannot do anything. No `figures` either — the page states them
+        in full a few sections up, and a shorter second copy inside a modal over it is the kind of
+        duplicate that eventually disagrees.
+      */}
       {fullscreen && (
-        <CreativeViewer
-          creatives={[creative]}
-          index={0}
-          onIndexChange={() => undefined}
+        <AdPreviewDialog
+          creative={creative}
+          locale={locale}
           onClose={() => setFullscreen(false)}
         />
       )}
@@ -841,8 +847,8 @@ function MetricBlock({
   return (
     <div className="rounded-md border border-border p-3">
       <p className="text-xs text-text-secondary">{metricLabel(metricKey, locale)}</p>
-      <p className="mt-1 text-lg font-semibold tabular-nums text-text-primary" dir="ltr">
-        {formatMetric(now, metricKey, locale, currency)}
+      <p className="mt-1 text-lg font-semibold tabular-nums text-text-primary">
+        <Num>{formatMetric(now, metricKey, locale, currency)}
         {overWhole && (
           <span
             className="ms-1 cursor-help text-xs font-normal text-text-muted"
@@ -852,7 +858,7 @@ function MetricBlock({
           >
             ⓘ
           </span>
-        )}
+        )}</Num>
       </p>
       {change !== null && (
         <p

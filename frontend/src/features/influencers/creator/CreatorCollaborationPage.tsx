@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/Input'
 import { Textarea } from '@/components/ui/Textarea'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 /**
  * `/influencers/me/:id` — one agreement, from the creator's side (INFL-002).
@@ -44,7 +45,7 @@ const money = (amount: string | null, currency: string) =>
  */
 function Ltr({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <span dir="ltr" className={`inline-block ${className}`}>
+    <span dir="ltr" className={`text-start inline-block ${className}`}>
       {children}
     </span>
   )
@@ -345,8 +346,8 @@ export function CreatorCollaborationPage() {
         </div>
         <div className="rounded-2xl border border-border bg-surface p-4">
           <dt className="text-[11px] font-semibold text-text-muted">{ar ? 'الفترة' : 'Period'}</dt>
-          <dd className="mt-1 text-sm font-semibold text-text-primary" dir="ltr">
-            {c.starts_on || c.ends_on ? `${c.starts_on ?? '—'} → ${c.ends_on ?? '—'}` : ar ? 'غير محدّدة' : 'Not set'}
+          <dd className="mt-1 text-sm font-semibold text-text-primary">
+            <Num>{c.starts_on || c.ends_on ? `${c.starts_on ?? '—'} → ${c.ends_on ?? '—'}` : ar ? 'غير محدّدة' : 'Not set'}</Num>
           </dd>
         </div>
         <div className="rounded-2xl border border-border bg-surface p-4">

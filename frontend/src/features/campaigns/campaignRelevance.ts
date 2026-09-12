@@ -144,3 +144,62 @@ export function orderByRelevanceWith<T extends RelevanceFacts & { spend: number 
 export function orderByRelevance<T extends RelevanceRow>(rows: T[], windowEnd: string): T[] {
   return orderByRelevanceWith(rows, windowEnd, (row) => row.campaign_id)
 }
+
+/**
+ * REPORT-SCOPE-SELECTION-001 — reportability, which is a DIFFERENT question from relevance.
+ *
+ * ## Why this is not `campaignRelevance` with another name
+ *
+ * The rule above answers «what can an operator act on now», and its first clause is that a stopped
+ * campaign is stopped however much it spent — deliberately, because a finished campaign that
+ * outspent every running one used to lead the operational list and the first thing a person saw was
+ * something they could do nothing about.
+ *
+ * A report builder asks the opposite question: «what contributed to the period I am reporting on».
+ * A campaign completed in August was quite possibly the account's largest spender in the July report
+ * being built, and the operational rule files it under «stopped» — burying it beneath campaigns that
+ * are running today and contributed nothing to that month. The matrix states the distinction
+ * outright: «Reportability = campaign lifecycle + selected period + canonical status — NOT a
+ * simplistic `status === active` frontend filter».
+ *
+ * So two rules, side by side in one file, because the temptation to reuse the wrong one is exactly
+ * what this comment exists to interrupt.
+ *
+ * ## What decides it
+ *
+ * `last_active_on` from the server, which is already bounded to the report's window and already
+ * filtered to days with a positive figure. Nothing here re-derives either: a date means it ran, a
+ * null with a period asked means it did not, and a null with no period asked means nobody asked.
+ */
+export type Reportability = 'ran' | 'silent' | 'unknown'
+
+export function reportability(
+  row: { last_active_on: string | null },
+  period: { from?: string | null; to?: string | null },
+): Reportability {
+  if (!period.from || !period.to) return 'unknown'
+
+  return row.last_active_on === null ? 'silent' : 'ran'
+}
+
+/**
+ * The campaigns a report builder should read first, in the order it should read them.
+ *
+ * Ran first, most recently active at the top — «what was this month» in the order it happened. The
+ * rest keep the list's own order, which is by name: with nothing to say about them, inventing a
+ * ranking would be a claim.
+ *
+ * Membership never changes. The heading decides order and emphasis, and a campaign that did not run
+ * is still selectable — an operator may have a reason this rule does not know.
+ */
+export function orderByReportability<T extends { last_active_on: string | null }>(
+  rows: T[],
+  period: { from?: string | null; to?: string | null },
+): T[] {
+  if (!period.from || !period.to) return rows
+
+  const ran = rows.filter((r) => r.last_active_on !== null)
+    .sort((a, b) => String(b.last_active_on).localeCompare(String(a.last_active_on)))
+
+  return [...ran, ...rows.filter((r) => r.last_active_on === null)]
+}

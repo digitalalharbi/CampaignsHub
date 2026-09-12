@@ -370,8 +370,21 @@ final class ObjectivePerformanceTest extends TestCase
         $this->assertSame(120.0, (float) $data['objective_performance']['blended']['blended_cpa']);
         $this->assertSame(5000.0, (float) $data['objective_performance']['blended']['includes_non_sales_spend']);
 
-        // The section is FOURTH — immediately after the summary it qualifies.
-        $this->assertSame('objective_performance', array_column($data['slides'], 'type')[3]);
+        /*
+         * Immediately AFTER the executive summary it qualifies — asserted as adjacency, not as index 3.
+         *
+         * The position was pinned to the fourth slot, which was only true while every report carried
+         * the same eleven sections. REPORT-DEPTH-001 gives the executive form a shorter deck — it
+         * drops the recommendations — so the section it must follow moved up one and this read
+         * «budget». The claim in the comment above was always about ADJACENCY: a reader must meet the
+         * blended-versus-direct split before they act on the headline, whatever else the deck holds.
+         */
+        $types = array_column($data['slides'], 'type');
+        $this->assertSame(
+            array_search('executive_summary', $types, true) + 1,
+            array_search('objective_performance', $types, true),
+            'the objective split no longer sits immediately after the summary it qualifies',
+        );
 
         // …and it survives into the five-page summary a client is sent, which is the version that
         // gets forwarded and quoted with no per-platform pages behind it to argue with.

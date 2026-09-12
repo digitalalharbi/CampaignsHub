@@ -103,12 +103,43 @@ final class ReportGenerator
         // Initialise the slide layout once (from the objective + connected platforms) if not authored yet.
         $config = $report->config;
         if (empty($config['slides'])) {
-            $config = $this->template->defaultConfig($objective, $providerList);
+            /*
+             * REPORT-DEPTH-001 — the report's own FORM decides its shape.
+             *
+             * `form` has been a column since reports shipped, validated as `executive_summary` or
+             * `detailed`, with a comment at the call site explaining that it «defaults to the FULL
+             * report, never the summary». Nothing read it. Every report was generated as the full
+             * deck whatever it had been created as, and the two words meant nothing to the renderer.
+             *
+             * So this is not a new axis: it is the one the product already records, finally
+             * consulted. Adding a second `config['depth']` beside it — which is what I wrote first —
+             * would have been the duplicate taxonomy this product has spent several units removing.
+             */
+            $config = $this->template->defaultConfig($objective, $providerList, (string) $report->form);
             $report->forceFill(['config' => $config, 'campaign_objective' => $objective])->saveQuietly();
         }
 
         $topCreatives = $this->ranking->rank($objective, $campaigns);
-        $ads = $this->reportAds->for($objective, $from, $to);
+        /*
+         * REPORT-CREATIVE-TRUTH-001 §A — the ad section, bounded by the SAME scope as every figure.
+         *
+         * This read `for($objective, $from, $to)` with no filters at all, so the section was the one
+         * exception to the rule stated thirty lines above: «a scope honoured by four of those seven
+         * and forgotten by three would be worse than none». A report scoped to one campaign printed
+         * another campaign's creatives under a heading naming the first — worse than a wrong total,
+         * because it shows a client creative work that is not theirs.
+         *
+         * `resolvedCampaignIds()` rather than `campaignIds`: ad sets and ads carry no metrics of
+         * their own in this system and resolve UP to their campaigns, and the creative section has to
+         * narrow the same way the campaign figures beside it do, or the two disagree about the scope
+         * the reader was promised.
+         */
+        $ads = $this->reportAds->for($objective, $from, $to, [
+            'project_ids' => $scope->projectIds !== [] ? $scope->projectIds : [(string) $report->project_id],
+            'providers' => $scope->providers,
+            'campaign_ids' => $scope->resolvedCampaignIds() ?? [],
+            'creative_ids' => $scope->creativeIds,
+        ], (string) $report->form);
 
         /*
          * REPORT-WORST-CREATIVES-001 — a report that only lists winners never says what to stop.
@@ -186,6 +217,18 @@ final class ReportGenerator
             'ads_level' => $ads['level'],
             // REPORT-AD-PREVIEW-001 §A — ranked INSIDE each objective, with the metric that ordered it.
             'ads_groups' => $ads['groups'],
+            /*
+             * REPORT-CREATIVE-TRUTH-001 §B — what ran, and how much of it this document holds.
+             *
+             * The roster is every creative the report presents, in spend order and unranked; the two
+             * counts are the scope it was taken from and what the bound left out. A full report
+             * withholds nothing until an estate passes five hundred creatives, and a five-page
+             * summary curates on purpose — which it now says, rather than letting six ads read as
+             * the whole account.
+             */
+            'ads_roster' => $ads['roster'],
+            'creatives_in_scope' => $ads['creatives_in_scope'],
+            'creatives_withheld' => $ads['creatives_withheld'],
             'ads_absent_reason' => $ads['reason'],
             /*
              * FUNNEL-ANALYTICAL-PATTERN-001 — the ads section, read back in the funnel's own shape.
@@ -347,6 +390,8 @@ final class ReportGenerator
         $data['attribution_window'] = $report->attribution_window;
         $data['data_source'] = $report->data_source;
         $data['mode'] = $report->config['mode'] ?? 'snapshot';
+        /* Stated in the payload so every renderer, and the reader, know which shape this is. */
+        $data['form'] = $report->form;
         $data['generated_at'] = Carbon::now()->toIso8601String();
         $data['checksum'] = ExportReadinessGate::checksum($data);
 

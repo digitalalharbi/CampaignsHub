@@ -1,4 +1,5 @@
 import type { AdGroup, AdsReading, ReportAd } from './ReportAdsSection'
+import type { RosterRow } from './ReportCreativeRoster'
 import type { ObjectivePerformance } from './InteractiveReport'
 import type { PathLeaders } from '@/features/analytics/api'
 
@@ -254,6 +255,18 @@ export interface LivePayload {
   ads_absent_reason?: string | null
   ads_reading?: AdsReading
   /**
+   * REPORT-CREATIVE-TRUTH-001 §B — every creative that ran, beside the ones that worked.
+   *
+   * `ads` is a ranking and `ads_roster` is an inventory. The two counts beside it are what let the
+   * page say «65 ran, 60 listed» instead of showing six and leaving the reader to assume that is
+   * all there was.
+   */
+  ads_roster?: RosterRow[]
+  creatives_in_scope?: number | null
+  creatives_withheld?: number | null
+  /** `executive_summary` or `detailed` — the report's own depth, decided when it was created. */
+  form?: string | null
+  /**
    * REPORT-OBJECTIVE-003/004 — Direct against Blended, on the surface where it matters most.
    *
    * `totals` above rolls the whole scope together, so its cost per order divides EVERY campaign's
@@ -440,7 +453,20 @@ export interface ScopeExplain {
 }
 
 export interface ScopeOptions {
-  campaigns: Array<{ id: string; name: string; status: string | null; objective: string | null }>
+  campaigns: Array<{
+    id: string
+    name: string
+    status: string | null
+    objective: string | null
+    /**
+     * REPORT-SCOPE-SELECTION-001 — the last day this campaign ran INSIDE the period being reported on.
+     *
+     * Null where no period was asked about, which is «no claim» rather than «did not run»: an absence
+     * of a question is not an answer. Today's `status` cannot substitute for it — a campaign that is
+     * completed now may have been the account's largest spender during the month being reported.
+     */
+    last_active_on?: string | null
+  }>
   providers: string[]
   accounts: Array<{ id: string; name: string; provider: string }>
   ad_sets: Array<{ id: string; name: string; provider: string; campaign_id: string }>
@@ -473,7 +499,39 @@ export interface ScopeTemplate {
   created_at: string | null
 }
 
-export const scopeOptions = (p: string) => getData<ScopeOptions>(`${base(p)}/scope/options`)
+export const scopeOptions = (p: string, period?: { from?: string; to?: string }) =>
+  getData<ScopeOptions>(
+    `${base(p)}/scope/options`
+    + (period?.from && period?.to ? `?from=${period.from}&to=${period.to}` : ''),
+  )
+
+/**
+ * One axis of the scope options, searched where the rows live — UX-MULTISELECT-SCALE-001.
+ *
+ * The full payload is bounded and says so, which stops a short list reading as a complete one. It
+ * does not let anybody REACH past the bound: the picker's search box filters what it was sent, so on
+ * a project with five hundred ad sets the five-hundred-and-first cannot be selected by any route.
+ * An operator meets that as «my ad set is not in the system».
+ */
+export const searchScopeAxis = (p: string, axis: string, q: string) =>
+  getData<{ truncated: Record<string, boolean>; limit: number } & Record<string, unknown>>(
+    `${base(p)}/scope/options?axis=${encodeURIComponent(axis)}&q=${encodeURIComponent(q)}`,
+  )
+
+/**
+ * What a scope being BUILT would cover — REPORT-SCOPE-SELECTION-001 §C.
+ *
+ * The rule about what each axis REACHES belongs to the server: an ad-set bound resolves up to the
+ * campaigns behind it because no metric is stored at that grain, and a creative bound narrows the
+ * creative section while campaign totals stay where they are. A second copy of that in TypeScript
+ * would be a second answer to «what does this scope cover», and the two would part company the first
+ * time an axis changed depth — the exact failure `explain()` was written to prevent.
+ */
+export const explainScope = (p: string, scope: ReportScopeShape) =>
+  postData<{ scope: ReportScopeShape; bound_axes: string[]; explain: ScopeExplain[] }>(
+    `${base(p)}/scope/explain`,
+    { scope },
+  )
 
 export const getReportScope = (p: string, id: string) =>
   getData<{ scope: ReportScopeShape; explain: ScopeExplain[]; bound_axes: string[]; audience: string | null }>(`${base(p)}/${id}/scope`)

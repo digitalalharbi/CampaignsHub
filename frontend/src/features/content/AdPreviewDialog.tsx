@@ -8,6 +8,7 @@ import { canonicalObjectiveLabel, canonicalOfRaw } from '@/features/campaigns/ca
 import { providerLabel } from '@/features/campaigns/labels'
 import type { CreativeCard } from './api'
 import type { Locale } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 /**
  * AD-PREVIEW-001 — one ad, opened where the reader is standing.
@@ -44,6 +45,7 @@ export function AdPreviewDialog({
   creative,
   locale,
   figures,
+  trend,
   detailsTo,
   onClose,
 }: {
@@ -51,12 +53,30 @@ export function AdPreviewDialog({
   locale: Locale
   /** The row's own numbers, already formatted by the surface that owns them. */
   figures?: { label: string; value: string }[]
+  /**
+   * This creative's movement over the window, as a NODE the caller supplies.
+   *
+   * A node rather than data: the dialog is opened from surfaces with different project scopes and
+   * different windows, and each already knows its own. Fetching here would make the dialog decide
+   * what «this period» means — a second answer to a question the surface above it has already
+   * answered, which is exactly the second pipeline the requirement forbids.
+   */
+  trend?: ReactNode
   /** Where the full page is, when the reader does want to leave. */
   detailsTo?: string
   onClose: () => void
 }) {
   const ar = locale === 'ar'
   const reading = readPreview(creative.preview, ar)
+
+  /*
+   * «No figures of its own» — the same test the card makes, from the same field.
+   *
+   * `metrics` null is the platform having answered nothing for this creative in this window. A
+   * creative with a metrics object HAS figures, even where some of them are absent, so it gets the
+   * figures and no sentence.
+   */
+  const metricsAbsent = (creative.metrics ?? null) === null
 
   /*
    * The objective, through the canonical map — and the RAW value when the map has not been taught it.
@@ -165,22 +185,65 @@ export function AdPreviewDialog({
           {creative.ad_set_id && (
             <Fact label={ar ? 'المجموعة الإعلانية' : 'Ad set'} value={creative.ad_set_id} />
           )}
-          {creative.ads.length > 0 && (
+          {/*
+            `?? []` because the type says this is always an array and the payloads disagree.
+
+            Analytics' rows carry `ads`; a card from the library's own list, and a row inside a
+            client's shared report, do not always. The dialog crashed the whole page the first time
+            it was opened from the library — a blank screen, not a missing tile — because one caller's
+            shape had been taken for the contract.
+          */}
+          {(creative.ads ?? []).length > 0 && (
             <Fact
               label={ar ? 'الإعلانات' : 'Ads'}
-              value={String(creative.ads.length)}
+              value={String((creative.ads ?? []).length)}
             />
           )}
         </dl>
+
+        {/*
+          CONTENT-METRIC-ABSENCE-DETAIL-001 — why the figures are dashes, in the panel that shows them.
+          
+          The grid card has said this since it shipped: a creative with no figures of its own is
+          «لم يعمل خلال هذه الفترة» only when the AD did not run either. When the ad DID run and the
+          platform declined to break the result down per creative — 35 creatives on the owner's own
+          account — that sentence is false, and it is false in the expensive direction: an operator
+          reads it and turns off a creative that is running.
+          
+          The popup is the default detail surface now, and it inherited none of that. It drew six
+          dashes and said nothing, which is the weakest of the three true statements. The rule is the
+          card's, read from the same two fields, so the two cannot say different things about one ad.
+        */}
+        {metricsAbsent && (
+          <p
+            data-testid="ad-preview-dialog-absence"
+            className="mt-3 rounded-lg bg-surface-secondary px-3 py-2 text-[11px] leading-relaxed text-text-secondary"
+          >
+            {creative.ad_delivered
+              ? (ar
+                  ? 'هذا الإعلان عمل خلال الفترة، لكن المنصة لم تُرجع مؤشرات على مستوى المحتوى — الأرقام موجودة على مستوى الإعلان.'
+                  : 'This ad ran during the period, but the platform returned no metrics at content level — the figures exist at ad level.')
+              : (ar
+                  ? 'لم يعمل هذا المحتوى خلال هذه الفترة.'
+                  : 'This content item did not run in this period.')}
+          </p>
+        )}
 
         {figures && figures.length > 0 && (
           <div data-testid="ad-preview-dialog-figures" className="mt-3 grid grid-cols-3 gap-1.5 text-center">
             {figures.map((f) => (
               <div key={f.label} className="rounded-lg bg-surface-secondary p-2">
                 <div className="text-[11px] font-semibold leading-tight text-text-muted">{f.label}</div>
-                <div dir="ltr" className="tnum text-sm font-bold text-text-primary">{f.value}</div>
+                <div className="tnum text-sm font-bold text-text-primary"><Num>{f.value}</Num></div>
               </div>
             ))}
+          </div>
+        )}
+
+        {trend && (
+          <div data-testid="ad-preview-dialog-trend" className="mt-4">
+            <h4 className="mb-1 text-xs font-bold text-text-secondary">{ar ? 'الاتجاه الزمني' : 'Trend over time'}</h4>
+            {trend}
           </div>
         )}
 

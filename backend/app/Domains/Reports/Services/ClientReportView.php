@@ -75,6 +75,18 @@ final class ClientReportView
             }
         }
         /*
+         * REPORT-CREATIVE-TRUTH-001 §C — the roster crosses the same boundary, through its own rule.
+         *
+         * The loop above is written for the ranked rows and keeps a SANITISED campaign name on them,
+         * which is right for a list that never carries one. A presented roster row carries the real
+         * campaign name on every entry, plus `ad_set_id` and the platform's own ad objects — so it
+         * gets the boundary built for its shape rather than the one built for the other.
+         */
+        if (! empty($out['ads_roster']) && is_array($out['ads_roster'])) {
+            $out['ads_roster'] = ClientEntityBoundary::roster(array_values($out['ads_roster']));
+        }
+
+        /*
          * §14.7's observations name campaigns in prose, so they need the same treatment.
          *
          * «حملة «Meta — Lead Gen (burner)» تستهلك الميزانية أسرع من الخطة» would otherwise put an

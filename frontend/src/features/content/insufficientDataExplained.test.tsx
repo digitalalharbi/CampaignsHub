@@ -51,10 +51,17 @@ describe('a verdict that declines to judge says what was missing', () => {
     ).toEqual([])
   })
 
-  /** And the scan is reading something: a glob that matched nothing would agree forever. */
+  /**
+   * And the scan is reading something: a glob that matched nothing would agree forever.
+   *
+   * The floor was three and is two. `CreativeQuickFacts` was the third and is gone —
+   * AD-PREVIEW-DEFAULT-001 retired the full-screen viewer it belonged to, because the rail of
+   * figures it drew was a shallower copy of the creative's own page with no route to it. The
+   * remaining printers are the ones a reader actually meets.
+   */
   it('finds the surfaces that print it', () => {
     const printers = Object.values(TREE).filter((source) => /FATIGUE_LABEL\[/.test(source))
 
-    expect(printers.length).toBeGreaterThan(2)
+    expect(printers.length).toBeGreaterThan(1)
   })
 })

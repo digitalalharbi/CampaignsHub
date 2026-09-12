@@ -113,6 +113,8 @@ const page = (over: Partial<LibraryPage> = {}): LibraryPage => ({
   total: 1,
   period: { from: '2026-07-08', to: '2026-08-06' },
   currency: 'SAR',
+  /* The filtered library's own headline figures — null here, which is «nothing reported». */
+  totals: null,
   metrics_availability: { meta: { status: 'success', rows: 12, error: null, at: null } },
   filters: {
     providers: ['meta', 'tiktok'],

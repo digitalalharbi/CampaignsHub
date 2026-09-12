@@ -8,6 +8,7 @@ import { TextareaField } from '@/components/ui/form'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { getPublishedPage } from '@/features/settings/publicPagesApi'
+import { Num } from '@/components/ui/Num'
 
 /**
  * SITE-CMS-002: the request-tracking portal reads its own published document
@@ -110,7 +111,7 @@ function TrackView({ token, ar }: { token: string; ar: boolean }) {
             {d.timeline.map((t, i) => (
               <li key={i} className="flex gap-3 text-sm">
                 <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-brand-500" />
-                <div><div className="font-medium">{t.message ?? t.status}</div><div className="text-xs text-text-muted tnum" dir="ltr">{t.at?.slice(0, 16).replace('T', ' ')}</div></div>
+                <div><div className="font-medium">{t.message ?? t.status}</div><div className="text-xs text-text-muted tnum"><Num>{t.at?.slice(0, 16).replace('T', ' ')}</Num></div></div>
               </li>
             ))}
           </ol>

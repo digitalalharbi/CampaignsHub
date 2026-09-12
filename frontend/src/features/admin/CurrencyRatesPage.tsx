@@ -7,6 +7,7 @@ import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { Num } from '@/components/ui/Num'
 
 /**
  * FX-FEED-001 — where exchange rates come from, from the platform owner's console.
@@ -140,11 +141,11 @@ export function CurrencyRatesPage() {
         <dl className="mt-3 grid gap-3 sm:grid-cols-2">
           <div>
             <dt className="text-xs text-text-secondary">{t.lastRate}</dt>
-            <dd className="tnum font-bold text-text-primary" dir="ltr">{feed.last_rate_date ?? t.none}</dd>
+            <dd className="tnum font-bold text-text-primary"><Num>{feed.last_rate_date ?? t.none}</Num></dd>
           </div>
           <div>
             <dt className="text-xs text-text-secondary">{t.ratesOnFile}</dt>
-            <dd className="tnum font-bold text-text-primary" dir="ltr">{feed.rates}</dd>
+            <dd className="tnum font-bold text-text-primary"><Num>{feed.rates}</Num></dd>
           </div>
         </dl>
       </section>
@@ -159,9 +160,11 @@ export function CurrencyRatesPage() {
           <ul data-testid="fx-unmet" className="mt-3 grid gap-2">
             {unmet.map((p) => (
               <li key={`${p.base}-${p.quote}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface-secondary px-3 py-2 text-[13px]">
-                <span className="flex items-center gap-2 font-bold text-text-primary" dir="ltr">
-                  <AlertTriangle size={14} className="text-warning" aria-hidden />
-                  {p.base} → {p.quote}
+                <span className="text-start block font-bold text-text-primary">
+                  <Num className="inline-flex items-center gap-2">
+                    <AlertTriangle size={14} className="text-warning" aria-hidden />
+                    {p.base} → {p.quote}
+                  </Num>
                 </span>
                 <span className="text-text-secondary">
                   <span className="tnum font-bold text-warning" dir="ltr">{p.withheld}</span> {t.withheld}

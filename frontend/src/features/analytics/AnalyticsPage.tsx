@@ -1,3 +1,4 @@
+import { Num } from '@/components/ui/Num'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeftRight } from 'lucide-react'
@@ -127,7 +128,10 @@ import { useQuery } from '@tanstack/react-query'
 import { StoreFunnelTab } from './StoreFunnelTab'
 import { AttributionPanel } from './AttributionPanel'
 import { AdPoster } from '@/features/content/AdPoster'
+import { usePortalPath } from '@/app/portalPath'
 import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
+import { creativeDialogFigures } from '@/features/content/creativeDialogFigures'
+import { CreativeComparison, CreativeTrend } from '@/features/content/CreativeTrend'
 import { creativeScope, decodePath, drillInto, drillUpTo, encodePath, nextLevel, parentFor, rememberName,
   stepLabel, withNames,
   type DrillLevel, type DrillStep,
@@ -2295,6 +2299,8 @@ function DrillCrumbs({ path, level, ar, onUpTo }: { path: DrillStep[]; level: Dr
  * a campaign total would be a number nobody measured.
  */
 function CreativeTab({ projectId, range, filters }: TabProps) {
+  /* AD-PREVIEW-DEFAULT-001 — the popup's link resolves in the portal the reader is standing in. */
+  const portalTo = usePortalPath()
   const ar = useAr()
   /*
    * HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN — the last rung of campaign → ad set → ad → creative.
@@ -2502,21 +2508,42 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
           <AdPreviewDialog
             creative={openCreative}
             locale={ar ? 'ar' : 'en'}
-            figures={[
-              { label: ar ? 'الإنفاق' : 'Spend', value: rowMoney(openCreative.metrics ?? undefined, 'spend', currency) },
-              { label: ar ? 'الظهور' : 'Impressions', value: countCell(openCreative.metrics?.impressions ?? null).text },
-              { label: ar ? 'النقرات' : 'Clicks', value: countCell(openCreative.metrics?.clicks ?? null).text },
-              { label: 'CTR', value: rateOrDash(openCreative.metrics?.ctr ?? null) },
-              /*
-                CPC and CPM go through the same `rateOrDash`/money readers the row uses, and a figure
-                the provider never sent stays «—». `rowMoney` is deliberately not used for them: it
-                reads the money CONTRACT's spend/revenue envelope, and a cost-per is a derived ratio
-                rather than an amount with its own withheld provenance.
-              */
-              { label: 'CPC', value: rateOrDash(openCreative.metrics?.cpc ?? null) },
-              { label: 'CPM', value: rateOrDash(openCreative.metrics?.cpm ?? null) },
-            ]}
-            detailsTo={`/app/content/${openCreative.id}`}
+            /*
+              AD-PREVIEW-FIGURES-001 — read by the SAME readers the row above is read by.
+
+              This list was inline here and had drifted: CPC and CPM went through `rateOrDash`,
+              which multiplies by a hundred and appends a percent sign, so production printed «CPC
+              125.38%» over a row that said «1.25 USD» about the same click. ROAS printed «420.00%».
+              The dialog's own docblock promises it «cannot disagree with the line the reader
+              clicked», and this was the one place it did.
+            */
+            figures={creativeDialogFigures(openCreative.metrics ?? undefined, currency, ar)}
+            trend={projectId
+              ? (
+                <>
+                  <CreativeComparison
+                    projectId={projectId}
+                    creativeId={openCreative.id}
+                    window={{ from: range.from, to: range.to }}
+                    locale={ar ? 'ar' : 'en'}
+                  />
+                  <CreativeTrend
+                    projectId={projectId}
+                    creativeId={openCreative.id}
+                    window={{ from: range.from, to: range.to }}
+                    locale={ar ? 'ar' : 'en'}
+                    currency={currency ?? 'SAR'}
+                    height={180}
+                  />
+                </>
+              )
+              : undefined}
+            /*
+              AD-PREVIEW-DEFAULT-001 — the ad's own page, in the portal the reader is standing in.
+              This was hardcoded `/app/content/…`, so every operator working in `/agency` — which is
+              where this table is most used — was sent across portals by the one link the popup has.
+            */
+            detailsTo={portalTo(`/content/${openCreative.id}`)}
             onClose={() => setOpenCreative(null)}
           />
         )}
@@ -2565,6 +2592,8 @@ function EntityState({ row, windowEnd, ar }: { row: EntityRow; windowEnd: string
 }
 
 function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad_set' | 'ad' }) {
+  /* AD-PREVIEW-DEFAULT-001 — the popup's link resolves in the portal the reader is standing in. */
+  const portalTo = usePortalPath()
   const ar = useAr()
   /*
    * HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN — the parent comes from the URL, and it changes the QUERY.
@@ -2941,6 +2970,15 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
                 creative={openAd.creative}
                 locale={ar ? 'ar' : 'en'}
                 figures={openAd.figures}
+                /*
+                  AD-PREVIEW-DEFAULT-001 — and this one had no way out at all.
+
+                  The popup is deliberately shallow: «which ad is this, and did it work». Without a
+                  route to the creative's own page a reader who wants the rest has to leave, find the
+                  Content library, and search for it by name — so they do not, and decide from three
+                  figures.
+                */
+                detailsTo={portalTo(`/content/${openAd.creative.id}`)}
                 onClose={() => setOpenAd(null)}
               />
             )}
@@ -3136,7 +3174,7 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                         {(() => {
                           if (total === null) {
                             /* Null stays «—»: an unavailable figure is not a figure of zero. */
-                            return <dd className="tnum text-text-primary" dir="ltr">—</dd>
+                            return <dd className="tnum text-text-primary"><Num>—</Num></dd>
                           }
 
                           /*
@@ -3164,8 +3202,8 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                           const exact = 'exact' in read ? read.exact : (read.exact ?? undefined)
 
                           return (
-                            <dd className="tnum text-text-primary" dir="ltr" title={exact ?? undefined}>
-                              {read.text}
+                            <dd className="tnum text-text-primary" title={exact ?? undefined}>
+                              <Num>{read.text}</Num>
                             </dd>
                           )
                         })()}

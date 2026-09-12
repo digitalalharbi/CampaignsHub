@@ -226,6 +226,28 @@ final class CreativePresenter
 
         $blocked = $this->wasWithheld($creative);
 
+        /*
+         * CONTENT-MEDIA-RECOVERY-002 — a multi-asset ad shows the media it HAS.
+         *
+         * The three columns above are the ad's own hero, and a carousel or a collection frequently
+         * has none of them: the media lives on the CARDS, in the JSON this class already parses a
+         * few lines further down to build the strip. Every absence arm below is guarded by
+         * `cards === null`, so an ad with four real pictures and no hero matched none of them and
+         * fell to `default` — state `available`, all three URLs null. The grid drew an empty frame
+         * and the payload said nothing was wrong.
+         *
+         * «Use the strongest real available preview; unavailable only after all canonical recovery
+         * paths fail.» The first usable card is a canonical path: the platform's own asset for this
+         * ad, already fetched, already through the same credential guard as the hero.
+         *
+         * Not for a withheld or an expired ad. The cards arrived in the SAME response as the hero,
+         * so they carry the same credential and the same expiry — `cards()` says exactly that — and
+         * promoting one would be reaching around a refusal this product made on purpose.
+         */
+        if ($image === null && $video === null && $thumb === null && ! $blocked && ! $creative->assetExpired()) {
+            [$image, $video, $thumb] = $this->heroFromCards($creative);
+        }
+
         $shape = match (true) {
             $blocked => [
                 'state' => 'withheld',
@@ -321,7 +343,25 @@ final class CreativePresenter
                 'note_ar' => null,
                 'note_en' => null,
             ],
-            $image === null && $video === null && $thumb === null && $creative->cards === null => [
+            /*
+             * CONTENT-MEDIA-RECOVERY-002 — cards fetched, none of them usable, is its own sentence.
+             *
+             * Recovery ran and found nothing: every card's only link carried a credential, so the
+             * guard refused it and `cards()` counts it as withheld. Before this arm existed, such an
+             * ad fell past every absence — all of them require `cards` to be null — and called itself
+             * `available` with nothing to draw. Blaming the platform for exposing no asset would be
+             * wrong here too: it exposed several and we are the ones not showing them.
+             */
+            $image === null && $video === null && $thumb === null && $creative->cards !== null => [
+                'state' => 'unavailable',
+                'kind' => $kind,
+                'aspect' => $aspect,
+                'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
+                'expires_at' => null,
+                'note_ar' => 'جُلبت بطاقات هذا الإعلان، ولم يحمل أيٌّ منها أصلًا صالحًا للعرض.',
+                'note_en' => 'This ad’s cards were fetched and none of them carried a usable asset.',
+            ],
+            $image === null && $video === null && $thumb === null => [
                 'state' => 'unavailable',
                 'kind' => $kind,
                 'aspect' => $aspect,
@@ -371,6 +411,44 @@ final class CreativePresenter
      *
      * @return array{cards: list<array<string, mixed>>|null, cards_reported: bool, cards_withheld: int}
      */
+    /**
+     * The strongest media the ad's own cards carry, for an ad with no hero of its own.
+     *
+     * The FIRST usable card, not the best-looking one: the cards are ordered as the platform
+     * delivers them, so the first is the one a person scrolling past actually sees. A card is usable
+     * when at least one of its links survives the same credential guard the hero goes through —
+     * `safe()` here is the identical call, so nothing reaches a reader through this path that would
+     * be refused through the other.
+     *
+     * @return array{0: ?string, 1: ?string, 2: ?string} image, video, thumbnail
+     */
+    private function heroFromCards(ExternalCreative $creative): array
+    {
+        $raw = $creative->cards;
+
+        if (! is_array($raw)) {
+            return [null, null, null];
+        }
+
+        foreach ($raw as $card) {
+            if (! is_array($card)) {
+                continue;
+            }
+
+            $given = static fn (string $key): ?string => is_string($card[$key] ?? null) ? $card[$key] : null;
+
+            $image = $this->safe($given('image_url')) ?? $this->safe($given('asset_url'));
+            $video = $this->safe($given('video_url'));
+            $thumb = $this->safe($given('thumbnail_url'));
+
+            if ($image !== null || $video !== null || $thumb !== null) {
+                return [$image, $video, $thumb];
+            }
+        }
+
+        return [null, null, null];
+    }
+
     private function cards(ExternalCreative $creative, string $state): array
     {
         $raw = $creative->cards;

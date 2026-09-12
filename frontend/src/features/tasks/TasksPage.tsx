@@ -1,3 +1,4 @@
+import { Num } from '@/components/ui/Num'
 import { useEffect, useMemo, useState } from 'react'
 import { useDebouncedValue } from '@/components/forms/useTypeahead'
 import { StatCard } from '@/components/ui/StatCard'
@@ -439,7 +440,7 @@ function TaskDrawer({ task, c, ar, canUpdate, onClose, onStatus }: { task: Task;
         <dl className="flex flex-col gap-2 rounded-2xl border border-border p-4 text-sm">
           <div className="flex items-center justify-between gap-3">
             <dt className="text-text-secondary">{c.due}</dt>
-            <dd className={`tnum font-semibold ${task.is_overdue ? 'text-danger' : 'text-text-primary'}`} dir="ltr">{task.due_date ? fmtDate(task.due_date) : '—'}</dd>
+            <dd className={`tnum font-semibold ${task.is_overdue ? 'text-danger' : 'text-text-primary'}`}><Num>{task.due_date ? fmtDate(task.due_date) : '—'}</Num></dd>
           </div>
           <div className="flex items-center justify-between gap-3">
             <dt className="text-text-secondary">{c.status}</dt>
