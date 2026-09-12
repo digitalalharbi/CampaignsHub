@@ -50,6 +50,10 @@ final class AlertController extends Controller
         // failures with three different people to tell — and a rule carries `project_id` and a
         // `threshold`, so the SLA is the client's own rather than a constant somebody compromised on.
         'lead_unassigned', 'lead_no_contact', 'lead_follow_up_overdue',
+        // AUTOMATION-FIRST-OPERATIONS-001 — the type that needs no threshold from anybody: it
+        // compares a figure against its own recent behaviour, so it covers the campaigns nobody
+        // got round to writing a rule for, which are the ones that fail quietly.
+        'metric_anomaly',
     ];
 
     /**
