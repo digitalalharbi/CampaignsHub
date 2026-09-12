@@ -240,6 +240,34 @@ final class ReportRosterMediaTest extends TestCase
     }
 
     /**
+     * A STORY keeps its own shape in the report — «Story → proper vertical preview».
+     *
+     * The aspect travels with the envelope because a 9:16 story cropped into a landscape frame
+     * keeps the middle third and throws away the top and the bottom, which on a story is the logo
+     * and the call to action. A client comparing two creatives in a report would then be comparing
+     * two crops this product invented. The roster's row is small, but it is the same envelope the
+     * card and the popup read, so the shape has to survive the trip rather than be re-guessed at
+     * the far end.
+     */
+    public function test_a_vertical_story_carries_its_shape(): void
+    {
+        $this->creative([
+            'format' => 'video',
+            'asset_url' => null,
+            'video_url' => 'https://cdn.test/story.mp4',
+            'thumbnail_url' => 'https://cdn.test/story-frame.jpg',
+            'width' => 1080,
+            'height' => 1920,
+        ]);
+
+        $preview = $this->sharedRoster()[0]['preview'] ?? null;
+
+        $this->assertIsArray($preview);
+        $this->assertSame('vertical', $preview['aspect'], 'the story arrived without its shape and will be letterboxed');
+        $this->assertSame('https://cdn.test/story-frame.jpg', $preview['thumbnail_url']);
+    }
+
+    /**
      * And a creative with genuinely nothing says so — the absence state is not removed, it is
      * earned. A test that only proved pictures appear would be satisfied by inventing one.
      */
