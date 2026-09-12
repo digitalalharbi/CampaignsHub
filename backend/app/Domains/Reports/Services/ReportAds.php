@@ -79,7 +79,7 @@ final class ReportAds
      * @param  string  $form  `executive_summary` curates; anything else is the full report
      * @return array{ads: list<array<string,mixed>>, worst: list<array<string,mixed>>, groups: list<array<string,mixed>>, roster: list<array<string,mixed>>, level: string, reason: string|null, creatives_in_scope: int, creatives_withheld: int}
      */
-    public function for(string $objective, Carbon $from, Carbon $to, array $filters = [], string $form = 'detailed'): array
+    public function for(string $objective, Carbon $from, Carbon $to, array $filters = [], string $form = 'detailed', bool $liveMedia = false): array
     {
         $query = ExternalCreative::query();
         $this->creatives->applyFilters($query, $filters + [
@@ -114,7 +114,13 @@ final class ReportAds
             $rosterQuery->limit(self::SUMMARY_ROSTER);
         }
 
-        $roster = $this->creatives->lean($rosterQuery->get(), $from, $to);
+        /*
+         * `$liveMedia` — REPORT-CREATIVE-MEDIA-001. The LIVE link builds on every open and stores
+         * nothing, so its roster can carry the resolved media; a generated snapshot must not, which
+         * is what `lean()`'s own docblock is about. See `ReportCreativeMedia`, which gives a STORED
+         * report its pictures at read time instead.
+         */
+        $roster = $this->creatives->lean($rosterQuery->get(), $from, $to, withPreview: $liveMedia);
 
         $rows = $this->creatives->present(
             $this->creatives->applySort($query, 'spend', $from, $to)->limit(self::RANKING_CANDIDATES)->get(),
