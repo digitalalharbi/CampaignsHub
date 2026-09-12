@@ -124,11 +124,28 @@ export function AdPreviewDialog({
         showing behind it reads as a popup to be dismissed, and the reader came here to look at the
         media. Above `sm` it is the centred modal the requirement asks for.
       */}
+      {/*
+        CONTENT-POPUP-SCALE-001 — «larger than the current cramped modal, but NOT full-screen».
+        
+        It was `max-w-2xl`: 672 pixels of a 1440-pixel screen, one column, with the creative, the
+        figures and the chart stacked down it. Measured on the owner's own width, the chart sat
+        below the fold — so the panel opened to judge a creative could not show the creative and
+        its trend at the same time, which is the whole reason somebody opens it.
+        
+        A wider single column would not have fixed that: a taller hero pushes the chart further
+        down, and the two requirements («the creative visually dominant» and «the chart in the first
+        viewport») fight each other in one column at any width. So above `lg` the panel becomes two:
+        the media on one side, the reading of it on the other. Below `lg` it stays exactly as it
+        was, because on a phone a single column IS the right answer and two would be four.
+        
+        1024 of 1440 is deliberately short of the screen — the grid behind stays visible, which is
+        what keeps this a panel over the library rather than a page the reader navigated to.
+      */}
       <div
-        className="flex h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto border-border bg-surface p-4 sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border"
+        className="flex h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto border-border bg-surface p-4 sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border lg:grid lg:max-w-5xl lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-start lg:gap-x-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="mb-3 flex items-start justify-between gap-3 lg:col-span-2 lg:mb-0">
           <h3 className="text-sm font-bold text-text-primary">{creative.name}</h3>
           <button
             type="button"
@@ -140,13 +157,18 @@ export function AdPreviewDialog({
           </button>
         </div>
 
+        {/*
+          The media column. `min-w-0` because a grid track refuses to shrink below its content
+          otherwise, and a wide poster would push the figures off their own side.
+        */}
+        <div data-testid="ad-preview-dialog-media" className="flex min-w-0 flex-col gap-3 lg:col-start-1 lg:row-start-2">
         {reading.kind === 'video' ? (
           <CreativeVideoPlayer src={reading.src} poster={reading.poster} aspect={creative.preview?.aspect ?? null} />
         ) : (
           <AdPoster
             preview={creative.preview}
             name={creative.name}
-            className="h-72 w-full bg-surface-secondary object-contain"
+            className="h-72 w-full bg-surface-secondary object-contain lg:h-[26rem]"
             testid="ad-preview-dialog-poster"
             width={creative.width}
             height={creative.height}
@@ -164,6 +186,10 @@ export function AdPreviewDialog({
           from Analytics. Two callers had the fix and two did not.
         */}
         {creative.preview && <CreativeCarousel preview={creative.preview} locale={locale} />}
+        </div>
+
+        {/* The reading of it: why the figures are dashes, the figures, the trend, the detail, the way on. */}
+        <div className="flex min-w-0 flex-col lg:col-start-2 lg:row-start-2">
 
         {/*
           CONTENT-POPUP-VISUAL-001 — the order a reader needs, not the order the fields arrived in.
@@ -281,6 +307,7 @@ export function AdPreviewDialog({
             {ar ? 'فتح تحليلات هذا المحتوى' : 'Open this content’s analytics'}
           </Link>
         )}
+        </div>
       </div>
     </div>
   )

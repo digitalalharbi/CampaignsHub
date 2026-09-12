@@ -1,10 +1,41 @@
 import { useQuery } from '@tanstack/react-query'
 import { MetricLineChart } from '@/features/analytics/charts'
 import { metricLabel } from './metrics'
-import { getCreative } from './api'
+import { getCreativeInReach } from './api'
 import { Skeleton } from '@/components/ui/States'
 import type { Locale } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
+
+
+/**
+ * One creative, from the endpoint that can actually reach it — CONTENT-POPUP-TREND-404-001.
+ *
+ * ## The drift this component exists to prevent, in this component
+ *
+ * `CreativeTrend`'s whole reason for being is that the modal and the detail page must not derive a
+ * creative's trend two different ways. It then asked a different ENDPOINT from the detail page, and
+ * the difference was not cosmetic: `/projects/{project}/creatives/{creative}` is scoped to one
+ * project, and `CreativeAnalysisController::detail` says in its own docblock why the other one
+ * exists — «the library spans projects and a card does not carry a project id».
+ *
+ * So opening the quick panel on a card whose creative belongs to a different project than the one
+ * currently selected returned 404 «العنصر المطلوب غير موجود», and the panel drew «تعذّر تحميل
+ * الاتجاه الزمني» — a load error, for a creative sitting in the library the click came from. Found
+ * by reading the panel's own network traffic, not by a test: every unit test mocks this call.
+ *
+ * `getCreativeInReach` is what `CreativeDetailPage` has always used. Its ceiling is the reader's
+ * MEMBERSHIP, which is the only version of this that cannot be widened by editing a URL.
+ *
+ * `projectId` stays in the signature and in the key: it is what the caller knows it is asking
+ * about, and two projects' windows must not share a cache entry.
+ */
+function useCreativeInReach(projectId: string, creativeId: string, window: { from?: string; to?: string }) {
+  return useQuery({
+    queryKey: ['creative', projectId, creativeId, window.from, window.to],
+    queryFn: () => getCreativeInReach(creativeId, window),
+    enabled: Boolean(creativeId),
+  })
+}
 
 /**
  * ANALYTICS-CONTENT-PREVIEW-001 — one creative's trend, drawn wherever it is asked for.
@@ -45,11 +76,7 @@ export function CreativeTrend({
 }) {
   const ar = locale === 'ar'
 
-  const q = useQuery({
-    queryKey: ['creative', projectId, creativeId, window.from, window.to],
-    queryFn: () => getCreative(projectId, creativeId, window),
-    enabled: Boolean(projectId && creativeId),
-  })
+  const q = useCreativeInReach(projectId, creativeId, window)
 
   if (q.isPending) {
     return <Skeleton className="h-40 w-full" />
@@ -123,11 +150,7 @@ export function CreativeComparison({
 }) {
   const ar = locale === 'ar'
 
-  const q = useQuery({
-    queryKey: ['creative', projectId, creativeId, window.from, window.to],
-    queryFn: () => getCreative(projectId, creativeId, window),
-    enabled: Boolean(projectId && creativeId),
-  })
+  const q = useCreativeInReach(projectId, creativeId, window)
 
   const previous = q.data?.previous ?? null
   const current = q.data?.metrics ?? null

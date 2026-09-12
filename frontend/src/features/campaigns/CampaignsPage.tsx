@@ -740,9 +740,9 @@ export function CampaignsPage() {
                 <thead>
                   <tr className="border-b border-border text-xs text-text-muted">
                     <th className="p-2 text-start">{ar ? 'الهدف' : 'Objective'}</th>
-                    <th className="p-2 text-end">{ar ? 'الحملات' : 'Campaigns'}</th>
-                    <th className="p-2 text-end">{ar ? 'الإنفاق' : 'Spend'}</th>
-                    <th className="p-2 text-end">{ar ? 'النتائج' : 'Results'}</th>
+                    <th className="p-2 text-center">{ar ? 'الحملات' : 'Campaigns'}</th>
+                    <th className="p-2 text-center">{ar ? 'الإنفاق' : 'Spend'}</th>
+                    <th className="p-2 text-center">{ar ? 'النتائج' : 'Results'}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -751,14 +751,14 @@ export function CampaignsPage() {
                       <td className="p-2 font-semibold text-text-primary">{canonicalObjectiveLabel(r.key, ar ? 'ar' : 'en')}</td>
                       {/* `tnum` on the SPAN, not the cell: on the cell it sets the direction too, and
                           RTL figures slide out from under their own heading. */}
-                      <td className="p-2 text-end text-text-secondary"><span className="tnum" dir="ltr">{r.campaigns}</span></td>
+                      <td className="p-2 text-center text-text-secondary"><span className="tnum" dir="ltr">{r.campaigns}</span></td>
                       {/* «—», never a zero: a total nobody could compute is not a total of nothing. */}
-                      <td className="p-2 text-end text-text-primary">
+                      <td className="p-2 text-center text-text-primary">
                         {r.spend === null
                           ? <span className="text-text-muted">—</span>
                           : <span className="tnum" dir="ltr">{money(r.spend, mix.currency ?? undefined)}</span>}
                       </td>
-                      <td className="p-2 text-end text-text-secondary"><span className="tnum" dir="ltr">{num(r.results)}</span></td>
+                      <td className="p-2 text-center text-text-secondary"><span className="tnum" dir="ltr">{num(r.results)}</span></td>
                     </tr>
                   ))}
                 </tbody>
@@ -1017,9 +1017,9 @@ export function CampaignsPage() {
                     <th className="p-3 text-start">{ar ? 'الحالة' : 'Status'}</th>
                     <SortableHeader id="spend" label={ar ? 'الإنفاق' : 'Spend'} sort={sort} dir={dir} onSort={applySort} ar={ar} align="end" />
                     <SortableHeader id="results" label={ar ? 'النتائج' : 'Results'} sort={sort} dir={dir} onSort={applySort} ar={ar} align="end" />
-                    <th className="p-3 text-end">{ar ? 'تكلفة النتيجة' : 'Cost per result'}</th>
-                    <th className="p-3 text-end">{ar ? 'الميزانية' : 'Budget'}</th>
-                    <th className="p-3 text-end">{ar ? 'مرتبطة' : 'Linked'}</th>
+                    <th className="p-3 text-center">{ar ? 'تكلفة النتيجة' : 'Cost per result'}</th>
+                    <th className="p-3 text-center">{ar ? 'الميزانية' : 'Budget'}</th>
+                    <th className="p-3 text-center">{ar ? 'مرتبطة' : 'Linked'}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1036,11 +1036,11 @@ export function CampaignsPage() {
                           is judged on what it sold and an awareness one on who it reached, and a
                           column that printed «conversions» for both would price the wrong thing.
                         */}
-                        <td className="p-3 text-end"><MetricCell reading={campaignSpendReading(m, ar)} locale={locale} /></td>
-                        <td className="p-3 text-end"><MetricCell reading={campaignHeadline(c.objective, m, ar)?.reading ?? null} locale={locale} /></td>
-                        <td className="p-3 text-end"><MetricCell reading={campaignEfficiency(c.objective, m, ar)?.reading ?? null} locale={locale} /></td>
-                        <td className="p-3 text-end"><span className="tnum">{money(c.total_budget, c.budget_currency)}</span></td>
-                        <td className="p-3 text-end"><span className="tnum">{c.external_campaigns_count ?? 0}</span></td>
+                        <td className="p-3 text-center"><MetricCell reading={campaignSpendReading(m, ar)} locale={locale} /></td>
+                        <td className="p-3 text-center"><MetricCell reading={campaignHeadline(c.objective, m, ar)?.reading ?? null} locale={locale} /></td>
+                        <td className="p-3 text-center"><MetricCell reading={campaignEfficiency(c.objective, m, ar)?.reading ?? null} locale={locale} /></td>
+                        <td className="p-3 text-center"><span className="tnum">{money(c.total_budget, c.budget_currency)}</span></td>
+                        <td className="p-3 text-center"><span className="tnum">{c.external_campaigns_count ?? 0}</span></td>
                       </tr>
                     )
                   })}
