@@ -272,6 +272,36 @@ final class ReportScopeController extends Controller
         ], 'Report scope updated; regenerating.');
     }
 
+    /**
+     * What a scope being BUILT would actually cover — REPORT-SCOPE-SELECTION-001 §C.
+     *
+     * `explain()` has been returned by three endpoints since it was written: a report's saved scope,
+     * a saved template, and the result of saving one. None of them is the builder, so the one
+     * sentence that says «selecting two ad sets does not narrow to ad-set grain» was reachable
+     * everywhere except the screen where an operator makes that selection.
+     *
+     * A POST rather than a GET because a scope is twelve arrays and belongs in a body, not in a
+     * query string that a proxy will truncate at the first project with two hundred campaigns.
+     *
+     * It reads and stores nothing, so `reports.view` is the whole of what it needs — an operator who
+     * may look at a report may ask what a scope would cover. The ids still go through `validated()`,
+     * which drops what does not belong to this project and fills an emptied axis with the impossible
+     * id: an explanation of a scope that quietly widened back to «everything» would be worse than no
+     * explanation at all.
+     */
+    public function explain(Request $request, string $project): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('reports.view'), 403);
+
+        $scope = $this->validated($request, $project);
+
+        return ApiResponse::success([
+            'scope' => $scope->toArray(),
+            'bound_axes' => $scope->boundAxes(),
+            'explain' => $scope->explain(),
+        ]);
+    }
+
     /** The scope on a report, with what each bound axis actually reaches. */
     public function show(Request $request, string $project, string $report): JsonResponse
     {

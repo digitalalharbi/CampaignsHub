@@ -5,6 +5,7 @@ import { Bookmark, Info, Trash2 } from 'lucide-react'
 import {
   createScopeTemplate,
   deleteScopeTemplate,
+  explainScope,
   listScopeTemplates,
   scopeOptions,
   type ReportScopeShape,
@@ -41,6 +42,9 @@ const COPY = {
   ar: {
     title: 'نطاق التقرير',
     subtitle: 'اختر ما يغطيه هذا التقرير. كل ما لا تختاره يبقى بلا تحديد — أي كل المشروع.',
+    covers: 'ما سيغطيه هذا التقرير',
+    coversAll: 'لم تُحدَّد أي فلترة — سيغطي التقرير المشروع كاملًا خلال فترته.',
+    axisCount: (n: number) => `${n} محدَّد`,
     platforms: 'المنصات',
     accounts: 'الحسابات الإعلانية',
     campaigns: 'الحملات',
@@ -77,6 +81,9 @@ const COPY = {
   },
   en: {
     title: 'Report scope',
+    covers: 'What this report will cover',
+    coversAll: 'Nothing is narrowed — the report covers the whole project for its period.',
+    axisCount: (n: number) => `${n} selected`,
     subtitle: 'Choose what this report covers. Anything you leave alone stays unbounded — the whole project.',
     platforms: 'Platforms',
     accounts: 'Ad accounts',
@@ -224,6 +231,20 @@ export function ReportScopePicker({
         <span className="block text-sm font-bold text-text-primary">{t.title}</span>
         <span className="mt-0.5 block text-[11px] text-text-secondary">{t.subtitle}</span>
       </div>
+
+      {/*
+        REPORT-SCOPE-SELECTION-001 §C — what this scope actually covers, before it is exported.
+
+        `explain()` has been on the server since the scope object existed, and three endpoints
+        returned it — a saved scope, a template, the result of saving. None of them was the BUILDER,
+        so the one sentence that matters while somebody is choosing — «selecting two ad sets does not
+        narrow to ad-set grain, because no metric is stored there» — was reachable everywhere except
+        the screen where the choice is made.
+
+        Asked of the server rather than derived here: the rule is the generator's, and a second copy
+        would disagree with it the first time an axis changed depth.
+      */}
+      <ScopeStatement projectId={projectId} value={value} t={t} ar={ar} />
 
       <Chips
         label={t.platforms}
@@ -466,6 +487,82 @@ function ScopeSelect({
       />
     </div>
   )
+}
+
+/**
+ * The scope in words, kept live with the choices above it.
+ *
+ * Keyed on the scope, so React Query dedupes while an operator toggles the same chip twice and does
+ * not re-ask for an answer it already holds. A failure is silent: this explains a choice, it does
+ * not gate one, and an error panel over a builder would be a worse outcome than no sentence.
+ */
+function ScopeStatement({
+  projectId,
+  value,
+  t,
+  ar,
+}: {
+  projectId: string
+  value: ReportScopeShape
+  t: typeof COPY.en
+  ar: boolean
+}) {
+  const q = useQuery({
+    queryKey: ['report-scope-explain', projectId, value],
+    queryFn: () => explainScope(projectId, value),
+    enabled: Boolean(projectId),
+  })
+
+  if (q.isError || q.data === undefined) {
+    return null
+  }
+
+  const rows = q.data.explain
+
+  return (
+    <div data-testid="scope-statement" className="rounded-xl border border-border bg-surface-secondary/40 p-3">
+      <span className="block text-[11px] font-bold text-text-secondary">{t.covers}</span>
+
+      {rows.length === 0 ? (
+        <p data-testid="scope-statement-all" className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+          {t.coversAll}
+        </p>
+      ) : (
+        <ul className="mt-1 space-y-1">
+          {rows.map((row) => (
+            <li key={row.axis} data-testid={`scope-statement-${row.axis}`} className="text-[11px] leading-relaxed">
+              <span className="font-semibold text-text-primary">
+                {AXIS_LABEL[row.axis] ? (ar ? AXIS_LABEL[row.axis].ar : AXIS_LABEL[row.axis].en) : row.axis}
+              </span>
+              <span className="text-text-muted"> · {t.axisCount(row.count)}</span>
+              {/*
+                The GRAIN note, always — including where it is the reassuring one.
+                
+                «Narrows every figure» and «no metrics are stored at this level» are both facts a
+                reader needs, and showing only the warning would teach an operator that the absence
+                of a note means nothing was worth saying.
+              */}
+              <span className="block text-text-secondary">{ar ? row.note_ar : row.note_en}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/** The axes, named as the controls above name them, so the statement reads as a summary of them. */
+const AXIS_LABEL: Record<string, { ar: string; en: string }> = {
+  client_ids: { ar: 'العملاء', en: 'Clients' },
+  project_ids: { ar: 'المشاريع', en: 'Projects' },
+  providers: { ar: 'المنصات', en: 'Platforms' },
+  account_ids: { ar: 'الحسابات الإعلانية', en: 'Ad accounts' },
+  campaign_ids: { ar: 'الحملات', en: 'Campaigns' },
+  ad_set_ids: { ar: 'المجموعات الإعلانية', en: 'Ad sets' },
+  ad_ids: { ar: 'الإعلانات', en: 'Ads' },
+  creative_ids: { ar: 'المحتويات', en: 'Content' },
+  objectives: { ar: 'الأهداف', en: 'Objectives' },
+  paths: { ar: 'المسارات التسويقية', en: 'Marketing paths' },
 }
 
 function Chips({

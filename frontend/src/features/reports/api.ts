@@ -488,6 +488,21 @@ export interface ScopeTemplate {
 
 export const scopeOptions = (p: string) => getData<ScopeOptions>(`${base(p)}/scope/options`)
 
+/**
+ * What a scope being BUILT would cover — REPORT-SCOPE-SELECTION-001 §C.
+ *
+ * The rule about what each axis REACHES belongs to the server: an ad-set bound resolves up to the
+ * campaigns behind it because no metric is stored at that grain, and a creative bound narrows the
+ * creative section while campaign totals stay where they are. A second copy of that in TypeScript
+ * would be a second answer to «what does this scope cover», and the two would part company the first
+ * time an axis changed depth — the exact failure `explain()` was written to prevent.
+ */
+export const explainScope = (p: string, scope: ReportScopeShape) =>
+  postData<{ scope: ReportScopeShape; bound_axes: string[]; explain: ScopeExplain[] }>(
+    `${base(p)}/scope/explain`,
+    { scope },
+  )
+
 export const getReportScope = (p: string, id: string) =>
   getData<{ scope: ReportScopeShape; explain: ScopeExplain[]; bound_axes: string[]; audience: string | null }>(`${base(p)}/${id}/scope`)
 
