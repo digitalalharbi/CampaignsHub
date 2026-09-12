@@ -64,7 +64,8 @@ export function DeliveryLog() {
   }
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
+    /* The handle an acceptance test needs to ask whether this surface reaches a reader at all. */
+    <div data-testid="delivery-log" className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
       <h2 className="text-xl font-bold text-text-primary">{ar ? 'سجل الإرسال' : 'Delivery log'}</h2>
       <p className="mt-1 max-w-2xl text-sm leading-7 text-text-secondary">
         {ar

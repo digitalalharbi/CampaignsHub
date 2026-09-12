@@ -91,7 +91,8 @@ export function NotificationRecipients() {
   const label = (c: string) => words(CATEGORY_LABELS, c, ar)
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
+    /* The handle an acceptance test needs to ask whether this surface reaches a reader at all. */
+    <div data-testid="notification-recipients" className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
       <h2 className="text-xl font-bold text-text-primary">{ar ? 'من يصله التنبيه' : 'Who receives alerts'}</h2>
       <p className="mt-1 max-w-2xl text-sm leading-7 text-text-secondary">
         {ar

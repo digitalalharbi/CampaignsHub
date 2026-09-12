@@ -100,12 +100,20 @@ export async function switchToEnglish(page: Page) {
   if ((await html.getAttribute('dir')) === 'ltr') return
 
   /*
-   * The app's own control first, and it is the fast path: no navigation, so nothing in flight is
-   * interrupted. Most surfaces have it.
+   * The app's own control, WAITED FOR — and that wait is the whole of the second repair.
+   *
+   * The first version asked `count()` the instant it was called, which is immediately after a
+   * `goto`: the shell had not painted, the count was 0, and every caller fell through to the
+   * fallback below. On webkit that reload then produced «XMLHttpRequest cannot load
+   * /sanctum/csrf-cookie due to access control checks» and failed nine specs that assert console
+   * cleanliness — a browser-specific break caused entirely by a race in a test helper.
+   *
+   * Measured afterwards: every `/agency/*` route renders the control within a second. Only the
+   * advertiser portal genuinely has none, which is its own finding and not this one.
    */
   const toggle = page.getByRole('button', { name: 'Toggle language', exact: true }).first()
 
-  if (await toggle.count() > 0) {
+  if (await toggle.isVisible({ timeout: 10000 }).catch(() => false)) {
     await toggle.click()
   } else {
     /*
