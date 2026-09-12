@@ -110,17 +110,17 @@ function Row({
 }) {
   return (
     <tr data-testid="subscription-invoice-row" data-status={invoice.status} className="border-b border-border last:border-0">
-      <td className="p-3 font-mono font-semibold text-text-primary" dir="ltr">{invoice.number}</td>
-      <td className="p-3 text-text-secondary" dir="ltr">{invoice.issued_at?.slice(0, 10) ?? '—'}</td>
-      <td className="p-3 text-text-primary" dir="ltr">
-        {invoice.total} {invoice.currency}
+      <td className="p-3 font-mono font-semibold text-text-primary"><span dir="ltr">{invoice.number}</span></td>
+      <td className="p-3 text-text-secondary"><span dir="ltr">{invoice.issued_at?.slice(0, 10) ?? '—'}</span></td>
+      <td className="p-3 text-text-primary">
+        <span dir="ltr">{invoice.total} {invoice.currency}</span>
         {/* The treatment is named, not only the amount: `zero_rated` and `exempt` both compute to
             zero and are different statements to a tax authority. */}
         <span className="block text-[11px] text-text-muted">
           {copy.tax}: {invoice.tax_total} ({invoice.tax_treatment})
         </span>
       </td>
-      <td className="p-3 text-text-secondary" dir="ltr">{invoice.outstanding} {invoice.currency}</td>
+      <td className="p-3 text-text-secondary"><span dir="ltr">{invoice.outstanding} {invoice.currency}</span></td>
       <td className="p-3">
         <span className={`rounded-lg px-2 py-0.5 text-xs font-semibold ${invoice.status === 'paid' ? 'bg-[var(--positive-background)] text-[var(--positive-foreground)]' : 'bg-surface-secondary text-text-secondary'}`}>
           {copy.statuses[invoice.status] ?? invoice.status}

@@ -205,8 +205,8 @@ export function PaymentsPage() {
                                 <td className="p-2 text-text-muted"><span className="tnum" dir="ltr">{i + 1}</span></td>
                                 <td className="p-2 text-text-secondary"><span className="tnum" dir="ltr">{formatDateTime(t.at)}</span></td>
                                 <td className="p-2"><span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${tMeta.tone}`}>{tMeta.label}</span></td>
-                                <td className="p-2 font-mono text-text-secondary" dir="ltr">{t.session_id ?? '—'}</td>
-                                <td className="p-2 text-text-secondary" dir="ltr">{t.error ?? '—'}</td>
+                                <td className="p-2 font-mono text-text-secondary"><span dir="ltr">{t.session_id ?? '—'}</span></td>
+                                <td className="p-2 text-text-secondary"><span dir="ltr">{t.error ?? '—'}</span></td>
                               </tr>
                             )
                           })}
