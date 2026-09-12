@@ -96,6 +96,71 @@ describe('the figures a creative’s dialog carries', () => {
     expect(find(figures, 'CPM')).toBe('—')
   })
 
+  /**
+   * AD-PREVIEW-FIGURES-002 — a cost cannot survive the refusal of the spend it is made of.
+   *
+   * ## The owner's screenshot
+   *
+   * «الإنفاق —» in the same panel as «CPM 65.65%» and «CPC 125.38%». A cost per click IS spend
+   * divided by clicks: if the panel will not state the spend, it cannot state what the spend bought
+   * per click and call the two consistent.
+   *
+   * It happened because the two came from different places. Spend went through the money contract,
+   * which refuses a scope whose currencies cannot be added — a real refusal, correctly made. CPC and
+   * CPM were read straight off the row as plain numbers, so the refusal never reached them.
+   *
+   * ## Two scopes, because they refuse for different reasons
+   *
+   * `mixed_currency` is «these amounts are in different currencies and no rate converts them».
+   * `partial` is «some of this scope converted and some did not», where stating the converted subset
+   * would understate the total. Both must take the derived figures down with them.
+   */
+  it('withholds a cost per click when the spend it divides was refused', () => {
+    const mixed = metrics({
+      spend: 0,
+      spend_withheld_rows: 4,
+      spend_original: 3000,
+      money_original_currency: null,
+      money_original_currencies: 2,
+    })
+    const figures = creativeDialogFigures(mixed, 'USD', false)
+
+    expect(find(figures, 'Spend')).not.toMatch(/^\d/)
+    expect(find(figures, 'CPC'), 'a cost survived the refusal of its own numerator').toBe('—')
+    expect(find(figures, 'CPM')).toBe('—')
+  })
+
+  it('withholds them on a partly convertible scope too', () => {
+    const partial = metrics({
+      spend: 1200,
+      spend_withheld_rows: 2,
+      spend_original: 900,
+      money_original_currency: 'AED',
+      money_original_currencies: 1,
+    })
+    const figures = creativeDialogFigures(partial, 'USD', false)
+
+    expect(find(figures, 'CPC')).toBe('—')
+    expect(find(figures, 'CPM')).toBe('—')
+  })
+
+  /**
+   * And the CTR is untouched, because it is not made of money.
+   *
+   * Clicks over impressions needs no exchange rate, and blanking it alongside the costs would be the
+   * opposite error — withholding a figure that is perfectly well known.
+   */
+  it('keeps a click-through rate through a money refusal', () => {
+    const mixed = metrics({
+      spend: 0,
+      spend_withheld_rows: 4,
+      spend_original: 3000,
+      money_original_currencies: 2,
+    })
+
+    expect(find(creativeDialogFigures(mixed, 'USD', false), 'CTR')).toMatch(/%$/)
+  })
+
   /** Arabic labels the money figures in Arabic and leaves the acronyms alone — they are read as-is. */
   it('labels in the reader’s language', () => {
     const figures = creativeDialogFigures(metrics(), 'USD', true)

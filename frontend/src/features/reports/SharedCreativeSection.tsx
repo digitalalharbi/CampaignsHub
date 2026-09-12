@@ -16,7 +16,7 @@ import {
   type SharedKindWinner,
   type SharedObjectiveWinner,
 } from './sharedCreatives'
-import { CreativeViewer } from '@/features/content/CreativeViewer'
+import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
 import { CreativeVideoPlayer } from '@/features/content/CreativeVideoPlayer'
 import { CreativeCarousel } from '@/features/content/CreativeCarousel'
 import { imageLoading } from '@/features/content/format'
@@ -457,13 +457,18 @@ export function SharedCreativeSection({
         </div>
       )}
 
-      {viewerIndex !== null && rows.length > 0 && (
-        <CreativeViewer
-          creatives={rows}
-          index={viewerIndex}
-          onIndexChange={setViewerIndex}
+      {/*
+        AD-PREVIEW-DEFAULT-001 — one popup, on the client's link too.
+
+        No `detailsTo`: a client holding a share link has no Content page to reach and no account to
+        reach it with, so the control the operator gets is simply absent here rather than present and
+        refusing. The media itself is the whole of what this surface owes them.
+      */}
+      {viewerIndex !== null && rows[viewerIndex] && (
+        <AdPreviewDialog
+          creative={rows[viewerIndex]}
+          locale={ar ? 'ar' : 'en'}
           onClose={() => setViewerIndex(null)}
-          canZoom={permissions.image_zoom}
         />
       )}
 

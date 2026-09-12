@@ -175,10 +175,18 @@ export function AdPreviewDialog({
           {creative.ad_set_id && (
             <Fact label={ar ? 'المجموعة الإعلانية' : 'Ad set'} value={creative.ad_set_id} />
           )}
-          {creative.ads.length > 0 && (
+          {/*
+            `?? []` because the type says this is always an array and the payloads disagree.
+
+            Analytics' rows carry `ads`; a card from the library's own list, and a row inside a
+            client's shared report, do not always. The dialog crashed the whole page the first time
+            it was opened from the library — a blank screen, not a missing tile — because one caller's
+            shape had been taken for the contract.
+          */}
+          {(creative.ads ?? []).length > 0 && (
             <Fact
               label={ar ? 'الإعلانات' : 'Ads'}
-              value={String(creative.ads.length)}
+              value={String((creative.ads ?? []).length)}
             />
           )}
         </dl>

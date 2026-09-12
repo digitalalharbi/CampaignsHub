@@ -127,6 +127,7 @@ import { useQuery } from '@tanstack/react-query'
 import { StoreFunnelTab } from './StoreFunnelTab'
 import { AttributionPanel } from './AttributionPanel'
 import { AdPoster } from '@/features/content/AdPoster'
+import { usePortalPath } from '@/app/portalPath'
 import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
 import { creativeDialogFigures } from '@/features/content/creativeDialogFigures'
 import { CreativeComparison, CreativeTrend } from '@/features/content/CreativeTrend'
@@ -2297,6 +2298,8 @@ function DrillCrumbs({ path, level, ar, onUpTo }: { path: DrillStep[]; level: Dr
  * a campaign total would be a number nobody measured.
  */
 function CreativeTab({ projectId, range, filters }: TabProps) {
+  /* AD-PREVIEW-DEFAULT-001 — the popup's link resolves in the portal the reader is standing in. */
+  const portalTo = usePortalPath()
   const ar = useAr()
   /*
    * HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN — the last rung of campaign → ad set → ad → creative.
@@ -2534,7 +2537,12 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
                 </>
               )
               : undefined}
-            detailsTo={`/app/content/${openCreative.id}`}
+            /*
+              AD-PREVIEW-DEFAULT-001 — the ad's own page, in the portal the reader is standing in.
+              This was hardcoded `/app/content/…`, so every operator working in `/agency` — which is
+              where this table is most used — was sent across portals by the one link the popup has.
+            */
+            detailsTo={portalTo(`/content/${openCreative.id}`)}
             onClose={() => setOpenCreative(null)}
           />
         )}
@@ -2583,6 +2591,8 @@ function EntityState({ row, windowEnd, ar }: { row: EntityRow; windowEnd: string
 }
 
 function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad_set' | 'ad' }) {
+  /* AD-PREVIEW-DEFAULT-001 — the popup's link resolves in the portal the reader is standing in. */
+  const portalTo = usePortalPath()
   const ar = useAr()
   /*
    * HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN — the parent comes from the URL, and it changes the QUERY.
@@ -2959,6 +2969,15 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
                 creative={openAd.creative}
                 locale={ar ? 'ar' : 'en'}
                 figures={openAd.figures}
+                /*
+                  AD-PREVIEW-DEFAULT-001 — and this one had no way out at all.
+
+                  The popup is deliberately shallow: «which ad is this, and did it work». Without a
+                  route to the creative's own page a reader who wants the rest has to leave, find the
+                  Content library, and search for it by name — so they do not, and decide from three
+                  figures.
+                */
+                detailsTo={portalTo(`/content/${openAd.creative.id}`)}
                 onClose={() => setOpenAd(null)}
               />
             )}

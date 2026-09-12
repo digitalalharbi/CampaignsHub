@@ -153,7 +153,12 @@ export interface CreativeCard {
    * share each creative, and a card built from it pointed at one of four while looking definite.
    * `external_ads.creative_id` is the canonical relation, and it is the only one now.
    */
-  ads: CreativeAd[]
+  /*
+   * Optional because the payloads are. `CreativePresenter` sends it, and a row that reached this
+   * type through a client report's boundary or an older snapshot does not — which is how a dialog
+   * reading `creative.ads.length` took a whole page down the first time a new surface opened it.
+   */
+  ads?: CreativeAd[]
   preview: CreativePreview
   aspect_ratio: string | null
   duration_seconds: number | null

@@ -3,7 +3,9 @@ import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { GitCompare, Layers, LayoutGrid, Rows3 } from 'lucide-react'
 import { PosterImage } from './PosterImage'
-import { CreativeViewer } from './CreativeViewer'
+import { AdPreviewDialog } from './AdPreviewDialog'
+import { creativeDialogFigures } from './creativeDialogFigures'
+import { CreativeTrend } from './CreativeTrend'
 import { CreativeCompare } from './CreativeCompare'
 import { formatMetric, metricLabel, metricState } from './metrics'
 import { creativeGrainMissing, emptyReason, noDisplayableMetrics, type EmptyReason, type MetricsAvailability } from './availability'
@@ -1202,19 +1204,40 @@ export function CreativesPage() {
         </nav>
       )}
 
+      {/*
+        AD-PREVIEW-DEFAULT-001 — a thumbnail opens the quick popup, and the popup opens the page.
+
+        «Cancel this page for viewing content and adopt the direct, simple popup — and from it go to
+        the content's own analytics page.» The full-screen viewer carried a rail of figures that the
+        creative's own page already draws better — identity, copy, figures, funnel, trend, by
+        platform, peers, fatigue, evidence, insights against that rail's four blocks — so the reader
+        met a shallower copy of the page and had no route from it to the real one.
+
+        The popup answers «which ad is this, and did it work»; the page answers everything else, and
+        `detailsTo` is the way there. Paging between creatives goes with the viewer: the grid behind
+        the popup is the way to the next one, and it keeps the reader's filters and scroll position.
+      */}
       {viewerIndex !== null && creatives[viewerIndex] && (
-        <CreativeViewer
-          creatives={creatives}
-          index={viewerIndex}
-          onIndexChange={setViewerIndex}
+        <AdPreviewDialog
+          creative={creatives[viewerIndex]}
+          locale={ar ? 'ar' : 'en'}
+          /* This library's own window and currency — the popup never decides what «this period» is. */
+          figures={creativeDialogFigures(creatives[viewerIndex].metrics ?? undefined, data?.currency ?? null, ar)}
+          trend={currentProjectId
+            ? (
+              <CreativeTrend
+                projectId={currentProjectId}
+                creativeId={creatives[viewerIndex].id}
+                window={{ from, to }}
+                locale={ar ? 'ar' : 'en'}
+                currency={data?.currency ?? 'SAR'}
+                height={180}
+              />
+            )
+            : undefined}
+          /* The library's address travels with the link, so Back rebuilds the shelf as it was. */
+          detailsTo={`${creatives[viewerIndex].id}${libraryAddress}`}
           onClose={() => setViewerIndex(null)}
-          /*
-           * The panel, with the figures beside the asset — so «should we keep running this» is
-           * answerable here rather than four navigations away. It carries THIS library's window, so
-           * the pane can never quote a different period from the row that opened it, and the
-           * details link carries the library's address so Back rebuilds the shelf.
-           */
-          analysis={{ window: { from, to }, detailsTo: (c) => `${c.id}${libraryAddress}` }}
         />
       )}
 

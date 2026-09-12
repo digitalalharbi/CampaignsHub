@@ -4,7 +4,7 @@ import { creativeKindLabel } from './CreativesPage'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Maximize2, Minus, Plus, RotateCcw } from 'lucide-react'
-import { CreativeViewer } from './CreativeViewer'
+import { AdPreviewDialog } from './AdPreviewDialog'
 import { CreativeVideoPlayer } from './CreativeVideoPlayer'
 import { CreativeInsightCard } from './CreativeInsightCard'
 import { CreativeCarousel } from './CreativeCarousel'
@@ -760,13 +760,18 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
         )}
       </section>
 
-      {/* Reused rather than rebuilt: the viewer already owns zoom, the arrow keys and Escape, and
-          it unmounts the player on close — which is what stops a video that was playing. */}
+      {/*
+        AD-PREVIEW-DEFAULT-001 — the same popup every other surface opens.
+
+        No `detailsTo`: the reader IS on the creative's page, and a link back to the page they are
+        standing on is a control that cannot do anything. No `figures` either — the page states them
+        in full a few sections up, and a shorter second copy inside a modal over it is the kind of
+        duplicate that eventually disagrees.
+      */}
       {fullscreen && (
-        <CreativeViewer
-          creatives={[creative]}
-          index={0}
-          onIndexChange={() => undefined}
+        <AdPreviewDialog
+          creative={creative}
+          locale={locale}
           onClose={() => setFullscreen(false)}
         />
       )}
