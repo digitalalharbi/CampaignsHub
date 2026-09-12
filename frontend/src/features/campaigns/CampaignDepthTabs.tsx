@@ -1,4 +1,6 @@
 import { AlertCircle, CheckCircle2, Clock, Layers, MinusCircle, Target, XCircle } from 'lucide-react'
+import { MetricTable } from '@/components/ui/MetricTable'
+import { Num } from '@/components/ui/Num'
 import { useCampaignEvents, useCampaignSyncLog } from './metrics'
 import { objectiveLabel } from './labels'
 import type { UnifiedCampaign } from './types'
@@ -113,34 +115,28 @@ export function CampaignEventsTab({ campaign, projectId, range }: { campaign: Un
           description="لا تُعرض أحداث بقيمة صفر. إذا كنت تتوقع أحداثًا، تحقق من ربط المنصة وإعداد التتبع."
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border bg-surface">
-          <table data-testid="events-table" className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-text-muted">
-                <th className="p-3 text-start">الحدث</th>
-                <th className="p-3 text-center">العدد</th>
-                <th className="p-3 text-center">التكلفة لكل حدث</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.map((e) => {
-                const Icon = e.key === purpose ? EVENT_ICON.high : Target
-                return (
-                  <tr key={e.key} className="border-b border-border last:border-0">
-                    <td className="p-3">
-                      <span className="flex items-center gap-2">
-                        <Icon size={14} className={e.key === purpose ? 'text-success' : 'text-text-muted'} />
-                        <span className="font-semibold text-text-primary">{e.label_ar}</span>
-                        {e.key === purpose && <Badge tone="success">الغرض المعلن</Badge>}
-                      </span>
-                    </td>
-                    <td className="p-3 text-center font-semibold text-text-primary"><span className="tnum">{num(e.count)}</span></td>
-                    <td className="p-3 text-center text-text-secondary"><span className="tnum">{e.cost_per !== null ? moneyExact(e.cost_per, cur ?? null) : '—'}</span></td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+        <div data-testid="events-table" className="overflow-hidden rounded-2xl border border-border bg-surface">
+          {/*
+            TABLE-NUMERIC-ALIGNMENT-001 §58 — a consumer. The exemption said «nested expansion rows»
+            and there are none: three columns, one row per event, nothing expands. The testid moves
+            to the wrapper so anything addressing this block still finds it.
+          */}
+          <MetricTable
+            head={['الحدث', 'العدد', 'التكلفة لكل حدث']}
+            rows={events.map((e) => {
+              const Icon = e.key === purpose ? EVENT_ICON.high : Target
+
+              return [
+                <span key="l" className="flex items-center gap-2">
+                  <Icon size={14} className={e.key === purpose ? 'text-success' : 'text-text-muted'} />
+                  <span className="font-semibold text-text-primary">{e.label_ar}</span>
+                  {e.key === purpose && <Badge tone="success">الغرض المعلن</Badge>}
+                </span>,
+                <Num key="c">{num(e.count)}</Num>,
+                <Num key="p">{e.cost_per !== null ? moneyExact(e.cost_per, cur ?? null) : '—'}</Num>,
+              ]
+            })}
+          />
         </div>
       )}
     </div>

@@ -60,8 +60,12 @@ const EXEMPT: Record<string, string> = {
     + 'table that used to sit beside it is a consumer now — it needed none of the three. The recorded reason used '
     + 'to be «row selection and bulk actions live inside the table», and neither table on this page has ever had a '
     + 'checkbox: a false reason sends the next reader to build selection support nobody is waiting for',
-  'src/features/campaigns/CampaignDepthTabs.tsx': 'nested expansion rows, which the primitive does not model',
-  'src/features/campaigns/overview/UnifiedCampaignOverview.tsx': 'per-row sparklines and a drag handle',
+  'src/features/campaigns/overview/UnifiedCampaignOverview.tsx': 'renders at TWO SCALES with its own palette — '
+    + 'the same table at `text-xs` on a panel and `text-sm` on a wall display, with border and muted tones taken '
+    + 'from the surrounding theme rather than the app\'s. `MetricTable` offers no scale and no palette, which is '
+    + 'a real gap and the one to close before this migrates. The recorded reason used to be «per-row sparklines '
+    + 'and a drag handle»: the file contains neither — no sparkline at all, and its only «drag» is a comment '
+    + 'about a past layout bug',
 }
 
 /**
