@@ -122,3 +122,12 @@ rungs rendered, the Project rung being #357's addition.
   `meta.withheld` scoped to the filter, the hook reads them through `getEnvelope` instead of
   throwing `meta` away, and the tab says «تُعرض 100 من 250». Proved by injection: counting without
   the filter fails the one case that is about the filter.
+- **And the NOTIFICATION CENTRE had the same silence**, which the first pass over this backlog line
+  walked past because `meta.unread` looked like the endpoint already said something. An unread
+  COUNT is not a statement of completeness: three hundred notifications with ninety unread showed a
+  hundred rows beside «90», and nothing on screen said the other two hundred existed.
+  `total` and `withheld` travel beside `unread` now, `listNotifications` reads them instead of
+  taking `unread` and discarding the rest, and the dropdown says «تُعرض 100 من 300» only when
+  something is actually held back. Built inline from the locale rather than by adding interpolation
+  to `useT`, which takes a key and no values — a much larger blast radius than the defect.
+  One defect, two routes, one unit: the campaign tab and the centre, each proved by injection.
