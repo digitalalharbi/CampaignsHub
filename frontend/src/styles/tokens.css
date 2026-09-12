@@ -230,12 +230,29 @@ textarea {
   font-size: var(--text-base);
 }
 
-/* Latin, tabular numerals for numbers/dates/ids even inside RTL Arabic UI. */
+/*
+ * Tabular numerals — KPI-ALIGNMENT-002 §C.
+ *
+ * This class also set `direction: ltr; unicode-bidi: isolate`, and that second job is what the
+ * owner reported twice. `direction` re-bases every logical property on the element it lands on, so
+ * `.tnum` on a BLOCK made `text-align: start` mean LEFT — the figure jumped to the far edge of its
+ * card while its Arabic label stayed at the near one. Measured on the content summary: 134px apart,
+ * with no `dir` attribute anywhere near it. Eighty-six blocks across forty-nine files carried it.
+ *
+ * The two jobs are now separate. This shapes digits and nothing else, so it is safe on any element.
+ * Latin reading order — which «539K SAR» genuinely needs, or the currency lands at the wrong end —
+ * is `<Num>`, a `<bdi dir="ltr">` that isolates the run INLINE and moves no block.
+ *
+ * A run of bare digits needs neither: digits are directionally neutral and take the paragraph's
+ * order, which for «1,234» renders identically in both.
+ *
+ * Held by `e2e/metric-alignment.spec.ts` and not by a unit test: vitest stubs CSS (`css: false`), so
+ * nothing in this file is readable from one. Putting `direction` back fires that spec at 134px on
+ * the content summary — which is the measurement the owner made from a screenshot, automated.
+ */
 .tnum {
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
-  direction: ltr;
-  unicode-bidi: isolate;
 }
 
 @media (prefers-reduced-motion: reduce) {

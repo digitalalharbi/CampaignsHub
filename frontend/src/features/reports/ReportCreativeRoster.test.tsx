@@ -38,7 +38,13 @@ describe('the roster of everything that ran', () => {
 
     expect(screen.getByTestId('report-roster-scope')).toHaveTextContent('65 creatives')
     expect(screen.getByTestId('report-roster-withheld')).toHaveTextContent('60 listed here, 5 not shown')
-    expect(screen.getAllByTestId('report-roster-row')).toHaveLength(60)
+    /*
+      A PAGE of the sixty, not all sixty — §D renders the roster fifty at a time and offers the rest.
+      What this case is about is the SCOPE sentence, which must keep describing the sixty-five that
+      ran whatever the table happens to have drawn so far.
+    */
+    expect(screen.getAllByTestId('report-roster-row')).toHaveLength(50)
+    expect(screen.getByTestId('report-roster-more')).toHaveTextContent('10 remaining')
   })
 
   /* Nothing withheld says nothing about withholding — a «0 not shown» is noise on every full report. */
@@ -160,6 +166,48 @@ describe('the roster of everything that ran', () => {
     )
 
     expect(screen.queryByTestId('report-roster-open')).toBeNull()
+  })
+
+  /**
+   * REPORT-CREATIVE-TRUTH-001 §D — every creative is REACHABLE, a page at a time.
+   *
+   * «A disclosed 65 ran / 60 listed cap alone is not completion.» The payload carries them all now;
+   * what the table must not do is draw four thousand rows in one pass. The button is the difference
+   * between a bound and a page: the rows are here, it says how many are left, and nothing is
+   * withheld behind a request.
+   */
+  it('draws a first page and offers the rest, saying how many', () => {
+    renderWithProviders(
+      <ReportCreativeRoster roster={many(120)} inScope={120} withheld={0} locale="en" form="detailed" />,
+      { locale: 'en' },
+    )
+
+    expect(screen.getAllByTestId('report-roster-row')).toHaveLength(50)
+    expect(screen.getByTestId('report-roster-more')).toHaveTextContent('70 remaining')
+  })
+
+  it('reaches the whole estate by pressing on', () => {
+    renderWithProviders(
+      <ReportCreativeRoster roster={many(120)} inScope={120} withheld={0} locale="en" form="detailed" />,
+      { locale: 'en' },
+    )
+
+    fireEvent.click(screen.getByTestId('report-roster-more'))
+    expect(screen.getAllByTestId('report-roster-row')).toHaveLength(100)
+
+    fireEvent.click(screen.getByTestId('report-roster-more'))
+    expect(screen.getAllByTestId('report-roster-row')).toHaveLength(120)
+    expect(screen.queryByTestId('report-roster-more'), 'it offered more when there was none').toBeNull()
+  })
+
+  /** A list that fits needs no button at all. */
+  it('offers nothing more when everything is already drawn', () => {
+    renderWithProviders(
+      <ReportCreativeRoster roster={many(4)} inScope={4} withheld={0} locale="en" form="detailed" />,
+      { locale: 'en' },
+    )
+
+    expect(screen.queryByTestId('report-roster-more')).toBeNull()
   })
 
   /** Arabic counts its noun — «65 مادة إعلانية», not «65 مواد إعلانية». */

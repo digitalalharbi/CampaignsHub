@@ -46,15 +46,28 @@ final class ReportAds
     private const SUMMARY_ROWS = 60;
 
     /**
-     * And the most a FULL report presents, which is meant to hold the whole estate.
+     * The most creatives PRESENTED as cards, for the ranked lists a report leads with.
      *
-     * «Full reports must be able to show ALL promoted creatives truthfully.» `present()` is fully
-     * batched — one query for the figures, one for the campaigns, one for the ads, one for delivery —
-     * so five hundred rows cost the same round trips as sixty and only the per-row card differs. The
-     * bound stays because a payload has to end somewhere, and `creatives_withheld` states it when an
-     * estate is large enough to reach it, rather than the page pretending it is the whole account.
+     * A presented row carries a preview envelope, the platform's ad objects and a headline layout,
+     * and the ranked lists need every bit of it — «which of these worked» is answered with the
+     * picture that ran. Five hundred candidates is far more than any ranking reads, and the cost is
+     * per row rather than per query: `present()` is fully batched.
      */
-    private const FULL_ROWS = 500;
+    private const RANKING_CANDIDATES = 500;
+
+    /**
+     * And the roster is not bounded at all — REPORT-CREATIVE-TRUTH-001 §D.
+     *
+     * «A disclosed 65 ran / 60 listed cap alone is not completion.» §B made the bound honest and left
+     * the five creatives past it unreachable, which is a disclosed gap and still a gap.
+     *
+     * What had been costing the bound was never the query. It was the presented CARD, stored in a
+     * snapshot and parsed on every open. A roster is a table of names and figures and draws none of
+     * it, so it is built lean — nine fields a row — and once a row is nine fields the bound that was
+     * protecting the payload is protecting nothing. An account with four thousand creatives gets four
+     * thousand rows, rendered a page at a time by the surface that reads them.
+     */
+    private const SUMMARY_ROSTER = self::SUMMARY_ROWS;
 
     public function __construct(
         private readonly CreativeRows $creatives,
@@ -88,10 +101,23 @@ final class ReportAds
          */
         $inScope = (clone $query)->count();
 
-        $limit = $form === 'executive_summary' ? self::SUMMARY_ROWS : self::FULL_ROWS;
+        /*
+         * The roster FIRST, from its own lean read, because it is the one that must be complete.
+         *
+         * A five-page summary curates on purpose and keeps its bound; a full report takes the whole
+         * estate. Ordered by spend descending, the same order the presented rows use, so the two
+         * sections cannot disagree about which creative leads.
+         */
+        $rosterQuery = $this->creatives->applySort(clone $query, 'spend', $from, $to);
+
+        if ($form === 'executive_summary') {
+            $rosterQuery->limit(self::SUMMARY_ROSTER);
+        }
+
+        $roster = $this->creatives->lean($rosterQuery->get(), $from, $to);
 
         $rows = $this->creatives->present(
-            $this->creatives->applySort($query, 'spend', $from, $to)->limit($limit)->get(),
+            $this->creatives->applySort($query, 'spend', $from, $to)->limit(self::RANKING_CANDIDATES)->get(),
             $from,
             $to,
             withFatigue: false,
@@ -99,7 +125,7 @@ final class ReportAds
 
         if ($rows === []) {
             return [
-                'ads' => [], 'worst' => [], 'groups' => [], 'roster' => [], 'level' => 'campaign',
+                'ads' => [], 'worst' => [], 'groups' => [], 'roster' => $roster, 'level' => 'campaign',
                 'reason' => 'no_creatives_in_window',
                 'creatives_in_scope' => $inScope,
                 'creatives_withheld' => $inScope,
@@ -161,11 +187,18 @@ final class ReportAds
          * the same rows, the same presenter, the same figures — no second pipeline, and nothing here
          * is ranked, so it makes no claim the lists above have not already earned.
          */
-        $withheld = max(0, $inScope - count($rows));
+        /*
+         * What the ROSTER left out, which for a full report is now always nothing.
+         *
+         * Counted against the roster rather than the presented rows: the presented rows are ranking
+         * candidates and were never the list a reader is owed. A summary's five hundredth creative is
+         * still withheld, and says so.
+         */
+        $withheld = max(0, $inScope - count($roster));
 
         return $ranked === []
-            ? ['ads' => [], 'worst' => [], 'groups' => $groups, 'roster' => $rows, 'level' => 'ad', 'reason' => 'no_rankable_metric_for_this_objective', 'creatives_in_scope' => $inScope, 'creatives_withheld' => $withheld]
-            : ['ads' => $ranked, 'worst' => $weakest, 'groups' => $groups, 'roster' => $rows, 'level' => 'ad', 'reason' => null, 'creatives_in_scope' => $inScope, 'creatives_withheld' => $withheld];
+            ? ['ads' => [], 'worst' => [], 'groups' => $groups, 'roster' => $roster, 'level' => 'ad', 'reason' => 'no_rankable_metric_for_this_objective', 'creatives_in_scope' => $inScope, 'creatives_withheld' => $withheld]
+            : ['ads' => $ranked, 'worst' => $weakest, 'groups' => $groups, 'roster' => $roster, 'level' => 'ad', 'reason' => null, 'creatives_in_scope' => $inScope, 'creatives_withheld' => $withheld];
     }
 
     /**
