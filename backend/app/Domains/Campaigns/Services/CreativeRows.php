@@ -502,7 +502,7 @@ final class CreativeRows
      * @param  Collection<int, ExternalCreative>  $creatives
      * @return list<array<string, mixed>>
      */
-    public function lean(mixed $creatives, Carbon $from, Carbon $to): array
+    public function lean(mixed $creatives, Carbon $from, Carbon $to, bool $withPreview = false): array
     {
         $ids = array_map('strval', $creatives->modelKeys());
 
@@ -532,6 +532,29 @@ final class CreativeRows
                 'objective' => $objective,
                 'metrics' => $figures[$id] ?? null,
             ];
+
+            /*
+             * REPORT-CREATIVE-MEDIA-001 — the media, only where it is not being STORED.
+             *
+             * The paragraph above explains why this list carries no preview: a snapshot outlives a
+             * signed URL and must not carry a credential into a client's document. That reasoning
+             * is about STORING one, and the live link stores nothing — it is built on every open.
+             *
+             * Resolving it here rather than afterwards avoids loading every creative a SECOND time:
+             * they are already in hand at this point, and attaching the media after the fact
+             * re-queried and re-hydrated all of them — 1,539 rows on the owner's own report, every
+             * open.
+             *
+             * Measured honestly: on the sixty-creative seed the two versions are the same speed
+             * (778ms against 770ms, which is noise). The ~70ms both pay over the no-media baseline
+             * is `preview()` itself, about 1.1ms a creative, and that cost is unavoidable if the
+             * pictures are to be right. The double load is what this removes, and sixty rows is too
+             * small to see it — which is a reason to state the measurement rather than dress the
+             * change as a speed-up it has not been shown to be.
+             */
+            if ($withPreview) {
+                $out[count($out) - 1]['preview'] = $this->presenter->preview($creative);
+            }
         }
 
         return $out;
