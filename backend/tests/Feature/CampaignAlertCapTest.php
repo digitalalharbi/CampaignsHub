@@ -162,4 +162,41 @@ final class CampaignAlertCapTest extends TestCase
         $this->assertSame(40, $counts['resolved']);
         $this->assertSame(145, $counts['all']);
     }
+
+    /**
+     * The NOTIFICATION CENTRE has the same shape, and the same silence.
+     *
+     * `NotificationController::index` bounds at a hundred and returns `meta.unread`. An unread count
+     * is not a statement of completeness: a reader with three hundred notifications, ninety of them
+     * unread, saw a hundred rows beside «unread: 90» and had nothing on the page telling them two
+     * hundred more existed. Same fix, same reason, and it is asserted here rather than in a second
+     * file because it is one defect wearing two routes.
+     */
+    public function test_the_notification_centre_states_its_own_bound(): void
+    {
+        for ($i = 0; $i < 105; $i++) {
+            AppNotification::create([
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $this->tenant->id,
+                'project_id' => $this->project->id,
+                'user_id' => $this->user->id,
+                'type' => 'budget_risk',
+                'severity' => 'info',
+                'title' => "N{$i}",
+                'status' => $i < 30 ? 'unread' : 'read',
+            ]);
+        }
+
+        $body = $this->actingAs($this->user, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->project->id}/notifications")
+            ->assertOk()
+            ->json();
+
+        $this->assertCount(100, $body['data'], 'the cap itself should still hold');
+        $this->assertSame(105, $body['meta']['total'] ?? null, 'the centre did not say how many there are');
+        $this->assertSame(5, $body['meta']['withheld'] ?? null);
+
+        /* The unread count it already carried answers its own question and is untouched. */
+        $this->assertSame(30, $body['meta']['unread'] ?? null);
+    }
 }
