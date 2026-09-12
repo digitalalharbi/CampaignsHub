@@ -13,6 +13,7 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
@@ -238,6 +239,93 @@ final class ScopeOptionSearchTest extends TestCase
         $this->actingAs($this->operator, 'sanctum')
             ->getJson("/api/v1/projects/{$this->project->id}/reports/scope/options?axis=nonsense&q=x")
             ->assertStatus(422);
+    }
+
+    /**
+     * REPORT-SCOPE-SELECTION-001 — a campaign that ran in the WINDOW, whatever its status is today.
+     *
+     * «Reportability = campaign lifecycle + selected period + canonical status — NOT a simplistic
+     * `status === active` frontend filter», because a campaign inactive today may have been active
+     * during a historical report window. A builder that grouped by today's status would file a
+     * completed campaign under «did not run» and silently drop its spend from a report about the
+     * month it ran in.
+     */
+    public function test_a_completed_campaign_that_ran_in_the_window_reports_its_last_active_day(): void
+    {
+        $this->campaign->forceFill(['status' => 'completed'])->save();
+
+        DailyMetric::create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'unified_campaign_id' => $this->campaign->id,
+            'external_account_id' => $this->external->external_account_id,
+            'external_campaign_id' => $this->external->id,
+            'provider' => 'meta',
+            'metric_key' => 'spend',
+            'metric_date' => '2026-07-15',
+            'value' => 120,
+        ]);
+
+        $row = collect($this->scopeOptions(['from' => '2026-07-01', 'to' => '2026-07-31'])['campaigns'])
+            ->firstWhere('id', (string) $this->campaign->id);
+
+        $this->assertSame('completed', $row['status']);
+        $this->assertSame('2026-07-15', $row['last_active_on'], 'a campaign that ran was filed as one that did not');
+    }
+
+    /** A day of zeros is not a day the campaign ran — the same rule the relevance ordering uses. */
+    public function test_a_window_of_zeros_is_not_activity(): void
+    {
+        DailyMetric::create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'unified_campaign_id' => $this->campaign->id,
+            'external_account_id' => $this->external->external_account_id,
+            'external_campaign_id' => $this->external->id,
+            'provider' => 'meta',
+            'metric_key' => 'spend',
+            'metric_date' => '2026-07-15',
+            'value' => 0,
+        ]);
+
+        $row = collect($this->scopeOptions(['from' => '2026-07-01', 'to' => '2026-07-31'])['campaigns'])
+            ->firstWhere('id', (string) $this->campaign->id);
+
+        $this->assertNull($row['last_active_on'], 'a month of zeros was read as a month of running');
+    }
+
+    /**
+     * And activity OUTSIDE the window is not activity inside it.
+     *
+     * The whole clause is that the question is asked about the period being reported on. A campaign
+     * that ran in June and was dark in July must not be grouped as having run in a July report.
+     */
+    public function test_activity_outside_the_window_does_not_count(): void
+    {
+        DailyMetric::create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'unified_campaign_id' => $this->campaign->id,
+            'external_account_id' => $this->external->external_account_id,
+            'external_campaign_id' => $this->external->id,
+            'provider' => 'meta',
+            'metric_key' => 'spend',
+            'metric_date' => '2026-06-15',
+            'value' => 500,
+        ]);
+
+        $row = collect($this->scopeOptions(['from' => '2026-07-01', 'to' => '2026-07-31'])['campaigns'])
+            ->firstWhere('id', (string) $this->campaign->id);
+
+        $this->assertNull($row['last_active_on']);
+    }
+
+    /** With no period asked about, no claim is made either way. */
+    public function test_no_period_means_no_claim(): void
+    {
+        $row = collect($this->scopeOptions()['campaigns'])->firstWhere('id', (string) $this->campaign->id);
+
+        $this->assertNull($row['last_active_on']);
     }
 
     /** And with no axis asked for, the endpoint answers exactly as it always did. */

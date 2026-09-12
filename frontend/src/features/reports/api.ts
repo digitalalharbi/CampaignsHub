@@ -453,7 +453,20 @@ export interface ScopeExplain {
 }
 
 export interface ScopeOptions {
-  campaigns: Array<{ id: string; name: string; status: string | null; objective: string | null }>
+  campaigns: Array<{
+    id: string
+    name: string
+    status: string | null
+    objective: string | null
+    /**
+     * REPORT-SCOPE-SELECTION-001 — the last day this campaign ran INSIDE the period being reported on.
+     *
+     * Null where no period was asked about, which is «no claim» rather than «did not run»: an absence
+     * of a question is not an answer. Today's `status` cannot substitute for it — a campaign that is
+     * completed now may have been the account's largest spender during the month being reported.
+     */
+    last_active_on?: string | null
+  }>
   providers: string[]
   accounts: Array<{ id: string; name: string; provider: string }>
   ad_sets: Array<{ id: string; name: string; provider: string; campaign_id: string }>
@@ -486,7 +499,11 @@ export interface ScopeTemplate {
   created_at: string | null
 }
 
-export const scopeOptions = (p: string) => getData<ScopeOptions>(`${base(p)}/scope/options`)
+export const scopeOptions = (p: string, period?: { from?: string; to?: string }) =>
+  getData<ScopeOptions>(
+    `${base(p)}/scope/options`
+    + (period?.from && period?.to ? `?from=${period.from}&to=${period.to}` : ''),
+  )
 
 /**
  * One axis of the scope options, searched where the rows live — UX-MULTISELECT-SCALE-001.

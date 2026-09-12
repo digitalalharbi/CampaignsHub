@@ -13,6 +13,7 @@ use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportScopeTemplate;
@@ -77,6 +78,8 @@ final class ReportScopeController extends Controller
         $request->validate([
             'axis' => ['nullable', Rule::in(array_keys(self::SEARCHABLE))],
             'q' => ['nullable', 'string', 'max:200'],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date'],
         ]);
 
         $axis = $request->string('axis')->toString();
@@ -96,6 +99,19 @@ final class ReportScopeController extends Controller
          * omits it. The same rule the campaign filter already follows: fetch one past the cap so
          * «there are more» is a FACT, and say it.
          */
+        /*
+         * The window the report is about, where the caller named one.
+         *
+         * One aggregate for the whole project rather than a query per campaign: a project with four
+         * hundred campaigns is exactly the cardinality this requirement exists for, and four hundred
+         * round trips to decide a heading is not a grouping, it is an outage.
+         */
+        $from = $request->date('from');
+        $to = $request->date('to');
+        $lastActive = $from !== null && $to !== null
+            ? app(MetricsAggregator::class)->forProjects([$project])->lastActiveByCampaign($from, $to)
+            : [];
+
         [$campaigns, $campaignsMore] = $this->bounded(
             UnifiedCampaign::query()
                 ->where('project_id', $project)
@@ -107,6 +123,18 @@ final class ReportScopeController extends Controller
                 'name' => (string) ($c->client_display_name ?: $c->name),
                 'status' => $c->status,
                 'objective' => $c->objective,
+                /*
+                 * REPORT-SCOPE-SELECTION-001 — did this campaign RUN in the period being reported on?
+                 *
+                 * «Reportability = campaign lifecycle + selected period + canonical status — NOT a
+                 * simplistic `status === active` frontend filter», because a campaign inactive today
+                 * may have been active during a historical report window. Filtering on today's status
+                 * would silently drop its spend from a report about last month.
+                 *
+                 * Null where no period was asked about, which the picker reads as «no claim made»
+                 * rather than as «did not run» — an absence of a question is not an answer.
+                 */
+                'last_active_on' => $lastActive[(string) $c->getKey()] ?? null,
             ],
         );
 

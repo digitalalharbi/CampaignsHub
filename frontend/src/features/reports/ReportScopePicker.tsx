@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { isClientAudience } from './InteractiveReport'
+import { orderByReportability } from '@/features/campaigns/campaignRelevance'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, Info, Trash2 } from 'lucide-react'
 import {
@@ -44,6 +45,7 @@ const COPY = {
     title: 'نطاق التقرير',
     subtitle: 'اختر ما يغطيه هذا التقرير. كل ما لا تختاره يبقى بلا تحديد — أي كل المشروع.',
     covers: 'ما سيغطيه هذا التقرير',
+    ranInPeriod: 'مرتّبة حسب ما عمل خلال فترة التقرير — الحالة اليوم لا تقرّر ما إذا كانت الحملة قد عملت وقتها.',
     coversAll: 'لم تُحدَّد أي فلترة — سيغطي التقرير المشروع كاملًا خلال فترته.',
     axisCount: (n: number) => `${n} محدَّد`,
     platforms: 'المنصات',
@@ -83,6 +85,7 @@ const COPY = {
   en: {
     title: 'Report scope',
     covers: 'What this report will cover',
+    ranInPeriod: 'Ordered by what ran during the report’s period — today’s status does not decide whether a campaign ran then.',
     coversAll: 'Nothing is narrowed — the report covers the whole project for its period.',
     axisCount: (n: number) => `${n} selected`,
     subtitle: 'Choose what this report covers. Anything you leave alone stays unbounded — the whole project.',
@@ -157,7 +160,19 @@ export function ReportScopePicker({
    */
   const namesInternalEntities = !isClientAudience(audience ?? 'client')
 
-  const options = useQuery({ queryKey: ['report-scope-options', projectId], queryFn: () => scopeOptions(projectId), retry: false })
+  /*
+   * REPORT-SCOPE-SELECTION-001 — the campaign list knows which period it is being asked about.
+   *
+   * The period is in the query KEY as well as in the request. Serving June's answer from cache for a
+   * July report is how a campaign that ran all July ends up filed under «did not run» — the same
+   * mistake as reading today's status, arriving by a different route.
+   */
+  const period = { from: value.from, to: value.to }
+  const options = useQuery({
+    queryKey: ['report-scope-options', projectId, period.from, period.to],
+    queryFn: () => scopeOptions(projectId, period),
+    retry: false,
+  })
   const templates = useQuery({ queryKey: ['report-scope-templates', projectId], queryFn: () => listScopeTemplates(projectId), retry: false })
 
   const [templateName, setTemplateName] = useState('')
@@ -220,6 +235,33 @@ export function ReportScopePicker({
     [value],
   )
 
+  /*
+   * The campaigns, ordered by what ran in the REPORT'S window — ENTITY-RELEVANCE-ORDERING-001.
+   *
+   * Through `orderByReportability` and NOT `orderByRelevance`, and the difference is the whole
+   * clause. The relevance rule answers «what can an operator act on now», and its first move is to
+   * file anything completed as stopped however much it spent — right for the campaigns workspace and
+   * wrong here, because a campaign completed in August may have been the largest spender in the July
+   * report being built, and it would be buried under campaigns running today that contributed
+   * nothing to that month.
+   *
+   * With no period the server states no `last_active_on` and this returns the list untouched: an
+   * absence of a question is not an answer.
+   */
+  const campaignItems = useMemo(() => {
+    const rows = (options.data?.campaigns ?? []).map((c) => ({
+      campaign_id: c.id,
+      status: c.status,
+      last_active_on: c.last_active_on ?? null,
+      spend: null,
+      name: c.name,
+    }))
+
+    const ordered = orderByReportability(rows, period)
+
+    return ordered.map((c) => ({ id: c.campaign_id, label: c.name }))
+  }, [options.data, period.to])
+
   if (options.isLoading) return <Skeleton className="h-40 w-full" />
   if (options.isError) {
     return <ErrorState title={t.loadError} error={options.error} onRetry={() => void options.refetch()} ar={ar} />
@@ -267,11 +309,20 @@ export function ReportScopePicker({
 
       {namesInternalEntities && <ScopeSelect
         label={t.campaigns}
+        /*
+          REPORT-SCOPE-SELECTION-001 — «ran in this period» first, and said in words.
+
+          «Reportability = campaign lifecycle + selected period + canonical status — NOT a simplistic
+          `status === active` frontend filter», because a campaign inactive today may have been
+          active during the window being reported on. The heading decides ORDER and emphasis, never
+          membership: nothing is hidden, and with no period asked about no claim is made either way.
+        */
+        note={period.from && period.to ? t.ranInPeriod : undefined}
         truncated={o.truncated?.campaigns}
         axis="campaigns"
         projectId={projectId}
         limit={o.limit}
-        items={o.campaigns.map((c) => ({ id: c.id, label: c.name }))}
+        items={campaignItems}
         selected={value.campaign_ids ?? []}
         onChange={(next) => set('campaign_ids', next)}
         ar={ar}

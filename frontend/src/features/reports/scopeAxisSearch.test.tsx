@@ -120,6 +120,51 @@ describe('searching an axis the list could not hold', () => {
     expect(box.getAllByText('Ramadan retargeting').length).toBeGreaterThan(0)
   })
 
+  /**
+   * REPORT-SCOPE-SELECTION-001 — «ran in this period» decides the ORDER, and status today does not.
+   *
+   * «Reportability = campaign lifecycle + selected period + canonical status — NOT a simplistic
+   * `status === active` frontend filter», because a campaign inactive today may have been the
+   * account's largest spender during the month being reported on. Sorting by today's status would
+   * bury it under campaigns that are running now and contributed nothing to that report.
+   *
+   * Nothing is hidden: the order changes, membership does not.
+   */
+  it('puts a completed campaign that ran in the window above one that did not', async () => {
+    vi.mocked(api.scopeOptions).mockResolvedValue({
+      ...(options as never as api.ScopeOptions),
+      campaigns: [
+        { id: 'c-quiet', name: 'Quiet but active', status: 'active', objective: 'sales', last_active_on: null },
+        { id: 'c-ran', name: 'Ran in July', status: 'completed', objective: 'sales', last_active_on: '2026-07-28' },
+      ],
+    })
+    vi.mocked(api.listScopeTemplates).mockResolvedValue([] as never)
+    vi.mocked(api.explainScope).mockResolvedValue({ scope: {}, bound_axes: [], explain: [] })
+
+    renderWithProviders(
+      <ReportScopePicker
+        projectId="p1"
+        value={{ from: '2026-07-01', to: '2026-07-31' }}
+        onChange={vi.fn()}
+        audience="internal"
+      />,
+      { locale: 'en' },
+    )
+
+    const box = within(await screen.findByTestId('scope-select-Campaigns'))
+    fireEvent.click(box.getAllByRole('combobox')[0])
+
+    const names = box.getAllByRole('option').map((o) => o.textContent ?? '')
+    expect(names[0], 'today’s status decided the order of a historical report').toContain('Ran in July')
+  })
+
+  /** And the period travels with the request, so June's answer is never served for a July report. */
+  it('asks for the options of the period being reported on', async () => {
+    setup({ from: '2026-07-01', to: '2026-07-31' })
+
+    await waitFor(() => expect(api.scopeOptions).toHaveBeenCalledWith('p1', { from: '2026-07-01', to: '2026-07-31' }))
+  })
+
   /** And the bound now tells the reader what to DO, rather than to change what they are building. */
   it('says the list can be searched past', async () => {
     setup()
