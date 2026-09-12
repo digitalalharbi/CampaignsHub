@@ -37,7 +37,7 @@ test.describe('the content surfaces the owner checked', () => {
   test('the library prints no placeholder value and no cost as a percentage', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
     await page.goto('/agency/content')
-    await expect(page.locator('[data-testid="content-metrics"]')).toBeVisible({ timeout: 30000 })
+    await expect(page.locator('[data-testid="content-summary"]')).toBeVisible({ timeout: 30000 })
     await page.waitForLoadState('networkidle')
 
     const text = await surfaceText(page, 'main')
@@ -141,5 +141,78 @@ test.describe('the content surfaces the owner checked', () => {
     const text = await surfaceText(page, 'main')
     expect(text).not.toMatch(GARBAGE)
     expect(text).not.toMatch(MONEY_AS_PERCENT)
+  })
+})
+
+
+/**
+ * CONTENT-SUMMARY-COMPACT-001 / CONTENT-POPUP-VISUAL-001 — the owner's UX ruling, measured.
+ *
+ * «Too many large KPI cards, clutter without enough value … compact summary → filters → content
+ * grid → quick insight.» The strip had thirteen cards and nine of them read «no data» on the owner's
+ * own account — my own doing, and truthful rather than readable.
+ *
+ * Counting them is the check, because «compact» is exactly the property a screenshot shows and a
+ * unit test cannot.
+ */
+test.describe('the content library reads as a content page', () => {
+  test.use({ storageState: AUTH.owner })
+
+  test('the top is a compact summary, not a wall of cards', async ({ page, request }) => {
+    await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
+    await page.goto('/agency/content')
+
+    const summary = page.getByTestId('content-summary')
+    await expect(summary).toBeVisible({ timeout: 30000 })
+
+    /* Four figures. The other nine live on the creative's page and in the popup. */
+    const figures = summary.getByTestId('content-summary-figures').locator('> div')
+    await expect(figures).toHaveCount(4)
+
+    /* And the old thirteen-card strip is gone, not merely shrunk. */
+    await expect(page.getByTestId('content-metrics')).toHaveCount(0)
+  })
+
+  /**
+   * The summary sits ABOVE the filters, which sit above the grid.
+   *
+   * «compact summary → filters → content grid/table → quick insight» is an order, and an order is
+   * the one thing a component test cannot hold.
+   */
+  test('the page reads summary, then filters, then the grid', async ({ page, request }) => {
+    await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
+    await page.goto('/agency/content')
+
+    await expect(page.getByTestId('content-summary')).toBeVisible({ timeout: 30000 })
+
+    const top = async (selector: string) => (await page.locator(selector).first().boundingBox())?.y ?? Infinity
+
+    const summaryY = await top('[data-testid="content-summary"]')
+    const filtersY = await top('[data-testid="content-filters"]')
+    const gridY = await top('article')
+
+    expect(summaryY).toBeLessThan(gridY)
+    expect(filtersY, 'the filters are not between the summary and the grid').toBeLessThan(gridY)
+    expect(summaryY).toBeLessThan(filtersY)
+  })
+
+  /** And the popup leads with the work and its figures, not with a stack of ids. */
+  test('the popup puts the creative and its chart before its metadata', async ({ page, request }) => {
+    await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
+    await page.goto('/agency/content')
+
+    await page.getByRole('article').first().getByRole('button').first().click()
+
+    const dialog = page.getByTestId('ad-preview-dialog')
+    await expect(dialog).toBeVisible({ timeout: 15000 })
+
+    const meta = dialog.getByTestId('ad-preview-dialog-meta')
+    await expect(meta).toBeVisible()
+
+    const poster = await dialog.locator('img, video, [data-testid$="-absent"]').first().boundingBox()
+    const metaBox = await meta.boundingBox()
+
+    expect(poster?.y ?? Infinity, 'the media is not the first thing in the panel')
+      .toBeLessThan(metaBox?.y ?? 0)
   })
 })

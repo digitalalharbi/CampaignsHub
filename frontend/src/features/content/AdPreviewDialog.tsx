@@ -165,54 +165,27 @@ export function AdPreviewDialog({
         */}
         {creative.preview && <CreativeCarousel preview={creative.preview} locale={locale} />}
 
-        <dl className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-          <Fact label={ar ? 'المنصة' : 'Platform'} value={providerLabel(creative.provider, locale)} />
-          <Fact label={ar ? 'النوع' : 'Format'} value={creative.format} />
-          <Fact label={ar ? 'الحالة' : 'Status'} value={creative.status} />
-          {creative.campaign_name && <Fact label={ar ? 'الحملة' : 'Campaign'} value={creative.campaign_name} />}
-          {/*
-            What it was bought FOR — CONTENT-DETAIL-MODAL-001.
+        {/*
+          CONTENT-POPUP-VISUAL-001 — the order a reader needs, not the order the fields arrived in.
 
-            The figures below are chosen by this objective (`headline_metrics`), so a reader looking
-            at «CTR 0.4%» without knowing the ad was bought for reach is judging it against a target
-            nobody set. Absent rather than «unknown» when the campaign has no objective recorded.
-          */}
-          {objectiveLabel !== null && <Fact label={ar ? 'الهدف' : 'Objective'} value={objectiveLabel} />}
-          {/*
-            Its place in the hierarchy. The ad-set id is what the card carries, and an id is a poor
-            label — but it is the honest one, and it is what a reader pastes into the platform.
-          */}
-          {creative.ad_set_id && (
-            <Fact label={ar ? 'المجموعة الإعلانية' : 'Ad set'} value={creative.ad_set_id} />
-          )}
-          {/*
-            `?? []` because the type says this is always an array and the payloads disagree.
+          «Large creative preview at the top, clear key KPIs beside it or directly under the hero,
+          prominent chart near the top — not buried at the bottom, compact performance summary,
+          concise metadata, clear CTA.»
 
-            Analytics' rows carry `ads`; a card from the library's own list, and a row inside a
-            client's shared report, do not always. The dialog crashed the whole page the first time
-            it was opened from the library — a blank screen, not a missing tile — because one caller's
-            shape had been taken for the contract.
-          */}
-          {(creative.ads ?? []).length > 0 && (
-            <Fact
-              label={ar ? 'الإعلانات' : 'Ads'}
-              value={String((creative.ads ?? []).length)}
-            />
-          )}
-        </dl>
+          This panel used to read: media, then eight metadata facts, then the figures, then the
+          trend, then the link. So the chart — the one thing that answers «is this getting better or
+          worse» — was below a fold on every phone, under a stack of ids nobody opened the panel to
+          read. The order now is hero → figures → chart → metadata → CTA, which is the order of the
+          questions somebody actually has.
+        */}
 
         {/*
-          CONTENT-METRIC-ABSENCE-DETAIL-001 — why the figures are dashes, in the panel that shows them.
-          
-          The grid card has said this since it shipped: a creative with no figures of its own is
-          «لم يعمل خلال هذه الفترة» only when the AD did not run either. When the ad DID run and the
-          platform declined to break the result down per creative — 35 creatives on the owner's own
-          account — that sentence is false, and it is false in the expensive direction: an operator
-          reads it and turns off a creative that is running.
-          
-          The popup is the default detail surface now, and it inherited none of that. It drew six
-          dashes and said nothing, which is the weakest of the three true statements. The rule is the
-          card's, read from the same two fields, so the two cannot say different things about one ad.
+          CONTENT-METRIC-ABSENCE-DETAIL-001 — why the figures are dashes, above the figures.
+
+          A creative with no figures of its own is «لم يعمل خلال هذه الفترة» only when the AD did not
+          run either. When the ad DID run and the platform declined to break the result down per
+          creative — 35 creatives on the owner's own account — that sentence is false in the
+          expensive direction: an operator reads it and turns off something that is running.
         */}
         {metricsAbsent && (
           <p
@@ -229,10 +202,11 @@ export function AdPreviewDialog({
           </p>
         )}
 
+        {/* The figures, directly under the hero — the first thing after seeing the ad. */}
         {figures && figures.length > 0 && (
-          <div data-testid="ad-preview-dialog-figures" className="mt-3 grid grid-cols-3 gap-1.5 text-center">
+          <div data-testid="ad-preview-dialog-figures" className="mt-3 grid grid-cols-3 gap-1.5">
             {figures.map((f) => (
-              <div key={f.label} className="rounded-lg bg-surface-secondary p-2">
+              <div key={f.label} className="rounded-lg bg-surface-secondary p-2 text-start">
                 <div className="text-[11px] font-semibold leading-tight text-text-muted">{f.label}</div>
                 <div className="tnum text-sm font-bold text-text-primary"><Num>{f.value}</Num></div>
               </div>
@@ -240,6 +214,12 @@ export function AdPreviewDialog({
           </div>
         )}
 
+        {/*
+          And the chart, HIGH — the answer to «is this getting better or worse».
+
+          It was last, under eight metadata rows, which on a phone put it off the screen entirely in
+          the panel somebody opened to judge a creative.
+        */}
         {trend && (
           <div data-testid="ad-preview-dialog-trend" className="mt-4">
             <h4 className="mb-1 text-xs font-bold text-text-secondary">{ar ? 'الاتجاه الزمني' : 'Trend over time'}</h4>
@@ -247,13 +227,58 @@ export function AdPreviewDialog({
           </div>
         )}
 
+        {/*
+          The metadata LAST, and folded away.
+
+          Platform, format, status, objective and the ad-set id answer «which ad is this» — a
+          question a reader has already answered by opening the panel from a row they chose. They are
+          kept because an operator does occasionally need the id to paste into the platform, and put
+          behind a summary so they cost nothing to the reader who does not.
+        */}
+        <details data-testid="ad-preview-dialog-meta" className="mt-4">
+          <summary className="cursor-pointer text-xs font-semibold text-text-secondary">
+            {ar ? 'تفاصيل الإعلان' : 'Ad details'}
+          </summary>
+
+          <dl className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+            <Fact label={ar ? 'المنصة' : 'Platform'} value={providerLabel(creative.provider, locale)} />
+            <Fact label={ar ? 'النوع' : 'Format'} value={creative.format} />
+            <Fact label={ar ? 'الحالة' : 'Status'} value={creative.status} />
+            {creative.campaign_name && <Fact label={ar ? 'الحملة' : 'Campaign'} value={creative.campaign_name} />}
+            {/*
+              What it was bought FOR. The figures above are chosen by this objective, so a reader
+              looking at «CTR 0.4%» without knowing the ad was bought for reach is judging it against
+              a target nobody set. Absent rather than «unknown» when no objective is recorded.
+            */}
+            {objectiveLabel !== null && <Fact label={ar ? 'الهدف' : 'Objective'} value={objectiveLabel} />}
+            {/* An id is a poor label and the honest one — it is what a reader pastes into the platform. */}
+            {creative.ad_set_id && (
+              <Fact label={ar ? 'المجموعة الإعلانية' : 'Ad set'} value={creative.ad_set_id} />
+            )}
+            {/*
+              `?? []` because the type says this is always an array and the payloads disagree. The
+              dialog took a whole page down the first time the library opened it, because one
+              caller's shape had been taken for the contract.
+            */}
+            {(creative.ads ?? []).length > 0 && (
+              <Fact label={ar ? 'الإعلانات' : 'Ads'} value={String((creative.ads ?? []).length)} />
+            )}
+          </dl>
+        </details>
+
+        {/*
+          The way onward, as a CONTROL rather than a line of underlined text.
+
+          «A clear CTA to open the full content analytics page if deeper analysis is needed» — this
+          was a small link at the bottom of a text sheet, which is how a route nobody takes looks.
+        */}
         {detailsTo && (
           <Link
             to={detailsTo}
             data-testid="ad-preview-dialog-details"
-            className="mt-3 inline-block text-xs font-semibold text-brand-600 underline underline-offset-2"
+            className="mt-4 inline-flex items-center justify-center rounded-lg bg-brand-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-brand-700"
           >
-            {ar ? 'صفحة الإعلان' : 'Open the ad’s page'}
+            {ar ? 'فتح تحليلات هذا المحتوى' : 'Open this content’s analytics'}
           </Link>
         )}
       </div>

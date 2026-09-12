@@ -1,4 +1,5 @@
 import { StatCard } from '@/components/ui/StatCard'
+import { alertCategory, alertCategoryLabel, alertNextAction, ALERT_CATEGORY_ORDER, type AlertCategory } from './alertTaxonomy'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, BellRing, CheckCircle2, Clock, ListChecks, Plus, Settings2, Truck } from 'lucide-react'
@@ -23,6 +24,7 @@ const COPY = {
     tab_alerts: 'التنبيهات', tab_rules: 'القواعد', tab_prefs: 'التفضيلات', tab_deliveries: 'سجل التسليم',
     all: 'الكل', active: 'نشِطة', snoozed: 'مؤجّلة', resolved: 'مُغلقة', none: 'لا يوجد شيء هنا.',
     no_match: 'لا نتائج تطابق البحث أو الفلاتر.', search_ph: 'ابحث في التنبيهات…',
+    category: 'النوع', all_categories: 'كل الأنواع',
     sum_open: 'مفتوحة', sum_critical: 'حرِجة', sum_snoozed: 'مؤجّلة', sum_resolved: 'مُغلقة', sum_open_hint: 'تحتاج إجراء', sum_open_clear: 'لا شيء مفتوح',
     none_clear: 'لا توجد تنبيهات مفتوحة — لم تُطلق أي قاعدة نشطة في هذا المشروع.',
     resolve: 'إغلاق', snooze: 'تأجيل', create_task: 'إنشاء مهمة', task_created: 'أُنشئت المهمة',
@@ -47,6 +49,7 @@ const COPY = {
     tab_alerts: 'Alerts', tab_rules: 'Rules', tab_prefs: 'Preferences', tab_deliveries: 'Delivery log',
     all: 'All', active: 'Active', snoozed: 'Snoozed', resolved: 'Resolved', none: 'Nothing here.',
     no_match: 'No alerts match your search or filters.', search_ph: 'Search alerts…',
+    category: 'Kind', all_categories: 'Every kind',
     sum_open: 'Open', sum_critical: 'Critical', sum_snoozed: 'Snoozed', sum_resolved: 'Resolved', sum_open_hint: 'Need action', sum_open_clear: 'Nothing open',
     none_clear: 'No open alerts — no active rule has fired for this project.',
     resolve: 'Resolve', snooze: 'Snooze', create_task: 'Create task', task_created: 'Task created',
@@ -154,6 +157,8 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   const [filter, setFilter] = useState<EventFilter>('open')
   const [sev, setSev] = useState<'all' | AlertEvent['severity']>('all')
   const [type, setType] = useState<'all' | string>('all')
+  /* ALERT-TAXONOMY-001 — the cut severity cannot make: WHAT kind of problem this is. */
+  const [category, setCategory] = useState<'all' | AlertCategory>('all')
   const [term, setTerm] = useState('')
   // Live update: poll every 20s so newly-raised alerts appear without a manual refresh.
   // One read of the ledger, filtered client-side. The server caps the page at 200 and sends the
@@ -206,12 +211,22 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   ]
   // Category (type) chips — only the types actually present in the ledger, to keep the row honest and short.
   const presentTypes = [...new Set(all.map((e) => e.type))]
+  /*
+   * The categories actually in the ledger, in the reading order — not every category that exists.
+   *
+   * A filter offering «Follow-up» to an account that has never raised one is a control whose every
+   * option returns the same list, which teaches a reader that the controls do nothing.
+   */
+  const presentCategories = ALERT_CATEGORY_ORDER.filter(
+    (k) => all.some((e) => alertCategory(e.type) === k),
+  )
 
   const needle = term.trim().toLowerCase()
   const events = all.filter((e) => {
     if (e.status !== filter) return false
     if (sev !== 'all' && e.severity !== sev) return false
     if (type !== 'all' && e.type !== type) return false
+    if (category !== 'all' && alertCategory(e.type) !== category) return false
     if (!needle) return true
     const hay = `${labelFor(e, locale)} ${messageFor(e, locale)} ${TYPE_LABEL[e.type as AlertType]?.[locale] ?? e.type}`.toLowerCase()
     return hay.includes(needle)
@@ -310,6 +325,25 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
           onChange={(v) => setSev(v as 'all' | AlertEvent['severity'])}
         />
 
+        {/*
+          ALERT-TAXONOMY-001 — narrow by WHAT, which is the cut severity cannot make.
+
+          Offered only where more than one kind is present: a control whose every option returns the
+          same list is a control that teaches a reader it does nothing.
+        */}
+        {presentCategories.length > 1 && (
+          <FilterSelect
+            label={c.category}
+            value={category}
+            testid="alerts-category"
+            options={[
+              { value: 'all', label: c.all_categories },
+              ...presentCategories.map((k) => ({ value: k, label: alertCategoryLabel(k, locale) })),
+            ]}
+            onChange={(v) => setCategory(v as 'all' | AlertCategory)}
+          />
+        )}
+
         {presentTypes.length > 1 && (
           <FilterSelect
             label={c.source}
@@ -355,6 +389,21 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
                 <div className="flex flex-1 flex-col gap-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-text-primary">{labelFor(e, locale)}</span>
+                    {/*
+                      ALERT-TAXONOMY-001 — WHAT kind of problem, beside how loud it is.
+
+                      Severity was the only grouping the page had, and an expiring token and a
+                      campaign spending with no results are both «warning». They go to different
+                      people and lead to opposite actions, so a reader scanning twenty alerts was
+                      sorting them in their head every time.
+                    */}
+                    <span
+                      data-testid={`alert-category-${e.id}`}
+                      data-category={alertCategory(e.type)}
+                      className="rounded-full bg-brand-500/10 px-2 py-0.5 text-[11px] font-semibold text-brand-600"
+                    >
+                      {alertCategoryLabel(alertCategory(e.type), locale)}
+                    </span>
                     <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
                       {c.source}: {TYPE_LABEL[e.type as AlertType]?.[locale] ?? e.type}
                     </span>
@@ -375,6 +424,20 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
                   </div>
                   <p className="text-sm text-text-secondary">{messageFor(e, locale)}</p>
                   <ContextChips e={e} c={c} />
+                  {/*
+                    ALERT-TAXONOMY-001 — the one thing to do next.
+
+                    The message states what happened, with the figures that made it true, and stops
+                    there. What to DO is a property of the TYPE and is the same every time — a token
+                    expiry is always «reconnect the account», whatever the numbers were — so it is
+                    not written into each event's message, where it would have to be re-decided per
+                    event and would crowd out the evidence.
+                  */}
+                  {alertNextAction(e.type, locale) !== null && (
+                    <p data-testid={`alert-action-${e.id}`} className="text-[12px] font-semibold text-text-primary">
+                      {alertNextAction(e.type, locale)}
+                    </p>
+                  )}
                   <span className="text-[11px] text-text-muted">{c.triggered}: {fmt(e.last_triggered_at)}</span>
                 </div>
               </div>

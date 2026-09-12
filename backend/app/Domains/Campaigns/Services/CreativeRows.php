@@ -15,6 +15,7 @@ use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -473,6 +474,67 @@ final class CreativeRows
         }
 
         return $matching;
+    }
+
+    /**
+     * The same creatives, as a TABLE ROW rather than a card — REPORT-CREATIVE-TRUTH-001 §D.
+     *
+     * ## Why this exists beside `present()`
+     *
+     * A presented row carries a preview envelope, the platform's ad objects, a headline-metric
+     * layout and a delivery fact. Every one of those is drawn by a card and none of them by a table
+     * of names and figures — and a report's roster is stored in a snapshot, parsed on every open and
+     * carried into a PDF. Presenting four thousand creatives to render four thousand table rows is
+     * how a bound came to exist on the one list a reader is owed in full.
+     *
+     * So this reads the SAME figures through the SAME service — `CreativeMetrics::forCreatives`, one
+     * query for the whole set, the identical money-truth projection — and shapes nine fields. A
+     * second metrics pipeline is exactly what the requirement forbids, and this is not one: it is
+     * the same numbers with the decoration left off.
+     *
+     * ## What it deliberately does not carry
+     *
+     * No preview, so nothing here can leak a signed URL into a stored document that outlives it. No
+     * campaign name, which a client report must not print. No `ads`, which is internal ids end to
+     * end. The ranked lists above the roster keep all of it, because that is the section where the
+     * picture is the point.
+     *
+     * @param  Collection<int, ExternalCreative>  $creatives
+     * @return list<array<string, mixed>>
+     */
+    public function lean(mixed $creatives, Carbon $from, Carbon $to): array
+    {
+        $ids = array_map('strval', $creatives->modelKeys());
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $figures = $this->metrics->forCreatives($ids, $from, $to);
+
+        $campaigns = UnifiedCampaign::query()
+            ->whereIn('id', $creatives->pluck('campaign_id')->filter()->unique()->values()->all())
+            ->get(['id', 'objective'])
+            ->keyBy('id');
+
+        $out = [];
+
+        foreach ($creatives as $creative) {
+            $id = (string) $creative->getKey();
+            $objective = $creative->campaign_id === null ? null : $campaigns->get($creative->campaign_id)?->objective;
+
+            $out[] = [
+                'id' => $id,
+                /* The client-facing name where one is set — the same resolution `card()` makes. */
+                'name' => (string) ($creative->client_display_name ?: $creative->name),
+                'provider' => $creative->provider,
+                'format' => $creative->format,
+                'objective' => $objective,
+                'metrics' => $figures[$id] ?? null,
+            ];
+        }
+
+        return $out;
     }
 
     public function present(mixed $creatives, Carbon $from, Carbon $to, bool $withFatigue, bool $withPrevious = false): array

@@ -15,6 +15,8 @@ import { LIFECYCLE_KEYS, lifecycleView, type Lifecycle } from './campaignLifecyc
 import { campaignEfficiency, campaignHeadline, campaignSpendReading, type CampaignHeadline } from './campaignHeadline'
 import type { MetricReading } from '@/components/ui/MetricStrip'
 import { campaignRelevance, type CampaignRelevance } from './campaignRelevance'
+import { SpendLimitChip } from '@/features/budget/SpendLimitChip'
+import { useSpendLimits, type SpendLimitsPage } from '@/features/budget/spendLimitsApi'
 import { bandCounts, byPriority, type CampaignBand } from './campaignPriority'
 import { movers } from './campaignMovers'
 import { objectiveMix } from './objectiveMix'
@@ -27,7 +29,7 @@ const LIFECYCLE_LABELS: Record<Lifecycle, { ar: string; en: string }> = {
   inactive: { ar: 'غير النشطة', en: 'Inactive' },
   all: { ar: 'الكل', en: 'All' },
 }
-import { useUrlNumber, useUrlState } from '@/features/analytics/filterUrlState'
+import { useUrlNumber, useUrlState, useUrlWriter } from '@/features/analytics/filterUrlState'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
@@ -93,7 +95,19 @@ export function CampaignsPage() {
   const ar = locale === 'ar'
   const navigate = useNavigate()
   const canCreate = useAuth((s) => s.hasPermission('campaigns.create'))
+
   const { currentProjectId: projectId } = useProject()
+  /*
+   * BUDGET-CONNECTED-001 — the project's active spend limits, read once for the whole board.
+   *
+   * One request rather than one per card: a project with four hundred campaigns is the case this
+   * feature is for, and the limits are a short list whatever the campaign count is. `useSpendLimits`
+   * is the same hook the limits page uses, so the two cannot disagree about a state.
+   *
+   * A failure is silent by design — the chip simply does not draw. A campaigns board that fails to
+   * load because a governance sidecar did would be a worse outcome than the missing chip.
+   */
+  const spendLimits = useSpendLimits(projectId)
 
   const [days, setDays] = useUrlNumber('days', 30)
   // PERF-CAMPAIGNS-001: the page opens on the CARD LIST, not the chart-heavy overview. Four charts plus
@@ -107,7 +121,17 @@ export function CampaignsPage() {
     ranked. A reader arriving to answer «what needs me today» had to find the control that would tell
     them before they could start.
   */
-  const [view, setView] = useState<ViewMode>('overview')
+  /*
+   * Which view is open is part of the ADDRESS — the same rule the filters below already follow.
+   *
+   * It was `useState` alone, so `?view=cards` did nothing: the board always opened on the overview
+   * whatever the link said, Back walked out of the page instead of back a view, and a reload lost
+   * the reader's place. The default is untouched — the overview is what an operator should meet
+   * first, and that is a product decision, not a consequence of where the state was kept.
+   */
+  const [view, setView] = useUrlState('view', 'overview') as [ViewMode, (v: string) => void]
+  /* For the handlers that change the view AND a filter together — see the band button below. */
+  const writeUrl = useUrlWriter()
   const [compareIds, setCompareIds] = useState<string[]>([])
   /*
    * ANALYTICS-FILTER-TRUTH-001 — these live in the URL, so a refresh, Back and a shared link all
@@ -624,7 +648,19 @@ export function CampaignsPage() {
                 type="button"
                 data-testid={`campaigns-band-${b.id}`}
                 data-count={bands[b.id]}
-                onClick={() => { setView('table'); setLifecycle('all') }}
+                /*
+                  Both keys in ONE write — `useUrlWriter` exists for exactly this.
+                  
+                  Two `useUrlState` setters in one handler do not compose: each functional update is
+                  applied against the params of the render it was created in, so the second silently
+                  drops the first. Moving `view` into the URL turned this pair from two `useState`
+                  calls into that trap, and the overview spec caught it on all three browsers — the
+                  band opened the list and the view stayed where it was.
+                */
+                onClick={() => writeUrl({
+                  view: { value: 'table', fallback: 'overview' },
+                  lifecycle: { value: 'all', fallback: 'active' },
+                })}
                 className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
                   b.id === 'attention' && bands[b.id] > 0
                     ? 'border-warning/40 bg-warning/10 text-text-primary'
@@ -928,6 +964,7 @@ export function CampaignsPage() {
                   key={c.id}
                   c={c}
                   locale={locale}
+                  limits={spendLimits.data}
                   headline={campaignHeadline(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)}
                   efficiency={campaignEfficiency(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)}
                   state={campaignState(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined)}
@@ -1240,7 +1277,7 @@ function LandingAnswer({ answer, ar }: { answer: ReturnType<typeof landingAnswer
   )
 }
 
-function CampaignCard({ c, locale, headline, efficiency, state, freshness, trend, onOpen }: { c: UnifiedCampaign; locale: 'ar' | 'en'; headline?: CampaignHeadline | null; efficiency?: CampaignHeadline | null; state?: ReturnType<typeof campaignState>; freshness?: { relevance: CampaignRelevance; lastActiveOn: string | null }; trend?: { change: number | null; hasBaseline: boolean }; onOpen: () => void }) {
+function CampaignCard({ c, locale, headline, efficiency, state, freshness, trend, limits, onOpen }: { c: UnifiedCampaign; locale: 'ar' | 'en'; headline?: CampaignHeadline | null; efficiency?: CampaignHeadline | null; state?: ReturnType<typeof campaignState>; freshness?: { relevance: CampaignRelevance; lastActiveOn: string | null }; trend?: { change: number | null; hasBaseline: boolean }; limits?: SpendLimitsPage; onOpen: () => void }) {
   const unlinked = (c.external_campaigns_count ?? 0) === 0
   return (
     <button onClick={onOpen} data-testid="campaign-card" className="flex flex-col gap-2.5 rounded-2xl border border-border bg-surface p-4 text-start shadow-[var(--shadow-small)] transition-colors hover:border-brand-300 hover:bg-surface-hover">
@@ -1251,6 +1288,26 @@ function CampaignCard({ c, locale, headline, efficiency, state, freshness, trend
       <div className="flex flex-wrap gap-1.5">
         <Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge>
         <Badge tone="neutral">{objectiveLabel(c.objective, locale)}</Badge>
+        {/*
+          BUDGET-CONNECTED-001 — the internal spend limit, on the campaign it constrains.
+          
+          It reached its own page, the alert evaluator and the daily digest, and nowhere an operator
+          works: a campaign at 94% of a limit looked exactly like one with no limit at all here. The
+          chip draws nothing while everything is fine — a badge on every card teaches a reader to
+          stop seeing the badges, and the one that matters is the one they then miss.
+          
+          No `provider`: a unified campaign may carry externals on several platforms, so a
+          platform-scoped limit is undecidable from this row and is reported as unmatched rather
+          than guessed at. The project and campaign rungs match exactly.
+        */}
+        {limits !== undefined && (
+          <SpendLimitChip
+            campaign={{ campaign_id: c.id }}
+            limits={limits.limits}
+            enforcementNote={locale === 'ar' ? limits.enforcement_note_ar : limits.enforcement_note_en}
+            locale={locale}
+          />
+        )}
       </div>
       <div className="grid grid-cols-3 gap-1.5 text-[11px]">
         <span className="rounded-lg bg-surface-secondary px-2 py-1.5">{locale === 'ar' ? 'الميزانية' : 'Budget'} <b className="tnum block text-text-primary">{money(c.total_budget, c.budget_currency)}</b></span>

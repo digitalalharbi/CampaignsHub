@@ -38,8 +38,15 @@ const SOURCES = import.meta.glob('/src/**/*.tsx', {
   eager: true,
 }) as Record<string, string>
 
-/** Any opening tag that carries `dir="ltr"`. */
-const TAGGED = /<([a-zA-Z][a-zA-Z0-9]*)\b[^>]{0,900}?dir="ltr"[^>]{0,900}?>/gs
+/**
+ * Any opening tag that re-bases its own direction — by ATTRIBUTE or by CLASS.
+ *
+ * `.tnum` used to set `direction: ltr` as well as shaping digits, so it did exactly what
+ * `dir="ltr"` does and this guard could not see it: eighty-six blocks carried it, and the content
+ * summary's figures measured 134px from their labels with no `dir` attribute anywhere near them.
+ * The class does one job now, and this keeps watching for the pattern in case a second one is added.
+ */
+const TAGGED = /<([a-zA-Z][a-zA-Z0-9]*)\b[^>]{0,900}?(?:dir="ltr"|\bdirection-ltr\b)[^>]{0,900}?>/gs
 
 /**
  * Lays out as a block — so `dir` on it re-bases the alignment of everything inside.

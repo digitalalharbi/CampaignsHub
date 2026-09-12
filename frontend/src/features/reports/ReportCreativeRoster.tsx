@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { AdPoster } from '@/features/content/AdPoster'
 import { DataMetricTable, type Column, type Row } from '@/components/ui/MetricTable'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -52,6 +53,16 @@ export type RosterRow = {
   } | null
 }
 
+/**
+ * How many rows the roster draws before it offers more — REPORT-CREATIVE-TRUTH-001 §D.
+ *
+ * The payload now carries every creative that ran, because a disclosed «65 ran, 60 listed» was a
+ * disclosed gap and still a gap. Four thousand table rows in one pass is its own defect, so the
+ * table renders a page at a time and says how many remain. Nothing is withheld: the rest are one
+ * press away, and the press is in the document rather than behind a request.
+ */
+const PAGE = 50
+
 export function ReportCreativeRoster({
   roster,
   inScope,
@@ -77,6 +88,12 @@ export function ReportCreativeRoster({
   const ar = locale === 'ar'
   const rows = roster ?? []
   const scope = inScope ?? 0
+  /*
+   * Declared before the early return below, because hooks are ordered and an early return would
+   * make this one conditional — the lint rule that caught it is right, and the bug it prevents is a
+   * component that keeps a DIFFERENT reader's paging state after a re-render.
+   */
+  const [shown, setShown] = useState(PAGE)
 
   /*
    * Nothing ran, so there is nothing to say here.
@@ -90,6 +107,8 @@ export function ReportCreativeRoster({
 
   const summary = form === 'executive_summary'
   const left = Math.max(0, withheld ?? 0)
+  const visible = rows.slice(0, shown)
+  const remaining = rows.length - visible.length
 
   return (
     <section data-testid="report-roster" data-state={summary ? 'counted' : 'listed'} className="mt-6 flex flex-col gap-2">
@@ -127,11 +146,31 @@ export function ReportCreativeRoster({
         : (
           <DataMetricTable
             columns={columns(ar, currency ?? null)}
-            rows={rows.map((row, i) => line(row, i, locale, onOpen))}
+            rows={visible.map((row, i) => line(row, i, locale, onOpen))}
             /* Spend descending: the money is what a reader scans this list for first. */
             initialSort={{ column: 2, dir: 'desc' }}
           />
         )}
+
+      {/*
+        The rest, one press away — never a silent truncation.
+        
+        This is the difference between a bound and a page: the rows are all here, and the button
+        says exactly how many are still to draw. A reader who wants the whole list gets it without
+        leaving the document, and a reader who wanted the top twenty never pays for four thousand.
+      */}
+      {!summary && remaining > 0 && (
+        <button
+          type="button"
+          data-testid="report-roster-more"
+          onClick={() => setShown((n) => n + PAGE)}
+          className="self-start rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:border-brand-400 hover:text-text-primary"
+        >
+          {ar
+            ? `عرض ${Math.min(PAGE, remaining)} إضافية — بقي ${remaining}`
+            : `Show ${Math.min(PAGE, remaining)} more — ${remaining} remaining`}
+        </button>
+      )}
     </section>
   )
 }

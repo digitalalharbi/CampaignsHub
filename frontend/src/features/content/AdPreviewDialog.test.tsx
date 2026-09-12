@@ -291,3 +291,66 @@ describe('a creative with no figures of its own', () => {
     expect(screen.queryByTestId('ad-preview-dialog-absence')).toBeNull()
   })
 })
+
+
+/**
+ * CONTENT-POPUP-VISUAL-001 — the order a reader needs, not the order the fields arrived in.
+ *
+ * The panel used to read: media, then eight metadata facts, then the figures, then the trend, then a
+ * small underlined link. So the chart — the one thing that answers «is this getting better or
+ * worse» — sat below a fold on every phone, under a stack of ids nobody opened the panel to read.
+ *
+ * What is asserted is ORDER, because that is the defect. A test that only checked each piece was
+ * present would have passed on the version the owner objected to.
+ */
+describe('what the popup puts first', () => {
+  const withEverything = () => ({
+    ...creative(),
+    metrics: { spend: 10, clicks: 2 },
+  })
+
+  it('puts the figures and the chart above the metadata', () => {
+    renderWithProviders(
+      <AdPreviewDialog
+        creative={withEverything() as never}
+        locale="en"
+        figures={[{ label: 'Spend', value: '10 USD' }]}
+        trend={<div data-testid="a-chart" />}
+        onClose={() => {}}
+      />,
+      { locale: 'en' },
+    )
+
+    const panel = screen.getByTestId('ad-preview-dialog')
+    const order = ['ad-preview-dialog-figures', 'ad-preview-dialog-trend', 'ad-preview-dialog-meta']
+      .map((id) => Array.from(panel.querySelectorAll('[data-testid]')).findIndex((n) => n.getAttribute('data-testid') === id))
+
+    expect(order[0], 'the figures are not on screen').toBeGreaterThan(-1)
+    expect(order[1], 'the chart is buried below the metadata again').toBeGreaterThan(order[0])
+    expect(order[2], 'the metadata came before the chart').toBeGreaterThan(order[1])
+  })
+
+  /** The metadata is kept and folded — an operator does occasionally need the id to paste. */
+  it('keeps the details, behind a summary', () => {
+    renderWithProviders(
+      <AdPreviewDialog creative={withEverything() as never} locale="en" onClose={() => {}} />,
+      { locale: 'en' },
+    )
+
+    const meta = screen.getByTestId('ad-preview-dialog-meta')
+    expect(meta.tagName.toLowerCase()).toBe('details')
+    expect(meta).toHaveTextContent('Platform')
+  })
+
+  /** And the way onward is a control, not a line of underlined text at the bottom of a sheet. */
+  it('offers the analytics page as a button', () => {
+    renderWithProviders(
+      <AdPreviewDialog creative={withEverything() as never} locale="en" detailsTo="/agency/content/c1" onClose={() => {}} />,
+      { locale: 'en' },
+    )
+
+    const cta = screen.getByTestId('ad-preview-dialog-details')
+    expect(cta).toHaveTextContent(/analytics/i)
+    expect(cta.className, 'the CTA is still a text link').toMatch(/bg-brand/)
+  })
+})

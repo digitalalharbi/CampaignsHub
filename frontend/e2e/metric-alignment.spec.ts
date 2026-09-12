@@ -45,8 +45,13 @@ const EDGE_TOLERANCE = 12
  */
 async function edges(page: Page, card: string) {
   const el = page.locator(card)
-  const label = el.getByTestId('metric-label').first()
-  const value = el.getByTestId('metric-value').first()
+  /*
+    `MetricCard` names its two halves; a plain definition pair does not, and both are metric blocks
+    the owner's contract covers. Falling back to `dt`/`dd` is what lets one helper measure the
+    dashboard's cards and the content summary's compact pairs without knowing which it was given.
+  */
+  const label = el.getByTestId('metric-label').or(el.locator('dt')).first()
+  const value = el.getByTestId('metric-value').or(el.locator('dd')).first()
 
   await expect(label, 'the card drew no label').toBeVisible()
   await expect(value, 'the card drew no value row').toBeVisible()
@@ -91,7 +96,12 @@ test.describe('a metric card’s title and figure share one edge', () => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
     await page.goto('/agency/content')
 
-    const card = '[data-testid="content-metrics"] [data-testid^="metric-"]'
+    /*
+      The compact summary, which replaced the thirteen-card strip — CONTENT-SUMMARY-COMPACT-001.
+      The rule it is measured against is unchanged: a figure sits under its own label, on the same
+      edge. Only the element carrying the pair moved.
+    */
+    const card = '[data-testid^="content-summary-"]:not([data-testid$="figures"]):not([data-testid$="count"]):not([data-testid$="mix"])'
     await expect(page.locator(card).first()).toBeVisible({ timeout: 30000 })
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')
 
@@ -116,7 +126,7 @@ test.describe('a metric card’s title and figure share one edge', () => {
     await page.goto('/agency/content')
     await switchToEnglish(page)
 
-    const card = '[data-testid="content-metrics"] [data-testid^="metric-"]'
+    const card = '[data-testid^="content-summary-"]:not([data-testid$="figures"]):not([data-testid$="count"]):not([data-testid$="mix"])'
     await expect(page.locator(card).first()).toBeVisible({ timeout: 30000 })
 
     const { label, value } = await edges(page, `${card} >> nth=0`)

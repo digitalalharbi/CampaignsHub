@@ -26,8 +26,25 @@ const SOURCES = import.meta.glob('/src/**/*.{ts,tsx}', {
   eager: true,
 }) as Record<string, string>
 
-/** `const SOMETHING_KPI_KEYS = [ ... ]` / `..._METRIC_KEYS = [ ... ]` — the declared lists. */
-const DECLARATION = /const\s+([A-Z0-9_]*(?:KPI|METRIC)_KEYS)\s*(?::[^=]+)?=\s*\[([^\]]*)\]/g
+/**
+ * The lists that are actually HANDED to the catalogue.
+ *
+ * Two earlier spellings of this were wrong in opposite directions. Keying on the NAME required
+ * `KPI` or `METRIC` in it and matched nothing the moment `CONTENT_KPI_KEYS` was renamed — a guard
+ * that matches nothing agrees with everything, which its own self-check caught. Keying on any
+ * `*_KEYS` swept in `COLOR_KEYS` and this page's `AXIS_KEYS`, neither of which the catalogue has
+ * ever been asked about.
+ *
+ * The invariant is narrower than both: a list reaches `buildItems`, which silently drops any key
+ * `SPECS` does not hold. So this finds what is passed to `metricsForKeys` and checks THAT.
+ */
+const PASSED = /metricsForKeys\(\s*([A-Za-z0-9_]+)/g
+const declarationOf = (source: string, name: string): string | null => {
+  const found = new RegExp(`const\\s+${name}\\s*(?::[^=]+)?=\\s*\\[([^\\]]*)\\]`).exec(source)
+
+  return found === null ? null : found[1]
+}
+
 const LITERAL = /'([a-z0-9_]+)'/g
 
 describe('a declared metric key exists in the catalogue', () => {
@@ -36,13 +53,28 @@ describe('a declared metric key exists in the catalogue', () => {
   let lists = 0
 
   for (const [path, raw] of Object.entries(SOURCES)) {
-    if (path.includes('.test.')) continue
+    if (path.includes('.test.') || path.includes('metricCatalog')) continue
 
-    for (const match of raw.matchAll(DECLARATION)) {
+    /*
+     * Only the files that hand a key list to the CATALOGUE, which is where a typo goes silent.
+     *
+     * Keying on the NAME was brittle — it required `KPI` or `METRIC` in it, and matched nothing the
+     * moment a list was renamed, and a guard that matches nothing agrees with everything. Keying on
+     * `*_KEYS` alone was too wide and swept in `COLOR_KEYS`, which the catalogue has never been
+     * asked about. The invariant is about the lists that reach `buildItems`, so that is the test.
+     */
+    if (!/metricsForKeys|metricCatalog/.test(raw)) continue
+
+    for (const call of raw.matchAll(PASSED)) {
+      const body = declarationOf(raw, call[1])
+
+      /* Built inline or imported from elsewhere — nothing to read here, and not a silent typo. */
+      if (body === null) continue
+
       lists++
 
-      for (const key of match[2].matchAll(LITERAL)) {
-        if (!known.has(key[1])) offenders.push(`${path}: ${match[1]} names «${key[1]}»`)
+      for (const key of body.matchAll(LITERAL)) {
+        if (!known.has(key[1])) offenders.push(`${path}: ${call[1]} names «${key[1]}»`)
       }
     }
   }

@@ -17,6 +17,7 @@ import { anyDisplayablePreview } from './previewPresence'
 import {
   groupCreatives,
   libraryQueryString,
+  contentIntelligence,
   listCreatives,
   type CreativeCard,
   type FatigueStatus,
@@ -28,7 +29,7 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { FilterBar, FilterMulti, FilterSearch, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro } from '@/components/ui/PageIntro'
-import { MetricStrip } from '@/components/ui/MetricStrip'
+import { ContentSummary } from './ContentSummary'
 import { metricsForKeys } from '@/features/analytics/metricCatalog'
 import type { Summary } from '@/features/analytics/api'
 
@@ -40,10 +41,7 @@ import type { Summary } from '@/features/analytics/api'
  * a catalogue key: a metric named here that the platform never sent still renders «لم ترسله
  * المنصة», which is the requirement's «never turn unavailable data into zero».
  */
-const CONTENT_KPI_KEYS = [
-  'spend', 'impressions', 'reach', 'clicks', 'ctr', 'cpc', 'cpm',
-  'conversions', 'cpa', 'revenue', 'roas', 'video_views', 'video_completion_rate',
-] as const
+const CONTENT_SUMMARY_KEYS = ['spend', 'impressions', 'ctr', 'cpa'] as const
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
@@ -481,6 +479,24 @@ export function CreativesPage() {
   })
 
   /*
+   * CONTENT-SUMMARY-COMPACT-001 — the split of spend across content shapes.
+   *
+   * The one comparison this page owes that a dashboard cannot give: «what KIND of content earns its
+   * money here» is the only content question whose answer transfers to the next brief. Computed
+   * server-side already, over the same filtered scope as the library itself, so the bar and the grid
+   * under it can never describe different sets.
+   *
+   * A failure is silent — the bar simply does not draw. A content library that fails to load because
+   * a comparison did would be a worse outcome than the missing bar.
+   */
+  const intelligence = useQuery({
+    queryKey: ['content-intelligence', currentProjectId, query],
+    queryFn: () => contentIntelligence(query, currentProjectId ?? ''),
+    enabled: Boolean(currentProjectId),
+    placeholderData: keepPreviousData,
+  })
+
+  /*
    * The address follows the controls — so a refresh, a Back, or a shared link reopens this view.
    *
    * `replace` deliberately: typing in the search box would otherwise push a history entry per
@@ -539,7 +555,22 @@ export function CreativesPage() {
    * `previous` is empty and `delta` is absent on purpose: the library has no comparison window, and
    * a card drawn with a delta of zero would say a figure held steady when nothing was compared.
    */
-  const contentKpis = useMemo(() => {
+  /*
+   * CONTENT-SUMMARY-COMPACT-001 — four figures, not thirteen.
+   *
+   * The strip this replaces named every metric the catalogue holds, and on the owner's own account
+   * nine of the thirteen read «لا توجد بيانات» or «لم ترسله المنصة». Truthful and unreadable: a wall
+   * of empty boxes above the thing the page is for.
+   *
+   * These four are what a content reader is deciding on — what it cost, how far it reached, whether
+   * anybody clicked, and what a result cost. The other nine are not deleted; they are on the
+   * creative's own page and in the popup, where somebody has asked about ONE thing rather than
+   * scanned a shelf.
+   *
+   * Read through `metricsForKeys` exactly as before, so «لم ترسله المنصة» and the money contract's
+   * refusals survive the change — the strip's size is what was wrong, not its honesty.
+   */
+  const summaryFigures = useMemo(() => {
     const totals = data?.totals
 
     if (!totals) {
@@ -555,7 +586,11 @@ export function CreativesPage() {
       currency: data?.currency ?? null,
     } as unknown as Summary
 
-    return metricsForKeys(CONTENT_KPI_KEYS, 'all', summary, ar)
+    return metricsForKeys(CONTENT_SUMMARY_KEYS, 'all', summary, ar).map((m) => ({
+      key: m.key,
+      label: typeof m.label === 'string' ? m.label : m.key,
+      value: m.reading.kind === 'value' ? m.reading.text : m.reading.kind === 'withheld' ? m.reading.original : '—',
+    }))
   }, [data, ar])
 
   const creatives = data?.creatives ?? []
@@ -710,22 +745,13 @@ export function CreativesPage() {
         the platform never sent, same refusal when the money cannot be added. The server totals over
         the FILTERED set, never the page, so the strip and the cards beneath it describe one scope.
       */}
-      <MetricStrip
-        id="content"
-        ar={ar}
-        primary={contentKpis}
-        /*
-          KPI-STRIP-RESERVE-001 — the card count is known before any figure is.
-
-          `contentKpis` is derived from the response and is empty until it lands, so the skeleton
-          reserved nothing and the toolbar under it dropped 482px when thirteen cards appeared. The
-          key list is a constant; the page has always known how tall this row would be.
-        */
-        loadingCards={CONTENT_KPI_KEYS.length}
-        hasRows={data === undefined ? undefined : data.total > 0}
+      <ContentSummary
+        figures={summaryFigures}
+        formats={intelligence.data?.by_format.formats}
+        creativesRead={intelligence.data?.creatives_read ?? null}
         loading={libraryQuery.isPending}
-        error={libraryQuery.isError ? libraryQuery.error : undefined}
-        onRetry={() => void libraryQuery.refetch()}
+        currency={data?.currency ?? null}
+        locale={locale}
       />
 
       <FilterBar
