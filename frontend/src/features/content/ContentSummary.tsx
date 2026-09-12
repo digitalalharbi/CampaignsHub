@@ -36,6 +36,7 @@ export function ContentSummary({
   currency,
   locale,
   loading = false,
+  formatsPending = false,
 }: {
   /** The four headline figures, already formatted by the page that owns the money contract. */
   figures: { key: string; label: string; value: string }[]
@@ -43,6 +44,20 @@ export function ContentSummary({
   creativesRead: number | null
   currency: string | null
   locale: Locale
+  /**
+   * Whether the FORMAT query — a different request from the figures' — is still in flight.
+   *
+   * This is the whole of CONTENT-SUMMARY-RESERVE-002. `loading` below is `libraryQuery.isPending`
+   * and the mix is drawn from `intelligence`, so on a browser where the second response lands after
+   * the first (webkit, consistently; chromium, not) the block painted its resolved layout with
+   * `formats === undefined`, drew no mix, and then GREW by the mix's own height when the formats
+   * arrived. The webkit gate measured the toolbar under it moving 77px.
+   *
+   * Reserving in the skeleton was never enough, because the skeleton had already gone. `undefined`
+   * alone cannot carry this: it is also what an error leaves behind, and a block that pulses for
+   * ever is worse than one that says it could not load.
+   */
+  formatsPending?: boolean
   /**
    * KPI-STRIP-RESERVE-001, again — a block that appears after the page has painted moves everything
    * under it.
@@ -69,18 +84,18 @@ export function ContentSummary({
         <div className="h-5 w-40 animate-pulse rounded bg-surface-secondary" />
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="flex flex-col gap-1.5">
-              <div className="h-3 w-16 animate-pulse rounded bg-surface-secondary" />
-              <div className="h-6 w-24 animate-pulse rounded bg-surface-secondary" />
+            <div key={i}>
+              {/*
+                The SAME two heights the resolved figure declares — `FIGURE_LABEL` and `FIGURE_VALUE`
+                below, not a second description of them. Writing the skeleton's rows by eye is how
+                this block came to be 50px shorter than what replaced it the first time.
+              */}
+              <div className={`${FIGURE_LABEL} w-16 animate-pulse rounded bg-surface-secondary`} />
+              <div className={`${FIGURE_VALUE} mt-0.5 w-24 animate-pulse rounded bg-surface-secondary`} />
             </div>
           ))}
         </div>
-        {/* The mix reserves its own height too — it is why the block moved 73px when it did not. */}
-        <div className="mt-4">
-          <div className="h-3 w-44 animate-pulse rounded bg-surface-secondary" />
-          <div className="mt-1.5 h-2.5 w-full animate-pulse rounded-full bg-surface-secondary" />
-          <div className="mt-2 h-3 w-64 animate-pulse rounded bg-surface-secondary" />
-        </div>
+        <MixPlaceholder />
       </section>
     )
   }
@@ -93,7 +108,7 @@ export function ContentSummary({
    * branch exists to prevent — a grid that looks like it failed to load rather than like a scope
    * nobody reported on. The grid below says which filter is empty; this says only that it is.
    */
-  if (figures.length === 0 && mix.shares.length === 0) {
+  if (figures.length === 0 && mix.shares.length === 0 && ! formatsPending) {
     return null
   }
 
@@ -117,8 +132,8 @@ export function ContentSummary({
       <dl data-testid="content-summary-figures" className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {figures.map((f) => (
           <div key={f.key} data-testid={`content-summary-${f.key}`} className="text-start">
-            <dt className="text-[11px] font-semibold text-text-muted">{f.label}</dt>
-            <dd className="tnum mt-0.5 text-lg font-extrabold leading-tight text-text-primary">
+            <dt className={`${FIGURE_LABEL} text-[11px] font-semibold leading-4 text-text-muted`}>{f.label}</dt>
+            <dd className={`${FIGURE_VALUE} tnum mt-0.5 text-lg font-extrabold leading-6 text-text-primary`}>
               <Num>{f.value}</Num>
             </dd>
           </div>
@@ -139,9 +154,33 @@ export function ContentSummary({
         was about: it states which shape the whole budget went to, which is a fact about the account
         and the same fact the bar states when there are four.
       */}
-      {mix.shares.length > 0 && (
-        <div data-testid="content-summary-mix" className="mt-4">
-          <div className="mb-1.5 flex items-baseline justify-between gap-2">
+      {mix.shares.length === 0 ? (
+        /*
+         * The region keeps its height in every state, because the height is what moves the toolbar.
+         *
+         * Three states and three different sentences: still asking, asked and nothing could be
+         * priced, and the bar itself. The middle one is not filler holding space — «no spend could
+         * be attributed to a content type» is the answer to the question the bar exists to ask, and
+         * a reader who sees the heading with nothing under it concludes the chart failed.
+         */
+        formatsPending ? <MixPlaceholder /> : (
+          <div data-testid="content-summary-mix" data-state="none" className="mt-4">
+            <div className={`${MIX_LABEL_ROW} mb-1.5 flex items-baseline`}>
+              <span className="text-[11px] font-semibold text-text-muted">
+                {ar ? 'توزيع الإنفاق حسب نوع المحتوى' : 'Spend by content type'}
+              </span>
+            </div>
+            <div className={MIX_BAR} />
+            <p className={`${MIX_LEGEND_ROW} mt-2 flex items-center text-[11px] text-text-secondary`}>
+              {ar
+                ? 'لا يمكن نسب أي إنفاق إلى نوع محتوى في هذه الفترة.'
+                : 'No spend could be attributed to a content type in this period.'}
+            </p>
+          </div>
+        )
+      ) : (
+        <div data-testid="content-summary-mix" data-state="ready" className="mt-4">
+          <div className={`${MIX_LABEL_ROW} mb-1.5 flex items-baseline justify-between gap-2`}>
             <span className="text-[11px] font-semibold text-text-muted">
               {ar ? 'توزيع الإنفاق حسب نوع المحتوى' : 'Spend by content type'}
             </span>
@@ -159,7 +198,7 @@ export function ContentSummary({
             )}
           </div>
 
-          <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-surface-secondary">
+          <div className={`${MIX_BAR} flex overflow-hidden`}>
             {mix.shares.map((s, i) => (
               <span
                 key={s.format}
@@ -170,7 +209,7 @@ export function ContentSummary({
             ))}
           </div>
 
-          <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+          <ul className={`${MIX_LEGEND_ROW} mt-2 flex flex-wrap items-center gap-x-4 gap-y-1`}>
             {mix.shares.map((s, i) => (
               <li key={s.format} className="flex items-center gap-1.5 text-[11px] text-text-secondary">
                 <span className="h-2 w-2 rounded-full" style={{ background: SLICE[i % SLICE.length] }} aria-hidden />
@@ -185,6 +224,40 @@ export function ContentSummary({
         </div>
       )}
     </section>
+  )
+}
+
+/*
+ * CONTENT-SUMMARY-RESERVE-002 — every reserved height declared ONCE.
+ *
+ * This block has now moved the toolbar under it three times: 53px when it had no loading state at
+ * all, 73px when the mix drew only for more than one format, and 77px when the mix waited on a
+ * second request that lands later on webkit than on chromium. Each fix was correct and the next
+ * break was the same shape, because the skeleton and the real thing were two descriptions of one
+ * layout and nothing held them together.
+ *
+ * They are one description now. A row whose height is a constant cannot disagree with itself, and
+ * `min-h` rather than `h` on the legend lets it wrap on a narrow screen without collapsing on a
+ * wide one.
+ */
+const FIGURE_LABEL = 'h-4'
+
+const FIGURE_VALUE = 'h-6'
+
+const MIX_LABEL_ROW = 'h-4'
+
+const MIX_BAR = 'h-2.5 w-full rounded-full bg-surface-secondary'
+
+const MIX_LEGEND_ROW = 'min-h-[1.125rem]'
+
+/** The mix region before it can say anything — the same rows it will occupy once it can. */
+function MixPlaceholder() {
+  return (
+    <div data-testid="content-summary-mix" data-state="loading" className="mt-4">
+      <div className={`${MIX_LABEL_ROW} mb-1.5 w-44 animate-pulse rounded bg-surface-secondary`} />
+      <div className={`${MIX_BAR} animate-pulse`} />
+      <div className={`${MIX_LEGEND_ROW} mt-2 w-64 animate-pulse rounded bg-surface-secondary`} />
+    </div>
   )
 }
 
