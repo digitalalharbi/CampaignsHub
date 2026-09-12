@@ -215,6 +215,31 @@ final class ReportRosterMediaTest extends TestCase
     }
 
     /**
+     * A COLLECTION whose hero is empty and whose tiles hold the media.
+     *
+     * Listed separately from the carousel because it is a different shape with the same rescue, and
+     * because `CreativeCarousel`'s own docblock records that a caller once gated the tiles on
+     * `kind === 'carousel'` and dropped a collection's products. One case per shape is what stops
+     * that being rediscovered from a client's report.
+     */
+    public function test_a_collection_falls_back_to_its_first_usable_tile(): void
+    {
+        $this->creative([
+            'format' => 'collection',
+            'asset_url' => null,
+            'cards' => [
+                ['image_url' => null],
+                ['image_url' => 'https://cdn.test/tile-2.jpg'],
+            ],
+        ]);
+
+        $preview = $this->sharedRoster()[0]['preview'] ?? null;
+
+        $this->assertIsArray($preview);
+        $this->assertSame('https://cdn.test/tile-2.jpg', $preview['image_url']);
+    }
+
+    /**
      * And a creative with genuinely nothing says so — the absence state is not removed, it is
      * earned. A test that only proved pictures appear would be satisfied by inventing one.
      */
