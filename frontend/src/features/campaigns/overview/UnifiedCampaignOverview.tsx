@@ -296,10 +296,10 @@ export function UnifiedCampaignOverview({
                 <tr className={`border-b ${c.rowBorder} ${c.muted}`}>
                   <th className="py-1.5 text-start font-semibold">{w.campaign}</th>
                   <th className="py-1.5 text-start font-semibold">{w.platform}</th>
-                  <th className="py-1.5 text-end font-semibold">{w.spend}</th>
-                  <th className="py-1.5 text-end font-semibold">{w.results}</th>
-                  <th className="py-1.5 text-end font-semibold">{w.cost}</th>
-                  <th className="py-1.5 text-end font-semibold">ROAS</th>
+                  <th className="py-1.5 text-center font-semibold">{w.spend}</th>
+                  <th className="py-1.5 text-center font-semibold">{w.results}</th>
+                  <th className="py-1.5 text-center font-semibold">{w.cost}</th>
+                  <th className="py-1.5 text-center font-semibold">ROAS</th>
                 </tr>
               </thead>
               <tbody>
@@ -312,10 +312,10 @@ export function UnifiedCampaignOverview({
                         {providerName(cp.provider)}
                       </span>
                     </td>
-                    <td className={`py-1.5 text-end ${c.sub}`}><span className="tnum">{money(cp.spend, currency)}</span></td>
-                    <td className={`py-1.5 text-end ${c.sub}`}><span className="tnum">{num(cp.results)}</span></td>
-                    <td className={`py-1.5 text-end ${c.sub}`}><span className="tnum">{cp.cpa === null ? '—' : moneyExact(cp.cpa, currency ?? null)}</span></td>
-                    <td className={`py-1.5 text-end font-semibold ${c.value}`}><span className="tnum">{cp.roas === null ? '—' : ratio(cp.roas)}</span></td>
+                    <td className={`py-1.5 text-center ${c.sub}`}><span className="tnum">{money(cp.spend, currency)}</span></td>
+                    <td className={`py-1.5 text-center ${c.sub}`}><span className="tnum">{num(cp.results)}</span></td>
+                    <td className={`py-1.5 text-center ${c.sub}`}><span className="tnum">{cp.cpa === null ? '—' : moneyExact(cp.cpa, currency ?? null)}</span></td>
+                    <td className={`py-1.5 text-center font-semibold ${c.value}`}><span className="tnum">{cp.roas === null ? '—' : ratio(cp.roas)}</span></td>
                   </tr>
                 ))}
               </tbody>
