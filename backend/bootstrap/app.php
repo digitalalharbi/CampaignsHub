@@ -35,6 +35,7 @@ use App\Domains\Tenancy\Middleware\EnsurePlatformAdmin;
 use App\Domains\Tenancy\Middleware\EnsurePortal;
 use App\Domains\Tenancy\Middleware\ResolveMembership;
 use App\Http\Middleware\AssignRequestId;
+use App\Http\Middleware\CompressJsonResponses;
 use App\Http\Middleware\ConditionalThrottle;
 use App\Http\Middleware\SetLocale;
 use App\Support\ApiResponse;
@@ -175,6 +176,22 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(append: [
             RejectRevokedSessions::class,
             EnsureAccountActive::class,
+        ]);
+
+        /*
+         * API-PAYLOAD-COMPRESSION-001 — prepended, so it is the LAST thing to touch the response.
+         *
+         * Middleware unwinds in reverse, so a compressor prepended here sees the finished body after
+         * every other layer has had its say — which is what it has to see, because anything that
+         * rewrites a response afterwards would be rewriting gzip.
+         *
+         * Measured on the owner's own shared report: 1.02MB with no `content-encoding` at all, and
+         * of the roster's cost roughly half a second is the server and a full second is the wire.
+         * JSON of that shape — repeated keys, repeated CDN prefixes, long runs of nulls — goes to
+         * about a tenth of its size.
+         */
+        $middleware->api(prepend: [
+            CompressJsonResponses::class,
         ]);
 
         // Route-middleware aliases. `throttle` is overridden so rate limiting is enforced in production but
