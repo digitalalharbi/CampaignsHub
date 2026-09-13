@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Campaigns\Models\ExternalAdSet;
+use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Services\EntityMetricsAggregator;
 use App\Domains\Projects\Models\Project;
@@ -157,6 +163,74 @@ final class EntityMetricsAggregatorTest extends TestCase
     }
 
     /** @return list<array<string,mixed>> */
+    /**
+     * OBJECTIVE-ANALYTICS-DEPTH-001 — the entity row states which objective it was bought for.
+     *
+     * The ad-set and ad tables render a FIXED column set — spend, impressions, reach, frequency,
+     * clicks, CTR, CPC, CPM, conversions, CPA — for every row whatever its campaign was for. So a
+     * sales ad set is shown frequency and CPM and denied ROAS, and an awareness ad set is shown
+     * conversions and a cost per order it was never bought to produce. That is exactly what
+     * `ObjectiveFamily::headlineMetrics()` exists to prevent, one rung below where it is enforced.
+     *
+     * A column set can only follow the objective if the ROW says what the objective is, and these rows
+     * said nothing: `named()` attached a name and a status and stopped. The objective is read from
+     * `unified_campaigns` through the entity's own `unified_campaign_id` — the campaign's objective in
+     * THIS product, not `external_campaigns.objective`, which is what the provider said and diverges
+     * the moment an operator corrects a misclassification.
+     *
+     * Null where the entity is not linked to a unified campaign: unlinked is not «unknown objective»,
+     * and a caller deciding columns has to treat it as «no answer» rather than as a family.
+     */
+    public function test_an_entity_row_carries_the_objective_of_the_campaign_it_belongs_to(): void
+    {
+        $campaign = UnifiedCampaign::create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'name' => 'Awareness push',
+            'objective' => 'awareness',
+            'status' => 'active',
+        ]);
+
+        $adSet = ExternalAdSet::create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'unified_campaign_id' => $campaign->id,
+            /* NOT NULL on this table: the provider's own campaign id, which every real row carries. */
+            'external_campaign_id' => $this->externalCampaign((string) $campaign->id)->id,
+            'provider' => 'snapchat',
+            'external_id' => 'sq-ads-1',
+            'name' => 'Broad KSA',
+            'status' => 'active',
+        ]);
+
+        $this->row((string) $adSet->id, '2026-08-01', ['impressions' => 1000, 'spend' => 50]);
+
+        $out = $this->aggregate()[0];
+
+        $this->assertSame('awareness', $out['objective'] ?? null, 'the row does not say what it was bought for');
+    }
+
+    /** Unlinked is «no answer», not a family — a caller must not headline it as one. */
+    public function test_an_entity_with_no_unified_campaign_states_no_objective(): void
+    {
+        $adSet = ExternalAdSet::create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'external_campaign_id' => $this->externalCampaign(null)->id,
+            'provider' => 'snapchat',
+            'external_id' => 'sq-ads-2',
+            'name' => 'Orphan',
+            'status' => 'active',
+        ]);
+
+        $this->row((string) $adSet->id, '2026-08-01', ['impressions' => 1000, 'spend' => 50]);
+
+        $out = $this->aggregate()[0];
+
+        $this->assertArrayHasKey('objective', $out, 'the key is absent, so a caller cannot tell «no answer» from «not implemented»');
+        $this->assertNull($out['objective']);
+    }
+
     private function aggregate(?array $parentIds = null, ?string $attributionWindow = null): array
     {
         return $this->aggregator->byEntity(
@@ -167,6 +241,50 @@ final class EntityMetricsAggregatorTest extends TestCase
             $parentIds,
             $attributionWindow,
         );
+    }
+
+    /**
+     * The provider's own campaign row, because `external_ad_sets.external_campaign_id` is a real FK.
+     *
+     * Minimal on purpose: this test is about the objective travelling from `unified_campaigns` to the
+     * entity row, and an account and a connection above it would be setup that proves nothing here.
+     */
+    private ?string $accountId = null;
+
+    /** The account chain `external_campaigns.external_account_id` requires — built once, reused. */
+    private function account(): string
+    {
+        if ($this->accountId !== null) {
+            return $this->accountId;
+        }
+
+        $credential = new IntegrationCredential(['provider' => 'snapchat', 'credential_scope' => 'project_only', 'credential_type' => 'oauth', 'status' => 'active']);
+        $credential->setPayload('token-snapchat');
+        $credential->save();
+
+        $connection = ProviderConnection::create([
+            'credential_id' => $credential->id, 'provider' => 'snapchat',
+            'connection_name' => 'snapchat connection', 'scope' => 'project_only', 'status' => 'connected',
+        ]);
+
+        return $this->accountId = (string) ExternalAccount::create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->id, 'provider' => 'snapchat',
+            'account_type' => 'ad_account', 'external_id' => 'act_sq_1', 'name' => 'Ad account', 'status' => 'active',
+        ])->id;
+    }
+
+    private function externalCampaign(?string $unifiedId): ExternalCampaign
+    {
+        return ExternalCampaign::create([
+            'external_account_id' => $this->account(),
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'unified_campaign_id' => $unifiedId,
+            'provider' => 'snapchat',
+            'external_id' => 'sq-c-'.Str::random(6),
+            'name' => 'Ext',
+            'status' => 'active',
+        ]);
     }
 
     /** @param array<string,mixed> $values */
