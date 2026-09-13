@@ -5,6 +5,7 @@ import { Loader2, Moon, Sun } from 'lucide-react'
 import { AccountMenu } from '@/features/account/UserMenu'
 import { fetchCreatorProfile } from '@/features/influencers/creator/api'
 import { useUi } from '@/stores/ui'
+import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 
 /**
  * The creator's shell (INFL-002, ADR 0002).
@@ -34,6 +35,16 @@ export function CreatorShell() {
     <div data-testid="creator-shell" className="flex min-h-[100dvh] flex-col bg-background text-text-primary">
       <header className="sticky top-0 z-40 border-b border-border bg-surface/85 backdrop-blur-md">
         <div className="mx-auto flex w-full max-w-[1080px] items-center gap-3 px-4 py-3 sm:px-6">
+          {/*
+            BRAND-MARK-001 — the platform's identity, BESIDE the creator's rather than over it.
+
+            The circle to its right is the creator's own initial: this header answers «whose space is
+            this», and the answer is theirs. So the product says who it is with the mark and leaves
+            the name to them — the same split every other shell makes between platform and workspace.
+          */}
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark" data-testid="creator-shell-brand">
+            <CampaignsHubMark size={20} title="CampaignsHub" />
+          </span>
           <div className="flex min-w-0 items-center gap-2.5">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-extrabold text-white">
               {(profile.data?.creator.name ?? 'C').slice(0, 1)}
