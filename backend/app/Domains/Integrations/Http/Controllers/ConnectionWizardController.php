@@ -69,6 +69,22 @@ final class ConnectionWizardController extends Controller
     {
         abort_unless($request->user()->hasPermission('integrations.view'), 403);
 
+        /*
+         * GADS-STALE-PICKER-001 — what is NOT changed here, and why.
+         *
+         * The owner's click on «Finish selecting accounts» ended in a generic «Item not found». A
+         * workspace filter was written here on the theory that the banner was offering a connection from
+         * another workspace — and then removed, because the theory does not survive the code:
+         * `connectionOr404()` scopes by TENANT, exactly as this query does, so a connection listed here
+         * cannot 404 there for that reason. The Arabic sentence the owner saw is
+         * `QueryFailure`'s generic 404 copy, which any 404 from any of the picker's requests renders.
+         *
+         * Identifying which request 404s needs the production request trail, which is not in hand. What IS
+         * fixed is the click that leads there: a connection with no CURRENTLY selectable account is no
+         * longer offered at all, because `discovered` stops counting rows the latest discovery could not
+         * confirm. Guessing at the 404's source and shipping a filter for it would be the same class of
+         * mistake as the stale count itself.
+         */
         $connections = ProviderConnection::withoutGlobalScopes()
             ->where('tenant_id', $this->tenant->tenantId())
             ->where('status', 'connected')

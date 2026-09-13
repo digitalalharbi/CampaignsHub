@@ -137,10 +137,14 @@ return [
             'client_id' => env('GOOGLE_ADS_CLIENT_ID'),
             'client_secret' => env('GOOGLE_ADS_CLIENT_SECRET'),
             /*
-             * The developer token is approved separately from the OAuth client, and every Google Ads
-             * call is refused without it. Listing it as REQUIRED in the catalogue is the difference between an
-             * account that says "awaiting credentials" and one that says "connected" and then returns
-             * nothing but errors.
+             * GADS-TOKEN-SUNSET-001 — optional since Google sunset developer tokens on 2026-09-09.
+             *
+             * This comment used to tie the token's approval to a path of its own and to claim no call
+             * succeeds without it, and the catalogue marked it required on that basis.
+             * Google transferred the access levels of approved tokens to the Cloud projects that had been
+             * calling with them, and production access now follows the Cloud project owning the OAuth
+             * client. The header is still sent — Google ignores it rather than rejecting it — but it is no
+             * longer what grants access, and it no longer gates readiness.
              */
             'developer_token' => env('GOOGLE_ADS_DEVELOPER_TOKEN'),
             /*
