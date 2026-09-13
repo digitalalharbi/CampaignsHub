@@ -17,6 +17,7 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 import { CANONICAL_CURRENCY } from '@/lib/money/contract'
+import { MetricTable } from '@/components/ui/MetricTable'
 import { Num } from '@/components/ui/Num'
 
 /**
@@ -637,36 +638,33 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
           <p className="mt-2 text-sm text-text-secondary">{t.onePlatform}</p>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[36rem] text-sm">
-              <thead className="bg-surface-hover text-xs text-text-secondary">
-                <tr>
-                  <th className="p-2 text-start">{t.platform}</th>
-                  {['spend', 'impressions', 'clicks', 'conversions'].map((k) => (
-                    <th key={k} className="p-2 text-center">{metricLabel(k, locale)}</th>
-                  ))}
-                  <th className="p-2 text-start">{t.source}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.by_platform.map((row) => (
-                  <tr key={row.creative_id} className="border-t border-border">
-                    <td className="p-2">{providerLabel(row.provider, locale)}</td>
-                    {['spend', 'impressions', 'clicks', 'conversions'].map((k) => (
-                      <td key={k} className="p-2 text-center tabular-nums">
-                        <Num>{formatMetric(metricState(row.metrics, k), k, locale, currency)}</Num>
-                      </td>
-                    ))}
-                    {/*
-                      CONTENT-SOURCE-LABEL-001 — the «المصدر» column printed `platform_reported`.
-                      
-                      That column answers «where did this row come from», which is the question a
-                      reader checking a figure asks first — and it answered in the database's words.
-                    */}
-                    <td className="p-2 text-xs text-text-secondary">{metricSourceLabel(row.source, locale === 'ar')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {/*
+              TABLE-NUMERIC-ALIGNMENT-001 §58 — a consumer. It needed nothing the primitive lacks.
+              
+              The exemption said «three tables, one of which is a per-day series that wants a chart
+              rather than a migration». None of the three is a per-day series: that is
+              `CreativeTrend`, and it has been a chart all along. The three are this platform
+              breakdown, the peer comparison below it and the funnel — all plain, none with a row
+              press, a sort, or a per-row identity anything reads.
+            */}
+            <MetricTable
+              head={[
+                t.platform,
+                ...['spend', 'impressions', 'clicks', 'conversions'].map((k) => metricLabel(k, locale)),
+                t.source,
+              ]}
+              rows={data.by_platform.map((row) => [
+                providerLabel(row.provider, locale),
+                ...['spend', 'impressions', 'clicks', 'conversions'].map((k) => (
+                  <Num key={k}>{formatMetric(metricState(row.metrics, k), k, locale, currency)}</Num>
+                )),
+                /*
+                  CONTENT-SOURCE-LABEL-001 — «where did this row come from», in the reader's words
+                  rather than the database's. It printed `platform_reported` once.
+                */
+                <span key="src" className="text-xs text-text-secondary">{metricSourceLabel(row.source, locale === 'ar')}</span>,
+              ])}
+            />
           </div>
         )}
       </section>
@@ -682,38 +680,28 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
               <span dir="ltr">{data.peers.count}</span> {t.peersCount} · {marketingPathLabel(String(data.peers.path ?? data.path), locale)}
             </p>
             <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[32rem] text-sm">
-                <thead className="bg-surface-hover text-xs text-text-secondary">
-                  <tr>
-                    <th className="p-2 text-start" />
-                    {['ctr', 'cpc', 'cpm', 'roas'].map((k) => (
-                      <th key={k} className="p-2 text-center">{metricLabel(k, locale)}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-t border-border">
-                    <td className="p-2 font-medium">{t.mine}</td>
-                    {['ctr', 'cpc', 'cpm', 'roas'].map((k) => (
-                      <td key={k} className="p-2 text-center tabular-nums">
-                        <Num>{formatMetric(metricState(metrics, k), k, locale, currency)}</Num>
-                      </td>
-                    ))}
-                  </tr>
-                  <tr className="border-t border-border text-text-secondary">
-                    <td className="p-2">{t.average}</td>
-                    {['ctr', 'cpc', 'cpm', 'roas'].map((k) => (
-                      <td key={k} className="p-2 text-center tabular-nums">
-                        <Num>
-                          {typeof data.peers?.[k] === 'number'
-                            ? formatMetric({ kind: 'value', value: data.peers[k] as number }, k, locale, currency)
-                            : t.notProvided}
-                        </Num>
-                      </td>
-                    ))}
-                  </tr>
-                </tbody>
-              </table>
+              {/* The peer comparison — two rows against four rates, and nothing the primitive lacks. */}
+              <MetricTable
+                head={['', ...['ctr', 'cpc', 'cpm', 'roas'].map((k) => metricLabel(k, locale))]}
+                rows={[
+                  [
+                    <span key="mine" className="font-medium">{t.mine}</span>,
+                    ...['ctr', 'cpc', 'cpm', 'roas'].map((k) => (
+                      <Num key={k}>{formatMetric(metricState(metrics, k), k, locale, currency)}</Num>
+                    )),
+                  ],
+                  [
+                    <span key="avg" className="text-text-secondary">{t.average}</span>,
+                    ...['ctr', 'cpc', 'cpm', 'roas'].map((k) => (
+                      <Num key={k}>
+                        {typeof data.peers?.[k] === 'number'
+                          ? formatMetric({ kind: 'value', value: data.peers[k] as number }, k, locale, currency)
+                          : t.notProvided}
+                      </Num>
+                    )),
+                  ],
+                ]}
+              />
             </div>
           </>
         )}
@@ -891,42 +879,27 @@ function FunnelTable({
 }) {
   return (
     <div className="mt-4 overflow-x-auto">
-      <table className="w-full min-w-[32rem] text-sm">
-        <thead className="bg-surface-hover text-xs text-text-secondary">
-          <tr>
-            <th className="p-2 text-start">{t.stage}</th>
-            <th className="p-2 text-center">{t.count}</th>
-            <th className="p-2 text-center">{t.rate}</th>
-            <th className="p-2 text-center">{t.costPer}</th>
-            <th className="p-2 text-start">{t.source}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {stages.map((stage) => (
-            <tr key={stage.key} className="border-t border-border">
-              <td className="p-2">{ar ? stage.label_ar : stage.label_en}</td>
-              <td className="p-2 text-center tabular-nums">
-                <Num>{stage.count === null ? t.notProvided : stage.count.toLocaleString('en-US')}</Num>
-              </td>
-              <td className="p-2 text-center tabular-nums">
-                <Num>{stage.rate_from_previous === null ? '—' : `${(stage.rate_from_previous * 100).toFixed(1)}%`}</Num>
-              </td>
-              <td className="p-2 text-center tabular-nums">
-                {/* Three different sentences: withheld by the link, no spend reported, and a real
-                    figure. Collapsing the first two into «—» tells the reader the wrong story. */}
-                <Num>
-                  {stage.cost_hidden
-                    ? t.costHidden
-                    : stage.cost_per === null
-                      ? t.notProvided
-                      : formatMetric({ kind: 'value', value: stage.cost_per }, 'cpa', locale, currency)}
-                </Num>
-              </td>
-              <td className="p-2 text-xs text-text-secondary">{stage.source}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* The funnel's stages — the third of the three, and the last hand-rolled table on this page. */}
+      <MetricTable
+        head={[t.stage, t.count, t.rate, t.costPer, t.source]}
+        rows={stages.map((stage) => [
+          ar ? stage.label_ar : stage.label_en,
+          <Num key="c">{stage.count === null ? t.notProvided : stage.count.toLocaleString('en-US')}</Num>,
+          <Num key="r">{stage.rate_from_previous === null ? '—' : `${(stage.rate_from_previous * 100).toFixed(1)}%`}</Num>,
+          /*
+            Three different sentences: withheld by the link, no spend reported, and a real figure.
+            Collapsing the first two into «—» tells the reader the wrong story.
+          */
+          <Num key="cp">
+            {stage.cost_hidden
+              ? t.costHidden
+              : stage.cost_per === null
+                ? t.notProvided
+                : formatMetric({ kind: 'value', value: stage.cost_per }, 'cpa', locale, currency)}
+          </Num>,
+          <span key="src" className="text-xs text-text-secondary">{stage.source}</span>,
+        ])}
+      />
     </div>
   )
 }

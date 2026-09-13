@@ -54,11 +54,18 @@ const EXEMPT: Record<string, string> = {
   'src/features/reports/ReportsPage.tsx': 'a list of reports and a share access log — identifiers, times and controls, with nothing a reader compares across rows. Out of scope by KIND, not waiting to be migrated',
   'src/features/reports/PrintDocument.tsx': 'a printed page has no sort control, no hover and no scroller, and those three are most of what the primitive is. Out of scope by kind',
   'src/features/content/CreativesPage.tsx': 'the list view of a grid: selection checkboxes and media previews per row',
-  'src/features/content/CreativeDetailPage.tsx': 'three tables, one of which is a per-day series that wants a chart rather than a migration',
   'src/features/campaigns/CampaignCommandCenter.tsx': 'inline editing per row — the cells are controls, and the spec API needs an editable kind first',
-  'src/features/campaigns/CampaignsPage.tsx': 'row selection and bulk actions live inside the table',
-  'src/features/campaigns/CampaignDepthTabs.tsx': 'nested expansion rows, which the primitive does not model',
-  'src/features/campaigns/overview/UnifiedCampaignOverview.tsx': 'per-row sparklines and a drag handle',
+  'src/features/campaigns/CampaignsPage.tsx': 'the campaigns table orders by PRIORITY BAND before any column sort, '
+    + 'drives that sort from the page rather than from the table, and navigates on a row press. The objective-mix '
+    + 'table that used to sit beside it is a consumer now — it needed none of the three. The recorded reason used '
+    + 'to be «row selection and bulk actions live inside the table», and neither table on this page has ever had a '
+    + 'checkbox: a false reason sends the next reader to build selection support nobody is waiting for',
+  'src/features/campaigns/overview/UnifiedCampaignOverview.tsx': 'renders at TWO SCALES with its own palette — '
+    + 'the same table at `text-xs` on a panel and `text-sm` on a wall display, with border and muted tones taken '
+    + 'from the surrounding theme rather than the app\'s. `MetricTable` offers no scale and no palette, which is '
+    + 'a real gap and the one to close before this migrates. The recorded reason used to be «per-row sparklines '
+    + 'and a drag handle»: the file contains neither — no sparkline at all, and its only «drag» is a comment '
+    + 'about a past layout bug',
 }
 
 /**

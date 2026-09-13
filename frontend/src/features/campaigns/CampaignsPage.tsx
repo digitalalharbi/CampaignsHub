@@ -29,6 +29,8 @@ const LIFECYCLE_LABELS: Record<Lifecycle, { ar: string; en: string }> = {
   inactive: { ar: 'غير النشطة', en: 'Inactive' },
   all: { ar: 'الكل', en: 'All' },
 }
+import { MetricTable } from '@/components/ui/MetricTable'
+import { Num } from '@/components/ui/Num'
 import { useUrlNumber, useUrlState, useUrlWriter } from '@/features/analytics/filterUrlState'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -736,33 +738,30 @@ export function CampaignsPage() {
             <div data-testid="campaigns-objective-mix" className="rounded-2xl border border-border bg-surface p-4">
               <h3 className="mb-3 text-sm font-bold text-text-primary">{ar ? 'الإنفاق حسب الهدف' : 'Spend by objective'}</h3>
 
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-xs text-text-muted">
-                    <th className="p-2 text-start">{ar ? 'الهدف' : 'Objective'}</th>
-                    <th className="p-2 text-center">{ar ? 'الحملات' : 'Campaigns'}</th>
-                    <th className="p-2 text-center">{ar ? 'الإنفاق' : 'Spend'}</th>
-                    <th className="p-2 text-center">{ar ? 'النتائج' : 'Results'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mix.rows.map((r) => (
-                    <tr key={r.key} data-testid={`campaigns-objective-${r.key}`} className="border-b border-border last:border-0">
-                      <td className="p-2 font-semibold text-text-primary">{canonicalObjectiveLabel(r.key, ar ? 'ar' : 'en')}</td>
-                      {/* `tnum` on the SPAN, not the cell: on the cell it sets the direction too, and
-                          RTL figures slide out from under their own heading. */}
-                      <td className="p-2 text-center text-text-secondary"><span className="tnum" dir="ltr">{r.campaigns}</span></td>
-                      {/* «—», never a zero: a total nobody could compute is not a total of nothing. */}
-                      <td className="p-2 text-center text-text-primary">
-                        {r.spend === null
-                          ? <span className="text-text-muted">—</span>
-                          : <span className="tnum" dir="ltr">{money(r.spend, mix.currency ?? undefined)}</span>}
-                      </td>
-                      <td className="p-2 text-center text-text-secondary"><span className="tnum" dir="ltr">{num(r.results)}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {/*
+                TABLE-NUMERIC-ALIGNMENT-001 §58 — a consumer, not a twelfth hand-rolled table.
+                
+                This one needed nothing the primitive lacks: four columns, no row click, no sort, no
+                per-row identity anything reads. It was hand-rolled only because it was written
+                before the primitive was reachable, which is the whole category §58 asked to be
+                emptied rather than recorded. The numeric columns take the primitive's convention by
+                construction now, so they cannot drift from it again.
+                
+                What it keeps is the absence rule: a spend nobody could add stays «—», never a zero.
+              */}
+              <MetricTable
+                head={ar
+                  ? ['الهدف', 'الحملات', 'الإنفاق', 'النتائج']
+                  : ['Objective', 'Campaigns', 'Spend', 'Results']}
+                rows={mix.rows.map((r) => [
+                  canonicalObjectiveLabel(r.key, ar ? 'ar' : 'en'),
+                  <Num key="c">{num(r.campaigns)}</Num>,
+                  r.spend === null
+                    ? <span key="s" className="text-text-muted">—</span>
+                    : <Num key="s">{money(r.spend, mix.currency ?? undefined)}</Num>,
+                  <Num key="r">{num(r.results)}</Num>,
+                ])}
+              />
 
               {(mix.dropped > 0 || mix.unclassified > 0) && (
                 <p data-testid="campaigns-objective-mix-note" className="mt-2 text-xs text-text-muted">
