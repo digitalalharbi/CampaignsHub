@@ -5,6 +5,23 @@
  */
 export const brand = {
   name: import.meta.env.VITE_BRAND_NAME ?? 'CampaignsHub',
+  /**
+   * BRAND-LOCKUP-001 — the words that belong to the LOGO, which are not the product's tagline.
+   *
+   * The identity file sets the lockup as «CampaignsHub · PAID MEDIA IN ONE PLACE» and
+   * «كامبينز هب · منصة إدارة الحملات المدفوعة». `tagline` below is a different thing: the sentence
+   * the product is sold and described by, pinned by BRAND-001 to match `config/brand.php`.
+   *
+   * Kept as two fields on purpose. Collapsing them would either put the logo's line into the title
+   * tag and the sign-in panel, or put the product sentence under the mark — and one of the two
+   * would then be wrong everywhere it appears.
+   */
+  lockup: {
+    nameEn: 'CampaignsHub',
+    nameAr: 'كامبينز هب',
+    lineEn: 'PAID MEDIA IN ONE PLACE',
+    lineAr: 'منصة إدارة الحملات المدفوعة',
+  },
   domain: import.meta.env.VITE_BRAND_DOMAIN ?? 'campaignshub.io',
   /*
    * The OFFICIAL tagline — BRAND-001, and it must match `config/brand.php` exactly.

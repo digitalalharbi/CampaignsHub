@@ -11,6 +11,16 @@
   --brand-500: #10b981;
   --brand-600: #0d8a6f;
   --brand-700: #047857;
+  /*
+   * BRAND-MARK-001 — the identity's own two values, and nothing newly invented.
+   *
+   * The identity file states «#0D8A6F في الوضع الفاتح و #F7F5F0 في الداكن. النقطة الذهبية ثابتة».
+   * `--brand-600` above is ALREADY #0d8a6f, so the mark points at the product's approved green
+   * rather than adding a third shade of it. The gold is the one colour the identity pins outright,
+   * so it does not change between themes.
+   */
+  --brand-mark: var(--brand-600);
+  --brand-gold: #e8a33d;
 
   /* Semantic brand + surface aliases — components reference these, never raw brand steps. */
   --brand-primary: var(--brand-600);
@@ -129,6 +139,8 @@
   --brand-50: #04201e;
   --brand-100: #063831;
   --brand-200: #0a544a;
+  /* Dark: the near-white the identity names. The gold is deliberately NOT redefined here. */
+  --brand-mark: #f7f5f0;
   --brand-300: #6ee7b7;
   --brand-400: #14c39a;
   --brand-500: #14c39a;

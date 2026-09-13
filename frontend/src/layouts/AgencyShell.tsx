@@ -9,10 +9,10 @@ import {
   Moon,
   PanelLeft,
   Sun,
-  Users,
   X,
 } from 'lucide-react'
 import { AccountMenu } from '@/features/account/UserMenu'
+import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { fetchMemberships } from '@/features/auth/memberships'
 import { useUi } from '@/stores/ui'
@@ -96,9 +96,15 @@ function AgencyIdentity({ collapsed }: { collapsed?: boolean }) {
 
   return (
     <div className={`flex items-center gap-2.5 ${collapsed ? 'justify-center' : 'px-1'}`}>
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-[var(--shadow-small)]">
-        <Users size={18} />
-      </div>
+      {/*
+        BRAND-MARK-001 — the product's own symbol, where a generic «people» glyph used to sit.
+        The NAME beside it stays the tenant's: this is the agency's portal, and replacing their name
+        with «CampaignsHub» would take their identity out of their own workspace. The platform is
+        the mark; the workspace is the words. That is the same hierarchy the reports follow.
+      */}
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark">
+        <CampaignsHubMark size={20} />
+      </span>
       {!collapsed && (
         <div className="min-w-0">
           <span className="block truncate font-heading text-[15px] font-extrabold tracking-tight text-text-primary">

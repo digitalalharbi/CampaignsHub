@@ -32,6 +32,9 @@
   --color-brand-500: var(--brand-500);
   --color-brand-600: var(--brand-600);
   --color-brand-700: var(--brand-700);
+  /* The mark's colour and the fixed gold, as utilities — so no component writes a hex. */
+  --color-brand-mark: var(--brand-mark);
+  --color-brand-gold: var(--brand-gold);
   --color-brand-primary: var(--brand-primary);
   --color-brand-primary-hover: var(--brand-primary-hover);
   --color-brand-primary-soft: var(--brand-primary-soft);
