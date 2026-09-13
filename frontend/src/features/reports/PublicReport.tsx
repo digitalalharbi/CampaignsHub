@@ -13,6 +13,7 @@ import { SharedCreativeSection } from './SharedCreativeSection'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { useUi } from '@/stores/ui'
+import { CampaignsHubBrandFooter } from '@/components/brand/CampaignsHubBrandFooter'
 
 interface Shared {
   name: string
@@ -238,9 +239,37 @@ export function PublicReport() {
             </div>
           </div>
         )}
+
+        {/*
+          BRAND-ATTRIBUTION-001 — the credit, on the one report surface a client actually keeps.
+          Secondary by construction: the header above already names whoever the report belongs to,
+          per BRANDING-HIERARCHY-001, and this sits under the content as a footer row rather than
+          over their brand. The invitation is offered HERE and not in print, because a shared link
+          is a live surface somebody can act from and a printed page is not.
+          The year comes from the report's own period, so a snapshot opened next year is not
+          restamped as current.
+        */}
+        <div className="mx-auto w-full max-w-6xl px-4 pb-10">
+          <CampaignsHubBrandFooter
+            locale={locale === 'ar' ? 'ar' : 'en'}
+            year={reportYear(report?.generated_at)}
+            cta
+          />
+        </div>
       </main>
     </div>
   )
+}
+
+/**
+ * The year this report belongs to. A snapshot is a record of when it was generated, and re-opening
+ * it later must not quietly restamp its copyright as today — so the clock is the last resort, used
+ * only when the report has no date of its own yet.
+ */
+function reportYear(generatedAt?: string | null): number {
+  const parsed = generatedAt ? Number(String(generatedAt).slice(0, 4)) : Number.NaN
+
+  return Number.isFinite(parsed) && parsed > 2000 ? parsed : new Date().getFullYear()
 }
 
 /** Truthful data-lineage strip for the client link: what the numbers are, and how fresh. */
