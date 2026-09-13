@@ -51,7 +51,6 @@ import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { Panel, ProvenanceBadge, SERIES, platformColor, tooltipProps } from './components'
 import { BudgetReading } from './BudgetReading'
 import { FamilyDecisionTable } from './FamilyDecisionTable'
-import { spendIsWithheld } from './money'
 import {
   COST_PER_DENOMINATOR,
   ENTITY_MONEY_KEYS,
@@ -68,7 +67,7 @@ import { funnelStageLabel } from './metricLabels'
 import { AnalyticsOverview, DashboardOverview, useOverviewData } from './OverviewCompositions'
 import { useUrlList, useUrlNumber, useUrlState, useUrlWriter } from './filterUrlState'
 import { familyMoney, familyTotal, type FamilyRow, familySpend } from './familyTotals'
-import { readCostPer, readMoney, readRoas } from '@/lib/money/contract'
+import { moneyState, readCostPer, readMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
 
 /** The two KPI keys that are money rather than a quantity or a rate. */
 const MONEY_KPIS = new Set(['spend', 'revenue'])
@@ -1115,7 +1114,7 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
               withheld denominator is a fabricated ratio. So the answer is the reason, not a ranking.
             */
             <p className="text-sm text-text-muted" data-testid="analytics-worst-unavailable">
-              {rows.some((r) => spendIsWithheld(r))
+              {rows.some((r) => moneyState(r as unknown as MoneyTotals, 'spend').state === 'complete_withheld')
                 ? (ar
                     ? 'لم يُحوَّل إنفاق هذه الحملات إلى عملة التقرير، فلا يمكن ترتيبها حسب ROAS.'
                     : 'Spend on these campaigns was not converted into the report’s currency, so they cannot be ranked by ROAS.')

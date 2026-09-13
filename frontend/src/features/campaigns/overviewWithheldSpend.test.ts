@@ -12,6 +12,11 @@ import type { CampaignRow } from '@/features/analytics/api'
  * and the list was permanently empty — including the campaigns that had burned money for nothing,
  * which is what it exists to surface. The alert list is built from the same rows, so both went
  * quiet together.
+ *
+ * The threshold is asked through `moneyState` rather than a number, because a withheld figure is in
+ * the platform's own currency: comparing it to a riyal threshold would trade one defect for a
+ * currency error. Money we hold and cannot state qualifies on its own — that IS the case worth a
+ * look.
  */
 const row = (over: Partial<CampaignRow>): CampaignRow => ({
   campaign_id: 'c1',
@@ -25,6 +30,7 @@ const row = (over: Partial<CampaignRow>): CampaignRow => ({
   spend_original: 0,
   spend_withheld_rows: 0,
   money_original_currency: null,
+  money_original_currencies: 0,
   ...over,
 } as unknown as CampaignRow)
 
@@ -43,13 +49,20 @@ const vm = (campaigns: CampaignRow[]) =>
 
 describe('a campaign that spent real money the sync could not convert', () => {
   it('still reaches the needs-attention list', () => {
-    const withheld = row({ spend: 0, spend_original: 9000, spend_withheld_rows: 4, conversions: 0 })
+    // The production shape: nothing converted, the real amount held in one platform currency.
+    const withheld = row({
+      spend: 0, spend_original: 9000, spend_withheld_rows: 4, conversions: 0,
+      money_original_currency: 'USD', money_original_currencies: 1,
+    })
 
     expect(vm([withheld]).needsAttention.length).toBe(1)
   })
 
   it('reaches the alert list too, since both are built from the same rows', () => {
-    const withheld = row({ spend: 0, spend_original: 9000, spend_withheld_rows: 4, conversions: 0 })
+    const withheld = row({
+      spend: 0, spend_original: 9000, spend_withheld_rows: 4, conversions: 0,
+      money_original_currency: 'USD', money_original_currencies: 1,
+    })
 
     expect(vm([withheld]).alerts.length).toBeGreaterThan(0)
   })

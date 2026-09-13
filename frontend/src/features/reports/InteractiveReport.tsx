@@ -197,6 +197,17 @@ export interface ObjectivePath {
   label_en: string
   headline_metrics: string[]
   spend: number
+  /**
+   * AGGREGATION-TRUTH-001 — what the sync HELD when it could not convert.
+   *
+   * `spend` is the converted figure and is honestly 0 when no rate existed. Without these beside it
+   * a path whose money is entirely withheld is indistinguishable from a path nobody ran, and this
+   * table dropped it at `spend > 0` — which took the whole objective decomposition off the report.
+   */
+  spend_original?: number | null
+  spend_withheld_rows?: number | null
+  revenue_original?: number | null
+  revenue_withheld_rows?: number | null
   impressions: number
   clicks: number
   orders: number

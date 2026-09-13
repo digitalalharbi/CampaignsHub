@@ -16,7 +16,7 @@ import { dash } from '@/features/analytics/metricLabels'
 import { ratio } from '@/features/analytics/format'
 import type { OverviewVM } from './UnifiedCampaignOverview'
 import { providerName } from './UnifiedCampaignOverview'
-import { spendOf } from '@/features/analytics/money'
+import { moneyState, type MoneyTotals } from '@/lib/money/contract'
 
 type CampaignRow = {
   campaign_id: string | number
@@ -68,7 +68,26 @@ export function useOverviewVm(input: {
      * comment there says the shared threshold is deliberate so the two cannot disagree. They agreed
      * perfectly — on nothing.
      */
-    () => (campaigns ?? []).filter((c) => spendOf(c) > 3000 && c.conversions < 2),
+    () =>
+      (campaigns ?? []).filter((c) => {
+        if (c.conversions >= 2) return false
+
+        /*
+         * «Spent enough to worry about» — asked through the canonical money contract, because the
+         * answer is not always a number this threshold can be compared against.
+         *
+         * A converted figure is in the reporting currency and the threshold means something. A
+         * WITHHELD figure is in the platform's own currency: comparing 3,000 of an unknown unit
+         * against a riyal threshold would be a currency error, and dropping it — which is what
+         * reading `c.spend` did — removes the campaign from the list entirely. Money we hold and
+         * cannot state is exactly the case worth a look, so it qualifies on its own.
+         */
+        const money = moneyState(c as unknown as MoneyTotals, 'spend')
+
+        if (money.state === 'complete_converted') return (money.converted ?? 0) > 3000
+
+        return money.state === 'complete_withheld' || money.state === 'partial' || money.state === 'mixed_currency'
+      }),
     [campaigns],
   )
 
