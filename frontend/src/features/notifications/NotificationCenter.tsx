@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bell, CheckCheck } from 'lucide-react'
 import { listNotifications, markAllNotificationsRead, markNotificationRead, type AppNotification } from './api'
 import { useT } from '@/lib/i18n'
+import { useUi } from '@/stores/ui'
 
 const severityDot: Record<AppNotification['severity'], string> = {
   info: 'bg-info', success: 'bg-success', warning: 'bg-warning', critical: 'bg-danger',
@@ -12,6 +13,7 @@ const severityDot: Record<AppNotification['severity'], string> = {
 
 export function NotificationCenter() {
   const t = useT()
+  const ar = useUi((s) => s.locale) === 'ar'
   const navigate = useNavigate()
   const portalPath = usePortalPath()
   const qc = useQueryClient()
@@ -31,6 +33,8 @@ export function NotificationCenter() {
 
   const unread = q.data?.unread ?? 0
   const items = q.data?.items ?? []
+  const withheld = q.data?.withheld ?? 0
+  const total = q.data?.total ?? items.length
 
   const openItem = (n: AppNotification) => {
     if (n.status === 'unread') markRead.mutate(n.id)
@@ -78,6 +82,23 @@ export function NotificationCenter() {
                     </button>
                   </li>
                 ))}
+                {/*
+                  OPS-LEDGER-001 — the centre says how much of itself it is showing.
+                  
+                  The bound is right: nobody scrolls three hundred notifications in a dropdown. What
+                  was wrong is that `unread` was the only figure on screen, and an unread count says
+                  nothing about whether the list is complete.
+                */}
+                {withheld > 0 && (
+                  <li
+                    data-testid="notification-centre-bounded"
+                    className="border-t border-border/60 px-3 py-2 text-center text-[11px] text-text-muted"
+                  >
+                    {ar
+                      ? `تُعرض ${items.length} من ${total} إشعارًا — الأقدم غير معروضة.`
+                      : `Showing ${items.length} of ${total} — the oldest are not listed.`}
+                  </li>
+                )}
               </ul>
             )}
           </div>

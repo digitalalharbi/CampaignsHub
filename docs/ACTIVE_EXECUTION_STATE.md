@@ -110,5 +110,47 @@ rungs rendered, the Project rung being #357's addition.
   project integrations page that had been listing every task with no count — found by checking every
   consumer of the endpoint, not only the page the unit was about. It cost a CI cycle, which is the
   right trade.
-- Eleven more literal caps remain — sync runs, invitations, branding, security events, platform email.
-  Same shape, none client-facing.
+- **The «eleven more literal caps» line was checked, and most of them were already honest.** Security
+  events carry `history_total`/`history_withheld`, branding carries a total and a withheld count,
+  invitations count what they left out, and the `DiagnoseSyncCommand` caps are deliberate CLI
+  sampling rather than a list anybody reads as complete. The one that was genuinely silent was
+  `CampaignAlertsController`: a hundred rows with no statement of how many the filter holds.
+  Its `meta.counts` looked like coverage and is not — that is a status breakdown of every alert the
+  campaign ever had, and it ignores the `status` filter the list was narrowed by, so a campaign with
+  250 unread alerts asked for its unread ones returned a hundred rows beside «active: 250». Two true
+  numbers, neither an answer to «is this list complete». It now carries `meta.total` and
+  `meta.withheld` scoped to the filter, the hook reads them through `getEnvelope` instead of
+  throwing `meta` away, and the tab says «تُعرض 100 من 250». Proved by injection: counting without
+  the filter fails the one case that is about the filter.
+- **And the NOTIFICATION CENTRE had the same silence**, which the first pass over this backlog line
+  walked past because `meta.unread` looked like the endpoint already said something. An unread
+  COUNT is not a statement of completeness: three hundred notifications with ninety unread showed a
+  hundred rows beside «90», and nothing on screen said the other two hundred existed.
+  `total` and `withheld` travel beside `unread` now, `listNotifications` reads them instead of
+  taking `unread` and discarding the rest, and the dropdown says «تُعرض 100 من 300» only when
+  something is actually held back. Built inline from the locale rather than by adding interpolation
+  to `useT`, which takes a key and no values — a much larger blast radius than the defect.
+  One defect, two routes, one unit: the campaign tab and the centre, each proved by injection.
+- **Four more at two hundred, and a guard so the next one cannot ship silent.** Quotes, invoices,
+  campaign annotations and Drive links all capped at 200 with no count. Invoices is the one that
+  matters most — it is the list a customer reads to answer «have I been billed for everything», and
+  a silently truncated one answers it wrongly in the direction that costs them nothing to believe.
+  All four now count after their filters and before the bound.
+  `BoundedListsStateTheirBoundTest` reads the controllers rather than testing each endpoint again,
+  because what no feature test can say is «and the next one somebody writes will do this too» —
+  which is exactly how this defect kept returning: security events were made honest, then campaign
+  alerts shipped silent, then the notification centre, then these four, each written by somebody who
+  had not read the others. Console sampling is deliberately out of scope: taking three payloads for
+  a diagnostic is not a list anybody reads as complete.
+- **And the consumers, because a count nobody renders is not a fix.** That is the same trap the
+  report media defect turned on: the envelope existed and nothing read it. `listQuotes` and
+  `listInvoices` used `getData`, which throws `meta` away, so the totals would have sat unread.
+  **`InvoicesPage` was the serious one**: its summary cards — including «Outstanding», which is money
+  somebody is owed — are reduced over the rows that ARRIVED, so past the bound they described the
+  most recent two hundred invoices while wearing the label of the whole ledger, and understating a
+  debt is the expensive direction. The page now says so above the cards. `PaymentsPage` distinguishes
+  «nothing to pay» from «nothing to pay among the most recent shown», which are different sentences
+  and only one is safe to show somebody who owes money. `TabBilling` filters one client out of a
+  bounded fetch of every client's invoices, so a client whose invoices are older than the bound
+  simply did not appear; it says that too. Computing these summaries server-side is the better
+  answer and is a larger change — what could not wait is the claim.

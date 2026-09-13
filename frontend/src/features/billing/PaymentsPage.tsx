@@ -69,7 +69,12 @@ export function PaymentsPage() {
   const canManage = useAuth((s) => s.hasPermission('billing.manage'))
 
   const q = useQuery({ queryKey: ['billing', 'invoices', 'payable'], queryFn: () => listInvoices() })
-  const payable = (q.data ?? []).filter(isPayable)
+  const payable = (q.data?.items ?? []).filter(isPayable)
+  /*
+    OPS-LEDGER-001 — this page acts on payable invoices, so a bounded ledger matters here too: an
+    invoice past the server's bound cannot be paid from a screen that never lists it.
+  */
+  const invoicesWithheld = q.data?.withheld ?? 0
 
   // Sessions accumulate from real `pay` responses, keyed by payment id. A stable idempotency key per invoice
   // means retrying returns the SAME payment — so repeated starts append attempts rather than fabricating rows.
@@ -125,6 +130,16 @@ export function PaymentsPage() {
             <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">{c.loading}</p>
           ) : q.isError ? (
             <p className="rounded-xl border border-danger/30 bg-danger/5 p-8 text-center text-sm text-danger">{c.error}</p>
+          ) : payable.length === 0 && invoicesWithheld > 0 ? (
+            /*
+              OPS-LEDGER-001 — «nothing to pay» and «nothing to pay in the most recent two hundred»
+              are different sentences, and only one of them is safe to show somebody who owes money.
+            */
+            <p data-testid="payments-bounded-empty" className="rounded-xl border border-warning/40 bg-warning/5 p-8 text-center text-sm text-warning">
+              {ar
+                ? 'لا فواتير مستحقة ضمن الأحدث المعروضة — قد توجد فواتير أقدم غير محمّلة.'
+                : 'No payable invoices among the most recent shown — older invoices may not be loaded.'}
+            </p>
           ) : payable.length === 0 ? (
             <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border p-10 text-center text-text-secondary">
               <CreditCard size={22} /><span className="text-sm">{c.none_payable}</span>

@@ -628,7 +628,9 @@ function MiniStat({ label, value, exact }: { label: string; value: string; exact
 export function CampaignAlertsTab({ campaign, projectId }: { campaign: UnifiedCampaign; projectId: string }) {
   const [status, setStatus] = useState('')
   const alerts = useCampaignAlerts(projectId, campaign.id, status)
-  const rows = alerts.data ?? []
+  const rows = alerts.data?.rows ?? []
+  const withheld = alerts.data?.withheld ?? 0
+  const total = alerts.data?.total ?? rows.length
 
   const sevTone: Record<string, string> = {
     critical: 'border-danger/40 bg-danger/5 text-danger', warning: 'border-warning/40 bg-warning/5 text-warning',
@@ -648,6 +650,19 @@ export function CampaignAlertsTab({ campaign, projectId }: { campaign: UnifiedCa
         : rows.length === 0 ? <EmptyState title="لا تنبيهات" description="لا توجد تنبيهات لهذه الحملة ضمن هذا الفلتر." />
         : (
           <ul className="space-y-2">
+            {/*
+              OPS-LEDGER-001 — the list says how much of itself it is showing.
+              
+              The server bounds this at a hundred for a real reason, and a hundred rows handed over
+              with no count reads as «these are the alerts». The status breakdown beside it answers a
+              different question: it counts every alert this campaign ever had, whatever filter the
+              list was narrowed by.
+            */}
+            {withheld > 0 && (
+              <li data-testid="campaign-alerts-bounded" className="rounded-lg border border-dashed border-border p-2 text-center text-[11px] text-text-secondary">
+                {`تُعرض ${rows.length} من ${total} تنبيهًا ضمن هذا الفلتر — الأقدم غير معروضة.`}
+              </li>
+            )}
             {rows.map((a) => (
               <li key={a.id} className={`rounded-xl border p-3 ${sevTone[a.severity] ?? sevTone.info}`}>
                 <div className="flex items-center justify-between gap-2">

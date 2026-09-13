@@ -25,9 +25,29 @@ export interface NotificationDeliveryRow {
   created_at: string | null
 }
 
-export async function listNotifications(): Promise<{ items: AppNotification[]; unread: number }> {
+/**
+ * The centre's list, with what it left out — OPS-LEDGER-001.
+ *
+ * `unread` was the only figure read from `meta`, and an unread COUNT is not a statement of
+ * completeness: three hundred notifications, ninety unread, showed a hundred rows beside «90» and
+ * nothing said the other two hundred existed.
+ */
+export async function listNotifications(): Promise<{
+  items: AppNotification[]
+  unread: number
+  total: number
+  withheld: number
+}> {
   const res = await api.get<ApiEnvelope<AppNotification[]>>('/notifications')
-  return { items: res.data.data ?? [], unread: (res.data.meta as { unread?: number } | undefined)?.unread ?? 0 }
+  const meta = res.data.meta as { unread?: number; total?: number; withheld?: number } | undefined
+  const items = res.data.data ?? []
+
+  return {
+    items,
+    unread: meta?.unread ?? 0,
+    total: meta?.total ?? items.length,
+    withheld: meta?.withheld ?? 0,
+  }
 }
 
 export const markNotificationRead = (id: string) => api.post(`/notifications/${id}/read`)

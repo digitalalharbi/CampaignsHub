@@ -22,16 +22,24 @@ use Illuminate\Http\Request;
  */
 final class DriveController extends Controller
 {
+    /** The most rows this list returns; `meta.total` says how many there are. */
+    private const MAX_ROWS = 200;
+
     public function __construct(private readonly DriveService $drive) {}
 
     public function links(Request $request): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('drive.view'), 403);
 
-        return ApiResponse::success(
-            DriveLink::query()->latest('created_at')->limit(200)->get()->all(),
-            'Drive links.',
-        );
+        /* OPS-LEDGER-001 — the bound is real, and the response says what it left out. */
+        $query = DriveLink::query()->latest('created_at');
+        $total = (clone $query)->count();
+        $rows = $query->limit(self::MAX_ROWS)->get()->all();
+
+        return ApiResponse::success($rows, 'Drive links.', meta: [
+            'total' => $total,
+            'withheld' => max(0, $total - count($rows)),
+        ]);
     }
 
     public function linkFolder(Request $request): JsonResponse
