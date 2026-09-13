@@ -4,6 +4,7 @@ import { objectiveLabel } from '@/features/campaigns/labels'
 import type { CreativePreview } from '@/features/content/api'
 import type { Locale } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
+import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
 
 /**
  * REPORT-AD-PREVIEW-001 — the ads that ran, in the document the client keeps.
@@ -35,6 +36,21 @@ export type ReportAd = {
   objective?: string | null
   preview?: CreativePreview | null
   spend?: number | null
+  /*
+   * CLIENT-REPORT-MONEY-REDACTION-001 — the withheld half of the money travels with the ad.
+   *
+   * `ReportAds` used to write `spend => metrics.spend ?? 0`, so an unconvertible amount arrived here
+   * as a zero and the card printed «0 USD» for an ad that had really spent 412.50. It now leaves
+   * `spend` null and carries these beside it, under the same key names `readMoney` already reads, so
+   * this card and every other money surface make one set of decisions rather than two.
+   *
+   * A link that hides spend has none of these keys — `ShareService` removes them — so the figure is
+   * simply not built, which is how the permission is enforced here.
+   */
+  spend_original?: number | null
+  spend_withheld_rows?: number | null
+  money_original_currency?: string | null
+  money_original_currencies?: number | null
   impressions?: number | null
   clicks?: number | null
   conversions?: number | null
@@ -321,8 +337,22 @@ function figuresFor(ad: ReportAd, ar: boolean, currency: string | null): { label
     return text === null ? null : (currency ? `${text} ${currency}` : text)
   }
 
-  const spend = cash(ad.spend)
-  if (spend !== null) out.push({ label: ar ? 'الإنفاق' : 'Spend', value: spend })
+  /*
+   * Money through the canonical reader, which separates the four states `cash()` cannot see:
+   * converted, original-only, a measured zero, and genuinely unreported. `cash(ad.spend)` returned
+   * null for a withheld figure and the row was dropped — so real spend vanished off the card — and
+   * returned «0» for the coerced zero the builder used to send.
+   */
+  const spendReading = readMoney(ad as MoneyTotals, 'spend', currency ?? null, ar)
+  const spendText = formatMoneyReading(spendReading, (value, unit) => {
+    const text = n(value, 0)
+
+    return text === null ? '—' : (unit ? `${text} ${unit}` : text)
+  })
+
+  if (spendReading.kind !== 'absent') {
+    out.push({ label: ar ? 'الإنفاق' : 'Spend', value: spendText })
+  }
 
   /*
    * A return of «0.00×» is a claim that the ad returned nothing. Production printed it on every

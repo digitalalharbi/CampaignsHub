@@ -22,12 +22,13 @@ import { CreativeCarousel } from '@/features/content/CreativeCarousel'
 import { imageLoading } from '@/features/content/format'
 import { DataMetricTable, MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { formatMetric, metricLabel, metricState } from '@/features/content/metrics'
+import { creativeMoney } from '@/features/content/creativeMoney'
 import { formatMoneyReading, readMoney } from '@/lib/money/contract'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
-import type { CreativeCard } from '@/features/content/api'
+import type { CreativeCard, CreativeMetrics } from '@/features/content/api'
 import type { CreativePulse, FatigueAlert, PulseList } from '@/features/content/pulse'
 import { Num } from '@/components/ui/Num'
 
@@ -554,12 +555,13 @@ function WinnerGroup({
                   v={
                     hidden
                       ? t.hidden
-                      : formatMetric(
-                          metricState(creative?.metrics ?? null, metric),
-                          metric,
-                          locale,
-                          currency,
-                        )
+                      /*
+                       * The winning figure is money when the ranking metric is money, and then it
+                       * goes through the canonical reader — a ranking decided on spend printed «No
+                       * data» for its own winner on any account with an unconvertible currency.
+                       * `hidden` still wins: the link's own refusal is not a money state.
+                       */
+                      : figureText(creative?.metrics ?? null, metric, locale, currency)
                   }
                 />
                 {creative?.provider && <Pair k={t.platform} v={providerLabel(creative.provider, locale)} />}
@@ -986,6 +988,55 @@ function SharedCreativeDetail({
   )
 }
 
+/**
+ * CLIENT-REPORT-MONEY-REDACTION-001 — is this reader allowed to see this money figure?
+ *
+ * Not «did the operator tick a box» — the PAYLOAD's own answer. `SharedCreativeView::redactRow`
+ * removes a hidden metric from `metrics` and filters it out of `headline_metrics`, for a stated
+ * reason: «a key present and empty tells a reader that a value exists and is being kept from them».
+ * So a page that renders only what it was sent cannot bypass the permission, and asking the payload
+ * rather than a second flag is what makes that structural instead of merely careful.
+ *
+ * A withheld figure is permitted and PRESENT — `spend` is null by FX-001's design with the real
+ * amount in `spend_original` — so the original is part of the question, not a fallback to it.
+ */
+const moneyPermitted = (metrics: CreativeMetrics | null, key: 'spend' | 'revenue'): boolean =>
+  metrics !== null && (key in metrics || `${key}_original` in metrics)
+
+/**
+ * One cell's worth of a creative's figure, money read the way every other surface reads it.
+ *
+ * Money goes through `creativeMoney` → `readMoney`, which distinguishes converted, original-only,
+ * a measured zero, and genuinely unavailable. `metricState` sees only the CONVERTED column, so on
+ * production — every Snapchat account USD with no USD→SAR rate — it called a real 412.50 USD «No
+ * data» on the one document a client keeps. Counts and ratios stay on `metricState`, which is right
+ * for them: it already separates a measured zero from «the platform does not send this».
+ */
+const figureText = (
+  metrics: CreativeMetrics | null,
+  key: string,
+  locale: 'ar' | 'en',
+  currency: string | null,
+): string =>
+  key === 'spend' || key === 'revenue'
+    ? creativeMoney(metrics, key, currency, locale).text
+    : formatMetric(metricState(metrics, key), key, locale, currency)
+
+/**
+ * The figures a creative is entitled to, with spend FIXED ahead of the objective's own.
+ *
+ * `headline_metrics` answers «what is this creative JUDGED on», which is an objective question — an
+ * awareness cut is headlined on impressions, reach and CPM. Spend is an operational fact and does
+ * not depend on what the creative was bought for, so it leads, and the objective's metrics follow
+ * it. Where the link hides spend the key is absent from both the payload and this list, so nothing
+ * is printed and no labelled blank names what was withheld.
+ */
+const figureKeys = (creative: CreativeCard, take: number): string[] => {
+  const chosen = creative.headline_metrics.filter((key) => key !== 'spend')
+
+  return moneyPermitted(creative.metrics, 'spend') ? ['spend', ...chosen.slice(0, take - 1)] : chosen.slice(0, take)
+}
+
 function CreativeTile({
   creative,
   currency,
@@ -1040,11 +1091,11 @@ function CreativeTile({
         {creative.campaign_name ? ` · ${creative.campaign_name}` : ''}
       </p>
       <dl className="grid gap-0.5 text-[11px]">
-        {creative.headline_metrics.slice(0, 3).map((key) => (
+        {figureKeys(creative, 3).map((key) => (
           <div key={key} className="flex justify-between gap-1">
             <dt className="truncate text-text-muted">{metricLabel(key, locale)}</dt>
             <dd className="tnum shrink-0 font-semibold">
-              <Num>{formatMetric(metricState(creative.metrics, key), key, locale, currency)}</Num>
+              <Num>{figureText(creative.metrics, key, locale, currency)}</Num>
             </dd>
           </div>
         ))}
@@ -1096,7 +1147,18 @@ function CreativeComparisonTable({
   // The union of what each row's own path calls headline, so an awareness row is not given a column
   // for a metric its objective never produces — it simply has no value in that column.
   const columns = useMemo(
-    () => [...new Set(creatives.flatMap((c) => c.headline_metrics))].slice(0, 7),
+    () => {
+      const chosen = [...new Set(creatives.flatMap((c) => c.headline_metrics))].filter((key) => key !== 'spend')
+
+      /*
+       * Spend leads the comparison for the same reason it leads the tile, and is present on the same
+       * terms: ANY creative in the set that is permitted its spend earns the column, and the rows
+       * that were not sent theirs render an absence in it rather than a figure.
+       */
+      return creatives.some((c) => moneyPermitted(c.metrics, 'spend'))
+        ? ['spend', ...chosen.slice(0, 6)]
+        : chosen.slice(0, 7)
+    },
     [creatives],
   )
 
@@ -1117,7 +1179,7 @@ function CreativeComparisonTable({
       </span>
     </div>,
     ...columns.map((key) => (
-      <span key={key} dir="ltr">{formatMetric(metricState(creative.metrics, key), key, locale, currency)}</span>
+      <span key={key} dir="ltr">{figureText(creative.metrics, key, locale, currency)}</span>
     )),
   ])
 
@@ -1128,6 +1190,23 @@ function CreativeComparisonTable({
   const values: SortValues[] = creatives.map((creative) => [
     creative.name,
     ...columns.map((key) => {
+      /*
+       * A withheld figure sorts by its ORIGINAL amount, not as an absence.
+       *
+       * The cells and the sort keys have to answer the same question or the column orders by
+       * something the reader cannot see. `metricState` returned null for every withheld row, so a
+       * table of Snapchat creatives — real money, no rate — sorted as though none of them had spent
+       * anything. Cross-currency ordering is the honest limit here: a column mixing converted and
+       * original amounts is ordered within each kind, which is what the rows themselves say.
+       */
+      if (key === 'spend' || key === 'revenue') {
+        const reading = readMoney(creative.metrics ?? undefined, key, currency, locale === 'ar')
+
+        return reading.kind === 'converted' || reading.kind === 'withheld' || reading.kind === 'zero'
+          ? reading.amount
+          : null
+      }
+
       const state = metricState(creative.metrics, key)
 
       return state.kind === 'value' ? state.value : null

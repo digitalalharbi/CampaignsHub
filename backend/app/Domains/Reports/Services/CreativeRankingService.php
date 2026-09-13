@@ -27,10 +27,37 @@ final class CreativeRankingService
 
     public function __construct(private readonly CreativeRanking $ranking = new CreativeRanking) {}
 
+    /**
+     * Did this creative spend money — asked of the money contract, not of `?? 0`.
+     *
+     * CLIENT-REPORT-MONEY-REDACTION-001. The gate was `(float) ($i['spend'] ?? 0) > 0`, which is the
+     * right QUESTION and the wrong way to ask it: FX-001 leaves `spend` null and the real amount in
+     * `spend_original` when no conversion rate exists, so every Snapchat creative on a USD account
+     * with no USD→SAR rate answered «spent nothing» and was dropped from both lists — silently, under
+     * a heading that still read «الأفضل أداءً».
+     *
+     * The three states this must separate:
+     *
+     *   withheld   converted null, an original present → it SPENT. «No rate» is a fact about the
+     *              conversion, not about the campaign.
+     *   zero       a reported 0 → it did not spend, and that is measured, not missing.
+     *   absent     neither → nothing to judge.
+     */
+    private function didSpend(array $item): bool
+    {
+        $converted = $item['spend'] ?? null;
+
+        if ($converted !== null) {
+            return (float) $converted > 0;
+        }
+
+        return (float) ($item['spend_original'] ?? 0) > 0;
+    }
+
     /** @param list<array<string, mixed>> $items rows with metric keys (spend, roas, cpa, ctr, ...) */
     public function rank(string $objective, array $items, int $limit = 5): array
     {
-        $items = array_values(array_filter($items, fn ($i) => (float) ($i['spend'] ?? 0) > 0));
+        $items = array_values(array_filter($items, fn ($i) => $this->didSpend($i)));
 
         [$sortKey, $direction, $reason] = $this->strategy($objective, $items);
 
@@ -90,7 +117,7 @@ final class CreativeRankingService
         // Spending, and actually measured on the metric it is being judged by.
         $measured = array_values(array_filter(
             $items,
-            fn ($i) => (float) ($i['spend'] ?? 0) > 0 && ($i[$sortKey] ?? null) !== null,
+            fn ($i) => $this->didSpend($i) && ($i[$sortKey] ?? null) !== null,
         ));
 
         if ($measured === []) {

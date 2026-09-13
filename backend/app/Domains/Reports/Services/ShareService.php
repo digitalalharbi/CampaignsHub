@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Services;
 
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Support\CreativeVisibility;
 use App\Support\Frontend;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -161,22 +162,47 @@ final class ShareService
         ]);
     }
 
+    /**
+     * The creative-bearing sections of a report payload, snapshot and live alike.
+     *
+     * CLIENT-REPORT-MONEY-REDACTION-001 — the enumeration below was one section long.
+     *
+     * `ReportCreativeMedia` walks `ads`, `ads_roster`, `worst_creatives`, `top_creatives` and
+     * `ads_groups[].ads`. The snapshot sanitizer named `top_creatives` and the live sanitizer named
+     * none of them, so an operator who hid spend found it again on the ads gallery — the most-read
+     * part of a client report — and on the roster beneath it. This is the failure the live
+     * sanitizer's own comment predicted: «a section added to the payload and not to this list is a
+     * section that ignores the link's hide flags».
+     *
+     * @var list<string>
+     */
+    private const CREATIVE_SECTIONS = ['ads', 'ads_roster', 'worst_creatives', 'top_creatives'];
+
     /** Removes figures the share hides so the client payload never contains them. */
     public function sanitize(array $data, ReportShare $share): array
     {
+        /*
+         * CLIENT-REPORT-MONEY-REDACTION-001 — both paths read ONE list, and its companions.
+         *
+         * This named four keys while `sanitizeLive()` named seven and
+         * `CreativeVisibility::COST_METRICS` named six, two of which were in neither — so a snapshot
+         * link hiding spend published `cpl`, which is spend divided by a lead count printed beside
+         * it. The list now lives in one place; see the constant for what it covers and why.
+         *
+         * The `_original` companions matter more than the converted columns on production: FX-001
+         * preserves an unconvertible amount there beside a null conversion, so nulling `spend` and
+         * leaving `spend_original` shipped the withheld figure exactly.
+         */
         $stripMoney = function (array &$row) use ($share): void {
-            if ($share->hide_spend) {
-                foreach (['spend', 'cpa', 'cpc', 'cpm'] as $k) {
-                    if (array_key_exists($k, $row)) {
-                        $row[$k] = null;
-                    }
-                }
-            }
-            if ($share->hide_revenue) {
-                foreach (['revenue', 'roas'] as $k) {
-                    if (array_key_exists($k, $row)) {
-                        $row[$k] = null;
-                    }
+            $keys = array_merge(
+                $share->hide_spend ? array_merge(CreativeVisibility::COST_METRICS, CreativeVisibility::MONEY_COMPANIONS['spend']) : [],
+                $share->hide_revenue ? array_merge(CreativeVisibility::REVENUE_METRICS, CreativeVisibility::MONEY_COMPANIONS['revenue']) : [],
+                $share->hide_spend && $share->hide_revenue ? CreativeVisibility::MONEY_CURRENCY_KEYS : [],
+            );
+
+            foreach ($keys as $k) {
+                if (array_key_exists($k, $row)) {
+                    $row[$k] = null;
                 }
             }
         };
@@ -184,7 +210,7 @@ final class ShareService
         if (isset($data['kpis']) && is_array($data['kpis'])) {
             $stripMoney($data['kpis']);
         }
-        foreach (['platforms', 'campaigns', 'top_creatives', 'timeseries', 'budget'] as $section) {
+        foreach (['platforms', 'campaigns', 'timeseries', 'budget', ...self::CREATIVE_SECTIONS] as $section) {
             if (! empty($data[$section]) && is_array($data[$section])) {
                 foreach ($data[$section] as &$row) {
                     if (is_array($row)) {
@@ -197,6 +223,37 @@ final class ShareService
                 unset($row);
             }
         }
+
+        /*
+         * `ads_groups[].ads` is a rung DOWN, and a rung down is where this kind of gap lives.
+         *
+         * The loop above walks top-level lists; the grouped gallery nests its ads one level inside,
+         * so every one of them sailed past both sanitizers. Nesting is handled here rather than by
+         * making the walk recursive, for the same reason the section list is enumerated: a blind walk
+         * would also rewrite keys nobody has thought about.
+         */
+        if (! empty($data['ads_groups']) && is_array($data['ads_groups'])) {
+            $data['ads_groups'] = array_map(function ($group) use ($stripMoney, $share) {
+                if (! is_array($group)) {
+                    return $group;
+                }
+                if (! empty($group['ads']) && is_array($group['ads'])) {
+                    foreach ($group['ads'] as &$ad) {
+                        if (is_array($ad)) {
+                            $stripMoney($ad);
+                            if ($share->hide_campaign_names && array_key_exists('campaign_name', $ad)) {
+                                $ad['campaign_name'] = 'حملة';
+                            }
+                        }
+                    }
+                    unset($ad);
+                }
+                $stripMoney($group);
+
+                return $group;
+            }, $data['ads_groups']);
+        }
+
         if ($share->hide_spend || $share->hide_revenue) {
             unset($data['summary']); // summary embeds spend/revenue figures
         }
@@ -253,9 +310,11 @@ final class ShareService
             return $payload;
         }
 
+        /* The same one list the snapshot path reads — see `sanitize()` and the constant itself. */
         $money = array_merge(
-            $share->hide_spend ? ['spend', 'cpa', 'cpc', 'cpm', 'cpl', 'cpi', 'cpe'] : [],
-            $share->hide_revenue ? ['revenue', 'roas', 'aov'] : [],
+            $share->hide_spend ? array_merge(CreativeVisibility::COST_METRICS, CreativeVisibility::MONEY_COMPANIONS['spend']) : [],
+            $share->hide_revenue ? array_merge(CreativeVisibility::REVENUE_METRICS, CreativeVisibility::MONEY_COMPANIONS['revenue']) : [],
+            $share->hide_spend && $share->hide_revenue ? CreativeVisibility::MONEY_CURRENCY_KEYS : [],
         );
 
         $strip = function (array $row) use ($money, $share): array {
@@ -289,13 +348,27 @@ final class ShareService
          * enumerated rather than walked precisely so that adding a section is a decision somebody
          * makes here, and this is that decision.
          */
-        foreach (['timeseries', 'platforms', 'campaigns', 'ad_sets', 'budget'] as $section) {
+        foreach (['timeseries', 'platforms', 'campaigns', 'ad_sets', 'budget', ...self::CREATIVE_SECTIONS] as $section) {
             if (! empty($payload[$section]) && is_array($payload[$section])) {
                 $payload[$section] = array_map(
                     fn ($row) => is_array($row) ? $strip($row) : $row,
                     $payload[$section],
                 );
             }
+        }
+
+        /* The same rung down the snapshot path walks — see the note there. */
+        if (! empty($payload['ads_groups']) && is_array($payload['ads_groups'])) {
+            $payload['ads_groups'] = array_map(function ($group) use ($strip) {
+                if (! is_array($group)) {
+                    return $group;
+                }
+                if (! empty($group['ads']) && is_array($group['ads'])) {
+                    $group['ads'] = array_map(fn ($ad) => is_array($ad) ? $strip($ad) : $ad, $group['ads']);
+                }
+
+                return $strip($group);
+            }, $payload['ads_groups']);
         }
 
         /*

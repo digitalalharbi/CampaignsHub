@@ -147,7 +147,23 @@ final class ReportAds
             'objective' => $row['objective'] ?? null,
             'preview' => $row['preview'],
             'format' => $row['format'] ?? null,
-            'spend' => (float) ($row['metrics']['spend'] ?? 0),
+            /*
+             * CLIENT-REPORT-MONEY-REDACTION-001 — the money truth, not `?? 0`.
+             *
+             * `?? 0` printed «0» as an ad's spend whenever FX-001 had withheld the conversion, which
+             * is the one thing the owner named outright: never turn unavailable spend into zero. It
+             * also made the ad disappear, because the ranker gates on «did it spend» — see
+             * `CreativeRankingService::didSpend()`.
+             *
+             * `spend` stays null when the conversion is unavailable, and the original travels beside
+             * it under the same key names the frontend money reader already uses, so the ad card
+             * renders «412.50 USD» through the one contract rather than a second opinion.
+             */
+            'spend' => $row['metrics']['spend'] ?? null,
+            'spend_original' => $row['metrics']['spend_original'] ?? null,
+            'spend_withheld_rows' => $row['metrics']['spend_withheld_rows'] ?? null,
+            'money_original_currency' => $row['metrics']['money_original_currency'] ?? null,
+            'money_original_currencies' => $row['metrics']['money_original_currencies'] ?? null,
             'impressions' => (float) ($row['metrics']['impressions'] ?? 0),
             'clicks' => (float) ($row['metrics']['clicks'] ?? 0),
             'conversions' => (float) ($row['metrics']['conversions'] ?? 0),
