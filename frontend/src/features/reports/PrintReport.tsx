@@ -6,6 +6,7 @@ import { SlideBody, isClientAudience, type Meta, type ReportData, type Slide } f
 import { PrintDocument } from './PrintDocument'
 import { headerIdentity, type SharedBranding } from './sharedBranding'
 import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
+import { brand } from '@/lib/brand'
 
 interface PrintPayload {
   report_id: string
@@ -139,6 +140,19 @@ export function PrintReport() {
   const period = d.period ? `${d.period.from} → ${d.period.to}` : ''
   const mode = (d.mode as string) === 'live' ? 'Live' : 'Snapshot'
   const updated = d.generated_at ? fmtDate(String(d.generated_at)) : ''
+  /*
+   * The year this report belongs to, read from its own dates before the clock — the period it
+   * covers first, then when it was generated. A deck is a record, and a record does not restamp
+   * itself every time somebody opens it.
+   */
+  const coverYear = (() => {
+    for (const candidate of [d.period?.to, d.period?.from, d.generated_at]) {
+      const year = Number(String(candidate ?? '').slice(0, 4))
+      if (Number.isFinite(year) && year > 2000) return year
+    }
+
+    return new Date().getFullYear()
+  })()
   const total = slides.length
 
   return (
@@ -169,6 +183,26 @@ export function PrintReport() {
               </div>
             )}
           </div>
+          {/*
+            BRAND-ATTRIBUTION-001 — the credit, ONCE, on the cover.
+
+            The per-page footer below already names whoever the report belongs to, and repeating
+            «Powered by CampaignsHub» under every page of a client's deck would be the thing the
+            owner ruled out: «لا تحوّل تقارير العميل إلى إعلانات». The cover carries no footer at
+            all, so the credit goes there — a real hyperlink, because a PDF's link has to be a link
+            and not printed text somebody retypes.
+
+            The year is the report's OWN: a snapshot reopened next year is a record of its period,
+            not a document that quietly restamps itself as current.
+          */}
+          {s.type === 'cover' && (
+            <footer className="report-cover-credit" data-testid="print-cover-credit">
+              <a href={`https://${brand.domain}`} target="_blank" rel="noopener noreferrer">
+                © {coverYear} {brand.lockup.nameEn} — All rights reserved · {brand.domain}
+              </a>
+            </footer>
+          )}
+
           {/* Professional per-page footer — never on the cover; one per page, inside the safe area. */}
           {s.type !== 'cover' && (
             <footer className="report-slide-footer">
@@ -371,6 +405,12 @@ function printCss(landscape: boolean): string {
   .report-footer-note p { margin: 0; }
   .report-footer-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .report-footer-brand, .report-footer-page { font-size: 9.5px; color: var(--text-muted); white-space: nowrap; }
+  /*
+    The cover's one line of attribution. Small, at the foot of the page, and a real anchor so the
+    PDF carries a clickable link rather than a URL somebody has to retype.
+  */
+  .report-cover-credit { position: absolute; inset-inline: 0; bottom: 10mm; text-align: center; }
+  .report-cover-credit a { font-size: 9px; color: var(--text-muted); text-decoration: none; }
   .report-provenance { margin-top: 14px; padding-top: 8px; border-top: 1px dashed var(--border);
     font-size: 9px; color: var(--text-muted); word-break: break-all; line-height: 1.6; }
   /* Never split a chart, card, or table row across pages. */
