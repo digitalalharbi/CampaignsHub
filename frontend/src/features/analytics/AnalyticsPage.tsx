@@ -1552,7 +1552,16 @@ export function QualityTab({ projectId, range, filters }: TabProps) {
     <div>
       {!f.isLoading && rows.length > 0 && <WindowConfidenceLine c={confidence} windowDays={windowDays} ar={ar} />}
       <QualityFindings findings={findings} ar={ar} loading={f.isLoading} />
-      <AttributionFindings findings={attributionNotes} ar={ar} loading={attribution.isLoading} />
+      {/*
+        `examined` is read from the PAYLOAD, not from «were there findings»: an absent payload and an
+        agreeing one both produce an empty list, and they are different answers.
+      */}
+      <AttributionFindings
+        findings={attributionNotes}
+        ar={ar}
+        loading={attribution.isLoading}
+        examined={attribution.data !== undefined && attribution.data !== null}
+      />
       {/*
         ANALYTICS-FILTER-TRUTH-001 — the chips are lit and this panel ignored them, on purpose.
 
@@ -1691,13 +1700,45 @@ function WindowConfidenceLine({ c, windowDays, ar }: { c: WindowConfidence; wind
  * way», and the second is the one a client asks when two platforms disagree.
  */
 function AttributionFindings({
-  findings, ar, loading,
+  findings, ar, loading, examined,
 }: {
   findings: AttributionFinding[]
   ar: boolean
   loading: boolean
+  /**
+   * Whether there was anything to examine — the third state this had collapsed into silence.
+   *
+   * DATA-QUALITY-OPERATOR-UX-001. `QualityFindings` says «everything is current» and `DiagnosticPanel`
+   * says «cannot be examined — this is not no problems found». This said neither: it was `findings` or
+   * `return null`, so a clean window and a failed request drew the same picture, on the half of the tab
+   * a client asks about when two platforms disagree.
+   *
+   * «Examined and agreed» and «we could not read how they counted» lead an operator to opposite
+   * actions, so the absence of findings is not enough on its own to state either.
+   */
+  examined: boolean
 }) {
-  if (loading || findings.length === 0) return null
+  if (loading) return null
+
+  if (!examined) {
+    return (
+      <p data-testid="attribution-findings-unavailable" className="mb-4 rounded-xl border border-border bg-surface-secondary p-3.5 text-sm text-text-secondary">
+        {ar
+          ? 'تعذّر فحص طريقة العدّ: لم تُقرأ بيانات الإسناد لهذه الفترة. هذا ليس «لا يوجد اختلاف».'
+          : 'How the platforms counted could not be examined: no attribution data was read for this period. This is not «no disagreement».'}
+      </p>
+    )
+  }
+
+  if (findings.length === 0) {
+    return (
+      <p data-testid="attribution-findings-clear" className="mb-4 rounded-xl border border-success/30 bg-success/5 p-3.5 text-sm text-text-secondary">
+        {ar
+          ? 'فُحصت طريقة العدّ لكل منصة أرسلت إسنادًا، ولم يظهر اختلاف يستدعي الانتباه.'
+          : 'How each reporting platform counted was examined, and no disagreement needs your attention.'}
+      </p>
+    )
+  }
 
   const OWNER: Record<AttributionFinding['owner'], { ar: string; en: string }> = {
     system: { ar: 'النظام — تلقائيًا', en: 'The system, on its own' },
