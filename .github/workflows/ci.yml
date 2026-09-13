@@ -100,6 +100,40 @@ jobs:
         run: npm run test
       - name: Production build
         run: npm run build
+  # REPORT-EXPORT-FUNCTIONAL-001 — the image the server actually runs, built before it is deployed.
+  #
+  # Nothing here ever built `deploy/backend.production.Dockerfile`. The host rebuilds it from `main`
+  # on merge, so the FIRST place a broken or incomplete image was exercised was Production — which is
+  # how an image with no browser, no Node and no python served a PDF button for months while every
+  # check on this workflow stayed green.
+  #
+  # This job does not deploy and does not push: it proves the Dockerfile still builds, and that the
+  # renderer runtime the PDF pipeline needs is present INSIDE the built image. A guard reading the
+  # file could be satisfied by a line that looks right; asking the image is what cannot be faked.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the production backend image
+        run: docker build -f deploy/backend.production.Dockerfile -t campaignshub-backend:ci .
+
+      # Each of these is a dependency the renderer spawns or resolves at runtime. A missing one does
+      # not break the build — it breaks the export, silently, on the server.
+      - name: The renderer runtime exists in the image
+        run: |
+          set -euo pipefail
+          run() { docker run --rm --entrypoint sh campaignshub-backend:ci -c "$1"; }
+          echo "node:      $(run 'node --version')"
+          echo "chromium:   $(run '/usr/bin/chromium --version')"
+          echo "python3:   $(run 'python3 --version')"
+          run 'python3 -c "import pikepdf; print(\"pikepdf\", pikepdf.__version__)"'
+          run 'node -e "require(require(\"module\").createRequire(\"/opt/print/package.json\").resolve(\"playwright-core\"));console.log(\"playwright-core ok\")"'
+          # The Arabic face, without which the renderer draws tofu for every heading.
+          run 'fc-list 2>/dev/null | grep -qi arabic || ls /usr/share/fonts/noto | grep -qi arabic'
+          # The scripts the renderer shells out to must be IN the image, not just in the repo.
+          run 'test -f scripts/report-print.mjs && test -f scripts/fix-arabic-textlayer.py'
+
 
   # ── The browser gate, on a runner that is only running the gate ────────────────────────────────
   #

@@ -11,9 +11,25 @@ Run top to bottom. Every step is either a command or a question with one right a
 - [ ] Redis reachable — sessions, cache and queues all live there.
 - [ ] PHP 8.4 with the extensions Laravel 12 requires, plus `bcmath` (money is compared with
       `bccomp`, never with float equality) and `zip`/`gd` for the xlsx and PDF exports.
-- [ ] Node 20+ **on the build machine only**. The server serves a built bundle; it does not need Node.
-- [ ] A headless Chromium for PDF export, or `REPORTS_CHROMIUM_ENABLED=false` and the honest
-      «PDF export unavailable» state.
+- [ ] Node 20+ on the build machine to compile the bundle — and Node **on the server too**, which
+      this line used to deny. The server does not need Node to SERVE the bundle, but the report
+      renderer spawns `node scripts/report-print.mjs` on the box that works the `reports` queue, so
+      a server without Node cannot produce a PDF. The production image installs it.
+- [ ] The renderer runtime on whichever container works the `reports` queue, all of it, because the
+      PDF path fails closed at every step: a browser (Alpine's `chromium` — Playwright's own builds
+      are glibc and the image is musl, so the supported path is the distro browser plus
+      `REPORTS_CHROMIUM_PATH`), `playwright-core` resolvable from `REPORTS_REQUIRE_BASE`,
+      an Arabic face (`font-noto-arabic`, or every Arabic heading renders as tofu), and
+      `python3` + `pikepdf` for the Arabic text-layer pass. That last one is not optional polish:
+      `ReportDownloadController` refuses any PDF whose `validation_status` is not `passed`, so
+      without pikepdf there is no downloadable PDF at all.
+- [ ] `REPORTS_CHROMIUM_ENABLED=true` once the above is present — or `false` AND accept that the
+      product will say «the PDF renderer is not enabled on this server» wherever an export is
+      offered. Those are the only two honest states; a `false` server that still offers a working
+      export button is the defect the owner reported.
+- [ ] `deploy/backend.production.Dockerfile` builds in CI (the `image` job) before it reaches the
+      host. The host rebuilds from `main` on merge, so CI is the only place an image problem can be
+      found while it is still cheap.
 - [ ] TLS terminating in front of the app, and the proxy's real-IP headers trusted (`TrustProxies`).
 
 ## 2. Environment
