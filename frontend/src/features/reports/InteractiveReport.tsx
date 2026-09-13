@@ -1,4 +1,4 @@
-import { DataMetricTable } from '@/components/ui/MetricTable'
+import { DataMetricTable, type Column, type Row as TableRow } from '@/components/ui/MetricTable'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import { useMemo, useState } from 'react'
 import { attributionWindow } from './attributionWindow'
@@ -1501,38 +1501,41 @@ function CampaignsSlide({ data }: { data: ReportData }) {
   const c = data.currency
   const rows = [...(data.campaigns ?? [])].sort((a, b) => Number(b.spend ?? 0) - Number(a.spend ?? 0))
 
+  /*
+   * TABLE-NUMERIC-ALIGNMENT-001 — the shared primitive, not a table written here.
+   *
+   * My first draft was a hand-rolled `<table>` with its own `tnum` classes and its own idea of how
+   * money and RTL behave. That is the requirement's own words for the defect: «no page-specific
+   * table formatting». `DataMetricTable` already owns column widths, numeric alignment in both
+   * directions, sorting, compact values, the exact-value tooltip and the money contract — including
+   * the rule that a null currency prints the figure BARE rather than under a guessed one.
+   */
+  const columns: Column[] = [
+    { key: 'name', label: 'الحملة', kind: 'text' },
+    { key: 'platform', label: 'المنصة', kind: 'text' },
+    { key: 'spend', label: 'الإنفاق', kind: 'money', currency: c ?? null },
+    { key: 'results', label: 'النتائج', kind: 'number' },
+    { key: 'cost', label: 'تكلفة النتيجة', kind: 'cost', currency: c ?? null },
+  ]
+
+  const table: TableRow[] = rows.map((r) => ({
+    name: String(r.campaign_name ?? '—'),
+    platform: r.provider ? providerLabel(String(r.provider), 'ar') : '—',
+    spend: typeof r.spend === 'number' ? r.spend : null,
+    results: typeof r.conversions === 'number' ? r.conversions : null,
+    cost: typeof r.cpa === 'number' ? r.cpa : null,
+  }))
+
   return (
     <div>
       <Title sub="أين ذهب الإنفاق، وما الذي عاد منه — نسخة الفريق الداخلية">تحليل الحملات</Title>
-      {rows.length === 0 ? (
+      {table.length === 0 ? (
         <p className="rounded-2xl border border-border bg-surface-secondary p-6 text-center text-sm text-text-secondary">
           لا توجد حملات بأرقام في هذا النطاق.
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm" data-testid="report-campaigns-table">
-            <thead>
-              <tr className="border-b border-border text-start text-xs text-text-muted">
-                <th className="p-2 text-start font-semibold">الحملة</th>
-                <th className="p-2 text-start font-semibold">المنصة</th>
-                <th className="p-2 text-end font-semibold">الإنفاق</th>
-                <th className="p-2 text-end font-semibold">النتائج</th>
-                <th className="p-2 text-end font-semibold">تكلفة النتيجة</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={String(r.campaign_id ?? r.campaign_name ?? i)} className="border-b border-border/60">
-                  <td className="p-2">{String(r.campaign_name ?? '—')}</td>
-                  <td className="p-2">{r.provider ? providerLabel(String(r.provider), 'ar') : '—'}</td>
-                  {/* tnum so the column reads as a column — TABLE-NUMERIC-ALIGNMENT-001. */}
-                  <td className="tnum p-2 text-end">{money(Number(r.spend ?? 0), c)}</td>
-                  <td className="tnum p-2 text-end">{r.conversions == null ? '—' : num(Number(r.conversions))}</td>
-                  <td className="tnum p-2 text-end">{r.cpa == null ? '—' : money(Number(r.cpa), c)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div data-testid="report-campaigns-table">
+          <DataMetricTable columns={columns} rows={table} initialSort={{ column: 2, dir: 'desc' }} />
         </div>
       )}
     </div>
