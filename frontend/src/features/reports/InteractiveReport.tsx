@@ -607,10 +607,42 @@ function NoteCard({ note }: { note: NoteCardData }) {
   )
 }
 
+/**
+ * REPORT-SUMMARY-DECISION-001 — how many of these a SUMMARY shows.
+ *
+ * A decision-length report that prints eleven recommendations is a full report with a shorter
+ * cover. It shows the few at the top of the list and SAYS it is showing a few: a silent truncation
+ * teaches a reader that the list they can see is the list that exists, which is the one thing a
+ * summary must not do to somebody who will act on it.
+ */
+const SUMMARY_NOTES = 3
+
+function trimmedForForm<T>(items: T[], form: string | null | undefined): { shown: T[]; hidden: number } {
+  if (form !== 'executive_summary' || items.length <= SUMMARY_NOTES) {
+    return { shown: items, hidden: 0 }
+  }
+
+  return { shown: items.slice(0, SUMMARY_NOTES), hidden: items.length - SUMMARY_NOTES }
+}
+
+function MoreInTheFullReport({ hidden }: { hidden: number }) {
+  if (hidden < 1) return null
+
+  return (
+    <p className="mt-2 text-xs text-text-muted" data-testid="summary-trimmed-note">
+      {`و${hidden} أخرى في التقرير التفصيلي.`}
+    </p>
+  )
+}
+
 function RecommendationsSlide({ data }: { data: ReportData }) {
   // Two balanced columns: findings (right in RTL) + recommendations (left in RTL).
-  const findings = data.findings ?? []
-  const recs = data.recommendations ?? []
+  const allFindings = data.findings ?? []
+  const allRecs = data.recommendations ?? []
+  const findingsTrim = trimmedForForm(allFindings, data.form)
+  const recsTrim = trimmedForForm(allRecs, data.form)
+  const findings = findingsTrim.shown
+  const recs = recsTrim.shown
   const legacy = findings.length === 0 && recs.length === 0 ? (data.summary ?? []) : []
   return (
     <div>
@@ -629,10 +661,12 @@ function RecommendationsSlide({ data }: { data: ReportData }) {
           <section>
             <h3 className="mb-2 flex items-center gap-2 text-sm font-extrabold text-text-primary"><CircleCheck size={15} className="text-brand-600" /> أبرز النتائج والملاحظات</h3>
             <div className="space-y-2">{findings.length ? findings.map((n, i) => <NoteCard key={i} note={n} />) : <p className="text-sm text-text-muted">لا ملاحظات.</p>}</div>
+            <MoreInTheFullReport hidden={findingsTrim.hidden} />
           </section>
           <section>
             <h3 className="mb-2 flex items-center gap-2 text-sm font-extrabold text-text-primary"><ArrowRight size={15} className="text-brand-600" /> التوصيات والخطوات القادمة</h3>
             <div className="space-y-2">{recs.length ? recs.map((n, i) => <NoteCard key={i} note={n} />) : <p className="text-sm text-text-muted">لا توصيات.</p>}</div>
+            <MoreInTheFullReport hidden={recsTrim.hidden} />
           </section>
         </div>
       )}
