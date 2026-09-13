@@ -667,7 +667,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
                     `metricState`, which is right for them.
                   */}
                   {k === 'spend'
-                    ? creativeMoney(row.metrics as never, 'spend', currency, locale).text
+                    ? creativeMoney(row.metrics, 'spend', currency, locale).text
                     : formatMetric(metricState(row.metrics, k), k, locale, currency)}</Num>
                 )),
                 /*

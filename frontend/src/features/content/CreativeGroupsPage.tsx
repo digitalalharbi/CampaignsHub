@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft, Layers, Unlink } from 'lucide-react'
 import { formatMetric, metricKind, metricLabel, metricState } from './metrics'
+import { creativeMoney } from './creativeMoney'
 import { imageLoading } from './format'
 import {
   getCreativeGroup,
@@ -11,7 +12,6 @@ import {
   ungroupCreative,
   type CreativeGroupDetail,
   type CreativeGroupSummary,
-  type CreativeMetrics,
 } from './api'
 import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
@@ -318,15 +318,33 @@ function MixedNotice({
  * case the additive figures are still shown — what is withheld is the JUDGEMENT, not the arithmetic.
  */
 function GroupFigures({ group, locale, currency }: { group: CreativeGroupSummary; locale: 'ar' | 'en'; currency: string | null }) {
-  const keys = group.headline_metrics.length > 0 ? group.headline_metrics : ['spend', 'impressions', 'clicks']
+  /*
+   * CONTENT-SPEND-ALWAYS-001 — spend is FIXED, the objective's own figures are dynamic.
+   *
+   * This read `headline_metrics` with `['spend', …]` as the fallback, which had the rule backwards:
+   * the fallback is the case where the product knows LEAST about the group, and it was the only
+   * case guaranteed the figure. An awareness group — headlined on impressions, reach and CPM —
+   * dropped spend entirely, while the mixed-objective group beside it kept it.
+   */
+  const keys = (group.headline_metrics.length > 0
+    ? group.headline_metrics
+    : ['impressions', 'clicks']).filter((key) => key !== 'spend')
 
   return (
     <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="rounded-md border border-border p-2">
+        <dt className="text-[11px] text-text-secondary">{metricLabel('spend', locale)}</dt>
+        <dd className="mt-0.5 text-sm font-medium text-text-primary">
+          <Num>{creativeMoney(group.metrics, 'spend', currency, locale).text}</Num>
+        </dd>
+      </div>
       {keys.map((key) => (
         <div key={key} className="rounded-md border border-border p-2">
           <dt className="text-[11px] text-text-secondary">{metricLabel(key, locale)}</dt>
           <dd className="mt-0.5 text-sm font-medium text-text-primary">
-            <Num>{formatMetric(metricState(group.metrics, key), key, locale, currency)}</Num>
+            <Num>{key === 'revenue'
+              ? creativeMoney(group.metrics, 'revenue', currency, locale).text
+              : formatMetric(metricState(group.metrics, key), key, locale, currency)}</Num>
           </dd>
         </div>
       ))}
@@ -527,7 +545,10 @@ function PlatformTable({
   locale: 'ar' | 'en'
   t: (typeof COPY)['ar'] | (typeof COPY)['en']
 }) {
-  const keys = group.headline_metrics.length > 0 ? group.headline_metrics : ['spend', 'impressions', 'clicks']
+  /* Spend leads every column set here for the same reason it leads the card — see `GroupFigures`. */
+  const keys = ['spend', ...(group.headline_metrics.length > 0
+    ? group.headline_metrics
+    : ['impressions', 'clicks']).filter((key) => key !== 'spend')]
 
   return (
     <DataMetricTable
@@ -554,7 +575,26 @@ function PlatformTable({
            * same rule the transposed tables follow. «Not provided» and «no data» are two different
            * facts, and the one dash the primitive prints says neither.
            */
-          const state = metricState(line.metrics as CreativeMetrics | null, key)
+          if (key === 'spend' || key === 'revenue') {
+            /*
+             * Money goes through the canonical reader, not `metricState`, which sees only the
+             * CONVERTED column. Production's Snapchat rows are USD with no USD→SAR rate, so
+             * `spend` is null by FX-001's design and the real amount is in `spend_original` — this
+             * table called that «no data» while the library card said «412.50 USD».
+             *
+             * A converted figure stays a NUMBER so the primitive right-aligns and formats it; a
+             * withheld one carries its own currency and must reach the cell as the reader wrote it.
+             */
+            const reading = creativeMoney(line.metrics, key, group.currency, locale)
+
+            row[key] = typeof line.metrics?.[key] === 'number'
+              ? (line.metrics[key] as number)
+              : <span dir="ltr">{reading.text}</span>
+
+            continue
+          }
+
+          const state = metricState(line.metrics, key)
 
           row[key] = state.kind === 'value'
             ? state.value

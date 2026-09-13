@@ -122,7 +122,28 @@ export interface CreativeMetrics {
   active_days: number | null
   /** Which keys the provider actually sent. A key that is `false` here is «Not Provided», not zero. */
   reported: Record<string, boolean>
-  [key: string]: number | null | boolean | Record<string, boolean> | undefined
+  /*
+   * CREATIVE-MONEY-TRUTH-001 — the withheld half of the money, which this type used to deny.
+   *
+   * `CreativeMetrics` declared the converted columns and an index signature admitting only numbers,
+   * booleans and `reported`. The backend has emitted these six alongside them since
+   * CREATIVE-MONEY-TRUTH-001, and `readMoney` reads exactly them — so every money call site had to
+   * launder the object through `as never` or `as MoneyTotals` to get past a type that said the
+   * fields could not exist. A cast is not a contract: it silenced the one check that would have
+   * caught a surface reading the converted column alone, which is the defect this whole family of
+   * rows keeps being about.
+   *
+   * `money_original_currency` is why the index signature needed widening: it is a STRING, the only
+   * non-numeric figure in the bag, and the reader refuses to name a currency unless
+   * `money_original_currencies` is exactly 1.
+   */
+  spend_original?: number | null
+  revenue_original?: number | null
+  spend_withheld_rows?: number | null
+  revenue_withheld_rows?: number | null
+  money_original_currency?: string | null
+  money_original_currencies?: number | null
+  [key: string]: number | string | null | boolean | Record<string, boolean> | undefined
 }
 
 export type FatigueStatus = 'improving' | 'stable' | 'watch' | 'fatigued' | 'insufficient_data'
