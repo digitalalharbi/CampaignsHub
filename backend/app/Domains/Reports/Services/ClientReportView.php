@@ -60,19 +60,31 @@ final class ClientReportView
         //    Resolution order: explicit client_display_name → sanitised internal name → safe generated.
         foreach (['ads'] as $key) {
             if (! empty($out[$key]) && is_array($out[$key])) {
-                $out[$key] = array_map(function ($row) {
-                    if (! empty($row['client_display_name'])) {
-                        $row['campaign_name'] = (string) $row['client_display_name'];
-                    } elseif (isset($row['campaign_name'])) {
-                        $row['campaign_name'] = self::clientName((string) $row['campaign_name']);
-                    }
-                    unset($row['client_display_name']); // internal field — never expose the mapping
-                    unset($row['campaign_id']);         // internal id — never expose to a client
-                    unset($row['external_account_id']);
-
-                    return $row;
-                }, $out[$key]);
+                $out[$key] = array_map([self::class, 'clientAdRow'], $out[$key]);
             }
+        }
+        /*
+         * REPORT-EXPORT-FUNCTIONAL-001 — the SAME rule for the ads inside a group.
+         *
+         * The loop above was written when one list of ads existed. `ads_groups` arrived later — the
+         * content groups an owner reads a report by — and each group carries its own `ads[]`, which
+         * nobody taught this boundary about. So every ad inside a group still carried `campaign_id`,
+         * and `ClientReportContentValidator` walks the WHOLE payload: it found them, refused to
+         * produce a leaky client file, and marked the export failed.
+         *
+         * That is the validator working exactly as intended and an export that can never succeed.
+         * Measured on a real report: three violations, all `ads_groups.0.ads.N.campaign_id`, which
+         * is why a client PDF failed for some reports and not others — a report with no groups has
+         * nothing to leak. One rule applied to both lists, so a third list cannot quietly opt out.
+         */
+        if (! empty($out['ads_groups']) && is_array($out['ads_groups'])) {
+            $out['ads_groups'] = array_map(function ($group) {
+                if (is_array($group) && ! empty($group['ads']) && is_array($group['ads'])) {
+                    $group['ads'] = array_map([self::class, 'clientAdRow'], $group['ads']);
+                }
+
+                return $group;
+            }, $out['ads_groups']);
         }
         /*
          * REPORT-CREATIVE-TRUTH-001 §C — the roster crosses the same boundary, through its own rule.
@@ -325,6 +337,43 @@ final class ClientReportView
     private const STILL_INTERNAL = '/\b(?:burner|test|tmp|copy|internal|draft|wip)\b/i';
 
     /** Strip internal markers from a name for client display; fall back to generic when unsalvageable. */
+    /**
+     * One ad row, as a client may see it.
+     *
+     * Named rather than inlined because two lists carry these rows — the ranked `ads` and the `ads`
+     * inside every content group — and the second was missed for as long as the rule lived inside a
+     * loop over the first.
+     *
+     * @param  mixed  $row
+     * @return mixed
+     */
+    private static function clientAdRow($row)
+    {
+        if (! is_array($row)) {
+            return $row;
+        }
+
+        /*
+         * Identity out, ALL of it — the rule the rest of this class already follows.
+         *
+         * `campaigns`, `ad_sets`, `top_creatives` and `worst_creatives` are EMPTIED for a client
+         * rather than sanitised, and `ClientReportContentValidator` flags `campaign_name` by KEY
+         * whatever its value — so a row that kept a prettified campaign name was a row the exporter
+         * would refuse to ship. Keeping one and stripping the other is how a payload came to be
+         * «clean» according to one half of the product and leaky according to the half that decides
+         * whether a file exists.
+         *
+         * «اسم واختيار الحملة احذفه من التقارير» is the owner's own instruction and it is not
+         * partial. A client-facing label, if it is ever wanted, has to arrive through a key this
+         * boundary permits — which is a decision, not something to leave implied by a mapping.
+         */
+        foreach (['campaign_id', 'campaign_name', 'ad_set_id', 'ad_set_name', 'external_account_id', 'client_display_name', 'external_entity_id'] as $internal) {
+            unset($row[$internal]);
+        }
+
+        return $row;
+    }
+
     public static function clientName(string $name): string
     {
         $clean = $name;
