@@ -142,7 +142,19 @@ export function AdPreviewDialog({
         what keeps this a panel over the library rather than a page the reader navigated to.
       */}
       <div
-        className="flex h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto border-border bg-surface p-4 sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border lg:grid lg:max-w-5xl lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-start lg:gap-x-5"
+        /*
+         * CONTENT-POPUP-MEDIA-001 — the creative gets the room, and the panel gets the viewport.
+         *
+         * It was `lg:max-w-5xl` split `1.05fr / 1fr`: a 1024-pixel panel on a 1440-pixel screen with the
+         * media given half of it, so the stage measured 497 wide whatever the ad's shape. The figures
+         * column had the same width as the thing the panel exists to show.
+         *
+         * Wider now, and weighted: the media track takes roughly two thirds, which is what «the creative
+         * is the hero» means in a grid. `88vw` rather than a fixed pixel width so a larger screen gives
+         * the creative more instead of more margin, capped so it never becomes a full-screen takeover —
+         * this is a quick review surface and a modal that fills the screen stops reading as one.
+         */
+        className="flex h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto border-border bg-surface p-4 sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border lg:grid lg:max-w-[88vw] lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)] lg:items-start lg:gap-x-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-start justify-between gap-3 lg:col-span-2 lg:mb-0">
@@ -162,19 +174,55 @@ export function AdPreviewDialog({
           otherwise, and a wide poster would push the figures off their own side.
         */}
         <div data-testid="ad-preview-dialog-media" className="flex min-w-0 flex-col gap-3 lg:col-start-1 lg:row-start-2">
+        {/*
+          CONTENT-POPUP-MEDIA-001 — a media STAGE, bounded on both axes, that cannot crop any ratio.
+          *
+          * The poster used to be `h-72 w-full … lg:h-[26rem]` and to pass `object-contain` — which did
+          * nothing, because `AdPoster` injected `object-cover` for everything it did not read as portrait
+          * and both utilities landed on the element. Measured in a browser on the real panel: computed
+          * `object-fit` was `cover`, and a 600×600 creative rendered into a 497×416 box, losing about 16%
+          * of its height off the top and bottom. A 1:1 ad is «landscape» to `previewShape`, whose portrait
+          * threshold is `height > width * 1.2`, so square and horizontal creatives were the ones being cut.
+          *
+          * Bounding the asset by `max-h-full max-w-full` inside a centred stage handles EVERY ratio by
+          * construction rather than by a rule per format: a 9:16 story is limited by the height, a 16:9 by
+          * the width, a square by whichever is tighter, and an asset whose dimensions nobody reported is
+          * limited by both. There is no shape this can crop and none it can overflow.
+          *
+          * The stage keeps its own height in `vh` so the whole panel — creative, figures, trend and the
+          * way on — stays inside a 900-pixel-tall viewport without scrolling, which is what the quick
+          * review is for. The neutral surface behind it is what stops letter-boxing reading as a fault.
+        */}
+        <div
+          data-testid="ad-preview-dialog-stage"
+          className="flex h-[46vh] items-center justify-center overflow-hidden rounded-xl bg-surface-secondary lg:h-[58vh]"
+        >
         {reading.kind === 'video' ? (
-          <CreativeVideoPlayer src={reading.src} poster={reading.poster} aspect={creative.preview?.aspect ?? null} />
+          <CreativeVideoPlayer
+              src={reading.src}
+              poster={reading.poster}
+              aspect={creative.preview?.aspect ?? null}
+              bound="container"
+              className="h-full w-full"
+            />
         ) : (
           <AdPoster
             preview={creative.preview}
             name={creative.name}
-            className="h-72 w-full bg-surface-secondary object-contain lg:h-[26rem]"
+            /* The stage owns the box; the asset owns its own proportions inside it. */
+            className="max-h-full max-w-full"
             testid="ad-preview-dialog-poster"
             width={creative.width}
             height={creative.height}
             aspectRatio={creative.aspect_ratio}
+            /*
+             * Stated, not inherited. This surface exists to show the ad, so it never crops — and saying so
+             * here is what stops a shape rule written for a grid of thumbnails deciding it.
+             */
+            fit="contain"
           />
         )}
+        </div>
 
         {/*
           CONTENT-PREVIEW-SHAPES-001 — the component decides the kind, not the caller.

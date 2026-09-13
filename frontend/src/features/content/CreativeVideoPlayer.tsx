@@ -61,6 +61,7 @@ export function CreativeVideoPlayer({
   poster,
   durationHint,
   aspect = null,
+  bound = 'viewport',
   className = '',
 }: {
   src: string
@@ -80,6 +81,17 @@ export function CreativeVideoPlayer({
    * every caller that has nothing better to say.
    */
   aspect?: 'vertical' | 'square' | 'horizontal' | null
+  /**
+   * CREATIVE-PREVIEW-POPUP-001 — who decides how tall the film may be.
+   *
+   * `viewport` is the standing behaviour: the caps below are read against the window, which is
+   * right on a page where the player is the tallest thing present. In the review dialog the film
+   * shares a fixed stage with the figures and the trend, and a window-sized cap overflowed it —
+   * a 9:16 capped at 70vh inside a 58vh stage, and `aspect-video w-full` measured 769x432 in a
+   * 418px one. `container` hands the ceiling to whatever box the caller supplies, so the frame
+   * is bounded on BOTH axes and no shape can spill or be clipped by the stage's overflow.
+   */
+  bound?: 'viewport' | 'container'
   className?: string
 }) {
   const { locale } = useUi()
@@ -206,9 +218,16 @@ export function CreativeVideoPlayer({
          * no cap because a landscape frame never needed one. Height leads for a vertical asset and
          * the aspect ratio computes the width, which keeps the shape exact while it fits.
          */
-        className={`bg-black ${aspectClass(aspect) ?? 'aspect-video'} ${
-          aspect === 'vertical' ? 'mx-auto max-h-[70vh] w-auto' : 'w-full'
-        }`}
+        className={
+          bound === 'container'
+            ? // The stage IS the box, so the frame is measured against it on both axes and the file's
+              // OWN shape fills it — truer than an aspect bucket, which only knows three shapes and
+              // guesses landscape whenever the platform reported nothing.
+              'bg-black h-full w-full object-contain'
+            : `bg-black ${aspectClass(aspect) ?? 'aspect-video'} ${
+                aspect === 'vertical' ? 'mx-auto max-h-[70vh] w-auto' : 'w-full'
+              }`
+        }
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)}

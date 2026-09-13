@@ -19,11 +19,31 @@ export function AdPoster({
   width,
   height,
   aspectRatio,
+  fit,
 }: {
   preview: CreativePreview | null | undefined
   name: string
   className?: string
   testid?: string
+  /**
+   * CONTENT-POPUP-MEDIA-001 — whether this surface may CROP, decided by the surface.
+   *
+   * This component chose for everybody: portrait was contained and everything else was covered. That
+   * is defensible for a grid of uniform tiles and destructive for a review surface, and the quick
+   * panel — whose whole job is showing the ad clearly — was the surface paying for it.
+   *
+   * The panel already passed `object-contain` in `className` and it did nothing: both utilities landed
+   * on the element, `rounded-lg object-cover … object-contain`, and Tailwind's own stylesheet order
+   * decides which applies rather than the caller. Measured in a browser on the real panel: computed
+   * `object-fit` came back `cover`, and a 600×600 creative rendered into a 497×416 box — about 16% of
+   * its height clipped away, top and bottom. That is the owner's «important portions are cut off».
+   *
+   * So the choice is explicit and there is only ever ONE fit utility on the element. `contain` never
+   * crops; `cover` fills a fixed tile. Default `undefined` keeps every existing caller on the old
+   * shape-derived behaviour, because a grid that suddenly letter-boxes every landscape thumbnail is a
+   * different change from the one this row is about.
+   */
+  fit?: 'contain' | 'cover'
   /**
    * CONTENT-PREVIEW-SHAPES-001 — the asset's own dimensions, where the platform reported them.
    *
@@ -106,6 +126,15 @@ export function AdPoster({
    */
   const portrait = previewShape(width, height, aspectRatio) === 'portrait'
 
+  /*
+   * One fit utility, chosen once. `fit` when the caller states it, otherwise the shape rule this
+   * component has always applied — so nothing that does not ask changes.
+   *
+   * A contained asset gets the surface behind it for the reason the comment above gives: letter-boxing
+   * on bare page reads as a broken image, and on a surface it reads as deliberate.
+   */
+  const contained = fit === undefined ? portrait : fit === 'contain'
+
   return (
     <PosterImage
       src={src}
@@ -123,7 +152,7 @@ export function AdPoster({
        * the ad should be — the owner's blank card, with no sentence and no signal anywhere.
        */
       fallback={absent('fetch_failed')}
-      className={`rounded-lg ${portrait ? 'bg-surface-secondary object-contain' : 'object-cover'} ${className}`}
+      className={`rounded-lg ${contained ? 'bg-surface-secondary object-contain' : 'object-cover'} ${className}`}
     />
   )
 }
