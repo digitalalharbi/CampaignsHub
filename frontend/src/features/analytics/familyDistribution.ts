@@ -28,12 +28,19 @@ export type FamilyDistribution = {
   /** Everything below the named ones, when there is more than one of them. */
   rest: DistributionSlice | null
   total: number
-  /** False when the family has fewer than two SPENDING campaigns. */
+  /** False when the family has fewer than two SPENDING campaigns, or when its money never converted. */
   meaningful: boolean
+  /** Present only when `meaningful` is false: what the reader should be told instead. */
+  reason?: 'too_few_spending' | 'spend_withheld'
 }
 
 export function distributionFor(
-  campaigns: readonly { name?: string | null; spend?: number | null }[],
+  campaigns: readonly {
+    name?: string | null
+    spend?: number | null
+    spend_original?: number | null
+    spend_withheld_rows?: number | null
+  }[],
   top = 3,
 ): FamilyDistribution {
   const spending = campaigns
@@ -44,7 +51,23 @@ export function distributionFor(
   const total = spending.reduce((n, c) => n + c.spend, 0)
 
   if (total <= 0 || spending.length < 2) {
-    return { slices: [], rest: null, total, meaningful: false }
+    /*
+     * AGGREGATION-TRUTH-001 — WHY there is no distribution, which is not always the same reason.
+     *
+     * A family whose spend the sync could not convert looks identical here to a family that spent
+     * nothing: both arrive with `spend` at 0. The reader was shown a bare list of campaign names
+     * either way — a metric disappearing with no state, which is the shape the owner reports.
+     *
+     * The distribution still is not drawn, and that is correct: these shares would be computed by
+     * summing unconverted originals from several currencies under one reporting label, which is a
+     * fabricated figure rather than a withheld one. What changes is that the absence now has a
+     * reason attached to it.
+     */
+    const withheld = campaigns.some(
+      (c) => (c.spend_withheld_rows ?? 0) > 0 && (c.spend_original ?? 0) > 0,
+    )
+
+    return { slices: [], rest: null, total, meaningful: false, reason: withheld ? 'spend_withheld' : 'too_few_spending' }
   }
 
   const named = spending.slice(0, top).map((c) => ({ ...c, share: c.spend / total }))

@@ -67,7 +67,7 @@ import { funnelStageLabel } from './metricLabels'
 import { AnalyticsOverview, DashboardOverview, useOverviewData } from './OverviewCompositions'
 import { useUrlList, useUrlNumber, useUrlState, useUrlWriter } from './filterUrlState'
 import { familyMoney, familyTotal, type FamilyRow, familySpend } from './familyTotals'
-import { readCostPer, readMoney, readRoas } from '@/lib/money/contract'
+import { moneyState, readCostPer, readMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
 
 /** The two KPI keys that are money rather than a quantity or a rate. */
 const MONEY_KPIS = new Set(['spend', 'revenue'])
@@ -1093,14 +1093,36 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
           )}
         </Panel>
         <Panel title={ar ? 'تحتاج مراجعة (أدنى ROAS)' : 'Needs a look (lowest ROAS)'} loading={c.isLoading} error={c.isError}>
-          {worst && (
+          {worst ? (
             <div>
               <div className="text-lg font-bold text-text-primary">{worst.campaign_name}</div>
               <div className="mt-1 text-sm text-text-secondary">
                 ROAS <span className="tnum font-semibold text-danger">{rowRoas(worst)}</span> · {ar ? 'إنفاق' : 'spend'} {rowMoney(worst, 'spend')}
               </div>
             </div>
-          )}
+          ) : rows.length > 0 ? (
+            /*
+              AGGREGATION-TRUTH-001 — the panel says why it can name nobody.
+
+              «Lowest ROAS» is chosen among campaigns that spent, and spend here is the CONVERTED
+              figure. On an account whose money the sync could not convert that set is empty, so this
+              panel drew its title over nothing at all — for every window, permanently, with no way
+              for the reader to tell an account with no problems from one whose money never arrived
+              in this currency.
+
+              The comparison genuinely cannot be made on unconverted money: a ROAS computed from a
+              withheld denominator is a fabricated ratio. So the answer is the reason, not a ranking.
+            */
+            <p className="text-sm text-text-muted" data-testid="analytics-worst-unavailable">
+              {rows.some((r) => moneyState(r as unknown as MoneyTotals, 'spend').state === 'complete_withheld')
+                ? (ar
+                    ? 'لم يُحوَّل إنفاق هذه الحملات إلى عملة التقرير، فلا يمكن ترتيبها حسب ROAS.'
+                    : 'Spend on these campaigns was not converted into the report’s currency, so they cannot be ranked by ROAS.')
+                : (ar
+                    ? 'لا توجد حملة أنفقت خلال هذه الفترة لترتيبها حسب ROAS.'
+                    : 'No campaign spent in this period, so there is nothing to rank by ROAS.')}
+            </p>
+          ) : null}
         </Panel>
       </div>
       <Panel title={ar ? 'ترتيب الحملات' : 'Campaign ranking'} description={ar ? 'مرتّبة حسب الإنفاق' : 'Ordered by spend'} loading={c.isLoading} error={c.isError} empty={!c.isLoading && rows.length === 0}>
@@ -3343,6 +3365,10 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                   campaigns={f.campaigns.map((r) => ({
                     name: (r.campaign_name ?? r.campaign_id) as string,
                     spend: typeof r.spend === 'number' ? r.spend : 0,
+                    // The provenance travels with the figure: without it this component cannot tell
+                    // «spent nothing» from «could not be converted», and it was saying the first.
+                    spend_original: (r as { spend_original?: number | null }).spend_original ?? null,
+                    spend_withheld_rows: (r as { spend_withheld_rows?: number | null }).spend_withheld_rows ?? null,
                   }))}
                   ar={ar}
                 />
@@ -3414,16 +3440,33 @@ function FamilySpend({
   family, campaigns, ar,
 }: {
   family: string
-  campaigns: { name: string; spend: number }[]
+  campaigns: { name: string; spend: number; spend_original?: number | null; spend_withheld_rows?: number | null }[]
   ar: boolean
 }) {
   const d = distributionFor(campaigns)
 
   if (!d.meaningful) {
     return (
-      <ul className="mt-2 space-y-0.5 text-xs text-text-secondary">
-        {campaigns.slice(0, 5).map((c) => <li key={c.name} className="truncate">{c.name}</li>)}
-      </ul>
+      <div className="mt-2">
+        <ul className="space-y-0.5 text-xs text-text-secondary">
+          {campaigns.slice(0, 5).map((c) => <li key={c.name} className="truncate">{c.name}</li>)}
+        </ul>
+        {/*
+          The reason, where a bare list of names used to stand.
+
+          A family whose money the sync could not convert looked exactly like a family that spent
+          nothing. Naming it is the difference between «there is nothing to distribute» and «we hold
+          this money and cannot state it in this currency» — and the second is a fact about our
+          exchange rates that an operator can act on.
+        */}
+        {d.reason === 'spend_withheld' && (
+          <p className="mt-1 text-[11px] leading-snug text-text-muted" data-testid={`family-distribution-withheld-${family}`}>
+            {ar
+              ? 'الإنفاق على هذه الحملات لم يُحوَّل إلى عملة التقرير، فلا يمكن عرض توزيع دقيق له.'
+              : 'Spend on these campaigns was not converted into the report’s currency, so no accurate distribution can be shown.'}
+          </p>
+        )}
+      </div>
     )
   }
 
