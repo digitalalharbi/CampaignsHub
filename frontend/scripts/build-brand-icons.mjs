@@ -55,6 +55,31 @@ const TARGETS = [
   { file: 'icon-maskable-512.png', size: 512, background: DEEP, stroke: '#f7f5f0', inset: 0.58 },
 ]
 
+/**
+ * The share card the identity file lists at 1200×630.
+ *
+ * A social crawler cannot render a component, so this one surface genuinely needs a raster of the
+ * lockup — which is why it is GENERATED from the same geometry and the same words rather than
+ * exported by hand. Latin wordmark on purpose: the headless renderer has no guaranteed Arabic face,
+ * and a share card with broken shaping is worse than one in the product's Latin name.
+ */
+const shareCard = () => `<!doctype html><meta charset="utf-8">
+  <style>
+    html,body{margin:0;padding:0}
+    body{width:1200px;height:630px;background:${DEEP};display:flex;flex-direction:column;
+         align-items:center;justify-content:center;gap:28px;
+         font-family:"Helvetica Neue",Helvetica,Arial,sans-serif}
+    .row{display:flex;align-items:center;gap:26px}
+    .name{font-size:76px;font-weight:800;letter-spacing:-1.5px;color:#f7f5f0}
+    .name em{font-style:normal;color:#2bb894}
+    .line{font-size:22px;letter-spacing:11px;color:#9fb3ad;text-transform:uppercase}
+  </style>
+  <div class="row">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="132" height="132">${mark('#f7f5f0')}</svg>
+    <div class="name">Campaigns<em>Hub</em></div>
+  </div>
+  <div class="line">Paid Media In One Place</div>`
+
 const browser = await chromium.launch({ args: ['--no-sandbox'] })
 await mkdir(OUT, { recursive: true })
 
@@ -65,6 +90,14 @@ for (const t of TARGETS) {
   await writeFile(resolve(OUT, t.file), png)
   await p.close()
   process.stdout.write(`${t.file} ${t.size}x${t.size}\n`)
+}
+
+{
+  const p = await browser.newPage({ viewport: { width: 1200, height: 630 }, deviceScaleFactor: 1 })
+  await p.setContent(shareCard())
+  await writeFile(resolve(OUT, 'og-card.png'), await p.screenshot())
+  await p.close()
+  process.stdout.write('og-card.png 1200x630\n')
 }
 
 await browser.close()
