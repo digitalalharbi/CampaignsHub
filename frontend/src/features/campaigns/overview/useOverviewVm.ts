@@ -16,6 +16,7 @@ import { dash } from '@/features/analytics/metricLabels'
 import { ratio } from '@/features/analytics/format'
 import type { OverviewVM } from './UnifiedCampaignOverview'
 import { providerName } from './UnifiedCampaignOverview'
+import { spendOf } from '@/features/analytics/money'
 
 type CampaignRow = {
   campaign_id: string | number
@@ -54,7 +55,20 @@ export function useOverviewVm(input: {
    * condition, written twice, is how a campaign appears in «تحتاج تدخلًا» and not in the alerts.
    */
   const struggling = useMemo(
-    () => (campaigns ?? []).filter((c) => c.spend > 3000 && c.conversions < 2),
+    /*
+     * AGGREGATION-TRUTH-001 — the threshold reads the money that EXISTS, not the column it landed in.
+     *
+     * This filtered on `c.spend`, the converted figure. FX-001 withholds a conversion when no rate
+     * exists rather than inventing one, and `MetricsAggregator` says production's rows are «entirely
+     * withheld» — so on a live account every campaign's converted spend is 0 and this list was
+     * permanently empty. A campaign that spent real money and produced nothing is precisely what it
+     * exists to surface, and it was the accounts with unconvertible money that lost it.
+     *
+     * The blast radius was both lists: `alerts` below is built from `struggling` too, and the
+     * comment there says the shared threshold is deliberate so the two cannot disagree. They agreed
+     * perfectly — on nothing.
+     */
+    () => (campaigns ?? []).filter((c) => spendOf(c) > 3000 && c.conversions < 2),
     [campaigns],
   )
 
