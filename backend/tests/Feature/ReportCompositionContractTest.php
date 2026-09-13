@@ -108,4 +108,38 @@ final class ReportCompositionContractTest extends TestCase
         );
         self::assertNotSame([], $executive, 'the executive filter emptied the report');
     }
+
+    /**
+     * REPORT-DETAIL-DEPTH-001 — campaign analysis exists, and stops at the client boundary.
+     *
+     * The owner asked a detailed report for campaign analysis and, separately and earlier, asked for
+     * campaign names OUT of client reports. Both hold: the section is in the full report, absent
+     * from a summary, and removed — heading and data together — for a client.
+     */
+    public function test_campaign_analysis_is_in_the_full_report_and_not_in_a_summary(): void
+    {
+        self::assertContains('campaigns', $this->types('detailed'));
+        self::assertNotContains('campaigns', $this->types('executive_summary'));
+    }
+
+    public function test_a_client_never_meets_a_heading_over_a_roster_that_was_removed(): void
+    {
+        $config = app(ReportTemplateEngine::class)->defaultConfig('sales', self::PLATFORMS, 'detailed');
+        $payload = [
+            'slides' => $config['slides'],
+            'kpis' => ['spend' => 1],
+            'campaigns' => [['campaign_name' => 'Meta — Lead Gen (burner)', 'spend' => 1.0]],
+            'checksum' => 'x',
+        ];
+
+        $view = app(ClientReportView::class);
+
+        foreach (['filter', 'executive'] as $audience) {
+            $out = $view->{$audience}($payload);
+            $types = array_map(static fn (array $s): string => (string) $s['type'], $out['slides'] ?? []);
+
+            self::assertNotContains('campaigns', $types, "the {$audience} view kept the campaign section");
+            self::assertSame([], $out['campaigns'] ?? [], "the {$audience} view kept the roster itself");
+        }
+    }
 }

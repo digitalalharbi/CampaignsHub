@@ -188,6 +188,18 @@ final class ReportTemplateEngine
          * because they INTERPRET what the reader has just been shown; put first, they would be
          * conclusions about figures nobody had seen yet.
          */
+        /*
+         * REPORT-DETAIL-DEPTH-001 — campaign analysis, in the full report and never in a summary.
+         *
+         * The owner's depth contract asks a detailed report for campaign analysis by name. It is
+         * absent from the summary form because a decision document is about what the money did, not
+         * how it was arranged, and absent from a CLIENT payload entirely — the generator does not
+         * even produce the roster unless the report is internal, and `ClientReportView` drops this
+         * section so a client never meets a heading over a list that was removed for their benefit.
+         */
+        if (! $summary) {
+            $slides[] = ['id' => 'campaigns', 'type' => 'campaigns', 'order' => $order++, 'visible' => true];
+        }
         $slides[] = ['id' => 'observations', 'type' => 'observations', 'order' => $order++, 'visible' => true];
         /*
          * CLIENT-FACING-PRESENTATION-001 — the recommendations, AFTER the evidence they rest on.
