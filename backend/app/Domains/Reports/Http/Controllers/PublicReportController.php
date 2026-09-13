@@ -247,8 +247,19 @@ final class PublicReportController extends Controller
 
         $this->shares->log($share, 'view', $request, 'attribution');
 
+        /*
+         * CLIENT-REPORT-MONEY-REDACTION-001 — the link's hide flags apply here too.
+         *
+         * This returned the transparency payload verbatim, and that payload names revenue
+         * `platform_reported_revenue`, `store_confirmed_revenue` and `total_revenue`. The section
+         * flag above is not the money flag: a link may show the reconciliation and hide revenue, and
+         * before this it showed revenue anyway.
+         */
         return ApiResponse::success(
-            $transparency->build((string) $report->tenant_id, (string) $report->project_id, $from, $to),
+            $this->shares->sanitizeAttribution(
+                $transparency->build((string) $report->tenant_id, (string) $report->project_id, $from, $to),
+                $share,
+            ),
             'Shared attribution.',
         );
     }

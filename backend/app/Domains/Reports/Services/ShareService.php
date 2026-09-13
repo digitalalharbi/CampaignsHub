@@ -207,8 +207,20 @@ final class ShareService
             }
         };
 
-        if (isset($data['kpis']) && is_array($data['kpis'])) {
-            $stripMoney($data['kpis']);
+        /*
+         * Both names for the scalar totals, in both paths — hardening, not an observed leak.
+         *
+         * The snapshot writes `kpis` (`ReportGenerator`) and the live payload writes `totals`
+         * (`LiveReportService`), so each sanitizer covered its own and skipped the other's. Nothing
+         * leaks today because neither payload carries the other's key. But that is exactly the shape
+         * of the `ads` gap this row already fixed — a section present in a payload and absent from a
+         * list — and the split into two names is what would make it silent. Covering both costs a
+         * line and removes the class.
+         */
+        foreach (['kpis', 'totals'] as $scalars) {
+            if (isset($data[$scalars]) && is_array($data[$scalars])) {
+                $stripMoney($data[$scalars]);
+            }
         }
         foreach (['platforms', 'campaigns', 'timeseries', 'budget', ...self::CREATIVE_SECTIONS] as $section) {
             if (! empty($data[$section]) && is_array($data[$section])) {
@@ -293,6 +305,70 @@ final class ShareService
     }
 
     /**
+     * The attribution payload, under the same hide flags as every other client surface.
+     *
+     * CLIENT-REPORT-MONEY-REDACTION-001 — this endpoint sanitized NOTHING.
+     * `PublicReportController::attribution()` returned `AttributionTransparency::build(...)`
+     * verbatim, and that payload carries revenue under its own names. The section is gated on
+     * `sectionVisibility()->attribution`, which is a DIFFERENT flag from `hide_revenue`, so an
+     * operator who turned the reconciliation on and hid revenue published revenue — measured at
+     * 18,000 on exactly such a link before this existed.
+     *
+     * It was missed because the money rules were reached through `sanitize()` and `sanitizeLive()`,
+     * and this route called neither — which is why the guard over it walks the registered routes
+     * instead of a list of the ones we thought of.
+     *
+     * The orders, the difference and the ratio survive: they are the section's subject, they are not
+     * money, and a spend-hiding link has no claim on them. `cost_per_order` and friends are caught
+     * by the shared cost list, which this walks too.
+     */
+    public function sanitizeAttribution(array $payload, ReportShare $share): array
+    {
+        if (! $share->hide_spend && ! $share->hide_revenue) {
+            return $payload;
+        }
+
+        $keys = array_merge(
+            $share->hide_spend ? array_merge(CreativeVisibility::COST_METRICS, CreativeVisibility::MONEY_COMPANIONS['spend']) : [],
+            $share->hide_revenue ? array_merge(
+                CreativeVisibility::REVENUE_METRICS,
+                CreativeVisibility::ATTRIBUTION_REVENUE_KEYS,
+                CreativeVisibility::MONEY_COMPANIONS['revenue'],
+            ) : [],
+            $share->hide_spend && $share->hide_revenue ? CreativeVisibility::MONEY_CURRENCY_KEYS : [],
+        );
+
+        return $this->nullKeysDeeply($payload, array_values(array_unique($keys)));
+    }
+
+    /**
+     * Null every listed key wherever it appears, at any depth.
+     *
+     * A recursive walk is right HERE and wrong for the report payloads: this one is a fixed analytical
+     * shape built by one service, where the report payloads carry operator prose, slide configuration
+     * and client-supplied names that a blind walk would reach. The report sanitizers enumerate their
+     * sections for that reason; this one cannot, because the nesting is the analysis.
+     *
+     * @param  list<string>  $keys
+     */
+    private function nullKeysDeeply(array $payload, array $keys): array
+    {
+        foreach ($payload as $key => $value) {
+            if (is_string($key) && in_array($key, $keys, true)) {
+                $payload[$key] = null;
+
+                continue;
+            }
+
+            if (is_array($value)) {
+                $payload[$key] = $this->nullKeysDeeply($value, $keys);
+            }
+        }
+
+        return $payload;
+    }
+
+    /**
      * The same hide-flags, applied to a LIVE payload (LIVEREP-001).
      *
      * A separate method rather than a reuse of `sanitize()` because the two payloads have different
@@ -330,9 +406,14 @@ final class ShareService
             return $row;
         };
 
-        if (isset($payload['totals']) && is_array($payload['totals'])) {
-            $payload['totals'] = $strip($payload['totals']);
-            $payload['deltas'] = $strip((array) ($payload['deltas'] ?? []));
+        /* Both names, for the reason given in `sanitize()`. `deltas` rides with the totals. */
+        foreach (['totals', 'kpis'] as $scalars) {
+            if (isset($payload[$scalars]) && is_array($payload[$scalars])) {
+                $payload[$scalars] = $strip($payload[$scalars]);
+            }
+        }
+        if (isset($payload['deltas']) && is_array($payload['deltas'])) {
+            $payload['deltas'] = $strip($payload['deltas']);
         }
 
         /*
