@@ -60,11 +60,64 @@ final class CreativeVisibility
         'recommendations',
     ];
 
-    /** Cost metrics that a hidden spend must take with it — each is spend over something. */
-    public const COST_METRICS = ['cpc', 'cpm', 'cpa', 'cost_per_view', 'cost_per_lpv', 'spend'];
+    /**
+     * Cost metrics that a hidden spend must take with it — each is spend over something.
+     *
+     * CLIENT-REPORT-MONEY-REDACTION-001 — this is the ONLY list, and it used to be three.
+     *
+     * `ShareService::sanitize()` nulled `['spend', 'cpa', 'cpc', 'cpm']`, `sanitizeLive()` nulled
+     * those plus `['cpl', 'cpi', 'cpe']`, and this constant named `cost_per_view` and
+     * `cost_per_lpv` that neither of them did. Three lists is three rendering paths disagreeing
+     * about one question, and `sanitizeLive`'s own docblock makes the argument against that: «an
+     * operator who ticked hide spend ticked it about this client, not about one rendering path».
+     * A snapshot link hiding spend published `cpl` — spend divided by a lead count printed beside
+     * it — and `cost_per_result`, which `ObjectivePerformance` emits, was in none of the three.
+     *
+     * Adding a cost-per metric to the product is now one edit, and `ClientLinkMoneyKeysTest`
+     * fails if the product computes one this list does not name.
+     */
+    public const COST_METRICS = [
+        'spend', 'cpc', 'cpm', 'cpa', 'cpl', 'cpi', 'cpe', 'cost_per_view', 'cost_per_lpv', 'cost_per_result',
+    ];
 
     /** Revenue-derived metrics that a hidden revenue must take with it. */
     public const REVENUE_METRICS = ['revenue', 'aov', 'roas'];
+
+    /**
+     * The money-truth companions a hidden figure must take with it, keyed by the figure.
+     *
+     * FX-001 preserves an unconvertible amount in `<key>_original` beside a null converted column,
+     * and on production that is where the money IS — every Snapchat account is USD with no USD→SAR
+     * rate. A redaction that nulls the converted column and leaves these ships the withheld amount
+     * to the byte. `money_original_currency` is shared by both keys and handled separately: it goes
+     * only when neither figure survives, because a withheld «412.50» with no currency is worse than
+     * either state.
+     *
+     * @var array<string, list<string>>
+     */
+    public const MONEY_COMPANIONS = [
+        'spend' => ['spend_original', 'spend_withheld_rows'],
+        'revenue' => ['revenue_original', 'revenue_withheld_rows'],
+    ];
+
+    /** Shared by both money keys, so removed only when neither survives. */
+    public const MONEY_CURRENCY_KEYS = ['money_original_currency', 'money_original_currencies'];
+
+    /**
+     * Revenue under the names the attribution payload gives it.
+     *
+     * `AttributionTransparency` answers a different question — does the platform's order count match
+     * the store's ledger — and names its figures for that question: `platform_reported_revenue`,
+     * `store_confirmed_revenue`, `total_revenue`. They are revenue, and a link that hides revenue
+     * must not publish them; but the ORDERS, the difference and the ratio are the section's actual
+     * subject and are not money, so they stay. Redacting the whole section would answer «hide the
+     * revenue» with «delete the reconciliation».
+     *
+     * @var list<string>
+     */
+    public const ATTRIBUTION_REVENUE_KEYS = [
+        'platform_reported_revenue', 'store_confirmed_revenue', 'total_revenue', 'revenue',
+    ];
 
     private function __construct(
         public readonly bool $creatives,

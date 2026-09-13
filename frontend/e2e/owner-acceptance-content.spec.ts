@@ -133,15 +133,67 @@ test.describe('the content surfaces the owner checked', () => {
    * Its popup is where «CPM 65.65%» was printed, over a row that said «1.25 USD» about the same
    * click.
    */
+  /*
+   * The tab slug is `creative`, singular.
+   *
+   * This case asked for `?tab=creatives`, which is not a tab: `useUrlState` fell back to
+   * `performance`, and the assertions — both of them absence assertions — passed on the overview
+   * having never rendered a content table. A guard made only of «X does not appear» passes loudest
+   * on a page that rendered nothing, so it now names the table it is about FIRST and the absence
+   * checks follow it.
+   */
   test('the Analytics content table and its popup agree about units', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/analytics?tab=creatives')
+    await page.goto('/agency/analytics?tab=creative')
     await page.waitForLoadState('networkidle')
 
     const text = await surfaceText(page, 'main')
+    expect(text, 'the content table did not render, so nothing below was measured').toMatch(/أداء المحتويات|Content performance/)
+    expect(text).toMatch(/الإنفاق|Spend/)
     expect(text).not.toMatch(GARBAGE)
     expect(text).not.toMatch(MONEY_AS_PERCENT)
   })
+
+  /**
+   * CONTENT-SPEND-ALWAYS-001 — the reconciliation the owner asked for, on the rendered pages.
+   *
+   * The owner's words: «Spend is a mandatory operational figure for every promoted creative where
+   * the provider reported it. It must remain visible regardless of objective.» The unit guards prove
+   * each surface in isolation with a fixture; this proves the CHAIN — library, groups, the ad's own
+   * page and the Analytics content table — in three browsers, because «every surface agrees» is a
+   * claim about surfaces together and no single-surface test can make it.
+   *
+   * Shapes, not values: the seeder's figures change, and the acceptance is that spend is STATED.
+   */
+  const SPEND = /الإنفاق|Spend/
+
+  /** A money figure carrying its own currency — the withheld state, which must never read as absent. */
+  const ABSENT = /لا توجد بيانات|No data|غير متاح|Not provided/
+
+  for (const [name, path, ready] of [
+    ['the library', '/agency/content', '[data-testid="content-summary"]'],
+    ['the groups page', '/agency/content/groups', 'main'],
+    ['the Analytics content table', '/agency/analytics?tab=creative', 'main'],
+  ] as const) {
+    test(`${name} states spend whatever the objective headlines`, async ({ page, request }) => {
+      await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
+      await page.goto(path)
+      await expect(page.locator(ready).first()).toBeVisible({ timeout: 30000 })
+      await page.waitForLoadState('networkidle')
+
+      const text = await surfaceText(page, 'main')
+
+      expect(text, 'spend is not named on this surface').toMatch(SPEND)
+      expect(text, 'a placeholder reached the page as text').not.toMatch(GARBAGE)
+
+      /*
+       * The figure beside the label must be a figure. An absence sentence directly after «Spend» is
+       * the production defect itself — a withheld amount rendered as though nothing ran.
+       */
+      const beside = text.match(/(?:الإنفاق|Spend)\s*([^\n]{0,24})/)?.[1] ?? ''
+      expect(beside, `«${beside}» follows the spend label`).not.toMatch(ABSENT)
+    })
+  }
 })
 
 
