@@ -15,6 +15,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use RuntimeException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
@@ -155,7 +156,7 @@ final class ReportExportPipelineTest extends TestCase
         $file = tempnam(sys_get_temp_dir(), 'xlsxprops').'.xlsx';
         file_put_contents($file, $bytes);
 
-        $properties = \PhpOffice\PhpSpreadsheet\IOFactory::load($file)->getProperties();
+        $properties = IOFactory::load($file)->getProperties();
 
         self::assertSame('CampaignsHub', $properties->getCreator());
         self::assertSame('CampaignsHub', $properties->getCompany());
