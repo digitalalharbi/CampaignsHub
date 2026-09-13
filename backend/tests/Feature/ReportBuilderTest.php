@@ -21,13 +21,19 @@ final class ReportBuilderTest extends TestCase
 
         $types = array_column($config['slides'], 'type');
         /*
-         * `objective_performance` is fourth, immediately after the summary it qualifies
-         * (REPORT-OBJECTIVE-004). Placed further down, a reader would already have taken the
-         * headline cost per order at face value and would meet the Direct/Blended distinction only
-         * after acting on it.
+         * The owner's opening — CLIENT-FACING-PRESENTATION-001, decided 2026-09-13.
+         *
+         * Executive Summary → KPIs → Trends → Platform / Objective / Creative. `recommendations`
+         * vacated the second position; `comparison` took it as «Trends», because what changed sets
+         * up every breakdown that follows.
+         *
+         * `objective_performance` keeps its place directly before the platform pages, and the
+         * reason is unchanged (REPORT-OBJECTIVE-004): placed further down, a reader would already
+         * have taken the headline cost per order at face value and would meet the Direct/Blended
+         * distinction only after acting on it.
          */
         $this->assertSame(
-            ['cover', 'recommendations', 'executive_summary', 'objective_performance'],
+            ['cover', 'executive_summary', 'comparison', 'objective_performance'],
             array_slice($types, 0, 4),
         );
         /*
@@ -46,12 +52,27 @@ final class ReportBuilderTest extends TestCase
         $this->assertContains('budget', $types);
         $this->assertContains('next_steps', $types);
         /*
-         * §14.7's analysis, in §14.10's order: interpretation comes AFTER the figures it interprets,
-         * and data quality is last because it says how much weight the rest of the deck can carry.
+         * CLIENT-FACING-PRESENTATION-001 — the owner's composition, decided 2026-09-13.
+         *
+         * DATA → VISUAL → COMPARISON → INSIGHT → RECOMMENDATION → ACTION. `comparison` left this
+         * closing run and opens the evidence instead, as «Trends»: what changed sets up every
+         * breakdown that follows. `recommendations` left the SECOND position and arrived here, after
+         * the observations that support it — the PDF and the live link had both ended that way for
+         * months, and the deck alone disagreed, on a rationale about an operator rather than the
+         * client who reads it.
+         *
+         * `next_steps` still closes the narrative; `data_quality` still follows it as the operator's
+         * appendix, saying how much weight the rest of the deck can carry.
          */
         $this->assertSame(
-            ['comparison', 'observations', 'next_steps', 'data_quality'],
+            ['observations', 'recommendations', 'next_steps', 'data_quality'],
             array_slice($types, -4),
+        );
+        /* And «Trends» opens the evidence rather than closing it. */
+        $this->assertLessThan(
+            array_search('objective_performance', $types, true),
+            array_search('comparison', $types, true),
+            'the period comparison must be read before the breakdowns it summarises',
         );
         // Exactly one performance slide per connected platform, and none for unconnected platforms.
         $platforms = array_filter(array_column($config['slides'], 'platform'));

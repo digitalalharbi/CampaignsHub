@@ -371,20 +371,46 @@ final class ObjectivePerformanceTest extends TestCase
         $this->assertSame(5000.0, (float) $data['objective_performance']['blended']['includes_non_sales_spend']);
 
         /*
-         * Immediately AFTER the executive summary it qualifies — asserted as adjacency, not as index 3.
+         * AFTER the summary it qualifies, and BEFORE anything a reader would act on.
          *
-         * The position was pinned to the fourth slot, which was only true while every report carried
-         * the same eleven sections. REPORT-DEPTH-001 gives the executive form a shorter deck — it
-         * drops the recommendations — so the section it must follow moved up one and this read
-         * «budget». The claim in the comment above was always about ADJACENCY: a reader must meet the
-         * blended-versus-direct split before they act on the headline, whatever else the deck holds.
+         * This was pinned to index 3, then relaxed to adjacency when REPORT-DEPTH-001 gave the
+         * executive form a shorter deck. CLIENT-FACING-PRESENTATION-001 breaks the adjacency on
+         * purpose: the owner's decided narrative is Executive Summary → KPIs → Trends → Platform /
+         * Objective / Creative Performance, so the trends slide now sits between the two.
+         *
+         * Adjacency was never the claim — it was a way of getting it. The claim is that a reader
+         * meets the blended-versus-direct split BEFORE they act on the headline cost per order, so
+         * that is what is asserted now, and it is stronger than the adjacency it replaces: the split
+         * may not drift behind the per-platform pages, the recommendations or the next steps, which
+         * adjacency alone never said. It still has to follow the summary, because a qualification
+         * printed before the figure it qualifies is a footnote nobody connects.
          */
         $types = array_column($data['slides'], 'type');
-        $this->assertSame(
-            array_search('executive_summary', $types, true) + 1,
-            array_search('objective_performance', $types, true),
-            'the objective split no longer sits immediately after the summary it qualifies',
+        $at = static function (string $type) use ($types): int {
+            $i = array_search($type, $types, true);
+            self::assertNotFalse($i, "the deck has no «{$type}» slide to place");
+
+            return (int) $i;
+        };
+
+        $this->assertGreaterThan(
+            $at('executive_summary'),
+            $at('objective_performance'),
+            'the objective split is printed before the summary whose figure it qualifies',
         );
+
+        foreach (['recommendations', 'next_steps', 'platform_performance', 'platform_comparison'] as $acted) {
+            $i = array_search($acted, $types, true);
+            if ($i === false) {
+                continue;
+            }
+
+            $this->assertLessThan(
+                (int) $i,
+                $at('objective_performance'),
+                "«{$acted}» is printed before the blended-versus-direct split that qualifies it",
+            );
+        }
 
         // …and it survives into the five-page summary a client is sent, which is the version that
         // gets forwarded and quoted with no per-platform pages behind it to argue with.
