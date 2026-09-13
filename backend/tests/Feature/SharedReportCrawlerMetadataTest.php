@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Branding\Services\BrandingService;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
@@ -11,6 +12,7 @@ use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 /**
@@ -36,6 +38,8 @@ final class SharedReportCrawlerMetadataTest extends TestCase
 
     private Tenant $agency;
 
+    private ClientWorkspace $client;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -43,8 +47,8 @@ final class SharedReportCrawlerMetadataTest extends TestCase
         $this->agency = Tenant::create(['name' => 'Al Harbi Agency', 'slug' => 'cm-'.uniqid(), 'status' => 'active']);
         app(TenantContext::class)->setTenantId($this->agency->id);
 
-        $client = ClientWorkspace::create(['name' => 'Nakheel', 'slug' => 'cmc-'.uniqid(), 'mode' => 'managed']);
-        $project = Project::create(['client_workspace_id' => $client->id, 'name' => 'P', 'status' => 'active']);
+        $this->client = ClientWorkspace::create(['name' => 'Nakheel', 'slug' => 'cmc-'.uniqid(), 'mode' => 'managed']);
+        $project = Project::create(['client_workspace_id' => $this->client->id, 'name' => 'P', 'status' => 'active']);
 
         $report = Report::create([
             'project_id' => $project->id, 'name' => 'تقرير الأداء الشهري', 'type' => 'executive',
@@ -57,6 +61,24 @@ final class SharedReportCrawlerMetadataTest extends TestCase
             'scope' => ['project_id' => $project->id],
             'mode' => 'live',
         ], null);
+
+        app(TenantContext::class)->forget();
+    }
+
+    /** A real stored logo, so the branded preview has an image to promise a crawler. */
+    private function asset(string $scope, ?string $scopeId, string $marker): void
+    {
+        if (app(TenantContext::class)->tenantId() === null) {
+            app(TenantContext::class)->setTenantId($this->agency->id);
+        }
+
+        app(BrandingService::class)->storeAsset(
+            $scope,
+            $scopeId,
+            'report_logo',
+            'any',
+            UploadedFile::fake()->createWithContent('logo.png', $marker),
+        );
 
         app(TenantContext::class)->forget();
     }
@@ -80,6 +102,58 @@ final class SharedReportCrawlerMetadataTest extends TestCase
             $this->assertStringContainsString($tag, $html, "the preview is missing {$tag}");
         }
         $this->assertStringContainsString('<link rel="canonical"', $html);
+    }
+
+    /**
+     * REPORT-TITLE-METADATA-001 — the picture a crawler is TOLD to fetch, actually fetched.
+     *
+     * The remaining clause on this row said «the og:image is asserted to exist but never fetched as
+     * a crawler would», and it was generous: the tag was not asserted at all. The list above names
+     * five tags and `og:image` is not among them.
+     *
+     * That is the one tag whose value is a promise to a third party. WhatsApp, Slack and Twitter
+     * fetch it from their own servers, with no session and no cookies, and cache whatever comes
+     * back. A URL that needs a session, 404s, or answers with HTML produces a broken card on every
+     * client the link is forwarded to — and nothing inside this product would ever show it, because
+     * the product never fetches its own preview image.
+     *
+     * So this does what the crawler does: read the tag, then request exactly that URL with no
+     * session at all, and require an image to come back.
+     */
+    public function test_the_preview_image_is_one_a_crawler_can_actually_fetch(): void
+    {
+        $this->asset('client', (string) $this->client->id, 'Nakheel logo');
+
+        $html = $this->crawl();
+
+        $this->assertMatchesRegularExpression(
+            '/<meta property="og:image" content="([^"]+)"/',
+            $html,
+            'the branded preview offered no image at all',
+        );
+
+        preg_match('/<meta property="og:image" content="([^"]+)"/', $html, $m);
+        $url = html_entity_decode($m[1]);
+
+        /* A crawler has no session. Anything that needs one is a broken card everywhere it is shared. */
+        $path = parse_url($url, PHP_URL_PATH);
+        $query = parse_url($url, PHP_URL_QUERY);
+
+        $this->assertIsString($path, "og:image is not a fetchable address: {$url}");
+
+        $response = $this->get($path.($query === null ? '' : '?'.$query), ['User-Agent' => 'WhatsApp/2.23.20.0']);
+
+        $this->assertSame(
+            200,
+            $response->getStatusCode(),
+            "a crawler fetching og:image got {$response->getStatusCode()} — the card is broken wherever this link is shared",
+        );
+
+        $this->assertStringStartsWith(
+            'image/',
+            (string) $response->headers->get('Content-Type'),
+            'og:image answered with something that is not an image, so the card renders empty',
+        );
     }
 
     /**
