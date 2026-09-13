@@ -103,6 +103,22 @@ final class CreativeVisibility
     /** Shared by both money keys, so removed only when neither survives. */
     public const MONEY_CURRENCY_KEYS = ['money_original_currency', 'money_original_currencies'];
 
+    /**
+     * Revenue under the names the attribution payload gives it.
+     *
+     * `AttributionTransparency` answers a different question — does the platform's order count match
+     * the store's ledger — and names its figures for that question: `platform_reported_revenue`,
+     * `store_confirmed_revenue`, `total_revenue`. They are revenue, and a link that hides revenue
+     * must not publish them; but the ORDERS, the difference and the ratio are the section's actual
+     * subject and are not money, so they stay. Redacting the whole section would answer «hide the
+     * revenue» with «delete the reconciliation».
+     *
+     * @var list<string>
+     */
+    public const ATTRIBUTION_REVENUE_KEYS = [
+        'platform_reported_revenue', 'store_confirmed_revenue', 'total_revenue', 'revenue',
+    ];
+
     private function __construct(
         public readonly bool $creatives,
         public readonly bool $video,
