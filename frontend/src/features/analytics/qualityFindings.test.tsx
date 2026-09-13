@@ -127,6 +127,61 @@ describe('the data quality tab answers the operator’s questions', () => {
    * An empty findings list rendered as nothing would read as a page that failed to load — which is
    * the reading this product refuses everywhere else it has an empty state.
    */
+  /**
+   * DATA-QUALITY-OPERATOR-UX-001 — the ATTRIBUTION half of the tab, given the treatment the freshness
+   * half already has.
+   *
+   * `QualityFindings` distinguishes three states and says each one out loud: a finding, «everything is
+   * current», and — in `DiagnosticPanel`, the same pattern one panel over — «cannot be examined, and
+   * this is not «no problems found»». `AttributionFindings` had ONE: findings, or `return null`.
+   *
+   * So an operator reading the attribution section of a clean window saw nothing, and nothing is the
+   * same picture a failed request draws. The reading this product refuses everywhere else — «an empty
+   * space means a page that did not load» — was shipping on the half of the tab a client asks about
+   * when two platforms disagree.
+   *
+   * The distinction is not cosmetic here: «the platforms agree on how they counted» and «we could not
+   * read how they counted» lead an operator to opposite actions.
+   */
+  it('states that attribution was examined and agreed, rather than showing an empty space', async () => {
+    route([{ ...FRESHNESS[0], last_sync_status: 'fresh', missing_days: 0, days_with_data: 14, latest_metric_date: new Date().toISOString().slice(0, 10), data_freshness_at: new Date().toISOString().slice(0, 10) }])
+    await openQuality()
+
+    expect(await screen.findByTestId('attribution-findings-clear')).toBeInTheDocument()
+    expect(screen.queryByTestId('attribution-findings')).toBeNull()
+  })
+
+  /** Not examined is not clean, and may not borrow the clean sentence. */
+  it('never renders an unread attribution as «examined and agreed»', async () => {
+    /*
+     * `route()` FIRST, then one branch overridden.
+     *
+     * A first version replaced the whole `getData` mock and left `getEnvelope` cleared, so the
+     * freshness hook received nothing and the panel rendered neither state — the test failed on a
+     * missing envelope while claiming the attribution notice was absent. Overriding one branch of a
+     * working route is what keeps the failure about the thing under test.
+     */
+    route([{ ...FRESHNESS[0], last_sync_status: 'fresh', missing_days: 0, days_with_data: 14, latest_metric_date: new Date().toISOString().slice(0, 10), data_freshness_at: new Date().toISOString().slice(0, 10) }])
+
+    const routed = vi.mocked(getData).getMockImplementation()!
+    vi.mocked(getData).mockImplementation(((url: string) =>
+      (url.includes('attribution')
+        /*
+         * REJECTS rather than resolving null — that is how «not read» actually happens.
+         *
+         * Resolving null left the query retrying, so it stayed pending past the assertion and NEITHER
+         * state rendered: the test failed reporting an absent notice while the panel was still loading.
+         * A rejection settles, which is the state an operator meets when the endpoint does not answer.
+         */
+        ? Promise.reject(new Error('attribution unavailable'))
+        : routed(url)) as never) as never)
+
+    await openQuality()
+
+    expect(await screen.findByTestId('attribution-findings-unavailable')).toBeInTheDocument()
+    expect(screen.queryByTestId('attribution-findings-clear')).toBeNull()
+  })
+
   it('states that everything is current rather than showing an empty space', async () => {
     route([{ ...FRESHNESS[0], last_sync_status: 'fresh', missing_days: 0, days_with_data: 14, latest_metric_date: new Date().toISOString().slice(0, 10), data_freshness_at: new Date().toISOString().slice(0, 10) }])
     await openQuality()
