@@ -283,11 +283,17 @@ final class ObjectivePerformance
                 'provider' => $provider,
                 'spend' => 0.0, 'impressions' => 0.0, 'clicks' => 0.0,
                 'landing_page_views' => 0.0, 'orders' => 0.0, 'revenue' => 0.0,
+                // The money truth travels with the money — AGGREGATION-TRUTH-001.
+                'spend_original' => 0.0, 'spend_withheld_rows' => 0,
+                'revenue_original' => 0.0, 'revenue_withheld_rows' => 0,
                 'campaigns' => 0,
             ];
 
-            foreach (['spend', 'impressions', 'clicks', 'landing_page_views', 'orders', 'revenue'] as $key) {
-                $bucket[$provider][$key] += (float) $row->{$key};
+            foreach (['spend', 'impressions', 'clicks', 'landing_page_views', 'orders', 'revenue', 'spend_original', 'revenue_original'] as $key) {
+                $bucket[$provider][$key] += (float) ($row->{$key} ?? 0);
+            }
+            foreach (['spend_withheld_rows', 'revenue_withheld_rows'] as $key) {
+                $bucket[$provider][$key] += (int) ($row->{$key} ?? 0);
             }
             $bucket[$provider]['campaigns']++;
         }
@@ -664,9 +670,11 @@ final class ObjectivePerformance
             ->groupBy('daily_metrics.metric_date', 'unified_campaigns.objective')
             ->select('daily_metrics.metric_date', 'unified_campaigns.objective')
             ->selectRaw($this->sum('spend'))
+            ->selectRaw($this->heldMoney('spend'))
             ->selectRaw($this->sum('impressions'))
             ->selectRaw($this->sum('clicks'))
             ->selectRaw($this->sum('revenue'))
+            ->selectRaw($this->heldMoney('revenue'))
             ->selectRaw("COALESCE(SUM(daily_metrics.value) FILTER (WHERE metric_key = 'conversions'), 0) AS orders")
             ->toBase()
             ->get();
@@ -697,10 +705,12 @@ final class ObjectivePerformance
             ->groupBy('daily_metrics.unified_campaign_id', 'daily_metrics.provider', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
             ->select('daily_metrics.unified_campaign_id', 'daily_metrics.provider', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
             ->selectRaw($this->sum('spend'))
+            ->selectRaw($this->heldMoney('spend'))
             ->selectRaw($this->sum('impressions'))
             ->selectRaw($this->sum('clicks'))
             ->selectRaw($this->sum('landing_page_views'))
             ->selectRaw($this->sum('revenue'))
+            ->selectRaw($this->heldMoney('revenue'))
             /*
              * An «order» is a `conversions` row, and ONLY a `conversions` row.
              *
@@ -724,6 +734,29 @@ final class ObjectivePerformance
     private function sum(string $key): string
     {
         return "COALESCE(SUM(daily_metrics.value) FILTER (WHERE metric_key = '{$key}'), 0) AS {$key}";
+    }
+
+    /**
+     * AGGREGATION-TRUTH-001 — the money this service was reporting as zero.
+     *
+     * `sum()` reads `value`, the CONVERTED column, and coalesces null to 0. FX-001 withholds a
+     * conversion when no rate exists rather than inventing one, so a withheld row is exactly
+     * `value IS NULL` with `original_amount` intact — and `MetricsAggregator` says production's rows
+     * are «entirely withheld and entirely USD».
+     *
+     * Measured on a real row: with the row withheld, this service's spend came back 0 while 175 was
+     * sitting in `original_amount`. Every path then read as zero spend, `LiveDetailTables` drops
+     * paths at `spend > 0`, and the objective decomposition disappeared from the analytics tab AND
+     * the client report — a whole section gone, on the accounts where the money is real.
+     *
+     * So the truth travels beside the figure, exactly as `MetricsAggregator::MONEY_TRUTH` does:
+     * what was held, and how many rows held it. A summed original with no withheld rows behind it
+     * claims nothing — that is what a sum of nothing produces.
+     */
+    private function heldMoney(string $key): string
+    {
+        return "COALESCE(SUM(daily_metrics.original_amount) FILTER (WHERE metric_key = '{$key}' AND daily_metrics.value IS NULL AND daily_metrics.original_amount IS NOT NULL), 0) AS {$key}_original, "
+            ."COUNT(*) FILTER (WHERE metric_key = '{$key}' AND daily_metrics.value IS NULL AND daily_metrics.original_amount IS NOT NULL) AS {$key}_withheld_rows";
     }
 
     private function emptyPath(MarketingPath $path): array

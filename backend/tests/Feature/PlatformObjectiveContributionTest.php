@@ -515,4 +515,46 @@ final class PlatformObjectiveContributionTest extends TestCase
 
         return $this->accounts[$provider] = $account;
     }
+
+    /**
+     * AGGREGATION-TRUTH-001 — the objective decomposition on an account whose money never converted.
+     *
+     * `sum()` reads `daily_metrics.value`, the CONVERTED column, and coalesces null to 0. FX-001
+     * withholds a conversion when no rate exists rather than inventing one, so a withheld row is
+     * exactly `value IS NULL` with `original_amount` intact — and `MetricsAggregator` says
+     * production's rows are «entirely withheld and entirely USD».
+     *
+     * Measured on a real row before the fix: this service reported spend 0 while 175 sat in
+     * `original_amount`. Every path then read as zero spend, `LiveDetailTables` drops paths at
+     * `spend > 0`, and the objective decomposition vanished from the analytics tab AND the client
+     * report — a whole section gone on the accounts where the money is real.
+     */
+    public function test_a_path_whose_money_was_never_converted_still_reports_what_it_holds(): void
+    {
+        $this->spendWith('snapchat', 'sales', 500, orders: 10, impressions: 1000);
+
+        // Withhold it exactly as a failed conversion does: the converted column emptied, the
+        // original preserved. Nothing else about the row changes.
+        DailyMetric::withoutGlobalScopes()
+            ->where('metric_key', 'spend')
+            ->update(['value' => null, 'original_amount' => 500, 'original_currency' => 'USD']);
+
+        $out = app(ObjectivePerformance::class, ['projectIds' => [(string) $this->project->id]])
+            ->byPlatform(Carbon::parse('2026-08-01'), Carbon::parse('2026-08-31'));
+
+        $sales = collect($out['paths'])->firstWhere('path', 'conversion');
+        self::assertNotNull($sales, 'the conversion path disappeared entirely');
+
+        $snap = collect($sales['platforms'])->firstWhere('provider', 'snapchat');
+        self::assertNotNull($snap, 'the platform disappeared because its money was withheld');
+
+        // The converted figure is honestly zero — no rate existed, and inventing one is the defect
+        // this product refuses. What must NOT be zero is the truth beside it.
+        self::assertSame(500.0, (float) $snap['spend_original'], 'the held amount was lost');
+        self::assertGreaterThan(0, (int) $snap['spend_withheld_rows'], 'nothing recorded that it was held');
+
+        // And the non-money metrics were never in doubt: they must survive untouched.
+        self::assertSame(1000.0, (float) $snap['impressions']);
+        self::assertSame(10.0, (float) $snap['orders']);
+    }
 }
