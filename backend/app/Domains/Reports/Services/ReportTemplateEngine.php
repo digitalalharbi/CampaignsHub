@@ -98,8 +98,16 @@ final class ReportTemplateEngine
              * «reduce prose aggressively» half of the requirement — this is the most text-heavy
              * section in the template.
              */
-            ...($summary ? [] : [['id' => 'recommendations', 'type' => 'recommendations', 'order' => 2, 'visible' => true]]),
-            ['id' => 'executive_summary', 'type' => 'executive_summary', 'order' => 3, 'visible' => true],
+            ['id' => 'executive_summary', 'type' => 'executive_summary', 'order' => 2, 'visible' => true],
+            /*
+             * The period comparison is «Trends», and it opens the evidence rather than closing it.
+             *
+             * The owner's sequence reads Executive Summary → KPIs → TRENDS → Platform / Objective /
+             * Creative → Budget / Funnel → Recommendations → Next Steps. What changed sets up every
+             * breakdown that follows: a reader who meets «spend is up 40%» first knows what the
+             * platform pages are explaining.
+             */
+            ['id' => 'comparison', 'type' => 'comparison', 'order' => 3, 'visible' => true],
             /*
              * Direct against Blended, immediately after the summary (REPORT-OBJECTIVE-003/004).
              *
@@ -125,7 +133,7 @@ final class ReportTemplateEngine
              */
             ['id' => 'objective_performance', 'type' => 'objective_performance', 'order' => 4, 'visible' => true],
         ];
-        $order = 5; // 1–4 are the fixed opening: cover, recommendations, summary, objective split.
+        $order = 5; // 1–4 are the fixed opening: cover, summary, trends, objective split.
         /*
          * The per-platform slides are the section that grows without a ceiling — six connected
          * platforms is six slides — and they are the operator's view of money the distribution chart
@@ -180,9 +188,24 @@ final class ReportTemplateEngine
          * because they INTERPRET what the reader has just been shown; put first, they would be
          * conclusions about figures nobody had seen yet.
          */
-        /* The period comparison IS «what changed», which is half of what an executive came for. */
-        $slides[] = ['id' => 'comparison', 'type' => 'comparison', 'order' => $order++, 'visible' => true];
         $slides[] = ['id' => 'observations', 'type' => 'observations', 'order' => $order++, 'visible' => true];
+        /*
+         * CLIENT-FACING-PRESENTATION-001 — the recommendations, AFTER the evidence they rest on.
+         *
+         * They were second, on a rationale about an operator: «recommendations are what an operator
+         * DOES next». This is a client document, and the client's other two already disagreed with
+         * it — `ReportStructure::ORDER` ends the PDF with them («read before the evidence it is an
+         * opinion; read after it, it is a conclusion») and the live link ends with `ClientAttention`
+         * («the composition ends where the reader's work begins»). One report produced two documents
+         * that put the same section at opposite ends.
+         *
+         * The owner has decided: DATA → VISUAL → COMPARISON → INSIGHT → RECOMMENDATION → ACTION.
+         * The observations above are the insight; this is what follows from it; `next_steps` below
+         * is the action, and stays last.
+         */
+        if (! $summary) {
+            $slides[] = ['id' => 'recommendations', 'type' => 'recommendations', 'order' => $order++, 'visible' => true];
+        }
         // Client-facing action plan — rendered only when there are approved recommendations.
         /*
          * «Next steps» and the data-quality appendix are the operator's two most text-heavy closings.
