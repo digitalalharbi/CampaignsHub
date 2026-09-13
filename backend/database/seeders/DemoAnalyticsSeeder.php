@@ -227,6 +227,37 @@ final class DemoAnalyticsSeeder extends Seeder
             ],
         );
 
+        /*
+         * One AWARENESS campaign, because a demo with one objective cannot exercise objective-awareness.
+         *
+         * OBJECTIVE-ANALYTICS-DEPTH-001. Every campaign in `self::CAMPAIGNS` is `sales`, so every ad set
+         * and ad beneath them is too — and the whole point of that row is that an ad table must show a
+         * sales buy its return and an awareness buy its reach, and must REFUSE to blend the two when the
+         * rows span both. With one objective in the world, the mixed case was unreachable in a browser
+         * and the single-family case could not be told apart from the old fixed column set.
+         *
+         * It runs: `DemoIntegrationsSeeder` mirrors every unified campaign into an external campaign with
+         * ad sets and ads beneath it, and `DemoAdCreativeLinkSeeder` writes the ad-grain
+         * `entity_daily_metrics` — so this campaign reaches the Ads table the same way the others do,
+         * without a second seeding path.
+         *
+         * Additive and OUTSIDE `self::CAMPAIGNS`, for the reason the never-launched campaign is: that
+         * list divides `total_budget` by its own count, and appending to it would move every other
+         * campaign's budget and shift figures this seed is the fixture for. Its own objective is the only
+         * thing that differs from its neighbours.
+         */
+        UnifiedCampaign::updateOrCreate(
+            ['project_id' => $project->id, 'name' => 'ميتا — الوعي بالعلامة'],
+            [
+                'client_workspace_id' => $ws->id,
+                'objective' => 'awareness',
+                'status' => 'active',
+                'total_budget' => 40000,
+                'budget_currency' => self::PROJECT_CURRENCY,
+                'meta' => ['is_demo' => true, 'primary_platform' => 'meta'],
+            ],
+        );
+
         app(TenantContext::class)->forget();
     }
 

@@ -6,6 +6,8 @@ namespace Database\Seeders;
 
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCreative;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Metrics\Models\EntityDailyMetric;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -102,7 +104,76 @@ final class DemoAdCreativeLinkSeeder extends Seeder
             }
         }
 
-        $this->command?->info("Demo: {$linked} ads now carry a creative and ad-level metrics.");
+        /*
+         * At least one ad per OBJECTIVE has ad-level metrics — OBJECTIVE-ANALYTICS-DEPTH-001.
+         *
+         * The grouping above is by project and provider, and the demo's providers all carry `sales`
+         * campaigns, so every ad that reached the entity table belonged to one objective. The Ads table
+         * must show a sales buy its return and an awareness buy its reach, and must REFUSE to blend the
+         * two when the rows span both — and with one objective in the table, the mixed case was
+         * unreachable in a browser and the single-family case was indistinguishable from the fixed column
+         * set it replaced.
+         *
+         * Written for ads that have none rather than for a fixed count, so a second run adds nothing —
+         * the same idempotence the linking step above is careful about.
+         */
+        $withMetrics = EntityDailyMetric::withoutGlobalScopes()
+            ->where('entity_type', 'ad')
+            ->distinct()
+            ->pluck('entity_id')
+            ->all();
+
+        $ads = ExternalAd::withoutGlobalScopes()
+            ->whereNotNull('unified_campaign_id')
+            ->get(['id', 'project_id', 'provider', 'tenant_id', 'unified_campaign_id', 'external_id', 'external_campaign_id', 'external_ad_set_id']);
+
+        $objectives = UnifiedCampaign::withoutGlobalScopes()
+            ->whereIn('id', $ads->pluck('unified_campaign_id')->filter()->unique()->values()->all())
+            ->pluck('objective', 'id');
+
+        /*
+         * IDEMPOTENCE, and it took a correction to get right.
+         *
+         * A first version excluded ads that already had metrics and then picked one ad per
+         * project-and-objective from what remained — so every run found a DIFFERENT unmetriced ad for the
+         * same objective and wrote another fourteen days for it. Two more ads per `db:seed`, which is the
+         * demo world that grows on repetition this file's own docblock warns about.
+         *
+         * The question is «does this project's objective already have an ad with metrics», not «does this
+         * ad have them». So the covered set is built from the ads that ALREADY have rows, before anything
+         * is written.
+         */
+        $hasRows = array_fill_keys($withMetrics, true);
+        $covered = [];
+        foreach ($ads as $ad) {
+            if (isset($hasRows[(string) $ad->getKey()])) {
+                $covered[(string) $ad->project_id.'|'.(string) ($objectives[$ad->unified_campaign_id] ?? '')] = true;
+            }
+        }
+
+        $forObjective = 0;
+        foreach ($ads as $ad) {
+            $objective = (string) ($objectives[$ad->unified_campaign_id] ?? '');
+            $seen = (string) $ad->project_id.'|'.$objective;
+
+            if ($objective === '' || isset($covered[$seen]) || isset($hasRows[(string) $ad->getKey()])) {
+                continue;
+            }
+
+            $this->metrics($ad);
+            $covered[$seen] = true;
+            $forObjective++;
+        }
+
+        /*
+         * Counted per step, because one number for both was misleading.
+         *
+         * `$linked` was incremented by the linking step and by this one, so a re-run that inserted
+         * nothing still reported «2 ads now carry … metrics» — an operator reading that would believe
+         * the seeder had written rows it had not. `metrics()` is a plain `insert`, so «did it run
+         * again» is a question with real consequences, and the message has to answer it.
+         */
+        $this->command?->info("Demo: {$linked} ads linked to a creative, {$forObjective} given ad-level metrics for their objective.");
     }
 
     /**
