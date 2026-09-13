@@ -510,6 +510,39 @@ final class SharedCreativeView
         }
 
         /*
+         * CLIENT-REPORT-MONEY-REDACTION-001 — a hidden figure takes its ORIGINAL with it.
+         *
+         * The loop above removes the CONVERTED column, which is the only place money lived when this
+         * redaction was written. `CreativeMetrics::MONEY_TRUTH` has emitted five companions beside it
+         * since CREATIVE-MONEY-TRUTH-001, and on production they are where the money actually IS:
+         * every Snapchat account is USD with no USD→SAR rate, so `spend` is null by FX-001's design
+         * and `spend_original` holds the real amount. Unsetting the null and shipping the figure is
+         * the exact thing this class's own docblock forbids — a client opening the network tab found
+         * the spend their agency chose not to show them, to the byte.
+         *
+         * It was invisible because every client-report surface read money through `metricState`,
+         * which looks at the converted column alone. The two defects were hiding each other, and
+         * fixing the renderer first would have turned a payload leak into a printed one.
+         *
+         * The currency NAME is shared by both keys, so it goes only when neither figure survives:
+         * stripping it while spend is still permitted would leave the client «412.50» of something.
+         */
+        $moneyCompanions = array_merge(
+            $visibility->spend ? [] : CreativeVisibility::MONEY_COMPANIONS['spend'],
+            $visibility->revenue ? [] : CreativeVisibility::MONEY_COMPANIONS['revenue'],
+            ! $visibility->spend && ! $visibility->revenue ? CreativeVisibility::MONEY_CURRENCY_KEYS : [],
+        );
+
+        foreach ($moneyCompanions as $key) {
+            if (isset($row['metrics']) && is_array($row['metrics'])) {
+                unset($row['metrics'][$key]);
+            }
+            if (isset($row['previous']) && is_array($row['previous'])) {
+                unset($row['previous'][$key]);
+            }
+        }
+
+        /*
          * The headline metric LIST is filtered too, not only the figures.
          *
          * The card renders whatever this list names, so leaving `roas` in it after removing the ROAS
