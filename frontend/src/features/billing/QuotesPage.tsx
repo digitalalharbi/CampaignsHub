@@ -70,7 +70,9 @@ export function QuotesPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | string>('all')
 
   const q = useQuery({ queryKey: ['billing', 'quotes'], queryFn: listQuotes })
-  const quotes = q.data ?? []
+  const quotes = q.data?.items ?? []
+  const quotesWithheld = q.data?.withheld ?? 0
+  const quotesTotal = q.data?.total ?? quotes.length
 
   const summary = {
     total: quotes.length,
@@ -113,6 +115,15 @@ export function QuotesPage() {
           <QuoteSummaryCard label={c.sum_sent} value={summary.sent} tone="info" />
           <QuoteSummaryCard label={c.sum_draft} value={summary.draft} tone="muted" />
         </div>
+      )}
+
+      {/* OPS-LEDGER-001 — the cards above are reduced over what arrived, not over the whole book. */}
+      {quotesWithheld > 0 && (
+        <p data-testid="quotes-bounded" className="rounded-xl border border-warning/40 bg-warning/5 px-3 py-2 text-xs text-warning">
+          {ar
+            ? `تُعرض أحدث ${quotes.length} من ${quotesTotal} عرض سعر — الأرقام أعلاه تصف المعروض.`
+            : `Showing the most recent ${quotes.length} of ${quotesTotal} quotes — the figures above describe what is shown.`}
+        </p>
       )}
 
       {/* Search + status filters. */}

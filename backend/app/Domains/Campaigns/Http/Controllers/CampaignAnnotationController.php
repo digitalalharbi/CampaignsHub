@@ -20,6 +20,9 @@ use Illuminate\Validation\Rule;
  */
 final class CampaignAnnotationController extends Controller
 {
+    /** The most rows this list returns; `meta.total` says how many there are. */
+    private const MAX_ROWS = 200;
+
     private const KINDS = ['note', 'recommendation'];
 
     private const STATUSES = ['draft', 'reviewed', 'approved', 'hidden', 'rejected'];
@@ -60,7 +63,7 @@ final class CampaignAnnotationController extends Controller
     {
         abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
 
-        $rows = CampaignAnnotation::query()
+        $query = CampaignAnnotation::query()
             ->leftJoin('unified_campaigns', 'unified_campaigns.id', '=', 'campaign_annotations.campaign_id')
             ->when(
                 $request->string('kind')->toString(),
@@ -72,8 +75,12 @@ final class CampaignAnnotationController extends Controller
             ->select('campaign_annotations.*', 'unified_campaigns.name as campaign_name')
             ->orderByRaw("CASE campaign_annotations.priority
                 WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END")
-            ->latest('campaign_annotations.created_at')
-            ->limit(200)
+            ->latest('campaign_annotations.created_at');
+
+        /* OPS-LEDGER-001 — counted after the filters, before the bound. */
+        $total = (clone $query)->count();
+
+        $rows = $query->limit(self::MAX_ROWS)
             ->get()
             ->map(fn (CampaignAnnotation $a) => $this->shape($a) + [
                 'campaign_id' => $a->campaign_id,
@@ -81,7 +88,10 @@ final class CampaignAnnotationController extends Controller
             ])
             ->all();
 
-        return ApiResponse::success($rows, 'Project recommendations.');
+        return ApiResponse::success($rows, 'Project recommendations.', meta: [
+            'total' => $total,
+            'withheld' => max(0, $total - count($rows)),
+        ]);
     }
 
     public function store(Request $request, string $project, string $campaign, AuditLogger $audit): JsonResponse

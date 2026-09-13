@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { CreativePreview } from '@/features/content/api'
-import { getData, postData, api, ensureCsrfCookie } from '@/lib/api/client'
+import { getData, getEnvelope, postData, api, ensureCsrfCookie } from '@/lib/api/client'
 import type { BudgetRow, FunnelStage, PlatformRow, Range, Summary, TimePoint } from '@/features/analytics/api'
 
 /**
@@ -62,11 +62,26 @@ export interface CampaignAlert {
   created_at: string | null
 }
 
-/** Campaign alerts (from the shared notification store, filtered to this campaign). */
+/**
+ * Campaign alerts (from the shared notification store, filtered to this campaign).
+ *
+ * Through `getEnvelope`, not `getData` — OPS-LEDGER-001. The server bounds this list at a hundred
+ * and now says how many the filter actually holds, and `getData` throws `meta` away, so the page
+ * would have gone on presenting a truncated list as the whole set with the count sitting unread in
+ * the response.
+ */
 export function useCampaignAlerts(projectId: string | null, campaignId: string | null, status = '') {
   return useQuery({
     queryKey: ['projects', projectId, 'campaigns', campaignId, 'alerts', status],
-    queryFn: () => getData<CampaignAlert[]>(`${base(projectId!, campaignId!)}/alerts${status ? `?status=${status}` : ''}`),
+    queryFn: async () => {
+      const res = await getEnvelope<CampaignAlert[]>(
+        `${base(projectId!, campaignId!)}/alerts${status ? `?status=${status}` : ''}`,
+      )
+      const meta = res.meta as { total?: number; withheld?: number } | undefined
+      const rows = res.data ?? []
+
+      return { rows, total: Number(meta?.total ?? rows.length), withheld: Number(meta?.withheld ?? 0) }
+    },
     enabled: Boolean(projectId && campaignId),
   })
 }

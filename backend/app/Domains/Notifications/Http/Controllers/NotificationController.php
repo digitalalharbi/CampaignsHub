@@ -18,6 +18,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class NotificationController extends Controller
 {
+    /** The most rows either list returns; `meta.total` says how many there are. */
+    private const MAX_ROWS = 100;
+
     public function index(Request $request): JsonResponse
     {
         $query = AppNotification::query()
@@ -36,10 +39,27 @@ final class NotificationController extends Controller
 
         $unread = (clone $query)->where('status', 'unread')->count();
 
+        /*
+         * OPS-LEDGER-001 — the bound is stated, because `unread` never stated it.
+         *
+         * An unread COUNT is not a statement of completeness. A reader with three hundred
+         * notifications, ninety of them unread, met a hundred rows beside «unread: 90» and had
+         * nothing on the page telling them two hundred more existed — the count answered a question
+         * they had not asked while the one they had asked went unanswered.
+         *
+         * Counted on a clone, before the limit, under the same filters the rows were read with.
+         */
+        $total = (clone $query)->count();
+        $rows = $query->limit(self::MAX_ROWS)->get();
+
         return ApiResponse::success(
-            NotificationResource::collection($query->limit(100)->get()),
+            NotificationResource::collection($rows),
             'Notifications retrieved.',
-            meta: ['unread' => $unread],
+            meta: [
+                'unread' => $unread,
+                'total' => $total,
+                'withheld' => max(0, $total - $rows->count()),
+            ],
         );
     }
 
