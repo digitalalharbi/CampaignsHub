@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Support\PlatformHttp;
+use Illuminate\Http\Client\Response;
 
 /**
  * Google Ads API (REST).
@@ -77,6 +78,50 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector
                 continue;
             }
 
+            /*
+             * GADS-ROOT-TYPE-001 — ask the root WHAT IT IS before asking what is under it.
+             *
+             * Every root used to be handed to `clientsUnder()`, which queries `FROM customer_client`
+             * with `login-customer-id` set to that root. Google documents `customer_client` as the
+             * hierarchy of a MANAGER account, and a plain advertiser is not one — the old comment here
+             * asserted that a plain account «answers with its own self link», and that assumption is
+             * the defect rather than a description of it. On the owner's production connection the call
+             * answered `403 PERMISSION_DENIED` and no account was ever discovered.
+             *
+             * `ListAccessibleCustomers` cannot tell us which case a root is: it is documented to ignore
+             * `login-customer-id` entirely, which is exactly why it is the only call in this flow that
+             * still succeeded and why its success proved nothing about the calls after it.
+             *
+             * So each root is probed on its own `customer` record first, and only a manager is asked
+             * for a hierarchy.
+             */
+            $root = $this->customerRecord($tokens, $entry);
+
+            if ($root === null) {
+                continue;
+            }
+
+            if (($root['manager'] ?? false) !== true) {
+                /*
+                 * A directly held advertiser IS the account. It is recorded from its own record, with
+                 * no manager above it — «an account held directly has no manager», and inventing one
+                 * would send every later campaign and metric query through a path that does not exist.
+                 */
+                $accounts[$entry] ??= [
+                    'external_id' => $entry,
+                    'name' => (string) ($root['descriptiveName'] ?? $entry),
+                    'currency' => isset($root['currencyCode']) ? (string) $root['currencyCode'] : null,
+                    'timezone' => isset($root['timeZone']) ? (string) $root['timeZone'] : null,
+                    'status' => strtoupper((string) ($root['status'] ?? 'ENABLED')) === 'ENABLED'
+                        ? 'active'
+                        : 'inactive',
+                    'parent_external_id' => null,
+                    'raw' => $root,
+                ];
+
+                continue;
+            }
+
             foreach ($this->clientsUnder($tokens, $entry) as $client) {
                 $id = $this->plainCustomerId((string) ($client['id'] ?? ''));
 
@@ -114,6 +159,102 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector
         }
 
         return array_values($accounts);
+    }
+
+    /**
+     * What Google actually said, instead of «HTTP 403».
+     *
+     * GADS-ROOT-TYPE-001. Every refusal collapsed to one sentence built from the human message, so the
+     * three facts that decide what an operator does next were thrown away: the `GoogleAdsFailure`
+     * classification, the request id Google asks for when you report a problem, and which customer was
+     * being operated on through which login context.
+     *
+     * `USER_PERMISSION_DENIED` means this identity cannot see that customer. An invalid
+     * login-customer/customer combination means the PATH was wrong. A Cloud-project access error means
+     * the project is not approved for what it asked. They lead to three different actions, and one
+     * message for all of them sent the reader to none of them.
+     *
+     * Nothing secret is carried: an error code, a request id and customer ids are all identifiers, and
+     * the developer token and OAuth secret are never read here.
+     */
+    private function refusal(Response $response, string $customer): string
+    {
+        /** @var array<string,mixed> $body */
+        $body = $response->json() ?? [];
+        /** @var array<string,mixed> $error */
+        $error = is_array($body['error'] ?? null) ? $body['error'] : [];
+
+        $codes = [];
+        $requestId = null;
+
+        foreach ((array) ($error['details'] ?? []) as $detail) {
+            if (! is_array($detail)) {
+                continue;
+            }
+
+            $requestId ??= isset($detail['requestId']) ? (string) $detail['requestId'] : null;
+
+            foreach ((array) ($detail['errors'] ?? []) as $one) {
+                if (! is_array($one) || ! is_array($one['errorCode'] ?? null)) {
+                    continue;
+                }
+
+                /*
+                 * The KEY names the family — `authorizationError`, `queryError`, `quotaError` — and the
+                 * value names the member. Both are kept: «authorizationError=USER_PERMISSION_DENIED»
+                 * says more than either half, and a family this build has not seen before still reads.
+                 */
+                foreach ($one['errorCode'] as $family => $member) {
+                    if (is_string($member) && $member !== '') {
+                        $codes[] = $family.'='.$member;
+                    }
+                }
+            }
+        }
+
+        $login = $this->loginCustomerId();
+
+        return implode(' | ', array_filter([
+            $this->label().' refused the query',
+            $codes === [] ? null : implode(', ', array_unique($codes)),
+            PlatformHttp::reason($response),
+            'customer '.$customer,
+            'login-customer-id '.($login ?? 'omitted'),
+            $requestId === null ? null : 'request '.$requestId,
+        ]));
+    }
+
+    /**
+     * One root's own `customer` record — the fact that decides which query may follow.
+     *
+     * GADS-ROOT-TYPE-001. `customer.manager` is the only thing that separates an advertiser from a
+     * folder, and it has to be read BEFORE a resource is chosen: `customer_client` is the manager
+     * hierarchy, and asking a plain advertiser for one is a query Google refuses.
+     *
+     * Queried with `login-customer-id` set to the customer itself, which Google permits explicitly for
+     * an individual account reached directly — «omit the login-customer-id header or set it to the same
+     * value as CUSTOMER_ID». Using the root as its own login context is also correct for a manager
+     * reading its own record, so one call serves both cases without guessing which it is in.
+     *
+     * Null when the root answers nothing, so a single unreadable root cannot empty the whole discovery.
+     *
+     * @return array<string,mixed>|null
+     */
+    private function customerRecord(OAuthTokens $tokens, string $entry): ?array
+    {
+        $rows = $this->through($entry, fn (): array => $this->stream($tokens, $entry, <<<'GAQL'
+            SELECT customer.id, customer.descriptive_name, customer.currency_code,
+                   customer.time_zone, customer.manager, customer.status
+            FROM customer
+            GAQL));
+
+        foreach ($rows as $row) {
+            if (isset($row['customer']) && is_array($row['customer'])) {
+                return $row['customer'];
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -448,9 +589,7 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector
         }
 
         if (! $response->successful()) {
-            throw new \RuntimeException(
-                $this->label().' refused the query: '.PlatformHttp::reason($response),
-            );
+            throw new \RuntimeException($this->refusal($response, $customer));
         }
 
         /** @var array<int,array<string,mixed>> $chunks */

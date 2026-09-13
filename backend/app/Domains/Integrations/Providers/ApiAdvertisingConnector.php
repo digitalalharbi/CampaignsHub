@@ -351,12 +351,21 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
             'tiktok' => $request->withHeaders(['Access-Token' => $tokens->accessToken]),
 
             /*
-             * Google Ads needs the developer token on every call — that one IS ours, it identifies
-             * this application to Google and is approved separately from the OAuth client.
+             * GADS-TOKEN-SUNSET-001 — the developer token is sent where one exists, and grants nothing.
              *
-             * `login-customer-id` is not (GADS-MCC-001). It names the manager account through which
-             * the caller reaches the client account being queried, so it varies per customer and is
-             * asked of the connector rather than read from platform configuration.
+             * Google sunset developer tokens on 2026-09-09 and moved the access levels onto the Google
+             * Cloud projects that had been calling with them: production access now follows the Cloud
+             * project owning the OAuth client. This comment used to tie the token's approval to a path of its own, separate
+             * from the OAuth client, and that was the basis for requiring it — and for an install reading
+             * «awaiting credentials» while being perfectly configured.
+             *
+             * Still transmitted, because Google ignores it rather than rejecting it and an existing token
+             * costs nothing. `array_filter` drops it when absent, which is now an ordinary state.
+             *
+             * `login-customer-id` is a different kind of value (GADS-MCC-001). It names the manager
+             * account through which the caller reaches the client being queried, so it varies per customer
+             * and is asked of the connector — and for a directly held advertiser Google permits it to be
+             * omitted or set to that customer's own id (GADS-ROOT-TYPE-001).
              */
             'google' => $request->withToken($tokens->accessToken)->withHeaders(array_filter([
                 'developer-token' => $creds->get('developer_token'),
