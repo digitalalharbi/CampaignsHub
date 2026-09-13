@@ -100,7 +100,22 @@ final class ConnectionWizardState
             ->where('provider_connection_id', $connection->getKey())
             ->where('account_type', 'ad_account');
 
-        $discovered = (clone $accounts)->count();
+        /*
+         * GADS-STALE-PICKER-001 — «currently selectable», not «ever discovered».
+         *
+         * This counted every `ExternalAccount` row the connection had ever produced. The rows survive a
+         * refused discovery on purpose — a temporary failure must not unbind work an operator already did
+         * — so after a refusal this count offered accounts that the provider had just declined to confirm.
+         * That is how the banner said «1 account available — Finish selecting accounts» while the card
+         * said «0 ad accounts», and how the button opened a connection that answered «Item not found».
+         *
+         * A discovery that was REFUSED is not a discovery that found nothing, and neither is the same as
+         * one that has never run. The rows are still there and still bound; what they are not is a current
+         * answer to «what can be selected right now».
+         */
+        $everDiscovered = (clone $accounts)->count();
+        $blocked = $connection->discovery_blocked_reason !== null;
+        $discovered = $blocked ? 0 : $everDiscovered;
 
         $assigned = ProjectIntegrationBinding::withoutGlobalScopes()
             ->whereIn('external_account_id', (clone $accounts)->select('id'))
@@ -162,6 +177,13 @@ final class ConnectionWizardState
             'state' => $state,
             'user_state' => $userState,
             'discovered' => $discovered,
+            /*
+             * Both numbers, because they answer different questions and the interface needs both: the
+             * banner may only offer what is selectable NOW, while «you had 3 accounts here» is what makes
+             * a blocked state legible rather than alarming.
+             */
+            'ever_discovered' => $everDiscovered,
+            'discovery_blocked_reason' => $connection->discovery_blocked_reason,
             'assigned' => $assigned,
             'synced' => $synced,
             'has_parent' => ProviderHierarchy::hasParent($connection->provider),
