@@ -4,7 +4,7 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, Download, FileText, LayoutGrid, Link2, Loader2, Plus, RefreshCw, Rows3, Send, Share2, Trash2, SlidersHorizontal } from 'lucide-react'
+import { AlertTriangle, Check, Copy, Download, FileText, LayoutGrid, Link2, Loader2, Plus, RefreshCw, Rows3, Send, Share2, Trash2, SlidersHorizontal } from 'lucide-react'
 import {
   createReport,
   updateReportScope,
@@ -30,6 +30,7 @@ import { Modal } from '@/components/ui/Modal'
 import { DateField } from '@/components/ui/DateField'
 import { Skeleton } from '@/components/ui/States'
 import { ErrorSummary, SelectField, type FieldError } from '@/components/forms'
+import { exportFailureCopy } from './exportFailureCopy'
 import { optionLabel } from '@/components/forms/types'
 import { toApiError } from '@/lib/api/client'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
@@ -120,7 +121,21 @@ export function ReportsPage() {
     queryKey: ['reports', currentProjectId, status, search],
     queryFn: () => listReports(currentProjectId!, params.toString()),
     enabled: Boolean(currentProjectId),
-    refetchInterval: (q) => (q.state.data?.reports.some((r) => r.status === 'processing') ? 2500 : false),
+    /*
+     * REPORT-EXPORT-FUNCTIONAL-001 — an EXPORT in flight is a reason to keep looking, too.
+     *
+     * This watched reports only. Clicking «PDF» dispatches a queue job that renders through a real
+     * browser — seconds, not milliseconds — and the only refresh was a single `setTimeout` 1.5s
+     * after the click. The export was still `processing` then, so the table redrew the same button
+     * and never looked again: a SUCCESSFUL export stayed invisible until somebody reloaded the page,
+     * and a failed one stayed invisible for good. «Nothing happened» was the interface, not the job.
+     */
+    refetchInterval: (q) =>
+      q.state.data?.reports.some(
+        (r) => r.status === 'processing' || r.exports.some((e) => e.status === 'processing'),
+      )
+        ? 2500
+        : false,
   })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['reports', currentProjectId] })
@@ -128,7 +143,8 @@ export function ReportsPage() {
   const del = useMutation({ mutationFn: (id: string) => deleteReport(currentProjectId!, id), onSuccess: invalidate })
   const exp = useMutation({
     mutationFn: ({ id, format }: { id: string; format: ReportFormat }) => exportReport(currentProjectId!, id, format),
-    onSuccess: () => setTimeout(invalidate, 1500),
+    // Straight away: the row now holds a `processing` export, which is what keeps the poll above alive.
+    onSuccess: invalidate,
   })
   const send = useMutation({
     mutationFn: ({ id, emails }: { id: string; emails: string[] }) => sendReport(currentProjectId!, id, emails),
@@ -503,6 +519,19 @@ function ReportRowView({
           {statusLabel(report.status, ar)}
         </span>
         {report.status === 'failed' && report.error && <div className="mt-1 max-w-[220px] truncate text-xs text-danger" title={report.error}>{report.error}</div>}
+        {/*
+          A failed EXPORT, stated where the failed REPORT is already stated.
+          The button beside it turns red and retries; this is the part that says what went wrong, so
+          an operator is not left to guess from an icon whether to click again or call somebody.
+        */}
+        {report.exports.some((e) => e.status === 'failed') && (
+          <div data-testid={`export-failure-note-${report.id}`} className="mt-1 max-w-[260px] text-xs leading-snug text-danger">
+            {(() => {
+              const worst = [...report.exports].reverse().find((e) => e.status === 'failed')!
+              return `${worst.format.toUpperCase()}: ${exportFailureCopy(worst.failure_reason, ar)}`
+            })()}
+          </div>
+        )}
       </td>
       <td className="p-3 text-text-muted"><span className="tnum">{report.created_at ? fmtDate(report.created_at) : '—'}</span></td>
       <td className="p-3">
@@ -511,6 +540,48 @@ function ReportRowView({
             <>
               {(['pdf', 'xlsx', 'csv'] as ReportFormat[]).map((f) => {
                 const ready = report.exports.find((e) => e.format === f && e.status === 'completed' && e.token)
+                /*
+                 * REPORT-EXPORT-FUNCTIONAL-001 — the other two states an export can be in.
+                 *
+                 * Only `completed` was ever read here, so a render still in flight and a render that
+                 * FAILED drew the same thing: the export button again. The owner clicked PDF in
+                 * Production, the job failed with its reason sitting in the export row, and the
+                 * interface said nothing at all — which reads as «the button does not work».
+                 *
+                 * The newest row wins for a format that has been tried more than once, so a retry
+                 * that succeeded is never described by the attempt before it.
+                 */
+                const latest = [...report.exports].reverse().find((e) => e.format === f)
+                const running = !ready && latest?.status === 'processing'
+                const failed = !ready && latest?.status === 'failed' ? latest : null
+
+                if (running) {
+                  return (
+                    <span
+                      key={f}
+                      data-testid={`export-running-${f}-${report.id}`}
+                      className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold text-text-muted"
+                    >
+                      <Loader2 size={12} className="animate-spin" />
+                      {f.toUpperCase()}
+                    </span>
+                  )
+                }
+
+                if (failed) {
+                  return (
+                    <button
+                      key={f}
+                      onClick={() => onExport(f)}
+                      data-testid={`export-failed-${f}-${report.id}`}
+                      title={`${exportFailureCopy(failed.failure_reason, ar)} — ${ar ? 'إعادة المحاولة' : 'try again'}`}
+                      className="inline-flex items-center gap-1 rounded-lg border border-danger px-2 py-1 text-xs font-semibold text-danger hover:bg-surface-hover"
+                    >
+                      <AlertTriangle size={12} /> {f.toUpperCase()}
+                    </button>
+                  )
+                }
+
                 return ready ? (
                   <a
                     key={f}

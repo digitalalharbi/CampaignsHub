@@ -158,4 +158,77 @@ final class ClientReportViewTest extends TestCase
         $this->assertContains('internal_marker_burner', $codes);
         $this->assertContains('uuid', $codes);
     }
+
+    /**
+     * REPORT-EXPORT-FUNCTIONAL-001 — the ads inside a content GROUP cross the same boundary.
+     *
+     * The sanitiser was a loop over one list. `ads_groups` arrived later, each group carrying its own
+     * `ads[]`, and nobody taught this class about them — so every ad in a group still held
+     * `campaign_id`. `ClientReportContentValidator` walks the whole payload, found them, and refused
+     * to produce the file: a client PDF that could never succeed for any report that had groups, and
+     * succeeded for any report that had none, which is why it looked intermittent.
+     *
+     * Measured on a real failing report before the fix: three violations, all
+     * `ads_groups.0.ads.N.campaign_id`.
+     */
+    public function test_an_ad_inside_a_content_group_carries_no_campaign_identity(): void
+    {
+        $snap = $this->internalSnapshot();
+        $snap['ads_groups'] = [[
+            'key' => 'video',
+            'label_ar' => 'فيديو',
+            'ads' => [
+                [
+                    'name' => 'Story A',
+                    'campaign_id' => '56f56d91-1496-4743-aec1-5d41e0732a6f',
+                    'campaign_name' => 'Meta — Lead Gen (burner)',
+                    'ad_set_id' => 'as_1',
+                    'external_account_id' => 'act_99',
+                    'client_display_name' => 'Spring launch',
+                    'spend' => 100.0,
+                ],
+            ],
+        ]];
+
+        $client = app(ClientReportView::class)->filter($snap);
+        $row = $client['ads_groups'][0]['ads'][0];
+
+        self::assertArrayNotHasKey('campaign_id', $row);
+        self::assertArrayNotHasKey('ad_set_id', $row);
+        self::assertArrayNotHasKey('external_account_id', $row);
+        self::assertArrayNotHasKey('client_display_name', $row);
+        /*
+         * And no campaign NAME either, prettified or otherwise. The validator flags the key whatever
+         * it holds, so a row carrying «Spring launch» is a row the exporter refuses to ship — and the
+         * lists beside this one are emptied rather than sanitised for exactly that reason.
+         */
+        self::assertArrayNotHasKey('campaign_name', $row);
+        self::assertArrayNotHasKey('ad_set_name', $row);
+        // And the figures are untouched — this boundary is about identity, never about money.
+        self::assertSame(100.0, $row['spend']);
+    }
+
+    /**
+     * The validator is what actually blocks the export, so it is what this asserts — a payload the
+     * view calls clean must be a payload the exporter will ship.
+     */
+    public function test_a_grouped_payload_passes_the_content_validator_that_blocks_exports(): void
+    {
+        $snap = $this->internalSnapshot();
+        $snap['ads_groups'] = [[
+            'key' => 'image',
+            'ads' => [
+                ['name' => 'A', 'campaign_id' => 'c-1', 'ad_set_name' => 'Retargeting', 'spend' => 1.0],
+                ['name' => 'B', 'campaign_id' => 'c-2', 'spend' => 2.0],
+            ],
+        ]];
+
+        $client = app(ClientReportView::class)->filter($snap);
+        $validator = app(ClientReportContentValidator::class);
+
+        self::assertTrue(
+            $validator->passes($client),
+            'a grouped client payload still carries internal identity: '.json_encode($validator->scan($client))
+        );
+    }
 }

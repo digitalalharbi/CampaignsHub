@@ -10,6 +10,7 @@ use App\Domains\Reports\Jobs\GenerateReportExportJob;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
+use App\Domains\Reports\Services\ExportFailureReason;
 use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Domains\Reports\Services\ReportCreativeMedia;
 use App\Domains\Reports\Services\ReportDeliveryAudienceGuard;
@@ -262,6 +263,16 @@ final class ReportController extends Controller
                     'renderer' => $e->renderer, 'renderer_version' => $e->renderer_version,
                     'template_version' => $e->template_version, 'locale' => $e->locale,
                     'layout_mode' => $e->layout_mode, 'validation_status' => $e->validation_status,
+                    /*
+                     * WHY it failed, as a code the interface translates — never the stored message.
+                     *
+                     * The raw `error` carries renderer stderr and absolute paths, and this row is
+                     * read by an operator who can act on «the renderer is off on this server» and
+                     * can do nothing with a stack trace.
+                     */
+                    'failure_reason' => $e->status === 'failed'
+                        ? ExportFailureReason::classify($e->error)
+                        : null,
                 ])->all()
                 : [],
         ];
