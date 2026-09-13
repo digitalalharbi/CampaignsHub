@@ -404,6 +404,18 @@ final class CreativeRows
                     [...Relevance::NOT_RUNNING, $to->copy()->subDays(Relevance::SERVING_WITHIN_DAYS)->toDateString()],
                 )
                 ->orderByRaw('sorted.sort_total DESC NULLS LAST')
+                /*
+                 * ENTITY-RELEVANCE-ORDERING-001 — and the same tie, in the order the library
+                 * actually opens on.
+                 *
+                 * Relevance is «is it running» then «what did it spend». A freshly connected
+                 * account answers neither: nothing has delivered, so every creative is in one
+                 * status bucket with a null spend, and the whole first page tied and fell to `id`.
+                 * The name is inserted before it for the reason given on the default arm below —
+                 * `id` is deterministic and meaningless, and a reader scanning for a creative they
+                 * know the name of had no order to scan.
+                 */
+                ->orderBy('external_creatives.name')
                 ->orderBy('external_creatives.id'),
             'oldest' => $query->orderBy('first_seen_at')->orderBy('id'),
             /*
@@ -418,8 +430,22 @@ final class CreativeRows
             default => $query
                 ->orderByRaw('external_creatives.last_active_at DESC NULLS LAST')
                 ->orderByRaw('external_creatives.last_synced_at DESC NULLS LAST')
-                // `id` last, always: the first two tie freely across a batch synced in one run, and
-                // an ordering with ties repeats and skips rows across pages.
+                /*
+                 * ENTITY-RELEVANCE-ORDERING-001 — the tie is the NORMAL case, so break it readably.
+                 *
+                 * Both keys above are facts about delivery and about syncing, and a freshly
+                 * connected account has neither: `last_active_at` is null for everything that has
+                 * never delivered, and `last_synced_at` is identical across everything one sync
+                 * batch wrote in one run. So the whole first page tied and fell through to `id` —
+                 * a UUID, which is deterministic and meaningless. The library opened in an order
+                 * nobody could predict, follow, or scan for a creative they knew the name of.
+                 *
+                 * The name goes BEFORE `id` rather than instead of it. Two creatives can share a
+                 * name and on this product routinely do — one film uploaded to two platforms
+                 * carries one name — so the name alone is not a stable sort, and an ordering with
+                 * ties repeats and skips rows across pages.
+                 */
+                ->orderBy('external_creatives.name')
                 ->orderBy('external_creatives.id'),
         };
     }

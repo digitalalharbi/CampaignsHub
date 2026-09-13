@@ -57,7 +57,20 @@ export function InvoicesPage() {
 
   // Fetch the full ledger once — summary cards + filters stay client-side.
   const q = useQuery({ queryKey: ['billing', 'invoices', 'all'], queryFn: () => listInvoices() })
-  const all = q.data ?? []
+  const all = q.data?.items ?? []
+  /*
+   * OPS-LEDGER-001 — the server bounds this ledger, and the SUMMARY is computed from what arrived.
+   *
+   * The cards below — issued, paid and outstanding — are reduced over `all`. On an account past the
+   * bound that is a figure about the most recent two hundred invoices wearing the label of the whole
+   * ledger, and «outstanding» is money somebody is owed. Understating it is the expensive direction.
+   *
+   * So when anything is held back the page says so and qualifies the cards, rather than printing a
+   * total that reads as complete. Computing the summary server-side is the better answer and is a
+   * larger change than this; what must not wait is the claim.
+   */
+  const withheld = q.data?.withheld ?? 0
+  const ledgerTotal = q.data?.total ?? all.length
   const invoices = filter === 'all' ? all : all.filter((i) => i.status === filter)
 
   const outstandingOf = (i: Invoice) => Math.max(0, Number(i.total) - Number(i.amount_paid))
@@ -87,6 +100,24 @@ export function InvoicesPage() {
           <StatCard dot tone="success" label={ar ? 'مدفوعة' : 'Paid'} value={String(summary.paid)} />
           <StatCard dot tone="warning" label={ar ? 'المتبقي' : 'Outstanding'} value={formatMoney(summary.outstanding, all[0]?.currency ?? 'SAR')} />
         </StatGrid>
+      )}
+
+      {/*
+        OPS-LEDGER-001 — said ABOVE the cards, because the cards are what it qualifies.
+        
+        «Total invoices» and «Outstanding» are reduced over the rows that arrived. Past the server's
+        bound those are figures about the most recent two hundred wearing the label of the whole
+        ledger, and understating what somebody is owed is the expensive direction to be wrong in.
+      */}
+      {withheld > 0 && (
+        <p
+          data-testid="invoices-bounded"
+          className="rounded-xl border border-warning/40 bg-warning/5 px-3 py-2 text-xs text-warning"
+        >
+          {ar
+            ? `تُعرض أحدث ${all.length} فاتورة من ${ledgerTotal} — الأرقام أعلاه تصف المعروض، لا السجل كاملًا.`
+            : `Showing the most recent ${all.length} of ${ledgerTotal} invoices — the figures above describe what is shown, not the whole ledger.`}
+        </p>
       )}
 
       <div className="flex flex-wrap gap-2">

@@ -17,8 +17,16 @@ export function TabBilling({ clientId }: { clientId: string }) {
   const quotesQ = useQuery({ queryKey: ['billing', 'quotes'], queryFn: listQuotes })
   const invoicesQ = useQuery({ queryKey: ['billing', 'invoices', 'all'], queryFn: () => listInvoices() })
 
-  const quotes = (quotesQ.data ?? []).filter((q) => q.client_workspace_id === clientId)
-  const invoices = (invoicesQ.data ?? []).filter((i) => i.client_workspace_id === clientId)
+  const quotes = (quotesQ.data?.items ?? []).filter((q) => q.client_workspace_id === clientId)
+  const invoices = (invoicesQ.data?.items ?? []).filter((i) => i.client_workspace_id === clientId)
+  /*
+   * OPS-LEDGER-001 — this client's figures are filtered from a BOUNDED fetch of every client's.
+   *
+   * Past the server's bound, a client whose invoices are older than the two hundred most recent
+   * simply does not appear in the source list, so «outstanding» here understates what they owe —
+   * and nothing on the tab would say so.
+   */
+  const ledgerBounded = (invoicesQ.data?.withheld ?? 0) > 0 || (quotesQ.data?.withheld ?? 0) > 0
   const outstanding = invoices.reduce((s, i) => s + Math.max(0, Number(i.total) - Number(i.amount_paid)), 0)
 
   if (quotesQ.isLoading || invoicesQ.isLoading) return <div className="h-40 animate-pulse rounded-xl bg-surface-secondary" />
@@ -41,6 +49,14 @@ export function TabBilling({ clientId }: { clientId: string }) {
           </div>
         ))}
       </div>
+
+      {ledgerBounded && (
+        <p data-testid="client-billing-bounded" className="rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-xs text-warning">
+          {ar
+            ? 'السجل المالي مقصور على الأحدث — قد توجد فواتير أقدم لهذا العميل غير محتسبة في الأرقام أعلاه.'
+            : 'The billing ledger is bounded to the most recent — this client may have older invoices not counted above.'}
+        </p>
+      )}
 
       {quotes.length === 0 && invoices.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-text-secondary">

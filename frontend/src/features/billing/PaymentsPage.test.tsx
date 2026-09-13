@@ -27,7 +27,7 @@ const nullPayment: Payment = {
 describe('PaymentsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(listInvoices).mockResolvedValue([invoice])
+    vi.mocked(listInvoices).mockResolvedValue({ items: [invoice], total: 1, withheld: 0 })
     vi.mocked(startPayment).mockResolvedValue(nullPayment)
   })
   afterEach(() => signOut())

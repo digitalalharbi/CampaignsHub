@@ -23,16 +23,24 @@ use Illuminate\Validation\Rule;
  */
 final class BillingController extends Controller
 {
+    /** The most rows either list returns; `meta.total` says how many there are. */
+    private const MAX_ROWS = 200;
+
     public function __construct(private readonly BillingService $billing) {}
 
     public function quotes(Request $request): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('billing.view'), 403);
 
-        return ApiResponse::success(
-            Quote::query()->latest('created_at')->limit(200)->get()->all(),
-            'Quotes.',
-        );
+        /* OPS-LEDGER-001 — the bound is real, and the response says what it left out. */
+        $query = Quote::query()->latest('created_at');
+        $total = (clone $query)->count();
+        $rows = $query->limit(self::MAX_ROWS)->get()->all();
+
+        return ApiResponse::success($rows, 'Quotes.', meta: [
+            'total' => $total,
+            'withheld' => max(0, $total - count($rows)),
+        ]);
     }
 
     public function storeQuote(Request $request): JsonResponse
@@ -84,7 +92,20 @@ final class BillingController extends Controller
             }
         }
 
-        return ApiResponse::success($query->limit(200)->get()->all(), 'Invoices.');
+        /*
+         * OPS-LEDGER-001 — counted AFTER the status filter, like the rows.
+         *
+         * An invoice list is one a customer reads to answer «have I been billed for everything»,
+         * and a silently truncated one answers it wrongly in the direction that costs them nothing
+         * to believe.
+         */
+        $total = (clone $query)->count();
+        $rows = $query->limit(self::MAX_ROWS)->get()->all();
+
+        return ApiResponse::success($rows, 'Invoices.', meta: [
+            'total' => $total,
+            'withheld' => max(0, $total - count($rows)),
+        ]);
     }
 
     public function startPayment(Request $request, Invoice $invoice): JsonResponse
