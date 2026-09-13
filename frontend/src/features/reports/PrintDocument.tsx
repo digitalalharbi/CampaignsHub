@@ -2,6 +2,8 @@ import { useEffect } from 'react'
 import type { ReportData } from './InteractiveReport'
 import { moneyExact } from '@/features/analytics/format'
 import { mixedResultsNote, type ResultPart } from './reportMetrics'
+import { brand } from '@/lib/brand'
+import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 
 /**
  * English, LTR, A4-portrait DOCUMENT rendering of a report (distinct from the RTL 16:9 slide
@@ -87,6 +89,16 @@ function Table({ head, rows }: { head: string[]; rows: (string | number)[][] }) 
       </tbody>
     </table>
   )
+}
+
+/**
+ * Has the branding chain fallen through to the platform itself?
+ *
+ * Compared against the brand's own name rather than a literal, so renaming the product in one place
+ * cannot leave this comparing against a word nobody uses any more.
+ */
+function isPlatformIdentity(name?: string | null): boolean {
+  return !name || name.trim() === brand.lockup.nameEn || name.trim() === brand.name
 }
 
 export function PrintDocument({
@@ -319,9 +331,32 @@ export function PrintDocument({
           others. On a client's report a broken icon reads as «the report failed», which is worse
           than showing no mark at all.
         */}
-        {identity?.logoUrl
-          ? <img src={identity.logoUrl} alt={identity.name} className="doc-logo" data-testid="print-document-logo" />
-          : <div className="doc-brand" data-testid="print-document-brand">{identity?.name ?? 'CampaignsHub'}</div>}
+        {identity?.logoUrl ? (
+          <img src={identity.logoUrl} alt={identity.name} className="doc-logo" data-testid="print-document-logo" />
+        ) : isPlatformIdentity(identity?.name) ? (
+          /*
+            BRAND-LOCKUP-001 — when the hierarchy reaches ITS last link, draw the mark.
+
+            `headerIdentity` resolves client → agency → CampaignsHub, so a name of «CampaignsHub»
+            here means no tenant branding was found, and this report is the product's own. Printing
+            the word where the logo belongs was the last place the identity was text pretending to
+            be a mark. A tenant's name still prints as a name: their brand is not ours to redraw.
+          */
+          <div className="doc-brand inline-flex items-center gap-2" data-testid="print-document-brand">
+            {/*
+              The MARK beside the name, not instead of it.
+
+              `printDocumentBranding.test.tsx` requires this cover to SAY «CampaignsHub» when the
+              chain falls through to the product — it is the last link of client → agency →
+              CampaignsHub and a cover with no words is not a cover. So the name stays exactly as it
+              was and gains the symbol it was standing in for.
+            */}
+            <CampaignsHubMark size={22} className="text-brand-mark" />
+            <span>{identity?.name ?? brand.lockup.nameEn}</span>
+          </div>
+        ) : (
+          <div className="doc-brand" data-testid="print-document-brand">{identity?.name ?? brand.lockup.nameEn}</div>
+        )}
         {/*
           The agency is named secondarily, never in place of the client — the same rule the shared
           link follows, so a reader moving between the link and its PDF meets one hierarchy.
