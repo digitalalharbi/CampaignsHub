@@ -99,6 +99,20 @@ final class ClientAnalyticsService
             'timeseries' => $agg->timeseries($from, $to),
             'best_campaign' => $this->pickCampaign($campaigns, $roasPrimary, true),
             'worst_campaign' => $this->pickCampaign($campaigns, $roasPrimary, false),
+            /*
+             * AGGREGATION-TRUTH-001 — WHY there is no best or worst, when there is none.
+             *
+             * `pickCampaign()` ranks campaigns that spent, and «spent» there is the CONVERTED
+             * figure. On an account whose money was never converted no campaign qualifies, both keys
+             * come back null, and a client surface simply stopped showing the two panels — with
+             * nothing to distinguish «no campaign stands out» from «we hold this money and cannot
+             * rank it in your currency».
+             *
+             * The ranking genuinely cannot be done: a ROAS or a cost per result computed from a
+             * withheld denominator is a fabricated ratio. So the reason travels instead, and the
+             * surface can say which silence this is.
+             */
+            'campaign_ranking_state' => $this->rankingState($campaigns),
         ];
     }
 
@@ -214,6 +228,32 @@ final class ClientAnalyticsService
      * @param  list<array<string,mixed>>  $campaigns
      * @return array<string,mixed>|null
      */
+    /**
+     * Why the best/worst pair is empty, when it is.
+     *
+     * `ranked` — a pick was possible. `withheld` — money exists and was never converted, so there is
+     * no comparable magnitude to rank by. `no_spend` — nothing was spent at all, which is a fact
+     * about the account rather than about our exchange rates.
+     *
+     * @param  list<array<string,mixed>>  $campaigns
+     */
+    private function rankingState(array $campaigns): string
+    {
+        foreach ($campaigns as $c) {
+            if ((float) ($c['spend'] ?? 0) > 0) {
+                return 'ranked';
+            }
+        }
+
+        foreach ($campaigns as $c) {
+            if ((int) ($c['spend_withheld_rows'] ?? 0) > 0 && (float) ($c['spend_original'] ?? 0) > 0) {
+                return 'withheld';
+            }
+        }
+
+        return 'no_spend';
+    }
+
     private function pickCampaign(array $campaigns, bool $roasPrimary, bool $best): ?array
     {
         $spending = array_values(array_filter($campaigns, fn ($c) => ($c['spend'] ?? 0) > 0));
