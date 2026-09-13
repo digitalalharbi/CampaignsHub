@@ -102,16 +102,28 @@ final class AdPlatformConnectorTest extends TestCase
         Http::assertNothingSent();
     }
 
-    /** Google Ads is the one that can look configured and not be: the developer token is separate. */
-    public function test_google_ads_is_not_configured_by_an_oauth_client_alone(): void
+    /**
+     * Google Ads IS configured by an OAuth client alone — GADS-TOKEN-SUNSET-001.
+     *
+     * This case asserted the opposite, and its name said so: the developer token was «separate», so an
+     * install holding only the OAuth pair read «awaiting credentials». Google sunset developer tokens on
+     * 2026-09-09 and transferred the access levels of approved tokens to the Google Cloud projects that
+     * had been calling with them — production access now follows the Cloud project owning the OAuth
+     * client, and no token gates anything.
+     *
+     * Inverted rather than deleted, because the claim is worth pinning in the new direction: an install
+     * with a valid OAuth client must not be told it is missing a credential Google no longer issues.
+     */
+    public function test_google_ads_is_configured_by_its_oauth_client(): void
     {
-        config()->set('ad_platforms.platforms.google.client_id', 'id');
+        config()->set('ad_platforms.platforms.google.client_id', '123456789012-abc.apps.googleusercontent.com');
         config()->set('ad_platforms.platforms.google.client_secret', 'secret');
+        config()->set('ad_platforms.platforms.google.developer_token', null);
 
         $creds = PlatformCredentials::for('google');
 
-        $this->assertFalse($creds->isConfigured());
-        $this->assertSame(['developer_token'], $creds->missing());
+        $this->assertTrue($creds->isConfigured(), 'an OAuth-configured install still reads as awaiting credentials');
+        $this->assertSame([], $creds->missing());
     }
 
     // ── The authorise URL each platform actually wants ────────────────────────────────────────

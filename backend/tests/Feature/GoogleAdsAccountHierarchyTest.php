@@ -236,9 +236,22 @@ final class GoogleAdsAccountHierarchyTest extends TestCase
         });
     }
 
-    /** The developer token stays a system credential — it identifies US, and is sent on every call. */
+    /**
+     * The token is still SENT where one is configured — GADS-TOKEN-SUNSET-001.
+     *
+     * It is no longer REQUIRED: Google sunset developer tokens on 2026-09-09 and moved the access levels
+     * onto the Cloud projects that had been calling with them. `configure()` sets only the keys the
+     * catalogue requires, so this case now sets the token itself — otherwise it would assert a header
+     * for a credential it never provided, and pass or fail for the wrong reason.
+     *
+     * Still asserted, because an install that holds a token must keep transmitting it: Google ignores
+     * the header rather than rejecting it, and silently dropping it would be an untested change to every
+     * Google call.
+     */
     public function test_the_developer_token_is_still_sent_on_every_call(): void
     {
+        config()->set('ad_platforms.platforms.google.developer_token', 'test-developer_token');
+
         $this->configure('google');
         $connection = $this->connection('google');
         Http::fake(['googleads.googleapis.com/*' => Http::response([])]);
@@ -285,27 +298,43 @@ final class GoogleAdsAccountHierarchyTest extends TestCase
             'googleads.googleapis.com/*customers:listAccessibleCustomers' => Http::response([
                 'resourceNames' => ['customers/9999999999', 'customers/3333333333'],
             ]),
-            'googleads.googleapis.com/*customers/9999999999/googleAds:searchStream' => Http::response([[
-                'results' => [
-                    ['customerClient' => [
-                        'id' => '9999999999', 'descriptiveName' => 'Agency MCC', 'manager' => true,
-                        'level' => '0', 'status' => 'ENABLED', 'currencyCode' => 'SAR', 'timeZone' => 'Asia/Riyadh',
-                    ]],
-                    ['customerClient' => [
-                        'id' => '1111111111', 'descriptiveName' => 'Client One', 'manager' => false,
-                        'level' => '1', 'status' => 'ENABLED', 'currencyCode' => 'SAR', 'timeZone' => 'Asia/Riyadh',
-                    ]],
-                    ['customerClient' => [
-                        'id' => '2222222222', 'descriptiveName' => 'Client Two', 'manager' => false,
-                        'level' => '1', 'status' => 'CANCELED', 'currencyCode' => 'AED', 'timeZone' => 'Asia/Dubai',
-                    ]],
-                ],
-            ]]),
+            /*
+             * GADS-ROOT-TYPE-001 — each root now answers WHAT IT IS before it answers what is under it.
+             *
+             * This fixture used to serve `customer_client` for every root, because the connector asked
+             * every root for a hierarchy. The owner's production connection disproved that contract: a
+             * directly held advertiser answers `403 PERMISSION_DENIED` to the manager-hierarchy query,
+             * and no account was ever discovered. So the sequence is the probe first, then the hierarchy
+             * for a manager — and the DIRECT root below serves only the probe, because asking it for a
+             * hierarchy is the defect this row removed.
+             */
+            'googleads.googleapis.com/*customers/9999999999/googleAds:searchStream' => Http::sequence()
+                ->push([['results' => [['customer' => [
+                    'id' => '9999999999', 'descriptiveName' => 'Agency MCC', 'manager' => true,
+                    'status' => 'ENABLED', 'currencyCode' => 'SAR', 'timeZone' => 'Asia/Riyadh',
+                ]]]]])
+                ->push([[
+                    'results' => [
+                        ['customerClient' => [
+                            'id' => '9999999999', 'descriptiveName' => 'Agency MCC', 'manager' => true,
+                            'level' => '0', 'status' => 'ENABLED', 'currencyCode' => 'SAR', 'timeZone' => 'Asia/Riyadh',
+                        ]],
+                        ['customerClient' => [
+                            'id' => '1111111111', 'descriptiveName' => 'Client One', 'manager' => false,
+                            'level' => '1', 'status' => 'ENABLED', 'currencyCode' => 'SAR', 'timeZone' => 'Asia/Riyadh',
+                        ]],
+                        ['customerClient' => [
+                            'id' => '2222222222', 'descriptiveName' => 'Client Two', 'manager' => false,
+                            'level' => '1', 'status' => 'CANCELED', 'currencyCode' => 'AED', 'timeZone' => 'Asia/Dubai',
+                        ]],
+                    ],
+                ]]),
+            /* A direct advertiser: its own record is the whole answer. */
             'googleads.googleapis.com/*customers/3333333333/googleAds:searchStream' => Http::response([[
                 'results' => [
-                    ['customerClient' => [
+                    ['customer' => [
                         'id' => '3333333333', 'descriptiveName' => 'Direct Account', 'manager' => false,
-                        'level' => '0', 'status' => 'ENABLED', 'currencyCode' => 'SAR', 'timeZone' => 'Asia/Riyadh',
+                        'status' => 'ENABLED', 'currencyCode' => 'SAR', 'timeZone' => 'Asia/Riyadh',
                     ]],
                 ],
             ]]),

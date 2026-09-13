@@ -38,6 +38,31 @@ final class AccountDiscovery
     public function __construct(private readonly AdvertisingConnectorRegistry $registry) {}
 
     /**
+     * Why the latest discovery produced no list — named, not guessed.
+     *
+     * GADS-STALE-PICKER-001. The reason is for the reader, so it has to separate the cases that lead to
+     * different actions. A provider that refuses THIS identity on THIS customer is not a provider whose
+     * project lacks approval, and neither is a network fault.
+     *
+     * Anything unrecognised stays `discovery_failed`. A reason invented for an error nobody has read is
+     * how a product ends up explaining the wrong thing confidently — the failure this row is named for.
+     */
+    private function classify(\Throwable $e): string
+    {
+        $said = $e->getMessage();
+
+        return match (true) {
+            str_contains($said, 'USER_PERMISSION_DENIED') => 'provider_permission_denied',
+            str_contains($said, 'CUSTOMER_NOT_ENABLED') => 'provider_customer_not_enabled',
+            str_contains($said, 'NOT_ADS_USER') => 'provider_identity_not_an_ads_user',
+            str_contains($said, 'CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION'),
+            str_contains($said, 'DEVELOPER_TOKEN_NOT_APPROVED'),
+            str_contains($said, 'ACTION_NOT_PERMITTED') => 'provider_project_not_approved',
+            default => 'discovery_failed',
+        };
+    }
+
+    /**
      * Re-read this connection's ad accounts and bring the catalogue up to date.
      *
      * @return array{discovered:int, created:int, named:int, access_lost:int}
@@ -50,7 +75,32 @@ final class AccountDiscovery
             return ['discovered' => 0, 'created' => 0, 'named' => 0, 'access_lost' => 0];
         }
 
-        $accounts = $connector->withConnection($connection)->listAdAccounts();
+        /*
+         * GADS-STALE-PICKER-001 — the outcome is recorded whichever way it goes.
+         *
+         * A refusal used to leave no trace on the connection: the exception propagated, the account rows
+         * stayed exactly as a previous permitted discovery had left them, and `ConnectionWizardState`
+         * counted them as currently selectable. That is how one screen came to say «0 ad accounts» beside
+         * «1 account available — Finish selecting accounts».
+         *
+         * The rows are still left alone — a temporary refusal must not unbind work an operator already
+         * did — so what changes is that the CONNECTION now knows the latest attempt failed, and the count
+         * of «currently available» can stop trusting rows that predate it.
+         *
+         * Rethrown, because the caller still has to handle the failure; this only stops it being silent.
+         */
+        $connection->forceFill(['last_discovery_attempted_at' => Carbon::now()])->save();
+
+        try {
+            $accounts = $connector->withConnection($connection)->listAdAccounts();
+        } catch (\Throwable $e) {
+            $connection->forceFill([
+                'discovery_blocked_reason' => $this->classify($e),
+                'last_error' => mb_substr($e->getMessage(), 0, 1000),
+            ])->save();
+
+            throw $e;
+        }
 
         $created = 0;
         $named = 0;
@@ -99,7 +149,18 @@ final class AccountDiscovery
 
         $accessLost = $this->markUnreachable($connection, $seen);
 
-        $connection->forceFill(['last_health_check_at' => Carbon::now()])->save();
+        $connection->forceFill([
+            'last_health_check_at' => Carbon::now(),
+            /*
+             * Cleared on success, which is what lets a connection recover on its own.
+             *
+             * When a provider grants the access it was withholding, the next discovery answers and the
+             * blocked state has to disappear without anybody clicking anything — otherwise the product
+             * keeps explaining a problem that has been over for a week.
+             */
+            'last_discovery_succeeded_at' => Carbon::now(),
+            'discovery_blocked_reason' => null,
+        ])->save();
 
         return [
             'discovered' => count($accounts),

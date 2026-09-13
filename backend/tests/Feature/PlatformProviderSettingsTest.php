@@ -84,8 +84,19 @@ final class PlatformProviderSettingsTest extends TestCase
         $this->assertSame(['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin', 'salla', 'zid'], $keys);
 
         $google = collect($response->json('data.providers'))->firstWhere('key', 'google');
+        /*
+         * GADS-TOKEN-SUNSET-001 — still OFFERED, no longer REQUIRED.
+         *
+         * Google sunset developer tokens on 2026-09-09 and moved the access levels onto the Cloud projects
+         * that had been calling with them, so the token gates nothing. The field survives because an
+         * install that already holds one needs somewhere to keep it and Google still accepts the header —
+         * what changed is that its absence is an ordinary state rather than «awaiting credentials».
+         */
         $this->assertContains('developer_token', array_column($google['fields'], 'key'));
-        $this->assertTrue(collect($google['fields'])->firstWhere('key', 'developer_token')['required']);
+        $this->assertFalse(
+            collect($google['fields'])->firstWhere('key', 'developer_token')['required'],
+            'a credential Google no longer issues still blocks a correctly configured install',
+        );
 
         /*
          * Snapchat asks for the PLATFORM'S app and nothing else — SNAP-ORG-001.
@@ -236,14 +247,20 @@ final class PlatformProviderSettingsTest extends TestCase
 
         $this->assertSame(ProviderSetupState::NotConfigured, $settings->state('google'));
 
+        /*
+         * The OAuth pair completes Google now — GADS-TOKEN-SUNSET-001.
+         *
+         * This walk used to stop at `AwaitingCredentials` here, missing `developer_token`, and only reach
+         * `ReadyToConnect` once a third string was typed. Access follows the Cloud project owning the OAuth
+         * client since the 2026-09-09 sunset, so the pair IS the credential set — and telling an operator
+         * otherwise sent them after something Google no longer issues.
+         *
+         * Nothing is proven yet even so: a complete form says somebody typed two strings, which is why
+         * this is ready to CONNECT rather than ready for production.
+         */
         $settings->save('google', ['client_id' => 'id', 'client_secret' => 'sec']);
-        $this->assertSame(ProviderSetupState::AwaitingCredentials, $settings->state('google'));
-        $this->assertSame(['developer_token'], $settings->missing('google'));
-
-        // Complete — but nothing has been proven yet, so it is ready to CONNECT, not ready for
-        // production. A full form says somebody typed three strings and nothing more.
-        $settings->save('google', ['developer_token' => 'dev']);
         $this->assertSame(ProviderSetupState::ReadyToConnect, $settings->state('google'));
+        $this->assertSame([], $settings->missing('google'));
 
         $settings->save('google', [], environment: 'production');
         $this->assertSame(ProviderSetupState::ReadyToConnect, $settings->state('google'));

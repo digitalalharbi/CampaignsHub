@@ -252,10 +252,31 @@ final class ProviderCatalogue
                 ProviderField::secret('client_secret', 'OAuth client secret', 'سر عميل OAuth',
                     'Same credential entry',
                     'المدخل نفسه في بيانات الاعتماد'),
+                /*
+                 * GADS-TOKEN-SUNSET-001 — OPTIONAL since Google sunset developer tokens on 2026-09-09.
+                 *
+                 * The access levels that used to belong to an approved token were transferred to the
+                 * Google Cloud projects that had been calling with it, and production access now follows
+                 * the Cloud project that owns the OAuth client. A new project applies for Explorer or
+                 * Basic from its own Google Ads API page.
+                 *
+                 * It was REQUIRED here, and the copy tied its approval to a path of its own while
+                 * claiming no call succeeds without it. Both halves are now false, and the second was
+                 * the harmful one: it sent an operator after a credential that gates nothing while the
+                 * real gate — which Cloud project owns the OAuth client — went unmentioned.
+                 *
+                 * Kept rather than deleted, and still sent: Google describes the token as ignored, not
+                 * rejected, and an install that already holds one needs somewhere to put it. Removing a
+                 * harmless header on the strength of a sunset note would be guesswork in the other
+                 * direction.
+                 */
                 ProviderField::secret('developer_token', 'Developer token', 'رمز المطوّر',
-                    'Google Ads manager account → Tools → API Center. Approved SEPARATELY from the OAuth '
-                        .'client; without it every API call is refused even though sign-in succeeds',
-                    'حساب مدير جوجل أدز ← الأدوات ← مركز الـ API. يُعتمد بشكل منفصل عن عميل OAuth؛ وبدونه تُرفض كل استدعاءات الـ API رغم نجاح تسجيل الدخول'),
+                    'Optional since 9 Sep 2026, when Google sunset developer tokens. Production access now '
+                        .'follows the Google Cloud project that owns the OAuth client — apply for Explorer or '
+                        .'Basic from that project\'s Google Ads API page. An existing token is still accepted',
+                    'اختياري منذ 9 سبتمبر 2026، حين أوقفت جوجل رموز المطوّر. صلاحية الوصول للإنتاج تتبع الآن مشروع Google Cloud '
+                        .'المالك لعميل OAuth — اطلب Explorer أو Basic من صفحة Google Ads API لذلك المشروع. والرمز القائم ما زال مقبولًا',
+                    required: false),
                 /*
                  * GADS-MCC-001 — there was a fourth field here: «معرّف الحساب المدير»
                  * (`login_customer_id`). It is gone, because it was never ours to hold.
