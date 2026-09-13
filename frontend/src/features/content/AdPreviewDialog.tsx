@@ -154,7 +154,7 @@ export function AdPreviewDialog({
          * the creative more instead of more margin, capped so it never becomes a full-screen takeover —
          * this is a quick review surface and a modal that fills the screen stops reading as one.
          */
-        className="flex h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto border-border bg-surface p-4 sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border lg:grid lg:max-w-[88vw] lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)] lg:items-start lg:gap-x-6 xl:max-w-[1320px]"
+        className="flex h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto border-border bg-surface p-4 sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border lg:grid lg:max-w-[88vw] lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)] lg:items-start lg:gap-x-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-start justify-between gap-3 lg:col-span-2 lg:mb-0">
