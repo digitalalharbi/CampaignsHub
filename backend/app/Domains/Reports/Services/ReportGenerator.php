@@ -73,6 +73,32 @@ final class ReportGenerator
             $to = Carbon::parse($scope->to);
         }
 
+        /*
+         * MONEY-USD-002 — the unit is read from the rows, not taken on trust from the stamp.
+         *
+         * `$report->currency` is a column written when the report was CREATED, before any row was
+         * read, and it was threaded through every money formatter below — the KPIs, the leaders, the
+         * platform notes, the findings, the recommendations and the executive summary prose. So one
+         * wrong stamp mislabels the whole document, and on a client link that is real money wearing
+         * the wrong unit.
+         *
+         * It is not a hypothetical. `ReportingCurrency::DEFAULT` is USD, every new report is stamped
+         * with it, and rows already normalised with `project_currency = SAR` are deliberately NOT
+         * re-normalised yet — `metrics:renormalise-currency` is still pending — so a project holding
+         * legacy rows is exactly where the stamp and the figures disagree.
+         *
+         * THE ROWS WIN, and that is a decision rather than a cleanup: the stamp is metadata, the rows
+         * are the money. Labelling figures with what they actually are does not alter what a snapshot
+         * is — the FIGURES are still frozen here at generation, which is the property a snapshot
+         * exists for. What stops is the unit being a claim nobody checked.
+         *
+         * More than one basis means no single unit is true, and the report states NONE rather than
+         * choosing one for the reader — the same refusal `readMoney` makes on a mixed scope. With no
+         * rows at all nothing contradicts the stamp, so it stands.
+         */
+        $basis = $agg->currencyBasis($from, $to);
+        $currency = $basis['bases'] === 0 ? $report->currency : $basis['currency'];
+
         $totals = $agg->totals($from, $to);
         $len = $from->diffInDays($to) + 1;
         $prevTo = $from->copy()->subDay();
@@ -152,7 +178,7 @@ final class ReportGenerator
 
         $data = [
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
-            'currency' => $report->currency,
+            'currency' => $currency,
             'objective' => $objective,
             'platform_order' => $config['platform_order'] ?? $providerList,
             'metric_set' => $config['metric_set'] ?? $this->template->metricSet($objective),
@@ -175,7 +201,7 @@ final class ReportGenerator
             'timeseries' => $agg->timeseries($from, $to),
             'platform_series' => $agg->timeseriesByProvider($from, $to),
             'platforms' => $platforms,
-            'best' => $this->leaders($lens, $platforms, $campaigns, $report->currency),
+            'best' => $this->leaders($lens, $platforms, $campaigns, $currency ?? ''),
             /*
              * CLIENT-REPORT-ENTITY-BOUNDARY-001 — empty, and computed all the same.
              *
@@ -241,7 +267,7 @@ final class ReportGenerator
             'ads_reading' => (new AdsExplanation)->explain($ads['ads'], $ads['worst'], $objective),
             'worst_creatives' => [],
             'creative_level' => 'campaign', // ad-level arrives once connectors provide it
-            'platform_notes' => $this->platformNotes($lens, $platforms, $report->currency),
+            'platform_notes' => $this->platformNotes($lens, $platforms, $currency ?? ''),
             /*
              * `funnel` stays the stage LIST, and the spend it is derived from rides beside it.
              *
@@ -281,7 +307,7 @@ final class ReportGenerator
              * is partly an artefact of which campaigns each figure counted.
              */
             'objective_performance_previous' => ClientEntityBoundary::objectivePerformance($scope->objectivePerformance()->build($prevFrom, $prevTo)),
-            'summary' => $this->executiveSummary($lens, $totals, $delta, $platforms, $campaigns, $report->currency),
+            'summary' => $this->executiveSummary($lens, $totals, $delta, $platforms, $campaigns, $currency ?? ''),
             /*
              * The professional analysis — §14.7.
              *
@@ -292,8 +318,8 @@ final class ReportGenerator
              */
             'observations' => [],
             // Structured two-column content: findings (left) + recommendations (right). Cards, not prose.
-            'findings' => $this->tagAnnotations($this->findings($lens, $totals, $delta, $platforms, $campaigns, $report->currency), 'finding', $report),
-            'recommendations' => ($recs = $this->tagAnnotations($this->recommendations($lens, $platforms, $campaigns, $report->currency), 'recommendation', $report)),
+            'findings' => $this->tagAnnotations($this->findings($lens, $totals, $delta, $platforms, $campaigns, $currency ?? ''), 'finding', $report),
+            'recommendations' => ($recs = $this->tagAnnotations($this->recommendations($lens, $platforms, $campaigns, $currency ?? ''), 'recommendation', $report)),
             // Client "Next Steps" — built ONLY from approved recommendations (action/priority/owner/due).
             'next_steps' => $this->nextSteps($recs),
             /*
