@@ -1,9 +1,9 @@
-import { Outlet } from 'react-router-dom'
+import { Link, Outlet } from 'react-router-dom'
 import {
+  Megaphone,
   BarChart3,
   FolderKanban,
   LayoutDashboard,
-  Megaphone,
   Menu,
   Moon,
   PanelLeft,
@@ -22,6 +22,7 @@ import { PortalFrame } from './PortalFrame'
 import { useSectionTitle } from './sectionTitle'
 import type { MobileTab } from './MobileTabBar'
 import { moreGroupsFrom } from './mobileTabs'
+import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 
 // `ent` = the account-entitlement nav key; an item shows only when it's in the workspace's entitled nav.
 
@@ -66,9 +67,10 @@ function NavItems({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?:
 function Brand({ collapsed }: { collapsed?: boolean }) {
   return (
     <div className={`flex items-center gap-2.5 ${collapsed ? 'justify-center' : 'px-1'}`}>
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-[var(--shadow-small)]">
-        <Megaphone size={18} />
-      </div>
+      {/* BRAND-MARK-001 — the product's symbol, where a megaphone glyph stood in for it. */}
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark" data-testid="shell-brand-mark">
+        <CampaignsHubMark size={20} />
+      </span>
       {!collapsed && (
         <span className="font-heading text-lg font-extrabold tracking-tight text-text-primary">CampaignsHub</span>
       )}
@@ -181,6 +183,22 @@ export function AppShell() {
           >
             <Menu size={19} />
           </button>
+
+          {/*
+            BRAND-MARK-001 — the identity on a PHONE.
+
+            The rail carries it on a desktop, and a phone hides the rail: this bar had a hamburger,
+            a language toggle and an avatar, and nothing at all saying what the product is. The mark
+            alone, because a wordmark beside four controls on a 390px bar is what pushes them off it.
+          */}
+          <Link
+            to="/app"
+            aria-label="CampaignsHub"
+            data-testid="mobile-brand-mark"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark lg:hidden"
+          >
+            <CampaignsHubMark size={18} />
+          </Link>
 
           {/* Command / search (visual entry point). */}
           <button className="hidden h-9 items-center gap-2 rounded-xl border border-border bg-surface-secondary px-3 text-sm text-text-muted transition-colors hover:border-border-strong sm:flex sm:w-[280px]">

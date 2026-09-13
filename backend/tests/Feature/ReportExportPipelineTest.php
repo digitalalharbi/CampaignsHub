@@ -15,6 +15,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use RuntimeException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
@@ -135,5 +136,48 @@ final class ReportExportPipelineTest extends TestCase
 
         // Legacy provenance ⇒ stale ⇒ 409 (never streamed), regardless of the file existing.
         $this->get("/api/v1/reports/download/{$export->signed_token}")->assertStatus(409);
+    }
+
+    /**
+     * BRAND-ATTRIBUTION-001 — the workbook signs itself, in the only place the format allows.
+     *
+     * A spreadsheet has nowhere to put a mark and a banner row would break every parser that reads
+     * row 1 as headers, so the product's name lives in the document properties — which a file that
+     * is saved, mailed on and reopened months later still carries. Asserted by READING the written
+     * file back, because a property the writer sets and the file does not keep is not attribution.
+     */
+    public function test_the_xlsx_carries_the_products_attribution_in_its_properties(): void
+    {
+        $report = $this->report($this->consistentData(), 'internal');
+        $report->forceFill(['name' => 'Monthly — Acme'])->save();
+
+        $bytes = app(ReportExporter::class)->render($report, 'xlsx');
+
+        $file = tempnam(sys_get_temp_dir(), 'xlsxprops').'.xlsx';
+        file_put_contents($file, $bytes);
+
+        $properties = IOFactory::load($file)->getProperties();
+
+        self::assertSame('CampaignsHub', $properties->getCreator());
+        self::assertSame('CampaignsHub', $properties->getCompany());
+        // The REPORT is still what the file is about; the product only says it made it.
+        self::assertSame('Monthly — Acme', $properties->getTitle());
+        self::assertStringContainsString('campaignshub.io', $properties->getDescription());
+
+        @unlink($file);
+    }
+
+    /**
+     * And the CSV does NOT try. The format has no metadata, and a comment line would corrupt the
+     * first row for anything that parses it — so the first line is headers and nothing else.
+     */
+    public function test_the_csv_puts_no_branding_where_a_parser_expects_headers(): void
+    {
+        $report = $this->report($this->consistentData(), 'internal');
+
+        $first = strtok(app(ReportExporter::class)->render($report, 'csv'), "\n");
+
+        self::assertStringNotContainsString('CampaignsHub', (string) $first);
+        self::assertStringNotContainsString('campaignshub.io', (string) $first);
     }
 }

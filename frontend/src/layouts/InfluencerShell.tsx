@@ -1,6 +1,7 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
+  Users,
   Handshake,
   ListChecks,
   ClipboardCheck,
@@ -8,7 +9,6 @@ import {
   Moon,
   PanelLeft,
   Sun,
-  Users,
   X,
 } from 'lucide-react'
 import { AccountMenu } from '@/features/account/UserMenu'
@@ -17,6 +17,7 @@ import { fetchMemberships } from '@/features/auth/memberships'
 import { useUi } from '@/stores/ui'
 import { PortalFrame } from './PortalFrame'
 import type { MobileTab } from './MobileTabBar'
+import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 
 /**
  * The influencers & UGC portal's shell (ADR 0002, INFL-001).
@@ -99,9 +100,10 @@ function InfluencerIdentity({ collapsed }: { collapsed?: boolean }) {
 
   return (
     <div className={`flex items-center gap-2.5 ${collapsed ? 'justify-center' : 'px-1'}`}>
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-[var(--shadow-small)]">
-        <Users size={18} />
-      </div>
+      {/* The platform's mark; the NAME beside it stays the workspace's, as in every other shell. */}
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark" data-testid="shell-brand-mark">
+        <CampaignsHubMark size={20} />
+      </span>
       {!collapsed && (
         <div className="min-w-0">
           <span className="block truncate font-heading text-[15px] font-extrabold tracking-tight text-text-primary">
@@ -182,6 +184,22 @@ export function InfluencerShell() {
           >
             <Menu size={19} />
           </button>
+
+          {/*
+            BRAND-MARK-001 — the identity on a PHONE.
+
+            The rail carries it on a desktop, and a phone hides the rail: this bar had a hamburger,
+            a language toggle and an avatar, and nothing at all saying what the product is. The mark
+            alone, because a wordmark beside four controls on a 390px bar is what pushes them off it.
+          */}
+          <Link
+            to="/influencer"
+            aria-label="CampaignsHub"
+            data-testid="mobile-brand-mark"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark lg:hidden"
+          >
+            <CampaignsHubMark size={18} />
+          </Link>
 
           <div className="ms-auto flex items-center gap-1.5">
             <NotificationCenter />

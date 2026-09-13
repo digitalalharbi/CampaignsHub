@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom'
+import { Link, Outlet } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Building2,
@@ -9,10 +9,10 @@ import {
   Moon,
   PanelLeft,
   Sun,
-  Users,
   X,
 } from 'lucide-react'
 import { AccountMenu } from '@/features/account/UserMenu'
+import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { fetchMemberships } from '@/features/auth/memberships'
 import { useUi } from '@/stores/ui'
@@ -96,9 +96,15 @@ function AgencyIdentity({ collapsed }: { collapsed?: boolean }) {
 
   return (
     <div className={`flex items-center gap-2.5 ${collapsed ? 'justify-center' : 'px-1'}`}>
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-[var(--shadow-small)]">
-        <Users size={18} />
-      </div>
+      {/*
+        BRAND-MARK-001 — the product's own symbol, where a generic «people» glyph used to sit.
+        The NAME beside it stays the tenant's: this is the agency's portal, and replacing their name
+        with «CampaignsHub» would take their identity out of their own workspace. The platform is
+        the mark; the workspace is the words. That is the same hierarchy the reports follow.
+      */}
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark" data-testid="shell-brand-mark">
+        <CampaignsHubMark size={20} />
+      </span>
       {!collapsed && (
         <div className="min-w-0">
           <span className="block truncate font-heading text-[15px] font-extrabold tracking-tight text-text-primary">
@@ -189,6 +195,22 @@ export function AgencyShell() {
           >
             <Menu size={19} />
           </button>
+
+          {/*
+            BRAND-MARK-001 — the identity on a PHONE.
+
+            The rail carries it on a desktop, and a phone hides the rail: this bar had a hamburger,
+            a language toggle and an avatar, and nothing at all saying what the product is. The mark
+            alone, because a wordmark beside four controls on a 390px bar is what pushes them off it.
+          */}
+          <Link
+            to="/agency"
+            aria-label="CampaignsHub"
+            data-testid="mobile-brand-mark"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark lg:hidden"
+          >
+            <CampaignsHubMark size={18} />
+          </Link>
 
           <div className="ms-auto flex items-center gap-1.5">
             <NotificationCenter />

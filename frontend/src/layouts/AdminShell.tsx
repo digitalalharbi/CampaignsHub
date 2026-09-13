@@ -1,11 +1,10 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet } from 'react-router-dom'
 import {
   ClipboardCheck,
   CreditCard,
   ShieldAlert,
   ScrollText,
   Settings,
-  ShieldCheck,
   Building2,
   LayoutDashboard,
   Menu,
@@ -22,6 +21,7 @@ import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { useUi } from '@/stores/ui'
 import { PortalFrame } from './PortalFrame'
 import type { MobileMoreGroup, MobileTab } from './MobileTabBar'
+import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 
 /**
  * The platform owner's shell (ADR 0002, ADMIN-001).
@@ -182,9 +182,16 @@ function PlatformIdentity({ collapsed }: { collapsed?: boolean }) {
 
   return (
     <div className={`flex items-center gap-2.5 ${collapsed ? 'justify-center' : 'px-1'}`}>
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 text-white shadow-[var(--shadow-small)]">
-        <ShieldCheck size={18} />
-      </div>
+      {/*
+        The canonical mark, in the slate container this shell chose ON PURPOSE.
+
+        The distinction admin needs is «this is not a tenant workspace», and the file says so a few
+        lines up. That distinction belongs to the CONTAINER, not to a second logo: the geometry stays
+        the product's one mark and inherits white from the tile, exactly as it does in dark mode.
+      */}
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 text-white shadow-[var(--shadow-small)]" data-testid="shell-brand-mark">
+        <CampaignsHubMark size={20} />
+      </span>
       {!collapsed && (
         <div className="min-w-0">
           <span className="block truncate font-heading text-[15px] font-extrabold tracking-tight text-text-primary">
@@ -265,6 +272,22 @@ export function AdminShell() {
           >
             <Menu size={19} />
           </button>
+
+          {/*
+            BRAND-MARK-001 — the identity on a PHONE.
+
+            The rail carries it on a desktop, and a phone hides the rail: this bar had a hamburger,
+            a language toggle and an avatar, and nothing at all saying what the product is. The mark
+            alone, because a wordmark beside four controls on a 390px bar is what pushes them off it.
+          */}
+          <Link
+            to="/admin"
+            aria-label="CampaignsHub"
+            data-testid="mobile-brand-mark"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark lg:hidden"
+          >
+            <CampaignsHubMark size={18} />
+          </Link>
 
           <div className="ms-auto flex items-center gap-1.5">
             <NotificationCenter />

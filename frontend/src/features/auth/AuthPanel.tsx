@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BarChart3, Bell, Check, ChevronDown, FileText, LayoutDashboard, Megaphone } from 'lucide-react'
+import { BarChart3, Bell, Check, ChevronDown, FileText, LayoutDashboard } from 'lucide-react'
+import { CampaignsHubLogo } from '@/components/brand/CampaignsHubLogo'
 import type { Locale } from '@/features/marketing/homeCopy'
 
 /**
@@ -236,11 +237,14 @@ export function AuthPanel({ locale, portal }: { locale: Locale; portal: AuthPort
       <div className="relative w-full max-w-[min(35rem,100%)] ms-auto">
         {/* A real way back to the site the visitor came from. */}
         <Link to="/" className="flex w-fit items-center gap-2.5">
-          <span className="flex h-[clamp(2.25rem,3vw,2.75rem)] w-[clamp(2.25rem,3vw,2.75rem)] items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-[var(--shadow-small)]">
-            <Megaphone size={18} />
-          </span>
+          {/*
+            BRAND-LOCKUP-001 — the real mark, not a megaphone in a gradient box.
+            `compact` on purpose: the line under the name here is the PRODUCT tagline, which is
+            approved copy for this surface, and the lockup's own line would replace it with the
+            logo's words. The two are different things and this keeps them that way.
+          */}
+          <CampaignsHubLogo locale={locale === 'ar' ? 'ar' : 'en'} variant="compact" size="md" />
           <span className="min-w-0">
-            <span className="block font-heading text-[clamp(1.0625rem,1.35vw,1.25rem)] font-extrabold leading-tight tracking-tight text-text-primary">CampaignsHub</span>
             <span className="block text-[clamp(0.6875rem,0.85vw,0.75rem)] text-text-muted">{c.tagline}</span>
           </span>
         </Link>
