@@ -1,4 +1,4 @@
-import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
+import { formatMoneyReading, readMoney } from '@/lib/money/contract'
 import { formatMetric } from './metrics'
 import type { CreativeMetrics } from './api'
 import type { Locale } from '@/stores/ui'
@@ -44,7 +44,7 @@ export function creativeMoney(
     return { text: formatMetric({ kind: 'no_data' }, key, locale, currency), note: null }
   }
 
-  const reading = readMoney(metrics as MoneyTotals, key, currency, ar)
+  const reading = readMoney(metrics, key, currency, ar)
 
   return {
     text: formatMoneyReading(reading, (n, c) =>
