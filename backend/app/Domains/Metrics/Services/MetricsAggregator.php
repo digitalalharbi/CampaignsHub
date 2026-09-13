@@ -502,6 +502,41 @@ final class MetricsAggregator
      *
      * @return array<string, mixed> base sums + derived KPIs + money-truth and coverage annotations
      */
+    /**
+     * What unit these rows' CONVERTED figures are actually in — three answers, not one.
+     *
+     * MONEY-USD-002. Every caller that needed this asked
+     * `->whereNotNull('project_currency')->value('project_currency')`, which takes the FIRST row and
+     * therefore cannot distinguish «these rows are all SAR» from «some are SAR and some are USD». It
+     * silently picks one of several and states it as the unit, which is the same failure as a wrong
+     * label: a total in two currencies is not a figure in either.
+     *
+     * `ReportingCurrency::DEFAULT` is USD and rows already normalised with `project_currency = SAR`
+     * are deliberately NOT re-normalised yet — `metrics:renormalise-currency` is still pending — so a
+     * project holding legacy rows is exactly where a stamped currency and its own figures disagree.
+     *
+     * Returns the currency when the rows agree on one, and null when there are no rows OR more than
+     * one basis. A caller that must print a unit has to treat null as «cannot be stated», the way
+     * `readMoney` treats a mixed scope, rather than choosing for the reader.
+     *
+     * @return array{currency: string|null, bases: int}
+     */
+    public function currencyBasis(Carbon $from, Carbon $to): array
+    {
+        $row = $this->base($from, $to)
+            ->whereNotNull('project_currency')
+            ->selectRaw('COUNT(DISTINCT project_currency) AS bases')
+            ->selectRaw('MIN(project_currency) AS only_currency')
+            ->first();
+
+        $bases = (int) ($row->bases ?? 0);
+
+        return [
+            'currency' => $bases === 1 ? (string) $row->only_currency : null,
+            'bases' => $bases,
+        ];
+    }
+
     public function totals(Carbon $from, Carbon $to): array
     {
         $select = array_merge(self::PIVOT, self::MONEY_TRUTH);
