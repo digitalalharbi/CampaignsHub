@@ -102,7 +102,7 @@ function AgencyIdentity({ collapsed }: { collapsed?: boolean }) {
         with «CampaignsHub» would take their identity out of their own workspace. The platform is
         the mark; the workspace is the words. That is the same hierarchy the reports follow.
       */}
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark" data-testid="shell-brand-mark">
         <CampaignsHubMark size={20} />
       </span>
       {!collapsed && (

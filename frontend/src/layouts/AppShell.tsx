@@ -68,7 +68,7 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
   return (
     <div className={`flex items-center gap-2.5 ${collapsed ? 'justify-center' : 'px-1'}`}>
       {/* BRAND-MARK-001 — the product's symbol, where a megaphone glyph stood in for it. */}
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark" data-testid="shell-brand-mark">
         <CampaignsHubMark size={20} />
       </span>
       {!collapsed && (

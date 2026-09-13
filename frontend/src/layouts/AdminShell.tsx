@@ -189,7 +189,7 @@ function PlatformIdentity({ collapsed }: { collapsed?: boolean }) {
         lines up. That distinction belongs to the CONTAINER, not to a second logo: the geometry stays
         the product's one mark and inherits white from the tile, exactly as it does in dark mode.
       */}
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 text-white shadow-[var(--shadow-small)]">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 text-white shadow-[var(--shadow-small)]" data-testid="shell-brand-mark">
         <CampaignsHubMark size={20} />
       </span>
       {!collapsed && (

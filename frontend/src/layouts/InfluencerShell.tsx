@@ -101,7 +101,7 @@ function InfluencerIdentity({ collapsed }: { collapsed?: boolean }) {
   return (
     <div className={`flex items-center gap-2.5 ${collapsed ? 'justify-center' : 'px-1'}`}>
       {/* The platform's mark; the NAME beside it stays the workspace's, as in every other shell. */}
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark" data-testid="shell-brand-mark">
         <CampaignsHubMark size={20} />
       </span>
       {!collapsed && (
