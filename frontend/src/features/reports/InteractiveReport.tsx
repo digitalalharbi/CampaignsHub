@@ -314,6 +314,7 @@ export function SlideBody({ slide, data, meta }: { slide: Slide; data: ReportDat
     case 'objective_performance': return <ObjectiveSplitSlide data={data} />
     case 'funnel': return <FunnelSlide data={data} />
     case 'comparison': return <PeriodComparisonSlide data={data} />
+    case 'campaigns': return <CampaignsSlide data={data} />
     case 'observations': return <ObservationsSlide data={data} />
     /*
      * CLIENT-DIAGNOSTIC-SEPARATION-001 — the data-quality slide is the OPERATOR's.
@@ -1486,6 +1487,58 @@ const NOTE_TONE: Record<string, { border: string; text: string; Icon: typeof Tri
  * nothing alarming in it is a result, and filling the space with generic advice would teach a
  * reader that this section is decoration.
  */
+/**
+ * REPORT-DETAIL-DEPTH-001 — campaign analysis, for the report that is allowed to have it.
+ *
+ * The owner's depth contract asks a detailed report for campaign analysis by name. It reaches this
+ * component only for an INTERNAL report: the generator does not produce the roster for any other
+ * audience and `ClientReportView` drops this whole section, so a client never meets a heading over
+ * a list that was removed for their benefit.
+ *
+ * Sorted by spend, because the operator's first question about a roster is where the money went.
+ */
+function CampaignsSlide({ data }: { data: ReportData }) {
+  const c = data.currency
+  const rows = [...(data.campaigns ?? [])].sort((a, b) => Number(b.spend ?? 0) - Number(a.spend ?? 0))
+
+  return (
+    <div>
+      <Title sub="أين ذهب الإنفاق، وما الذي عاد منه — نسخة الفريق الداخلية">تحليل الحملات</Title>
+      {rows.length === 0 ? (
+        <p className="rounded-2xl border border-border bg-surface-secondary p-6 text-center text-sm text-text-secondary">
+          لا توجد حملات بأرقام في هذا النطاق.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="report-campaigns-table">
+            <thead>
+              <tr className="border-b border-border text-start text-xs text-text-muted">
+                <th className="p-2 text-start font-semibold">الحملة</th>
+                <th className="p-2 text-start font-semibold">المنصة</th>
+                <th className="p-2 text-end font-semibold">الإنفاق</th>
+                <th className="p-2 text-end font-semibold">النتائج</th>
+                <th className="p-2 text-end font-semibold">تكلفة النتيجة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={String(r.campaign_id ?? r.campaign_name ?? i)} className="border-b border-border/60">
+                  <td className="p-2">{String(r.campaign_name ?? '—')}</td>
+                  <td className="p-2">{r.provider ? providerLabel(String(r.provider), 'ar') : '—'}</td>
+                  {/* tnum so the column reads as a column — TABLE-NUMERIC-ALIGNMENT-001. */}
+                  <td className="tnum p-2 text-end">{money(Number(r.spend ?? 0), c)}</td>
+                  <td className="tnum p-2 text-end">{r.conversions == null ? '—' : num(Number(r.conversions))}</td>
+                  <td className="tnum p-2 text-end">{r.cpa == null ? '—' : money(Number(r.cpa), c)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ObservationsSlide({ data }: { data: ReportData }) {
   const notes = data.observations ?? []
 

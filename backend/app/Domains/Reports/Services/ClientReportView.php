@@ -77,6 +77,19 @@ final class ClientReportView
          * is why a client PDF failed for some reports and not others — a report with no groups has
          * nothing to leak. One rule applied to both lists, so a third list cannot quietly opt out.
          */
+        /*
+         * The campaign SECTION goes with the campaign DATA.
+         *
+         * The roster below is emptied for a client, and a heading over an empty list reads as a
+         * report that failed to load rather than as a boundary being kept. One rule removes both.
+         */
+        if (! empty($out['slides']) && is_array($out['slides'])) {
+            $out['slides'] = array_values(array_filter(
+                $out['slides'],
+                static fn ($s): bool => ($s['type'] ?? '') !== 'campaigns',
+            ));
+        }
+
         if (! empty($out['ads_groups']) && is_array($out['ads_groups'])) {
             $out['ads_groups'] = array_map(function ($group) {
                 if (is_array($group) && ! empty($group['ads']) && is_array($group['ads'])) {
