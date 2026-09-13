@@ -18,6 +18,7 @@ import { useUi } from '@/stores/ui'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 import { CANONICAL_CURRENCY } from '@/lib/money/contract'
 import { MetricTable } from '@/components/ui/MetricTable'
+import { creativeMoney } from './creativeMoney'
 import { Num } from '@/components/ui/Num'
 
 /**
@@ -656,7 +657,18 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
               rows={data.by_platform.map((row) => [
                 providerLabel(row.provider, locale),
                 ...['spend', 'impressions', 'clicks', 'conversions'].map((k) => (
-                  <Num key={k}>{formatMetric(metricState(row.metrics, k), k, locale, currency)}</Num>
+                  <Num key={k}>{/*
+                    CONTENT-SPEND-ALWAYS-001 — money through the canonical reader here too.
+                    
+                    `metricState` reads the CONVERTED column only, so a withheld spend rendered as
+                    «No data» on the very page the card links to. The card, the table and the popup
+                    all read `creativeMoney`; this one did not, so the same creative could say
+                    «412.50 USD» in the library and «No data» one click later. Counts keep
+                    `metricState`, which is right for them.
+                  */}
+                  {k === 'spend'
+                    ? creativeMoney(row.metrics as never, 'spend', currency, locale).text
+                    : formatMetric(metricState(row.metrics, k), k, locale, currency)}</Num>
                 )),
                 /*
                   CONTENT-SOURCE-LABEL-001 — «where did this row come from», in the reader's words

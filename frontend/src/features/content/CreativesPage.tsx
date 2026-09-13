@@ -1531,44 +1531,67 @@ function CreativeGridCard({
           ) : (
             <CardEmptyReason availability={availability} locale={locale} />
           )
-        ) : creative.headline_metrics.length === 0 ? (
-          /*
-             CONTENT-KPI-EMPTY-STATE-001 — «it ran and we cannot headline it» is its OWN sentence.
-             
-             This branch used to share the one above, and that was a false statement. A creative with
-             a metrics object HAS figures — the platform answered for it — so printing
-             «لم يعمل خلال هذه الفترة» over it tells the operator to leave alone a creative that is
-             actually running. `metrics_availability` cannot answer this either: it records what
-             happened to the REQUEST, and the request succeeded.
-             
-             Still not an empty grid: mapping over an empty list would render a `<dl>` with nothing
-             in it, which reads as a broken card rather than as a true statement.
-          */
-          <EmptyReasonPanel reason={noDisplayableMetrics(locale)} />
         ) : (
-          /* The creative's OWN headline metrics — chosen by its objective, so an awareness video is
-             never asked for a cost per order it was not bought to produce. */
-          <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-            {creative.headline_metrics.slice(0, 4).map((key) => (
-              <div key={key} className="flex flex-col">
-                <dt className="text-text-secondary">{metricLabel(key, locale)}</dt>
+          /*
+             CONTENT-SPEND-ALWAYS-001 — Spend is an operational fact, not an objective's opinion.
+             
+             This grid used to be `headline_metrics.slice(0, 4)` and nothing else. `headline_metrics`
+             is the server's answer to «what is this creative JUDGED on», which is an objective
+             question — an awareness video is headlined on reach and view rate, a traffic ad on
+             clicks and CPC — so Spend appeared for some objectives and simply vanished for others,
+             on a card sitting beside a table that renders Spend explicitly. The money reader handled
+             it correctly the whole time; nobody asked it.
+             
+             So Spend is FIXED and first, and the objective's own metrics follow it. The card stays
+             compact: one fixed figure and three chosen ones, not seven.
+             
+             «It ran and we cannot headline it» keeps its sentence — CONTENT-KPI-EMPTY-STATE-001 —
+             but it is no longer a reason to withhold the price. A creative the platform priced and
+             could not headline is still a creative somebody spent money on.
+          */
+          <div data-testid="creative-card-metrics" className="flex flex-col gap-1">
+            <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+              <div className="flex flex-col">
+                <dt className="text-text-secondary">{metricLabel('spend', locale)}</dt>
                 <dd className="tabular-nums text-text-primary">
-                  <Num>{/*
-                    * CONTENT-MONEY-VISIBLE-001 — money through the canonical reader, everything
-                    * else through `metricState`.
-                    *
-                    * `metricState` reads the CONVERTED column only, so a withheld spend rendered as
-                    * «No data» — on production that is every Snapchat creative, because the account
-                    * spends USD and no USD→SAR rate exists. Counts and ratios keep the old path,
-                    * which is correct for them: it already tells a measured zero from «not sent».
-                    */}
-                  {key === 'spend' || key === 'revenue'
-                    ? creativeMoney(creative.metrics, key, currency, locale).text
-                    : formatMetric(metricState(creative.metrics, key), key, locale, currency)}</Num>
+                  {/*
+                    Through `creativeMoney` — the canonical reader the table, the popup, Content
+                    Analytics and the report all use, so the six surfaces reconcile on this figure by
+                    construction rather than by four of them agreeing.
+                    
+                    It already knows the four states this contract names: a converted figure in the
+                    reporting currency; the ORIGINAL amount and currency when no rate exists (every
+                    Snapchat creative on this account); a reported zero as zero; and an unreported
+                    spend as «—» rather than as a zero somebody invented.
+                  */}
+                  <Num>{creativeMoney(creative.metrics, 'spend', currency, locale).text}</Num>
                 </dd>
               </div>
-            ))}
-          </dl>
+
+              {creative.headline_metrics
+                .filter((key) => key !== 'spend')
+                .slice(0, 3)
+                .map((key) => (
+                  <div key={key} className="flex flex-col">
+                    <dt className="text-text-secondary">{metricLabel(key, locale)}</dt>
+                    <dd className="tabular-nums text-text-primary">
+                      <Num>{/*
+                        * CONTENT-MONEY-VISIBLE-001 — money through the canonical reader, everything
+                        * else through `metricState`. Counts and ratios keep that path, which is
+                        * right for them: it already tells a measured zero from «not sent».
+                        */}
+                      {key === 'revenue'
+                        ? creativeMoney(creative.metrics, key, currency, locale).text
+                        : formatMetric(metricState(creative.metrics, key), key, locale, currency)}</Num>
+                    </dd>
+                  </div>
+                ))}
+            </dl>
+
+            {creative.headline_metrics.length === 0 && (
+              <EmptyReasonPanel reason={noDisplayableMetrics(locale)} />
+            )}
+          </div>
         )}
 
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
