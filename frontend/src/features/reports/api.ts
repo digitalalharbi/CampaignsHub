@@ -16,6 +16,13 @@ export interface ReportExportRow {
   status: string
   size: number | null
   token: string | null
+  /**
+   * REPORT-EXPORT-FUNCTIONAL-001 — WHY a failed export failed, as a code this interface translates.
+   *
+   * Never the renderer's own message: that carries stderr, binary names and absolute server paths.
+   * Null while an export is healthy or still running.
+   */
+  failure_reason: string | null
 }
 export interface ReportRow {
   id: string
