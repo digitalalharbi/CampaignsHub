@@ -46,6 +46,8 @@ const COPY = {
     subtitle: 'اختر ما يغطيه هذا التقرير. كل ما لا تختاره يبقى بلا تحديد — أي كل المشروع.',
     covers: 'ما سيغطيه هذا التقرير',
     ranInPeriod: 'مرتّبة حسب ما عمل خلال فترة التقرير — الحالة اليوم لا تقرّر ما إذا كانت الحملة قد عملت وقتها.',
+    ranGroup: 'عملت في هذه الفترة',
+    noActivityGroup: 'لم تُسجّل نشاطًا في هذه الفترة',
     coversAll: 'لم تُحدَّد أي فلترة — سيغطي التقرير المشروع كاملًا خلال فترته.',
     axisCount: (n: number) => `${n} محدَّد`,
     platforms: 'المنصات',
@@ -86,6 +88,8 @@ const COPY = {
     title: 'Report scope',
     covers: 'What this report will cover',
     ranInPeriod: 'Ordered by what ran during the report’s period — today’s status does not decide whether a campaign ran then.',
+    ranGroup: 'Ran in this period',
+    noActivityGroup: 'No activity recorded in this period',
     coversAll: 'Nothing is narrowed — the report covers the whole project for its period.',
     axisCount: (n: number) => `${n} selected`,
     subtitle: 'Choose what this report covers. Anything you leave alone stays unbounded — the whole project.',
@@ -259,8 +263,29 @@ export function ReportScopePicker({
 
     const ordered = orderByReportability(rows, period)
 
-    return ordered.map((c) => ({ id: c.campaign_id, label: c.name }))
-  }, [options.data, period.to])
+    /*
+     * REPORT-SCOPE-SELECTION-001 §B — the ordering's boundary, made visible.
+     *
+     * Ordering by reportability told an operator nothing they could see: scrolling 120 rows, «did
+     * not run in this period» and «further down the alphabet» look identical, and that distinction
+     * is the entire reason the order is not alphabetical. The heading decides EMPHASIS, never
+     * membership — nothing is filtered out, exactly as the ordering promised.
+     *
+     * Through `Option.group`, which `MultiSelectField` already renders as a header. A second
+     * grouping mechanism here would be a second opinion about what a heading is.
+     *
+     * No period asked about means NO CLAIM — not «did not run». That is the same rule
+     * `orderByReportability` follows when it returns the list untouched, and the reason it is a rule
+     * is that the absence of a question is not an answer.
+     */
+    const asked = Boolean(period.from && period.to)
+
+    return ordered.map((c) => ({
+      id: c.campaign_id,
+      label: c.name,
+      group: asked ? (c.last_active_on === null ? t.noActivityGroup : t.ranGroup) : undefined,
+    }))
+  }, [options.data, period.from, period.to, t])
 
   if (options.isLoading) return <Skeleton className="h-40 w-full" />
   if (options.isError) {
@@ -495,7 +520,15 @@ function ScopeSelect({
    * written long before this change caught it, which is the whole reason it was written.
    */
   note?: string
-  items: Array<{ id: string; label: string }>
+  /**
+   * `group` is optional and MEANS «no claim» when absent — see `campaignItems`.
+   *
+   * Carried on the item rather than computed here, because only the caller knows which axis has an
+   * activity answer and which does not: the server's own axis SEARCH returns `{id, name}` and says
+   * nothing about the window, so a searched row stays ungrouped rather than being filed under
+   * «recorded no activity» on the strength of a question nobody asked.
+   */
+  items: Array<{ id: string; label: string; group?: string }>
   selected: string[]
   onChange: (next: string[]) => void
   truncated?: boolean
@@ -535,7 +568,15 @@ function ScopeSelect({
    * so an operator who picks an ad set by search and then clears the box would watch their own
    * selection turn into a UUID.
    */
-  const offered = found === null ? items : found.map((r) => ({ id: r.id, label: r.name }))
+  /*
+   * A SEARCHED row carries no group, and that is the honest shape.
+   *
+   * `searchAxis` answers «which rows match this term», not «which ran in the report's window», so
+   * filing its results under «recorded no activity» would print an answer to a question the server
+   * was never asked. They render ungrouped, beside the grouped page list they replace.
+   */
+  const offered: Array<{ id: string; label: string; group?: string }> =
+    found === null ? items : found.map((r) => ({ id: r.id, label: r.name }))
 
   /*
    * Every name this control has ever shown, kept for as long as the picker is open.
@@ -602,7 +643,7 @@ function ScopeSelect({
         label=""
         value={selected}
         onChange={onChange}
-        options={options.map((i) => ({ value: i.id, label: i.label }))}
+        options={options.map((i) => ({ value: i.id, label: i.label, group: i.group }))}
         /* Typed into the box, answered by the server — see the note on `axis`. */
         onSearchChange={axis === undefined ? undefined : setTerm}
         /*
