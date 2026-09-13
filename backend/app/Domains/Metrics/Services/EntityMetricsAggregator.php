@@ -157,16 +157,49 @@ final class EntityMetricsAggregator
 
         $named = $entityType === EntityDailyMetric::AD
             ? ExternalAd::withoutGlobalScopes()->whereIn('id', $ids)
-                ->get(['id', 'name', 'status', 'external_id', 'external_ad_set_id', 'external_campaign_id'])
+                ->get(['id', 'name', 'status', 'external_id', 'external_ad_set_id', 'external_campaign_id', 'unified_campaign_id'])
             : ExternalAdSet::withoutGlobalScopes()->whereIn('id', $ids)
-                ->get(['id', 'name', 'status', 'external_id', 'external_campaign_id']);
+                ->get(['id', 'name', 'status', 'external_id', 'external_campaign_id', 'unified_campaign_id']);
 
         $byId = $named->keyBy(static fn ($m): string => (string) $m->getKey());
 
-        return array_map(static function (array $row) use ($byId): array {
-            $entity = $byId->get((string) $row['entity_id']);
+        /*
+         * OBJECTIVE-ANALYTICS-DEPTH-001 — the row says what it was bought FOR.
+         *
+         * Without this the ad-set and ad tables render one fixed column set for every row whatever its
+         * campaign was for: a sales ad set shown frequency and CPM and denied ROAS, an awareness ad set
+         * shown a cost per order it was never bought to produce. `ObjectiveFamily::headlineMetrics()`
+         * exists to prevent exactly that, and it could not reach this grain because the rows carried no
+         * objective to select on.
+         *
+         * From `unified_campaigns`, through the entity's own `unified_campaign_id` — NOT
+         * `external_campaigns.objective`. Both tables carry the column; the external one is what the
+         * provider said, and the two diverge the moment an operator corrects a misclassification, which
+         * is the correction the whole objective family is built to honour.
+         *
+         * One query for the whole page, keyed in memory: a lookup per row would make an ad table's cost
+         * grow with its own length, and an ad table is the longest one in the product.
+         */
+        $objectives = UnifiedCampaign::withoutGlobalScopes()
+            ->whereIn('id', $named->pluck('unified_campaign_id')->filter()->unique()->values()->all())
+            ->pluck('objective', 'id');
 
-            return [...$row, 'name' => $entity?->name, 'status' => $entity?->status];
+        return array_map(static function (array $row) use ($byId, $objectives): array {
+            $entity = $byId->get((string) $row['entity_id']);
+            $campaignId = $entity?->unified_campaign_id;
+
+            return [
+                ...$row,
+                'name' => $entity?->name,
+                'status' => $entity?->status,
+                /*
+                 * Null where the entity is not linked to a unified campaign. Unlinked is «no answer»,
+                 * not «unknown objective»: a caller deciding a column set has to be able to tell the
+                 * two apart, because `unknown` IS a family with its own metrics and this is the absence
+                 * of a question rather than an answer to it.
+                 */
+                'objective' => $campaignId === null ? null : ($objectives[$campaignId] ?? null),
+            ];
         }, $rows);
     }
 
