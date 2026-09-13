@@ -196,6 +196,8 @@ export function ReportsPage() {
             variant="secondary"
             disabled={!currentProjectId}
             title={!currentProjectId ? (ar ? 'اختر مشروعًا أولًا' : 'Choose a project first') : undefined}
+            /* Addressed by the builder's browser acceptance, which must not depend on the label's language. */
+            data-testid="open-report-builder"
             onClick={() => setBuilderOpen(true)}
           >
             <Plus size={18} /> {ar ? 'تقرير محفوظ' : 'Saved report'}
@@ -752,6 +754,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
             ))}
           </div>
         </Field>
+        <div data-testid="builder-audience">
         <SelectField
           label={ar ? 'هذا التقرير موجّه إلى' : 'This report is for'}
           value={audience}
@@ -762,6 +765,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
           onRetry={() => audiences.refetch()}
           clearable={false}
         />
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={ar ? 'من' : 'From'} htmlFor="rb-from"><DateField id="rb-from" value={from} onChange={setFrom} /></Field>
           <Field label={ar ? 'إلى' : 'To'} htmlFor="rb-to"><DateField id="rb-to" value={to} onChange={setTo} /></Field>

@@ -199,6 +199,34 @@ final class DemoAnalyticsSeeder extends Seeder
         }
 
         $upsert->handle($metrics);
+
+        /*
+         * One campaign that exists and never ran — REPORT-SCOPE-SELECTION-001 §B.
+         *
+         * Every campaign above reports metrics on every day of the window, so the demo could not show
+         * the state an operator meets constantly: a campaign created, budgeted and not yet launched.
+         * The report builder groups its campaign list by what ran in the report's own period, and with
+         * no such campaign the «recorded no activity» heading was unreachable — so the grouping could
+         * not be exercised in a browser on real seeded data, which is the evidence a visible UX change
+         * owes.
+         *
+         * Deliberately NOT added to `self::CAMPAIGNS`: that list divides `total_budget` by its own
+         * count, so appending to it would move every other campaign's budget and shift figures this
+         * seed is the fixture for. It carries its own budget and no metrics at all, which is what makes
+         * it «did not run» in every window rather than only in some.
+         */
+        UnifiedCampaign::firstOrCreate(
+            ['project_id' => $project->id, 'name' => 'حملة الإطلاق — لم تُشغَّل بعد'],
+            [
+                'client_workspace_id' => $ws->id,
+                'objective' => 'sales',
+                'status' => 'draft',
+                'total_budget' => 15000,
+                'budget_currency' => self::PROJECT_CURRENCY,
+                'meta' => ['is_demo' => true, 'primary_platform' => 'meta'],
+            ],
+        );
+
         app(TenantContext::class)->forget();
     }
 

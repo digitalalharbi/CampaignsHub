@@ -195,6 +195,14 @@ export function SelectField({
                       key={opt.value}
                       id={`${listId}-opt-${i}`}
                       role="option"
+                      /*
+                       * The option's own VALUE, so a caller can address it without reading its label.
+                       *
+                       * Every label here is localized and several come from the taxonomy engine, so a
+                       * browser test that clicks «Internal» passes in English and addresses nothing in
+                       * Arabic. The value is the thing the product actually stores.
+                       */
+                      data-value={opt.value}
                       aria-selected={isSelected}
                       aria-disabled={opt.disabled || undefined}
                       onMouseEnter={() => !opt.disabled && setActive(i)}
