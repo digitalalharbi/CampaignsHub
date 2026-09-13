@@ -203,9 +203,22 @@ final class ReportTemplateEngine
          * The observations above are the insight; this is what follows from it; `next_steps` below
          * is the action, and stays last.
          */
-        if (! $summary) {
-            $slides[] = ['id' => 'recommendations', 'type' => 'recommendations', 'order' => $order++, 'visible' => true];
-        }
+        /*
+         * REPORT-SUMMARY-DECISION-001 — a summary ENDS on what to do, and the owner has said so.
+         *
+         * This section was withheld from the summary form on the reasoning quoted above:
+         * «recommendations are what an operator DOES next» and a summary «states what happened».
+         * That is a defensible reading and it is not the one the product is being held to. The
+         * owner's summary contract asks for «concise recommendations» and «concise next actions» by
+         * name, and a decision-length document that stops at the findings hands its reader a
+         * diagnosis and no prescription — which is the half that gets acted on.
+         *
+         * So the section is present in BOTH forms and the FORM decides its length: the renderer
+         * already receives `data.form`, and it shows the few highest-priority items in a summary and
+         * the whole set in the full report. Concision by depth, not by absence — and stated, never
+         * silently truncated.
+         */
+        $slides[] = ['id' => 'recommendations', 'type' => 'recommendations', 'order' => $order++, 'visible' => true];
         // Client-facing action plan — rendered only when there are approved recommendations.
         /*
          * «Next steps» and the data-quality appendix are the operator's two most text-heavy closings.
@@ -213,9 +226,13 @@ final class ReportTemplateEngine
          * appendix is already withheld from a client audience by CLIENT-DIAGNOSTIC-SEPARATION-001,
          * so keeping it in a summary would put it in front of exactly the reader it was taken from.
          */
-        if (! $summary) {
-            $slides[] = ['id' => 'next_steps', 'type' => 'next_steps', 'order' => $order++, 'visible' => true];
-        }
+        /*
+         * And the action, for the same reason — plus one the two axes had already settled between
+         * them: `next_steps` is IN `ClientReportView::EXECUTIVE_SLIDE_TYPES`, so an EXECUTIVE reader
+         * was being given next steps while a SUMMARY reader was not. One section, two answers,
+         * decided by which axis you asked. It is present in both forms now, at summary length.
+         */
+        $slides[] = ['id' => 'next_steps', 'type' => 'next_steps', 'order' => $order++, 'visible' => true];
         /*
          * Data quality LAST, and always present.
          *
