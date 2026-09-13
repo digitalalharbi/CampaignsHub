@@ -622,6 +622,15 @@ export interface EntityRow extends MoneyProvenance {
   status: string | null
   campaign_id: string | null
   ad_set_id: string | null
+  /**
+   * The objective of the unified campaign this entity belongs to — OBJECTIVE-ANALYTICS-DEPTH-001.
+   *
+   * From `unified_campaigns`, not from what the provider said: the two diverge the moment an operator
+   * corrects a misclassification, and the correction is the whole point of the unified record. Null
+   * where the entity is not linked to a unified campaign, which is «no answer» rather than the
+   * `unknown` family — a caller choosing a column set has to tell those apart.
+   */
+  objective: string | null
   active_days: number
   last_active_on: string | null
   spend: number | null
@@ -657,6 +666,15 @@ export interface EntityRow extends MoneyProvenance {
   engagement_rate: number | null
   completion_rate: number | null
   view_rate: number | null
+  /*
+   * Read by key, because the COLUMNS are chosen at runtime now.
+   *
+   * `entityMetricCell` is handed a metric key from `entityColumnPlan` and has to look it up; without
+   * this every call site would cast to `Record<string, unknown>`, which is the same laundering that let
+   * `CreativeMetrics` deny the money-truth fields for months. The named fields above stay exactly as
+   * they are — this widens what may be READ, not what the contract promises.
+   */
+  [key: string]: string | number | boolean | null | undefined
 }
 
 export interface EntityPage {

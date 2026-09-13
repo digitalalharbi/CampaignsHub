@@ -51,6 +51,13 @@ import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { Panel, ProvenanceBadge, SERIES, platformColor, tooltipProps } from './components'
 import { BudgetReading } from './BudgetReading'
 import { FamilyDecisionTable } from './FamilyDecisionTable'
+import {
+  COST_PER_DENOMINATOR,
+  ENTITY_MONEY_KEYS,
+  ENTITY_RATE_KEYS,
+  entityColumnLabel,
+  entityColumnPlan,
+} from './entityObjectiveColumns'
 import { PathAnalysis } from './PathAnalysis'
 import { PathTrends } from './PathTrends'
 import { contentIntelligence, listCreatives, type CreativeCard } from '@/features/content/api'
@@ -2227,6 +2234,53 @@ function metricOrDash(value: number | null | undefined, digits = 0): string {
  * `digits` is still honoured for frequency, which is «2.4 times», not a count to abbreviate: the law
  * abbreviates only when there is a magnitude worth abbreviating, and 2.4 is not one.
  */
+/**
+ * One metric cell of an entity table, by key — OBJECTIVE-ANALYTICS-DEPTH-001.
+ *
+ * The cells were written out one per column, which is why they could not follow the objective: the code
+ * knew «the fourth cell is CPM», not «this cell is whatever the fourth column asked for». Each kind
+ * keeps exactly the reading it had before:
+ *
+ *   money      through `rowMoney`, the money contract — a withheld figure states its own currency and
+ *              an unreported one is never a zero;
+ *   cost-per   through `rowCostPer` WITH its denominator, so a cost per order on an ad set with no
+ *              orders reads «—» rather than a number divided by nothing;
+ *   rate       a percentage, or «—» for a null;
+ *   frequency  read exactly to two places, because «2.4 times» is not a magnitude to abbreviate;
+ *   count      abbreviated, with the exact value reachable — NUMBER-PRESENTATION-001.
+ */
+function entityMetricCell(row: EntityRow, key: string, currency: string | null): string {
+  if (ENTITY_MONEY_KEYS.includes(key)) {
+    return rowMoney(row as never, key as 'spend' | 'revenue', currency)
+  }
+
+  const per = COST_PER_DENOMINATOR[key]
+  if (per) {
+    const raw = Number(row[per.field] ?? 0)
+
+    return rowCostPer(row as never, key, per.per ? raw / per.per : raw, currency)
+  }
+
+  if (ENTITY_RATE_KEYS.includes(key)) {
+    return rateOrDash(row[key] as number | null | undefined)
+  }
+
+  if (key === 'frequency') {
+    return metricOrDash(row[key] as number | null | undefined, 2)
+  }
+
+  return countCell(row[key] as number | null | undefined).text
+}
+
+/** The exact figure behind an abbreviated cell, or null where the cell was never abbreviated. */
+function entityMetricExact(row: EntityRow, key: string): string | null {
+  if (ENTITY_MONEY_KEYS.includes(key) || COST_PER_DENOMINATOR[key] || ENTITY_RATE_KEYS.includes(key) || key === 'frequency') {
+    return null
+  }
+
+  return countCell(row[key] as number | null | undefined).exact
+}
+
 function countCell(value: number | null | undefined): { text: string; exact: string | null } {
   const read = readMetricValue('number', value ?? null)
 
@@ -2767,20 +2821,28 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
    */
   const adContext = level === 'ad'
 
+  /*
+   * OBJECTIVE-ANALYTICS-DEPTH-001 — the metric columns follow what these rows were bought for.
+   *
+   * This table rendered a FIXED set — spend, impressions, reach, frequency, clicks, CTR, CPC, CPM,
+   * results, CPA — for every row whatever its campaign's objective was. A sales ad set was shown
+   * frequency and CPM and denied its return; an awareness ad set was priced on orders it was never
+   * bought to produce. `entityColumnPlan` asks `layoutFor` — the SAME chooser the headline row uses —
+   * so one family gets its own figures and several fall to the mixed set, which withholds cost-per and
+   * return for the reason stated there.
+   *
+   * Head, cells and exact values are generated from `plan.keys` in one pass. They used to be three
+   * hand-aligned positional arrays, and making the columns dynamic without joining them would have put
+   * a figure under the wrong heading the first time a family changed the count — a worse defect than
+   * the generic column set this replaces.
+   */
+  const plan = entityColumnPlan(rows)
+
   const head = [
     ar ? 'الاسم' : 'Name',
     ...(adContext ? [ar ? 'الحملة' : 'Campaign', ar ? 'الهدف' : 'Objective'] : []),
     ar ? 'الحالة' : 'State',
-    ar ? 'الإنفاق' : 'Spend',
-    ar ? 'الظهور' : 'Impressions',
-    ar ? 'الوصول' : 'Reach',
-    ar ? 'التكرار' : 'Frequency',
-    ar ? 'النقرات' : 'Clicks',
-    'CTR',
-    'CPC',
-    'CPM',
-    ar ? 'النتائج' : 'Results',
-    'CPA',
+    ...plan.keys.map((key) => entityColumnLabel(key, ar)),
     ...(adContext ? [ar ? 'آخر نشاط' : 'Last active'] : []),
   ]
 
@@ -2860,7 +2922,18 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
             {creativeByAd.get(row.external_id ?? '')?.campaign_name ?? '—'}
           </span>,
           <span key={`obj-${row.entity_id}`} className="text-text-secondary">
-            {creativeByAd.get(row.external_id ?? '')?.objective ?? '—'}
+            {/*
+              OBJECTIVE-ANALYTICS-DEPTH-001 — the ROW's objective, with the creative as the fallback.
+              *
+              * This read the creative only, and the column PLAN above reads `row.objective` — two
+              * sources for one question, which is how a table can withhold a blended verdict because
+              * its rows span objectives while printing a single objective down its own column. The row
+              * is the better source: it comes from `unified_campaigns` through the aggregator, so it
+              * survives an ad whose creative the library does not hold, and it honours an operator's
+              * correction of a misclassification. The creative stays as the fallback for a row the
+              * aggregator could not link.
+            */}
+            {row.objective ?? creativeByAd.get(row.external_id ?? '')?.objective ?? '—'}
           </span>,
         ]
       : []),
@@ -2872,17 +2945,7 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
      * every row is decorated says nothing.
      */
     <EntityState key={`state-${row.entity_id}`} row={row} windowEnd={windowEnd} ar={ar} />,
-    rowMoney(row, 'spend', currency),
-    countCell(row.impressions).text,
-    countCell(row.reach).text,
-    /* Frequency is «2.4 times», not a magnitude — it is read exactly, as it always was. */
-    metricOrDash(row.frequency, 2),
-    countCell(row.clicks).text,
-    rateOrDash(row.ctr),
-    rowCostPer(row, 'cpc', row.clicks ?? 0, currency),
-    rowCostPer(row, 'cpm', (row.impressions ?? 0) / 1000, currency),
-    countCell(row.conversions).text,
-    rowCostPer(row, 'cpa', row.conversions ?? 0, currency),
+    ...plan.keys.map((key) => entityMetricCell(row, key, currency)),
     ...(adContext
       ? [row.last_active_on ? fmtDate(row.last_active_on) : '—']
       : []),
@@ -2899,16 +2962,7 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
     null,                                   // name
     ...(adContext ? [null, null] : []),     // campaign, objective
     null,                                   // state
-    null,                                   // spend — money carries its own exact value
-    countCell(row.impressions).exact,
-    countCell(row.reach).exact,
-    null,                                   // frequency
-    countCell(row.clicks).exact,
-    null,                                   // CTR
-    null,                                   // CPC
-    null,                                   // CPM
-    countCell(row.conversions).exact,
-    null,                                   // CPA
+    ...plan.keys.map((key) => entityMetricExact(row, key)),
     ...(adContext ? [null] : []),           // last active
   ])
 
@@ -2997,6 +3051,25 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
           </p>
         ) : (
           <div data-testid={`entity-table-${level}`}>
+            {/*
+              OBJECTIVE-ANALYTICS-DEPTH-001 — when the rows span objectives, say so.
+
+              The columns fall back to the operational set here, and an operator who does not know WHY
+              is left thinking the product cannot compute a return. It can; it refuses to, because a
+              return over a scope half of which was never bought to earn is not a return, and a cost per
+              result spanning a brand budget and a sales budget divides one objective's money by another
+              objective's events.
+
+              Only when the rows really hold several. One family — even beside rows with no campaign link
+              at all — gets its own figures and needs no explanation.
+            */}
+            {plan.mixed && (
+              <p data-testid={`entity-mixed-objectives-${level}`} className="mb-2 rounded-xl border border-border bg-surface-secondary p-3 text-xs text-text-secondary">
+                {ar
+                  ? 'تضم هذه القائمة أهدافًا مختلفة، فتُعرض الأرقام المشتركة فقط: العائد وتكلفة النتيجة لا يصحّان عبر أهداف اشترت أشياء مختلفة. ضيِّق الهدف من الفلتر لترى أرقام هدف واحد.'
+                  : 'These rows span different objectives, so only the figures they share are shown: a return or a cost per result across objectives that bought different things is not one number. Narrow the objective filter to see one objective’s own figures.'}
+              </p>
+            )}
             {/*
               No initial sort. The rows arrive in the operational order — serving first, then by
               spend — and re-sorting them by spend here would discard it, which is what happened when

@@ -67,6 +67,115 @@ async function openAdSets() {
   fireEvent.click(await screen.findByRole('tab', { name: 'Ad sets' }))
 }
 
+/**
+ * OBJECTIVE-ANALYTICS-DEPTH-001 — the RENDERED columns follow what the rows were bought for.
+ *
+ * `entityObjectiveColumns.test.ts` proves the plan. This proves the table obeys it, which is a
+ * separate claim: the head, the cells and the exact values used to be three hand-aligned positional
+ * arrays, and the danger in making the columns dynamic is a figure appearing under the wrong heading
+ * rather than a wrong column set. So these assert the HEADING and the value together.
+ *
+ * The rows here carry an `objective`, which they could not before — `EntityMetricsAggregator` states
+ * it now, from `unified_campaigns` rather than from what the provider said.
+ */
+describe('the ad set table shows the objective’s own figures', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useProject.setState({ currentProjectId: 'p1' })
+    signInWith(['campaigns.view'])
+  })
+  afterEach(() => signOut())
+
+  const sales = { ...ROW, objective: 'sales', purchases: 12, revenue: 9000, roas: 3.2, conversions: 12 }
+  const awareness = { ...ROW, entity_id: 'e2', external_id: 'sq-2', objective: 'awareness' }
+
+  it('gives a sales-only table its return and withholds nothing it earned', async () => {
+    route([sales])
+    await openAdSets()
+
+    const table = await screen.findByTestId('entity-table-ad_set')
+
+    /*
+     * The return is what a sales buy is judged on, and the fixed column set never offered it.
+     *
+     * Asserted by the LABEL the product prints, not by «ROAS»: `metricLabel` has no entry for these
+     * keys and would have fallen through to the raw lowercase key, so the heading is read from `SPECS`
+     * — «Return on ad spend». A first version of this case asserted the abbreviation and failed on the
+     * correct render, which is how the missing-label defect surfaced at all.
+     */
+    expect(table).toHaveTextContent('Return on ad spend')
+    expect(table).toHaveTextContent('Orders')
+    expect(table, 'a raw metric key reached a column heading').not.toHaveTextContent(/\broas\b/)
+    expect(table, 'a sales table still carries no mixed-objective excuse').not.toHaveTextContent(/span different objectives/i)
+  })
+
+  it('gives an awareness-only table reach and frequency and no cost per order', async () => {
+    route([awareness])
+    await openAdSets()
+
+    const table = await screen.findByTestId('entity-table-ad_set')
+
+    expect(table).toHaveTextContent('Reach')
+    expect(table).toHaveTextContent('Frequency')
+    /*
+     * The defect in one assertion: an awareness ad set was priced on orders it was never bought to
+     * produce, so «CPA» appeared over a column that could only ever be «—».
+     */
+    expect(table, 'an awareness table is priced on orders it never bought').not.toHaveTextContent('Cost per result')
+  })
+
+  /*
+   * Spend is the operational fact an operator scans for, whatever the objective.
+   *
+   * One case per objective rather than a loop: a first version re-rendered the page inside the loop and
+   * failed with «found multiple elements with the role tab» — two tab bars mounted, which says nothing
+   * about spend.
+   */
+  it.each([
+    ['sales', () => sales],
+    ['awareness', () => awareness],
+  ])('keeps spend on a %s table, in the currency it was measured in', async (_objective, rowOf) => {
+    route([rowOf()])
+    await openAdSets()
+
+    const table = await screen.findByTestId('entity-table-ad_set')
+
+    expect(table).toHaveTextContent('Spend')
+    /* Withheld: the amount states its own currency — never converted, never zeroed. */
+    expect(table).toHaveTextContent(/412\.5/)
+    expect(table).toHaveTextContent(/USD/)
+  })
+
+  it('refuses a blended verdict when the rows span objectives, and says why', async () => {
+    route([sales, awareness])
+    await openAdSets()
+
+    const table = await screen.findByTestId('entity-table-ad_set')
+
+    expect(await screen.findByTestId('entity-mixed-objectives-ad_set')).toBeInTheDocument()
+    /*
+     * Neither objective's verdict, because neither is true of the whole list: a return over a scope
+     * half of which was never bought to earn is not a return.
+     */
+    expect(table).not.toHaveTextContent('Return on ad spend')
+    expect(table).not.toHaveTextContent('Cost per result')
+    /* The shared figures survive — this is a refusal to blend, not a refusal to report. */
+    expect(table).toHaveTextContent('Spend')
+    expect(table).toHaveTextContent('Impressions')
+  })
+
+  /** One family beside an unlinked row is not a mixture, and owes no explanation. */
+  it('does not call one family mixed because a row has no campaign link', async () => {
+    route([sales, { ...ROW, entity_id: 'e3', external_id: 'sq-3', objective: null }])
+    await openAdSets()
+
+    await screen.findByTestId('entity-table-ad_set')
+
+    expect(screen.queryByTestId('entity-mixed-objectives-ad_set')).toBeNull()
+    expect(screen.getByTestId('entity-table-ad_set')).toHaveTextContent('Return on ad spend')
+  })
+})
+
 describe('the ad set analysis tab', () => {
   beforeEach(() => {
     vi.clearAllMocks()
