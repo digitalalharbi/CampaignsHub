@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Users,
@@ -184,6 +184,22 @@ export function InfluencerShell() {
           >
             <Menu size={19} />
           </button>
+
+          {/*
+            BRAND-MARK-001 — the identity on a PHONE.
+
+            The rail carries it on a desktop, and a phone hides the rail: this bar had a hamburger,
+            a language toggle and an avatar, and nothing at all saying what the product is. The mark
+            alone, because a wordmark beside four controls on a 390px bar is what pushes them off it.
+          */}
+          <Link
+            to="/influencer"
+            aria-label="CampaignsHub"
+            data-testid="mobile-brand-mark"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark lg:hidden"
+          >
+            <CampaignsHubMark size={18} />
+          </Link>
 
           <div className="ms-auto flex items-center gap-1.5">
             <NotificationCenter />
