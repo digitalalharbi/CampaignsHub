@@ -149,6 +149,14 @@ export interface ClientAnalytics {
   platforms: { provider: string; spend: number; /** Null when no spend was recorded: a share of nothing is not zero. */ spend_share: number | null; impressions: number; clicks: number; conversions: number; revenue: number; roas: number | null; ctr: number | null; cpc: number | null; cpm: number | null; cpa: number | null }[]
   projects: { project_id: string; name: string; spend: number; currency: string | null }[]
   timeseries: { date: string; spend: number; clicks: number; impressions: number; conversions: number; revenue: number }[]
+  /**
+   * AGGREGATION-TRUTH-001 — which silence the ranking is in, when both cards are absent.
+   *
+   * `ranked` — a pick was possible. `withheld` — money exists and was never converted into the
+   * reporting currency, so there is no comparable magnitude to rank by. `no_spend` — nothing was
+   * spent, which is a fact about the account rather than about our exchange rates.
+   */
+  campaign_ranking_state?: 'ranked' | 'withheld' | 'no_spend'
   best_campaign: Record<string, unknown> | null
   worst_campaign: Record<string, unknown> | null
   freshness: { state: 'fresh' | 'partial' | 'stale' | 'sync_failed' | 'no_data'; last_sync_at: string | null; missing_days: number; sync_failed: boolean }
