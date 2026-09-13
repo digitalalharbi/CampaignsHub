@@ -1,9 +1,9 @@
 import { Outlet } from 'react-router-dom'
 import {
+  Megaphone,
   BarChart3,
   FolderKanban,
   LayoutDashboard,
-  Megaphone,
   Menu,
   Moon,
   PanelLeft,
@@ -22,6 +22,7 @@ import { PortalFrame } from './PortalFrame'
 import { useSectionTitle } from './sectionTitle'
 import type { MobileTab } from './MobileTabBar'
 import { moreGroupsFrom } from './mobileTabs'
+import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 
 // `ent` = the account-entitlement nav key; an item shows only when it's in the workspace's entitled nav.
 
@@ -66,9 +67,10 @@ function NavItems({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?:
 function Brand({ collapsed }: { collapsed?: boolean }) {
   return (
     <div className={`flex items-center gap-2.5 ${collapsed ? 'justify-center' : 'px-1'}`}>
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-[var(--shadow-small)]">
-        <Megaphone size={18} />
-      </div>
+      {/* BRAND-MARK-001 — the product's symbol, where a megaphone glyph stood in for it. */}
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark">
+        <CampaignsHubMark size={20} />
+      </span>
       {!collapsed && (
         <span className="font-heading text-lg font-extrabold tracking-tight text-text-primary">CampaignsHub</span>
       )}

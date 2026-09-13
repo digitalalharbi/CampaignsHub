@@ -5,7 +5,6 @@ import {
   ShieldAlert,
   ScrollText,
   Settings,
-  ShieldCheck,
   Building2,
   LayoutDashboard,
   Menu,
@@ -22,6 +21,7 @@ import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { useUi } from '@/stores/ui'
 import { PortalFrame } from './PortalFrame'
 import type { MobileMoreGroup, MobileTab } from './MobileTabBar'
+import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 
 /**
  * The platform owner's shell (ADR 0002, ADMIN-001).
@@ -182,9 +182,16 @@ function PlatformIdentity({ collapsed }: { collapsed?: boolean }) {
 
   return (
     <div className={`flex items-center gap-2.5 ${collapsed ? 'justify-center' : 'px-1'}`}>
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 text-white shadow-[var(--shadow-small)]">
-        <ShieldCheck size={18} />
-      </div>
+      {/*
+        The canonical mark, in the slate container this shell chose ON PURPOSE.
+
+        The distinction admin needs is «this is not a tenant workspace», and the file says so a few
+        lines up. That distinction belongs to the CONTAINER, not to a second logo: the geometry stays
+        the product's one mark and inherits white from the tile, exactly as it does in dark mode.
+      */}
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 text-white shadow-[var(--shadow-small)]">
+        <CampaignsHubMark size={20} />
+      </span>
       {!collapsed && (
         <div className="min-w-0">
           <span className="block truncate font-heading text-[15px] font-extrabold tracking-tight text-text-primary">
