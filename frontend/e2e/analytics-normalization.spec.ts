@@ -129,6 +129,57 @@ test.describe('the analytics page explains its own figures', () => {
     await expect(details).toContainText(/قابل للجمع|additive/)
     await expect(details).toContainText(/يُعاد حسابه|recomputed/)
   })
+
+  /**
+   * DATA-QUALITY-OPERATOR-UX-001 — the attribution half says which of its three answers it is giving.
+   *
+   * `AttributionFindings` was `if (loading || findings.length === 0) return null`, so a window in which
+   * every platform agreed drew the same picture as a request that failed: nothing. The freshness half
+   * one block up has always said «everything is current», and `DiagnosticPanel` says «cannot be examined
+   * — this is not no problems found». This half said neither.
+   *
+   * Asserted in a browser because the distinction IS the rendering: a unit test can prove the component
+   * returns an element, and what an operator needs is that the element is on the page they opened, in the
+   * language they opened it in. The demo window has no attribution disagreement, so this is the
+   * «examined and agreed» state on real seeded data.
+   */
+  test('the attribution half states that it examined and found no disagreement', async ({ page }) => {
+    await openQualityTab(page)
+
+    const clear = page.getByTestId('attribution-findings-clear')
+    await expect(clear).toBeVisible({ timeout: 30000 })
+
+    /* A heading in the DOM that the reader cannot see is not a statement. */
+    const box = await clear.boundingBox()
+    expect(box, 'the notice has no box, so nothing was drawn').not.toBeNull()
+    expect(box!.height, 'the notice is collapsed to no height').toBeGreaterThan(8)
+
+    /* And it is not the «could not be examined» sentence, which would be a different claim. */
+    await expect(page.getByTestId('attribution-findings-unavailable')).toHaveCount(0)
+  })
+
+  /**
+   * The same statement, in Arabic, through the app's own control.
+   *
+   * Not a second test of the same string: the two sentences are separate copy, and a panel that reads
+   * correctly in one language and prints an English sentence into an RTL page is the failure this
+   * product has had to fix more than once.
+   */
+  test('states it in Arabic too, in an RTL page', async ({ page }) => {
+    await page.goto('/app/analytics')
+    await expect(page.locator('main')).toBeVisible()
+
+    /* The demo session opens in Arabic; assert the direction rather than assuming it. */
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')
+
+    const tab = page.getByRole('tab', { name: /جودة البيانات والإسناد/ })
+    await tab.click()
+    await expect(tab).toHaveAttribute('aria-selected', 'true')
+
+    const clear = page.getByTestId('attribution-findings-clear')
+    await expect(clear).toBeVisible({ timeout: 30000 })
+    await expect(clear).toContainText('فُحصت')
+  })
 })
 
 /**
@@ -188,4 +239,5 @@ test.describe('the content reading can actually be seen', () => {
       .not.toMatch(/^(transparent$|rgba\([^)]*,\s*0\s*\))/)
     expect(paint.width, 'the leading format’s bar has no width').toBeGreaterThan(0)
   })
+
 })
