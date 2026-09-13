@@ -51,6 +51,7 @@ import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { Panel, ProvenanceBadge, SERIES, platformColor, tooltipProps } from './components'
 import { BudgetReading } from './BudgetReading'
 import { FamilyDecisionTable } from './FamilyDecisionTable'
+import { spendIsWithheld } from './money'
 import {
   COST_PER_DENOMINATOR,
   ENTITY_MONEY_KEYS,
@@ -1093,14 +1094,36 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
           )}
         </Panel>
         <Panel title={ar ? 'تحتاج مراجعة (أدنى ROAS)' : 'Needs a look (lowest ROAS)'} loading={c.isLoading} error={c.isError}>
-          {worst && (
+          {worst ? (
             <div>
               <div className="text-lg font-bold text-text-primary">{worst.campaign_name}</div>
               <div className="mt-1 text-sm text-text-secondary">
                 ROAS <span className="tnum font-semibold text-danger">{rowRoas(worst)}</span> · {ar ? 'إنفاق' : 'spend'} {rowMoney(worst, 'spend')}
               </div>
             </div>
-          )}
+          ) : rows.length > 0 ? (
+            /*
+              AGGREGATION-TRUTH-001 — the panel says why it can name nobody.
+
+              «Lowest ROAS» is chosen among campaigns that spent, and spend here is the CONVERTED
+              figure. On an account whose money the sync could not convert that set is empty, so this
+              panel drew its title over nothing at all — for every window, permanently, with no way
+              for the reader to tell an account with no problems from one whose money never arrived
+              in this currency.
+
+              The comparison genuinely cannot be made on unconverted money: a ROAS computed from a
+              withheld denominator is a fabricated ratio. So the answer is the reason, not a ranking.
+            */
+            <p className="text-sm text-text-muted" data-testid="analytics-worst-unavailable">
+              {rows.some((r) => spendIsWithheld(r))
+                ? (ar
+                    ? 'لم يُحوَّل إنفاق هذه الحملات إلى عملة التقرير، فلا يمكن ترتيبها حسب ROAS.'
+                    : 'Spend on these campaigns was not converted into the report’s currency, so they cannot be ranked by ROAS.')
+                : (ar
+                    ? 'لا توجد حملة أنفقت خلال هذه الفترة لترتيبها حسب ROAS.'
+                    : 'No campaign spent in this period, so there is nothing to rank by ROAS.')}
+            </p>
+          ) : null}
         </Panel>
       </div>
       <Panel title={ar ? 'ترتيب الحملات' : 'Campaign ranking'} description={ar ? 'مرتّبة حسب الإنفاق' : 'Ordered by spend'} loading={c.isLoading} error={c.isError} empty={!c.isLoading && rows.length === 0}>
