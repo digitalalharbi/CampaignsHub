@@ -2,7 +2,7 @@ import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { compact, money, moneyFromTotals } from '@/features/analytics/format'
-import { formatMoneyReading, readCostPer, type MoneyTotals } from '@/lib/money/contract'
+import { formatMoneyReading, moneyState, readCostPer, type MoneyTotals } from '@/lib/money/contract'
 import { mixedResultsNote } from './reportMetrics'
 import type { LivePayload } from './api'
 import type { Locale } from '@/stores/ui'
@@ -150,8 +150,22 @@ export function LiveDetailTables({
     </span>
   ))
 
-  /* Only the paths money was actually spent on: a path at zero is not a finding, it is an absence. */
-  const objectiveRows = (payload.objective_performance?.paths ?? []).filter((p) => p.spend > 0)
+  /*
+   * Only the paths money was actually spent on: a path at zero is not a finding, it is an absence.
+   *
+   * «Spent» reads the money that EXISTS, not the column it survived in. `spend` is the converted
+   * figure, and FX-001 leaves it at 0 when no rate existed — so on an account whose money was never
+   * converted this filter removed every path and the objective decomposition disappeared from the
+   * report entirely. `spendOf` keeps the distinction that matters here: a path nobody ran is still
+   * dropped, a path whose money we hold is not.
+   */
+  const objectiveRows = (payload.objective_performance?.paths ?? []).filter((p) => {
+    const { state } = moneyState(p as unknown as MoneyTotals, 'spend')
+
+    // «Nothing reported» and «measured as nothing» are both absences and stay out. Money we HOLD
+    // and cannot state is not an absence, and that is the row this filter used to delete.
+    return state !== 'absent' && state !== 'zero'
+  })
 
   const objectives = (() => {
     /*
