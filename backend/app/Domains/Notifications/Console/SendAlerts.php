@@ -7,6 +7,7 @@ namespace App\Domains\Notifications\Console;
 use App\Domains\Notifications\Services\AlertDispatcher;
 use App\Domains\Notifications\Services\NotificationAudience;
 use App\Domains\Notifications\Support\MessageCatalogue;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -84,6 +85,17 @@ final class SendAlerts extends Command
                 $totals[$state] = ($totals[$state] ?? 0) + $n;
             }
         }
+
+        /*
+         * AUTOMATION-FIRST-OPERATIONS-001 — the count the ledger is supposed to hold.
+         *
+         * Every state this run produced, summed. The per-state breakdown is what the line below is for;
+         * the ledger holds one number, and «how many alert deliveries did tonight involve» is it.
+         *
+         * Already computed, already printed to a terminal nobody watches, while
+         * `scheduled_runs.rows_affected` stayed null.
+         */
+        app(ScheduledRunRows::class)->report((int) array_sum($totals));
 
         $this->info('alerts '.json_encode($totals));
 

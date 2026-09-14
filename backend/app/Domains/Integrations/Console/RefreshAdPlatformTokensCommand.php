@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Console;
 
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Throwable;
@@ -52,6 +53,18 @@ final class RefreshAdPlatformTokensCommand extends Command
                 $this->warn("{$connection->provider} ({$connection->id}): {$e->getMessage()}");
             }
         }
+
+        /*
+         * AUTOMATION-FIRST-OPERATIONS-001 — the count the ledger is supposed to hold.
+         *
+         * Both: a refreshed credential and one marked as needing re-authorisation are each a row this run
+         * WROTE. A run that reached ten and failed on nine did not touch one.
+         *
+         * The number was already computed and already printed to a terminal nobody is watching at
+         * 04:00, while `scheduled_runs.rows_affected` stayed null — so the ops page could say the run
+         * SUCCEEDED without being able to say whether it did anything.
+         */
+        app(ScheduledRunRows::class)->report($refreshed + $failed);
 
         $this->info("Refreshed {$refreshed} token(s); {$failed} need re-authorisation.");
 

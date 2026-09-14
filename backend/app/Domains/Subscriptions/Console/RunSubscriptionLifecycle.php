@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Subscriptions\Console;
 
+use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Domains\Subscriptions\Services\SubscriptionCheckout;
 use App\Domains\Subscriptions\Services\SubscriptionLifecycle;
 use Illuminate\Console\Command;
@@ -29,6 +30,18 @@ final class RunSubscriptionLifecycle extends Command
     {
         // A dry run passes no checkout, so the sweep moves states but opens no charge at the gateway.
         $result = $lifecycle->runDueWork($this->option('dry-run') ? null : $checkout);
+
+        /*
+         * AUTOMATION-FIRST-OPERATIONS-001 — the count the ledger is supposed to hold.
+         *
+         * Every state the sweep moved — trials converted, renewals charged, accounts marked past due or
+         * suspended. A dry run moves states without charging and still touches those rows, which is
+         * why the count is not gated on the flag.
+         *
+         * Already computed, already printed to a terminal nobody watches, while
+         * `scheduled_runs.rows_affected` stayed null.
+         */
+        app(ScheduledRunRows::class)->report((int) array_sum($result));
 
         foreach ($result as $what => $count) {
             $this->line(str_pad($what, 24).$count);

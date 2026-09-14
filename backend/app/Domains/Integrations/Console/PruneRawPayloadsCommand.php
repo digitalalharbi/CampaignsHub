@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Console;
 
 use App\Domains\Integrations\Models\IntegrationRawPayload;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -41,6 +42,17 @@ final class PruneRawPayloadsCommand extends Command
 
             $deleted += IntegrationRawPayload::withoutGlobalScopes()->whereIn('id', $batch)->delete();
         } while (true);
+
+        /*
+         * AUTOMATION-FIRST-OPERATIONS-001 — the count the ledger is supposed to hold.
+         *
+         * The payloads deleted — the only rows a prune touches.
+         *
+         * The number was already computed and already printed to a terminal nobody is watching at
+         * 04:00, while `scheduled_runs.rows_affected` stayed null — so the ops page could say the run
+         * SUCCEEDED without being able to say whether it did anything.
+         */
+        app(ScheduledRunRows::class)->report($deleted);
 
         $this->info("Pruned {$deleted} raw payload(s) older than {$cutoff->toDateString()}.");
 

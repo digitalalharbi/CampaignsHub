@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Requests\Console;
 
+use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Services\RequestNotifier;
 use Illuminate\Console\Command;
@@ -48,6 +49,18 @@ final class EvaluateSla extends Command
                 $warned++;
             }
         }
+
+        /*
+         * AUTOMATION-FIRST-OPERATIONS-001 — the count the ledger is supposed to hold.
+         *
+         * Both halves are rows this run CHANGED: a warning stamps `sla_warned_at` and a breach stamps
+         * `sla_breached_at`. The requests it merely read are not rows it touched.
+         *
+         * The number was already computed and already printed to a terminal nobody is watching at
+         * 04:00, while `scheduled_runs.rows_affected` stayed null — so the ops page could say the run
+         * SUCCEEDED without being able to say whether it did anything.
+         */
+        app(ScheduledRunRows::class)->report($warned + $breached);
 
         $this->info("SLA evaluated — {$warned} warning(s), {$breached} breach(es).");
 

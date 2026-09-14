@@ -8,6 +8,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -86,6 +87,17 @@ final class SyncAdPlatformsCommand extends Command
                     $queued++;
                 }
             });
+
+        /*
+         * AUTOMATION-FIRST-OPERATIONS-001 — the count the ledger is supposed to hold.
+         *
+         * Account syncs QUEUED. The metric rows they go on to write belong to those jobs.
+         *
+         * Already computed, already printed to a terminal nobody watches at 04:00, while
+         * `scheduled_runs.rows_affected` stayed null — so the ops page could say SUCCEEDED without
+         * being able to say whether the run did anything.
+         */
+        app(ScheduledRunRows::class)->report($queued);
 
         $this->info("Queued {$queued} account sync(s) for {$from->toDateString()} → {$to->toDateString()}.");
 
