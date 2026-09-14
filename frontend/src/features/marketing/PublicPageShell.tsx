@@ -3,7 +3,7 @@ import { FooterContact } from './FooterContact'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { PublicHeader } from './PublicHeader'
 import { useUi } from '@/stores/ui'
-import { brand } from '@/lib/brand'
+import { brand, productName } from '@/lib/brand'
 
 /**
  * The frame every public page outside the marketing homepage wears.
@@ -40,7 +40,7 @@ export function PublicPageShell({
   }, [c.dir, locale])
 
   useEffect(() => {
-    document.title = `${title} — CampaignsHub`
+    document.title = `${title} — ${productName(locale)}`
   }, [title])
 
   return (

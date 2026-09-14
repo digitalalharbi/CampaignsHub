@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { brand } from '@/lib/brand'
+import { brand, productName } from '@/lib/brand'
 import * as LucideIcons from 'lucide-react'
 import { ArrowLeft, ArrowRight, RotateCcw, Search } from 'lucide-react'
 import { FooterContact } from './FooterContact'
@@ -71,7 +71,7 @@ export function PublicServicesPage() {
 
   useEffect(() => {
     const title = current ? (ar ? current.label_ar : current.label_en) : (ar ? 'الخدمات' : 'Services')
-    document.title = `${title} — CampaignsHub`
+    document.title = `${title} — ${productName(locale)}`
   }, [current, ar])
 
   return (
