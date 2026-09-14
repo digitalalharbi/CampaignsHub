@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react'
 import { attributionWindow } from './attributionWindow'
 import { ReportAdDetail } from './ReportAdDetail'
 import { ReportCreativeRoster, type RosterRow } from './ReportCreativeRoster'
-import { ReportAdsSection, type AdGroup, type AdsReading, type ReportAd } from './ReportAdsSection'
+import { ReportAdsSection, type AdGroup, type AdPlatformGroup, type AdsReading, type ReportAd } from './ReportAdsSection'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { campaigns as countedCampaigns } from '@/lib/counted'
@@ -89,6 +89,8 @@ export interface ReportData {
   ads_absent_reason?: string | null
   /** REPORT-AD-PREVIEW-001 §A — ranked inside each objective, with the metric that ordered it. */
   ads_groups?: AdGroup[]
+  /** REPORT-DETAIL-PARITY-001 — the same ads ranked inside each platform. */
+  ads_platform_groups?: AdPlatformGroup[]
   /**
    * REPORT-CREATIVE-TRUTH-001 §B — every creative that ran, beside the ones that worked.
    *
@@ -957,6 +959,31 @@ function AdsSlide({ data }: { data: ReportData }) {
 }
 
 /**
+ * REPORT-DETAIL-PARITY-001 — one platform's own leaders, and the fallback for reports that predate them.
+ *
+ * `data.ads` is the scope-wide ranking, so filtering it by provider answers «which of the report's
+ * best ads happen to run here». That is a different question, and its answer is EMPTY for any
+ * platform that did not place in the overall cut — a platform running twenty creatives got a slide
+ * under its own name saying it had none.
+ *
+ * `ads_platform_groups` is ranked inside each platform and inside each objective there. A stored
+ * snapshot generated before that section existed carries none, and falls back to the filtered list
+ * so a report already in a client's hands keeps rendering exactly as it did.
+ */
+export function platformAds(
+  data: { ads?: ReportAd[]; ads_platform_groups?: AdPlatformGroup[] },
+  platform: string,
+): { ads: ReportAd[]; groups?: AdGroup[] } {
+  const own = (data.ads_platform_groups ?? []).find((p) => p.provider === platform)
+
+  if (own === undefined) {
+    return { ads: (data.ads ?? []).filter((a) => a.provider === platform) }
+  }
+
+  return { ads: own.groups.flatMap((g) => g.ads), groups: own.groups }
+}
+
+/**
  * CLIENT-REPORT-ENTITY-BOUNDARY-001 — «أفضل الإعلانات» shows ads.
  *
  * It showed CAMPAIGNS. `top_creatives` and `worst_creatives` ranked campaigns — `creative_level` said
@@ -976,7 +1003,7 @@ function CreativesSlide({ data, platform }: { data: ReportData; platform: string
   const ar = useUi((s) => s.locale) === 'ar'
   const [open, setOpen] = useState<ReportAd | null>(null)
 
-  const ads = (data.ads ?? []).filter((a) => a.provider === platform)
+  const { ads, groups } = platformAds(data, platform)
 
   return (
     <div>
@@ -984,6 +1011,7 @@ function CreativesSlide({ data, platform }: { data: ReportData; platform: string
 
       <ReportAdsSection
         ads={ads}
+        groups={groups}
         currency={data.currency ?? null}
         /*
          * The scope-wide reason only where THIS platform is the reason it is empty. A platform with

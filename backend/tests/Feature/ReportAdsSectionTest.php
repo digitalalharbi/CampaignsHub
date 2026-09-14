@@ -278,6 +278,105 @@ final class ReportAdsSectionTest extends TestCase
         }
     }
 
+    /**
+     * REPORT-DETAIL-PARITY-001 — «best-performing creatives per platform», the owner's words.
+     *
+     * One merged top list can only be ordered by something every platform reports, and the ads an
+     * agency wants more of are the ones that worked WHERE they ran: «this is what works on TikTok»
+     * is a finding somebody can act on, and «this worked overall» is not.
+     *
+     * The fixture is deliberately lopsided — the strongest sales ad by return runs on TikTok, the
+     * weakest on Meta — so a section that merged the platforms would put the TikTok ad at the top of
+     * one list and leave Meta's leader invisible. Per platform, each is the leader of its own.
+     */
+    public function test_the_best_creatives_are_ranked_inside_their_platform(): void
+    {
+        $meta = $this->campaign('Meta sales', CampaignObjective::Sales, spend: 3_000, orders: 40, revenue: 9_000, provider: 'meta');
+        $this->creative($meta, 'Meta leader', spend: 1_000, conversions: 30, revenue: 6_000, provider: 'meta');
+        $this->creative($meta, 'Meta laggard', spend: 2_000, conversions: 10, revenue: 3_000, provider: 'meta');
+
+        $tiktok = $this->campaign('TikTok sales', CampaignObjective::Sales, spend: 1_000, orders: 50, revenue: 20_000, provider: 'tiktok');
+        $this->creative($tiktok, 'TikTok leader', spend: 1_000, conversions: 50, revenue: 20_000, provider: 'tiktok');
+
+        $platforms = array_column($this->generate()['ads_platform_groups'], null, 'provider');
+
+        $this->assertArrayHasKey('meta', $platforms);
+        $this->assertArrayHasKey('tiktok', $platforms);
+
+        $metaSales = array_column($platforms['meta']['groups'], null, 'family')['sales'];
+        $tiktokSales = array_column($platforms['tiktok']['groups'], null, 'family')['sales'];
+
+        /*
+         * Meta's leader is Meta's — not the ad that would have won a merged list.
+         *
+         * TikTok returns 20x and Meta's best 6x, so one list across both would rank «TikTok leader»
+         * first and «Meta leader» second, and a reader looking for what worked on Meta would be
+         * reading TikTok's ad.
+         */
+        $this->assertSame('Meta leader', $metaSales['ads'][0]['name']);
+        $this->assertSame('TikTok leader', $tiktokSales['ads'][0]['name']);
+
+        // No platform's section carries another platform's ad.
+        foreach ($platforms as $provider => $platform) {
+            foreach ($platform['groups'] as $group) {
+                foreach ($group['ads'] as $ad) {
+                    $this->assertSame($provider, $ad['provider'], 'a platform section carried another platform’s ad');
+                }
+            }
+        }
+    }
+
+    /**
+     * A platform's ads are grouped by OBJECTIVE inside it, never ranked across objectives.
+     *
+     * Ranking a brand film against a sales ad because they share a platform is the same defect
+     * `groupsByObjective` was written to remove, one axis over: one ordering across objectives can
+     * only rest on a metric they share, and what they share is spend. Spending most is not
+     * performing best, and a brand ad has not failed for producing no revenue it was never bought to
+     * produce.
+     */
+    public function test_a_platform_never_ranks_a_brand_ad_against_a_sales_ad(): void
+    {
+        $sales = $this->campaign('Meta sales', CampaignObjective::Sales, spend: 2_000, orders: 40, revenue: 9_000, provider: 'meta');
+        $this->creative($sales, 'Meta sales ad', spend: 2_000, conversions: 40, revenue: 9_000, provider: 'meta');
+
+        $brand = $this->campaign('Meta brand', CampaignObjective::Awareness, spend: 5_000, orders: 0, revenue: 0, provider: 'meta');
+        $this->creative($brand, 'Meta brand film', spend: 5_000, conversions: 0, revenue: 0, impressions: 900_000, provider: 'meta');
+
+        $platforms = array_column($this->generate()['ads_platform_groups'], null, 'provider');
+        $families = array_column($platforms['meta']['groups'], null, 'family');
+
+        $this->assertArrayHasKey('sales', $families);
+        $this->assertArrayHasKey('awareness', $families);
+        $this->assertNotSame('roas', $families['awareness']['metric'], 'a brand ad was judged on a sales metric');
+
+        // Each family holds only its own ads, so neither list is an ordering across the two.
+        $this->assertSame(['Meta sales ad'], array_column($families['sales']['ads'], 'name'));
+        $this->assertSame(['Meta brand film'], array_column($families['awareness']['ads'], 'name'));
+    }
+
+    /**
+     * REPORT-CREATIVE-TRUTH-001 §B — «the best three» says «of how many».
+     *
+     * The group published three ads and nothing else, so a client reading «الأعلى أداءً» over three
+     * cards could not tell whether three was the leaders of forty or the whole of what ran. Those are
+     * different reports, and the second one is the claim a truncated list makes by default.
+     */
+    public function test_a_truncated_group_says_how_many_it_was_chosen_from(): void
+    {
+        $campaign = $this->campaign('Many', CampaignObjective::Sales, spend: 9_000, orders: 90, revenue: 50_000);
+
+        foreach (range(1, 7) as $i) {
+            $this->creative($campaign, "Ad {$i}", spend: 1_000, conversions: 10 * $i, revenue: 1_000 * $i);
+        }
+
+        $group = array_column($this->generate()['ads_groups'], null, 'family')['sales'];
+
+        $this->assertCount(3, $group['ads'], 'the group still publishes its leaders, not the list');
+        $this->assertSame(3, $group['shown']);
+        $this->assertSame(7, $group['candidates'], 'the group must say how many it chose from');
+    }
+
     /** @return array<string,mixed> */
     private function generate(): array
     {
@@ -295,7 +394,7 @@ final class ReportAdsSectionTest extends TestCase
         return app(ReportGenerator::class)->generate($report);
     }
 
-    private function campaign(string $name, CampaignObjective $objective, float $spend, float $orders, float $revenue): UnifiedCampaign
+    private function campaign(string $name, CampaignObjective $objective, float $spend, float $orders, float $revenue, string $provider = 'meta'): UnifiedCampaign
     {
         $campaign = UnifiedCampaign::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
@@ -307,14 +406,14 @@ final class ReportAdsSectionTest extends TestCase
         $external = ExternalCampaign::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
             'external_account_id' => $this->account->getKey(), 'unified_campaign_id' => $campaign->id,
-            'provider' => 'meta', 'external_id' => 'ext-'.uniqid(), 'name' => $name, 'status' => 'active',
+            'provider' => $provider, 'external_id' => 'ext-'.uniqid(), 'name' => $name, 'status' => 'active',
         ]);
 
         foreach (['spend' => $spend, 'conversions' => $orders, 'revenue' => $revenue] as $key => $value) {
             DailyMetric::withoutGlobalScopes()->create([
                 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
                 'external_account_id' => $this->account->getKey(), 'external_campaign_id' => $external->id,
-                'unified_campaign_id' => $campaign->id, 'provider' => 'meta',
+                'unified_campaign_id' => $campaign->id, 'provider' => $provider,
                 'metric_key' => $key, 'metric_date' => self::DATE, 'value' => $value,
                 'original_amount' => $value, 'original_currency' => 'SAR', 'project_currency' => 'SAR', 'exchange_rate' => 1,
             ]);
@@ -331,6 +430,7 @@ final class ReportAdsSectionTest extends TestCase
         float $revenue,
         ?string $thumbnail = 'https://cdn/thumb.jpg',
         float $impressions = 100_000,
+        string $provider = 'meta',
     ): void {
         $external = ExternalCampaign::withoutGlobalScopes()->where('unified_campaign_id', $campaign->id)->firstOrFail();
 
@@ -339,7 +439,7 @@ final class ReportAdsSectionTest extends TestCase
             'project_id' => $this->project->id,
             'campaign_id' => $campaign->id,
             'external_campaign_id' => $external->id,
-            'provider' => 'meta',
+            'provider' => $provider,
             'external_creative_id' => 'cr-'.uniqid(),
             'name' => $name,
             'format' => 'image',

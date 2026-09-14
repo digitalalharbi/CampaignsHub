@@ -99,6 +99,22 @@ final class LiveReportService
             'ads' => ClientEntityBoundary::ads($built['ads']),
             'ads_level' => $built['level'],
             'ads_groups' => ClientEntityBoundary::ads($built['groups']),
+            /*
+             * REPORT-DETAIL-PARITY-001 — the same ads on the platform axis, past the same boundary.
+             *
+             * `ClientEntityBoundary::ads()` recurses through a group's own `ads` key and stops there,
+             * which is correct for an objective group and one rung short for this one: a platform
+             * entry holds `groups`, and its ads are two rungs down. Handing the platform entries
+             * straight to `ads()` would have stripped nothing at all — the walk never reaches a row —
+             * so the boundary is applied to each platform's GROUPS, which is the shape it knows.
+             */
+            'ads_platform_groups' => array_map(
+                static fn (array $platform): array => [
+                    ...$platform,
+                    'groups' => ClientEntityBoundary::ads($platform['groups'] ?? []),
+                ],
+                $built['platform_groups'],
+            ),
             'ads_absent_reason' => $built['reason'],
             // The same reading the generated deck carries, from the same two ranked lists.
             'ads_reading' => (new AdsExplanation)->explain($built['ads'], $built['worst'], $objective),
@@ -258,7 +274,7 @@ final class LiveReportService
             'conversions_basis' => $engine->conversionsBasis($from, $to),
             'deltas' => $this->deltas($totals, $previous),
             'timeseries' => $engine->timeseries($from, $to),
-            'platforms' => $engine->byProvider($from, $to),
+            'platforms' => $this->platformsWithMovement($engine, $from, $to),
             /*
              * CLIENT-REPORT-ENTITY-BOUNDARY-001 — a shared link carries PERFORMANCE, not the campaign
              * plan that produced it.
@@ -491,7 +507,7 @@ final class LiveReportService
             'platform_comparison' => ['platforms' => []],
             'objective_breakdown' => ['objective_performance' => null, 'objective_leaders' => null],
             'creatives' => [
-                'ads' => [], 'ads_groups' => [], 'ads_roster' => [], 'top_creatives' => [],
+                'ads' => [], 'ads_groups' => [], 'ads_platform_groups' => [], 'ads_roster' => [], 'top_creatives' => [],
                 'worst_creatives' => [], 'ads_reading' => null, 'ads_level' => null, 'ads_absent_reason' => null,
             ],
             'budget' => ['budget' => []],
@@ -608,6 +624,43 @@ final class LiveReportService
         $asked = array_map(strval(...), $requested);
 
         return array_values(array_intersect($asked, $allowed));
+    }
+
+    /**
+     * REPORT-DETAIL-PARITY-001 — each platform's own period-over-period movement.
+     *
+     * `deltas` compares the TOTALS, so the client's page could say the account grew 26% and had no
+     * way to say which platform did the growing — the one question a per-platform summary exists to
+     * answer. A month where Meta fell and TikTok doubled reads as a flat account at the top of the
+     * page, and «flat» is the least useful true thing a report can say.
+     *
+     * The movement is computed with the same ratio rule as the totals' — a ratio, not a percentage,
+     * and NULL where there was nothing to compare against rather than «+100%», which invites a
+     * reader to see a doubling of a real number where a platform simply started running.
+     *
+     * A platform with no previous row at all gets an empty movement rather than a fabricated one: it
+     * did not shrink to nothing, it was not there.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function platformsWithMovement(MetricsAggregator $engine, Carbon $from, Carbon $to): array
+    {
+        $current = $engine->byProvider($from, $to);
+        $days = $from->diffInDays($to) + 1;
+        $before = array_column(
+            $engine->byProvider($from->copy()->subDays($days), $from->copy()->subDay()),
+            null,
+            'provider',
+        );
+
+        return array_map(function (array $row) use ($before): array {
+            $provider = (string) ($row['provider'] ?? '');
+            $previous = $before[$provider] ?? null;
+
+            $row['movement'] = $previous === null ? [] : $this->deltas($row, $previous);
+
+            return $row;
+        }, $current);
     }
 
     /** The same window immediately before this one, for period-over-period deltas. */
