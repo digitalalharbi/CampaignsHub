@@ -124,6 +124,5 @@ final class ReportIdentityTest extends TestCase
         $report = $this->report();
 
         $this->assertSame(ReportIdentity::title($report), ReportIdentity::subject($report));
-        $this->assertStringEndsWith('· CampaignsHub', ReportIdentity::documentTitle($report));
     }
 }

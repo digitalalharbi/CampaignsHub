@@ -57,7 +57,22 @@ final class SharePreviewController extends Controller
              * report is this?» — and it is already implied by the link the sender chose to send.
              */
             'description' => $period === null ? $who : "{$who} · {$period}",
-            'siteName' => config('app.name', 'CampaignsHub'),
+            /*
+             * BRAND-CANONICAL-001 — `brand.name`, and not the framework's name key.
+             *
+             * Two configuration keys held the product's identity and this card read the wrong one.
+             * The framework's own name key defaults to «Laravel» and is what `MAIL_FROM_NAME` and
+             * `VITE_APP_NAME` interpolate — a framework value that happens to be set correctly in
+             * every env template we ship. `brand.name` is the product's, and its whole docblock is
+             * «change here (or via env) — never hard-code the name in code». The other key is not
+             * spelled out here: `BrandIdentitySourceTest` sweeps for the call, and a note quoting it
+             * trips the guard it exists to explain.
+             *
+             * Nothing a reader sees changes today, because both say «CampaignsHub». What changes is
+             * that there is one source: an install that renamed the brand renamed this card with it,
+             * and one that never set `APP_NAME` no longer sends «Laravel» to WhatsApp.
+             */
+            'siteName' => (string) config('brand.name'),
             'url' => url("/r/{$token}"),
             'image' => $identity['logo_url'],
         ]);

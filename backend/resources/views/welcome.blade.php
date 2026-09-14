@@ -4,7 +4,16 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title>{{ config('app.name', 'Laravel') }}</title>
+        {{-- BRAND-CANONICAL-001 — the brand's name, not the framework's.
+
+     This is Laravel's scaffolding page, served at `/` on the API host. It read the FRAMEWORK's name
+     key, which falls back to «Laravel», so an install that never set APP_NAME titled a page on the
+     product's own domain with the framework's name. `brand.name` is the product's identity and the
+     only key that should ever answer this question.
+
+     The key is not quoted here: `BrandIdentitySourceTest` sweeps for the call, and a note that spells
+     it out trips the guard it exists to explain. --}}
+        <title>{{ config('brand.name') }}</title>
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">

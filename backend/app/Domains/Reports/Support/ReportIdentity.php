@@ -48,11 +48,22 @@ final class ReportIdentity
         return implode(' — ', $parts);
     }
 
-    /** The browser tab, which also names the product — `Report — Client — Period · CampaignsHub`. */
-    public static function documentTitle(Report $report, string $locale = 'ar'): string
-    {
-        return self::title($report, $locale).' · CampaignsHub';
-    }
+    /*
+     * There was a `documentTitle()` here, and deleting it is the point.
+     *
+     * It appended « · CampaignsHub» to the title — the Latin name, whatever language the rest of the
+     * string was in — and it had exactly one caller in the world: its own unit test. The browser tab
+     * for a report is set by the SPA: the client's shared report names itself «report · client», and
+     * every authenticated section titles itself from the rail. A third answer computed on the server
+     * and rendered by nobody can only drift, and this one already had — the owner's rule is that once
+     * the locale is known the visible title follows it, and this named the product in Latin on an
+     * Arabic document.
+     *
+     * The rest of this class stays because every one of its answers is USED: `title()` by the subject
+     * and the filename, `subject()` by `ScheduledReportDispatcher`, `filename()` by
+     * `ReportDownloadController` — and each of those is now asserted where it lands rather than only
+     * where it is computed.
+     */
 
     /**
      * The email subject.
