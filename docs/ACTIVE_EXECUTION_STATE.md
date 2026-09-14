@@ -3,9 +3,25 @@
 _Reconciled from Git on 2026-09-14. It had been left at #362 while `origin/main` reached #404 —
 when this file and Git disagree, Git is right._
 
-## Where Git is (2026-09-14)
+## Where Git is (2026-09-14, later the same day)
 
-`origin/main` = `218e0046` (#404). This run merged #402, #403 and #404, each with all six checks
+`origin/main` = `e5408a58` (#412).
+
+**This file said #404. It was eight merges out of date — on the run whose own header explains that it
+goes stale.** Reconciled against Git rather than trusted, which is the owner's standing instruction
+and the reason this section is rewritten rather than appended to.
+
+Merged since: #405 (ad-set grain) · #406 (what a share link may disclose) · #407 (one identity) ·
+#408 (the live report's cross-platform comparison) · #409 (the detailed report's platform rung) ·
+#410 (project lifecycle authorization) · #411 (one identity key) · #412 (fourteen commands that knew
+how much they did). Every one merged with all six checks green and a confirmed main-branch deploy.
+
+In flight: the owner's two latest corrections, tracked against **BRAND-MARK-001** (the identity, and
+where clicking it goes) and **MKT-FIX-001** (the mobile marketing homepage shifting on a cold load).
+
+### The earlier reconciliation, kept because its reasoning still applies
+
+This run merged #402, #403 and #404, each with all six checks
 green and each deploy confirmed against its own commit.
 
 **#402** is verified in the served Production bundle. **#403** has no runtime surface — a test and a

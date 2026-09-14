@@ -39,9 +39,17 @@ export function PublicPageShell({
     document.documentElement.setAttribute('lang', locale)
   }, [c.dir, locale])
 
+  /*
+   * BRAND-MARK-001 — the tab follows the language the page is in.
+   *
+   * The dependency list was `[title]`, so this ran once and never again: a reader switching to
+   * English got an English page under an Arabic tab, and back. `productName(locale)` was already
+   * being called — with a `locale` the effect had been told to ignore, which is the quiet kind of
+   * wrong, because the code reads as though it handles the case.
+   */
   useEffect(() => {
     document.title = `${title} — ${productName(locale)}`
-  }, [title])
+  }, [title, locale])
 
   return (
     <div className="min-h-screen bg-background text-text-primary" dir={c.dir}>

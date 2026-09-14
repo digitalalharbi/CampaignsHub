@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
-import { brand } from '@/lib/brand'
+import { brand, productName } from '@/lib/brand'
 import {
   Activity, ArrowLeft, ArrowRight, BarChart3, Bell, CheckCircle2, FileText, LayoutDashboard, LogIn,
   Megaphone, ShieldCheck, Sparkles, Target, UserCircle, Wallet,
@@ -115,6 +115,21 @@ export function PublicHomePage() {
     document.documentElement.setAttribute('dir', c.dir)
     document.documentElement.setAttribute('lang', locale)
   }, [c.dir, locale])
+
+  /*
+   * BRAND-MARK-001 — the homepage names itself, in the language it is being read in.
+   *
+   * It set neither, so the tab kept whatever `index.html` shipped: the Arabic tagline and the Latin
+   * product name, on an English page, for as long as the reader stayed. Every other public page has
+   * had a title since `PublicPageShell` was written; the homepage is the one that does not use it.
+   *
+   * The static tag in the document stays as it is — it is what a crawler reads before any of this
+   * runs, and the owner's rule allows it to be neutral. What the rule requires is that the moment the
+   * locale is known, the visible title follows it.
+   */
+  useEffect(() => {
+    document.title = `${locale === 'ar' ? brand.taglineAr : brand.tagline} — ${productName(locale)}`
+  }, [locale])
 
   const Arrow = c.dir === 'rtl' ? ArrowLeft : ArrowRight
 
