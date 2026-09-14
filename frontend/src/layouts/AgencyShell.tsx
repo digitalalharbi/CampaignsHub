@@ -206,7 +206,7 @@ export function AgencyShell() {
           */}
           <Link
             to="/agency"
-            aria-label="CampaignsHub"
+            aria-label={productName(locale)}
             data-testid="mobile-brand-mark"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark lg:hidden"
           >

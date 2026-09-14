@@ -22,6 +22,7 @@ import { useUi } from '@/stores/ui'
 import { PortalFrame } from './PortalFrame'
 import type { MobileMoreGroup, MobileTab } from './MobileTabBar'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
+import { productName } from '@/lib/brand'
 
 /**
  * The platform owner's shell (ADR 0002, ADMIN-001).
@@ -282,7 +283,7 @@ export function AdminShell() {
           */}
           <Link
             to="/admin"
-            aria-label="CampaignsHub"
+            aria-label={productName(locale)}
             data-testid="mobile-brand-mark"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark lg:hidden"
           >
