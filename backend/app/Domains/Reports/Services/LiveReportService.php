@@ -178,6 +178,24 @@ final class LiveReportService
          * empty list is the fail-closed «none» that the ceiling's other axes use for a deliberate
          * empty choice. Collapsing the two would silently empty every older link in existence.
          */
+        /*
+         * The campaign ceiling, read with the SAME fail-closed rule the engine uses.
+         *
+         * `MetricsAggregator::forCampaigns([])` sets an empty list rather than null, and its `where`
+         * turns an empty list into the impossible-id sentinel — so a ceiling naming no campaign
+         * matches nothing, deliberately. The objective sections wrote `$scope['campaign_ids'] ?: null`,
+         * and null in `ObjectivePerformance` means «every campaign»: the one spelling that turns a
+         * fail-CLOSED choice into a fail-OPEN one.
+         *
+         * Measured on the demo world before this: a share naming no campaign rendered `platforms` 0
+         * and an objective split of 129,967 — the report body empty and the objective section
+         * reporting the whole project, in one document.
+         *
+         * Passed through as an array, never coalesced: `ObjectivePerformance` carries the same
+         * sentinel for an empty list, so the two agree by construction rather than by coincidence.
+         */
+        $campaignCeiling = $scope['campaign_ids'];
+
         $accountCeiling = ($share->scope['account_ids'] ?? []) ?: null;
 
         $engine = ReportScope::fromArray([
@@ -322,7 +340,7 @@ final class LiveReportService
              */
             'objective_performance' => ClientEntityBoundary::objectivePerformance((new ObjectivePerformance(
                 projectIds: $scope['project_id'] === '' ? null : [$scope['project_id']],
-                campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : ($scope['campaign_ids'] ?: null),
+                campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : $campaignCeiling,
                 providers: $applied['providers'] !== [] ? $applied['providers'] : ($scope['providers'] ?: null),
                 accountIds: $accountCeiling,
             ))->build($from, $to)),
@@ -337,7 +355,7 @@ final class LiveReportService
              */
             'objective_leaders' => (new ObjectivePerformance(
                 projectIds: $scope['project_id'] === '' ? null : [$scope['project_id']],
-                campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : ($scope['campaign_ids'] ?: null),
+                campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : $campaignCeiling,
                 providers: $applied['providers'] !== [] ? $applied['providers'] : ($scope['providers'] ?: null),
                 accountIds: $accountCeiling,
             ))->leadersByPath($from, $to, by: 'provider'),
