@@ -1,7 +1,7 @@
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
-import { compact, money, moneyFromTotals } from '@/features/analytics/format'
+import { compact, moneyExact, moneyFromTotals, percent } from '@/features/analytics/format'
 import { formatMoneyReading, moneyState, readCostPer, type MoneyTotals } from '@/lib/money/contract'
 import { mixedResultsNote } from './reportMetrics'
 import type { LivePayload } from './api'
@@ -41,32 +41,14 @@ import type { Locale } from '@/stores/ui'
  * currency is withheld, partial or mixed reads «—» rather than being printed under this report's
  * currency, and it sorts LAST rather than as a zero.
  */
-export function LiveDetailTables({
-  payload,
-  currency,
-  locale,
-}: {
-  payload: LivePayload
-  currency: string
-  locale: Locale
-}) {
-  const ar = locale === 'ar'
-  const t = {
-    platforms: ar ? 'كل المنصات' : 'Every platform',
-    objectives: ar ? 'كل هدف' : 'Every objective',
-    platform: ar ? 'المنصة' : 'Platform',
-    objective: ar ? 'الهدف' : 'Objective',
-    spend: ar ? 'الإنفاق' : 'Spend',
-    impressions: ar ? 'الظهور' : 'Impressions',
-    clicks: ar ? 'النقرات' : 'Clicks',
-    results: ar ? 'النتائج' : 'Results',
-    costPerResult: ar ? 'تكلفة النتيجة' : 'Cost per result',
-    none: ar ? 'لا توجد صفوف في هذه الفترة.' : 'No rows in this period.',
-    noObjectives: ar
-      ? 'لم يُنفَق على أي هدف في هذه الفترة.'
-      : 'Nothing was spent on any objective in this window.',
-  }
-
+/**
+ * The money-reading helpers both tables share.
+ *
+ * They were declared inside the component, which is why promoting the platform table to a section of
+ * its own meant either duplicating them or moving them here. Duplicating them is how two tables of
+ * the same figures come to disagree about what a withheld amount reads as.
+ */
+function moneyHelpers(ar: boolean, currency: string) {
   const numberOf = (row: Record<string, unknown>, key: string): number | null => {
     const v = row[key]
 
@@ -99,6 +81,209 @@ export function LiveDetailTables({
 
     return shown === whole ? null : whole
   }
+
+  return { numberOf, spendOf, spendValue, full }
+}
+
+/**
+ * LIVE-CROSS-PLATFORM-001 — every selected platform on one row, and what its money bought.
+ *
+ * ## What was missing
+ *
+ * The live page drew spend over time and a share-of-spend donut. Neither answers «which platform did
+ * better»: a share of spend says how much went somewhere, not what it bought. The one table that
+ * came close lived in `LiveDetailTables` and carried spend, impressions, clicks and results — the
+ * four columns that let a reader rank by volume and none that let them rank by price.
+ *
+ * ## Why it sits here and not in the detailed form
+ *
+ * It was the detailed form's table, so a client on a dashboard link never saw it, and the owner's
+ * contract for this page asks for exactly this comparison as part of the concise view. Both forms
+ * carry it now; the detailed form adds the objective decomposition below.
+ *
+ * ## The two derived columns are the SERVER's
+ *
+ * `cpa` and `ctr` arrive on every platform row from `MetricsAggregator::withDerived()`. Recomputing
+ * them here from spend and conversions was the first attempt and it was a second arithmetic for one
+ * figure — the way a page comes to disagree with the export of itself. It also skipped the money
+ * contract: a browser-side division reads a WITHHELD spend's null as zero and prints «0», a held
+ * amount rendered as free, and over zero results it prints «Infinity» on a client's report.
+ *
+ * `readCostPer` answers each of those as the contract does, which is not one answer: a spend that is
+ * complete but merely unconverted yields a real cost stated in the currency it was RECORDED in, and
+ * only a numerator that is partial or spans currencies is refused outright. A link that hides spend
+ * never reaches either branch — `ShareService` nulls `cpa` before this sees it.
+ *
+ * A platform's cost per result averages every objective bought on it — a lead programme's price with
+ * a sale's. The sentence under the table says so, because the table cannot say which.
+ */
+/*
+ * Both cost-per columns print the EXACT figure, not the compact one.
+ *
+ * `money()` runs through `compact()`, which rounds below a thousand: a cost per result of 31.5 came
+ * out «32 SAR». On a total that is noise; on a cost-per it is the figure, and `moneyExact`'s own note
+ * says so — it exists because a CPM of 29.71 printing «30 SAR» is a different answer, not a rounding.
+ *
+ * The KPI cards on this same page had already made that call: every cost-per card formats through
+ * `moneyExact`. Only these two table cells still compacted, so a client reading «تكلفة النتيجة»
+ * twice on one page could be shown two different numbers for it.
+ */
+export function LivePlatformComparison({
+  payload,
+  currency,
+  locale,
+}: {
+  payload: LivePayload
+  currency: string
+  locale: Locale
+}) {
+  const ar = locale === 'ar'
+  const t = {
+    title: ar ? 'مقارنة أداء المنصات' : 'Platform performance',
+    platform: ar ? 'المنصة' : 'Platform',
+    none: ar ? 'لا توجد صفوف في هذه الفترة.' : 'No rows in this period.',
+    /*
+     * The caveat does not promise a table below it.
+     *
+     * It said «the objective table breaks that apart», and that table is the DETAILED form's — on a
+     * dashboard link the sentence pointed at a section the reader does not have.
+     */
+    blend: ar
+      ? 'تكلفة النتيجة لكل منصة هي متوسط كل الأهداف المُشتراة عليها.'
+      : 'A platform’s cost per result averages every objective bought on it.',
+  }
+  const head = [
+    t.platform,
+    ar ? 'الإنفاق' : 'Spend',
+    ar ? 'النتائج' : 'Results',
+    ar ? 'تكلفة النتيجة' : 'Cost per result',
+    ar ? 'الظهور' : 'Impressions',
+    ar ? 'النقرات' : 'Clicks',
+    ar ? 'نسبة النقر' : 'CTR',
+  ]
+
+  const { numberOf, spendOf, spendValue, full } = moneyHelpers(ar, currency)
+
+  /*
+   * Every SELECTED platform gets a row, including the ones that reported nothing.
+   *
+   * `payload.platforms` carries only the platforms with figures in the window, so a link selecting
+   * six published four rows — and the table silently answered a different question: «the platforms
+   * that had data», not «the platforms this report covers». A reader cannot tell those apart, and
+   * the difference is the whole point of a comparison: a platform that spent nothing is a finding,
+   * and one that is simply missing from a list is not even visible as a question.
+   *
+   * The comment above this section claimed the rows were kept before the code did it. It was written
+   * from the intent rather than from the page, and opening the page is what showed the gap.
+   *
+   * The selected set is what the READER is looking at: the link's own providers, narrowed by any
+   * filter they applied. A platform they filtered out is not silent, it is excluded.
+   */
+  const reported = payload.platforms as Array<Record<string, unknown>>
+  const selected = (payload.applied?.providers?.length ?? 0) > 0
+    ? (payload.applied?.providers ?? [])
+    : (payload.available?.providers ?? [])
+  const silent = selected
+    .filter((provider) => !reported.some((row) => String(row.provider ?? '') === provider))
+    .map((provider) => ({ provider, __silent: true }) as Record<string, unknown>)
+  const rows = [...reported, ...silent]
+
+  /*
+   * The cost per result, through the contract rather than through a division.
+   *
+   * `readCostPer` is handed the row's own `conversions` as the denominator so a withheld spend can
+   * still be stated in its ORIGINAL currency — the same courtesy the spend column gets — instead of
+   * collapsing to «—» the moment a rate is missing.
+   */
+  const costPer = (row: Record<string, unknown>) =>
+    readCostPer(row as MoneyTotals, 'cpa', 'conversions', currency, ar)
+
+  const built = {
+    rows: rows.map((row) => [
+      <span key="name" className="font-semibold">
+        {providerLabel(canonicalPlatform(String(row.provider ?? '')), locale)}
+        {/*
+          Said in words, not left to six dashes.
+          
+          A row of «—» reads as «the report failed to load this» as easily as «this platform reported
+          nothing», and those are opposite facts. The marker is what makes it the second one.
+        */}
+        {row.__silent === true && (
+          <span className="ms-1 text-xs font-normal text-text-muted">
+            {ar ? '· لم تُبلِّغ عن بيانات' : '· reported nothing'}
+          </span>
+        )}
+      </span>,
+      <span key="spend" dir="ltr">{spendOf(row).text}</span>,
+      <span key="results" dir="ltr">{compact(numberOf(row, 'conversions'))}</span>,
+      <span key="cost" dir="ltr">{formatMoneyReading(costPer(row), moneyExact)}</span>,
+      <span key="impressions" dir="ltr">{compact(numberOf(row, 'impressions'))}</span>,
+      <span key="clicks" dir="ltr">{compact(numberOf(row, 'clicks'))}</span>,
+      <span key="ctr" dir="ltr">{percent(numberOf(row, 'ctr'), 2)}</span>,
+    ]),
+    values: rows.map((row): SortValues => [
+      String(row.provider ?? ''),
+      spendValue(row),
+      numberOf(row, 'conversions'),
+      costPer(row).amount,
+      numberOf(row, 'impressions'),
+      numberOf(row, 'clicks'),
+      numberOf(row, 'ctr'),
+    ]),
+    exact: rows.map((row) => [
+      null,
+      spendOf(row).exact,
+      full(numberOf(row, 'conversions')),
+      null,
+      full(numberOf(row, 'impressions')),
+      full(numberOf(row, 'clicks')),
+      null,
+    ]),
+  }
+
+  return (
+    <div className="mt-3 min-w-0">
+      <Section title={t.title} testid="live-platform-comparison" empty={rows.length === 0} none={t.none}>
+        <MetricTable
+          head={head}
+          rows={built.rows}
+          values={built.values}
+          exact={built.exact}
+          initialSort={{ column: 1, dir: 'desc' }}
+        />
+        <p className="mt-2 text-xs text-text-muted">{t.blend}</p>
+      </Section>
+    </div>
+  )
+}
+
+export function LiveDetailTables({
+  payload,
+  currency,
+  locale,
+}: {
+  payload: LivePayload
+  currency: string
+  locale: Locale
+}) {
+  const ar = locale === 'ar'
+  const t = {
+    platforms: ar ? 'كل المنصات' : 'Every platform',
+    objectives: ar ? 'كل هدف' : 'Every objective',
+    platform: ar ? 'المنصة' : 'Platform',
+    objective: ar ? 'الهدف' : 'Objective',
+    spend: ar ? 'الإنفاق' : 'Spend',
+    impressions: ar ? 'الظهور' : 'Impressions',
+    clicks: ar ? 'النقرات' : 'Clicks',
+    results: ar ? 'النتائج' : 'Results',
+    costPerResult: ar ? 'تكلفة النتيجة' : 'Cost per result',
+    none: ar ? 'لا توجد صفوف في هذه الفترة.' : 'No rows in this period.',
+    noObjectives: ar
+      ? 'لم يُنفَق على أي هدف في هذه الفترة.'
+      : 'Nothing was spent on any objective in this window.',
+  }
+
+  const { numberOf, spendOf, spendValue, full } = moneyHelpers(ar, currency)
 
   const body = (rows: Array<Record<string, unknown>>, nameOf: (row: Record<string, unknown>) => React.ReactNode) => ({
     rows: rows.map((row) => [
@@ -142,14 +327,6 @@ export function LiveDetailTables({
     ]),
   })
 
-  const head = (first: string) => [first, t.spend, t.impressions, t.clicks, t.results]
-
-  const platforms = body(payload.platforms as Array<Record<string, unknown>>, (row) => (
-    <span key="name" className="font-semibold">
-      {providerLabel(canonicalPlatform(String(row.provider ?? '')), locale)}
-    </span>
-  ))
-
   /*
    * Only the paths money was actually spent on: a path at zero is not a finding, it is an absence.
    *
@@ -185,7 +362,7 @@ export function LiveDetailTables({
      */
     const costPer = (row: (typeof objectiveRows)[number]) =>
       row.result_metrics_apply
-        ? formatMoneyReading(readCostPer(row as unknown as MoneyTotals, 'cpa', 'orders', currency, ar), money)
+        ? formatMoneyReading(readCostPer(row as unknown as MoneyTotals, 'cpa', 'orders', currency, ar), moneyExact)
         : '\u2014'
 
     /*
@@ -226,10 +403,6 @@ export function LiveDetailTables({
 
   return (
     <div data-testid="live-detail-tables" className="mt-3 grid gap-3 [&>*]:min-w-0">
-      <Section title={t.platforms} testid="live-detail-platforms" empty={payload.platforms.length === 0} none={t.none}>
-        <MetricTable head={head(t.platform)} rows={platforms.rows} values={platforms.values} exact={platforms.exact} initialSort={{ column: 1, dir: 'desc' }} />
-      </Section>
-
       {/*
         REPORT-OBJECTIVE-003/004 in the detailed form — the axis a client's money is actually judged on.
 

@@ -3,7 +3,7 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { clientKpiKeys } from './clientKpis'
 import { ClientAttention } from './ClientAttention'
 import { readMetricValue, type MetricValue } from '@/lib/metricValue'
-import { LiveDetailTables } from './LiveDetailTables'
+import { LiveDetailTables, LivePlatformComparison } from './LiveDetailTables'
 import { ReportAdDetail } from './ReportAdDetail'
 import { ReportCreativeRoster } from './ReportCreativeRoster'
 import { ReportAdsSection, type ReportAd } from './ReportAdsSection'
@@ -305,6 +305,8 @@ export function LiveSharedReport({
   const spendChartable = spendState === 'complete_converted' || spendState === 'zero'
   const platformSpendRank = rankableMoney(payload.platforms as MoneyTotals[], 'spend', currency)
 
+
+
   return (
     /*
      * `[&>*]:min-w-0` — without it this page scrolls sideways on a phone.
@@ -541,6 +543,37 @@ export function LiveSharedReport({
           </div>
         )}
 
+        {/*
+          LIVE-CROSS-PLATFORM-001 — the question the charts below cannot answer.
+
+          They answer «how much» and «over time»; neither answers «which platform did better», and
+          that is what a client opens a multi-platform report to ask. A share-of-spend donut says how
+          much went somewhere, not what it bought.
+
+          It opens the «where» group rather than closing it. CLIENT-FACING-PRESENTATION-001 fixes the
+          order of the client's six questions and this section belongs to the fifth — but inside that
+          group the comparison comes first, because the charts are the illustration of a ranking the
+          reader has not been given yet when they meet them the other way round.
+
+          Every form carries it. Gating it to the dashboard was the first attempt and it rendered for
+          nobody — `form` defaults to `detailed`, so the section was hidden on almost every link, and
+          it took looking at the page rather than reading the condition to see that. The table itself
+          is `LiveDetailTables`' own, promoted out of the detailed form and given the two columns that
+          let a reader rank by price instead of by volume; see the component for why the derived ones
+          come from the server.
+
+          A platform the link SELECTED but which reported nothing keeps its row and says so. Dropping
+          it would quietly answer a different question — «the platforms that had data» — and a reader
+          cannot tell an absent row from a platform nobody bought on.
+
+          That is the row itself, and not a sentence under the table: `FreshnessStrip` already names
+          the platforms the figures exclude, and a dashboard that says a thing twice is on its way to
+          being a document. A paragraph was written here first and deleted after reading the page.
+        */}
+        {payload.sections?.platform_comparison !== false && (
+          <LivePlatformComparison payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />
+        )}
+
         <div className="mt-3 grid gap-3 lg:grid-cols-3" data-testid="live-platforms">
           <ChartCard title={ar ? 'الأداء بمرور الوقت' : 'Performance over time'} className="lg:col-span-2">
             <MetricLineChart
@@ -585,6 +618,8 @@ export function LiveSharedReport({
           </ChartCard>
         </div>
 
+
+
         {/*
           CLIENT-REPORT-ENTITY-BOUNDARY-001 — the campaign ranking that stood here is gone.
 
@@ -592,6 +627,14 @@ export function LiveSharedReport({
           the money go» is the question it answered, and the donut above answers it by platform; what
           only the campaign chart could add was the roster, which is the plan rather than the result.
         */}
+        {/*
+          No funnel, no funnel section — «no empty decorative sections».
+          
+          Switching the funnel off emptied the payload and left this container drawing an empty chart
+          card, which is the decoration the owner's contract rules out and a worse answer than the
+          section simply not being there.
+        */}
+        {payload.funnel.length > 0 && (
         <div className="mt-3 grid gap-3" data-testid="live-funnel">
           <ChartCard title={ar ? 'قمع الأداء' : 'Performance funnel'}>
             <ConversionFunnelChart stages={payload.funnel} currency={currency} ar={ar} />
@@ -606,6 +649,7 @@ export function LiveSharedReport({
             )}
           </ChartCard>
         </div>
+        )}
 
         {/*
           * FUNNEL-001 — the store half, shown to the client only when there IS a store.

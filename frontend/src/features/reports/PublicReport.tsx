@@ -110,6 +110,32 @@ export function PublicReport() {
 
   const identity = headerIdentity(branding, locale)
 
+  /*
+   * REPORT-TITLE-METADATA-001 on the CLIENT's page — the one route the title rule had not reached.
+   *
+   * `index.html` ships the marketing line, the authenticated app replaces it per section, and this
+   * page replaced nothing: a client opening their own report got a tab, a bookmark and a history
+   * entry reading «كل حملاتك الإعلانية المدفوعة في مكان واحد» — the product's advertising, on a
+   * document about their account. Somebody with two clients' links open cannot tell them apart.
+   *
+   * A shared report keeps the CLIENT's title rather than taking the product's: the report's own name
+   * under whoever the header says this document belongs to. `headerIdentity` has already resolved
+   * that hierarchy — the client's name, else the agency's, else the product's — so the tab and the
+   * masthead cannot disagree.
+   */
+  useEffect(() => {
+    const previous = document.title
+    /*
+     * «·» and not «—», because both halves already contain one: «التقرير الأسبوعي — الأداء» under
+     * «Demo Store — Analytics» produced «… — … — … — …», four names and three identical separators
+     * with nothing to say where the report stops and the client starts.
+     */
+    if (report) document.title = `${report.name} · ${identity.name}`
+
+    // Restored on the way out, so a client link cannot rename the tab the reader goes back to.
+    return () => { document.title = previous }
+  }, [report, identity.name])
+
   return (
     <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-background text-text-primary">
       <header className="sticky top-0 z-10 border-b border-border bg-surface/85 px-4 py-3 backdrop-blur-md sm:px-8">

@@ -261,3 +261,34 @@ test.describe('the live report holds together on a phone', () => {
     }
   }
 })
+
+/**
+ * LIVE-CROSS-PLATFORM-001 — the table that answers «which platform did better».
+ *
+ * Driven through the real link rather than a fixture. The columns and their refusals are pinned in
+ * `platformComparison.test.tsx` against a rendered component; what this adds is that the section is
+ * on the page a client actually opens — the demo link's form is `detailed`, which is the form the
+ * table was originally hidden from.
+ */
+test.describe('the live dashboard compares its platforms', () => {
+  test('a row per reporting platform, with the figures the page already shows', async ({ page }) => {
+    await page.goto(URL)
+
+    const table = page.getByTestId('live-platform-comparison')
+    await expect(table).toBeVisible({ timeout: 20000 })
+
+    const rows = table.locator('tbody tr')
+    await expect(rows.first()).toBeVisible()
+    expect(await rows.count()).toBeGreaterThan(0)
+
+    /*
+     * No «Infinity», and no «NaN». Those are what a cost per result becomes when a platform reported
+     * no results or a withheld spend, and they are the failure this table is written to refuse — a
+     * client's report is the last place a division by zero should surface.
+     */
+    const text = (await table.innerText()).toLowerCase()
+    expect(text).not.toContain('infinity')
+    expect(text).not.toContain('nan')
+    expect(text).not.toContain('∞')
+  })
+})
