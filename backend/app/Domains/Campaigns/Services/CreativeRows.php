@@ -373,7 +373,7 @@ final class CreativeRows
                 ->select('creative_id')
                 ->selectRaw('SUM('.$sort.') AS sort_total')
                 ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
-                ->where(fn ($q) => CreativeDemoPolicy::applyToProject($q, 'creative_daily_metrics', $projectId))
+                ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'creative_daily_metrics', $projectId))
                 ->groupBy('creative_id');
 
             return $query
@@ -411,7 +411,7 @@ final class CreativeRows
                         ->selectRaw('SUM(spend) AS sort_total')
                         ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
                         /* Relevance is spend, and seeded spend is not this customer's — see above. */
-                        ->where(fn ($q) => CreativeDemoPolicy::applyToProject($q, 'creative_daily_metrics', $projectId))
+                        ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'creative_daily_metrics', $projectId))
                         ->groupBy('creative_id'),
                     'sorted',
                     'sorted.creative_id',

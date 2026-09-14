@@ -43,8 +43,23 @@ use Illuminate\Support\Facades\DB;
  */
 final class CreativeDemoPolicy
 {
-    /** @var array<string, bool> one existence check per scope, not per query. */
-    private static array $memo = [];
+    /**
+     * One existence check per scope, per REQUEST.
+     *
+     * This was `private static` and the memo outlived everything. Two consequences, and the second
+     * is the serious one: `CreativePulseApiTest` asserts 200 creatives cost the same queries as 2,
+     * and whichever scenario ran first paid for the check while the second read a memo it should not
+     * have been able to see — so the guard failed by ONE, in the direction that makes no sense for a
+     * per-row cost. Underneath that, a static cache means a scope's demo-ness could be answered in
+     * one request from a fact established in another, which on a long-running server is a wrong
+     * answer with no expiry.
+     *
+     * Instance state on a scoped binding: fresh per request, shared within it, and a test's world
+     * cannot leak into the next test's.
+     *
+     * @var array<string, bool>
+     */
+    private array $memo = [];
 
     /*
      * There was an `applyToCreatives()` here, keyed on the id list, and the project form replaced it.
@@ -63,9 +78,9 @@ final class CreativeDemoPolicy
      * The same, for a query whose scope is a PROJECT rather than a known list of creatives — the
      * sort subqueries, which rank every creative a project holds.
      */
-    public static function applyToProject(mixed $query, string $table, ?string $projectId): void
+    public function applyToProject(mixed $query, string $table, ?string $projectId): void
     {
-        if ($projectId === null || ! self::projectHasLiveRows($projectId)) {
+        if ($projectId === null || ! $this->projectHasLiveRows($projectId)) {
             return;
         }
 
@@ -77,11 +92,11 @@ final class CreativeDemoPolicy
      *
      * @param  list<string>  $creativeIds
      */
-    public static function creativesHaveLiveRows(array $creativeIds): bool
+    public function creativesHaveLiveRows(array $creativeIds): bool
     {
         sort($creativeIds);
 
-        return self::$memo['c:'.implode(',', $creativeIds)] ??= self::eitherGrainHasLiveRow(
+        return $this->memo['c:'.implode(',', $creativeIds)] ??= $this->eitherGrainHasLiveRow(
             DB::table('creative_daily_metrics')
                 ->whereIn('creative_id', $creativeIds)
                 ->where('is_demo', false),
@@ -98,9 +113,9 @@ final class CreativeDemoPolicy
         );
     }
 
-    public static function projectHasLiveRows(string $projectId): bool
+    public function projectHasLiveRows(string $projectId): bool
     {
-        return self::$memo['p:'.$projectId] ??= self::eitherGrainHasLiveRow(
+        return $this->memo['p:'.$projectId] ??= $this->eitherGrainHasLiveRow(
             DB::table('creative_daily_metrics')
                 ->where('project_id', $projectId)
                 ->where('is_demo', false),
@@ -123,7 +138,7 @@ final class CreativeDemoPolicy
      *
      * So both questions go in one statement and the database answers once.
      */
-    private static function eitherGrainHasLiveRow(mixed $creativeGrain, mixed $adGrain): bool
+    private function eitherGrainHasLiveRow(mixed $creativeGrain, mixed $adGrain): bool
     {
         /*
          * The two subqueries are inlined as SQL with their bindings, because a query builder cannot
@@ -138,11 +153,5 @@ final class CreativeDemoPolicy
         );
 
         return (bool) ($row->live ?? false);
-    }
-
-    /** Tests build a world per case; the memo must not carry one case's answer into the next. */
-    public static function forget(): void
-    {
-        self::$memo = [];
     }
 }

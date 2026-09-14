@@ -647,7 +647,20 @@ final class CreativePulseApiTest extends TestCase
      */
     public function test_two_hundred_creatives_cost_the_same_queries_as_two(): void
     {
-        $count = static function (callable $body): int {
+        $count = function (callable $body): int {
+            /*
+             * Each measurement is a separate REQUEST, so the per-request caches start empty.
+             *
+             * `CreativeDemoPolicy` asks once per request whether the scope holds live rows and
+             * memoises the answer on a scoped binding — which is what a request-lifetime cache is
+             * for. Measuring two «requests» inside one container let the first pay for that check and
+             * the second read it for free, so this guard failed by exactly one, in the direction that
+             * cannot mean per-row cost. Forgetting the scoped instances is what Octane does between
+             * requests; doing it here makes the harness model the thing it is measuring rather than
+             * weakening what it asserts.
+             */
+            $this->app->forgetScopedInstances();
+
             DB::flushQueryLog();
             DB::enableQueryLog();
             $body();
