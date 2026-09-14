@@ -320,6 +320,208 @@ final class ProjectCapabilityTest extends TestCase
     }
 
     /** @param  list<string>  $permissions */
+    /**
+     * TEAM-PROJECT-RBAC-001 — the narrowing that guards a READ was never put on the WRITES.
+     *
+     * ## The defect
+     *
+     * `show` learned it: «a client viewer confined to one project could read the neighbouring
+     * client's record by putting its id in the URL», and it now asks `reachable()` before answering.
+     * `update`, `archive`, `restore`, `pause`, `resume` and `clone` ask nothing of the kind. They
+     * check the TENANT permission — `projects.update`, `projects.create` — and then look the project
+     * up with a tenant-scoped `find()`, which by definition finds every project in the agency.
+     *
+     * So a member confined to one client could pause, archive, rename or copy ANOTHER client's
+     * project by putting its id in the URL. That is the same defect one rung more serious: reading a
+     * neighbour's project name is a disclosure, and pausing their campaigns stops their advertising.
+     *
+     * The id is not a secret — it is in the address of every project they legitimately open.
+     *
+     * ## Why the tenant permission is not the answer
+     *
+     * `projects.update` says «may this person run clients at all», which is exactly the sentence the
+     * route-coverage list uses to justify exempting these routes from a project capability. That
+     * sentence is true and it is not a scope: an account manager who runs one client holds it, and
+     * nothing about holding it says which client. `projects.view.all` is the permission that means
+     * «every project in this agency», and `reachable()` already reads it.
+     */
+    public function test_a_confined_member_cannot_pause_or_archive_a_neighbouring_project(): void
+    {
+        $manager = $this->confinedWriter();
+
+        foreach (['pause', 'archive', 'restore', 'resume'] as $action) {
+            $this->actingAs($manager, 'sanctum')
+                ->postJson("/api/v1/projects/{$this->otherProject->id}/{$action}")
+                ->assertForbidden();
+        }
+
+        $this->assertSame(
+            'active',
+            $this->otherProject->fresh()->status,
+            'a neighbouring client’s project changed state',
+        );
+    }
+
+    /** Renaming is the same act on the same row, through a different verb. */
+    public function test_a_confined_member_cannot_rename_a_neighbouring_project(): void
+    {
+        $manager = $this->confinedWriter();
+
+        $this->actingAs($manager, 'sanctum')
+            ->patchJson("/api/v1/projects/{$this->otherProject->id}", ['name' => 'Taken over'])
+            ->assertForbidden();
+
+        $this->assertNotSame('Taken over', $this->otherProject->fresh()->name);
+    }
+
+    /**
+     * And copying it, which takes the neighbour's configuration rather than changing it.
+     *
+     * A copy is a read the reader keeps: the name, the workspace, the account manager and whatever
+     * the clone carries across, in a project they then own.
+     */
+    public function test_a_confined_member_cannot_clone_a_neighbouring_project(): void
+    {
+        $manager = $this->confinedWriter();
+        $before = Project::withoutGlobalScopes()->count();
+
+        $this->actingAs($manager, 'sanctum')
+            ->postJson("/api/v1/projects/{$this->otherProject->id}/clone")
+            ->assertForbidden();
+
+        $this->assertSame($before, Project::withoutGlobalScopes()->count(), 'a copy of the neighbour was made');
+    }
+
+    /**
+     * The guard is a narrowing, not a lockout — the same member acts on their OWN project.
+     *
+     * A refusal that refuses everybody proves nothing about scope; it proves the route is broken.
+     */
+    public function test_the_same_member_still_pauses_their_own_project(): void
+    {
+        $manager = $this->confinedWriter();
+
+        $this->actingAs($manager, 'sanctum')
+            ->postJson("/api/v1/projects/{$this->project->id}/pause")
+            ->assertOk();
+
+        $this->assertSame('paused', $this->project->fresh()->status);
+    }
+
+    /**
+     * An agency-wide reader is not narrowed, because that is what `projects.view.all` means.
+     *
+     * Narrowing them would break the account the permission exists for — the person who runs every
+     * client — and `reachable()` already answers «null» for them on the read path.
+     */
+    public function test_an_agency_wide_holder_still_reaches_every_project(): void
+    {
+        $owner = $this->tenantUser(['projects.view', 'projects.view.all', 'projects.update']);
+
+        $this->actingAs($owner, 'sanctum')
+            ->postJson("/api/v1/projects/{$this->otherProject->id}/pause")
+            ->assertOk();
+    }
+
+    /**
+     * Every project LIFECYCLE route refuses a confined member — swept, not enumerated by hand.
+     *
+     * ## Why a sweep and not three more cases
+     *
+     * The routes under `/projects/{project}/…` are guarded by `ResolveProject`, which has applied
+     * this exact narrowing since it was written. The lifecycle routes are the ones OUTSIDE that
+     * middleware — they act on the project rather than inside it — and their protection is a line in
+     * a controller that somebody has to remember. It was remembered once, on `show`, and forgotten on
+     * every write beside it.
+     *
+     * So the guard is the same shape as the defect: it finds the routes by what they lack — a
+     * `{project}` in the path and no `ResolveProject` above them — and drives each one. A route added
+     * to this group tomorrow is swept rather than trusted.
+     *
+     * ## What «refuses» means here
+     *
+     * 403 specifically, and never a 2xx. A 404 would be a different answer with a different meaning,
+     * and an empty 200 is the failure this whole row is about: a refusal dressed as an answer.
+     */
+    public function test_every_lifecycle_route_refuses_a_confined_member(): void
+    {
+        $manager = $this->confinedWriter();
+        $swept = [];
+        $offenders = [];
+
+        foreach (app('router')->getRoutes() as $route) {
+            $name = (string) $route->getName();
+
+            if (! str_starts_with($name, 'api.v1.projects.') || ! str_contains($route->uri(), '{project}')) {
+                continue;
+            }
+
+            /* Anything with a second bound id belongs to a nested resource, not to the lifecycle. */
+            if (preg_match('/\{(?!project\??\})[a-zA-Z_]+\??\}/', $route->uri())) {
+                continue;
+            }
+
+            foreach ($route->gatherMiddleware() as $middleware) {
+                if (is_string($middleware) && str_contains($middleware, 'ResolveProject')) {
+                    continue 2;
+                }
+            }
+
+            $verb = collect($route->methods())->first(fn (string $m): bool => $m !== 'HEAD');
+            $uri = '/'.str_replace('{project}', (string) $this->otherProject->id, $route->uri());
+
+            $swept[] = $name;
+
+            $status = $this->actingAs($manager, 'sanctum')
+                ->json((string) $verb, $uri, [])
+                ->getStatusCode();
+
+            if ($status !== 403) {
+                $offenders[] = "{$name} → {$verb} answered {$status}";
+            }
+        }
+
+        sort($swept);
+        sort($offenders);
+
+        /*
+         * The sweep has to find the routes, or it proves nothing by finding no offenders. Seven is
+         * what the group holds today — show, update, archive, restore, clone, pause, resume.
+         */
+        $this->assertGreaterThanOrEqual(7, count($swept), 'the lifecycle sweep found almost no routes: '.implode(', ', $swept));
+
+        $this->assertSame(
+            [],
+            $offenders,
+            "A project lifecycle route acted on a project this member cannot reach.\n"
+            ."Call `authorizeReach()` after `find()`, as `show` and the transitions do:\n  "
+            .implode("\n  ", $offenders),
+        );
+    }
+
+    /**
+     * A member who may write inside ONE project, and is not an agency-wide reader.
+     *
+     * This is the shape the defect lives in: permissions are freeform strings a tenant grants, and
+     * «may edit a project» and «may see every project» are two of them. An account manager running a
+     * single client holds the first and not the second.
+     */
+    private function confinedWriter(): User
+    {
+        $user = $this->tenantUser(['projects.view', 'projects.update', 'projects.create']);
+
+        ProjectMembership::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'user_id' => $user->id,
+            'role' => ProjectRole::MARKETING_MANAGER,
+            'status' => 'active',
+            'joined_at' => Carbon::now(),
+        ]);
+
+        return $user;
+    }
+
     private function tenantUser(array $permissions): User
     {
         $user = $this->user();
