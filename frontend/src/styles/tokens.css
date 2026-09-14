@@ -1,6 +1,64 @@
 /* Design tokens — single source of truth for color, typography, radius, elevation.
    See docs/design-tokens.md. Never hard-code a color or a raw font-size; reference a token. */
 
+
+/*
+  MKT-FIX-001 — the substitute occupies the space the real font will take.
+
+  ## What it is for
+
+  Every face this product loads is `font-display: swap` and nothing is preloaded, so on a cold cache
+  the page paints in a fallback and reflows when Inter arrives. That is the residual after the
+  direction-and-theme flip was fixed: measured on the deployed site, one load at 393px recorded a
+  CLS of 0.0088 while most recorded 0.
+
+  ## The numbers are measured, not copied
+
+  At 400/100px, «Handgloves» is 559.67px in Inter Variable and 528.13px in Arial, so `size-adjust:
+  106%`. The overrides are Inter's own ascent (97) and descent (24) expressed against the ADJUSTED em,
+  which is why they are divided by that same 1.06 rather than used raw: an override is a share of the
+  font size, and `size-adjust` has already changed what that share is measuring.
+
+  ## The first attempt was tuned against a face that never resolved
+
+  It listed `local('system-ui')` first and was scaled to `system-ui`'s 497.22px. `system-ui` is a CSS
+  GENERIC, not a family a `local()` can match, so the fallback silently resolved to Arial and rendered
+  6.25% too wide — measured in a browser, not deduced. The stack now names real families, so what is
+  measured is what resolves.
+
+  `line-gap-override: 0%` because Inter reports none, and a fallback inventing one would push every
+  line down by a hair — which is the shift this exists to remove, in the other direction.
+
+  ## Arabic is deliberately left alone
+
+  «كامبينز هب الحملات» measures 746.37px in IBM Plex Sans Arabic against 739.21px in the system
+  fallback — within one per cent. It is not the mover, and a correction that small is more likely to
+  make the Arabic worse than better.
+
+  ## There is no automated guard on these numbers, and that is stated rather than hidden
+
+  A test was written to hold this face to «never a CSS generic in `local()`» and to keep the vertical
+  overrides consistent with `size-adjust`. It could not observe its subject: the vitest harness stubs
+  CSS, so reading this file through Vite's raw glob returns an empty string and every assertion would
+  have passed on nothing. A guard that cannot fail is worse than none, so it was deleted rather than
+  left to look like coverage. The evidence for these numbers is the measurement recorded above, taken
+  in a browser against the running product.
+
+  ## It is not a mask
+
+  Nothing is hidden, delayed or faded. The text is drawn immediately in a face whose metrics match
+  the one that is coming, so when the swap happens the glyphs change and the geometry does not.
+*/
+@font-face {
+  font-family: 'Inter Fallback';
+  src: local('Arial'), local('Helvetica'), local('Liberation Sans');
+  size-adjust: 106%;
+  ascent-override: 91.5%;
+  descent-override: 22.6%;
+  line-gap-override: 0%;
+}
+
+
 :root {
   /* ---- Brand + semantic color ---- */
   --brand-50: #ecfdf5;
@@ -105,8 +163,8 @@
   --radius-pill: 999px;
 
   /* ---- Typography: families (Latin→Inter, Arabic→Plex; ordered so each script picks its own) ---- */
-  --font-body: 'Inter Variable', 'IBM Plex Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-heading: 'Inter Variable', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+  --font-body: 'Inter Variable', 'Inter Fallback', 'IBM Plex Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: 'Inter Variable', 'Inter Fallback', 'IBM Plex Sans Arabic', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', 'IBM Plex Sans Arabic', monospace;
 
   /* ---- Typography: scale (rem, 1rem = 16px). Never smaller than 13px for real text. ---- */
