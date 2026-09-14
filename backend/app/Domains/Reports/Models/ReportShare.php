@@ -93,6 +93,48 @@ final class ReportShare extends Model
      * ATTRIB-VIS-001. Sibling of `creativeVisibility()` rather than a second pattern, because the
      * question is the same one: what did an operator deliberately choose to publish?
      */
+    /**
+     * Whether this link covers only PART of the project its report is about.
+     *
+     * A fact about the share, held here rather than re-derived at each call site, because two places
+     * need it and they must not be able to disagree: the endpoint that refuses the attribution
+     * section, and the payload flag that decides whether the client's page mounts that section at
+     * all. A refusal the page does not know about renders a section that appears and then fails,
+     * which `SharedAttributionSection` states is worse than one that never appears — a client cannot
+     * tell «not shared» from «broken».
+     */
+    /**
+     * The section flags a READER may act on — the operator's choice, narrowed by the link's reach.
+     *
+     * `sectionVisibility()` answers «what did the operator publish»; this answers «what may this link
+     * actually open», which is the question every caller was really asking and three of them were
+     * answering separately. `show()` and `live()` each built their own copy, and the endpoint that
+     * serves attribution applied a third rule — so a link could be told the section was available by
+     * one payload and refused by the request that followed. The page mounts
+     * `SharedAttributionSection` on this flag alone and that component carries no refusal path on
+     * purpose, so the disagreement rendered a section that appears and then fails.
+     *
+     * A conjunction, never an override: a link that never asked for attribution does not acquire it
+     * by being wide.
+     *
+     * @return array<string, bool>
+     */
+    public function visibleSections(): array
+    {
+        $sections = $this->sectionVisibility()->toArray();
+
+        $sections['attribution'] = ($sections['attribution'] ?? false) && ! $this->narrowerThanItsProject();
+
+        return $sections;
+    }
+
+    public function narrowerThanItsProject(): bool
+    {
+        $scope = (array) ($this->scope ?? []);
+
+        return (array) ($scope['account_ids'] ?? []) !== [] || (array) ($scope['campaign_ids'] ?? []) !== [];
+    }
+
     public function sectionVisibility(): ShareSections
     {
         return ShareSections::fromArray((array) (($this->settings ?? [])['sections'] ?? []));

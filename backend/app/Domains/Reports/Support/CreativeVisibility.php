@@ -78,6 +78,20 @@ final class CreativeVisibility
      */
     public const COST_METRICS = [
         'spend', 'cpc', 'cpm', 'cpa', 'cpl', 'cpi', 'cpe', 'cost_per_view', 'cost_per_lpv', 'cost_per_result',
+        /*
+         * `roas` is on BOTH lists, because it is built from both figures.
+         *
+         * It was classified by its numerator alone and so belonged only to revenue. But ROAS is
+         * revenue ÷ spend, and a link that hides spend while publishing revenue AND roas hands the
+         * hidden figure straight back: spend = revenue ÷ roas, exactly, no estimation. Measured on a
+         * `hide_spend` link before this: sixty roster rows, five ads and three grouped ads all
+         * carrying roas beside a revenue that was never hidden.
+         *
+         * Redaction a reader can undo with one division is not redaction, and the rule this contract
+         * is written to keep is that a hidden figure must take its derivations with it — whichever
+         * side of the fraction it sits on.
+         */
+        'roas',
     ];
 
     /** Revenue-derived metrics that a hidden revenue must take with it. */

@@ -293,7 +293,20 @@ final class SharedCreativeView
         $ceiling = $this->ceiling($share);
 
         $this->tenants->setTenantId((string) $share->tenant_id);
-        $this->projects->setProjectId($ceiling['project_id']);
+        /*
+         * A ceiling with no project sets the IMPOSSIBLE id, never the empty string.
+         *
+         * The explicit filter uses that sentinel already — «an empty value matches NOTHING rather
+         * than everything» — but the ambient project context was set to the raw value, and the global
+         * `ProjectScope` then added a second condition binding `''` to a uuid column. Postgres refuses
+         * it, so the endpoint answered 500 rather than an empty page: `invalid input syntax for type
+         * uuid: ""`. Shares carrying no scope at all are not hypothetical — `DemoAccountsSeeder`
+         * creates them, and so does any link minted before the scope existed.
+         *
+         * Fail-closed and fail-QUIET: the same «matches nothing» the filter means, expressed in the
+         * one place that was saying it differently.
+         */
+        $this->projects->setProjectId($ceiling['project_id'] === '' ? ReportScope::IMPOSSIBLE : $ceiling['project_id']);
 
         $requested = array_intersect_key($requested, array_flip(self::NARROWABLE));
 

@@ -137,7 +137,20 @@ final class LiveReportService
          * an authenticated operator when the link was created.
          */
         $this->tenants->setTenantId((string) $share->tenant_id);
-        $this->projects->setProjectId($scope['project_id']);
+        /*
+         * A ceiling with no project sets the IMPOSSIBLE id, never the empty string.
+         *
+         * The explicit filter uses that sentinel already — «an empty value matches NOTHING rather
+         * than everything» — but the ambient project context was set to the raw value, and the global
+         * `ProjectScope` then added a second condition binding `''` to a uuid column. Postgres refuses
+         * it, so the endpoint answered 500 rather than an empty page: `invalid input syntax for type
+         * uuid: ""`. Shares carrying no scope at all are not hypothetical — `DemoAccountsSeeder`
+         * creates them, and so does any link minted before the scope existed.
+         *
+         * Fail-closed and fail-QUIET: the same «matches nothing» the filter means, expressed in the
+         * one place that was saying it differently.
+         */
+        $this->projects->setProjectId($scope['project_id'] === '' ? ReportScope::IMPOSSIBLE : $scope['project_id']);
 
         $from = Carbon::parse($applied['from']);
         $to = Carbon::parse($applied['to']);
@@ -366,7 +379,16 @@ final class LiveReportService
              * could not offer it because it never carried the flags; it does now, and the section
              * itself is still fetched through the gated route rather than inlined here.
              */
-            'sections' => $share->sectionVisibility()->toArray(),
+            /*
+             * The flags the PAGE reads, with attribution closed on a link narrower than its project.
+             *
+             * `PublicReport` mounts `SharedAttributionSection` on this flag alone, and that component
+             * deliberately carries no refusal path — so leaving the flag true while the endpoint
+             * refuses would render a section that appears and then fails, the one outcome its own
+             * docblock rules out. The predicate lives on the share so the flag and the endpoint cannot
+             * drift into disagreeing about which links are too narrow.
+             */
+            'sections' => $share->visibleSections(),
             'store_funnel' => $this->storeFunnel($share, $scope['project_id'], $from, $to),
             'freshness' => $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers']),
             /*

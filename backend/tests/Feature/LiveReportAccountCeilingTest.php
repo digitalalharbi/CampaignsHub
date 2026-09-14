@@ -371,4 +371,177 @@ final class LiveReportAccountCeilingTest extends TestCase
 
         $this->assertNotContains('Not yet running', $names);
     }
+
+    /**
+     * The attribution section compares platform claims with the STORE's whole order ledger.
+     *
+     * `AttributionTransparency::build()` takes a tenant and a project and can take nothing else: a
+     * store order belongs to no ad account and no campaign. On a link scoped to part of the project it
+     * therefore published the whole of it — measured on the demo world, a ceiling naming ONE account
+     * that buys on google alone returned four platforms, google's 116,325 beside meta's 50,500,
+     * snapchat's 27,030 and tiktok's 6,350, matching the project totals exactly. That is revenue from
+     * outside the ceiling AND the fact of which platforms the agency buys on, a disclosure this product
+     * already guards: an empty provider ceiling lists no platform in the freshness footer.
+     *
+     * Bounding only the platform half would make `difference`, `ratio`, `overlap` and `dedup` compare
+     * one account's claims with the whole store's orders — a fabricated discrepancy, which is worse
+     * than an absent section. So the section is refused where the link is narrower than its project,
+     * the rule `ceiling()` already states for every axis: never a union, never a replacement.
+     */
+    public function test_the_attribution_section_is_refused_on_a_link_narrower_than_its_project(): void
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [$this->inside->id, $this->outside->id],
+                'account_ids' => [$this->accountInside],
+                'providers' => ['meta', 'tiktok'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $share->settings = ['sections' => ['attribution' => true]];
+        $share->save();
+
+        $res = $this->getJson("/api/v1/reports/shared/{$raw}/attribution")->assertStatus(404);
+
+        $this->assertNull($res->json('data'), 'A refused section must carry no figures at all.');
+
+        /*
+         * The reason is named, and is NOT the «you did not enable this» sentence. An operator who
+         * switched the section on and then cannot see it is owed the difference between the two.
+         */
+        $this->assertNotSame('هذا القسم غير متاح في هذا الرابط.', $res->json('message'));
+        $this->assertStringContainsString('جزءًا من المشروع', (string) $res->json('message'));
+    }
+
+    /** A whole-project link is untouched — the fix must close a leak, not blank a legitimate section. */
+    public function test_a_whole_project_link_still_gets_its_attribution(): void
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [],
+                'account_ids' => [],
+                'providers' => ['meta', 'tiktok'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $share->settings = ['sections' => ['attribution' => true]];
+        $share->save();
+
+        $this->getJson("/api/v1/reports/shared/{$raw}/attribution")->assertOk();
+    }
+
+    /**
+     * The page must never MOUNT a section the endpoint will refuse.
+     *
+     * `PublicReport` renders `SharedAttributionSection` on `sections.attribution` alone, and that
+     * component carries no refusal path on purpose: its docblock records that a section which appears
+     * and then fails is worse than one that never appears, because a client cannot tell «not shared»
+     * from «broken». So the flag and the endpoint answer from ONE predicate on the share.
+     */
+    public function test_the_payload_closes_the_attribution_flag_on_a_narrow_link(): void
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [$this->inside->id],
+                'account_ids' => [$this->accountInside],
+                'providers' => ['meta', 'tiktok'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $share->settings = ['sections' => ['attribution' => true]];
+        $share->save();
+
+        $res = $this->getJson("/api/v1/reports/shared/{$raw}/live")->assertOk();
+
+        $this->assertFalse($res->json('data.sections.attribution'));
+    }
+
+    /**
+     * And it is a CONJUNCTION, not an override.
+     *
+     * Written because the first attempt was an array union over the visibility flags, and PHP's `+`
+     * keeps the LEFT operand — which would have forced attribution ON for every whole-project link
+     * whose operator never asked for it. The opposite defect, and a louder one.
+     */
+    public function test_a_wide_link_that_never_enabled_attribution_still_does_not_get_it(): void
+    {
+        [, $raw] = app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [],
+                'account_ids' => [],
+                'providers' => ['meta', 'tiktok'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $res = $this->getJson("/api/v1/reports/shared/{$raw}/live")->assertOk();
+
+        $this->assertFalse($res->json('data.sections.attribution'));
+    }
+
+    /** A whole-project link that DID enable it keeps its flag, or the guards above prove nothing. */
+    public function test_a_wide_link_that_enabled_attribution_keeps_its_flag(): void
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [],
+                'account_ids' => [],
+                'providers' => ['meta', 'tiktok'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $share->settings = ['sections' => ['attribution' => true]];
+        $share->save();
+
+        $res = $this->getJson("/api/v1/reports/shared/{$raw}/live")->assertOk();
+
+        $this->assertTrue($res->json('data.sections.attribution'));
+    }
+
+    /**
+     * The SNAPSHOT payload carries the same closed flag as the live one.
+     *
+     * Caught in a browser, not in a test: the live payload said `attribution: false` and the shared
+     * page mounted the section anyway, because `show()` kept its OWN copy of the flags — a third
+     * place answering one question, beside `live()` and the attribution endpoint's own rule. A link
+     * could therefore be told a section was available by the payload it rendered from and refused by
+     * the request that followed. The conjunction lives on the share now and all three read it.
+     */
+    public function test_the_snapshot_payload_closes_the_flag_on_a_narrow_link_too(): void
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [$this->inside->id],
+                'account_ids' => [$this->accountInside],
+                'providers' => ['meta', 'tiktok'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $share->settings = ['sections' => ['attribution' => true]];
+        $share->save();
+
+        $res = $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk();
+
+        $this->assertFalse(
+            $res->json('data.sections.attribution'),
+            'The snapshot payload would mount a section the attribution endpoint refuses.',
+        );
+    }
 }
