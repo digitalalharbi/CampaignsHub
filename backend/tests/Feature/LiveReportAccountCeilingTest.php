@@ -371,4 +371,68 @@ final class LiveReportAccountCeilingTest extends TestCase
 
         $this->assertNotContains('Not yet running', $names);
     }
+
+    /**
+     * The attribution section compares platform claims with the STORE's whole order ledger.
+     *
+     * `AttributionTransparency::build()` takes a tenant and a project and can take nothing else: a
+     * store order belongs to no ad account and no campaign. On a link scoped to part of the project it
+     * therefore published the whole of it — measured on the demo world, a ceiling naming ONE account
+     * that buys on google alone returned four platforms, google's 116,325 beside meta's 50,500,
+     * snapchat's 27,030 and tiktok's 6,350, matching the project totals exactly. That is revenue from
+     * outside the ceiling AND the fact of which platforms the agency buys on, a disclosure this product
+     * already guards: an empty provider ceiling lists no platform in the freshness footer.
+     *
+     * Bounding only the platform half would make `difference`, `ratio`, `overlap` and `dedup` compare
+     * one account's claims with the whole store's orders — a fabricated discrepancy, which is worse
+     * than an absent section. So the section is refused where the link is narrower than its project,
+     * the rule `ceiling()` already states for every axis: never a union, never a replacement.
+     */
+    public function test_the_attribution_section_is_refused_on_a_link_narrower_than_its_project(): void
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [$this->inside->id, $this->outside->id],
+                'account_ids' => [$this->accountInside],
+                'providers' => ['meta', 'tiktok'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $share->settings = ['sections' => ['attribution' => true]];
+        $share->save();
+
+        $res = $this->getJson("/api/v1/reports/shared/{$raw}/attribution")->assertStatus(404);
+
+        $this->assertNull($res->json('data'), 'A refused section must carry no figures at all.');
+
+        /*
+         * The reason is named, and is NOT the «you did not enable this» sentence. An operator who
+         * switched the section on and then cannot see it is owed the difference between the two.
+         */
+        $this->assertNotSame('هذا القسم غير متاح في هذا الرابط.', $res->json('message'));
+        $this->assertStringContainsString('جزءًا من المشروع', (string) $res->json('message'));
+    }
+
+    /** A whole-project link is untouched — the fix must close a leak, not blank a legitimate section. */
+    public function test_a_whole_project_link_still_gets_its_attribution(): void
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [],
+                'account_ids' => [],
+                'providers' => ['meta', 'tiktok'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $share->settings = ['sections' => ['attribution' => true]];
+        $share->save();
+
+        $this->getJson("/api/v1/reports/shared/{$raw}/attribution")->assertOk();
+    }
 }
