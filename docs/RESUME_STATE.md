@@ -1,6 +1,42 @@
-# START HERE — 2026-09-09 (reconciled from Git after #327)
+# START HERE — 2026-09-14 (reconciled from Git)
 
 Read this file, then `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then `git log origin/main`.
+
+**Git is the authority. This file is a summary of it and goes stale between runs — when the two
+disagree, Git is right.** It had been left at #327 while `origin/main` reached #404, which is why
+that sentence is now the second line rather than a footnote.
+
+## 2026-09-14 — where this stopped
+
+`origin/main` = `218e0046` (#404), deployed.
+
+Merged, deployed and checked this run:
+
+- **#402** reports composition — verified in the SERVED Production bundle (`index-CU6X0AwJ.js`
+  carries `summary-trimmed-note`; component names are minified away, the testid survives).
+- **#403** branding removal guard — deployed, Production 200. It touched only a test and a Matrix
+  line, so there is NO runtime surface to verify and none is claimed.
+- **#404** one link, one ceiling — three share-token sections that ignored the ceiling. Deployed at
+  its own commit. Its Production half is BLOCKED_OPERATIONAL_EVIDENCE: all three surfaces are reached
+  through a share token, and issuing a Production token is the Owner's to do.
+
+In flight: **#405** ad-set demo grain. Prepared locally behind it: the attribution unit
+(`ceiling-deploy-note` branch) — the last share-token endpoint with no ceiling at all.
+
+**What this run was really about.** A parity question — do the deck and the live link build their
+shared axes from one path? — turned up a class of defect rather than a single bug: places where one
+fact about a link was computed in more than one spot, and the copies disagreed. The account ceiling
+was honoured by the engine and ignored by the two objective sections; an empty campaign ceiling was
+fail-closed for the engine and fail-open for those same sections; the creatives endpoint of the same
+token never read the account axis at all; and the attribution section was bounded by nothing. Each
+was measured on real data before it was called a defect, and the browser caught one the whole test
+suite had passed over — `show()` and `live()` each holding their own copy of the section flags.
+
+**Two mistakes worth carrying forward.** A flag written as a PHP array union (`+` keeps the LEFT
+operand) would have switched a section ON for every link that never asked for it — the opposite of
+the leak being fixed, caught by re-reading the patch and not by any test. And a guard that read
+`best`/`worst` where the payload publishes `strongest`/`weakest` passed against keys that do not
+exist. Both say the same thing: a green test proves the assertion ran, not that it asserted anything.
 
 ## 2026-09-09 — where this stopped
 

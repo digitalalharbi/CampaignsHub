@@ -1,8 +1,29 @@
 # Active execution state
 
-_Reconciled from Git, the Matrix and Production evidence on 2026-09-11._
+_Reconciled from Git on 2026-09-14. It had been left at #362 while `origin/main` reached #404 —
+when this file and Git disagree, Git is right._
 
-## Where Git is
+## Where Git is (2026-09-14)
+
+`origin/main` = `218e0046` (#404). This run merged #402, #403 and #404, each with all six checks
+green and each deploy confirmed against its own commit.
+
+**#402** is verified in the served Production bundle. **#403** has no runtime surface — a test and a
+ledger line — so its successful deploy is not dressed up as a verification. **#404** is deployed and
+locally proven end to end (API figures, creative attribution by id, and the rendered client
+document), but its Production half is BLOCKED_OPERATIONAL_EVIDENCE: every surface it touches is
+reached through a share token, and minting a Production token would mean creating a client-facing
+link on a live system.
+
+**#405** (ad-set demo grain) is in CI. Behind it, prepared and guarded locally on
+`ceiling-deploy-note`: the attribution unit — the last share-token endpoint with no ceiling at all,
+plus the section flag the client page mounts on.
+
+**Open, recorded honestly rather than closed:** `ADSET-METRICS-TRUTH-001` stays
+IMPLEMENTED_NOT_VERIFIED, because #405 seeds demo data only and demo seeders never run in production;
+the production half needs a real account on a provider that reports the grain
+(PROVIDER-LIVE-VERIFICATION-001).
+
 
 `origin/main` carries #355 · #356 · #357 · #358 · #359. Every one merged with all five checks green,
 every main-branch run succeeded, and each deploy was confirmed by the production asset hash changing
