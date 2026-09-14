@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Support\CreativeDemoPolicy;
+use App\Domains\Projects\Context\ProjectContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -168,7 +169,7 @@ final class CreativeMetrics
         $rows = DB::table('creative_daily_metrics')
             ->whereIn('creative_id', $creativeIds)
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
-            ->where(fn ($q) => CreativeDemoPolicy::applyToCreatives($q, 'creative_daily_metrics', $creativeIds))
+            ->where(fn ($q) => CreativeDemoPolicy::applyToProject($q, 'creative_daily_metrics', app(ProjectContext::class)->projectId()))
             ->groupBy('creative_id')
             ->selectRaw(implode(', ', $select))
             ->get();
@@ -287,7 +288,7 @@ final class CreativeMetrics
             ->join('external_ads', 'external_ads.id', '=', 'entity_daily_metrics.entity_id')
             ->where('entity_daily_metrics.entity_type', 'ad')
             ->whereIn('external_ads.creative_id', $creativeIds)
-            ->where(fn ($q) => CreativeDemoPolicy::applyToCreatives($q, 'entity_daily_metrics', $creativeIds))
+            ->where(fn ($q) => CreativeDemoPolicy::applyToProject($q, 'entity_daily_metrics', app(ProjectContext::class)->projectId()))
             ->whereBetween('entity_daily_metrics.metric_date', [$from->toDateString(), $to->toDateString()])
             ->groupBy('external_ads.creative_id')
             ->selectRaw(implode(', ', $select))
