@@ -435,4 +435,80 @@ final class LiveReportAccountCeilingTest extends TestCase
 
         $this->getJson("/api/v1/reports/shared/{$raw}/attribution")->assertOk();
     }
+
+    /**
+     * The page must never MOUNT a section the endpoint will refuse.
+     *
+     * `PublicReport` renders `SharedAttributionSection` on `sections.attribution` alone, and that
+     * component carries no refusal path on purpose: its docblock records that a section which appears
+     * and then fails is worse than one that never appears, because a client cannot tell «not shared»
+     * from «broken». So the flag and the endpoint answer from ONE predicate on the share.
+     */
+    public function test_the_payload_closes_the_attribution_flag_on_a_narrow_link(): void
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [$this->inside->id],
+                'account_ids' => [$this->accountInside],
+                'providers' => ['meta', 'tiktok'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $share->settings = ['sections' => ['attribution' => true]];
+        $share->save();
+
+        $res = $this->getJson("/api/v1/reports/shared/{$raw}/live")->assertOk();
+
+        $this->assertFalse($res->json('data.sections.attribution'));
+    }
+
+    /**
+     * And it is a CONJUNCTION, not an override.
+     *
+     * Written because the first attempt was an array union over the visibility flags, and PHP's `+`
+     * keeps the LEFT operand — which would have forced attribution ON for every whole-project link
+     * whose operator never asked for it. The opposite defect, and a louder one.
+     */
+    public function test_a_wide_link_that_never_enabled_attribution_still_does_not_get_it(): void
+    {
+        [, $raw] = app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [],
+                'account_ids' => [],
+                'providers' => ['meta', 'tiktok'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $res = $this->getJson("/api/v1/reports/shared/{$raw}/live")->assertOk();
+
+        $this->assertFalse($res->json('data.sections.attribution'));
+    }
+
+    /** A whole-project link that DID enable it keeps its flag, or the guards above prove nothing. */
+    public function test_a_wide_link_that_enabled_attribution_keeps_its_flag(): void
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [],
+                'account_ids' => [],
+                'providers' => ['meta', 'tiktok'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $share->settings = ['sections' => ['attribution' => true]];
+        $share->save();
+
+        $res = $this->getJson("/api/v1/reports/shared/{$raw}/live")->assertOk();
+
+        $this->assertTrue($res->json('data.sections.attribution'));
+    }
 }

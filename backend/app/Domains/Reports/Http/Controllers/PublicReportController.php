@@ -262,10 +262,7 @@ final class PublicReportController extends Controller
          * then cannot see it is owed the difference between «you did not turn it on» and «this link is
          * too narrow to answer it».
          */
-        $ceiling = (array) ($share->scope ?? []);
-        $narrowed = ($ceiling['account_ids'] ?? []) !== [] || ($ceiling['campaign_ids'] ?? []) !== [];
-
-        if ($narrowed) {
+        if ($share->narrowerThanItsProject()) {
             return ApiResponse::error(
                 'يقارن هذا القسم ما أبلغت به المنصات بطلبات المتجر كاملة، وهذا الرابط يغطي جزءًا من المشروع فقط.',
                 status: 404,
