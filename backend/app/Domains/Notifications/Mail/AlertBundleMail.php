@@ -63,7 +63,7 @@ final class AlertBundleMail extends Mailable
         return new Envelope(subject: $ar
             // Arabic counts 3–10 with a plural and 11+ with a singular. Getting this wrong is two
             // mistakes in three characters, which MAIL-007 recorded the first time.
-            ? sprintf('CampaignsHub — %d %s تحتاج قرارًا', $n, $n <= 10 ? 'تنبيهات' : 'تنبيهًا')
+            ? sprintf('كامبينز هَب — %d %s تحتاج قرارًا', $n, $n <= 10 ? 'تنبيهات' : 'تنبيهًا')
             : sprintf('CampaignsHub — %d alerts need a decision', $n));
     }
 
@@ -90,7 +90,7 @@ final class AlertBundleMail extends Mailable
             'intro' => $ar
                 ? 'هذه الملاحظات ظهرت في آخر فحص، وكل واحدة منها تستحق قرارًا اليوم.'
                 : 'These came up in the last sweep, and each is worth a decision today.',
-            'actionLabel' => $ar ? 'فتح في CampaignsHub' : 'Open in CampaignsHub',
+            'actionLabel' => $ar ? 'فتح في كامبينز هَب' : 'Open in كامبينز هَب',
             'actionUrl' => Frontend::origin().'/app/dashboard',
         ];
 

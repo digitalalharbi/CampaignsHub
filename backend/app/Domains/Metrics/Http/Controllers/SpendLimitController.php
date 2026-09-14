@@ -61,7 +61,7 @@ final class SpendLimitController extends Controller
              * with it, and the two locales are what this product renders.
              */
             'enforcement_note_en' => 'CampaignsHub watches spend against this limit and warns. It does not stop delivery on any ad platform.',
-            'enforcement_note_ar' => 'يراقب CampaignsHub الإنفاق مقابل هذا الحد ويُنبّه — ولا يوقف عرض الإعلانات على أي منصة.',
+            'enforcement_note_ar' => 'يراقب كامبينز هَب الإنفاق مقابل هذا الحد ويُنبّه — ولا يوقف عرض الإعلانات على أي منصة.',
             'today' => $today->toDateString(),
         ]);
     }

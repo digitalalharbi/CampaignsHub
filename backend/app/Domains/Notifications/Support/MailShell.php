@@ -90,7 +90,7 @@ final class MailShell
                 'privacy' => 'الخصوصية',
                 'terms' => 'الشروط',
                 'security' => 'الأمان',
-                'why' => 'وصلتك هذه الرسالة لأنك تتابع هذا المشروع في CampaignsHub.',
+                'why' => 'وصلتك هذه الرسالة لأنك تتابع هذا المشروع في كامبينز هَب.',
             ]
             : [
                 'manage_preferences' => 'Manage your notifications',

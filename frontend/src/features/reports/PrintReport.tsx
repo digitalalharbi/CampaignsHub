@@ -205,7 +205,8 @@ export function PrintReport() {
           {s.type === 'cover' && (
             <footer className="report-cover-credit" data-testid="print-cover-credit">
               <a href={`https://${brand.domain}`} target="_blank" rel="noopener noreferrer">
-                © {coverYear} {brand.lockup.nameEn} — All rights reserved · {brand.domain}
+                {/* The document is Arabic; so is the attribution on its cover. */}
+                © {coverYear} {brand.lockup.nameAr} — جميع الحقوق محفوظة · {brand.domain}
               </a>
             </footer>
           )}

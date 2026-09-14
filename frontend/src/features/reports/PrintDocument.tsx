@@ -98,7 +98,20 @@ function Table({ head, rows }: { head: string[]; rows: (string | number)[][] }) 
  * cannot leave this comparing against a word nobody uses any more.
  */
 function isPlatformIdentity(name?: string | null): boolean {
-  return !name || name.trim() === brand.lockup.nameEn || name.trim() === brand.name
+  /*
+   * BOTH spellings of the product's name, because it now has two.
+   *
+   * This compared against the English name and the locale-agnostic one. Once the platform's fallback
+   * started answering «كامبينز هَب» on an Arabic document — which is the point of localising it —
+   * that name would no longer have been recognised as the PLATFORM's, and the document would have
+   * treated the product's own name as though it were a client's agency branding.
+   *
+   * A second-order break from this unit's own change, which is why it is listed here beside the
+   * others rather than left for the renderer to get subtly wrong.
+   */
+  const own = [brand.lockup.nameEn, brand.lockup.nameAr, brand.name]
+
+  return !name || own.includes(name.trim())
 }
 
 export function PrintDocument({

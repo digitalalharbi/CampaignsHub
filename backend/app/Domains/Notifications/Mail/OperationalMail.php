@@ -88,7 +88,7 @@ final class OperationalMail extends Mailable
             'greeting' => $ar
                 ? ($this->recipientName !== '' ? "مرحبًا، {$this->recipientName}" : 'مرحبًا')
                 : ($this->recipientName !== '' ? "Hello, {$this->recipientName}" : 'Hello'),
-            'actionLabel' => $this->action ?? ($ar ? 'فتح في CampaignsHub' : 'Open in CampaignsHub'),
+            'actionLabel' => $this->action ?? ($ar ? 'فتح في كامبينز هَب' : 'Open in كامبينز هَب'),
             'actionUrl' => $app.$this->path,
         ];
 
