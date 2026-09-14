@@ -59,12 +59,36 @@ final class CreativeKind
             && $creative->thumbnail_url === null
             && $creative->preview_url === null;
 
+        /*
+         * CONTENT-PREVIEW-SHAPES-001 — media this product already holds is never hidden behind one still.
+         *
+         * Every arm below reads the platform's LABEL. A creative that carries several cards and is
+         * labelled as a still therefore resolves to `image`, and the surfaces branch on this: the
+         * preview dialog draws `AdPoster` for a still and `CreativeCarousel` for a card shape. So an
+         * ad whose four assets we have already fetched, stored and guarded is shown as one picture
+         * with nothing to say the other three exist.
+         *
+         * `CreativePresenter` has half-known this for a while: when such an ad has no hero of its
+         * own it promotes the first usable CARD to be the hero, «the platform's own asset for this
+         * ad, already fetched». That fixes the blank frame and leaves the reader with a single frame
+         * of a multi-frame ad.
+         *
+         * This is not a claim about how any platform labels anything — it is a rule about our own
+         * rows: if we are holding more than one card, the ad is not a single still. It sits AFTER
+         * collection and catalog, which are more specific truths that also carry cards, and after
+         * `video`, because a film with a card strip beside it is still a film.
+         */
+        $cards = is_array($creative->cards) ? $creative->cards : [];
+        $multiCard = count($cards) > 1;
+
         return match (true) {
             str_contains($format, 'collection') => 'collection',
             str_contains($format, 'catalog') || str_contains($format, 'dynamic_product') || str_contains($format, 'dpa') => 'catalog',
             str_contains($format, 'video') => 'video',
             str_contains($format, 'image') && $onlyFilmResolved => 'video',
             str_contains($format, 'carousel') => 'carousel',
+            /* Held cards outrank a still label — see the note above. */
+            $multiCard => 'carousel',
             str_contains($format, 'image') => 'image',
             $creative->video_url !== null => 'video',
             $creative->asset_url !== null || $creative->thumbnail_url !== null => 'image',
@@ -109,6 +133,17 @@ final class CreativeKind
             $hasNot($b, 'dynamic_product');
             $hasNot($b, 'dpa');
         };
+
+        /*
+         * «holds more than one card», as SQL.
+         *
+         * `cards` is JSON, so the count is the provider's own list length rather than a column. A row
+         * with no cards and a row with one are both single-asset; `> 1` is what the PHP arm reads and
+         * what this has to mean, or the filter and the card disagree about the same ad — which is the
+         * failure this file's own note describes.
+         */
+        $multiCard = static fn ($b) => $b->whereRaw("jsonb_array_length(coalesce(cards, '[]'::jsonb)) > 1");
+        $singleCard = static fn ($b) => $b->whereRaw("jsonb_array_length(coalesce(cards, '[]'::jsonb)) <= 1");
 
         /* «nothing still-shaped resolved» — the four columns the PHP arm reads, together. */
         $onlyFilm = static function ($b): void {
@@ -155,15 +190,20 @@ final class CreativeKind
                 });
             }),
 
-            'carousel' => $q->where(function ($b) use ($notCollectionOrCatalog, $hasNot, $has): void {
+            'carousel' => $q->where(function ($b) use ($notCollectionOrCatalog, $hasNot, $has, $multiCard): void {
                 $notCollectionOrCatalog($b);
                 $hasNot($b, 'video');
-                $has($b, 'carousel');
+                /* Labelled a carousel, or holding cards that outrank a still label. */
+                $b->where(function ($c) use ($has, $multiCard): void {
+                    $c->where(fn ($d) => $has($d, 'carousel'))->orWhere(fn ($d) => $multiCard($d));
+                });
             }),
 
-            'image' => $q->where(function ($b) use ($notCollectionOrCatalog, $hasNot, $has, $onlyFilm): void {
+            'image' => $q->where(function ($b) use ($notCollectionOrCatalog, $hasNot, $has, $onlyFilm, $singleCard): void {
                 $notCollectionOrCatalog($b);
                 $hasNot($b, 'video');
+                /* The carousel arm above now claims multi-card rows, so this one must not. */
+                $singleCard($b);
                 $b->where(function ($c) use ($has, $onlyFilm, $hasNot): void {
                     /* Labelled an image, and NOT the «only a film resolved» case that outranks it. */
                     $c->where(function ($d) use ($has, $onlyFilm): void {
