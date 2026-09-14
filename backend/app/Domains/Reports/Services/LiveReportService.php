@@ -444,7 +444,77 @@ final class LiveReportService
          * would tell a client their own data had been examined and found wanting when it was
          * never examined at all.
          */
+        /*
+         * A section the operator switched OFF leaves the payload, it is not hidden on the page.
+         *
+         * `ShareSections` states the rule for the attribution flag and it holds for these too: «a
+         * section removed from the UI while its data still travels in the JSON is not a permission,
+         * it is a CSS rule — and the network tab is one keystroke away». The same reasoning makes a
+         * display toggle honest rather than decorative: unticking «budget» must mean the figures are
+         * not in the document, or the control is a lie the operator cannot see through.
+         *
+         * BEFORE the outline is composed, so «what is in this report» describes what survived.
+         */
+        $payload = $this->applySectionFlags($payload, $share);
+
         $payload['outline'] = (new ReportStructure)->sections($payload, composesNarrative: false);
+
+        return $payload;
+    }
+
+    /**
+     * Remove the blocks whose section the link does not publish.
+     *
+     * One flag can own more than one key — «platform comparison» is the table and the distribution
+     * drawn from the same rows, «content» is the ranked ads and the roster beneath them — and the
+     * mapping is written out rather than inferred so that adding a payload key is a decision about
+     * which section it belongs to instead of a silent escape from all of them.
+     *
+     * @param  array<string,mixed>  $payload
+     * @return array<string,mixed>
+     */
+    private function applySectionFlags(array $payload, ReportShare $share): array
+    {
+        $sections = $share->visibleSections();
+
+        /*
+         * Each key with the EMPTY VALUE ITS OWN SHAPE TAKES — a list becomes `[]`, a block becomes
+         * null — because the page reads these keys and the two are not interchangeable to it.
+         *
+         * `[]` is truthy in Javascript. Emptying `objective_performance` to a list would leave
+         * `payload.objective_performance && …` true, render the block, and then read `.direct` off an
+         * array: a crash on a client's report, produced by a switch meant to remove a section. The
+         * shapes are written down here rather than inferred from the value, which is how that was
+         * nearly shipped.
+         */
+        $owned = [
+            'platform_comparison' => ['platforms' => []],
+            'objective_breakdown' => ['objective_performance' => null, 'objective_leaders' => null],
+            'creatives' => [
+                'ads' => [], 'ads_groups' => [], 'ads_roster' => [], 'top_creatives' => [],
+                'worst_creatives' => [], 'ads_reading' => null, 'ads_level' => null, 'ads_absent_reason' => null,
+            ],
+            'budget' => ['budget' => []],
+            'funnel_store' => ['funnel' => [], 'store_funnel' => null],
+            /*
+             * “Compared with the previous period” is the DELTAS, not the figures they sit beside.
+             * Dropping the totals here would remove the report; dropping the movement removes the
+             * comparison, which is what the switch is called.
+             */
+            'previous_comparison' => ['deltas' => [], 'previous' => null, 'objective_performance_previous' => null],
+        ];
+
+        foreach ($owned as $flag => $keys) {
+            if ($sections[$flag] ?? true) {
+                continue;
+            }
+
+            foreach ($keys as $key => $empty) {
+                if (array_key_exists($key, $payload)) {
+                    $payload[$key] = $empty;
+                }
+            }
+        }
 
         return $payload;
     }

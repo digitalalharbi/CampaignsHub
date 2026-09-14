@@ -42,6 +42,16 @@ const isoDaysAgo = (days: number) => {
   return d.toISOString().slice(0, 10)
 }
 
+/** The display sections an operator can switch off, in the order the page renders them. */
+const SECTION_CHOICES = [
+  { key: 'platform_comparison', ar: 'مقارنة المنصات وتوزيع الإنفاق', en: 'Platform comparison & spend split' },
+  { key: 'objective_breakdown', ar: 'التحليل حسب الهدف', en: 'Objective breakdown' },
+  { key: 'creatives', ar: 'المحتويات الأعلى أداءً', en: 'Top performing content' },
+  { key: 'budget', ar: 'الميزانية ووتيرة الصرف', en: 'Budget & pacing' },
+  { key: 'funnel_store', ar: 'القمع والمتجر', en: 'Funnel & store' },
+  { key: 'previous_comparison', ar: 'المقارنة بالفترة السابقة', en: 'Comparison with the previous period' },
+] as const
+
 export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const ar = useUi((s) => s.locale) === 'ar'
 
@@ -86,6 +96,22 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const [hideSpend, setHideSpend] = useState(false)
   const [hideRevenue, setHideRevenue] = useState(false)
   const [allowDownload, setAllowDownload] = useState(false)
+  /*
+    The SECTIONS the link publishes.
+    
+    Display sections are on unless the operator turns one off — the asymmetry `ShareSections` sets
+    out: a link built before these existed must keep what it has always rendered, where a DISCLOSURE
+    like attribution stays off until somebody asks. Off is sent explicitly so the payload drops the
+    block rather than the page hiding it.
+  */
+  const [sections, setSections] = useState<Record<string, boolean>>({
+    platform_comparison: true,
+    objective_breakdown: true,
+    creatives: true,
+    budget: true,
+    funnel_store: true,
+    previous_comparison: true,
+  })
   const [created, setCreated] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -102,6 +128,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         hide_spend: hideSpend,
         hide_revenue: hideRevenue,
         allow_download: allowDownload,
+        sections,
         ...(password ? { password } : {}),
         ...(expiresAt ? { expires_at: expiresAt } : {}),
       }),
@@ -325,6 +352,32 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                 >
                   {label}
                 </button>
+              ))}
+            </div>
+          </div>
+
+          {/*
+            Which sections the client's page carries.
+            
+            Unticking one removes the block from the PAYLOAD, not from the layout — `ShareSections`
+            makes the point that a section hidden in the UI while its data still travels is «not a
+            permission, it is a CSS rule». So these are real choices about what the document
+            contains, and the summary line below says so before the link is created.
+          */}
+          <div className="rounded-xl border border-border p-3">
+            <p className="mb-2 text-xs font-bold text-text-muted">{ar ? 'أقسام التقرير' : 'Report sections'}</p>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {SECTION_CHOICES.map((choice) => (
+                <label key={choice.key} className="flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-surface-hover">
+                  <span>{ar ? choice.ar : choice.en}</span>
+                  <input
+                    type="checkbox"
+                    data-testid={`live-link-section-${choice.key}`}
+                    checked={sections[choice.key] ?? true}
+                    onChange={(e) => setSections((prev) => ({ ...prev, [choice.key]: e.target.checked }))}
+                    className="h-4 w-4 accent-brand-600"
+                  />
+                </label>
               ))}
             </div>
           </div>

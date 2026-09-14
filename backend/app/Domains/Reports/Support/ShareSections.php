@@ -33,29 +33,75 @@ namespace App\Domains\Reports\Support;
 final class ShareSections
 {
     /** The flags an operator sets, in the order the link builder shows them. */
-    public const FLAGS = ['attribution'];
+    public const FLAGS = [
+        'attribution',
+        'platform_comparison',
+        'objective_breakdown',
+        'creatives',
+        'budget',
+        'funnel_store',
+        'previous_comparison',
+    ];
+
+    /**
+     * DISCLOSURE flags fail closed; DISPLAY flags do not — and the difference is deliberate.
+     *
+     * `attribution` publishes a sentence about the agency's own reporting, so a link that never asked
+     * for it must not acquire it: off unless said otherwise, including every link built before it
+     * existed. That reasoning is in the note above and is unchanged.
+     *
+     * The six below are sections a live link has ALWAYS rendered. Making them fail closed would empty
+     * every link in existence the day this shipped — the opposite of the direction to be wrong in for
+     * a display toggle, where «off» is a choice somebody made rather than a permission nobody granted.
+     * So an absent key means ON for these, and OFF is only ever explicit.
+     */
+    private const DISCLOSURE = ['attribution'];
 
     private function __construct(
         public readonly bool $attribution,
+        public readonly bool $platform_comparison,
+        public readonly bool $objective_breakdown,
+        public readonly bool $creatives,
+        public readonly bool $budget,
+        public readonly bool $funnel_store,
+        public readonly bool $previous_comparison,
     ) {}
 
     /** @param array<string,mixed> $raw */
     public static function fromArray(array $raw): self
     {
+        $flag = static fn (string $key): bool => in_array($key, self::DISCLOSURE, true)
+            ? (bool) ($raw[$key] ?? false)
+            : (bool) ($raw[$key] ?? true);
+
         return new self(
-            attribution: (bool) ($raw['attribution'] ?? false),
+            attribution: $flag('attribution'),
+            platform_comparison: $flag('platform_comparison'),
+            objective_breakdown: $flag('objective_breakdown'),
+            creatives: $flag('creatives'),
+            budget: $flag('budget'),
+            funnel_store: $flag('funnel_store'),
+            previous_comparison: $flag('previous_comparison'),
         );
     }
 
-    /** Everything off — what a link with no `sections` key means, and what a bad one falls back to. */
+    /** Every DISCLOSURE off and every display section on — what a link with no `sections` key means. */
     public static function closed(): self
     {
-        return new self(attribution: false);
+        return self::fromArray([]);
     }
 
     /** @return array<string,bool> */
     public function toArray(): array
     {
-        return ['attribution' => $this->attribution];
+        return [
+            'attribution' => $this->attribution,
+            'platform_comparison' => $this->platform_comparison,
+            'objective_breakdown' => $this->objective_breakdown,
+            'creatives' => $this->creatives,
+            'budget' => $this->budget,
+            'funnel_store' => $this->funnel_store,
+            'previous_comparison' => $this->previous_comparison,
+        ];
     }
 }
