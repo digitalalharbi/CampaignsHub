@@ -161,6 +161,20 @@ export function TabAnalytics({ clientId }: { clientId: string }) {
             {a.best_campaign && <CampaignCard title={t('an_best')} c={a.best_campaign} good />}
             {a.worst_campaign && <CampaignCard title={t('an_worst')} c={a.worst_campaign} />}
           </div>
+
+          {/*
+            Both cards absent is not one situation. A client whose money we hold and cannot convert
+            was shown exactly what a client with no campaigns was shown: nothing. Ranking withheld
+            money is genuinely impossible — a ROAS from a denominator we could not state is a made-up
+            ratio — so the surface says which silence this is instead of leaving a gap.
+          */}
+          {!a.best_campaign && !a.worst_campaign && a.campaign_ranking_state === 'withheld' && (
+            <p className="text-xs leading-relaxed text-text-muted" data-testid="client-ranking-withheld">
+              {ar
+                ? 'إنفاق هذه الحملات لم يُحوَّل إلى عملة التقرير، فلا يمكن ترتيب الأفضل والأضعف بدقة.'
+                : 'Spend on these campaigns was not converted into the report’s currency, so best and weakest cannot be ranked accurately.'}
+            </p>
+          )}
         </>
       )}
 

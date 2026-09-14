@@ -1198,13 +1198,31 @@ final class MetricsAggregator
 
     public function spendByCampaign(Carbon $from, Carbon $to): array
     {
+        /*
+         * AGGREGATION-TRUTH-001 — the previous window's money, and whether it is comparable at all.
+         *
+         * This returned the coalesced CONVERTED spend alone, which is 0 for a window whose rows were
+         * never converted. Paired against a current window that WAS converted, the trend below then
+         * reported a change between a real figure and a zero that means «we could not state this» —
+         * «spend down 100%» on an account that spent normally, or a rise out of nothing.
+         *
+         * A window that holds money it cannot state has no comparable magnitude, so it returns null
+         * and the trend declines to be computed. That is the same refusal the rest of the money
+         * contract makes: a figure nobody can compare is not a figure to subtract.
+         */
         return $this->base($from, $to)
             ->select('daily_metrics.unified_campaign_id as campaign_id')
             ->selectRaw("COALESCE(SUM(daily_metrics.value) FILTER (WHERE daily_metrics.metric_key = 'spend'), 0) AS spend")
+            ->selectRaw("COUNT(*) FILTER (WHERE daily_metrics.metric_key = 'spend' AND daily_metrics.value IS NULL AND daily_metrics.original_amount IS NOT NULL) AS spend_withheld_rows")
             ->whereNotNull('daily_metrics.unified_campaign_id')
             ->groupBy('daily_metrics.unified_campaign_id')
             ->get()
-            ->mapWithKeys(static fn ($r): array => [(string) $r->campaign_id => (float) $r->spend])
+            ->mapWithKeys(static function ($r): array {
+                $converted = (float) $r->spend;
+                $withheld = (int) $r->spend_withheld_rows;
+
+                return [(string) $r->campaign_id => $converted <= 0.0 && $withheld > 0 ? null : $converted];
+            })
             ->all();
     }
 
@@ -1215,9 +1233,18 @@ final class MetricsAggregator
      * rise from nothing is infinite). Both are «we cannot say», and the row renders that rather than
      * a number the reader would act on.
      */
-    public static function spendChange(?float $previous, float $current): ?float
+    public static function spendChange(?float $previous, float $current, bool $currentComparable = true): ?float
     {
         if ($previous === null || $previous <= 0.0) {
+            return null;
+        }
+
+        /*
+         * A current window whose money was never converted has no magnitude to compare. Reading its
+         * 0 as «spent nothing» turns a rate we could not state into a 100% collapse, which is the
+         * most alarming number this method can produce and the least true.
+         */
+        if (! $currentComparable) {
             return null;
         }
 
@@ -1401,6 +1428,8 @@ final class MetricsAggregator
                 'spend_change' => self::spendChange(
                     $previousSpend === null ? null : ($previousSpend[(string) $r->campaign_id] ?? null),
                     (float) ($r->spend ?? 0),
+                    // Comparable only when THIS window's money is stated in the reporting currency.
+                    ! ((float) ($r->spend ?? 0) <= 0.0 && (int) ($r->spend_withheld_rows ?? 0) > 0),
                 ),
                 'status' => $r->status === null ? null : CampaignStatus::tryFrom((string) $r->status)?->value,
                 'last_active_on' => $r->last_active_on === null ? null : Carbon::parse((string) $r->last_active_on)->toDateString(),
