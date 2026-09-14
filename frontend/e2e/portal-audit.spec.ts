@@ -61,7 +61,13 @@ test.describe('the advertiser portal', () => {
 
     await page.goto('/app/campaigns')
     await expect(page.locator('main')).toBeVisible()
-    await expect(page).toHaveTitle(/CampaignsHub/)
+    /*
+      The product's name in EITHER language. This asserted the Latin spelling, so it was really
+      asserting «the interface is in English» — and the portal runs in Arabic by default, where the
+      identity calls the product «كامبينز هب». What the case is about is that the tab carries the
+      product AND the section, which both spellings satisfy.
+    */
+    await expect(page).toHaveTitle(/CampaignsHub|كامبينز هب/)
     /* Two sections must not share one tab label — that is the whole defect. */
     await expect(page).not.toHaveTitle(dashboard)
   })

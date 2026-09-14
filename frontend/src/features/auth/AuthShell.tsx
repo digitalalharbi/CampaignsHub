@@ -1,4 +1,5 @@
-import { Megaphone, Moon, Sun } from 'lucide-react'
+import { Moon, Sun } from 'lucide-react'
+import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 import type { Locale } from '@/features/marketing/homeCopy'
@@ -26,7 +27,8 @@ export function AuthShell({ children, portal = 'default' }: { children: React.Re
       <main className="flex min-w-0 flex-col px-[clamp(1rem,3.2vw,2rem)] py-[clamp(0.5rem,1.1vh,0.875rem)]">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 lg:invisible">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Megaphone size={16} /></div>
+            {/* BRAND-CANONICAL-001 — the product's own mark, where a megaphone stood in for it. */}
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-primary-soft text-brand-mark"><CampaignsHubMark size={18} /></div>
             <span className="font-extrabold text-text-primary">{t('app_name')}</span>
           </div>
           <div className="flex items-center gap-1.5">

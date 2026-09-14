@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { brand, productName } from '@/lib/brand'
 import { fmtDateTime } from '@/lib/datetime'
 import { useParams } from 'react-router-dom'
 import { Download, Lock } from 'lucide-react'
@@ -107,7 +108,7 @@ export function PublicReport() {
     return () => { alive = false }
   }, [token])
 
-  const identity = headerIdentity(branding)
+  const identity = headerIdentity(branding, locale)
 
   return (
     <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-background text-text-primary">
@@ -183,7 +184,15 @@ export function PublicReport() {
           <div className="relative">
             {report.settings.watermark && (
               <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden">
-                <span className="rotate-[-25deg] text-[80px] font-extrabold text-text-primary/5">CampaignsHub</span>
+                {/*
+                  BRAND-CANONICAL-001 — the watermark says the platform's name in the READER's language.
+                  
+                  It was the Latin wordmark, hardcoded, on a document whose every other word is Arabic
+                  for most of the clients who hold one.
+                */}
+                <span className="rotate-[-25deg] text-[80px] font-extrabold text-text-primary/5">
+                  {locale === 'ar' ? brand.lockup.nameAr : brand.lockup.nameEn}
+                </span>
               </div>
             )}
             <div className="relative z-[1]">
@@ -210,7 +219,7 @@ export function PublicReport() {
                 <>
                   <InteractiveReport
                     data={report.data as never}
-                    meta={{ reportName: report.name, platforms, isDemo: report.is_demo, agencyName: report.branding?.name ?? 'CampaignsHub' }}
+                    meta={{ reportName: report.name, platforms, isDemo: report.is_demo, agencyName: report.branding?.name ?? productName(locale) }}
                   />
                   <ReportMetaStrip report={report} />
                 </>

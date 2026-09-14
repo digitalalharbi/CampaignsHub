@@ -6,6 +6,7 @@ import { AccountMenu } from '@/features/account/UserMenu'
 import { fetchCreatorProfile } from '@/features/influencers/creator/api'
 import { useUi } from '@/stores/ui'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
+import { productName } from '@/lib/brand'
 
 /**
  * The creator's shell (INFL-002, ADR 0002).
@@ -43,7 +44,7 @@ export function CreatorShell() {
             the name to them — the same split every other shell makes between platform and workspace.
           */}
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark" data-testid="creator-shell-brand">
-            <CampaignsHubMark size={20} title="CampaignsHub" />
+            <CampaignsHubMark size={20} title={productName(locale)} />
           </span>
           <div className="flex min-w-0 items-center gap-2.5">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-extrabold text-white">

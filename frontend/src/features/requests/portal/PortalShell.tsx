@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { productName } from '@/lib/brand'
 import { useQueryClient } from '@tanstack/react-query'
-import { LogOut, Megaphone, Moon, Sun } from 'lucide-react'
+import { LogOut, Moon, Sun } from 'lucide-react'
+import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { useUi } from '@/stores/ui'
 import { portalLogout } from '../clientPortalApi'
 import { PORTAL_NAV, PortalNav } from './portalNav'
@@ -94,21 +96,28 @@ export function PortalShell({
         <div className="mx-auto flex h-16 max-w-4xl items-center justify-between gap-2.5 px-4 sm:px-6">
           <Link to={spaceTo("")} className="flex items-center gap-2.5">
             {logo === undefined ? (
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Megaphone size={18} /></span>
+              /*
+                BRANDING-HIERARCHY-001 — the client's mark leads; this is what stands where they have none.
+                
+                A megaphone in a gradient tile stood here, so a client space with no logo of its own
+                wore a symbol belonging to no one. The platform's own mark is the honest fallback: it
+                says whose software this is without pretending to be the client's brand.
+              */
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark"><CampaignsHubMark size={20} /></span>
             ) : (
               // alt is the space's name, so a screen reader hears whose portal this is rather than
               // "logo".
               <img
                 src={logo.url}
                 onError={() => setBrokenLogo(logo.url)}
-                alt={branding?.space?.name ?? 'CampaignsHub'}
+                alt={branding?.space?.name ?? productName(locale)}
                 data-testid="portal-logo"
                 className="h-9 max-w-[140px] object-contain"
               />
             )}
             {logo === undefined && (
               <span className="font-heading text-base font-extrabold">
-                {branding?.space?.name ?? 'CampaignsHub'}
+                {branding?.space?.name ?? productName(locale)}
               </span>
             )}
             <span className="hidden text-xs text-text-muted sm:inline">· {title}</span>

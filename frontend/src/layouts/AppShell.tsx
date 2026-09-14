@@ -23,6 +23,7 @@ import { useSectionTitle } from './sectionTitle'
 import type { MobileTab } from './MobileTabBar'
 import { moreGroupsFrom } from './mobileTabs'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
+import { brand, productName } from '@/lib/brand'
 
 // `ent` = the account-entitlement nav key; an item shows only when it's in the workspace's entitled nav.
 
@@ -65,14 +66,28 @@ function NavItems({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?:
 }
 
 function Brand({ collapsed }: { collapsed?: boolean }) {
+  const { locale } = useUi()
+
   return (
     <div className={`flex items-center gap-2.5 ${collapsed ? 'justify-center' : 'px-1'}`}>
-      {/* BRAND-MARK-001 — the product's symbol, where a megaphone glyph stood in for it. */}
+      {/*
+        BRAND-CANONICAL-001 — the NAME comes from the identity too, not just the mark.
+        
+        #399 gave this shell the canonical mark and left the wordmark hand-written beside it, so an
+        Arabic account — most of them — read «CampaignsHub» in Latin where the identity says
+        «كامبينز هب». Half a lockup composed locally is how the two halves come to disagree, and the
+        English half was the one nobody noticed because it looked right in English.
+        
+        The tile survives: it is this shell's own chrome, not a second logo, and the collapsed rail
+        still needs a square to sit in.
+      */}
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark" data-testid="shell-brand-mark">
         <CampaignsHubMark size={20} />
       </span>
       {!collapsed && (
-        <span className="font-heading text-lg font-extrabold tracking-tight text-text-primary">CampaignsHub</span>
+        <span className="font-heading text-lg font-extrabold tracking-tight text-text-primary">
+          {locale === 'ar' ? brand.lockup.nameAr : brand.lockup.nameEn}
+        </span>
       )}
     </div>
   )
@@ -193,7 +208,7 @@ export function AppShell() {
           */}
           <Link
             to="/app"
-            aria-label="CampaignsHub"
+            aria-label={productName(locale)}
             data-testid="mobile-brand-mark"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark lg:hidden"
           >

@@ -20,7 +20,24 @@ const MARK_PATHS = [
 /** The rendered mark, asked of the DOM rather than of the source. */
 async function markIn(page: Page, selector: string) {
   return page.evaluate((sel) => {
-    const host = document.querySelector(sel)
+    /*
+     * The RENDERED one, where a selector matches more than one.
+     *
+     * The public header carries two lockups — the full one and a mark-only variant that takes over
+     * below 480px — so «the logo in the header» is now a question with two answers in the DOM and one
+     * on the screen. `querySelectorAll` plus a box check picks the one a reader can actually see.
+     *
+     * Playwright's `:visible` cannot do this job: it is a locator pseudo-class, not CSS, and this
+     * runs inside `page.evaluate` where `querySelector` rejects it outright. A first attempt used it
+     * here and every case died on an invalid selector.
+     */
+    const hosts = [...document.querySelectorAll(sel)]
+    const rendered = hosts.find((h) => {
+      const box = h.getBoundingClientRect()
+
+      return box.width > 0 && box.height > 0
+    })
+    const host = rendered ?? hosts[0]
     const svg = host?.tagName === 'svg' ? (host as SVGElement) : host?.querySelector('svg')
     if (!svg) return null
     const box = svg.getBoundingClientRect()
@@ -142,5 +159,72 @@ test.describe('the CampaignsHub identity in the product', () => {
     // And the bar it sits in must not push the page sideways.
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
     expect(overflow, 'the brand pushed the header off a 390px screen').toBeLessThanOrEqual(1)
+  })
+})
+
+/**
+ * The PUBLIC surfaces — the ones that actually shipped the wrong logo.
+ *
+ * Every case above visits `/login` or `/agency/dashboard`, so the suite proved the identity on the
+ * surfaces somebody listed and never on the marketing site, where a Lucide megaphone in a gradient
+ * tile stood beside a Latin wordmark for the life of the brand. `PublicHeader` is «the one public
+ * header. Every public page wears this», so one broken lockup was every public page at once — and
+ * the owner found it in production, not here.
+ *
+ * Unauthenticated on purpose: this is what a visitor sees before any session exists.
+ */
+test.describe('the identity on the public site', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+  test.describe.configure({ timeout: 90_000 })
+
+  for (const locale of ['ar', 'en'] as const) {
+    for (const theme of ['dark', 'light'] as const) {
+      test(`the marketing header wears the canonical lockup (${locale}, ${theme})`, async ({ page }) => {
+        /*
+          The app's OWN keys and the app's OWN control.
+          
+          The first version of this case wrote `localStorage.ui`, a shape this product does not use —
+          the store persists `campaign-hub-locale` and `campaign-hub-theme` — so both English cases
+          ran in Arabic and failed on the name. Inventing a second way to set the locale, in the unit
+          whose entire subject is surfaces inventing their own version of a shared thing.
+        */
+        await page.addInitScript((t) => localStorage.setItem('campaign-hub-theme', t), theme)
+        await page.goto('/')
+        if (locale === 'en') await switchToEnglish(page)
+
+        const mark = await markIn(page, 'header [data-testid="campaignshub-logo"]')
+        expect(mark, 'the public header drew no canonical mark').not.toBeNull()
+        expect(mark!.paths).toEqual(MARK_PATHS)
+        expect(mark!.dot).toBe(GOLD)
+        expect(mark!.visible).toBe(true)
+
+        /*
+         * The NAME is the identity's, in the reader's language. The defect was not only a wrong
+         * glyph — an Arabic visitor read «CampaignsHub» in Latin where the identity says «كامبينز هب».
+         */
+        /*
+         * The VISIBLE one. The header carries two lockups — the full one and a mark-only variant that
+         * takes over below 480px, which is how the wordmark yields without the identity changing — so
+         * an unqualified locator resolves to two elements and Playwright refuses it in strict mode.
+         */
+        const name = await page.locator('header [data-testid="campaignshub-logo"]:visible').innerText()
+        expect(name).toContain(locale === 'ar' ? 'كامبينز' : 'Campaigns')
+
+        /* And nothing that was ever mistaken for the logo is left in the header. */
+        const strays = await page.locator('header svg.lucide-megaphone').count()
+        expect(strays, 'a megaphone is back in the public header').toBe(0)
+      })
+    }
+  }
+
+  test('a phone gets the same identity, not a different one', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/')
+
+    /* At 390px the compact lockup is the hidden one and the mark-only variant is what shows. */
+    const mark = await markIn(page, 'header [data-testid="campaignshub-logo"]')
+    expect(mark, 'the phone header drew no canonical mark').not.toBeNull()
+    expect(mark!.paths).toEqual(MARK_PATHS)
+    expect(await page.locator('header svg.lucide-megaphone').count()).toBe(0)
   })
 })

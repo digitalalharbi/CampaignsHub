@@ -12,7 +12,12 @@ import { agencyNavGroups } from './agencyNav'
  */
 describe('the section a path belongs to', () => {
   it('names the section, not the product', () => {
-    expect(sectionTitle('/app/campaigns', appNavGroups, true)).toBe('الحملات — CampaignsHub')
+    /*
+      The product half follows the language too — «كامبينز هب» in Arabic, «CampaignsHub» in English.
+      This pinned the Latin name on both, so an Arabic operator's tabs, bookmarks and history read
+      the English wordmark while every word inside the window was Arabic.
+    */
+    expect(sectionTitle('/app/campaigns', appNavGroups, true)).toBe('الحملات — كامبينز هب')
     expect(sectionTitle('/app/campaigns', appNavGroups, false)).toBe('Campaigns — CampaignsHub')
   })
 

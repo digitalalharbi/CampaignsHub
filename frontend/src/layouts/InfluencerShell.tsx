@@ -1,4 +1,5 @@
 import { Link, NavLink, Outlet } from 'react-router-dom'
+import { productName } from '@/lib/brand'
 import { useQuery } from '@tanstack/react-query'
 import {
   Users,
@@ -107,7 +108,7 @@ function InfluencerIdentity({ collapsed }: { collapsed?: boolean }) {
       {!collapsed && (
         <div className="min-w-0">
           <span className="block truncate font-heading text-[15px] font-extrabold tracking-tight text-text-primary">
-            {current?.tenant.name ?? 'CampaignsHub'}
+            {current?.tenant.name ?? productName(ar ? 'ar' : 'en')}
           </span>
           <span data-testid="influencer-scope-note" className="block truncate text-[11px] text-text-muted">
             {ar ? 'بوابة المؤثرين وUGC' : 'Influencers & UGC'}
@@ -194,7 +195,7 @@ export function InfluencerShell() {
           */}
           <Link
             to="/influencer"
-            aria-label="CampaignsHub"
+            aria-label={productName(locale)}
             data-testid="mobile-brand-mark"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark lg:hidden"
           >

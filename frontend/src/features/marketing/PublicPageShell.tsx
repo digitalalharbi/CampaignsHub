@@ -3,6 +3,7 @@ import { FooterContact } from './FooterContact'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { PublicHeader } from './PublicHeader'
 import { useUi } from '@/stores/ui'
+import { brand, productName } from '@/lib/brand'
 
 /**
  * The frame every public page outside the marketing homepage wears.
@@ -39,7 +40,7 @@ export function PublicPageShell({
   }, [c.dir, locale])
 
   useEffect(() => {
-    document.title = `${title} — CampaignsHub`
+    document.title = `${title} — ${productName(locale)}`
   }, [title])
 
   return (
@@ -62,7 +63,7 @@ export function PublicPageShell({
       <footer className="border-t border-border bg-surface py-6 text-center text-xs text-text-muted">
         <div className="flex flex-col items-center gap-2 px-4">
           <FooterContact locale={locale as Locale} variant="inline" />
-          <span>© {new Date().getFullYear()} CampaignsHub — {c.footer.rights}</span>
+          <span>© {new Date().getFullYear()} {locale === 'ar' ? brand.lockup.nameAr : brand.lockup.nameEn} — {c.footer.rights}</span>
         </div>
       </footer>
     </div>

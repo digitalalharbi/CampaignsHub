@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, Building2, LayoutDashboard, Loader2, Megaphone, Sparkles, Users } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Building2, LayoutDashboard, Loader2, Sparkles, Users } from 'lucide-react'
+import { CampaignsHubLogo } from '@/components/brand/CampaignsHubLogo'
 import { PORTAL_LABELS, fetchMemberships, switchMembership, type Membership, type PortalKey } from './memberships'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { Button } from '@/components/ui/Button'
@@ -70,10 +71,8 @@ export function WorkspaceSwitcherPage() {
     <div className="min-h-screen bg-background px-5 py-10">
       <div className="mx-auto w-full max-w-2xl">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white">
-            <Megaphone size={19} />
-          </span>
-          <span className="font-heading text-lg font-extrabold tracking-tight text-text-primary">CampaignsHub</span>
+          {/* BRAND-CANONICAL-001 — the identity, not a megaphone in a gradient tile. */}
+          <CampaignsHubLogo locale={ar ? 'ar' : 'en'} variant="compact" size="md" />
         </div>
 
         <h1 className="mt-6 font-heading text-[26px] font-extrabold leading-tight text-text-primary">

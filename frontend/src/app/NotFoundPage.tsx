@@ -1,5 +1,6 @@
 import { Link, useLocation, useRouteError } from 'react-router-dom'
 import { Compass } from 'lucide-react'
+import { CampaignsHubLogo } from '@/components/brand/CampaignsHubLogo'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -28,6 +29,17 @@ export function NotFoundPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-5">
       <div data-testid="not-found" className="w-full max-w-md rounded-2xl border border-border bg-surface p-8 text-center">
+        {/*
+          BRAND-CANONICAL-001 — a wrong address is still one of our pages.
+          
+          This carried no identity at all, so a visitor who mistyped a URL met an unbranded card and
+          had nothing telling them whose product they were still inside. The mark, not the full
+          lockup: the page's job is the sentence below it, and a strapline over an error reads as
+          marketing at somebody who is already lost.
+        */}
+        <span className="mb-4 inline-flex justify-center">
+          <CampaignsHubLogo locale={ar ? 'ar' : 'en'} variant="mark" size="sm" href="/" />
+        </span>
         <Compass className="mx-auto text-text-muted" size={30} aria-hidden />
         <h1 className="mt-4 font-heading text-xl font-extrabold text-text-primary">
           {isError

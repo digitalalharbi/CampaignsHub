@@ -46,7 +46,12 @@ function promptUpdate(worker: ServiceWorker): void {
   banner.dir = isArabic ? 'rtl' : 'ltr'
   banner.style.cssText =
     'position:fixed;inset-inline:0;bottom:0;z-index:2147483647;display:flex;gap:12px;' +
-    'align-items:center;justify-content:center;padding:12px 16px;background:#0d8a6f;color:#fff;' +
+    /*
+     * The token, not the hex. This banner is raw DOM outside React and Tailwind, which is exactly
+     * how a second copy of the brand colour survives a rebrand: nothing here is scanned by the style
+     * pipeline, so the value simply stayed. `var()` reaches it the same as any other element.
+     */
+    'align-items:center;justify-content:center;padding:12px 16px;background:var(--brand-600);color:#fff;' +
     'font:500 14px/1.4 system-ui,sans-serif;box-shadow:0 -2px 12px rgba(0,0,0,.2)'
 
   const text = document.createElement('span')
@@ -55,7 +60,7 @@ function promptUpdate(worker: ServiceWorker): void {
   const reload = document.createElement('button')
   reload.textContent = isArabic ? 'تحديث' : 'Update'
   reload.style.cssText =
-    'background:#fff;color:#0d8a6f;border:0;border-radius:8px;padding:6px 14px;font-weight:700;cursor:pointer'
+    'background:#fff;color:var(--brand-600);border:0;border-radius:8px;padding:6px 14px;font-weight:700;cursor:pointer'
   reload.onclick = () => worker.postMessage('SKIP_WAITING')
 
   const dismiss = document.createElement('button')

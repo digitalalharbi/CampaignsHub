@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useUi } from '@/stores/ui'
+import { productName } from '@/lib/brand'
 import type { NavGroup } from './SidebarNav'
 import { navLeaves } from './SidebarNav'
 
@@ -21,7 +22,18 @@ import { navLeaves } from './SidebarNav'
  * detail page belongs to its section, and a tab reading «CampaignsHub» tells the reader nothing
  * that the window's existence did not already tell them.
  */
-export const BASE_TITLE = 'CampaignsHub'
+/**
+ * The product's name in the tab, in the language the product is speaking.
+ *
+ * This was the constant `'CampaignsHub'`, so an Arabic operator's tabs, bookmarks and history all
+ * read the Latin name while every word inside the window was Arabic. `index.html` may stay neutral —
+ * it is served before any locale is known — but the moment the app knows, the title follows.
+ *
+ * Resolved through the one resolver, so the tab cannot disagree with the rail above it.
+ */
+export function baseTitle(ar: boolean): string {
+  return productName(ar ? 'ar' : 'en')
+}
 
 export function sectionTitle(
   pathname: string,
@@ -42,7 +54,7 @@ export function sectionTitle(
     }
   }
 
-  return best === null ? null : `${best.label} — ${BASE_TITLE}`
+  return best === null ? null : `${best.label} — ${baseTitle(ar)}`
 }
 
 /**

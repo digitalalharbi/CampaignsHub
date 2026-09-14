@@ -272,4 +272,13 @@ jobs:
             frontend/test-results/
             frontend/playwright-report/
             backend/storage/logs/
+            # Snapshots written by this run — the only way to obtain a LINUX visual baseline.
+            #
+            # Baselines are per-platform (`-chromium-linux`, `-chromium-darwin`) and a developer on
+            # macOS cannot render the linux one. Playwright writes a missing baseline to the snapshot
+            # path and fails that run, so collecting the directory turns an unreproducible file into
+            # a downloadable one. Without this the linux baselines could only ever go stale: the
+            # homepage pair sat unchanged since #85 and still passed, against an image of a logo the
+            # product had replaced.
+            frontend/e2e/**/*-snapshots/
           retention-days: 7

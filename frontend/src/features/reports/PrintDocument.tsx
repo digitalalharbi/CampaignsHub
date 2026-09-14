@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import type { ReportData } from './InteractiveReport'
 import { moneyExact } from '@/features/analytics/format'
 import { mixedResultsNote, type ResultPart } from './reportMetrics'
-import { brand } from '@/lib/brand'
+import { brand, productName } from '@/lib/brand'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 
 /**
@@ -98,7 +98,20 @@ function Table({ head, rows }: { head: string[]; rows: (string | number)[][] }) 
  * cannot leave this comparing against a word nobody uses any more.
  */
 function isPlatformIdentity(name?: string | null): boolean {
-  return !name || name.trim() === brand.lockup.nameEn || name.trim() === brand.name
+  /*
+   * BOTH spellings of the product's name, because it now has two.
+   *
+   * This compared against the English name and the locale-agnostic one. Once the platform's fallback
+   * started answering «كامبينز هب» on an Arabic document — which is the point of localising it —
+   * that name would no longer have been recognised as the PLATFORM's, and the document would have
+   * treated the product's own name as though it were a client's agency branding.
+   *
+   * A second-order break from this unit's own change, which is why it is listed here beside the
+   * others rather than left for the renderer to get subtly wrong.
+   */
+  const own = [brand.lockup.nameEn, brand.lockup.nameAr, brand.name]
+
+  return !name || own.includes(name.trim())
 }
 
 export function PrintDocument({
@@ -133,7 +146,7 @@ export function PrintDocument({
     document.documentElement.setAttribute('lang', 'en')
     // The file's own title — «CampaignsHub» here put the product in the title bar and beside the
     // attachment in a mail client, on a report an agency sends to its own client under its own name.
-    document.title = `${identity?.name ?? 'CampaignsHub'} — ${currency} Report`
+    document.title = `${identity?.name ?? productName('ar')} — ${currency} Report`
     const w = window as Window & {
       __REPORT_DATA_READY__?: boolean; __REPORT_CHARTS_READY__?: boolean
       __REPORT_IMAGES_READY__?: boolean; __REPORT_LAYOUT__?: unknown

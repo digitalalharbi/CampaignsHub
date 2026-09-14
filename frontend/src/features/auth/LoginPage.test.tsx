@@ -80,6 +80,14 @@ describe('LoginPage — the sign-in card', () => {
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'ar' })
 
     expect(screen.getByRole('heading', { name: 'مرحباً بعودتك' })).toBeInTheDocument()
+    /*
+     * The product is called «CampaignsHub» in Arabic, and this string said «CampaignsHub».
+     *
+     * The owner's brand correction names login among the surfaces where the Latin name must not be
+     * the visible system name in an Arabic surface. This case pinned the old spelling as approved,
+     * so the string could not change without changing the case that held it — which is what a
+     * pinned string is for, and why it is updated here deliberately rather than loosened.
+     */
     expect(screen.getByText('سجّل الدخول إلى حسابك في CampaignsHub')).toBeInTheDocument()
   })
 

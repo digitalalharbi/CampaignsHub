@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { brand } from '@/lib/brand'
 import { policyLinks, type PolicyContext } from './policyLinks'
 import { useUi } from '@/stores/ui'
 
@@ -33,7 +34,10 @@ export function PortalFooter() {
       className="mt-8 border-t border-border pt-4 text-xs text-text-muted"
     >
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <span dir="ltr">© {year} CampaignsHub</span>
+        {/* The platform's attribution, in the language the page is being read in. */}
+        <span dir={locale === 'ar' ? 'rtl' : 'ltr'}>
+          © {year} {locale === 'ar' ? brand.lockup.nameAr : brand.lockup.nameEn}
+        </span>
         <nav className="flex flex-wrap items-center gap-x-4 gap-y-1" aria-label={locale === 'ar' ? 'السياسات' : 'Policies'}>
           {links.map((l) => (
             <Link

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { useSectionTitle } from './sectionTitle'
 import { appNavGroups } from './appNav'
+import { useUi } from '@/stores/ui'
 
 /**
  * REPORT-TITLE-METADATA-001 — the tab title actually changes, and changes back.
@@ -23,7 +24,7 @@ describe('the shell’s document title', () => {
 
     renderHook(() => useSectionTitle(appNavGroups), { wrapper: at('/app/analytics') })
 
-    expect(document.title).toBe('التحليلات — CampaignsHub')
+    expect(document.title).toBe('التحليلات — كامبينز هب')
   })
 
   it('gives the document its own title back on the way out', () => {
@@ -43,4 +44,32 @@ describe('the shell’s document title', () => {
 
     expect(document.title).toBe('Something a page chose')
   })
+
+  /**
+   * The title cannot go STALE across a language switch.
+   *
+   * `useSectionTitle` recomputes on locale, so this proves the wiring rather than the string: a tab
+   * left reading «Analytics — CampaignsHub» after the reader switched to Arabic is the same defect
+   * as never setting it at all, and it is the failure mode a title set once in an effect invites.
+   */
+  it('follows the reader from one language to the other', () => {
+    act(() => {
+      useUi.setState({ locale: 'en' })
+    })
+    const { rerender } = renderHook(() => useSectionTitle(appNavGroups), { wrapper: at('/app/analytics') })
+    expect(document.title).toBe('Analytics — CampaignsHub')
+
+    act(() => {
+      useUi.setState({ locale: 'ar' })
+    })
+    rerender()
+    expect(document.title).toBe('التحليلات — كامبينز هب')
+
+    act(() => {
+      useUi.setState({ locale: 'en' })
+    })
+    rerender()
+    expect(document.title).toBe('Analytics — CampaignsHub')
+  })
+
 })

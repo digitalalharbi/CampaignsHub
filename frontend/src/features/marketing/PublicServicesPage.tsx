@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { brand, productName } from '@/lib/brand'
 import * as LucideIcons from 'lucide-react'
 import { ArrowLeft, ArrowRight, RotateCcw, Search } from 'lucide-react'
 import { FooterContact } from './FooterContact'
@@ -70,7 +71,7 @@ export function PublicServicesPage() {
 
   useEffect(() => {
     const title = current ? (ar ? current.label_ar : current.label_en) : (ar ? 'الخدمات' : 'Services')
-    document.title = `${title} — CampaignsHub`
+    document.title = `${title} — ${productName(locale)}`
   }, [current, ar])
 
   return (
@@ -229,7 +230,7 @@ export function PublicServicesPage() {
       <footer className="border-t border-border bg-surface py-6 text-center text-xs text-text-muted">
         <div className="flex flex-col items-center gap-2 px-4">
           <FooterContact locale={locale as Locale} variant="inline" />
-          <span>© {new Date().getFullYear()} CampaignsHub — {c.footer.rights}</span>
+          <span>© {new Date().getFullYear()} {locale === 'ar' ? brand.lockup.nameAr : brand.lockup.nameEn} — {c.footer.rights}</span>
         </div>
       </footer>
     </div>

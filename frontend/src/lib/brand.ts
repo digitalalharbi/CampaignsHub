@@ -44,3 +44,23 @@ export const brand = {
   },
   supportEmail: 'info@campaignshub.io',
 } as const
+
+/**
+ * BRAND-CANONICAL-001 — the ONE place that decides what the product is called, given a language.
+ *
+ * The name was resolved independently in a dozen places: `brand.lockup.nameAr` in one shell, the
+ * literal `'CampaignsHub'` as a fallback in four more, and an `app_name` key duplicated into BOTH
+ * halves of the i18n dictionary with the English spelling on the Arabic side — so an Arabic account
+ * read «CampaignsHub» wherever a surface happened to use that key instead of the lockup.
+ *
+ * Every caller asks this instead. A fallback is still the product identity, and a fallback written
+ * as a string literal is the identity spelled by hand in a place nobody looks.
+ */
+export function productName(locale: string | undefined): string {
+  return locale === 'ar' ? brand.lockup.nameAr : brand.lockup.nameEn
+}
+
+/** The lockup's own line, which is NOT the marketing tagline — see the note on `lockup` above. */
+export function productLockupLine(locale: string | undefined): string {
+  return locale === 'ar' ? brand.lockup.lineAr : brand.lockup.lineEn
+}
