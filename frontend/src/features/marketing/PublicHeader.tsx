@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Megaphone, Menu, Moon, Sun, X } from 'lucide-react'
+import { Menu, Moon, Sun, X } from 'lucide-react'
+import { CampaignsHubLogo } from '@/components/brand/CampaignsHubLogo'
 import { Button } from '@/components/ui/Button'
 import { useUi } from '@/stores/ui'
 
@@ -105,10 +106,19 @@ export function PublicHeader({
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-surface/85 backdrop-blur-md">
       <div className={`mx-auto flex h-16 ${width} items-center gap-2 px-4 sm:gap-4 sm:px-6`}>
-        <Link to="/" className="flex shrink-0 items-center gap-2 sm:gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Megaphone size={18} /></span>
-          {/* The wordmark is the only thing that yields, and only below 480px — see the header note. */}
-          <span className="font-heading text-base font-extrabold tracking-tight max-[479px]:hidden sm:text-lg">CampaignsHub</span>
+        {/*
+          BRAND-CANONICAL-001 — the public header wears the identity, it does not draw one.
+          
+          What stood here was a Lucide megaphone in a gradient tile beside a hardcoded English
+          wordmark, and because this is «the one public header» every public page wore it — the
+          marketing site shipped a different logo from the product for the whole life of the brand.
+          The gradient was not in the identity either.
+          
+          `compact` rather than `full`: a strapline under a 64px header is noise, and the hero says
+          the same thing louder one screen down.
+        */}
+        <Link to="/" className="flex shrink-0 items-center">
+          <CampaignsHubLogo locale={ar ? 'ar' : 'en'} variant="compact" size="sm" />
         </Link>
 
         {nav.length > 0 && (

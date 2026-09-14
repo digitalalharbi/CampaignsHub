@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { Megaphone, Moon, Sun } from 'lucide-react'
+import { Moon, Sun } from 'lucide-react'
+import { CampaignsHubLogo } from '@/components/brand/CampaignsHubLogo'
 import { useUi } from '@/stores/ui'
 
 /** Centered, mobile-first, RTL/LTR + light/dark shell for verification + onboarding (pre-app). */
@@ -15,8 +16,8 @@ export function OnboardingShell({ title, children }: { title: string; children: 
       <header className="border-b border-border bg-surface">
         <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Megaphone size={18} /></span>
-            <span className="font-heading text-base font-extrabold">CampaignsHub</span>
+            {/* BRAND-CANONICAL-001 — one identity, read here rather than rebuilt. */}
+            <CampaignsHubLogo locale={ar ? 'ar' : 'en'} variant="compact" size="sm" />
             <span className="hidden text-xs text-text-muted sm:inline">· {title}</span>
           </div>
           <div className="flex items-center gap-1.5">

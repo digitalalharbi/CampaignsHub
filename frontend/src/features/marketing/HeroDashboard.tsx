@@ -1,4 +1,7 @@
-import { CalendarDays, Info, LayoutDashboard, TrendingDown, TrendingUp } from 'lucide-react'
+import { CalendarDays, Info, TrendingDown, TrendingUp } from 'lucide-react'
+import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
+import { brand } from '@/lib/brand'
+import { useUi } from '@/stores/ui'
 import type { HomeCopy } from './homeCopy'
 
 /**
@@ -60,6 +63,8 @@ function Panel({ title, children, className = '' }: { title: string; children: R
 }
 
 export function HeroDashboard({ c }: { c: HomeCopy }) {
+  const { locale } = useUi()
+  const ar = locale === 'ar'
   const d = c.dashboard
 
   return (
@@ -69,8 +74,15 @@ export function HeroDashboard({ c }: { c: HomeCopy }) {
     >
       {/* Window chrome: product, period, and an unmistakable demo label. */}
       <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-2.5 py-1.5">
+        {/*
+          BRAND-CANONICAL-001 — the mockup shows the product, so it shows the product's identity.
+          
+          A `LayoutDashboard` glyph beside the Latin name stood here, which meant the hero advertised
+          a different logo and a different name from the app it is a picture of — in Arabic, the
+          language most of the page is written in.
+        */}
         <span className="flex items-center gap-1.5 text-[12px] font-bold text-white">
-          <LayoutDashboard size={13} className="text-brand-300" /> CampaignsHub
+          <CampaignsHubMark size={13} className="text-brand-300" /> {ar ? brand.lockup.nameAr : brand.lockup.nameEn}
         </span>
         <span className="flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.05] px-2 py-1 text-[10px] text-white/60">
           <CalendarDays size={10} /> {d.dateRange}

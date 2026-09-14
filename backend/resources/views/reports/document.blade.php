@@ -75,7 +75,16 @@
     </tbody>
   </table>
 
-  <p class="muted" style="margin-top:20px">مصدر البيانات: {{ $report->data_source }} · CampaignsHub</p>
+  {{--
+    BRAND-CANONICAL-001 — the platform's name in the reader's language.
+
+    This PDF is a document a client keeps, and it credited the platform in Latin on a page whose
+    every other word is Arabic. The name is the identity's, not a string invented here.
+  --}}
+  @php($chLoc = data_get($data, 'disclaimer.locale_default', 'ar'))
+  @php($chName = $chLoc === 'ar' ? 'كامبينز هب' : 'CampaignsHub')
+
+  <p class="muted" style="margin-top:20px">مصدر البيانات: {{ $report->data_source }} · {{ $chName }}</p>
 
   @php
     $disc = $data['disclaimer'] ?? [];
@@ -90,7 +99,7 @@
   @if($en('short') && $txt('short'))
   <div class="doc-footer">
     {{ $txt('short') }}
-    <span style="float:{{ $loc === 'ar' ? 'left' : 'right' }}">CampaignsHub · <span class="pnum"></span></span>
+    <span style="float:{{ $loc === 'ar' ? 'left' : 'right' }}">{{ $loc === 'ar' ? 'كامبينز هب' : 'CampaignsHub' }} · <span class="pnum"></span></span>
   </div>
   @endif
 

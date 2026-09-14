@@ -10,7 +10,16 @@
  *     refreshed in the background. Hashed filenames make this safe.
  *   - Update flow: a waiting worker activates immediately on SKIP_WAITING (the page prompts the user first).
  */
-const VERSION = 'ch-v1'
+/*
+ * BRAND-CANONICAL-001 — the version is what evicts a stale identity.
+ *
+ * `activate` deletes every cache whose key does NOT start with VERSION, so a constant version means
+ * nothing is ever evicted. The shell below caches `/favicon.svg`, which is UNHASHED — the one asset
+ * whose bytes change while its URL does not — so a browser that installed this worker before a
+ * rebrand keeps serving the old mark in its tab for as long as the cache lives, whatever the origin
+ * now returns. Bump this whenever a shell asset's bytes change, which a rebrand always does.
+ */
+const VERSION = 'ch-v2-brand'
 const SHELL_CACHE = `${VERSION}-shell`
 const ASSET_CACHE = `${VERSION}-assets`
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg']

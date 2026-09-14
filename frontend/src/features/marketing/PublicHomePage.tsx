@@ -6,6 +6,7 @@ import {
   Megaphone, ShieldCheck, Sparkles, Target, UserCircle, Wallet,
 } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
+import { CampaignsHubLogo } from '@/components/brand/CampaignsHubLogo'
 import { FooterContact } from './FooterContact'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { HeroSection } from './HeroSection'
@@ -456,10 +457,8 @@ export function PublicHomePage() {
       <footer className="border-t border-border bg-surface">
         <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:px-6 md:grid-cols-[1.5fr_repeat(3,1fr)]">
           <div>
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Megaphone size={16} /></span>
-              <span className="font-heading font-extrabold">CampaignsHub</span>
-            </div>
+            {/* BRAND-CANONICAL-001 — the footer wears the identity, same as the header above it. */}
+            <CampaignsHubLogo locale={locale === 'ar' ? 'ar' : 'en'} variant="compact" size="sm" />
             <p className="mt-3 max-w-sm text-sm leading-relaxed text-text-secondary">{c.footer.tagline}</p>
 
             <FooterContact locale={locale} />

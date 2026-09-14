@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, CheckCircle2, Download, FileText, Megaphone, Search } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Download, FileText, Search } from 'lucide-react'
+import { CampaignsHubLogo } from '@/components/brand/CampaignsHubLogo'
 import { replyToRequest, trackFileUrl, trackRequest } from './api'
 import { Button } from '@/components/ui/Button'
 import { TextareaField } from '@/components/ui/form'
@@ -41,8 +42,8 @@ export function RequestTrackPage() {
       <header className="border-b border-border bg-surface">
         <div className="mx-auto flex h-16 max-w-2xl items-center px-4 sm:px-6">
           <Link to="/" className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Megaphone size={18} /></span>
-            <span className="font-heading text-lg font-extrabold">CampaignsHub</span>
+            {/* BRAND-CANONICAL-001 — the identity, read from one place, not rebuilt per page. */}
+            <CampaignsHubLogo locale={locale === 'ar' ? 'ar' : 'en'} variant="compact" size="sm" />
           </Link>
         </div>
       </header>
