@@ -227,12 +227,38 @@ final class ShareService
                 foreach ($data[$section] as &$row) {
                     if (is_array($row)) {
                         $stripMoney($row);
+                        /*
+                         * The roster keeps its money under `metrics`, one rung below a row's own
+                         * keys — see the note on the live path, which had the identical gap. Both
+                         * sanitisers reach it, because a client holding a snapshot and a client
+                         * holding a live link must not be told different things by one share.
+                         */
+                        if (! empty($row['metrics']) && is_array($row['metrics'])) {
+                            $stripMoney($row['metrics']);
+                        }
                         if ($share->hide_campaign_names && array_key_exists('campaign_name', $row)) {
                             $row['campaign_name'] = 'حملة';
                         }
                     }
                 }
                 unset($row);
+            }
+        }
+
+        /* The wrapper-shaped section that was on no list — see the live path's note. */
+        if (! empty($data['objective_performance']) && is_array($data['objective_performance'])) {
+            if (! empty($data['objective_performance']['paths']) && is_array($data['objective_performance']['paths'])) {
+                foreach ($data['objective_performance']['paths'] as &$path) {
+                    if (is_array($path)) {
+                        $stripMoney($path);
+                    }
+                }
+                unset($path);
+            }
+            foreach (['direct', 'blended'] as $block) {
+                if (! empty($data['objective_performance'][$block]) && is_array($data['objective_performance'][$block])) {
+                    $stripMoney($data['objective_performance'][$block]);
+                }
             }
         }
 
@@ -436,6 +462,57 @@ final class ShareService
                     $payload[$section],
                 );
             }
+        }
+
+        /*
+         * The roster keeps its money one rung DOWN, under `metrics`, and `$strip` only reaches a
+         * row's own keys.
+         *
+         * `ads_roster` has been on the list above since the list existed, which is exactly why this
+         * survived: the section was enumerated, the decision had been made, and the sanitiser still
+         * returned every figure untouched because the shape it strips is not the shape the roster
+         * has. Measured on a `hide_spend` link: sixty rows carrying `metrics.spend`, `metrics.cpc`,
+         * `metrics.cpm` and thirty carrying `metrics.cost_per_view` — the section the owner named
+         * FIRST when this contract was written.
+         *
+         * One named level, not a recursive walk: the enumeration above exists so that reaching a new
+         * shape is a decision somebody makes here, and a blind descent would also reach the preview
+         * envelope and the operator prose that sit beside these figures.
+         */
+        foreach (self::CREATIVE_SECTIONS as $section) {
+            if (! empty($payload[$section]) && is_array($payload[$section])) {
+                $payload[$section] = array_map(function ($row) use ($strip) {
+                    if (is_array($row) && ! empty($row['metrics']) && is_array($row['metrics'])) {
+                        $row['metrics'] = $strip($row['metrics']);
+                    }
+
+                    return $row;
+                }, $payload[$section]);
+            }
+        }
+
+        /*
+         * `objective_performance` was on NO list at all — the failure its own neighbours warn about.
+         *
+         * It was added to the live payload after this method was written, and a section added to the
+         * payload and not to the list is a section that ignores the link's hide flags. Measured on a
+         * `hide_spend` link: `paths[].spend`, `direct.spend` and `blended.spend` all present. Its
+         * shape is a WRAPPER rather than a list of rows — `paths`, `direct`, `blended` — so it cannot
+         * ride the loop above, which is why it was easy to miss and why it is stated explicitly here.
+         */
+        if (! empty($payload['objective_performance']) && is_array($payload['objective_performance'])) {
+            $objective = $payload['objective_performance'];
+
+            if (! empty($objective['paths']) && is_array($objective['paths'])) {
+                $objective['paths'] = array_map(fn ($p) => is_array($p) ? $strip($p) : $p, $objective['paths']);
+            }
+            foreach (['direct', 'blended'] as $block) {
+                if (! empty($objective[$block]) && is_array($objective[$block])) {
+                    $objective[$block] = $strip($objective[$block]);
+                }
+            }
+
+            $payload['objective_performance'] = $objective;
         }
 
         /* The same rung down the snapshot path walks — see the note there. */

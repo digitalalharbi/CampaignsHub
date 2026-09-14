@@ -153,7 +153,26 @@ final class SharedLinkMoneyLeakTest extends TestCase
                 'timeseries' => [$row],
                 'budget' => [$row],
                 'ads' => [$row],
-                'ads_roster' => [$row],
+                /*
+                 * The roster's REAL shape, money one rung down under `metrics`.
+                 *
+                 * This was `[$row]` — flat, money at the top level — and that single convenience is
+                 * why this sweep passed while a `hide_spend` link published sixty rows of
+                 * `metrics.spend`, `metrics.cpc` and `metrics.cpm` on the live payload. The sanitiser
+                 * strips a row's own keys, the fixture handed it a row whose keys were its own, and
+                 * the shape the product builds was never tested. A fixture more generous than the
+                 * server is a test that cannot fail for the reason the product breaks.
+                 */
+                'ads_roster' => [['name' => 'A creative', 'provider' => 'snapchat', 'metrics' => $row]],
+                /*
+                 * And a section that was on no list at all, in the WRAPPER shape it really has — the
+                 * failure `sanitizeLive()`'s own enumeration warns about, which no fixture carried.
+                 */
+                'objective_performance' => [
+                    'paths' => [['path' => 'conversion'] + $row],
+                    'direct' => $row,
+                    'blended' => $row,
+                ],
                 'worst_creatives' => [$row],
                 'top_creatives' => [$row],
                 'ads_groups' => [['ads' => [$row]]],
@@ -184,8 +203,18 @@ final class SharedLinkMoneyLeakTest extends TestCase
              * version of this sweep reported those four flags as leaks, which would have been a
              * detector bug published as a security finding.
              */
-            if (is_string($key) && in_array($key, $forbidden, true) && ! is_bool($value)
-                && $value !== null && $value !== [] && $value !== '') {
+            /*
+             * And a SENTENCE is never a figure either — it is an explanation.
+             *
+             * `objective_performance.direct.formula` is keyed by the metric it describes, so `cpa`
+             * holds «sales-path spend ÷ sales-path orders». That names the arithmetic and discloses
+             * no money, exactly as `spend: false` names a permission and discloses no money. The
+             * boolean lesson above, met a second time on a different shape: the rule is that a leak
+             * is a NUMBER, so anything non-numeric is read past rather than published as a finding.
+             *
+             * Numeric strings still count — a figure delivered as «6000.00» is a figure.
+             */
+            if (is_string($key) && in_array($key, $forbidden, true) && is_numeric($value)) {
                 $found[$here] = $value;
             }
 
@@ -224,8 +253,41 @@ final class SharedLinkMoneyLeakTest extends TestCase
     #[Test]
     public function no_shared_endpoint_publishes_money_on_a_link_that_hides_it(): void
     {
-        [$share, $token] = app(ShareService::class)->create($this->report, [
-            'mode' => 'snapshot',
+        foreach (['snapshot', 'live'] as $mode) {
+            $this->sweepOneMode($mode);
+        }
+    }
+
+    /**
+     * One link, every GET route it serves, in ONE mode.
+     *
+     * Split out because the sweep ran against a SNAPSHOT share only, and `live()` builds its payload
+     * from services rather than from stored data — so the one path where a section could be added
+     * without being added to the sanitiser's list was the path never swept.
+     */
+    private function sweepOneMode(string $mode): void
+    {
+        /*
+         * The live-mode link needs a SCOPE or it is not live at all.
+         *
+         * `ReportShare::isLive()` is `mode === 'live' && scope !== []`, so a scope-less live link
+         * answers 409 and the live payload — the one built by services rather than read from stored
+         * data, and therefore the one where a section can be added without being added to the
+         * sanitiser's list — was never swept. The snapshot link deliberately keeps NO scope, because
+         * that is the shape the seeders create and the shape that turned an empty project id into a
+         * 500.
+         */
+        $scope = $mode === 'live' ? [
+            'project_id' => (string) $this->report->project_id,
+            'campaign_ids' => [],
+            'providers' => [],
+            'earliest' => now()->subDays(30)->toDateString(),
+            'latest' => now()->toDateString(),
+        ] : null;
+
+        [$share, $token] = app(ShareService::class)->create($this->report, array_filter([
+            'mode' => $mode,
+            'scope' => $scope,
             'hide_spend' => true,
             'hide_revenue' => true,
             'settings' => [
@@ -236,18 +298,24 @@ final class SharedLinkMoneyLeakTest extends TestCase
                     'insights' => true, 'comparison' => true,
                 ])->toArray(),
             ],
-        ], null);
+        ]), null);
 
         $paths = $this->sharedPaths();
         $this->assertGreaterThan(3, count($paths), 'the route sweep found almost nothing, so it proved almost nothing');
 
         $answered = 0;
         $leaked = [];
+        $declined = [];
 
         foreach ($paths as $uri) {
             $response = $this->getJson('/'.str_replace('{token}', $token, $uri));
 
             if ($response->status() !== 200) {
+                $declined[] = $uri.' → '.$response->status();
+                if ($response->status() === 500) {
+                    fwrite(STDERR, "\n500 on {$uri}: ".substr((string) json_encode($response->json()), 0, 400)."\n");
+                }
+
                 continue;
             }
 
@@ -259,7 +327,8 @@ final class SharedLinkMoneyLeakTest extends TestCase
             }
         }
 
-        $this->assertGreaterThan(1, $answered, 'no shared endpoint answered, so nothing was inspected');
-        $this->assertSame([], $leaked, "a link hiding spend and revenue published money:\n".implode("\n", $leaked));
+        fwrite(STDERR, "\n[{$mode}] answered={$answered} declined=".implode(', ', $declined)."\n");
+        $this->assertGreaterThan(1, $answered, "no shared endpoint answered in {$mode} mode, so nothing was inspected");
+        $this->assertSame([], $leaked, "a {$mode} link hiding spend and revenue published money:\n".implode("\n", $leaked));
     }
 }
