@@ -212,6 +212,77 @@ final class ClientReportViewTest extends TestCase
      * The validator is what actually blocks the export, so it is what this asserts — a payload the
      * view calls clean must be a payload the exporter will ship.
      */
+    /**
+     * And the ads inside a PLATFORM group, which is the third list — added after the note above was
+     * written promising a third list could not quietly opt out.
+     *
+     * `ads_platform_groups` arrived with the detailed report's platform rung (#409). It nests one
+     * level deeper than `ads_groups` — platform → objective family → `ads[]` — and the sanitiser was
+     * a list of section names, so the new section simply was not in it. Every client export of a
+     * report carrying that section failed, in all three formats, with
+     * `campaign_management_entity`: the validator refusing to ship a payload holding campaign ids.
+     *
+     * Reproduced on a real report generated through the reports builder: three violations, all
+     * `ads_platform_groups.0.groups.0.ads.N.campaign_id`. That is the same defect as the note above,
+     * one section later — which is why the fix stopped naming sections.
+     */
+    public function test_an_ad_inside_a_platform_group_carries_no_campaign_identity(): void
+    {
+        $snap = $this->internalSnapshot();
+        $snap['ads_platform_groups'] = [[
+            'provider' => 'meta',
+            'groups' => [[
+                'key' => 'sales',
+                'ads' => [[
+                    'name' => 'Story A',
+                    'campaign_id' => '56f56d91-1496-4743-aec1-5d41e0732a6f',
+                    'campaign_name' => 'Meta — Lead Gen (burner)',
+                    'ad_set_id' => 'as_1',
+                    'external_account_id' => 'act_99',
+                    'spend' => 100.0,
+                ]],
+            ]],
+        ]];
+
+        $client = app(ClientReportView::class)->filter($snap);
+        $row = $client['ads_platform_groups'][0]['groups'][0]['ads'][0];
+
+        foreach (['campaign_id', 'campaign_name', 'ad_set_id', 'ad_set_name', 'external_account_id'] as $internal) {
+            self::assertArrayNotHasKey($internal, $row, "«{$internal}» survived into a client's platform group");
+        }
+
+        // The figures the section exists for are untouched — a boundary that empties the ad is not a
+        // boundary kept, it is a section that failed to load.
+        self::assertSame(100.0, $row['spend']);
+        self::assertSame('Story A', $row['name']);
+    }
+
+    /**
+     * The export the owner clicks, on a payload shaped like the one that failed.
+     *
+     * The test above asserts the keys; this asserts the CONSEQUENCE, through the validator that
+     * actually blocks the export. Both directions are needed: a filter that strips the keys and a
+     * validator that reads a different tree would still produce an export nobody can download.
+     */
+    public function test_a_platform_grouped_payload_passes_the_validator_that_blocks_exports(): void
+    {
+        $snap = $this->internalSnapshot();
+        $snap['ads_platform_groups'] = [[
+            'provider' => 'meta',
+            'groups' => [[
+                'key' => 'sales',
+                'ads' => [
+                    ['name' => 'A', 'campaign_id' => 'c-1', 'campaign_name' => 'Burner', 'spend' => 10.0],
+                    ['name' => 'B', 'campaign_id' => 'c-2', 'ad_set_name' => 'AS', 'spend' => 20.0],
+                ],
+            ]],
+        ]];
+
+        $client = app(ClientReportView::class)->filter($snap);
+
+        self::assertSame([], app(ClientReportContentValidator::class)->scan($client));
+    }
+
     public function test_a_grouped_payload_passes_the_content_validator_that_blocks_exports(): void
     {
         $snap = $this->internalSnapshot();
