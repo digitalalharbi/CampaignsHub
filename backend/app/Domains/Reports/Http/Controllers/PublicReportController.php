@@ -236,6 +236,42 @@ final class PublicReportController extends Controller
             return ApiResponse::error('هذا القسم غير متاح في هذا الرابط.', status: 404);
         }
 
+        /*
+         * A section an operator switched on does not widen the ceiling they drew.
+         *
+         * `AttributionTransparency::build()` takes a tenant and a PROJECT and nothing else — it can
+         * take nothing else, because the thing it compares platform claims against is the store's own
+         * order ledger, and a store order belongs to no ad account and no campaign. On a link scoped
+         * to part of the project it therefore published the whole of it: measured on the demo world,
+         * a share whose ceiling named ONE ad account — an account that buys on google alone — returned
+         * four platforms, google's 116,325 beside meta's 50,500, snapchat's 27,030 and tiktok's 6,350,
+         * matching the project totals exactly. That is 83,880 of revenue outside the ceiling, and it
+         * also discloses WHICH platforms the agency buys on, which this product already treats as a
+         * disclosure needing the ceiling: an empty provider ceiling lists no platform in the freshness
+         * footer for precisely that reason.
+         *
+         * Bounding only the platform half was the tempting fix and is the wrong one: `difference`,
+         * `ratio`, `overlap` and `dedup` would then compare one account's claims against the whole
+         * store's orders and manufacture a discrepancy that does not exist. A fabricated figure is
+         * worse than an absent section.
+         *
+         * So the section is refused where the link is narrower than the project it reports on, which
+         * is the rule `ceiling()` already states for every other axis — «never a union, never a
+         * replacement», the narrower of grant and request winning. The reason is named rather than
+         * reusing the «not available» sentence above, because an operator who enabled this section and
+         * then cannot see it is owed the difference between «you did not turn it on» and «this link is
+         * too narrow to answer it».
+         */
+        $ceiling = (array) ($share->scope ?? []);
+        $narrowed = ($ceiling['account_ids'] ?? []) !== [] || ($ceiling['campaign_ids'] ?? []) !== [];
+
+        if ($narrowed) {
+            return ApiResponse::error(
+                'يقارن هذا القسم ما أبلغت به المنصات بطلبات المتجر كاملة، وهذا الرابط يغطي جزءًا من المشروع فقط.',
+                status: 404,
+            );
+        }
+
         $report = Report::withoutGlobalScopes()->find($share->report_id);
         if (! $report || $report->status !== 'completed') {
             return ApiResponse::error('التقرير غير متاح.', status: 404);
