@@ -272,6 +272,66 @@ final class SharedReportBrandingTest extends TestCase
         );
     }
 
+    /**
+     * BRANDING-RENDER-EVIDENCE-001 — REMOVING a logo, which is the transition nothing covered.
+     *
+     * Uploading is tested, and replacing is tested through the slot upsert. Removal was not: every
+     * case here starts from a branding row that exists and never watches one go away. It is the
+     * transition most likely to leave a surface pointing at bytes that are no longer there, and the
+     * one this requirement names alongside upload and change.
+     *
+     * The chain must simply take the next step down — client to agency, agency to the product — and
+     * at no point offer a `logo_url` that would 404. A broken image on a client's report reads as a
+     * report that failed to load, which is worse than showing the name.
+     */
+    public function test_removing_a_clients_logo_falls_back_rather_than_breaking(): void
+    {
+        $clientAsset = $this->assetWith('client', (string) $this->client->id, 'CLIENT-BYTES');
+        $this->assetWith('tenant', null, 'AGENCY-BYTES');
+
+        $before = $this->read();
+        self::assertSame('client', $before['logo_source'], 'the client logo was not leading to begin with');
+
+        app(BrandingService::class)->removeAsset($clientAsset);
+
+        $after = $this->read();
+
+        // One step down the chain, not off it.
+        self::assertSame('tenant', $after['logo_source'], 'removing the client logo did not fall back to the agency');
+        self::assertNotNull($after['logo_url']);
+
+        /*
+         * The URL is deliberately the SAME — the bytes are served through the token, never by asset
+         * id, and `test_the_logo_bytes_are_served_through_the_token_and_not_by_asset_id` says so. So
+         * what must change is what comes back through it, and it must still come back at all.
+         */
+        $bytes = $this->get("/api/v1/reports/shared/{$this->token}/branding/logo")
+            ->assertOk()
+            ->streamedContent();
+
+        self::assertStringContainsString('AGENCY-BYTES', $bytes, 'the link still serves the removed asset');
+        self::assertStringNotContainsString('CLIENT-BYTES', $bytes);
+    }
+
+    /**
+     * And removing the LAST logo leaves the name, never an empty `logo_url`.
+     *
+     * `<img src="">` re-requests the page in some browsers and draws a broken icon in others — on a
+     * client's report that reads as «this failed», which is the one thing the fallback exists to
+     * prevent.
+     */
+    public function test_removing_the_last_logo_leaves_a_name_and_not_a_broken_image(): void
+    {
+        $only = $this->asset('tenant', null, 'Agency logo');
+
+        app(BrandingService::class)->removeAsset($only);
+
+        $body = $this->read();
+
+        self::assertNull($body['logo_url'], 'a removed logo left a URL behind');
+        self::assertNotSame('', $body['name'] ?? '', 'the reader was left with neither a mark nor a name');
+    }
+
     private function asset(string $scope, ?string $scopeId, string $name): BrandingAsset
     {
         if (app(TenantContext::class)->tenantId() === null) {
