@@ -72,7 +72,8 @@ export function PublicServicesPage() {
   useEffect(() => {
     const title = current ? (ar ? current.label_ar : current.label_en) : (ar ? 'الخدمات' : 'Services')
     document.title = `${title} — ${productName(locale)}`
-  }, [current, ar])
+    // `locale` and not `ar`: the title interpolates the locale, so the locale is what it depends on.
+  }, [current, ar, locale])
 
   return (
     <div className="min-h-screen bg-background text-text-primary" dir={c.dir}>

@@ -6,9 +6,45 @@ Read this file, then `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then `git log o
 disagree, Git is right.** It had been left at #327 while `origin/main` reached #404, which is why
 that sentence is now the second line rather than a footnote.
 
-## 2026-09-14 — where this stopped
+## 2026-09-14 (later the same day) — where this stopped
 
-`origin/main` = `218e0046` (#404), deployed.
+`origin/main` = `e5408a58` (#412), deployed.
+
+**This file said #404 while Git said #412 — eight merges out of date, on the run that wrote the
+sentence above about going stale.** That is the point of the sentence and not an excuse for it: a
+summary drifts the moment it is not rewritten, so the owner's instruction is to reconcile against Git
+BEFORE choosing what to do next, and this is that reconciliation.
+
+### Merged this run, each with six green checks and a confirmed deploy
+
+| PR | What it was |
+| --- | --- |
+| #405 | An ad-set rung with no rows reads as a broken dimension, not an empty one |
+| #406 | What a share link may disclose — the ceiling, the flags, and the money it hid |
+| #407 | One identity, and no surface may build a second |
+| #408 | The live report's cross-platform comparison — which platform did better |
+| #409 | The detailed report's platform rung — what works HERE |
+| #410 | The narrowing that guards the read was never put on the writes (authorization) |
+| #411 | One key holds the product's name, and one answer deleted for having no reader |
+| #412 | Fourteen scheduled commands already knew how much they did, and told a terminal |
+
+### What Production can and cannot show
+
+#408 and #409 are verified in the served bundle — the sections, both languages, the markers and the
+counts are in `index-Dh0amz30.js` and `index-CtRDQBVO.js`. That is «it shipped», not «a client sees
+it»: owner acceptance on a real multi-platform link needs an authenticated session this lane does not
+have, and is recorded as BLOCKED_OPERATIONAL_EVIDENCE rather than left looking finished.
+
+#410 is deployed and answers 401 to a stranger, which proves the route and the session gate and NOT
+the narrowing — that needs two users in one tenant. #411's check can only prove the absence of a
+regression, because its defect was visible only on an install that never set the framework's name
+key. #412 has no runtime surface a reader can see.
+
+### The owner's two latest corrections, against existing requirement IDs
+
+- **BRAND-MARK-001** — the identity and where clicking it goes. In flight.
+- **MKT-FIX-001** — the mobile marketing homepage shifting on a cold load. In flight; root cause
+  found and measured, see the row.
 
 Merged, deployed and checked this run:
 
