@@ -13,6 +13,7 @@ use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativePulse;
 use App\Domains\Campaigns\Services\CreativeRows;
+use App\Domains\Campaigns\Support\CreativeDemoPolicy;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\ReportShare;
@@ -871,6 +872,16 @@ final class SharedCreativeView
         return DB::table('creative_daily_metrics')
             ->where('creative_id', $creativeId)
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            /*
+             * ANALYTICS-PROVENANCE-001 — the sparkline on a CLIENT's own report.
+             *
+             * The figures above it go through `CreativeMetrics`, which applies this policy; the trend
+             * queried the table directly and did not. A client could be shown a curve drawn partly
+             * from seeded days beside totals that excluded them — the two disagreeing on one card,
+             * which is exactly the «reports that do not reflect trustworthy real data» the owner
+             * reported.
+             */
+            ->where(fn ($q) => CreativeDemoPolicy::applyToCreatives($q, 'creative_daily_metrics', [$creativeId]))
             ->orderBy('metric_date')
             ->get(['metric_date', 'spend', 'impressions', 'clicks', 'conversions', 'revenue', 'video_views', 'video_p100', 'frequency'])
             ->map(static function ($r) use ($visibility): array {

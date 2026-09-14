@@ -9,8 +9,10 @@ use App\Domains\Campaigns\Enums\CanonicalObjective;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Support\CreativeDemoPolicy;
 use App\Domains\Campaigns\Support\CreativeKind;
 use App\Domains\Campaigns\Support\Relevance;
+use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
 use Closure;
@@ -348,13 +350,30 @@ final class CreativeRows
     public function applySort(mixed $query, ?string $sort, Carbon $from, Carbon $to): mixed
     {
         $sort = (string) $sort;
+
+        /*
+         * The project whose creatives are being ranked, for the demo policy below.
+         *
+         * Read from the active project context rather than threaded through every caller: this
+         * method is reached from the library, the picker and the report builder, and the question is
+         * about the scope they all share.
+         */
+        $projectId = app(ProjectContext::class)->projectId();
         $metric = ['spend', 'impressions', 'clicks', 'conversions', 'revenue'];
 
         if (in_array($sort, $metric, true)) {
+            /*
+             * ANALYTICS-PROVENANCE-001 — the ORDER is a figure too.
+             *
+             * This ranks a real library by a total that included seeded rows, so a creative could
+             * outrank another on spend it never had. See `CreativeDemoPolicy` for why the scope and
+             * not the window decides.
+             */
             $totals = DB::table('creative_daily_metrics')
                 ->select('creative_id')
                 ->selectRaw('SUM('.$sort.') AS sort_total')
                 ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+                ->where(fn ($q) => CreativeDemoPolicy::applyToProject($q, 'creative_daily_metrics', $projectId))
                 ->groupBy('creative_id');
 
             return $query
@@ -391,6 +410,8 @@ final class CreativeRows
                         ->select('creative_id')
                         ->selectRaw('SUM(spend) AS sort_total')
                         ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+                        /* Relevance is spend, and seeded spend is not this customer's — see above. */
+                        ->where(fn ($q) => CreativeDemoPolicy::applyToProject($q, 'creative_daily_metrics', $projectId))
                         ->groupBy('creative_id'),
                     'sorted',
                     'sorted.creative_id',

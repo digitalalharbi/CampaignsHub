@@ -7,6 +7,7 @@ namespace App\Domains\Campaigns\Services;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
+use App\Domains\Campaigns\Support\CreativeDemoPolicy;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -167,14 +168,24 @@ final class CreativeMetrics
         $rows = DB::table('creative_daily_metrics')
             ->whereIn('creative_id', $creativeIds)
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
-            ->where(fn ($q) => $this->excludeDemo($q, 'creative_daily_metrics', $creativeIds))
+            ->where(fn ($q) => CreativeDemoPolicy::applyToCreatives($q, 'creative_daily_metrics', $creativeIds))
             ->groupBy('creative_id')
             ->selectRaw(implode(', ', $select))
             ->get();
 
         $out = [];
         foreach ($rows as $row) {
-            $out[(string) $row->creative_id] = $this->shape((array) $row);
+            $figures = $this->shape((array) $row);
+            /*
+             * Where the number came from, carried with it.
+             *
+             * `creative` is the platform reporting this creative directly. `ad` is a sum over the ads
+             * that ran it — the same money, attributed rather than reported, and a surface is
+             * entitled to say which it is holding. The alternative is a figure whose provenance only
+             * the query knows, which is how «trustworthy» becomes unanswerable.
+             */
+            $figures['grain'] = 'creative';
+            $out[(string) $row->creative_id] = $figures;
         }
 
         /*
@@ -222,63 +233,14 @@ final class CreativeMetrics
         return $out;
     }
 
-    /**
-     * ANALYTICS-PROVENANCE-001 — a seeded row is not part of a customer's real total.
+    /*
+     * The demo policy lives in `CreativeDemoPolicy`, not here.
      *
-     * ## The gap
-     *
-     * `MetricsAggregator` has guarded this on `daily_metrics` since the defect was found there: «a
-     * seeded row added to them is not a rounding error — it is invented money inside a real total».
-     * The creative tables carry the same `is_demo` column and NOTHING read it, so every figure the
-     * content library produced summed real and demo rows together whenever a scope held both.
-     *
-     * ## The same policy, derived the same way
-     *
-     * Demo-ness is a fact about rows, not about a project, so the scope decides: a set of creatives
-     * holding any live row is operational and its demo rows are excluded; a set holding only demo
-     * rows is a demo and they are exactly what to show. That keeps the demo tenant working and stops
-     * a real account's figures from acquiring seeded spend.
-     *
-     * Deliberately evaluated across the creatives rather than per day, for the reason the aggregator
-     * gives: if the WINDOW decided, one KPI would mean two different things on two date ranges with
-     * nothing on screen to say so.
-     *
-     * @param  list<string>  $creativeIds
+     * It was a private pair of methods on this class first, and that was already the second copy of
+     * a rule `MetricsAggregator` states for `daily_metrics`. Four call sites across three classes ask
+     * it; a policy copied four times is four places to forget it, which is how the creative tables
+     * came to be the ones without it.
      */
-    private function excludeDemo(mixed $query, string $table, array $creativeIds): void
-    {
-        if (! $this->scopeHasLiveRows($creativeIds)) {
-            return;
-        }
-
-        $query->where("{$table}.is_demo", false);
-    }
-
-    /**
-     * Does this set of creatives hold any row a customer's own platform reported?
-     *
-     * Both grains are asked, because a creative whose own table is empty is exactly the case the ad
-     * grain exists to answer — deciding «this is a demo scope» from the empty table alone would let
-     * demo rows back into a real account through the other one.
-     *
-     * @param  list<string>  $creativeIds
-     */
-    private function scopeHasLiveRows(array $creativeIds): bool
-    {
-        return $this->scopeHasLiveRows[implode(',', $creativeIds)] ??= DB::table('creative_daily_metrics')
-            ->whereIn('creative_id', $creativeIds)
-            ->where('is_demo', false)
-            ->exists()
-            || DB::table('entity_daily_metrics')
-                ->join('external_ads', 'external_ads.id', '=', 'entity_daily_metrics.entity_id')
-                ->where('entity_daily_metrics.entity_type', 'ad')
-                ->whereIn('external_ads.creative_id', $creativeIds)
-                ->where('entity_daily_metrics.is_demo', false)
-                ->exists();
-    }
-
-    /** @var array<string, bool> memo for {@see scopeHasLiveRows()} — one check per creative set. */
-    private array $scopeHasLiveRows = [];
 
     /**
      * A creative's totals summed from the ad grain, for creatives with no rows of their own.
@@ -325,7 +287,7 @@ final class CreativeMetrics
             ->join('external_ads', 'external_ads.id', '=', 'entity_daily_metrics.entity_id')
             ->where('entity_daily_metrics.entity_type', 'ad')
             ->whereIn('external_ads.creative_id', $creativeIds)
-            ->where(fn ($q) => $this->excludeDemo($q, 'entity_daily_metrics', $creativeIds))
+            ->where(fn ($q) => CreativeDemoPolicy::applyToCreatives($q, 'entity_daily_metrics', $creativeIds))
             ->whereBetween('entity_daily_metrics.metric_date', [$from->toDateString(), $to->toDateString()])
             ->groupBy('external_ads.creative_id')
             ->selectRaw(implode(', ', $select))
@@ -334,7 +296,9 @@ final class CreativeMetrics
         $out = [];
 
         foreach ($rows as $row) {
-            $out[(string) $row->creative_id] = $this->shape((array) $row);
+            $figures = $this->shape((array) $row);
+            $figures['grain'] = 'ad';
+            $out[(string) $row->creative_id] = $figures;
         }
 
         return $out;
