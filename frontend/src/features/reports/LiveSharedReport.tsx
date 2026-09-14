@@ -8,6 +8,8 @@ import { ReportAdDetail } from './ReportAdDetail'
 import { ReportCreativeRoster } from './ReportCreativeRoster'
 import { ReportAdsSection, type ReportAd } from './ReportAdsSection'
 import { canonicalPlatform } from '@/lib/platforms'
+import { platformComparisonRows } from './platformComparison'
+import { DataMetricTable, type Column, type Row as TableRow } from '@/components/ui/MetricTable'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import {
   ChartCard,
@@ -305,6 +307,26 @@ export function LiveSharedReport({
   const spendChartable = spendState === 'complete_converted' || spendState === 'zero'
   const platformSpendRank = rankableMoney(payload.platforms as MoneyTotals[], 'spend', currency)
 
+  /*
+    The comparison table's columns and rows.
+    
+    `results` is whatever the objective family counts, so the column is labelled «النتائج/Results»
+    rather than «conversions» — the same word the KPI row uses, because two names for one figure on
+    one page is how a reader comes to believe they are two figures.
+  */
+  const platformColumns: Column[] = [
+    { key: 'platform', label: ar ? 'المنصة' : 'Platform', kind: 'text' },
+    { key: 'spend', label: ar ? 'الإنفاق' : 'Spend', kind: 'money', currency: spendChartable ? currency : null },
+    { key: 'results', label: ar ? 'النتائج' : 'Results', kind: 'number' },
+    { key: 'cost_per_result', label: ar ? 'تكلفة النتيجة' : 'Cost / result', kind: 'cost', currency: spendChartable ? currency : null },
+    { key: 'impressions', label: ar ? 'الظهور' : 'Impressions', kind: 'number' },
+    { key: 'clicks', label: ar ? 'النقرات' : 'Clicks', kind: 'number' },
+    { key: 'ctr', label: ar ? 'نسبة النقر' : 'CTR', kind: 'percent' },
+  ]
+
+  const platformRows: TableRow[] = platformComparisonRows(payload.platforms, ar ? 'ar' : 'en')
+
+
   return (
     /*
      * `[&>*]:min-w-0` — without it this page scrolls sideways on a phone.
@@ -584,6 +606,44 @@ export function LiveSharedReport({
             )}
           </ChartCard>
         </div>
+
+        {/*
+          LIVE-CROSS-PLATFORM-001 — every selected platform on one row each, which the page never had.
+          
+          The charts above answer «how much» and «over time»; neither answers «which platform did
+          better», and that is the question a client opens a multi-platform report to ask. The donut
+          cannot: a share of spend says nothing about what the spend bought.
+          
+          A platform the link SELECTED but which reported nothing keeps its row and says so. Dropping
+          it would quietly answer a different question — «the platforms that had data» — and the
+          reader cannot tell an absent row from a platform nobody bought on.
+          
+          Every figure is read through the money contract, so a withheld amount stays withheld here
+          exactly as it does in the cards above rather than being re-derived into a number.
+        */}
+        {payload.platforms.length > 0 && (
+          <div className="mt-3 rounded-2xl border border-border bg-surface p-4" data-testid="live-platform-comparison">
+            <h3 className="mb-3 text-base font-bold text-text-primary">
+              {ar ? 'مقارنة أداء المنصات' : 'Platform performance'}
+            </h3>
+            <DataMetricTable
+              columns={platformColumns}
+              rows={platformRows}
+              initialSort={{ column: 1, dir: 'desc' }}
+            />
+            {/*
+              The platforms that reported nothing are NOT named again here.
+              
+              `FreshnessStrip` already says «the figures in this report do not include: X, LinkedIn»
+              at the top of the page, from the same scope. A second sentence under this table would
+              be the same fact twice, which is how a dashboard becomes a document — and the owner's
+              rule for this page is data, visual, comparison, not paragraph after paragraph.
+              
+              This comment stands where that sentence briefly did, because writing it was the obvious
+              move and rendering the page is what showed it was already said.
+            */}
+          </div>
+        )}
 
         {/*
           CLIENT-REPORT-ENTITY-BOUNDARY-001 — the campaign ranking that stood here is gone.
