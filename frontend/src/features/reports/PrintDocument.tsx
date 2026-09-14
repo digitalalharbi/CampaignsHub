@@ -102,7 +102,7 @@ function isPlatformIdentity(name?: string | null): boolean {
    * BOTH spellings of the product's name, because it now has two.
    *
    * This compared against the English name and the locale-agnostic one. Once the platform's fallback
-   * started answering «كامبينز هَب» on an Arabic document — which is the point of localising it —
+   * started answering «كامبينز هب» on an Arabic document — which is the point of localising it —
    * that name would no longer have been recognised as the PLATFORM's, and the document would have
    * treated the product's own name as though it were a client's agency branding.
    *

@@ -82,7 +82,7 @@
     every other word is Arabic. The name is the identity's, not a string invented here.
   --}}
   @php($chLoc = data_get($data, 'disclaimer.locale_default', 'ar'))
-  @php($chName = $chLoc === 'ar' ? 'كامبينز هب' : 'كامبينز هَب')
+  @php($chName = $chLoc === 'ar' ? 'كامبينز هب' : 'CampaignsHub')
 
   <p class="muted" style="margin-top:20px">مصدر البيانات: {{ $report->data_source }} · {{ $chName }}</p>
 
@@ -99,7 +99,7 @@
   @if($en('short') && $txt('short'))
   <div class="doc-footer">
     {{ $txt('short') }}
-    <span style="float:{{ $loc === 'ar' ? 'left' : 'right' }}">{{ $loc === 'ar' ? 'كامبينز هب' : 'كامبينز هَب' }} · <span class="pnum"></span></span>
+    <span style="float:{{ $loc === 'ar' ? 'left' : 'right' }}">{{ $loc === 'ar' ? 'كامبينز هب' : 'CampaignsHub' }} · <span class="pnum"></span></span>
   </div>
   @endif
 

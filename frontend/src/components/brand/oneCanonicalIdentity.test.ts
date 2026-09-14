@@ -164,51 +164,20 @@ describe('the legacy identity cannot come back', () => {
 })
 
 /**
- * The Arabic surfaces must call the product by its Arabic name.
+ * NOT a rule: «no Arabic string may contain CampaignsHub».
  *
- * The owner found «CampaignsHub» inside the product while the interface was in Arabic. The lockup
- * was already localised; what was not were the dozens of ordinary strings around it — a sign-in
- * subtitle, a plan description, an invoice note, a provider error — and an `app_name` key duplicated
- * into BOTH halves of the i18n dictionary with the English spelling on the Arabic side.
+ * A rule of that shape lived here and has been removed. It was written after the owner found the
+ * Latin name inside the Arabic product, and it read every Arabic string in the repository — which
+ * made it a blind translation mechanism for the TRADEMARK rather than a guard on the IDENTITY. Under
+ * it, «سجّل الدخول إلى حسابك في CampaignsHub» and a legal page's «حقوقك على بياناتك داخل
+ * CampaignsHub» were failures, and they are not: those name the product the way a sentence names a
+ * company, and the product's registered name is CampaignsHub.
  *
- * This is deliberately about ARABIC strings only. An English string saying «CampaignsHub» is the
- * product's name in English and must stay: a first pass of this migration rewrote one of those and
- * had to be reverted, which is the mistake this rule is shaped to avoid rather than repeat.
+ * What the identity is, and therefore what the rules above police, is the LOCKUP and the places the
+ * product presents itself as itself — a shell's wordmark, a report's attribution, a footer's credit,
+ * the `app_name` key. Those resolve through `productName(locale)` and say «كامبينز هب» in Arabic.
+ * Ordinary copy keeps the trademark, in either language.
+ *
+ * Recorded rather than deleted silently, because the difference between the two is the whole of this
+ * unit and a future reader will otherwise re-add the wider rule in good faith.
  */
-describe('the product is named in the language it is speaking', () => {
-  const ARABIC = /[\u0600-\u06FF]/
-
-  /**
-   * Per STRING, not per line, and never inside a comment.
-   *
-   * A first version of this rule read whole lines and named three files, of which one was a line
-   * holding an Arabic string beside an English one — where «CampaignsHub» is simply the product's
-   * name in English and belongs there — and another was a code comment quoting a string the product
-   * no longer contains. Both would have been "fixed" into worse copy. So comments are stripped and
-   * each quoted literal is judged on its own.
-   */
-  const withoutComments = (src: string): string =>
-    src.replaceAll(/\/\*[\s\S]*?\*\//g, '').replaceAll(/\/\/[^\n]*/g, '')
-
-  /*
-   * `[^'\\n]` would exclude the letter «n» as well as a newline — and «CampaignsHub» contains one,
-   * so every string this rule exists to find was skipped and the rule passed while the defect stood.
-   * A guard that cannot fail is worse than none: it reports the absence of what it never looked for.
-   */
-  const STRINGS = /'([^'\n]*)'|"([^"\n]*)"|`([^`]*)`/g
-
-  it('no Arabic string calls the product by its Latin name', () => {
-    const offenders: string[] = []
-
-    for (const [path, src] of files) {
-      for (const match of withoutComments(src).matchAll(STRINGS)) {
-        const text = match[1] ?? match[2] ?? match[3] ?? ''
-        if (!text.includes('CampaignsHub')) continue
-        /* Strip the Latin name; if what remains is Arabic, this is an Arabic sentence. */
-        if (ARABIC.test(text.replaceAll('CampaignsHub', ''))) offenders.push(`${path}: ${text.slice(0, 70)}`)
-      }
-    }
-
-    expect(offenders).toEqual([])
-  })
-})

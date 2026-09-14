@@ -126,7 +126,7 @@ export function PublicHeader({
           is here so it is not removed a third time. The `mark` variant is the same identity with the
           words stood down, not a second logo.
         */}
-        <Link to="/" className="flex shrink-0 items-center" aria-label={ar ? 'كامبينز هَب' : 'CampaignsHub'}>
+        <Link to="/" className="flex shrink-0 items-center" aria-label={ar ? 'كامبينز هب' : 'CampaignsHub'}>
           <span className="max-[479px]:hidden">
             <CampaignsHubLogo locale={ar ? 'ar' : 'en'} variant="compact" size="sm" />
           </span>

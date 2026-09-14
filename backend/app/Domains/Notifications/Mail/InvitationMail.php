@@ -46,7 +46,7 @@ final class InvitationMail extends Mailable
         $ar = $this->lang === 'ar';
 
         return new Envelope(subject: $ar
-            ? "كامبينز هَب — دعوة للانضمام إلى {$this->workspace}"
+            ? "CampaignsHub — دعوة للانضمام إلى {$this->workspace}"
             : "CampaignsHub — You have been invited to join {$this->workspace}");
     }
 
@@ -57,10 +57,10 @@ final class InvitationMail extends Mailable
 
         $intro = $this->invitedBy !== ''
             ? ($ar
-                ? "دعاك {$this->invitedBy} للانضمام إلى مساحة عمل {$this->workspace} على كامبينز هَب، حيث تتابع الفرق حملاتها الإعلانية المدفوعة في مكان واحد."
+                ? "دعاك {$this->invitedBy} للانضمام إلى مساحة عمل {$this->workspace} على CampaignsHub، حيث تتابع الفرق حملاتها الإعلانية المدفوعة في مكان واحد."
                 : "{$this->invitedBy} has invited you to join the {$this->workspace} workspace on CampaignsHub, where teams follow their paid advertising campaigns in one place.")
             : ($ar
-                ? "لديك دعوة للانضمام إلى مساحة عمل {$this->workspace} على كامبينز هَب، حيث تتابع الفرق حملاتها الإعلانية المدفوعة في مكان واحد."
+                ? "لديك دعوة للانضمام إلى مساحة عمل {$this->workspace} على CampaignsHub، حيث تتابع الفرق حملاتها الإعلانية المدفوعة في مكان واحد."
                 : "You have been invited to join the {$this->workspace} workspace on CampaignsHub, where teams follow their paid advertising campaigns in one place.");
 
         $shell = MailShell::build(

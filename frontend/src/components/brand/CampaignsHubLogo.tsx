@@ -72,14 +72,19 @@ export function CampaignsHubLogo({
 
               The Arabic was MIRRORED here — «كامبينز» green and «هب» in the text colour — and the
               comment that stood in this place called that deliberate. The official package settles
-              it the other way: `INTEGRATION.md` renders «كامبينز <span accent>هَب</span>», first word
-              in ink and «هَب» in the accent, which is the English arrangement rather than its
-              reflection. The fatha on «هَب» is the official spelling too, and it was missing.
+              it the other way: it renders the first word in ink and «هب» in the accent, which is the
+              English arrangement rather than its reflection.
+
+              The SPELLING is the owner's, not the artwork's: «كامبينز هب», no fatha. The identity
+              PDF writes it with one, and a later explicit decision says otherwise — a drawing is not
+              a decision. It is split across two spans here for the colour, which is also why a sweep
+              for the whole name did not find it and the rendered page still carried the fatha after
+              every file had been corrected. Rendering caught what grep could not.
             */}
             {ar ? (
               <>
                 <span className="text-text-primary">{"كامبينز "}</span>
-                <span className="text-brand-mark">{"هَب"}</span>
+                <span className="text-brand-mark">{"هب"}</span>
               </>
             ) : (
               <>

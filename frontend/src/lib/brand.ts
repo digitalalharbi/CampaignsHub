@@ -18,7 +18,7 @@ export const brand = {
    */
   lockup: {
     nameEn: 'CampaignsHub',
-    nameAr: 'كامبينز هَب',
+    nameAr: 'كامبينز هب',
     lineEn: 'PAID MEDIA IN ONE PLACE',
     lineAr: 'منصة إدارة الحملات المدفوعة',
   },

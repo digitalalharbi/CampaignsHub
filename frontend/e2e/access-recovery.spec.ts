@@ -142,7 +142,7 @@ test.describe('an account that belongs to no workspace', () => {
     await expect(page.getByTestId('access-recovery')).toHaveCount(0)
     /*
      * The product's name in EITHER language — the homepage is Arabic by default and the identity
-     * calls the product «كامبينز هَب» there. This asserted the Latin spelling, so it was really
+     * calls the product «كامبينز هب» there. This asserted the Latin spelling, so it was really
      * asserting «the interface is in English», which was never what the case is about: it is about
      * landing on the front door rather than the wall.
      */

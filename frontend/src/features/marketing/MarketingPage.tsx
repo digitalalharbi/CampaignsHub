@@ -197,7 +197,7 @@ export function MarketingPage() {
 
       {/* Final CTA + Footer */}
       <section className="mx-auto max-w-[1240px] px-6 py-16 text-center">
-        <h2 className="font-[var(--font-heading)] text-2xl font-bold">{ar ? 'ابدأ مع كامبينز هَب' : 'Get started with كامبينز هَب'}</h2>
+        <h2 className="font-[var(--font-heading)] text-2xl font-bold">{ar ? 'ابدأ مع CampaignsHub' : 'Get started with CampaignsHub'}</h2>
         <div className="mt-5 flex items-center justify-center gap-3">
           <Link to="/login"><Button>{ar ? 'إنشاء حساب' : 'Create account'}</Button></Link>
           <Button variant="secondary">{ar ? 'التواصل مع المبيعات' : 'Contact sales'}</Button>

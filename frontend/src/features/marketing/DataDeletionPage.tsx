@@ -108,7 +108,7 @@ export function DataDeletionPage() {
 
       <p className="mt-3 text-sm leading-7 text-[var(--muted-foreground)] sm:text-base">
         {t(
-          'اطلب حذف بياناتك من كامبينز هَب. سنرسل رمزًا إلى بريدك للتأكد أنك صاحب العنوان قبل تنفيذ أي حذف، وستحصل على رقم مرجعي تتابع به الطلب.',
+          'اطلب حذف بياناتك من CampaignsHub. سنرسل رمزًا إلى بريدك للتأكد أنك صاحب العنوان قبل تنفيذ أي حذف، وستحصل على رقم مرجعي تتابع به الطلب.',
           'Ask us to delete your data from CampaignsHub. We send a code to your email to confirm the address is yours before anything is deleted, and you get a reference to follow the request.',
         )}
       </p>

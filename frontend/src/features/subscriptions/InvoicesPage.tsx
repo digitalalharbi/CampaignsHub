@@ -20,7 +20,7 @@ import { Num } from '@/components/ui/Num'
 const COPY = {
   ar: {
     title: 'فواتير الاشتراك',
-    subtitle: 'فواتير كامبينز هَب لك. فواتيرك لعملائك في قسم الفوترة.',
+    subtitle: 'فواتير CampaignsHub لك. فواتيرك لعملائك في قسم الفوترة.',
     empty: 'لا توجد فواتير بعد.',
     number: 'رقم الفاتورة', issued: 'تاريخ الإصدار', total: 'الإجمالي', outstanding: 'المتبقي', status: 'الحالة',
     statuses: { issued: 'صادرة', paid: 'مدفوعة', refunded: 'مستردة', void: 'ملغاة' } as Record<string, string>,

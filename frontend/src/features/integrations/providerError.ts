@@ -93,7 +93,7 @@ const RULES: readonly Rule[] = [
     category: 'request_rejected',
     actor: 'product',
     match: /not present in schema|unknown field|unsupported (field|metric|parameter)|deprecat|invalid parameter|unrecognized|malformed|400 Bad Request/i,
-    ar: 'طلب كامبينز هَب من هذه المنصة شيئًا لم تعد تقبله. المشكلة في طلبنا لا في حسابك، وقد سُجّلت التفاصيل للفريق.',
+    ar: 'طلب CampaignsHub من هذه المنصة شيئًا لم تعد تقبله. المشكلة في طلبنا لا في حسابك، وقد سُجّلت التفاصيل للفريق.',
     en: 'CampaignsHub asked this platform for something it no longer accepts. This is our request, not your account — the details are recorded for the team.',
   },
   {
