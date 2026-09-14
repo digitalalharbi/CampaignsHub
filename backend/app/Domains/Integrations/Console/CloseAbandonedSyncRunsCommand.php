@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Console;
 
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Metrics\Enums\SyncRunStatus;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 
@@ -93,6 +94,18 @@ final class CloseAbandonedSyncRunsCommand extends Command
                 'finished_at' => now(),
                 'error' => 'The sync did not finish: the worker stopped it (timeout, memory, or a restart).',
             ]);
+
+        /*
+         * AUTOMATION-FIRST-OPERATIONS-001 — the count the ledger is supposed to hold.
+         *
+         * Runs closed. The dry pass above reports without closing and reports nothing here, which is
+         * correct: a run that changed nothing touched no rows.
+         *
+         * Already computed, already printed to a terminal nobody watches at 04:00, while
+         * `scheduled_runs.rows_affected` stayed null — so the ops page could say SUCCEEDED without
+         * being able to say whether the run did anything.
+         */
+        app(ScheduledRunRows::class)->report($closed);
 
         $this->info("Closed {$closed} abandoned run(s).");
 

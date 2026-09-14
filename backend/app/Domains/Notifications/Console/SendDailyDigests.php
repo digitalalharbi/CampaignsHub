@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Console;
 
 use App\Domains\Notifications\Services\DigestDispatcher;
 use App\Domains\Notifications\Support\DigestSchedule;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -132,6 +133,18 @@ final class SendDailyDigests extends Command
                 $this->line("{$user->email} monthly: {$state}");
             }
         }
+
+        /*
+         * AUTOMATION-FIRST-OPERATIONS-001 — the count the ledger is supposed to hold.
+         *
+         * Digests SENT. A user skipped for having nothing to say is not a row this run touched, and
+         * counting them would turn a quiet day into a busy-looking one.
+         *
+         * Already computed, already printed to a terminal nobody watches at 04:00, while
+         * `scheduled_runs.rows_affected` stayed null — so the ops page could say SUCCEEDED without
+         * being able to say whether the run did anything.
+         */
+        app(ScheduledRunRows::class)->report($sent);
 
         $this->info("digests sent={$sent} other={$skipped}");
 

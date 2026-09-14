@@ -8,6 +8,7 @@ use App\Domains\Commerce\Jobs\SyncStoreJob;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -80,6 +81,18 @@ final class SyncStoresCommand extends Command
                     $queued++;
                 }
             });
+
+        /*
+         * AUTOMATION-FIRST-OPERATIONS-001 — the count the ledger is supposed to hold.
+         *
+         * The syncs QUEUED, which is what this command does — the rows the jobs then write are the
+         * jobs’ own count, and claiming them here would count one night’s work twice.
+         *
+         * Already computed, already printed to a terminal nobody watches at 04:00, while
+         * `scheduled_runs.rows_affected` stayed null — so the ops page could say SUCCEEDED without
+         * being able to say whether the run did anything.
+         */
+        app(ScheduledRunRows::class)->report($queued);
 
         $this->info("Queued {$queued} store sync(s) for {$from->toDateString()} → {$to->toDateString()}.");
 

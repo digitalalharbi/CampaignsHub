@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Console;
 
 use App\Domains\Integrations\Jobs\SyncAccountStructureJob;
 use App\Domains\Integrations\Services\StructureSweepTargets;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use Illuminate\Console\Command;
 
 /**
@@ -47,6 +48,17 @@ final class SyncAdPlatformStructureCommand extends Command
         foreach ($accounts as $account) {
             SyncAccountStructureJob::dispatch((string) $account->id, ['source' => 'scheduler']);
         }
+
+        /*
+         * AUTOMATION-FIRST-OPERATIONS-001 — the count the ledger is supposed to hold.
+         *
+         * Structure syncs queued, on the same rule as the metrics sync beside it.
+         *
+         * Already computed, already printed to a terminal nobody watches at 04:00, while
+         * `scheduled_runs.rows_affected` stayed null — so the ops page could say SUCCEEDED without
+         * being able to say whether the run did anything.
+         */
+        app(ScheduledRunRows::class)->report($accounts->count());
 
         $this->info("Queued {$accounts->count()} structure sync(s).");
 
