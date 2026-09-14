@@ -8,6 +8,7 @@
  * These are only the rules the header must not get wrong, and each of them is one a reader would
  * notice immediately.
  */
+import { productName } from '@/lib/brand'
 export interface SharedBranding {
   name: string
   logo_url: string | null
@@ -40,13 +41,13 @@ export function hideBrokenLogo(event: { currentTarget: { style: { display: strin
   event.currentTarget.style.display = 'none'
 }
 
-export function headerIdentity(branding: SharedBranding | undefined): HeaderIdentity {
+export function headerIdentity(branding: SharedBranding | undefined, locale?: string): HeaderIdentity {
   /*
    * An empty name is not a name. A header with no text is indistinguishable from a page that failed
    * to load, so the product's own name stands in — this is the last link of the same
    * client → agency → CampaignsHub chain, not a separate default.
    */
-  const name = branding?.name?.trim() ? branding.name : 'CampaignsHub'
+  const name = branding?.name?.trim() ? branding.name : productName(locale)
 
   /*
    * An empty string is not a URL. `<img src="">` re-requests the page itself in some browsers and

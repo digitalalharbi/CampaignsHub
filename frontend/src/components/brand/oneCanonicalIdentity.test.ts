@@ -77,6 +77,24 @@ describe('one canonical CampaignsHub identity', () => {
   })
 
   /** The mark's colours arrive through tokens. A hex outside the brand folder is a second source. */
+  /**
+   * `{brand.name}` painted as a heading is a wordmark too — the path the earlier rules could not see.
+   *
+   * `MarketingPage` rendered `<span class="…font-extrabold text-brand-600">{brand.name}</span>`: no
+   * literal to match, no glyph in a tile, no gradient — and still a hand-assembled identity, in the
+   * locale-agnostic spelling, with no mark beside it. The owner found it by looking at the page,
+   * which is the standard this guard has to meet rather than the one it was passing.
+   *
+   * `brand.name` in a title, a meta tag or a sentence is fine and common; what is not is the name
+   * styled AS a logo, which is what the heading classes below identify.
+   */
+  it('no surface paints the brand name as a wordmark of its own', () => {
+    const painted = /className="[^"]*(?:font-extrabold|font-heading)[^"]*"\s*>\s*\{brand\.name\}/
+    const offenders = files.filter(([, src]) => painted.test(src)).map(([path]) => path)
+
+    expect(offenders).toEqual([])
+  })
+
   it('no surface paints a brand colour of its own', () => {
     /*
      * PAINTED, not merely present.
@@ -142,5 +160,55 @@ describe('the legacy identity cannot come back', () => {
     const stray = Object.keys(PUBLIC).filter((path) => /\/(logo|brand|mark)[-.]/i.test(path))
 
     expect(stray).toEqual([])
+  })
+})
+
+/**
+ * The Arabic surfaces must call the product by its Arabic name.
+ *
+ * The owner found «CampaignsHub» inside the product while the interface was in Arabic. The lockup
+ * was already localised; what was not were the dozens of ordinary strings around it — a sign-in
+ * subtitle, a plan description, an invoice note, a provider error — and an `app_name` key duplicated
+ * into BOTH halves of the i18n dictionary with the English spelling on the Arabic side.
+ *
+ * This is deliberately about ARABIC strings only. An English string saying «CampaignsHub» is the
+ * product's name in English and must stay: a first pass of this migration rewrote one of those and
+ * had to be reverted, which is the mistake this rule is shaped to avoid rather than repeat.
+ */
+describe('the product is named in the language it is speaking', () => {
+  const ARABIC = /[\u0600-\u06FF]/
+
+  /**
+   * Per STRING, not per line, and never inside a comment.
+   *
+   * A first version of this rule read whole lines and named three files, of which one was a line
+   * holding an Arabic string beside an English one — where «CampaignsHub» is simply the product's
+   * name in English and belongs there — and another was a code comment quoting a string the product
+   * no longer contains. Both would have been "fixed" into worse copy. So comments are stripped and
+   * each quoted literal is judged on its own.
+   */
+  const withoutComments = (src: string): string =>
+    src.replaceAll(/\/\*[\s\S]*?\*\//g, '').replaceAll(/\/\/[^\n]*/g, '')
+
+  /*
+   * `[^'\\n]` would exclude the letter «n» as well as a newline — and «CampaignsHub» contains one,
+   * so every string this rule exists to find was skipped and the rule passed while the defect stood.
+   * A guard that cannot fail is worse than none: it reports the absence of what it never looked for.
+   */
+  const STRINGS = /'([^'\n]*)'|"([^"\n]*)"|`([^`]*)`/g
+
+  it('no Arabic string calls the product by its Latin name', () => {
+    const offenders: string[] = []
+
+    for (const [path, src] of files) {
+      for (const match of withoutComments(src).matchAll(STRINGS)) {
+        const text = match[1] ?? match[2] ?? match[3] ?? ''
+        if (!text.includes('CampaignsHub')) continue
+        /* Strip the Latin name; if what remains is Arabic, this is an Arabic sentence. */
+        if (ARABIC.test(text.replaceAll('CampaignsHub', ''))) offenders.push(`${path}: ${text.slice(0, 70)}`)
+      }
+    }
+
+    expect(offenders).toEqual([])
   })
 })

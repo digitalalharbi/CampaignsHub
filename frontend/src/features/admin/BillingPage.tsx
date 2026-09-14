@@ -543,7 +543,7 @@ function StreamsTab({ ar }: { ar: boolean }) {
   const COPY: Record<RevenueStream['key'], { name: { ar: string; en: string }; direction: { ar: string; en: string }; note: { ar: string; en: string } }> = {
     platform_subscriptions: {
       name: { ar: 'اشتراكات المنصة', en: 'Platform subscriptions' },
-      direction: { ar: 'المستأجرون ← CampaignsHub', en: 'tenants → CampaignsHub' },
+      direction: { ar: 'المستأجرون ← كامبينز هَب', en: 'tenants → CampaignsHub' },
       note: {
         ar: 'القيمة الشهرية الملتزَم بها للاشتراكات النشطة والتجريبية، محسوبة من المبلغ المتفق عليه في كل اشتراك لا من سعر الخطة الحالي. لم يُحصَّل أي مبلغ: لا يوجد مسار تحصيل فعّال بعد.',
         en: 'Committed monthly value of active and trialing subscriptions, priced from the amount agreed on each subscription rather than the plan’s current price. Nothing has been collected: there is no live charging path yet.',

@@ -1,4 +1,5 @@
 import { DataMetricTable, type Column, type Row as TableRow } from '@/components/ui/MetricTable'
+import { productName } from '@/lib/brand'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import { useMemo, useState } from 'react'
 import { attributionWindow } from './attributionWindow'
@@ -560,10 +561,12 @@ const ACCENTS: Record<string, string> = {
 }
 
 function CoverSlide({ data, meta }: { data: ReportData; meta: Meta }) {
+  const ar = useUi((s) => s.locale) === 'ar'
+
   return (
     <div className="report-cover flex h-full min-h-[380px] flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 via-brand-600 to-brand-700 p-8 text-white">
       <div className="flex items-center justify-between">
-        <span className="rounded-lg bg-white/15 px-3 py-1 text-sm font-bold">{meta.agencyName ?? 'CampaignsHub'}</span>
+        <span className="rounded-lg bg-white/15 px-3 py-1 text-sm font-bold">{meta.agencyName ?? productName(ar ? 'ar' : 'en')}</span>
         {meta.isDemo && <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-semibold">بيانات تجريبية · Demo</span>}
       </div>
       <div>

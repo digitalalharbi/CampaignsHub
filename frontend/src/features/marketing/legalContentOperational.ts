@@ -148,7 +148,7 @@ export const AR_OPERATIONAL: LegalDoc[] = [
     title: 'طلب تصدير البيانات أو تصحيحها أو حذفها',
     updated: AR_UPDATED,
     disclaimer: AR_DISCLAIMER,
-    intro: 'حقوقك على بياناتك داخل CampaignsHub، وكيف تمارسها عمليًا.',
+    intro: 'حقوقك على بياناتك داخل كامبينز هَب، وكيف تمارسها عمليًا.',
     sections: [
       {
         heading: 'ما يمكنك طلبه',
@@ -182,7 +182,7 @@ export const AR_OPERATIONAL: LegalDoc[] = [
     title: 'سياسة الاستخدام المقبول',
     updated: AR_UPDATED,
     disclaimer: AR_DISCLAIMER,
-    intro: 'ما هو مسموح وما هو ممنوع عند استخدام CampaignsHub.',
+    intro: 'ما هو مسموح وما هو ممنوع عند استخدام كامبينز هَب.',
     sections: [
       {
         heading: 'ممنوع',
@@ -215,7 +215,7 @@ export const AR_OPERATIONAL: LegalDoc[] = [
     title: 'سياسة الاشتراكات والإلغاء والاسترداد',
     updated: AR_UPDATED,
     disclaimer: AR_DISCLAIMER,
-    intro: 'كيف تعمل الاشتراكات والتجديد والإلغاء والاسترداد داخل CampaignsHub.',
+    intro: 'كيف تعمل الاشتراكات والتجديد والإلغاء والاسترداد داخل كامبينز هَب.',
     sections: [
       {
         heading: 'الاشتراك والتجديد',
@@ -253,7 +253,7 @@ export const AR_OPERATIONAL: LegalDoc[] = [
     title: 'الإفصاح عن استخدام OAuth وبيانات المنصات',
     updated: AR_UPDATED,
     disclaimer: AR_DISCLAIMER,
-    intro: 'ما الذي يطلبه CampaignsHub من كل منصة عند الربط، ولماذا، وكيف يُستخدم ويُخزَّن ويُحذف.',
+    intro: 'ما الذي يطلبه كامبينز هَب من كل منصة عند الربط، ولماذا، وكيف يُستخدم ويُخزَّن ويُحذف.',
     sections: [
       {
         heading: 'كيف يتم الربط',

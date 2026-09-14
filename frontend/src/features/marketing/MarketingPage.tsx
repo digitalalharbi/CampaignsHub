@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { CampaignsHubLogo } from '@/components/brand/CampaignsHubLogo'
 import {
   BarChart3,
   Bell,
@@ -52,7 +53,13 @@ export function MarketingPage() {
       {/* Nav */}
       <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur">
         <div className="mx-auto flex max-w-[1240px] items-center gap-3 px-6 py-3">
-          <span className="font-[var(--font-heading)] text-lg font-extrabold text-brand-600">{brand.name}</span>
+          {/*
+            BRAND-CANONICAL-001 — the identity, not the brand NAME painted green.
+            
+            `brand.name` is the locale-agnostic string, so this header said «CampaignsHub» in an
+            Arabic page and carried no mark at all — a wordmark assembled here rather than the lockup.
+          */}
+          <CampaignsHubLogo locale={ar ? 'ar' : 'en'} variant="compact" size="sm" />
           <nav className="ms-auto flex items-center gap-2">
             <Button variant="secondary" onClick={toggleLocale}>{ar ? 'EN' : 'ع'}</Button>
             <Button variant="secondary" onClick={toggleTheme}>{theme === 'light' ? '🌙' : '☀️'}</Button>
@@ -190,7 +197,7 @@ export function MarketingPage() {
 
       {/* Final CTA + Footer */}
       <section className="mx-auto max-w-[1240px] px-6 py-16 text-center">
-        <h2 className="font-[var(--font-heading)] text-2xl font-bold">{ar ? 'ابدأ مع CampaignsHub' : 'Get started with CampaignsHub'}</h2>
+        <h2 className="font-[var(--font-heading)] text-2xl font-bold">{ar ? 'ابدأ مع كامبينز هَب' : 'Get started with كامبينز هَب'}</h2>
         <div className="mt-5 flex items-center justify-center gap-3">
           <Link to="/login"><Button>{ar ? 'إنشاء حساب' : 'Create account'}</Button></Link>
           <Button variant="secondary">{ar ? 'التواصل مع المبيعات' : 'Contact sales'}</Button>
@@ -198,7 +205,7 @@ export function MarketingPage() {
       </section>
       <footer className="border-t border-border bg-surface">
         <div className="mx-auto flex max-w-[1240px] flex-col items-center justify-between gap-2 px-6 py-6 text-xs text-text-muted md:flex-row">
-          <span>© {brand.name} — {brand.domain}</span>
+          <span>© {ar ? brand.lockup.nameAr : brand.lockup.nameEn} — {brand.domain}</span>
           <span>{ar ? 'المنتج · المزايا · الأسعار · الأمان · الخصوصية · الشروط · الدعم' : 'Product · Features · Pricing · Security · Privacy · Terms · Support'}</span>
         </div>
       </footer>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { brand } from '@/lib/brand'
+import { brand, productName } from '@/lib/brand'
 import { fmtDateTime } from '@/lib/datetime'
 import { useParams } from 'react-router-dom'
 import { Download, Lock } from 'lucide-react'
@@ -108,7 +108,7 @@ export function PublicReport() {
     return () => { alive = false }
   }, [token])
 
-  const identity = headerIdentity(branding)
+  const identity = headerIdentity(branding, locale)
 
   return (
     <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-background text-text-primary">
@@ -219,7 +219,7 @@ export function PublicReport() {
                 <>
                   <InteractiveReport
                     data={report.data as never}
-                    meta={{ reportName: report.name, platforms, isDemo: report.is_demo, agencyName: report.branding?.name ?? 'CampaignsHub' }}
+                    meta={{ reportName: report.name, platforms, isDemo: report.is_demo, agencyName: report.branding?.name ?? productName(locale) }}
                   />
                   <ReportMetaStrip report={report} />
                 </>

@@ -117,8 +117,22 @@ export function PublicHeader({
           `compact` rather than `full`: a strapline under a 64px header is noise, and the hero says
           the same thing louder one screen down.
         */}
-        <Link to="/" className="flex shrink-0 items-center">
-          <CampaignsHubLogo locale={ar ? 'ar' : 'en'} variant="compact" size="sm" />
+        {/*
+          The wordmark still YIELDS below 480px — the rule MKT-UGC-001 wrote and this unit deleted.
+
+          That fix exists because this row asked for 423px at 375px wide. Swapping in the canonical
+          lockup restored the identity and took the yield away with the old markup, so the homepage
+          scrolled sideways on every phone in both languages — which the gate caught, and this note
+          is here so it is not removed a third time. The `mark` variant is the same identity with the
+          words stood down, not a second logo.
+        */}
+        <Link to="/" className="flex shrink-0 items-center" aria-label={ar ? 'كامبينز هَب' : 'CampaignsHub'}>
+          <span className="max-[479px]:hidden">
+            <CampaignsHubLogo locale={ar ? 'ar' : 'en'} variant="compact" size="sm" />
+          </span>
+          <span className="hidden max-[479px]:inline-flex">
+            <CampaignsHubLogo locale={ar ? 'ar' : 'en'} variant="mark" size="sm" />
+          </span>
         </Link>
 
         {nav.length > 0 && (

@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { productName } from '@/lib/brand'
 import { useQueryClient } from '@tanstack/react-query'
 import { LogOut, Moon, Sun } from 'lucide-react'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
@@ -109,14 +110,14 @@ export function PortalShell({
               <img
                 src={logo.url}
                 onError={() => setBrokenLogo(logo.url)}
-                alt={branding?.space?.name ?? 'CampaignsHub'}
+                alt={branding?.space?.name ?? productName(locale)}
                 data-testid="portal-logo"
                 className="h-9 max-w-[140px] object-contain"
               />
             )}
             {logo === undefined && (
               <span className="font-heading text-base font-extrabold">
-                {branding?.space?.name ?? 'CampaignsHub'}
+                {branding?.space?.name ?? productName(locale)}
               </span>
             )}
             <span className="hidden text-xs text-text-muted sm:inline">· {title}</span>

@@ -1,9 +1,11 @@
 import { useUi } from '@/stores/ui'
+import { brand } from './brand'
 
 /** Minimal bilingual dictionary. Real i18n (per-domain namespaces) arrives with the design system. */
 const dictionary = {
   ar: {
-    app_name: 'CampaignsHub',
+    /* From the identity, not spelled again here — see `productName()`. */
+    app_name: brand.lockup.nameAr,
     search: 'بحث',
     analytics: 'التحليلات',
     dashboard: 'لوحة التحكم',
@@ -443,7 +445,7 @@ const dictionary = {
     unlinked_only: 'غير المرتبطة فقط',
   },
   en: {
-    app_name: 'CampaignsHub',
+    app_name: brand.lockup.nameEn,
     search: 'Search',
     analytics: 'Analytics',
     dashboard: 'Dashboard',

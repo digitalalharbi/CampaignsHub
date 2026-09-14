@@ -67,14 +67,19 @@ export function CampaignsHubLogo({
             className={`${s.title} font-heading font-extrabold leading-none tracking-tight`}
           >
             {/*
-              Split so the second half carries the mark's colour, as the identity draws it —
-              «Campaigns» in the text colour and «Hub» in the brand green, and the Arabic mirrored
-              so «كامبينز» is green and «هب» is the text colour.
+              Split so the second half carries the mark's colour: «Campaigns» in the text colour and
+              «Hub» in the brand green.
+
+              The Arabic was MIRRORED here — «كامبينز» green and «هب» in the text colour — and the
+              comment that stood in this place called that deliberate. The official package settles
+              it the other way: `INTEGRATION.md` renders «كامبينز <span accent>هَب</span>», first word
+              in ink and «هَب» in the accent, which is the English arrangement rather than its
+              reflection. The fatha on «هَب» is the official spelling too, and it was missing.
             */}
             {ar ? (
               <>
-                <span className="text-brand-mark">{"كامبينز "}</span>
-                <span className="text-text-primary">{"هب"}</span>
+                <span className="text-text-primary">{"كامبينز "}</span>
+                <span className="text-brand-mark">{"هَب"}</span>
               </>
             ) : (
               <>
@@ -85,7 +90,7 @@ export function CampaignsHubLogo({
           </span>
           {variant === "full" && (
             <span
-              className={`${s.line} mt-1 text-text-muted ${ar ? "" : "uppercase tracking-[0.28em]"}`}
+              className={`${s.line} mt-1 text-text-muted ${ar ? "" : "font-mono uppercase tracking-[0.14em]"}`}
               data-testid="brand-lockup-line"
             >
               {line}

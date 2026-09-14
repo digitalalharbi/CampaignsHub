@@ -48,7 +48,7 @@ import { portalLoginStart, portalLoginVerify } from '@/features/requests/clientP
 const COPY = {
   ar: {
     title: 'مرحباً بعودتك',
-    subtitle: 'سجّل الدخول إلى حسابك في CampaignsHub',
+    subtitle: 'سجّل الدخول إلى حسابك في كامبينز هَب',
     email: 'البريد الإلكتروني',
     emailPlaceholder: 'name@company.com',
     password: 'كلمة المرور',
