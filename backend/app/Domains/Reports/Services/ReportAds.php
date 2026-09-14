@@ -69,6 +69,15 @@ final class ReportAds
      */
     private const SUMMARY_ROSTER = self::SUMMARY_ROWS;
 
+    /**
+     * How many ads a single group publishes — the leaders, not the list.
+     *
+     * It was the literal `3` in two places, and a literal is how a bound becomes invisible: the
+     * section said «الأعلى أداءً» over three cards with nothing saying three of how many. Named here,
+     * and every group now publishes its `candidates` beside its `shown` so the page can say it.
+     */
+    private const GROUP_ADS = 3;
+
     public function __construct(
         private readonly CreativeRows $creatives,
         private readonly CreativeRankingService $ranking,
@@ -77,7 +86,7 @@ final class ReportAds
     /**
      * @param  array<string, mixed>  $filters  `project_ids`, `providers`, `campaign_ids` — the scope
      * @param  string  $form  `executive_summary` curates; anything else is the full report
-     * @return array{ads: list<array<string,mixed>>, worst: list<array<string,mixed>>, groups: list<array<string,mixed>>, roster: list<array<string,mixed>>, level: string, reason: string|null, creatives_in_scope: int, creatives_withheld: int}
+     * @return array{ads: list<array<string,mixed>>, worst: list<array<string,mixed>>, groups: list<array<string,mixed>>, platform_groups: list<array<string,mixed>>, roster: list<array<string,mixed>>, level: string, reason: string|null, creatives_in_scope: int, creatives_withheld: int}
      */
     public function for(string $objective, Carbon $from, Carbon $to, array $filters = [], string $form = 'detailed', bool $liveMedia = false): array
     {
@@ -131,7 +140,7 @@ final class ReportAds
 
         if ($rows === []) {
             return [
-                'ads' => [], 'worst' => [], 'groups' => [], 'roster' => $roster, 'level' => 'campaign',
+                'ads' => [], 'worst' => [], 'groups' => [], 'platform_groups' => [], 'roster' => $roster, 'level' => 'campaign',
                 'reason' => 'no_creatives_in_window',
                 'creatives_in_scope' => $inScope,
                 'creatives_withheld' => $inScope,
@@ -199,6 +208,7 @@ final class ReportAds
          * the section then shows those ads without claiming an order over them.
          */
         $groups = $this->groupsByObjective($rankable);
+        $platformGroups = $this->groupsByPlatform($rankable);
 
         /*
          * REPORT-CREATIVE-TRUTH-001 §B — what did we RUN, beside what worked.
@@ -219,8 +229,8 @@ final class ReportAds
         $withheld = max(0, $inScope - count($roster));
 
         return $ranked === []
-            ? ['ads' => [], 'worst' => [], 'groups' => $groups, 'roster' => $roster, 'level' => 'ad', 'reason' => 'no_rankable_metric_for_this_objective', 'creatives_in_scope' => $inScope, 'creatives_withheld' => $withheld]
-            : ['ads' => $ranked, 'worst' => $weakest, 'groups' => $groups, 'roster' => $roster, 'level' => 'ad', 'reason' => null, 'creatives_in_scope' => $inScope, 'creatives_withheld' => $withheld];
+            ? ['ads' => [], 'worst' => [], 'groups' => $groups, 'platform_groups' => $platformGroups, 'roster' => $roster, 'level' => 'ad', 'reason' => 'no_rankable_metric_for_this_objective', 'creatives_in_scope' => $inScope, 'creatives_withheld' => $withheld]
+            : ['ads' => $ranked, 'worst' => $weakest, 'groups' => $groups, 'platform_groups' => $platformGroups, 'roster' => $roster, 'level' => 'ad', 'reason' => null, 'creatives_in_scope' => $inScope, 'creatives_withheld' => $withheld];
     }
 
     /**
@@ -245,30 +255,124 @@ final class ReportAds
         $groups = [];
 
         foreach ($byFamily as $familyKey => $rows) {
-            $family = ObjectiveFamily::from($familyKey);
-            $ranked = $this->ranking->rank($familyKey, $rows, 3);
-
-            /*
-             * The metric the ORDER rests on, read from the ranked rows rather than from the
-             * objective's layout: the layout says what this family WOULD be judged on, and the rows
-             * say what anybody actually reported. A group ranked on a metric no row carries is the
-             * defect this section exists to remove.
-             */
-            $metric = $ranked === [] ? null : $this->ranking->metricFor($familyKey, $rows);
-
-            $groups[] = [
-                'family' => $family->value,
-                'label_ar' => $family->label()['ar'] ?? $family->value,
-                'label_en' => $family->label()['en'] ?? $family->value,
-                'metric' => $metric,
-                'metric_label_ar' => $metric === null ? null : RankingMetric::of((string) $metric)->labelAr,
-                'metric_label_en' => $metric === null ? null : RankingMetric::of((string) $metric)->labelEn,
-                // Ordered where a metric exists; otherwise the rows as they came, with no claim made.
-                'ads' => $ranked === [] ? array_slice($rows, 0, 3) : $ranked,
-                'ranked' => $ranked !== [],
-            ];
+            $groups[] = $this->familyGroup($familyKey, $rows);
         }
 
         return $groups;
+    }
+
+    /**
+     * One objective family's group: the ranked ads, the metric the order rests on, and HOW MANY were
+     * left out of it.
+     *
+     * Extracted so the per-platform section builds its groups with this rule rather than a second
+     * copy of it. Two sections ranking «the best creatives» by two definitions of best is the defect
+     * the objective grouping exists to remove, one axis over.
+     *
+     * @param  list<array<string,mixed>>  $rows
+     * @return array<string,mixed>
+     */
+    private function familyGroup(string $familyKey, array $rows): array
+    {
+        $family = ObjectiveFamily::tryFrom($familyKey) ?? ObjectiveFamily::Unknown;
+        $ranked = $this->ranking->rank($familyKey, $rows, self::GROUP_ADS);
+
+        /*
+         * The metric the ORDER rests on, read from the ranked rows rather than from the objective's
+         * layout: the layout says what this family WOULD be judged on, and the rows say what anybody
+         * actually reported. A group ranked on a metric no row carries is the defect this section
+         * exists to remove.
+         */
+        $metric = $ranked === [] ? null : $this->ranking->metricFor($familyKey, $rows);
+        $ads = $ranked === [] ? array_slice($rows, 0, self::GROUP_ADS) : $ranked;
+
+        return [
+            'family' => $family->value,
+            'label_ar' => $family->label()['ar'] ?? $family->value,
+            'label_en' => $family->label()['en'] ?? $family->value,
+            'metric' => $metric,
+            'metric_label_ar' => $metric === null ? null : RankingMetric::of((string) $metric)->labelAr,
+            'metric_label_en' => $metric === null ? null : RankingMetric::of((string) $metric)->labelEn,
+            // Ordered where a metric exists; otherwise the rows as they came, with no claim made.
+            'ads' => $ads,
+            'ranked' => $ranked !== [],
+            /*
+             * REPORT-CREATIVE-TRUTH-001 §B — «the best three» has to say «of how many».
+             *
+             * The group published three ads and nothing else. A client reading «الأعلى أداءً» over
+             * three cards has no way to tell whether three is the leaders of forty or the whole of
+             * what ran — and those are different reports. The roster below carries every creative,
+             * which is what makes the SECTION complete; this is what makes the CLAIM honest.
+             *
+             * `candidates` counts the rows this family had before the ranker took its cut, not the
+             * rows it returned: the ranker drops anything that did not spend, and a creative nobody
+             * bought is not one a reader is missing.
+             */
+            'candidates' => count($rows),
+            'shown' => count($ads),
+        ];
+    }
+
+    /**
+     * REPORT-DETAIL-PARITY-001 — the best creatives PER PLATFORM, which the report never had.
+     *
+     * The owner's words: «best-performing creatives per platform», not one merged top list. A single
+     * list across platforms can only be ordered by something they all report, and the ads a client
+     * wants to see more of are the ones that worked on the platform they ran on — «this is what works
+     * on TikTok» is a finding an agency can act on, and «this is what worked overall» is not.
+     *
+     * Platform, and then objective INSIDE it — never platform alone. Ranking a brand ad against a
+     * sales ad because they share a platform is the same defect `groupsByObjective` was written to
+     * remove: one ordering across objectives can only rest on a metric they share, and what they
+     * share is spend. Spending most is not performing best.
+     *
+     * @param  list<array<string,mixed>>  $rankable
+     * @return list<array<string,mixed>>
+     */
+    private function groupsByPlatform(array $rankable): array
+    {
+        /** @var array<string, list<array<string,mixed>>> $byProvider */
+        $byProvider = [];
+
+        foreach ($rankable as $row) {
+            $byProvider[(string) ($row['provider'] ?? '')][] = $row;
+        }
+
+        $platforms = [];
+
+        foreach ($byProvider as $provider => $rows) {
+            /** @var array<string, list<array<string,mixed>>> $byFamily */
+            $byFamily = [];
+
+            foreach ($rows as $row) {
+                $objective = (string) ($row['objective'] ?? '');
+                $family = ObjectiveFamily::tryFrom($objective)
+                    ?? (CampaignObjective::tryFrom($objective)?->family() ?? ObjectiveFamily::Unknown);
+
+                $byFamily[$family->value][] = $row;
+            }
+
+            $groups = [];
+
+            foreach ($byFamily as $familyKey => $familyRows) {
+                $groups[] = $this->familyGroup($familyKey, $familyRows);
+            }
+
+            $platforms[] = [
+                'provider' => $provider,
+                'groups' => $groups,
+                // Every creative this platform ran, so the section can say what it is showing a part of.
+                'candidates' => count($rows),
+            ];
+        }
+
+        /*
+         * Ordered by how much ran on each, so the platform a client spent most of their month on is
+         * the first one they read. Not by spend: a platform whose spend the money contract withheld
+         * would sort as nothing and land last, which is an ordering by a figure nobody can see.
+         */
+        usort($platforms, static fn (array $a, array $b): int => $b['candidates'] <=> $a['candidates']);
+
+        return $platforms;
     }
 }

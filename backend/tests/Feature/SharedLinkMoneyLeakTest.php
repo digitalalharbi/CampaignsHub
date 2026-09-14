@@ -67,6 +67,8 @@ final class SharedLinkMoneyLeakTest extends TestCase
 
     private Report $report;
 
+    private UnifiedCampaign $campaign;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -84,7 +86,7 @@ final class SharedLinkMoneyLeakTest extends TestCase
         ]);
         app(ProjectContext::class)->setProjectId((string) $project->getKey());
 
-        $campaign = UnifiedCampaign::create([
+        $campaign = $this->campaign = UnifiedCampaign::create([
             'tenant_id' => $tenant->getKey(), 'project_id' => $project->getKey(),
             'client_workspace_id' => $client->getKey(), 'name' => 'Sale',
             'objective' => 'sales', 'status' => 'active',
@@ -100,21 +102,36 @@ final class SharedLinkMoneyLeakTest extends TestCase
          * `sectionVisibility()->attribution`, a DIFFERENT flag from `hide_revenue`, so an operator
          * who turned the section on and hid revenue gets revenue.
          */
-        foreach (['orders' => 60.0, 'revenue' => 18000.0] as $key => $value) {
-            DailyMetric::create([
-                'tenant_id' => $tenant->getKey(),
-                'project_id' => $project->getKey(),
-                'unified_campaign_id' => $campaign->getKey(),
-                'external_account_id' => (string) Str::uuid(),
-                'external_campaign_id' => (string) Str::uuid(),
-                'provider' => 'snapchat',
-                'metric_key' => $key,
-                'metric_date' => now()->subDays(2)->toDateString(),
-                'value' => $value,
-                'project_currency' => 'SAR',
-                'attribution_window' => '7d_click',
-                'source_type' => 'platform_reported',
-            ]);
+        /*
+         * TWO windows, and the second one is not decoration.
+         *
+         * A platform row carries `movement` — its own period-over-period ratios — and
+         * `LiveReportService` leaves it EMPTY when the previous window held nothing, which is the
+         * honest answer for a platform that was not running then. With metrics in this window only,
+         * the live sweep reached a platforms list whose movement was `[]` on every row, and removing
+         * the sanitiser's movement strip changed nothing it could see. A fixture that cannot reach
+         * a branch proves nothing about it.
+         */
+        foreach ([2 => 1.0, 40 => 0.5] as $daysAgo => $scale) {
+            foreach (['orders' => 60.0, 'revenue' => 18000.0, 'spend' => 6000.0] as $key => $value) {
+                DailyMetric::create([
+                    'tenant_id' => $tenant->getKey(),
+                    'project_id' => $project->getKey(),
+                    'unified_campaign_id' => $campaign->getKey(),
+                    'external_account_id' => (string) Str::uuid(),
+                    'external_campaign_id' => (string) Str::uuid(),
+                    'provider' => 'snapchat',
+                    'metric_key' => $key,
+                    'metric_date' => now()->subDays($daysAgo)->toDateString(),
+                    'value' => $value * $scale,
+                    'original_amount' => $value * $scale,
+                    'original_currency' => 'SAR',
+                    'exchange_rate' => 1,
+                    'project_currency' => 'SAR',
+                    'attribution_window' => '7d_click',
+                    'source_type' => 'platform_reported',
+                ]);
+            }
         }
 
         /*
@@ -148,7 +165,15 @@ final class SharedLinkMoneyLeakTest extends TestCase
                  * sweep reported a leak for a key the snapshot never carries.
                  */
                 'kpis' => $row,
-                'platforms' => [$row],
+                /*
+                 * A platform row WITH its movement, because movement is a rung down.
+                 *
+                 * The values there are ratios rather than amounts, and the sweep cannot tell a ratio
+                 * under the key `spend` from a figure under it — which is the point: «hiding spend
+                 * takes the ratio that would give it back» is already this product's rule, and a
+                 * per-platform movement is that ratio one axis over.
+                 */
+                'platforms' => [$row + ['movement' => $row]],
                 'campaigns' => [$row],
                 'timeseries' => [$row],
                 'budget' => [$row],
@@ -176,6 +201,20 @@ final class SharedLinkMoneyLeakTest extends TestCase
                 'worst_creatives' => [$row],
                 'top_creatives' => [$row],
                 'ads_groups' => [['ads' => [$row]]],
+                /*
+                 * And the per-platform gallery, which nests the SAME group one rung further down.
+                 *
+                 * `ads_platform_groups[].groups[].ads[]` is platform → objective → ad. The
+                 * `ads_groups` line above is one rung and was itself added after a link published
+                 * every ad in the grouped gallery; a section that goes two is exactly where the next
+                 * one hides, so it is in the fixture in the shape the server really builds rather
+                 * than flattened into something a sanitiser passes by accident.
+                 */
+                'ads_platform_groups' => [[
+                    'provider' => 'snapchat',
+                    'candidates' => 4,
+                    'groups' => [['family' => 'sales', 'ads' => [$row]] + $row],
+                ]],
                 'slides' => [['id' => 'cover', 'type' => 'cover', 'order' => 1, 'visible' => true]],
             ],
             'generated_at' => now(),
@@ -279,7 +318,17 @@ final class SharedLinkMoneyLeakTest extends TestCase
          */
         $scope = $mode === 'live' ? [
             'project_id' => (string) $this->report->project_id,
-            'campaign_ids' => [],
+            /*
+             * The campaign, and NOT an empty list.
+             *
+             * An empty ceiling fails closed — `LiveReportService` intersects the share's campaigns
+             * with the window and an empty set matches nothing — so the live sweep was walking a
+             * payload whose `platforms`, `campaigns` and creative sections were all `[]`. It answered
+             * 200, inspected six routes, found no money and proved nothing about any section that
+             * carries money only when there is data. The same lesson as the roster's flattened row,
+             * one level up: a fixture that cannot reach a branch says nothing about it.
+             */
+            'campaign_ids' => [(string) $this->campaign->getKey()],
             'providers' => [],
             'earliest' => now()->subDays(30)->toDateString(),
             'latest' => now()->toDateString(),
