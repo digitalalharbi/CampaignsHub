@@ -1,4 +1,4 @@
-import type { AdGroup, AdsReading, ReportAd } from './ReportAdsSection'
+import type { AdGroup, AdPlatformGroup, AdsReading, ReportAd } from './ReportAdsSection'
 import type { RosterRow } from './ReportCreativeRoster'
 import type { ObjectivePerformance } from './InteractiveReport'
 import type { PathLeaders } from '@/features/analytics/api'
@@ -258,6 +258,8 @@ export interface LivePayload {
   ads?: ReportAd[]
   /** REPORT-AD-PREVIEW-001 §A — one ranked list per objective, each on its own metric. */
   ads_groups?: AdGroup[]
+  /** REPORT-DETAIL-PARITY-001 — the same ads on the platform axis; detailed form only. */
+  ads_platform_groups?: AdPlatformGroup[]
   ads_level?: string | null
   ads_absent_reason?: string | null
   ads_reading?: AdsReading

@@ -6,6 +6,7 @@ import { readMetricValue, type MetricValue } from '@/lib/metricValue'
 import { LiveDetailTables, LivePlatformComparison } from './LiveDetailTables'
 import { ReportAdDetail } from './ReportAdDetail'
 import { ReportCreativeRoster } from './ReportCreativeRoster'
+import { ReportPlatformCreatives } from './ReportAdsSection'
 import { ReportAdsSection, type ReportAd } from './ReportAdsSection'
 import { canonicalPlatform } from '@/lib/platforms'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
@@ -671,6 +672,29 @@ export function LiveSharedReport({
             locale={ar ? 'ar' : 'en'}
             onOpen={setOpenAd}
           />
+
+          {/*
+            REPORT-DETAIL-PARITY-001 — the same creatives, asked the other question.
+
+            The gallery above answers «what worked»; this answers «what works HERE», which is the one
+            an agency takes into next month's plan — the ad to make more of on TikTok is rarely the ad
+            to make more of on Google, and a merged list hands back whichever platform ranked highest.
+
+            Detailed only. On the dashboard it would be a second gallery of the same creatives on a
+            page whose whole correction was to stop saying things twice. The component itself refuses
+            a single-platform account for the same reason.
+          */}
+          {form === 'detailed' && (
+            <div className="mt-6">
+              <ReportPlatformCreatives
+                platforms={payload.ads_platform_groups}
+                metrics={payload.platforms}
+                currency={currency}
+                locale={ar ? 'ar' : 'en'}
+                onOpen={setOpenAd}
+              />
+            </div>
+          )}
 
           {/*
             REPORT-CREATIVE-TRUTH-001 §B — the live link inventories what ran, as the deck does.
