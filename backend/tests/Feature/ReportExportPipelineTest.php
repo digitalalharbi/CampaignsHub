@@ -10,10 +10,12 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
 use App\Domains\Reports\Services\NarrativeConsistencyValidator;
 use App\Domains\Reports\Services\ReportExporter;
+use App\Domains\Reports\Support\ReportIdentity;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use RuntimeException;
@@ -113,6 +115,56 @@ final class ReportExportPipelineTest extends TestCase
         $this->expectException(HttpException::class);
         $this->expectExceptionMessage('narrative/data mismatch');
         app(ReportExporter::class)->render($report, 'pdf');
+    }
+
+    /**
+     * REPORT-TITLE-METADATA-001 — the name the client's browser actually writes to disk.
+     *
+     * ## What this adds to `ReportIdentityTest`
+     *
+     * That test proves `ReportIdentity::filename()` builds a good name. It does not prove anybody
+     * calls it, and this row's whole history is of a correct answer computed somewhere nothing reads:
+     * `documentTitle()` sat beside it with one caller in the world — its own test.
+     *
+     * So this asserts the HEADER, which is the only place the name becomes a file. `basename($path)`
+     * is a uuid with an extension on it: the right name for a blob on a disk and the wrong one for a
+     * document a client keeps beside three others.
+     */
+    public function test_the_download_is_named_after_the_report_and_not_after_its_blob(): void
+    {
+        $report = $this->report($this->consistentData());
+        $report->update(['name' => 'أداء أغسطس']);
+
+        Storage::fake('local');
+        Storage::disk('local')->put('reports/blob.csv', 'a,b');
+
+        $export = ReportExport::create([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'report_id' => $report->id,
+            'format' => 'csv',
+            'status' => 'completed',
+            'disk' => 'local',
+            'path' => 'reports/blob.csv',
+            'signed_token' => 'tok_'.Str::random(20),
+            'expires_at' => now()->addDay(),
+        ]);
+
+        $disposition = $this->get("/api/v1/reports/download/{$export->signed_token}")
+            ->assertOk()
+            ->headers->get('content-disposition');
+
+        $this->assertNotNull($disposition);
+        $this->assertStringContainsString(ReportIdentity::filename($report, 'csv'), (string) $disposition);
+        $this->assertStringNotContainsString('blob.csv', (string) $disposition, 'the client was handed the blob’s name');
+
+        /*
+         * And the name is ASCII, which is the reason the filename is transliterated while the title
+         * is not: a `Content-Disposition` crosses a mail server, a browser and an operating system,
+         * and the failure is silent — the file arrives as `______.csv` or refuses to save.
+         */
+        $name = ReportIdentity::filename($report, 'csv');
+        $this->assertSame($name, preg_replace('/[^\x20-\x7E]/', '', $name), 'a non-ASCII filename reached the header');
     }
 
     public function test_stale_pdf_export_is_not_downloadable(): void
