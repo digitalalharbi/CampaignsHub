@@ -103,9 +103,27 @@ function AgencyIdentity({ collapsed }: { collapsed?: boolean }) {
         with «CampaignsHub» would take their identity out of their own workspace. The platform is
         the mark; the workspace is the words. That is the same hierarchy the reports follow.
       */}
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark" data-testid="shell-brand-mark">
+      {/*
+        BRAND-MARK-001 — the MARK is the way home, and the name beside it is not.
+        
+        The phone bar has carried this link since the mark was put on it; the rail rendered
+        the same identity as a plain span, so on the surface an operator uses most, the one
+        place they look for «take me back to the start» did nothing.
+        
+        Only the mark. The words next to it are the TENANT's name, and the note below says
+        why: the platform is the mark, the workspace is the words. Making their name navigate
+        would be a claim about whose it is — and it goes to this portal's own home, never to
+        the marketing site.
+      */}
+      <Link
+        to="/agency"
+        data-testid="shell-brand-mark"
+        aria-label={productName(ar ? 'ar' : 'en')}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+        data-brand-home="portal"
+      >
         <CampaignsHubMark size={20} />
-      </span>
+      </Link>
       {!collapsed && (
         <div className="min-w-0">
           <span className="block truncate font-heading text-[15px] font-extrabold tracking-tight text-text-primary">

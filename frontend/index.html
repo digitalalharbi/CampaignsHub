@@ -1,7 +1,47 @@
 <!doctype html>
-<html lang="en">
+<!--
+  MKT-FIX-001 — the document starts in the language and theme the product actually uses.
+
+  This said `lang="en"` with no `dir` and no `data-theme`, while the app resolves to Arabic, RTL and
+  dark by default. So the first paint of every FIRST visit was left-to-right and light, and the
+  moment `applyDocument()` ran the page flipped: the header swapped sides, the hero re-laid out, and
+  the whole document changed colour. On a phone that reads as «it moved and then settled», which is
+  exactly what the owner saw.
+
+  It also disagreed with itself: `og:locale` has said `ar_SA` all along, on a document declaring
+  English.
+-->
+<html lang="ar" dir="rtl" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      The stored preference, applied BEFORE the stylesheet paints anything.
+
+      A returning reader who chose English or light must not be shown the defaults first and
+      corrected afterwards — that is the same flip in the other direction. This is deliberately a
+      blocking inline script and not a module: it has to run before first paint, and the module that
+      owns this state cannot, because it arrives with the bundle.
+
+      It is NOT a mask. Nothing is hidden, delayed or faded; the document simply starts in its final
+      geometry. `bootDefaults.test.ts` holds these two defaults to the store's own, because
+      two places deciding «dark» is how the flash comes back silently.
+    -->
+    <script>
+      (function () {
+        try {
+          var d = document.documentElement
+          var theme = localStorage.getItem('campaign-hub-theme')
+          var locale = localStorage.getItem('campaign-hub-locale')
+          if (theme !== 'light' && theme !== 'dark') theme = 'dark'
+          if (locale !== 'ar' && locale !== 'en') locale = 'ar'
+          d.setAttribute('data-theme', theme)
+          d.setAttribute('lang', locale)
+          d.setAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr')
+        } catch (e) {
+          /* Private mode can refuse storage. The static defaults above are already correct. */
+        }
+      })()
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>كل حملاتك الإعلانية المدفوعة في مكان واحد — CampaignsHub</title>
