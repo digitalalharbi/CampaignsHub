@@ -58,25 +58,29 @@ final class ClientReportView
 
         // 3. Client-facing names on every list that carries a campaign/creative name.
         //    Resolution order: explicit client_display_name → sanitised internal name → safe generated.
-        foreach (['ads'] as $key) {
-            if (! empty($out[$key]) && is_array($out[$key])) {
-                $out[$key] = array_map([self::class, 'clientAdRow'], $out[$key]);
-            }
-        }
         /*
-         * REPORT-EXPORT-FUNCTIONAL-001 — the SAME rule for the ads inside a group.
+         * REPORT-EXPORT-FUNCTIONAL-001 — every list of ads, wherever it sits.
          *
-         * The loop above was written when one list of ads existed. `ads_groups` arrived later — the
-         * content groups an owner reads a report by — and each group carries its own `ads[]`, which
-         * nobody taught this boundary about. So every ad inside a group still carried `campaign_id`,
-         * and `ClientReportContentValidator` walks the WHOLE payload: it found them, refused to
-         * produce a leaky client file, and marked the export failed.
+         * This was a list of section names, and it was wrong twice for the same reason. First `ads`
+         * was the only list; then `ads_groups` arrived, each group carrying its own `ads[]`, and the
+         * ads inside a group still held `campaign_id`. That was fixed by naming the second section,
+         * with a note promising a third could not quietly opt out. A third arrived — the detailed
+         * report's `ads_platform_groups`, nested one level deeper — and opted out exactly as
+         * quietly, because a promise in a comment is not a mechanism.
          *
-         * That is the validator working exactly as intended and an export that can never succeed.
-         * Measured on a real report: three violations, all `ads_groups.0.ads.N.campaign_id`, which
-         * is why a client PDF failed for some reports and not others — a report with no groups has
-         * nothing to leak. One rule applied to both lists, so a third list cannot quietly opt out.
+         * The consequence both times was an export that could never succeed:
+         * `ClientReportContentValidator` walks the WHOLE payload, so it found what the sanitiser had
+         * skipped and refused the file. A client PDF, XLSX and CSV all failed with
+         * `campaign_management_entity`, for any report holding the section and for no other — which
+         * is why it read as intermittent rather than as broken.
+         *
+         * So the sanitiser now walks too, on the same shape the validator walks: any `ads` key
+         * holding a list of rows, at any depth. The two can still disagree about WHICH keys are
+         * internal — `clientAdRow` and the validator's list are separate, and a test holds them
+         * together — but they can no longer disagree about WHERE to look.
          */
+        $out = self::sanitiseAdListsDeep($out);
+
         /*
          * The campaign SECTION goes with the campaign DATA.
          *
@@ -90,15 +94,6 @@ final class ClientReportView
             ));
         }
 
-        if (! empty($out['ads_groups']) && is_array($out['ads_groups'])) {
-            $out['ads_groups'] = array_map(function ($group) {
-                if (is_array($group) && ! empty($group['ads']) && is_array($group['ads'])) {
-                    $group['ads'] = array_map([self::class, 'clientAdRow'], $group['ads']);
-                }
-
-                return $group;
-            }, $out['ads_groups']);
-        }
         /*
          * REPORT-CREATIVE-TRUTH-001 §C — the roster crosses the same boundary, through its own rule.
          *
@@ -360,6 +355,39 @@ final class ClientReportView
      * @param  mixed  $row
      * @return mixed
      */
+    /**
+     * Apply the ad boundary to every `ads` list in the payload, at any depth.
+     *
+     * Keyed on `ads` specifically rather than on «any list of rows»: the roster and the ranked
+     * creative lists carry different shapes and have their own rules, and a walk that sanitised
+     * every list it met would quietly take those over. `clientAdRow` only unsets keys, so a row
+     * reached twice is unchanged the second time.
+     *
+     * @param  array<string,mixed>  $data
+     * @return array<string,mixed>
+     */
+    private static function sanitiseAdListsDeep(array $data): array
+    {
+        foreach ($data as $key => $value) {
+            if (! is_array($value)) {
+                continue;
+            }
+
+            if ($key === 'ads') {
+                $data[$key] = array_map(
+                    static fn ($row) => is_array($row) ? self::clientAdRow($row) : $row,
+                    $value,
+                );
+
+                continue;
+            }
+
+            $data[$key] = self::sanitiseAdListsDeep($value);
+        }
+
+        return $data;
+    }
+
     private static function clientAdRow($row)
     {
         if (! is_array($row)) {
