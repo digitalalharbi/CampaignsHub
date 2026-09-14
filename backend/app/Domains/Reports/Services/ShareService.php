@@ -236,6 +236,10 @@ final class ShareService
                         if (! empty($row['metrics']) && is_array($row['metrics'])) {
                             $stripMoney($row['metrics']);
                         }
+                        /* And a platform's movement, for the reason the live path states. */
+                        if (! empty($row['movement']) && is_array($row['movement'])) {
+                            $stripMoney($row['movement']);
+                        }
                         if ($share->hide_campaign_names && array_key_exists('campaign_name', $row)) {
                             $row['campaign_name'] = 'حملة';
                         }
@@ -270,26 +274,40 @@ final class ShareService
          * making the walk recursive, for the same reason the section list is enumerated: a blind walk
          * would also rewrite keys nobody has thought about.
          */
-        if (! empty($data['ads_groups']) && is_array($data['ads_groups'])) {
-            $data['ads_groups'] = array_map(function ($group) use ($stripMoney, $share) {
-                if (! is_array($group)) {
-                    return $group;
-                }
-                if (! empty($group['ads']) && is_array($group['ads'])) {
-                    foreach ($group['ads'] as &$ad) {
-                        if (is_array($ad)) {
-                            $stripMoney($ad);
-                            if ($share->hide_campaign_names && array_key_exists('campaign_name', $ad)) {
-                                $ad['campaign_name'] = 'حملة';
-                            }
+        $stripGroup = function ($group) use ($stripMoney, $share) {
+            if (! is_array($group)) {
+                return $group;
+            }
+            if (! empty($group['ads']) && is_array($group['ads'])) {
+                foreach ($group['ads'] as &$ad) {
+                    if (is_array($ad)) {
+                        $stripMoney($ad);
+                        if ($share->hide_campaign_names && array_key_exists('campaign_name', $ad)) {
+                            $ad['campaign_name'] = 'حملة';
                         }
                     }
-                    unset($ad);
                 }
-                $stripMoney($group);
+                unset($ad);
+            }
+            $stripMoney($group);
 
-                return $group;
-            }, $data['ads_groups']);
+            return $group;
+        };
+
+        if (! empty($data['ads_groups']) && is_array($data['ads_groups'])) {
+            $data['ads_groups'] = array_map($stripGroup, $data['ads_groups']);
+        }
+
+        /* Platform → objective → ad, through the same walk. See the live path's note for why. */
+        if (! empty($data['ads_platform_groups']) && is_array($data['ads_platform_groups'])) {
+            $data['ads_platform_groups'] = array_map(function ($platform) use ($stripGroup) {
+                if (! is_array($platform) || empty($platform['groups']) || ! is_array($platform['groups'])) {
+                    return $platform;
+                }
+                $platform['groups'] = array_map($stripGroup, $platform['groups']);
+
+                return $platform;
+            }, $data['ads_platform_groups']);
         }
 
         if ($share->hide_spend || $share->hide_revenue) {
@@ -458,7 +476,27 @@ final class ShareService
         foreach (['timeseries', 'platforms', 'campaigns', 'ad_sets', 'budget', ...self::CREATIVE_SECTIONS] as $section) {
             if (! empty($payload[$section]) && is_array($payload[$section])) {
                 $payload[$section] = array_map(
-                    fn ($row) => is_array($row) ? $strip($row) : $row,
+                    function ($row) use ($strip) {
+                        if (! is_array($row)) {
+                            return $row;
+                        }
+
+                        /*
+                         * A platform's `movement` is one rung down too, and its keys are the money's own names.
+                         *
+                         * The values are RATIOS — 0.26 for +26% — not amounts, so nothing here states a figure. But
+                         * «hiding spend takes the ratio that would give it back» is already this file's rule, and a
+                         * per-platform spend movement is that ratio one axis over: a reader with last month's link
+                         * and this month's growth has the amount. It also keeps the money-leak sweep meaningful,
+                         * which cannot tell a ratio under the key `spend` from a figure under it and should not have
+                         * to guess.
+                         */
+                        if (! empty($row['movement']) && is_array($row['movement'])) {
+                            $row['movement'] = $strip($row['movement']);
+                        }
+
+                        return $strip($row);
+                    },
                     $payload[$section],
                 );
             }
@@ -516,17 +554,40 @@ final class ShareService
         }
 
         /* The same rung down the snapshot path walks — see the note there. */
-        if (! empty($payload['ads_groups']) && is_array($payload['ads_groups'])) {
-            $payload['ads_groups'] = array_map(function ($group) use ($strip) {
-                if (! is_array($group)) {
-                    return $group;
-                }
-                if (! empty($group['ads']) && is_array($group['ads'])) {
-                    $group['ads'] = array_map(fn ($ad) => is_array($ad) ? $strip($ad) : $ad, $group['ads']);
-                }
+        $stripGroup = function ($group) use ($strip) {
+            if (! is_array($group)) {
+                return $group;
+            }
+            if (! empty($group['ads']) && is_array($group['ads'])) {
+                $group['ads'] = array_map(fn ($ad) => is_array($ad) ? $strip($ad) : $ad, $group['ads']);
+            }
 
-                return $strip($group);
-            }, $payload['ads_groups']);
+            return $strip($group);
+        };
+
+        if (! empty($payload['ads_groups']) && is_array($payload['ads_groups'])) {
+            $payload['ads_groups'] = array_map($stripGroup, $payload['ads_groups']);
+        }
+
+        /*
+         * The per-platform gallery nests the SAME group one rung further down, and that is the whole
+         * reason the walk above became a named function.
+         *
+         * `ads_platform_groups[].groups[].ads` is platform → objective → ad. Writing a third copy of
+         * the group walk for it is how the last gap happened: the snapshot sanitizer named four
+         * sections, the live one named seven, and an ad nested where neither looked shipped its
+         * spend to a link that hides spend. Reusing the walk is not the blind recursion this file
+         * rejected — the shape is still enumerated, it is simply enumerated once.
+         */
+        if (! empty($payload['ads_platform_groups']) && is_array($payload['ads_platform_groups'])) {
+            $payload['ads_platform_groups'] = array_map(function ($platform) use ($stripGroup) {
+                if (! is_array($platform) || empty($platform['groups']) || ! is_array($platform['groups'])) {
+                    return $platform;
+                }
+                $platform['groups'] = array_map($stripGroup, $platform['groups']);
+
+                return $platform;
+            }, $payload['ads_platform_groups']);
         }
 
         /*

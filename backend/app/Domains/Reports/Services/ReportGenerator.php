@@ -256,6 +256,8 @@ final class ReportGenerator
             'ads_level' => $ads['level'],
             // REPORT-AD-PREVIEW-001 §A — ranked INSIDE each objective, with the metric that ordered it.
             'ads_groups' => $ads['groups'],
+            // REPORT-DETAIL-PARITY-001 — the same ads on the platform axis; see ReportAds::groupsByPlatform().
+            'ads_platform_groups' => $ads['platform_groups'],
             /*
              * REPORT-CREATIVE-TRUTH-001 §B — what ran, and how much of it this document holds.
              *

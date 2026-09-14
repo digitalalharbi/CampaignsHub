@@ -1,6 +1,8 @@
 import { AdPoster } from '@/features/content/AdPoster'
 import { providerLabel } from '@/features/campaigns/labels'
 import { objectiveLabel } from '@/features/campaigns/labels'
+import { canonicalPlatform } from '@/lib/platforms'
+import { ReportPlatformSummary } from './ReportPlatformSummary'
 import type { CreativePreview } from '@/features/content/api'
 import type { Locale } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
@@ -101,6 +103,31 @@ export type AdGroup = {
   metric_label_en: string | null
   ads: ReportAd[]
   ranked: boolean
+  /*
+   * REPORT-CREATIVE-TRUTH-001 §B — how many this group chose from, and how many it shows.
+   *
+   * The group published three ads and nothing else. «الأعلى أداءً» over three cards is a claim about
+   * a list the reader cannot see the length of: three of forty and three of three are different
+   * reports, and a truncated list makes the second claim by default.
+   *
+   * Optional because a stored snapshot generated before this existed carries neither, and a report
+   * already sent must not start printing «best 3 of 3» about a list nobody counted.
+   */
+  candidates?: number
+  shown?: number
+}
+
+/**
+ * REPORT-DETAIL-PARITY-001 — one platform's creatives, grouped by what each was bought for.
+ *
+ * The owner's words: «best-performing creatives per platform», not one merged top list. The nesting
+ * is the rule, not a layout: platform, then objective INSIDE it, because ranking a brand film against
+ * a sales ad for sharing a platform is the defect the objective grouping exists to remove.
+ */
+export type AdPlatformGroup = {
+  provider: string
+  groups: AdGroup[]
+  candidates?: number
 }
 
 export function ReportAdsSection({
@@ -195,33 +222,14 @@ export function ReportAdsSection({
       */}
       {(groups ?? []).length > 0
         ? (groups ?? []).map((group) => (
-          <div key={group.family} data-testid={`report-ads-group-${group.family}`} className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-baseline gap-2">
-              <span className="text-sm font-bold text-text-primary">{ar ? group.label_ar : group.label_en}</span>
-              <span data-testid={`report-ads-basis-${group.family}`} className="text-[11px] text-text-muted">
-                {group.ranked && group.metric !== null
-                  ? (ar
-                      ? `مرتّبة حسب ${group.metric_label_ar ?? group.metric}`
-                      : `ranked by ${group.metric_label_en ?? group.metric}`)
-                  : (ar
-                      ? 'لم تُبلِّغ المنصات عن مقياس يصلح لترتيب إعلانات هذا الهدف — معروضة دون ترتيب.'
-                      : 'the platforms reported no metric this objective can be ranked on — shown without an order.')}
-              </span>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {group.ads.slice(0, limit).map((ad, i) => (
-                <AdCard
-                  key={ad.id ?? `${group.family}-${i}`}
-                  ad={ad}
-                  locale={locale}
-                  currency={currency ?? null}
-                  testidPrefix={`report-ad-poster-${group.family}-${i}`}
-                  onOpen={onOpen}
-                />
-              ))}
-            </div>
-          </div>
+          <AdGroupBlock
+            key={group.family}
+            group={group}
+            locale={locale}
+            currency={currency ?? null}
+            limit={limit}
+            onOpen={onOpen}
+          />
         ))
         : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -238,6 +246,79 @@ export function ReportAdsSection({
           </div>
         )}
     </section>
+  )
+}
+
+/**
+ * One objective group: its heading, what ordered it, how many it chose from, and its cards.
+ *
+ * Extracted so the per-platform section renders a group the same way this one does. Two sections
+ * drawing «the best creatives» through two components is how they come to disagree about what the
+ * order means — the same argument the server makes for ranking them through one service.
+ */
+function AdGroupBlock({
+  group,
+  locale,
+  currency,
+  limit,
+  onOpen,
+  testidPrefix = 'report-ads',
+}: {
+  group: AdGroup
+  locale: Locale
+  currency: string | null
+  limit?: number
+  onOpen?: (ad: ReportAd) => void
+  testidPrefix?: string
+}) {
+  const ar = locale === 'ar'
+  const shown = group.ads.slice(0, limit)
+
+  /*
+   * «الأفضل من بين N» — said whenever the group is a CUT of a longer list.
+   *
+   * `candidates` is optional: a snapshot generated before the server published it carries neither
+   * count, and a report already in a client's hands must not start printing a claim about a list
+   * nobody counted. Where it is present and larger than what is drawn, the sentence is owed.
+   */
+  const total = group.candidates ?? null
+  const truncated = total !== null && total > shown.length
+
+  return (
+    <div data-testid={`${testidPrefix}-group-${group.family}`} className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <span className="text-sm font-bold text-text-primary">{ar ? group.label_ar : group.label_en}</span>
+        <span data-testid={`${testidPrefix}-basis-${group.family}`} className="text-[11px] text-text-muted">
+          {group.ranked && group.metric !== null
+            ? (ar
+                ? `مرتّبة حسب ${group.metric_label_ar ?? group.metric}`
+                : `ranked by ${group.metric_label_en ?? group.metric}`)
+            : (ar
+                ? 'لم تُبلِّغ المنصات عن مقياس يصلح لترتيب إعلانات هذا الهدف — معروضة دون ترتيب.'
+                : 'the platforms reported no metric this objective can be ranked on — shown without an order.')}
+        </span>
+        {truncated && (
+          <span data-testid={`${testidPrefix}-of-${group.family}`} className="text-[11px] text-text-muted">
+            {ar
+              ? `— ${shown.length} من ${total} إعلانًا، وبقيتها في جدول الإعلانات أدناه`
+              : `— ${shown.length} of ${total}; the rest are in the creative roster below`}
+          </span>
+        )}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {shown.map((ad, i) => (
+          <AdCard
+            key={ad.id ?? `${group.family}-${i}`}
+            ad={ad}
+            locale={locale}
+            currency={currency}
+            testidPrefix={`report-ad-poster-${group.family}-${i}`}
+            onOpen={onOpen}
+          />
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -375,4 +456,121 @@ function figuresFor(ad: ReportAd, ar: boolean, currency: string | null): { label
   }
 
   return out.slice(0, 3)
+}
+
+/**
+ * REPORT-DETAIL-PARITY-001 — the creatives, platform by platform.
+ *
+ * ## What the detailed report was missing
+ *
+ * The report ended in one gallery of «الأعلى أداءً», grouped by objective across every platform. It
+ * answers «what worked» and cannot answer «what works HERE» — and the second is the question an
+ * agency takes into next month's plan: the ad to make more of on TikTok is rarely the ad to make
+ * more of on Google, and a merged list hands back whichever platform happened to rank highest.
+ *
+ * ## Why the nesting is platform → objective and never platform alone
+ *
+ * Ranking a brand film against a sales ad because they ran on the same platform is the defect the
+ * objective grouping was written to remove, one axis over: one ordering across objectives can only
+ * rest on a metric they share, and what they share is spend. The server groups it that way and this
+ * renders what it sends, through the same group component the objective gallery uses — two
+ * components drawing «the best creatives» is how two sections come to mean different things by it.
+ *
+ * ## Detailed only
+ *
+ * The dashboard is the concise view and already carries the objective gallery. A second gallery of
+ * the same creatives on the same page would be the duplication the live report was just cleaned of.
+ */
+export function ReportPlatformCreatives({
+  platforms,
+  metrics,
+  currency,
+  locale,
+  limit,
+  onOpen,
+}: {
+  platforms?: AdPlatformGroup[]
+  /**
+   * The platform ROWS, so each block can open with that platform's own figures.
+   *
+   * Passed in rather than fetched: these are the same rows the comparison table reads, and a second
+   * read of the same section is a second chance for two parts of one page to disagree about one
+   * number. Optional, because the printed deck renders this section from a stored snapshot whose
+   * platform rows it already holds elsewhere.
+   */
+  metrics?: Array<Record<string, unknown>>
+  currency?: string | null
+  locale: Locale
+  limit?: number
+  onOpen?: (ad: ReportAd) => void
+}) {
+  const ar = locale === 'ar'
+  const rows = platforms ?? []
+
+  /*
+   * A single platform gets no section.
+   *
+   * «Per platform» on an account that runs one platform is the gallery above with a platform name
+   * over it — the same creatives, a second time, under a heading that promises a comparison the
+   * account cannot make. An empty section says so; a redundant one says nothing and costs a screen.
+   */
+  if (rows.length < 2) {
+    return null
+  }
+
+  return (
+    <section data-testid="report-platform-creatives" className="flex flex-col gap-4">
+      <h3 className="text-base font-bold text-text-primary">
+        {ar ? 'الأعلى أداءً في كل منصة' : 'What performed best, platform by platform'}
+      </h3>
+
+      {rows.map((platform) => (
+        <div
+          key={platform.provider}
+          data-testid={`report-platform-creatives-${canonicalPlatform(platform.provider)}`}
+          className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4"
+        >
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span className="font-heading text-sm font-extrabold text-text-primary">
+              {providerLabel(canonicalPlatform(platform.provider), locale)}
+            </span>
+            {typeof platform.candidates === 'number' && (
+              <span className="text-[11px] text-text-muted">
+                {ar
+                  ? `${platform.candidates} إعلانًا في هذه الفترة`
+                  : `${platform.candidates} creative(s) in this window`}
+              </span>
+            )}
+          </div>
+
+          {/*
+            The platform's own figures, above its creatives.
+            
+            «What worked here» is only half an answer without «what did here cost and return» — the
+            section is the detailed report's per-platform depth, and a gallery with no figures over it
+            is the gallery above with a platform name on top.
+          */}
+          {(() => {
+            const row = (metrics ?? []).find((m) => String(m.provider ?? '') === platform.provider)
+
+            return row === undefined ? null : (
+              <ReportPlatformSummary platform={row} currency={currency ?? ''} locale={locale} />
+            )
+          })()}
+
+          {platform.groups.map((group) => (
+            <AdGroupBlock
+              key={`${platform.provider}-${group.family}`}
+              group={group}
+              locale={locale}
+              currency={currency ?? null}
+              limit={limit}
+              onOpen={onOpen}
+              testidPrefix={`report-platform-${canonicalPlatform(platform.provider)}`}
+            />
+          ))}
+        </div>
+      ))}
+    </section>
+  )
 }
