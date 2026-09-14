@@ -213,4 +213,44 @@ final class LiveReportAccountCeilingTest extends TestCase
         $this->assertSame(1, $conversion['campaigns'], 'A platform the link was never scoped to was ranked against the one it was.');
         $this->assertNotContains('tiktok', array_map('strtolower', $named));
     }
+
+    /**
+     * A ceiling naming NO campaign means «none», on every section of the document.
+     *
+     * `MetricsAggregator::forCampaigns([])` stores an empty list rather than null and resolves it to
+     * the impossible-id sentinel, so the engine-built sections render nothing — deliberately, and by
+     * the same rule `ceiling()` applies to the other axes. The objective sections coalesced that
+     * empty list to null, and null means «every campaign», so the one section that was not built
+     * from the engine read a fail-CLOSED choice as a fail-OPEN one.
+     *
+     * Measured on the demo world before the fix: `platforms` 0 beside an objective split of 129,967.
+     * An empty report body next to a section reporting the whole project is not a rounding
+     * disagreement — it is the document contradicting itself in front of the client.
+     */
+    public function test_a_ceiling_naming_no_campaign_empties_the_objective_split_too(): void
+    {
+        [, $raw] = app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [],
+                'account_ids' => [$this->accountInside],
+                'providers' => ['meta', 'tiktok'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $res = $this->getJson("/api/v1/reports/shared/{$raw}/live")->assertOk();
+
+        $platforms = (float) collect($res->json('data.platforms'))->sum('spend');
+
+        // The engine's own reading, stated here so the assertion below is anchored to it rather than
+        // to a constant that would drift if the ceiling rule ever changed.
+        $this->assertSame(0.0, $platforms, 'The engine no longer fails closed on an empty campaign ceiling.');
+        $this->assertSame(
+            $platforms,
+            $this->objectiveSpend($res->json('data.objective_performance') ?? []),
+            'The objective split reported campaigns the link named none of.',
+        );
+    }
 }
