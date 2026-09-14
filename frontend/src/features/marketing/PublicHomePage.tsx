@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
+import { brand } from '@/lib/brand'
 import {
   Activity, ArrowLeft, ArrowRight, BarChart3, Bell, CheckCircle2, FileText, LayoutDashboard, LogIn,
   Megaphone, ShieldCheck, Sparkles, Target, UserCircle, Wallet,
@@ -478,7 +479,7 @@ export function PublicHomePage() {
             </div>
           ))}
         </div>
-        <div className="border-t border-border py-4 text-center text-xs text-text-muted">© {new Date().getFullYear()} CampaignsHub — {c.footer.rights}</div>
+        <div className="border-t border-border py-4 text-center text-xs text-text-muted">© {new Date().getFullYear()} {locale === 'ar' ? brand.lockup.nameAr : brand.lockup.nameEn} — {c.footer.rights}</div>
       </footer>
     </div>
   )
