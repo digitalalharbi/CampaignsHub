@@ -375,7 +375,7 @@ final class LiveReportService
              * docblock rules out. The predicate lives on the share so the flag and the endpoint cannot
              * drift into disagreeing about which links are too narrow.
              */
-            'sections' => $this->sectionFlags($share),
+            'sections' => $share->visibleSections(),
             'store_funnel' => $this->storeFunnel($share, $scope['project_id'], $from, $to),
             'freshness' => $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers']),
             /*
@@ -681,29 +681,5 @@ final class LiveReportService
     private function iso(mixed $value): ?string
     {
         return $value === null ? null : Carbon::parse((string) $value)->toIso8601String();
-    }
-
-    /**
-     * The section flags the PAGE reads, with attribution closed on a link narrower than its project.
-     *
-     * `PublicReport` mounts `SharedAttributionSection` on this flag alone, and that component
-     * deliberately carries no refusal path — so leaving the flag true while the endpoint refuses
-     * would render a section that appears and then fails, the one outcome its own docblock rules
-     * out. The predicate lives on the share, so the flag and the endpoint cannot drift into
-     * disagreeing about which links are too narrow.
-     *
-     * A CONJUNCTION, never an override: the operator's own choice still has to be a yes. Writing
-     * this as an array union over the visibility flags would have forced attribution ON for every
-     * link that never asked for it, which is the opposite defect and a louder one.
-     *
-     * @return array<string, bool>
-     */
-    private function sectionFlags(ReportShare $share): array
-    {
-        $sections = $share->sectionVisibility()->toArray();
-
-        $sections['attribution'] = ($sections['attribution'] ?? false) && ! $share->narrowerThanItsProject();
-
-        return $sections;
     }
 }

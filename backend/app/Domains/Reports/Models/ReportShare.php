@@ -103,6 +103,31 @@ final class ReportShare extends Model
      * which `SharedAttributionSection` states is worse than one that never appears — a client cannot
      * tell «not shared» from «broken».
      */
+    /**
+     * The section flags a READER may act on — the operator's choice, narrowed by the link's reach.
+     *
+     * `sectionVisibility()` answers «what did the operator publish»; this answers «what may this link
+     * actually open», which is the question every caller was really asking and three of them were
+     * answering separately. `show()` and `live()` each built their own copy, and the endpoint that
+     * serves attribution applied a third rule — so a link could be told the section was available by
+     * one payload and refused by the request that followed. The page mounts
+     * `SharedAttributionSection` on this flag alone and that component carries no refusal path on
+     * purpose, so the disagreement rendered a section that appears and then fails.
+     *
+     * A conjunction, never an override: a link that never asked for attribution does not acquire it
+     * by being wide.
+     *
+     * @return array<string, bool>
+     */
+    public function visibleSections(): array
+    {
+        $sections = $this->sectionVisibility()->toArray();
+
+        $sections['attribution'] = ($sections['attribution'] ?? false) && ! $this->narrowerThanItsProject();
+
+        return $sections;
+    }
+
     public function narrowerThanItsProject(): bool
     {
         $scope = (array) ($this->scope ?? []);
