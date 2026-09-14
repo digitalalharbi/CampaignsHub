@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Metrics\Models\DailyMetric;
@@ -14,6 +15,7 @@ use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -252,5 +254,60 @@ final class LiveReportAccountCeilingTest extends TestCase
             $this->objectiveSpend($res->json('data.objective_performance') ?? []),
             'The objective split reported campaigns the link named none of.',
         );
+    }
+
+    /**
+     * The CREATIVES endpoint of the same link, which never read the account axis at all.
+     *
+     * `SharedCreativeView::ceiling()` read seven axes and not `account_ids`, while serving the same
+     * token as the report body — so a link scoped to one ad account listed the content of campaigns
+     * in every other account, with their names, previews and destination URLs. Measured on the demo
+     * world before the fix: twelve creatives returned where the ceiling granted four, the other eight
+     * belonging to two campaigns in an account the link was never scoped to.
+     *
+     * Creatives carry no account column, so the bound travels through their campaigns — resolved from
+     * `daily_metrics.external_account_id`, the space the share's own axis is validated against.
+     */
+    public function test_the_creatives_of_the_same_link_stop_at_the_account_ceiling(): void
+    {
+        $creative = function (UnifiedCampaign $campaign, string $name, string $provider): ExternalCreative {
+            return ExternalCreative::create([
+                'tenant_id' => $this->report->tenant_id,
+                'project_id' => $this->project->getKey(),
+                'campaign_id' => $campaign->getKey(),
+                'provider' => $provider,
+                'external_creative_id' => 'cr-'.Str::random(8),
+                'name' => $name,
+                'format' => 'image',
+                'status' => 'active',
+                'last_active_at' => Carbon::parse('2026-07-10'),
+            ]);
+        };
+
+        $creative($this->inside, 'Inside the ceiling', 'meta');
+        $creative($this->outside, 'Another account entirely', 'tiktok');
+
+        [$share, $raw] = app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [$this->inside->id, $this->outside->id],
+                'account_ids' => [$this->accountInside],
+                'providers' => ['meta', 'tiktok'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        // The section is fail-closed by default, so the leak is only reachable on a link that opens
+        // it — which is exactly the link an operator builds when they mean to show the work.
+        $share->settings = ['creatives' => ['creatives' => true]];
+        $share->save();
+
+        $res = $this->getJson("/api/v1/reports/shared/{$raw}/creatives")->assertOk();
+
+        $names = collect($res->json('data.creatives') ?? [])->pluck('name')->all();
+
+        $this->assertContains('Inside the ceiling', $names, 'The granted account\'s own content is missing, so this asserts nothing.');
+        $this->assertNotContains('Another account entirely', $names);
     }
 }
