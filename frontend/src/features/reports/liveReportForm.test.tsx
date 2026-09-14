@@ -153,7 +153,7 @@ describe('a live link and the form it was shared as', () => {
     const tables = await screen.findByTestId('live-detail-tables')
     expect(tables).toBeInTheDocument()
 
-    const platforms = within(screen.getByTestId('live-detail-platforms'))
+    const platforms = within(screen.getByTestId('live-platform-comparison'))
     expect(platforms.getByText('Snapchat')).toBeInTheDocument()
     expect(platforms.getByText('Meta')).toBeInTheDocument()
     // The row the dashboard's top-eight could never show.
@@ -216,7 +216,7 @@ describe('a live link and the form it was shared as', () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
     await screen.findByTestId('live-report')
 
-    const platforms = within(await screen.findByTestId('live-detail-platforms'))
+    const platforms = within(await screen.findByTestId('live-platform-comparison'))
     expect(platforms.getByTestId('sort-1')).toBeInTheDocument()
   })
 
@@ -248,7 +248,7 @@ describe('a live link and the form it was shared as', () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
     await screen.findByTestId('live-report')
 
-    const platforms = within(await screen.findByTestId('live-detail-platforms'))
+    const platforms = within(await screen.findByTestId('live-platform-comparison'))
     const rows = platforms.getAllByRole('row').slice(1)
 
     // Descending by spend: the comparable figure first, the incomparable one last — never the reverse.
@@ -259,8 +259,15 @@ describe('a live link and the form it was shared as', () => {
     expect(rows[1]).not.toHaveTextContent('500.00 SAR')
   })
 
-  /** An empty window says so rather than showing a heading over nothing. */
-  it('says when there is nothing in the window instead of drawing an empty table', async () => {
+  /**
+   * A window where the SELECTED platforms reported nothing names them, one row each.
+   *
+   * This asserted «No rows in this period», and that sentence was the honest answer while the table
+   * could only draw the platforms that had figures. It is the weaker answer now: the link covers
+   * Snapchat and Meta, and «neither of your two platforms reported» is a finding a client can act on
+   * where «no rows» is indistinguishable from a report that failed to load.
+   */
+  it('names the selected platforms that reported nothing rather than drawing no rows', async () => {
     vi.mocked(fetchLiveShared).mockResolvedValue({
       status: 200,
       envelope: { data: { ...PAYLOAD, campaigns: [], platforms: [] } },
@@ -269,7 +276,29 @@ describe('a live link and the form it was shared as', () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
     await screen.findByTestId('live-report')
 
-    expect(within(await screen.findByTestId('live-detail-platforms')).getByText(/No rows in this period/)).toBeInTheDocument()
+    const platforms = within(await screen.findByTestId('live-platform-comparison'))
+    const rows = platforms.getAllByRole('row').slice(1)
+    expect(rows).toHaveLength(2)
+    expect(platforms.getByText('Snapchat')).toBeInTheDocument()
+    expect(platforms.getByText('Meta')).toBeInTheDocument()
+    // Said in words, so a row of dashes cannot be read as a report that failed to load.
+    expect(platforms.getAllByText(/reported nothing/)).toHaveLength(2)
+  })
+
+  /** With nothing selected there is nothing to name, and the section says so rather than drawing a
+   *  heading over an empty table. */
+  it('says the window is empty when the link selects no platform at all', async () => {
+    vi.mocked(fetchLiveShared).mockResolvedValue({
+      status: 200,
+      envelope: {
+        data: { ...PAYLOAD, campaigns: [], platforms: [], available: { ...PAYLOAD.available, providers: [] } },
+      },
+    } as never)
+
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    await screen.findByTestId('live-report')
+
+    expect(within(await screen.findByTestId('live-platform-comparison')).getByText(/No rows in this period/)).toBeInTheDocument()
   })
 
   /** And a window where nothing was bought for anything says THAT, not «no rows». */
@@ -297,7 +326,7 @@ describe('a live link and the form it was shared as', () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
     await screen.findByTestId('live-report')
 
-    const platforms = within(await screen.findByTestId('live-detail-platforms'))
+    const platforms = within(await screen.findByTestId('live-platform-comparison'))
     const cell = platforms.getAllByText('90K')[0]?.closest('td')
 
     expect(cell).toHaveAttribute('title', '90,000')

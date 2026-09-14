@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { screen } from '@testing-library/react'
-import { LiveDetailTables } from './LiveDetailTables'
+import { LivePlatformComparison } from './LiveDetailTables'
 import { renderWithProviders } from '@/test/utils'
 import type { LivePayload } from './api'
 
@@ -32,7 +32,7 @@ const payload = (spend: number, over: Record<string, unknown> = {}) => ({
 describe('the money a client can only read as an abbreviation', () => {
   it('reveals the exact spend behind the compact one', async () => {
     renderWithProviders(
-      <LiveDetailTables payload={payload(10_696.54)} currency="USD" locale="en" />, { locale: 'en' },
+      <LivePlatformComparison payload={payload(10_696.54)} currency="USD" locale="en" />, { locale: 'en' },
     )
 
     const compact = await screen.findByText(/10\.7K/)
@@ -51,7 +51,7 @@ describe('the money a client can only read as an abbreviation', () => {
    */
   it('reveals nothing for an amount the contract refused to state', async () => {
     renderWithProviders(
-      <LiveDetailTables
+      <LivePlatformComparison
         payload={payload(0, { spend: null, spend_state: 'unavailable' })}
         currency="USD"
         locale="en"

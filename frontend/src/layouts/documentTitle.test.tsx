@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { ReactNode } from 'react'
@@ -19,6 +19,22 @@ const at = (path: string) => ({ children }: { children: ReactNode }) => (
 )
 
 describe('the shell’s document title', () => {
+  /*
+    The locale is GLOBAL, so the case below puts it back.
+    
+    A test that switches the product's language and leaves it switched hands the next file a store
+    it did not set up. The full run turned one unrelated legal-page case red exactly once while this
+    passed in isolation — the signature of shared state, and the reason this restores rather than
+    relies on file isolation holding.
+  */
+  const locale = useUi.getState().locale
+
+  afterEach(() => {
+    act(() => {
+      useUi.setState({ locale })
+    })
+  })
+
   it('names the section the reader is on', () => {
     document.title = 'كل حملاتك الإعلانية المدفوعة في مكان واحد — CampaignsHub'
 

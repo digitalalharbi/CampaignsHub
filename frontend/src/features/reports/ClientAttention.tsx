@@ -158,6 +158,15 @@ export function ClientAttention({
             { key: 'spent', label: ar ? 'المصروف' : 'Spent', kind: 'money', currency: unit },
             { key: 'remaining', label: ar ? 'المتبقي' : 'Remaining', kind: 'money', currency: unit },
             { key: 'consumed', label: ar ? 'الاستهلاك' : 'Consumed', kind: 'percent', digits: 0 },
+            /*
+              PACE belongs in the table, not only in the sentences below it.
+              
+              It was computed for every row and printed only where a finding fired, so a reader could
+              see «ahead of plan» for one platform and had no way to ask the same question of the
+              others. A ratio against elapsed time is the column that makes «consumed 72%» mean
+              something: three quarters spent is early in week one and late in week four.
+            */
+            { key: 'pace', label: ar ? 'الوتيرة' : 'Pace', kind: 'ratio' },
           ]}
           rows={rows.map((r) => ({
             platform: name(r),
@@ -165,6 +174,7 @@ export function ClientAttention({
             spent: r.spent,
             remaining: r.remaining,
             consumed: r.consumed_pct,
+            pace: r.pace,
           }))}
           initialSort={{ column: 1, dir: 'desc' }}
         />

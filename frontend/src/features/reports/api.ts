@@ -283,8 +283,24 @@ export interface LivePayload {
   objective_performance?: ObjectivePerformance
   /** The strongest and weakest campaign inside each path — never one list across paths. */
   objective_leaders?: { paths: PathLeaders[] }
-  /** ATTRIB-VIS-001 — which optional sections this link is allowed to open. */
-  sections?: { attribution: boolean }
+  /**
+   * ATTRIB-VIS-001 / LIVE-SECTIONS-001 — which sections this link publishes.
+   *
+   * `attribution` is a DISCLOSURE flag and fails closed; the rest are display toggles a sharer set,
+   * and an absent key means on. The backend empties the data a switched-off section would have shown,
+   * so a page that gated on «is this array empty» could not tell «switched off» from «reported
+   * nothing» — and the two must read differently: one is a section that is not there, the other a
+   * section that says so.
+   */
+  sections?: {
+    attribution: boolean
+    platform_comparison?: boolean
+    objective_breakdown?: boolean
+    creatives?: boolean
+    budget?: boolean
+    funnel_store?: boolean
+    previous_comparison?: boolean
+  }
   store_funnel: StoreFunnelPayload | null
   /**
    * CLIENT-FACING-PRESENTATION-001 — «what needs attention», which the link never carried.
