@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Support\PlatformHttp;
+use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Http\Client\Response;
 
 /**
@@ -23,7 +24,7 @@ use Illuminate\Http\Client\Response;
  * Awaiting credentials — and note that the OAuth client is not enough: Google Ads refuses every call
  * without an approved developer token, which is why it is in the platform's `requires`.
  */
-final class GoogleAdsConnector extends ApiAdvertisingConnector
+final class GoogleAdsConnector extends ApiAdvertisingConnector implements ReportsEntityGrains
 {
     private const MICRO = 1_000_000;
 
@@ -674,5 +675,125 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector
     private function plainCustomerId(string $id): string
     {
         return preg_replace('/\D+/', '', $id) ?? $id;
+    }
+
+    /** The first refusal of the last grain sweep, kept so the run log can say WHY the table is empty. */
+    private ?string $entityFailure = null;
+
+    public function lastEntityFailure(): ?string
+    {
+        return $this->entityFailure;
+    }
+
+    /**
+     * GADS-ENTITY-GRAIN-001 — the two rungs between a campaign and a creative, for Google.
+     *
+     * ## Why this exists
+     *
+     * `AccountMetricsSyncer` fills `entity_daily_metrics` for any connector that declares it can
+     * answer, and Google did not declare it — so an operator's Google ad groups and ads showed «—»
+     * for spend, clicks, CPC, CPM and CPA, which Google reports perfectly well. The codebase has
+     * written that sentence once already about Meta: «the product printed our silence as the
+     * platform's». This is the same silence, one provider over.
+     *
+     * It also decides whether a Google CREATIVE can ever show a figure. Nothing writes
+     * `creative_daily_metrics` for Google, so `CreativeMetrics` falls back to summing the ads that
+     * carry a creative — and that fallback has nothing to sum until this table is filled.
+     *
+     * ## The query
+     *
+     * `ad_group` and `ad_group_ad` are ordinary GAQL resources and the metrics are the same ones the
+     * campaign sweep already selects, so this is the existing query one level down rather than a new
+     * integration. `segments.date` gives the daily grain the table stores, and Google answers for the
+     * whole account at once — so `$campaignExternalIds` is ignored, exactly as the interface says a
+     * provider that can do this may.
+     *
+     * ## What is NOT claimed
+     *
+     * This is written against Google's documented GAQL shape and the parser this connector already
+     * uses for campaign metrics. No Google account is reachable from this install, so it has not been
+     * run against Google — the same standing this repo gave Meta's ad-set grain, and it is recorded
+     * as IMPLEMENTED_NOT_VERIFIED rather than dressed up.
+     *
+     * @param  ReportsEntityGrains::AD_SET|ReportsEntityGrains::AD  $grain
+     * @param  list<string>  $campaignExternalIds
+     */
+    public function entityInsights(
+        string $adAccountId,
+        string $grain,
+        array $campaignExternalIds,
+        string $from,
+        string $to,
+    ): SyncResult {
+        $this->entityFailure = null;
+
+        $isAdSet = $grain === ReportsEntityGrains::AD_SET;
+
+        /*
+         * Google's own names for the two rungs. An ad GROUP is what this product calls an ad set, and
+         * `ad_group_ad` is the ad — the resource that carries the creative this library shows.
+         */
+        $resource = $isAdSet ? 'ad_group' : 'ad_group_ad';
+        $idField = $isAdSet ? 'ad_group.id' : 'ad_group_ad.ad.id';
+
+        try {
+            $rows = $this->stream($this->tokens(), $adAccountId, <<<GAQL
+                SELECT {$idField}, ad_group.id, campaign.id, segments.date,
+                       metrics.cost_micros, metrics.impressions, metrics.clicks,
+                       metrics.conversions, metrics.conversions_value,
+                       metrics.video_views, metrics.engagements
+                FROM {$resource}
+                WHERE segments.date BETWEEN '{$from}' AND '{$to}'
+                GAQL);
+        } catch (\Throwable $e) {
+            /*
+             * The message, not a boolean. An empty grain has two entirely different causes — nothing
+             * swept yet, or the platform refused — and only the refusal tells an operator what to do.
+             */
+            $this->entityFailure = $e->getMessage();
+
+            return SyncResult::failed($e->getMessage());
+        }
+
+        $out = [];
+
+        foreach ($rows as $row) {
+            /** @var array<string,mixed> $metrics */
+            $metrics = (array) ($row['metrics'] ?? []);
+            /** @var array<string,mixed> $segments */
+            $segments = (array) ($row['segments'] ?? []);
+            /** @var array<string,mixed> $adGroup */
+            $adGroup = (array) ($row['adGroup'] ?? []);
+            /** @var array<string,mixed> $campaign */
+            $campaign = (array) ($row['campaign'] ?? []);
+
+            $entityId = $isAdSet
+                ? (string) ($adGroup['id'] ?? '')
+                : (string) (((array) ($row['adGroupAd'] ?? []))['ad']['id'] ?? '');
+
+            if ($entityId === '') {
+                continue;
+            }
+
+            /*
+             * `array_filter` on `!== null`, as the campaign sweep does: a metric Google did not
+             * return stays ABSENT rather than becoming a zero the reader would take as a measurement.
+             */
+            $out[] = array_filter([
+                'entity_id' => $entityId,
+                'ad_set_id' => (string) ($adGroup['id'] ?? '') ?: null,
+                'campaign_id' => (string) ($campaign['id'] ?? '') ?: null,
+                'date' => (string) ($segments['date'] ?? $from),
+                'spend' => isset($metrics['costMicros']) ? (float) $metrics['costMicros'] / self::MICRO : null,
+                'impressions' => isset($metrics['impressions']) ? (float) $metrics['impressions'] : null,
+                'clicks' => isset($metrics['clicks']) ? (float) $metrics['clicks'] : null,
+                'conversions' => isset($metrics['conversions']) ? (float) $metrics['conversions'] : null,
+                'revenue' => isset($metrics['conversionsValue']) ? (float) $metrics['conversionsValue'] : null,
+                'video_views' => isset($metrics['videoViews']) ? (float) $metrics['videoViews'] : null,
+                'engagements' => isset($metrics['engagements']) ? (float) $metrics['engagements'] : null,
+            ], static fn ($v) => $v !== null);
+        }
+
+        return SyncResult::of($out);
     }
 }
