@@ -331,4 +331,40 @@ final class SharedLinkMoneyLeakTest extends TestCase
         $this->assertGreaterThan(1, $answered, "no shared endpoint answered in {$mode} mode, so nothing was inspected");
         $this->assertSame([], $leaked, "a {$mode} link hiding spend and revenue published money:\n".implode("\n", $leaked));
     }
+
+    /**
+     * Hiding ONE figure while publishing the other — the case the sweep above cannot express.
+     *
+     * That sweep hides spend and revenue together, which is the safe direction: with both gone no
+     * ratio between them can survive either. The dangerous direction is asymmetric. A link that hides
+     * spend and publishes revenue was also publishing `roas`, and ROAS is revenue ÷ spend — so the
+     * hidden figure came back with one division, exactly, no estimation. Measured before the fix:
+     * sixty roster rows, five ads and three grouped ads carrying it.
+     *
+     * `roas` was classified by its numerator and so belonged to revenue alone. It belongs to both,
+     * because it is built from both, and a hidden figure must take its derivations with it whichever
+     * side of the fraction it sits on.
+     */
+    #[Test]
+    public function hiding_spend_takes_the_ratio_that_would_give_it_back(): void
+    {
+        [, $token] = app(ShareService::class)->create($this->report, [
+            'mode' => 'snapshot',
+            'hide_spend' => true,
+            // Revenue deliberately VISIBLE. With both hidden this test would pass without the fix.
+            'hide_revenue' => false,
+            'settings' => ['sections' => ['creatives' => true]],
+        ], null);
+
+        $body = $this->getJson("/api/v1/reports/shared/{$token}")->assertOk()->json();
+
+        $roster = $body['data']['data']['ads_roster'][0]['metrics'] ?? [];
+
+        $this->assertNull($roster['spend'] ?? null, 'the hidden figure itself survived');
+        $this->assertNull($roster['roas'] ?? null, 'roas survived a hidden spend, so revenue ÷ roas returns it');
+        $this->assertNotNull(
+            $roster['revenue'] ?? null,
+            'revenue was stripped though the link never hid it — over-redaction is its own defect',
+        );
+    }
 }
