@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Console;
 
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -60,6 +61,18 @@ final class ImportCurrencyRatesCommand extends Command
             // asked and did not answer, and the scheduler should surface that.
             return self::FAILURE;
         }
+
+        /*
+         * AUTOMATION-FIRST-OPERATIONS-001 — the count the ledger is supposed to hold.
+         *
+         * Rates RECORDED, not requested: a pair the provider refused is not a row, and the difference
+         * between the two numbers is exactly what an operator needs this ledger to show.
+         *
+         * Already computed, already printed to a terminal nobody watches at 04:00, while
+         * `scheduled_runs.rows_affected` stayed null — so the ops page could say SUCCEEDED without
+         * being able to say whether the run did anything.
+         */
+        app(ScheduledRunRows::class)->report((int) $result['imported']);
 
         $this->info("Requested {$result['requested']} pair(s); recorded {$result['imported']}.");
 
