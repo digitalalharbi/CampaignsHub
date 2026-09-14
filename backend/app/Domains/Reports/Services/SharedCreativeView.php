@@ -881,7 +881,7 @@ final class SharedCreativeView
              * which is exactly the «reports that do not reflect trustworthy real data» the owner
              * reported.
              */
-            ->where(fn ($q) => CreativeDemoPolicy::applyToCreatives($q, 'creative_daily_metrics', [$creativeId]))
+            ->where(fn ($q) => CreativeDemoPolicy::applyToProject($q, 'creative_daily_metrics', app(ProjectContext::class)->projectId()))
             ->orderBy('metric_date')
             ->get(['metric_date', 'spend', 'impressions', 'clicks', 'conversions', 'revenue', 'video_views', 'video_p100', 'frequency'])
             ->map(static function ($r) use ($visibility): array {

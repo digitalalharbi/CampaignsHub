@@ -12,6 +12,7 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -89,6 +90,12 @@ final class CreativeSpendFromAdGrainTest extends TestCase
             'name' => 'Meta',
             'status' => 'active',
         ]);
+        /*
+         * The active project, as `ResolveProject` sets it on every real request. The demo policy asks
+         * the project whether it holds live rows, so a test without a context would silently skip it.
+         */
+        app(ProjectContext::class)->setProjectId((string) $this->project->getKey());
+
         $this->campaign = ExternalCampaign::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
             'external_account_id' => $account->getKey(),
