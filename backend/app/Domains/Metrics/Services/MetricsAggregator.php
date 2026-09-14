@@ -923,7 +923,7 @@ final class MetricsAggregator
             ->whereIn('id', $rows->pluck('account_id')->filter()->all())
             ->pluck('name', 'id');
 
-        return $rows->map(fn ($r): array => [
+        $rows = $rows->map(fn ($r): array => [
             'account_id' => $r->account_id === null ? null : (string) $r->account_id,
             'provider' => $r->provider,
             /*
@@ -933,6 +933,21 @@ final class MetricsAggregator
              */
             'account_name' => $r->account_id === null ? null : ($names[$r->account_id] ?? null),
         ] + $this->withDerived((array) $r))->all();
+
+        /*
+         * ENTITY-RELEVANCE-ORDERING-001 — this returned rows in NO stated order at all.
+         *
+         * `GROUP BY` carries no `ORDER BY`, and PostgreSQL promises nothing about what comes back, so
+         * «what moved between the accounts» — the tab's own question — was answered in whatever order
+         * the database happened to produce, and could answer it differently on two identical
+         * requests. The campaign breakdown has had a total order since that was found there; this one
+         * never got it.
+         *
+         * Spend first and then the account id, for the reason `orderBySpendThen()` gives: an id is
+         * deterministic where a name can be renamed between two requests that should have agreed, and
+         * two accounts may legitimately share a name.
+         */
+        return self::orderBySpendThen($rows, 'account_id');
     }
 
     /** @return list<array<string, mixed>> one row per unified campaign (id/name/provider) ranked by spend. */
