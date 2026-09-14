@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import type { ReportData } from './InteractiveReport'
 import { moneyExact } from '@/features/analytics/format'
 import { mixedResultsNote, type ResultPart } from './reportMetrics'
-import { brand } from '@/lib/brand'
+import { brand, productName } from '@/lib/brand'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 
 /**
@@ -133,7 +133,7 @@ export function PrintDocument({
     document.documentElement.setAttribute('lang', 'en')
     // The file's own title — «CampaignsHub» here put the product in the title bar and beside the
     // attachment in a mail client, on a report an agency sends to its own client under its own name.
-    document.title = `${identity?.name ?? 'CampaignsHub'} — ${currency} Report`
+    document.title = `${identity?.name ?? productName('ar')} — ${currency} Report`
     const w = window as Window & {
       __REPORT_DATA_READY__?: boolean; __REPORT_CHARTS_READY__?: boolean
       __REPORT_IMAGES_READY__?: boolean; __REPORT_LAYOUT__?: unknown

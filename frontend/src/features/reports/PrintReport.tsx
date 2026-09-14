@@ -80,7 +80,14 @@ export function PrintReport() {
      * provenance exactly as before: rid/checksum/data-version are what make an internal snapshot
      * auditable, and they are still withheld from client and executive files.
      */
-    const who = headerIdentity(payload.branding).name
+    /*
+      This document is `lang="ar" dir="rtl"` — it is printed in Arabic, always.
+      
+      The identity's fallback is the PRODUCT's name, and with no locale it answered «CampaignsHub»,
+      so an Arabic PDF a client keeps credited the platform in Latin. The client's or agency's own
+      name still leads where they have one; this is only what stands in when they do not.
+    */
+    const who = headerIdentity(payload.branding, 'ar').name
 
     document.title =
       isClientAudience(payload.audience)
@@ -129,13 +136,13 @@ export function PrintReport() {
         currency={payload.currency}
         // The same resolved identity this file already uses for the PDF's metadata and for the
         // slide deck. The document layout was the one surface never given it.
-        identity={headerIdentity(payload.branding)}
+        identity={headerIdentity(payload.branding, 'ar')}
       />
     )
   }
 
   const d = payload.data
-  const meta: Meta = { reportName: payload.name, platforms: (d.platforms ?? []).map((p) => String(p.provider)), isDemo: payload.is_demo, agencyName: headerIdentity(payload.branding).name }
+  const meta: Meta = { reportName: payload.name, platforms: (d.platforms ?? []).map((p) => String(p.provider)), isDemo: payload.is_demo, agencyName: headerIdentity(payload.branding, 'ar').name }
   const landscape = type === 'presentation'
   const period = d.period ? `${d.period.from} → ${d.period.to}` : ''
   const mode = (d.mode as string) === 'live' ? 'Live' : 'Snapshot'
@@ -211,7 +218,7 @@ export function PrintReport() {
               </div>
               <div className="report-footer-meta">
                 {/* The footer names whoever the report belongs to, for the same reason the title does. */}
-                <span className="report-footer-brand">{headerIdentity(payload.branding).name}{payload.is_demo ? ' · Demo' : ''}{period ? ` · ${period}` : ''}</span>
+                <span className="report-footer-brand">{headerIdentity(payload.branding, 'ar').name}{payload.is_demo ? ' · Demo' : ''}{period ? ` · ${period}` : ''}</span>
                 <span className="report-footer-page">{mode}{updated ? ` · آخر تحديث ${updated}` : ''} · <bdi dir="ltr">{i + 1} / {total}</bdi></span>
               </div>
             </footer>

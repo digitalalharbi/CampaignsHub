@@ -5,6 +5,7 @@ import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Check, Copy, Download, FileText, LayoutGrid, Link2, Loader2, Plus, RefreshCw, Rows3, Send, Share2, Trash2, SlidersHorizontal } from 'lucide-react'
+import { productName } from '@/lib/brand'
 import {
   createReport,
   updateReportScope,
@@ -871,7 +872,7 @@ function ReportPreview({ projectId, id, onClose }: { projectId: string; id: stri
           <AnnotationsPanel projectId={projectId} reportId={id} />
           <InteractiveReport
             data={r.data as never}
-            meta={{ reportName: r.name, platforms, isDemo: r.is_demo, agencyName: 'CampaignsHub' }}
+            meta={{ reportName: r.name, platforms, isDemo: r.is_demo, agencyName: productName(ar ? 'ar' : 'en') }}
           />
         </div>
       )}
