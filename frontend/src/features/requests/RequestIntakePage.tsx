@@ -3,7 +3,8 @@ import { DEFAULT_DIAL_CODE, PhoneField, phoneFieldValue } from '@/components/ui/
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, Copy, FileText, Megaphone, Paperclip, RotateCcw, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Copy, FileText, Paperclip, RotateCcw, X } from 'lucide-react'
+import { CampaignsHubLogo } from '@/components/brand/CampaignsHubLogo'
 import {
   deleteUploadFile, getRequestMeta, startUploadSession, submitRequest, uploadRequestFile,
   type RequestSubmitPayload, type RequestType,
@@ -324,8 +325,8 @@ function DefaultIntake() {
       <header className="border-b border-border bg-surface">
         <div className="mx-auto flex h-16 max-w-3xl items-center gap-2.5 px-4 sm:px-6">
           <Link to="/" className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Megaphone size={18} /></span>
-            <span className="font-heading text-lg font-extrabold">CampaignsHub</span>
+            {/* BRAND-CANONICAL-001 — the identity, read from one place, not rebuilt per page. */}
+            <CampaignsHubLogo locale={locale === 'ar' ? 'ar' : 'en'} variant="compact" size="sm" />
           </Link>
         </div>
       </header>

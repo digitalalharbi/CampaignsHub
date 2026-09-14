@@ -144,3 +144,64 @@ test.describe('the CampaignsHub identity in the product', () => {
     expect(overflow, 'the brand pushed the header off a 390px screen').toBeLessThanOrEqual(1)
   })
 })
+
+/**
+ * The PUBLIC surfaces — the ones that actually shipped the wrong logo.
+ *
+ * Every case above visits `/login` or `/agency/dashboard`, so the suite proved the identity on the
+ * surfaces somebody listed and never on the marketing site, where a Lucide megaphone in a gradient
+ * tile stood beside a Latin wordmark for the life of the brand. `PublicHeader` is «the one public
+ * header. Every public page wears this», so one broken lockup was every public page at once — and
+ * the owner found it in production, not here.
+ *
+ * Unauthenticated on purpose: this is what a visitor sees before any session exists.
+ */
+test.describe('the identity on the public site', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+  test.describe.configure({ timeout: 90_000 })
+
+  for (const locale of ['ar', 'en'] as const) {
+    for (const theme of ['dark', 'light'] as const) {
+      test(`the marketing header wears the canonical lockup (${locale}, ${theme})`, async ({ page }) => {
+        /*
+          The app's OWN keys and the app's OWN control.
+          
+          The first version of this case wrote `localStorage.ui`, a shape this product does not use —
+          the store persists `campaign-hub-locale` and `campaign-hub-theme` — so both English cases
+          ran in Arabic and failed on the name. Inventing a second way to set the locale, in the unit
+          whose entire subject is surfaces inventing their own version of a shared thing.
+        */
+        await page.addInitScript((t) => localStorage.setItem('campaign-hub-theme', t), theme)
+        await page.goto('/')
+        if (locale === 'en') await switchToEnglish(page)
+
+        const mark = await markIn(page, 'header [data-testid="campaignshub-logo"]')
+        expect(mark, 'the public header drew no canonical mark').not.toBeNull()
+        expect(mark!.paths).toEqual(MARK_PATHS)
+        expect(mark!.dot).toBe(GOLD)
+        expect(mark!.visible).toBe(true)
+
+        /*
+         * The NAME is the identity's, in the reader's language. The defect was not only a wrong
+         * glyph — an Arabic visitor read «CampaignsHub» in Latin where the identity says «كامبينز هب».
+         */
+        const name = await page.locator('header [data-testid="campaignshub-logo"]').innerText()
+        expect(name).toContain(locale === 'ar' ? 'كامبينز' : 'Campaigns')
+
+        /* And nothing that was ever mistaken for the logo is left in the header. */
+        const strays = await page.locator('header svg.lucide-megaphone').count()
+        expect(strays, 'a megaphone is back in the public header').toBe(0)
+      })
+    }
+  }
+
+  test('a phone gets the same identity, not a different one', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/')
+
+    const mark = await markIn(page, 'header [data-testid="campaignshub-logo"]')
+    expect(mark, 'the phone header drew no canonical mark').not.toBeNull()
+    expect(mark!.paths).toEqual(MARK_PATHS)
+    expect(await page.locator('header svg.lucide-megaphone').count()).toBe(0)
+  })
+})
