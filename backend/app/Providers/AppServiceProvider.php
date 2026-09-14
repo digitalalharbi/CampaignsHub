@@ -6,6 +6,7 @@ namespace App\Providers;
 
 use App\Domains\Accounts\Services\AccountGrants;
 use App\Domains\Audit\Listeners\RecordAuthAudit;
+use App\Domains\Campaigns\Support\CreativeDemoPolicy;
 use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Company;
 use App\Domains\CRM\Models\Lead;
@@ -41,6 +42,15 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        /*
+         * One demo-policy answer per REQUEST — CONTENT-SPEND-ALWAYS-001.
+         *
+         * The policy memoises «does this scope hold live rows» so every creative read does not ask
+         * again. That memo was `static` first, and a static cache answers one request from a fact
+         * established in another — wrong on a long-running server, and it broke the N+1 guards by
+         * letting whichever scenario ran first pay for a check the second then read for free.
+         */
+        $this->app->scoped(CreativeDemoPolicy::class);
 
         /*
          * AUTOMATION-FIRST-OPERATIONS-001 — one counter per process, or the count never arrives.

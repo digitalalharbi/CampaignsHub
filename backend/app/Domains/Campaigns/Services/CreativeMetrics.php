@@ -7,8 +7,11 @@ namespace App\Domains\Campaigns\Services;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
+use App\Domains\Campaigns\Support\CreativeDemoPolicy;
+use App\Domains\Projects\Context\ProjectContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * What a creative's numbers mean, and which of them the platform actually sent (§15.4, §15.5, §15.15).
@@ -166,13 +169,137 @@ final class CreativeMetrics
         $rows = DB::table('creative_daily_metrics')
             ->whereIn('creative_id', $creativeIds)
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'creative_daily_metrics', app(ProjectContext::class)->projectId()))
             ->groupBy('creative_id')
             ->selectRaw(implode(', ', $select))
             ->get();
 
         $out = [];
         foreach ($rows as $row) {
-            $out[(string) $row->creative_id] = $this->shape((array) $row);
+            $figures = $this->shape((array) $row);
+            /*
+             * Where the number came from, carried with it.
+             *
+             * `creative` is the platform reporting this creative directly. `ad` is a sum over the ads
+             * that ran it — the same money, attributed rather than reported, and a surface is
+             * entitled to say which it is holding. The alternative is a figure whose provenance only
+             * the query knows, which is how «trustworthy» becomes unanswerable.
+             */
+            $figures['grain'] = 'creative';
+            $out[(string) $row->creative_id] = $figures;
+        }
+
+        /*
+         * CONTENT-SPEND-ALWAYS-001 — the figures exist one rung up, and nothing was reading them.
+         *
+         * ## What the owner sees
+         *
+         * «Spend missing / unavailable on promoted creatives» on a real account. The first rung to
+         * check is not the React cell: it is whether the number was ever ingested.
+         *
+         * ## It was not, for every provider but one
+         *
+         * `AccountMetricsSyncer` fetches creative-level insights behind
+         * `if ($connector instanceof ReportsCreativeInsights)`, and Snapchat is the only implementor.
+         * Meta, Google, TikTok, LinkedIn and X never write a `creative_daily_metrics` row, so this
+         * table — the only thing the content library read — is empty for them and every card on it
+         * shows nothing.
+         *
+         * This codebase has already met that exact shape one rung above and named it: «one
+         * `instanceof` decided that of eight platforms exactly one would ever fill the table … and
+         * the product printed our silence as the platform's». That was fixed for the ad and ad-set
+         * grains by asking a capability instead of a class, and **Meta implements it** — so a Meta
+         * account's ad-grain rows carry spend, impressions, clicks and the rest in
+         * `entity_daily_metrics` right now, keyed by the ad that ran the creative, while the card
+         * above them says «—».
+         *
+         * ## So the creative's figures come from its ADS when it has none of its own
+         *
+         * Not a second opinion and never a blend: a creative with native rows keeps them, because a
+         * provider that reports the creative grain is more precise than a sum over the ads that used
+         * it. The derivation is for the creatives that have nothing, which is all of them on every
+         * provider except Snapchat.
+         *
+         * Several ads may share one creative — summing them is not double counting, it is what that
+         * creative cost. An ad with no `creative_id` contributes nothing, because there is nothing to
+         * attribute it to, and a creative whose ads reported nothing still reaches the reader as an
+         * absence rather than as a zero.
+         */
+        $missing = array_values(array_diff($creativeIds, array_keys($out)));
+
+        foreach ($this->fromAdGrain($missing, $from, $to) as $creativeId => $figures) {
+            $out[$creativeId] = $figures;
+        }
+
+        return $out;
+    }
+
+    /*
+     * The demo policy lives in `CreativeDemoPolicy`, not here.
+     *
+     * It was a private pair of methods on this class first, and that was already the second copy of
+     * a rule `MetricsAggregator` states for `daily_metrics`. Four call sites across three classes ask
+     * it; a policy copied four times is four places to forget it, which is how the creative tables
+     * came to be the ones without it.
+     */
+
+    /**
+     * A creative's totals summed from the ad grain, for creatives with no rows of their own.
+     *
+     * The column list is deliberately the INTERSECTION of the two tables rather than everything
+     * either holds: `video_completions` exists on the creative table and not on the entity one, and
+     * inventing a 0 for it here would be the fabricated zero this product refuses everywhere else.
+     * A metric the ad grain does not carry stays absent, and the reader renders «—».
+     *
+     * @param  list<string>  $creativeIds
+     * @return array<string, array<string, mixed>>
+     */
+    private function fromAdGrain(array $creativeIds, Carbon $from, Carbon $to): array
+    {
+        if ($creativeIds === []) {
+            return [];
+        }
+
+        $entityColumns = Schema::getColumnListing('entity_daily_metrics');
+
+        $select = ['external_ads.creative_id as creative_id'];
+
+        foreach (self::SUMS as $alias => $column) {
+            if (in_array($column, $entityColumns, true)) {
+                $select[] = "SUM(entity_daily_metrics.{$column}) AS {$alias}";
+            }
+        }
+
+        if (in_array('frequency', $entityColumns, true)) {
+            $select[] = 'AVG(entity_daily_metrics.frequency) AS frequency';
+        }
+
+        $select[] = 'COUNT(DISTINCT entity_daily_metrics.metric_date) AS active_days';
+
+        foreach (self::MONEY_TRUTH as $alias => $expression) {
+            $select[] = str_replace(
+                ['spend', 'revenue', 'original_currency'],
+                ['entity_daily_metrics.spend', 'entity_daily_metrics.revenue', 'entity_daily_metrics.original_currency'],
+                $expression,
+            )." AS {$alias}";
+        }
+
+        $rows = DB::table('entity_daily_metrics')
+            ->join('external_ads', 'external_ads.id', '=', 'entity_daily_metrics.entity_id')
+            ->where('entity_daily_metrics.entity_type', 'ad')
+            ->whereIn('external_ads.creative_id', $creativeIds)
+            ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'entity_daily_metrics', app(ProjectContext::class)->projectId()))
+            ->whereBetween('entity_daily_metrics.metric_date', [$from->toDateString(), $to->toDateString()])
+            ->groupBy('external_ads.creative_id')
+            ->selectRaw(implode(', ', $select))
+            ->get();
+
+        $out = [];
+
+        foreach ($rows as $row) {
+            $figures = $this->shape((array) $row);
+            $figures['grain'] = 'ad';
+            $out[(string) $row->creative_id] = $figures;
         }
 
         return $out;
@@ -256,7 +383,17 @@ final class CreativeMetrics
      */
     private function shape(array $row): array
     {
-        $num = static fn (string $key): ?float => $row[$key] === null ? null : (float) $row[$key];
+        /*
+         * A key that is not in the row is NOT REPORTED, which is null — never 0.
+         *
+         * This read `$row[$key]` directly, which is safe for a creative-grain row because that query
+         * selects every metric in `SUMS`. The ad grain does not carry all of them — `video_completions`
+         * exists on one table and not the other — and the choice at that moment is the whole rule this
+         * product runs on: a missing key becomes `null` and the reader prints «—», or it becomes 0 and
+         * the reader is told the platform measured nothing. The second is the fabricated zero refused
+         * everywhere else, so it is the first.
+         */
+        $num = static fn (string $key): ?float => ($row[$key] ?? null) === null ? null : (float) $row[$key];
 
         $figures = [];
         foreach (array_keys(self::SUMS) as $key) {
@@ -282,10 +419,19 @@ final class CreativeMetrics
         // creative, which is the weaker of the two true statements.
         $figures['reported']['orders'] = $row['conversions'] !== null;
         foreach (array_keys(self::SUMS) as $key) {
-            $figures['reported'][$key] = $row[$key] !== null;
+            /*
+             * Absent and null are the same answer here: «the platform did not report this».
+             *
+             * A creative-grain row selects every metric, so the key is always present and this read
+             * it directly. The ad grain carries a narrower set — see `fromAdGrain()` — and a metric
+             * that table has no column for must arrive as «not reported» rather than as a key error
+             * or, worse, as a reported zero.
+             */
+            $figures['reported'][$key] = ($row[$key] ?? null) !== null;
         }
         foreach (self::AVERAGED as $key) {
-            $figures['reported'][$key] = $row[$key] !== null;
+            /* Same rule as the sums above: an absent column is «not reported». */
+            $figures['reported'][$key] = ($row[$key] ?? null) !== null;
         }
 
         /*

@@ -223,8 +223,29 @@ final class CreativeLibraryApiTest extends TestCase
         $this->assertTrue($rows['Ad ran']['ad_delivered'], 'Its ad has figures for this window.');
         $this->assertFalse($rows['Nothing ran']['ad_delivered']);
 
-        // The flag never becomes a figure: the creative still reports no metrics of its own.
-        $this->assertNull($rows['Ad ran']['metrics'], 'An ad figure must not be projected onto a creative.');
+        /*
+         * CONTENT-SPEND-ALWAYS-001 — this assertion was the opposite, and the owner's production
+         * observation is what changed it.
+         *
+         * It read «An ad figure must not be projected onto a creative» and required `metrics` to stay
+         * null. The rule was defensible on its own terms — an ad's figures are the ad's — and its
+         * consequence was the defect the owner reported: on every provider except Snapchat nothing
+         * writes the creative grain at all, so «no figures of its own» means no figures ever, and the
+         * content library showed «—» for spend on real, delivering creatives.
+         *
+         * A creative in this schema is reached by at most one `creative_id` per ad, so summing the
+         * ads that carry it is that creative's own delivery rather than a projection from something
+         * else. What the earlier rule was protecting — that a reader is never told the platform
+         * reported a creative figure when it did not — is kept by `grain`, which says which of the
+         * two this number is.
+         */
+        $this->assertNotNull($rows['Ad ran']['metrics'], 'A delivering creative reported nothing at all.');
+        $this->assertSame(900.0, (float) $rows['Ad ran']['metrics']['impressions']);
+        $this->assertSame(
+            'ad',
+            $rows['Ad ran']['metrics']['grain'],
+            'a figure summed from ads must say so rather than pass as the platform’s own creative figure',
+        );
     }
 
     public function test_the_library_lists_creatives_with_figures_that_match_their_objective(): void
