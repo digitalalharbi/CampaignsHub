@@ -289,6 +289,25 @@ export function AdPreviewDialog({
         )}
 
         {/*
+          CONTENT-SPEND-ALWAYS-001 — where these figures came from, said once.
+
+          On every provider but Snapchat nothing writes the creative grain, so a creative's numbers
+          are summed from the ADS that ran it. That is the same money and a different provenance, and
+          a reader studying a figure is entitled to know which one they are holding — the rule this
+          replaced protected that distinction by refusing to show any figure at all, which is how the
+          owner came to see «—» for spend on a delivering creative.
+
+          One line, under the figures rather than beside each: the grain belongs to the whole set.
+        */}
+        {(creative.metrics as { grain?: string } | null)?.grain === 'ad' && (
+          <p data-testid="ad-preview-dialog-grain" className="mt-1.5 text-[11px] leading-snug text-text-muted">
+            {ar
+              ? 'هذه الأرقام مجموعة من إعلانات هذا التصميم — المنصة لا تُبلّغ عنها على مستوى التصميم نفسه.'
+              : 'Summed from the ads that ran this creative — the platform does not report at creative level.'}
+          </p>
+        )}
+
+        {/*
           And the chart, HIGH — the answer to «is this getting better or worse».
 
           It was last, under eight metadata rows, which on a phone put it off the screen entirely in
