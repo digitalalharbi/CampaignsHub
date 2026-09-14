@@ -65,8 +65,7 @@ final class ProjectController extends Controller
          * That the list hides what this route served is the tell, and the id is not a secret: it is
          * in the address of every project they legitimately open.
          */
-        $reachable = $this->reachable($user);
-        abort_unless($reachable === null || in_array((string) $model->id, $reachable, true), 403, 'You do not have access to this project.');
+        $this->authorizeReach($user, $model);
 
         return ApiResponse::success(new ProjectResource($model), 'Project retrieved.');
     }
@@ -129,6 +128,7 @@ final class ProjectController extends Controller
     {
         abort_unless($request->user()->hasPermission('projects.update'), 403);
         $model = $this->find($project);
+        $this->authorizeReach($request->user(), $model);
 
         $validated = $request->validate([
             'name' => ['sometimes', 'string', 'max:160'],
@@ -149,6 +149,7 @@ final class ProjectController extends Controller
     {
         abort_unless($request->user()->hasPermission('projects.create'), 403);
         $source = $this->find($project);
+        $this->authorizeReach($request->user(), $source);
 
         $copy = Project::create([
             'client_workspace_id' => $source->client_workspace_id,
@@ -188,10 +189,51 @@ final class ProjectController extends Controller
     {
         abort_unless($request->user()->hasPermission($permission), 403);
         $model = $this->find($project);
+        $this->authorizeReach($request->user(), $model);
         $model->update(['status' => $status]);
         $audit->log(action: $action, entityType: Project::class, entityId: (string) $model->id, after: ['status' => $status]);
 
         return ApiResponse::success(new ProjectResource($model), 'Project status updated.');
+    }
+
+    /**
+     * TEAM-PROJECT-RBAC-001 — may this reader reach THIS project at all.
+     *
+     * ## Why it is a method and not two lines in `show`
+     *
+     * It WAS two lines in `show`, and that is exactly how the writes went without it. `show` learned
+     * that a member confined to one client could read the neighbouring client's record by putting its
+     * id in the URL, and the narrowing was added where the lesson was learned. `update`, `clone` and
+     * the four state transitions kept checking only the TENANT permission and then looking the
+     * project up with a tenant-scoped `find()` — which finds every project in the agency by
+     * definition.
+     *
+     * So the same member could pause, archive, restore, rename or copy another client's project. One
+     * rung more serious than the read it was fixed for: a neighbour's project name is a disclosure,
+     * and pausing their campaigns stops their advertising.
+     *
+     * ## Why the tenant permission is not the scope
+     *
+     * `projects.update` answers «may this person run clients at all», which is the sentence
+     * `ProjectRouteCapabilityCoverageTest` uses to justify exempting these routes from a project
+     * capability. That sentence is true and it is not a scope: an account manager running one client
+     * holds it, and nothing about holding it says which client. `projects.view.all` is the permission
+     * that means «every project in this agency», and {@see self::reachable()} already reads it — so
+     * an agency-wide reader is not narrowed and nobody who could act before loses anything they were
+     * entitled to.
+     *
+     * 403 and not 404: «ask for access» is the true answer, and telling a colleague the project does
+     * not exist sends them looking for a bug instead.
+     */
+    private function authorizeReach(User $user, Project $model): void
+    {
+        $reachable = $this->reachable($user);
+
+        abort_unless(
+            $reachable === null || in_array((string) $model->id, $reachable, true),
+            403,
+            'You do not have access to this project.',
+        );
     }
 
     /**
