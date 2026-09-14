@@ -310,4 +310,65 @@ final class LiveReportAccountCeilingTest extends TestCase
         $this->assertContains('Inside the ceiling', $names, 'The granted account\'s own content is missing, so this asserts nothing.');
         $this->assertNotContains('Another account entirely', $names);
     }
+
+    /**
+     * The cost of binding creatives through their campaigns' metrics, pinned deliberately.
+     *
+     * A campaign that has never spent has no row in `daily_metrics`, so it cannot be attributed to
+     * any account in the space the share's axis is validated against — and under an account ceiling
+     * its creatives are therefore NOT shown, even though the operator named that campaign in the
+     * link. That is a real cost and it is chosen rather than stumbled into.
+     *
+     * It is chosen because it is what the rest of the document already does: a campaign with no
+     * metrics in the granted account contributes no FIGURES to the report body either, so showing its
+     * content beside an objective split that omits it would make one link disagree with itself. The
+     * alternative — trusting the structural `external_campaigns.external_account_id` — reads a
+     * DIFFERENT identifier space from the one the axis is built in, so it would not be a stricter
+     * rule, just a wrong one.
+     *
+     * A link with NO account ceiling is unaffected: the bound is «every account», and the campaign's
+     * own grant stands on its own. That is the case this test's sibling above covers.
+     */
+    public function test_a_never_spent_campaigns_content_is_withheld_under_an_account_ceiling(): void
+    {
+        // The tenant context is deliberately forgotten at the end of setUp, so this states its own
+        // tenant rather than relying on an ambient one the class has already put down.
+        $unspent = UnifiedCampaign::create([
+            'tenant_id' => $this->report->tenant_id,
+            'project_id' => $this->project->id, 'name' => 'Named but never spent',
+            'status' => 'active', 'objective' => 'sales',
+        ]);
+
+        ExternalCreative::create([
+            'tenant_id' => $this->report->tenant_id,
+            'project_id' => $this->project->getKey(),
+            'campaign_id' => $unspent->getKey(),
+            'provider' => 'meta',
+            'external_creative_id' => 'cr-'.Str::random(8),
+            'name' => 'Not yet running',
+            'format' => 'image',
+            'status' => 'active',
+            'last_active_at' => Carbon::parse('2026-07-10'),
+        ]);
+
+        [$share, $raw] = app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [$this->inside->id, $unspent->id],
+                'account_ids' => [$this->accountInside],
+                'providers' => ['meta', 'tiktok'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $share->settings = ['creatives' => ['creatives' => true]];
+        $share->save();
+
+        $names = collect($this->getJson("/api/v1/reports/shared/{$raw}/creatives")->assertOk()->json('data.creatives') ?? [])
+            ->pluck('name')
+            ->all();
+
+        $this->assertNotContains('Not yet running', $names);
+    }
 }
