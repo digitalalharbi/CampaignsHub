@@ -132,17 +132,44 @@ final class DeckCompositionOrderTest extends TestCase
     }
 
     /**
-     * A five-page summary drops recommendations and next steps, and that is unchanged.
+     * REPORT-SUMMARY-DECISION-001 — a summary now ENDS on the action, and the owner asked for that.
      *
-     * «A summary states what happened» — the decision reorders the detailed deck; it does not put
-     * two of the most text-heavy sections back into the form built to omit them.
+     * This case asserted the opposite, on the reading that «a summary states what happened» and the
+     * two most text-heavy sections belong to the full report. That was defensible and it is not the
+     * contract the product is held to: the owner's summary specification names «concise
+     * recommendations» and «concise next actions», and a decision-length document that stops at the
+     * findings hands its reader a diagnosis with no prescription.
+     *
+     * It also resolved a disagreement between the two axes: `next_steps` is in
+     * `ClientReportView::EXECUTIVE_SLIDE_TYPES`, so an EXECUTIVE reader was already being given next
+     * steps that a SUMMARY reader was not — one section, two answers, depending which field you
+     * asked about.
+     *
+     * Concision is depth rather than absence: the renderer reads the report's own form and shows the
+     * few highest items, saying how many it is not showing.
      */
-    public function test_a_summary_still_omits_the_action_sections(): void
+    public function test_a_summary_ends_on_the_action_it_asks_for(): void
     {
         $at = $this->positions(form: 'executive_summary');
 
-        $this->assertArrayNotHasKey('recommendations', $at);
-        $this->assertArrayNotHasKey('next_steps', $at);
+        $this->assertArrayHasKey('recommendations', $at);
+        $this->assertArrayHasKey('next_steps', $at);
         $this->assertArrayHasKey('executive_summary', $at);
+
+        // And the ORDER this file exists to protect still holds: the action closes the document.
+        $this->assertLessThan($at['next_steps'], $at['recommendations'], 'the action follows the recommendation');
+        $this->assertLessThan($at['recommendations'], $at['observations'], 'insight precedes the recommendation it supports');
+    }
+
+    /**
+     * A summary is still SHORTER — the depth is what belongs to the full report, not the ending.
+     */
+    public function test_a_summary_still_leaves_the_depth_to_the_full_report(): void
+    {
+        $at = $this->positions(form: 'executive_summary');
+
+        $this->assertArrayNotHasKey('platform_performance', $at);
+        $this->assertArrayNotHasKey('data_quality', $at);
+        $this->assertArrayNotHasKey('campaigns', $at);
     }
 }
