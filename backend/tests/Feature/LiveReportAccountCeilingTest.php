@@ -511,4 +511,37 @@ final class LiveReportAccountCeilingTest extends TestCase
 
         $this->assertTrue($res->json('data.sections.attribution'));
     }
+
+    /**
+     * The SNAPSHOT payload carries the same closed flag as the live one.
+     *
+     * Caught in a browser, not in a test: the live payload said `attribution: false` and the shared
+     * page mounted the section anyway, because `show()` kept its OWN copy of the flags — a third
+     * place answering one question, beside `live()` and the attribution endpoint's own rule. A link
+     * could therefore be told a section was available by the payload it rendered from and refused by
+     * the request that followed. The conjunction lives on the share now and all three read it.
+     */
+    public function test_the_snapshot_payload_closes_the_flag_on_a_narrow_link_too(): void
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id,
+                'campaign_ids' => [$this->inside->id],
+                'account_ids' => [$this->accountInside],
+                'providers' => ['meta', 'tiktok'],
+                'earliest' => '2026-07-01',
+                'latest' => '2026-07-31',
+            ],
+        ], null);
+
+        $share->settings = ['sections' => ['attribution' => true]];
+        $share->save();
+
+        $res = $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk();
+
+        $this->assertFalse(
+            $res->json('data.sections.attribution'),
+            'The snapshot payload would mount a section the attribution endpoint refuses.',
+        );
+    }
 }

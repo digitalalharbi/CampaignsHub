@@ -135,7 +135,7 @@ final class PublicReportController extends Controller
              * The page needs it before it renders: a section it may not open must never appear as a
              * control that then refuses, and a client should not be shown a tab that answers 403.
              */
-            'sections' => $share->sectionVisibility()->toArray(),
+            'sections' => $share->visibleSections(),
             'data' => $data,
         ], 'Shared report.');
     }
