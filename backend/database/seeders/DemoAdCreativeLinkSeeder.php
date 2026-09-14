@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Domains\Campaigns\Models\ExternalAd;
+use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Metrics\Models\EntityDailyMetric;
@@ -165,6 +166,8 @@ final class DemoAdCreativeLinkSeeder extends Seeder
             $forObjective++;
         }
 
+        $squads = $this->adSetMetrics();
+
         /*
          * Counted per step, because one number for both was misleading.
          *
@@ -173,7 +176,7 @@ final class DemoAdCreativeLinkSeeder extends Seeder
          * the seeder had written rows it had not. `metrics()` is a plain `insert`, so «did it run
          * again» is a question with real consequences, and the message has to answer it.
          */
-        $this->command?->info("Demo: {$linked} ads linked to a creative, {$forObjective} given ad-level metrics for their objective.");
+        $this->command?->info("Demo: {$linked} ads linked to a creative, {$forObjective} given ad-level metrics for their objective, {$squads} ad sets given the grain above them.");
     }
 
     /**
@@ -185,6 +188,20 @@ final class DemoAdCreativeLinkSeeder extends Seeder
     private function metrics(ExternalAd $ad): void
     {
         $rows = [];
+
+        /*
+         * A weight per ad, from the ad's own key.
+         *
+         * Every ad was given the SAME series, which was invisible while one ad per project carried
+         * metrics and became the whole story once the ad-set grain above them was written: thirteen ad
+         * sets rendering «1.94K SAR · 126K · 2.52K» to the last digit, under a table whose own subtitle
+         * promises «الأعلى إنفاقًا أولًا». A ranking in which every row ties is not a ranking, and the
+         * change-drivers list beside it named thirteen equal movers.
+         *
+         * Derived from the key rather than drawn at random: the figures here exist to be pointed at by
+         * assertions, and a fixture whose numbers move between seeds makes every one of them flaky.
+         */
+        $weight = 0.6 + (crc32((string) $ad->getKey()) % 12) / 10;
 
         for ($day = 0; $day < self::DAYS; $day++) {
             $date = Carbon::today()->subDays($day);
@@ -202,10 +219,10 @@ final class DemoAdCreativeLinkSeeder extends Seeder
                 'external_ad_set_id' => $ad->external_ad_set_id,
                 'metric_date' => $date->toDateString(),
                 'attribution_window' => 'default',
-                'impressions' => 1200 * $step,
-                'clicks' => 24 * $step,
-                'spend' => 18.5 * $step,
-                'conversions' => $step,
+                'impressions' => round(1200 * $step * $weight),
+                'clicks' => round(24 * $step * $weight),
+                'spend' => round(18.5 * $step * $weight, 2),
+                'conversions' => max(1, (int) round($step * $weight)),
                 'is_demo' => true,
                 'created_at' => Carbon::now(),
                 'updated_at' => Carbon::now(),
@@ -213,5 +230,88 @@ final class DemoAdCreativeLinkSeeder extends Seeder
         }
 
         DB::table('entity_daily_metrics')->insert($rows);
+    }
+
+    /**
+     * The rung above the ads, summed from the ads themselves.
+     *
+     * `ChangeDrivers` answers `by=ad_set` out of `entity_daily_metrics` at the `ad_set` grain, and the
+     * demo world wrote only the `ad` grain — so that drill had nothing to answer with and returned an
+     * empty dimension, which reads in a browser exactly like a broken one. The rows here are the SUM of
+     * each ad set's own ads for the same day, not an independent invention: a provider's ad-set total
+     * and the ads under it have to reconcile, and a fixture that made them disagree would teach the
+     * wrong thing about the grain. Ad sets whose ads carry no metrics stay empty for the same reason.
+     *
+     * Written only for ad sets that have none, so a second run adds nothing.
+     */
+    private function adSetMetrics(): int
+    {
+        $already = EntityDailyMetric::withoutGlobalScopes()
+            ->where('entity_type', EntityDailyMetric::AD_SET)
+            ->distinct()
+            ->pluck('entity_id')
+            ->all();
+
+        $sums = DB::table('entity_daily_metrics')
+            ->select([
+                'tenant_id', 'project_id', 'provider', 'external_ad_set_id', 'metric_date',
+                DB::raw('SUM(impressions) AS impressions'),
+                DB::raw('SUM(clicks) AS clicks'),
+                DB::raw('SUM(spend) AS spend'),
+                DB::raw('SUM(conversions) AS conversions'),
+            ])
+            ->where('entity_type', EntityDailyMetric::AD)
+            ->whereNotNull('external_ad_set_id')
+            ->whereNotIn('external_ad_set_id', $already)
+            ->groupBy('tenant_id', 'project_id', 'provider', 'external_ad_set_id', 'metric_date')
+            ->get();
+
+        if ($sums->isEmpty()) {
+            return 0;
+        }
+
+        $externalIds = ExternalAdSet::withoutGlobalScopes()
+            ->whereIn('id', $sums->pluck('external_ad_set_id')->unique()->all())
+            ->pluck('external_id', 'id')
+            ->all();
+
+        $rows = [];
+
+        foreach ($sums as $sum) {
+            $externalId = $externalIds[$sum->external_ad_set_id] ?? null;
+
+            /*
+             * No ad set behind the id means the ads point at something the demo world never created,
+             * and `external_entity_id` is NOT NULL — inventing one would put a row in the table whose
+             * provider key matches nothing.
+             */
+            if ($externalId === null) {
+                continue;
+            }
+
+            $rows[] = [
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $sum->tenant_id,
+                'project_id' => $sum->project_id,
+                'provider' => $sum->provider,
+                'entity_type' => EntityDailyMetric::AD_SET,
+                'entity_id' => $sum->external_ad_set_id,
+                'external_entity_id' => (string) $externalId,
+                'external_ad_set_id' => $sum->external_ad_set_id,
+                'metric_date' => $sum->metric_date,
+                'attribution_window' => 'default',
+                'impressions' => $sum->impressions,
+                'clicks' => $sum->clicks,
+                'spend' => $sum->spend,
+                'conversions' => $sum->conversions,
+                'is_demo' => true,
+                'created_at' => Carbon::now(),
+                'updated_at' => Carbon::now(),
+            ];
+        }
+
+        DB::table('entity_daily_metrics')->insert($rows);
+
+        return count(array_unique(array_column($rows, 'entity_id')));
     }
 }
