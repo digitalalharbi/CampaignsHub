@@ -211,7 +211,20 @@ final class ReportGenerator
              * agency arranged it. Emptying the key rather than dropping it keeps every reader — the
              * deck, the PDF, the spreadsheet, an old stored report — working.
              */
-            'campaigns' => [],
+            /*
+             * REPORT-DETAIL-DEPTH-001 — the roster travels for an INTERNAL report, and only that one.
+             *
+             * The boundary above is about the document a CLIENT keeps, and it stands: «اسم واختيار
+             * الحملة احذفه من التقارير». An internal report is the operator's own copy of their own
+             * arrangement, and the owner's depth contract asks it for campaign analysis by name — so
+             * the roster is emitted for `internal` and for nothing else.
+             *
+             * Decided at GENERATION rather than left to the view. `ClientReportView` would empty it
+             * anyway, but then a client report's stored payload would be carrying campaign identity
+             * that only a filter stands between and a reader, and every path that forgets the filter
+             * becomes a leak. Not generating it is the property that cannot be forgotten.
+             */
+            'campaigns' => ($report->audience ?? 'client') === 'internal' ? $campaigns : [],
             /*
              * CLIENT-REPORT-ENTITY-BOUNDARY-001 — empty while the ranking is CAMPAIGN-level.
              *

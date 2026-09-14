@@ -1,4 +1,4 @@
-import { DataMetricTable } from '@/components/ui/MetricTable'
+import { DataMetricTable, type Column, type Row as TableRow } from '@/components/ui/MetricTable'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import { useMemo, useState } from 'react'
 import { attributionWindow } from './attributionWindow'
@@ -314,6 +314,7 @@ export function SlideBody({ slide, data, meta }: { slide: Slide; data: ReportDat
     case 'objective_performance': return <ObjectiveSplitSlide data={data} />
     case 'funnel': return <FunnelSlide data={data} />
     case 'comparison': return <PeriodComparisonSlide data={data} />
+    case 'campaigns': return <CampaignsSlide data={data} />
     case 'observations': return <ObservationsSlide data={data} />
     /*
      * CLIENT-DIAGNOSTIC-SEPARATION-001 — the data-quality slide is the OPERATOR's.
@@ -607,10 +608,42 @@ function NoteCard({ note }: { note: NoteCardData }) {
   )
 }
 
+/**
+ * REPORT-SUMMARY-DECISION-001 — how many of these a SUMMARY shows.
+ *
+ * A decision-length report that prints eleven recommendations is a full report with a shorter
+ * cover. It shows the few at the top of the list and SAYS it is showing a few: a silent truncation
+ * teaches a reader that the list they can see is the list that exists, which is the one thing a
+ * summary must not do to somebody who will act on it.
+ */
+const SUMMARY_NOTES = 3
+
+function trimmedForForm<T>(items: T[], form: string | null | undefined): { shown: T[]; hidden: number } {
+  if (form !== 'executive_summary' || items.length <= SUMMARY_NOTES) {
+    return { shown: items, hidden: 0 }
+  }
+
+  return { shown: items.slice(0, SUMMARY_NOTES), hidden: items.length - SUMMARY_NOTES }
+}
+
+function MoreInTheFullReport({ hidden }: { hidden: number }) {
+  if (hidden < 1) return null
+
+  return (
+    <p className="mt-2 text-xs text-text-muted" data-testid="summary-trimmed-note">
+      {`و${hidden} أخرى في التقرير التفصيلي.`}
+    </p>
+  )
+}
+
 function RecommendationsSlide({ data }: { data: ReportData }) {
   // Two balanced columns: findings (right in RTL) + recommendations (left in RTL).
-  const findings = data.findings ?? []
-  const recs = data.recommendations ?? []
+  const allFindings = data.findings ?? []
+  const allRecs = data.recommendations ?? []
+  const findingsTrim = trimmedForForm(allFindings, data.form)
+  const recsTrim = trimmedForForm(allRecs, data.form)
+  const findings = findingsTrim.shown
+  const recs = recsTrim.shown
   const legacy = findings.length === 0 && recs.length === 0 ? (data.summary ?? []) : []
   return (
     <div>
@@ -629,10 +662,12 @@ function RecommendationsSlide({ data }: { data: ReportData }) {
           <section>
             <h3 className="mb-2 flex items-center gap-2 text-sm font-extrabold text-text-primary"><CircleCheck size={15} className="text-brand-600" /> أبرز النتائج والملاحظات</h3>
             <div className="space-y-2">{findings.length ? findings.map((n, i) => <NoteCard key={i} note={n} />) : <p className="text-sm text-text-muted">لا ملاحظات.</p>}</div>
+            <MoreInTheFullReport hidden={findingsTrim.hidden} />
           </section>
           <section>
             <h3 className="mb-2 flex items-center gap-2 text-sm font-extrabold text-text-primary"><ArrowRight size={15} className="text-brand-600" /> التوصيات والخطوات القادمة</h3>
             <div className="space-y-2">{recs.length ? recs.map((n, i) => <NoteCard key={i} note={n} />) : <p className="text-sm text-text-muted">لا توصيات.</p>}</div>
+            <MoreInTheFullReport hidden={recsTrim.hidden} />
           </section>
         </div>
       )}
@@ -1452,6 +1487,61 @@ const NOTE_TONE: Record<string, { border: string; text: string; Icon: typeof Tri
  * nothing alarming in it is a result, and filling the space with generic advice would teach a
  * reader that this section is decoration.
  */
+/**
+ * REPORT-DETAIL-DEPTH-001 — campaign analysis, for the report that is allowed to have it.
+ *
+ * The owner's depth contract asks a detailed report for campaign analysis by name. It reaches this
+ * component only for an INTERNAL report: the generator does not produce the roster for any other
+ * audience and `ClientReportView` drops this whole section, so a client never meets a heading over
+ * a list that was removed for their benefit.
+ *
+ * Sorted by spend, because the operator's first question about a roster is where the money went.
+ */
+function CampaignsSlide({ data }: { data: ReportData }) {
+  const c = data.currency
+  const rows = [...(data.campaigns ?? [])].sort((a, b) => Number(b.spend ?? 0) - Number(a.spend ?? 0))
+
+  /*
+   * TABLE-NUMERIC-ALIGNMENT-001 — the shared primitive, not a table written here.
+   *
+   * My first draft was a hand-rolled `<table>` with its own `tnum` classes and its own idea of how
+   * money and RTL behave. That is the requirement's own words for the defect: «no page-specific
+   * table formatting». `DataMetricTable` already owns column widths, numeric alignment in both
+   * directions, sorting, compact values, the exact-value tooltip and the money contract — including
+   * the rule that a null currency prints the figure BARE rather than under a guessed one.
+   */
+  const columns: Column[] = [
+    { key: 'name', label: 'الحملة', kind: 'text' },
+    { key: 'platform', label: 'المنصة', kind: 'text' },
+    { key: 'spend', label: 'الإنفاق', kind: 'money', currency: c ?? null },
+    { key: 'results', label: 'النتائج', kind: 'number' },
+    { key: 'cost', label: 'تكلفة النتيجة', kind: 'cost', currency: c ?? null },
+  ]
+
+  const table: TableRow[] = rows.map((r) => ({
+    name: String(r.campaign_name ?? '—'),
+    platform: r.provider ? providerLabel(String(r.provider), 'ar') : '—',
+    spend: typeof r.spend === 'number' ? r.spend : null,
+    results: typeof r.conversions === 'number' ? r.conversions : null,
+    cost: typeof r.cpa === 'number' ? r.cpa : null,
+  }))
+
+  return (
+    <div>
+      <Title sub="أين ذهب الإنفاق، وما الذي عاد منه — نسخة الفريق الداخلية">تحليل الحملات</Title>
+      {table.length === 0 ? (
+        <p className="rounded-2xl border border-border bg-surface-secondary p-6 text-center text-sm text-text-secondary">
+          لا توجد حملات بأرقام في هذا النطاق.
+        </p>
+      ) : (
+        <div data-testid="report-campaigns-table">
+          <DataMetricTable columns={columns} rows={table} initialSort={{ column: 2, dir: 'desc' }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ObservationsSlide({ data }: { data: ReportData }) {
   const notes = data.observations ?? []
 
