@@ -102,9 +102,27 @@ function InfluencerIdentity({ collapsed }: { collapsed?: boolean }) {
   return (
     <div className={`flex items-center gap-2.5 ${collapsed ? 'justify-center' : 'px-1'}`}>
       {/* The platform's mark; the NAME beside it stays the workspace's, as in every other shell. */}
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark" data-testid="shell-brand-mark">
+      {/*
+        BRAND-MARK-001 — the MARK is the way home, and the name beside it is not.
+        
+        The phone bar has carried this link since the mark was put on it; the rail rendered
+        the same identity as a plain span, so on the surface an operator uses most, the one
+        place they look for «take me back to the start» did nothing.
+        
+        Only the mark. The words next to it are the TENANT's name, and the note below says
+        why: the platform is the mark, the workspace is the words. Making their name navigate
+        would be a claim about whose it is — and it goes to this portal's own home, never to
+        the marketing site.
+      */}
+      <Link
+        to="/influencers"
+        data-testid="shell-brand-mark"
+        aria-label={productName(ar ? 'ar' : 'en')}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+        data-brand-home="portal"
+      >
         <CampaignsHubMark size={20} />
-      </span>
+      </Link>
       {!collapsed && (
         <div className="min-w-0">
           <span className="block truncate font-heading text-[15px] font-extrabold tracking-tight text-text-primary">
@@ -193,8 +211,17 @@ export function InfluencerShell() {
             a language toggle and an avatar, and nothing at all saying what the product is. The mark
             alone, because a wordmark beside four controls on a 390px bar is what pushes them off it.
           */}
+          {/*
+            `/influencers`, plural — BRAND-MARK-001.
+            
+            This said `/influencer`, and the portal has been `/influencers` since it was routed:
+            `router.tsx` mounts `path: 'influencers'` and `portalPath.ts` lists the same prefix. So
+            the one control on a phone that says «take me home» went to a path the router does not
+            have. Found by a guard written for the RAIL, which then asked the same question of the bar
+            beside it — the rail was the reported defect and this was sitting next to it.
+          */}
           <Link
-            to="/influencer"
+            to="/influencers"
             aria-label={productName(locale)}
             data-testid="mobile-brand-mark"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary-soft text-brand-mark lg:hidden"

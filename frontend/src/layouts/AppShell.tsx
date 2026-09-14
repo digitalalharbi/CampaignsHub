@@ -68,8 +68,30 @@ function NavItems({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?:
 function Brand({ collapsed }: { collapsed?: boolean }) {
   const { locale } = useUi()
 
+  /*
+   * BRAND-MARK-001 — the lockup is the way home, and on a desktop it was not a link at all.
+   *
+   * The phone bar has carried `<Link to="/app">` since the mark was put on it. The rail beside it
+   * rendered the same identity as a plain `<div>`, so the one place a reader looks for «take me back
+   * to the start» did nothing on the surface they use it on most. Nobody reported it because a dead
+   * logo raises no error: it simply does not respond, and a reader concludes the product works that
+   * way.
+   *
+   * It goes to this portal's own home and never to the marketing site — an authenticated reader sent
+   * to the public homepage has been logged out as far as they can tell.
+   *
+   * The WHOLE lockup is the link here because the whole lockup is the product's own identity. The
+   * agency and influencer rails put the tenant's name beside the same mark, and there only the mark
+   * is the link: their name is theirs, and a name that navigates somewhere is a claim about what it
+   * belongs to.
+   */
   return (
-    <div className={`flex items-center gap-2.5 ${collapsed ? 'justify-center' : 'px-1'}`}>
+    <Link
+      to="/app"
+      data-testid="shell-brand-home"
+      aria-label={productName(locale)}
+      className={`flex items-center gap-2.5 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-brand-600 ${collapsed ? 'justify-center' : 'px-1'}`}
+    >
       {/*
         BRAND-CANONICAL-001 — the NAME comes from the identity too, not just the mark.
         
@@ -89,7 +111,7 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
           {locale === 'ar' ? brand.lockup.nameAr : brand.lockup.nameEn}
         </span>
       )}
-    </div>
+    </Link>
   )
 }
 
