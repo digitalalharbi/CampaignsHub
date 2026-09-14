@@ -161,6 +161,43 @@ final class LiveReportService
          * Every axis is empty on a link built before this existed, and `applyTo()` skips empty axes,
          * so those links behave exactly as they did.
          */
+        /*
+         * The account axis, read ONCE and handed to everything that needs it.
+         *
+         * `applyTo()` below binds the engine, so every section built from it — `platforms`, the
+         * KPIs, the timeseries — has always been bounded by the accounts the operator granted. The
+         * two objective sections are NOT built from that engine: they construct `ObjectivePerformance`
+         * directly, and they constructed it WITHOUT this axis, so a link scoped to one ad account
+         * drew its platform table for that account and its objective split for every account in the
+         * project. The comment beneath promises «the same service the deck calls, on the same bounds»
+         * — it was the same service and not the same bounds, because `ReportScope::objectivePerformance()`,
+         * which the deck uses, passes `accountIds` and the live path did not.
+         *
+         * Null rather than an empty array when the link names no account: null is «every account this
+         * project has», which is what a share built before the account axis existed means, and an
+         * empty list is the fail-closed «none» that the ceiling's other axes use for a deliberate
+         * empty choice. Collapsing the two would silently empty every older link in existence.
+         */
+        /*
+         * The campaign ceiling, read with the SAME fail-closed rule the engine uses.
+         *
+         * `MetricsAggregator::forCampaigns([])` sets an empty list rather than null, and its `where`
+         * turns an empty list into the impossible-id sentinel — so a ceiling naming no campaign
+         * matches nothing, deliberately. The objective sections wrote `$scope['campaign_ids'] ?: null`,
+         * and null in `ObjectivePerformance` means «every campaign»: the one spelling that turns a
+         * fail-CLOSED choice into a fail-OPEN one.
+         *
+         * Measured on the demo world before this: a share naming no campaign rendered `platforms` 0
+         * and an objective split of 129,967 — the report body empty and the objective section
+         * reporting the whole project, in one document.
+         *
+         * Passed through as an array, never coalesced: `ObjectivePerformance` carries the same
+         * sentinel for an empty list, so the two agree by construction rather than by coincidence.
+         */
+        $campaignCeiling = $scope['campaign_ids'];
+
+        $accountCeiling = ($share->scope['account_ids'] ?? []) ?: null;
+
         $engine = ReportScope::fromArray([
             'campaign_ids' => $scope['campaign_ids'],
             'account_ids' => $share->scope['account_ids'] ?? [],
@@ -303,8 +340,9 @@ final class LiveReportService
              */
             'objective_performance' => ClientEntityBoundary::objectivePerformance((new ObjectivePerformance(
                 projectIds: $scope['project_id'] === '' ? null : [$scope['project_id']],
-                campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : ($scope['campaign_ids'] ?: null),
+                campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : $campaignCeiling,
                 providers: $applied['providers'] !== [] ? $applied['providers'] : ($scope['providers'] ?: null),
+                accountIds: $accountCeiling,
             ))->build($from, $to)),
             /*
              * OBJECTIVE-ANALYTICS-DEPTH-001 — the strongest and weakest campaign INSIDE each path.
@@ -317,8 +355,9 @@ final class LiveReportService
              */
             'objective_leaders' => (new ObjectivePerformance(
                 projectIds: $scope['project_id'] === '' ? null : [$scope['project_id']],
-                campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : ($scope['campaign_ids'] ?: null),
+                campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : $campaignCeiling,
                 providers: $applied['providers'] !== [] ? $applied['providers'] : ($scope['providers'] ?: null),
+                accountIds: $accountCeiling,
             ))->leadersByPath($from, $to, by: 'provider'),
             /*
              * ATTRIB-VIS-001 — the link says which optional sections it is allowed to open.
