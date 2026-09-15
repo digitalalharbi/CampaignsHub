@@ -94,6 +94,30 @@ export function campaignEfficiency(
 }
 
 /**
+ * What this campaign RETURNED, when returning is what it was bought to do.
+ *
+ * Taken from the objective's own primary list rather than added as a column every row must answer:
+ * `sales` names `roas` there, `awareness` names nothing of the kind, and an awareness campaign
+ * given a return column would be shown a cell it can never fill. That is the distinction this table
+ * has to keep — «not applicable to this objective» is not «unavailable», and «—» says the second.
+ * Null here renders nothing at all, which is the first.
+ *
+ * `reading()` does the rest, so a revenue the platform never sent still says so rather than
+ * arriving as a coalesced zero beside a real one.
+ */
+export function campaignReturn(
+  objective: string | null,
+  row: Record<string, unknown> | undefined,
+  ar: boolean,
+): CampaignHeadline | null {
+  if (row === undefined) return null
+
+  const key = headlineKeys(objective).find((k) => k === 'roas' || k === 'revenue')
+
+  return key === undefined ? null : reading(key, row, ar)
+}
+
+/**
  * What this campaign SPENT, read through the same catalogue as every other figure on the row.
  *
  * A comparison table needs the money beside the result, and «spend» is the one column that means the
