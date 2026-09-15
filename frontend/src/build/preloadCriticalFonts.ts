@@ -24,7 +24,27 @@ import type { Plugin } from 'vite'
  * faded — see the owner's rule. The page paints once.
  */
 export function preloadCriticalFonts(): Plugin {
-  const CRITICAL = [/inter-latin-wght-normal/, /ibm-plex-sans-arabic-arabic-400-normal/]
+  /*
+   * The faces the FIRST SCREEN paints, which is three and not two.
+   *
+   * The first version preloaded the Latin Inter subset and Arabic Plex 400, and the production
+   * measurement after it deploying is what named the third: CLS fell 0.0375 → 0.0232 and did not
+   * reach zero. The card that used to GROW was stable; what still moved was everything below the
+   * hero, by 25.2px, at 1237ms.
+   *
+   * 25.2px is exactly one line of the hero `h1` — 21px Arabic at line-height 25.2px — so this is the
+   * heading RE-WRAPPING, not a line box changing height. The heading is weight 700, a separate file
+   * that was still `font-display: swap` and still unpreloaded: it painted in the system Arabic face,
+   * wrapped to a different number of lines, and re-wrapped when Plex 700 landed.
+   *
+   * Found by measuring the element rather than by reasoning about fonts: the shift's own numbers
+   * said «one line of THIS heading», and the heading's computed weight said which file.
+   */
+  const CRITICAL = [
+    /inter-latin-wght-normal/,
+    /ibm-plex-sans-arabic-arabic-400-normal/,
+    /ibm-plex-sans-arabic-arabic-700-normal/,
+  ]
   let hrefs: string[] = []
 
   return {

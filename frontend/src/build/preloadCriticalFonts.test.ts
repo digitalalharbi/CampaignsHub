@@ -33,12 +33,14 @@ function tagsFor(files: Record<string, unknown>) {
 }
 
 describe('the critical font preload', () => {
-  it('names the two faces the first screen needs, and only those', () => {
+  it('names the three faces the first screen needs, and only those', () => {
     const hrefs = tagsFor(bundle).map((t) => t.attrs.href)
 
-    expect(hrefs).toHaveLength(2)
+    expect(hrefs).toHaveLength(3)
     expect(hrefs).toContain('/assets/inter-latin-wght-normal-Dx4kXJAl.woff2')
     expect(hrefs).toContain('/assets/ibm-plex-sans-arabic-arabic-400-normal-CyU-ddYS.woff2')
+    // The hero heading's own weight — see the production measurement in the plugin's comment.
+    expect(hrefs).toContain('/assets/ibm-plex-sans-arabic-arabic-700-normal-9rXc6cUL.woff2')
   })
 
   /**
@@ -50,7 +52,6 @@ describe('the critical font preload', () => {
     const hrefs = tagsFor(bundle).map((t) => t.attrs.href).join(' ')
 
     expect(hrefs).not.toContain('cyrillic')
-    expect(hrefs).not.toContain('arabic-700')
     expect(hrefs).not.toContain('ibm-plex-sans-arabic-latin')
   })
 
