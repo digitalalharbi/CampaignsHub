@@ -104,6 +104,46 @@ final class SyncRunLedgerTest extends TestCase
     }
 
     /** And the response says how many it is not showing, rather than leaving it to be inferred. */
+    /**
+     * The summary describes THIS project, and `->getQuery()` is how it stopped doing that.
+     *
+     * The counts are built by dropping to the underlying query builder, which returns a
+     * `Query\Builder` and leaves every global scope behind — and `MetricSyncRun` carries two:
+     * `BelongsToTenant` and `BelongsToProject`. So the sync-run summary an operator reads, and the
+     * total derived from it, counted runs belonging to other projects and other TENANTS.
+     *
+     * It is the same defect as the campaign status counts on the campaigns ledger, in a second
+     * controller, and it is worse here: «14 failed syncs» attributed to a project that had two is a
+     * data-quality verdict about somebody else's pipeline, on the surface an operator consults to
+     * decide whether to trust their own figures.
+     */
+    public function test_the_summary_counts_this_project_and_not_the_whole_install(): void
+    {
+        $this->syncRun('completed', 5);
+        $this->syncRun('failed', 6);
+
+        $elsewhere = Project::create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $this->project->client_workspace_id,
+            'name' => 'Another project', 'status' => 'active',
+        ]);
+
+        for ($i = 0; $i < 9; $i++) {
+            MetricSyncRun::create([
+                'tenant_id' => $this->tenant->id, 'project_id' => $elsewhere->id,
+                'external_account_id' => null, 'provider' => 'meta', 'status' => 'failed',
+                'window_start' => '2026-08-01', 'window_end' => '2026-08-30',
+                'started_at' => now()->subMinutes(30), 'finished_at' => now()->subMinutes(30),
+            ]);
+        }
+
+        $data = $this->runs();
+
+        $this->assertSame(2, (int) ($data['runs_total'] ?? -1), 'the total counted another project’s runs');
+        $this->assertSame(1, (int) ($data['summary']['failed'] ?? -1), 'the failure count counted another project’s runs');
+        $this->assertSame(1, (int) ($data['summary']['completed'] ?? -1));
+    }
+
     public function test_it_states_the_total_and_what_the_cap_left_out(): void
     {
         for ($i = 0; $i < 130; $i++) {
