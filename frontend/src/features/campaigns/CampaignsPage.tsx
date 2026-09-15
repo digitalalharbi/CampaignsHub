@@ -235,10 +235,6 @@ export function CampaignsPage() {
     return c
   }, [campaignsQuery.data])
 
-  const statusDonut = useMemo(
-    () => CAMPAIGN_STATUSES.map((s) => ({ name: campaignStatusLabel(s, locale), value: counts[s] ?? 0 })).filter((d) => d.value > 0),
-    [counts, locale],
-  )
   /*
    * CAMP-BUDGET-CURRENCY-001 — «الميزانية 80K · مصروف 3.7K». Eighty thousand of what?
    *
@@ -558,9 +554,17 @@ export function CampaignsPage() {
             <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{ar ? 'الحملات' : 'Campaigns'}</h1>
             <ProvenanceBadge provenance={summary.data?.provenance} />
           </div>
+          {/*
+            * VISUAL-DECISION-001 — the count is data; the sentence around it was not.
+            *
+            * «each project is isolated from the others» is a true statement about the product that
+            * every reader of this page has already learned, printed on every visit above the answer
+            * they came for. The count stays because it is a figure; the explanation goes, which is
+            * the rule this surface is being held to — data, then visual, then comparison, then the
+            * decision, and prose only for a warning or a data-quality truth.
+            */}
           <p className="mt-1 text-sm text-text-secondary">
             <span className="tnum font-semibold text-text-primary">{countedCampaigns(counts.total, ar ? 'ar' : 'en')}</span>
-            {ar ? ' في المشروع الحالي — كل مشروع معزول عن غيره.' : ' in the current project — each project is isolated from the others.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -712,10 +716,19 @@ export function CampaignsPage() {
                   : <PlatformDonutChart data={platformSpend.data} centerLabel={ar ? 'الإجمالي' : 'Total'} centerValue={compact(platformSpend.data.reduce((a, b) => a + b.value, 0))} height={200} />}
             </ChartCard>
           </div>
-          <div className="grid gap-4 lg:grid-cols-3">
-            <ChartCard title={ar ? 'حالات الحملات' : 'Campaign statuses'} subtitle={ar ? 'توزيع الحالة' : 'How they break down'}>
-              {statusDonut.length ? <PlatformDonutChart data={statusDonut} colorBy="series" centerLabel={ar ? 'الحملات' : 'Campaigns'} centerValue={String(counts.total)} height={190} /> : <EmptyState title={ar ? 'لا حملات' : 'No campaigns'} />}
-            </ChartCard>
+          {/*
+            * VISUAL-DECISION-001 — the status donut is gone, and the ranking took its column.
+            *
+            * Status IS part-to-whole, so the shape was not wrong; the chart was. Every figure in it
+            * — active, paused, needs attention — is already a number in the health strip at the top
+            * of this page, so it restated what the reader had just read, as a picture, in a third of
+            * a row. One visualisation answers one decision, and «how do my campaigns break down by
+            * status» is not a decision anybody opens this page to make.
+            *
+            * The spend ranking underneath it answers one: which campaign is taking the money. It now
+            * has the width to show more than two bars.
+            */}
+          <div className="grid gap-4">
             <ChartCard
               title={ar ? 'أفضل الحملات' : 'Best campaigns'}
               subtitle={
@@ -723,7 +736,6 @@ export function CampaignsPage() {
                   ? (ar ? `حسب الإنفاق — ${topCampaigns.dropped} غير محتسَبة` : `By spend — ${topCampaigns.dropped} withheld`)
                   : (ar ? 'حسب الإنفاق' : 'By spend')
               }
-              className="lg:col-span-2"
             >
               {topCampaigns === null
                 ? <div className="flex h-[190px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'ترتيب الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend ranking unavailable — partial or multi-currency amounts'}</div>
