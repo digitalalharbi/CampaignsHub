@@ -1,4 +1,5 @@
 import { percent, rowCostPer, rowRoas } from '@/features/analytics/format'
+import { metricKind, metricLabel } from './metrics'
 import { creativeMoney } from './creativeMoney'
 import { readMetricValue } from '@/lib/metricValue'
 import type { CreativeMetrics } from './api'
@@ -33,7 +34,25 @@ export type DialogFigure = { label: string; value: string }
  * @param metrics the creative's own figures — the money contract's envelope, not a plain bag
  * @param currency the surface's reporting currency; null prints an amount bare
  */
-export function creativeDialogFigures(metrics: MoneyTotals, currency: string | null, ar: boolean): DialogFigure[] {
+export function creativeDialogFigures(
+  metrics: MoneyTotals,
+  currency: string | null,
+  ar: boolean,
+  /*
+   * Owner defect 94f — the objective's own result, from the BACKEND's mapping.
+   *
+   * The list below is universal: spend, impressions, clicks, CTR, CPC, CPM. True of every creative,
+   * and for four families of eight it omits the one figure that says whether the creative worked. A
+   * leads creative's popup carried no leads and no CPL; an app creative's carried no installs and no
+   * CPI; engagement carried neither engagements nor CPE. The CARD is objective-aware and the popup
+   * one click away was not, so the two disagreed about what mattered for the same creative.
+   *
+   * `headline_metrics` is what the card already renders and the server already chose. Passing it
+   * through is what keeps ONE objective engine: deciding here which metrics a leads creative
+   * deserves would be a second opinion, and the two would drift the first time a family changed.
+   */
+  headlineMetrics: string[] = [],
+): DialogFigure[] {
   const locale: Locale = ar ? 'ar' : 'en'
   const bag = (metrics ?? {}) as Record<string, unknown>
   const n = (key: string): number => {
@@ -92,6 +111,31 @@ export function creativeDialogFigures(metrics: MoneyTotals, currency: string | n
 
   if (typeof bag.roas === 'number') {
     figures.push({ label: 'ROAS', value: rowRoas(metrics) })
+  }
+
+  /*
+   * Then whatever this creative's objective asks for that is not already above.
+   *
+   * Only figures the row actually carries: a metric the provider never reported is left out rather
+   * than added as «—», for the reason revenue is — a panel of dashes teaches a reader to skip it.
+   */
+  const shown = new Set(['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm', 'revenue', 'roas'])
+
+  for (const key of headlineMetrics) {
+    if (shown.has(key)) continue
+    shown.add(key)
+
+    const raw = bag[key]
+    if (typeof raw !== 'number') continue
+
+    const kind = metricKind(key)
+    const value = kind === 'money'
+      ? costPer(metrics, key, 1, currency, raw)
+      : kind === 'percent'
+        ? percent(raw, 2)
+        : readMetricValue(kind === 'ratio' ? 'ratio' : 'number', raw).text
+
+    figures.push({ label: metricLabel(key, locale), value })
   }
 
   return figures
