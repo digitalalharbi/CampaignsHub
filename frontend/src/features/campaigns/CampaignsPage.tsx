@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { StatCard as SharedStatCard } from '@/components/ui/StatCard'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
+import { CampaignLink } from './CampaignLink'
+import { CampaignSecondaryStrip } from './CampaignSecondaryStrip'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { BarChart3, GitCompare, LayoutGrid, Plus, Rows, Search, TriangleAlert } from 'lucide-react'
@@ -12,7 +14,7 @@ import { campaignStatusLabel, campaignStatusTone, objectiveLabel } from './label
 import { CAMPAIGN_STATUSES, type UnifiedCampaign } from './types'
 import { CANONICAL_OBJECTIVE_KEYS, canonicalObjectiveLabel, canonicalOfRaw, rawObjectivesFor, type CanonicalObjectiveKey } from './canonicalObjectives'
 import { LIFECYCLE_KEYS, lifecycleView, type Lifecycle } from './campaignLifecycleView'
-import { campaignEfficiency, campaignHeadline, campaignSpendReading, type CampaignHeadline } from './campaignHeadline'
+import { campaignEfficiency, campaignHeadline, campaignReturn, campaignSpendReading, type CampaignHeadline } from './campaignHeadline'
 import type { MetricReading } from '@/components/ui/MetricStrip'
 import { campaignRelevance, type CampaignRelevance } from './campaignRelevance'
 import { SpendLimitChip } from '@/features/budget/SpendLimitChip'
@@ -40,9 +42,9 @@ import { ChartCard, PlatformDonutChart, ProgressRing, RankingBarChart, SpendReve
 import { useBudget, useCampaigns, usePlatforms, useSummary, useTimeseries, type BudgetRow } from '@/features/analytics/api'
 import { useLastNDaysRange } from '@/features/analytics/hooks'
 import { ProvenanceBadge, RangeTabs, TrendPill } from '@/features/analytics/components'
-import { compact, money, num, rowCostPer, rowRoas } from '@/features/analytics/format'
+import { compact, money, num } from '@/features/analytics/format'
 import { campaigns as countedCampaigns } from '@/lib/counted'
-import { rankableMoney, resolveMoneySeries, type MoneyTotals } from '@/lib/money/contract'
+import { formatMoneyReading, rankableMoney, readMoney, resolveMoneySeries, type MoneyTotals } from '@/lib/money/contract'
 import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
@@ -190,6 +192,11 @@ export function CampaignsPage() {
 
   useEffect(() => setPage(1), [projectId, status, objectiveParam, search])
 
+  const metricCampaigns = useCampaigns(projectId, range)
+
+  /* Relevance is read from the metrics window; before it answers, nothing about it is known. */
+  const metricsKnown = !metricCampaigns.isPending && !metricCampaigns.isError
+
   const campaignsQuery = useQuery({
     /*
      * ANALYTICS-OBJECTIVE-SYSTEM-001 — the reader picks a canonical objective, the server gets the
@@ -199,9 +206,20 @@ export function CampaignsPage() {
      * query, and keying on the canonical label instead would be one cache entry per label over
      * whatever the previous scope fetched.
      */
-    queryKey: ['project', projectId, 'campaigns', { status, objective: objectiveParam, search, sort, dir }, page],
+    queryKey: ['project', projectId, 'campaigns', { status, objective: objectiveParam, search, sort, dir, lifecycle, metricsKnown }, page],
     queryFn: () => listCampaigns(projectId!, {
       status: status || undefined, objective: objectiveParam, search: search || undefined,
+      /*
+       * «all» is the absence of the filter, not a third value the server has to know about.
+       *
+       * And nothing is asked for while the metrics window has not answered. The rule this page has
+       * always kept is that a view which cannot be computed is not «nothing is active»: narrowing
+       * before the reader's own metrics have arrived would render a short list, and a short list is
+       * read as a fact about the account rather than as a request still in flight. The server could
+       * answer — it computes relevance from its own query — but the page cannot yet TELL the reader
+       * which of the two they are looking at, and that is the part that matters.
+       */
+      lifecycle: lifecycle === 'all' || !metricsKnown ? undefined : lifecycle,
       /* Undefined when nothing is chosen — an empty string is a value, and «no sort» is not one. */
       sort: sort || undefined, dir: sort ? dir : undefined,
       page, from: range.from, to: range.to,
@@ -213,7 +231,6 @@ export function CampaignsPage() {
   const timeseries = useTimeseries(view === 'overview' ? projectId : null, range)
   const platforms = usePlatforms(view === 'overview' ? projectId : null, range)
   const budget = useBudget(projectId, range)
-  const metricCampaigns = useCampaigns(projectId, range)
 
   /*
    * CAMPAIGNS-LEDGER-001 — the rows are a page; the counts are the PROJECT's.
@@ -235,10 +252,6 @@ export function CampaignsPage() {
     return c
   }, [campaignsQuery.data])
 
-  const statusDonut = useMemo(
-    () => CAMPAIGN_STATUSES.map((s) => ({ name: campaignStatusLabel(s, locale), value: counts[s] ?? 0 })).filter((d) => d.value > 0),
-    [counts, locale],
-  )
   /*
    * CAMP-BUDGET-CURRENCY-001 — «الميزانية 80K · مصروف 3.7K». Eighty thousand of what?
    *
@@ -365,7 +378,6 @@ export function CampaignsPage() {
    * «active only» over unknown relevance would render an empty workspace as a statement about the
    * account rather than about a request that has not answered.
    */
-  const metricsKnown = !metricCampaigns.isPending && !metricCampaigns.isError
 
   const lifecycleRows = useMemo(
     () => campaigns.map((c) => {
@@ -376,10 +388,30 @@ export function CampaignsPage() {
     [campaigns, metricsByCampaign],
   )
 
+  /*
+   * CAMPAIGNS-LEDGER-001 — the SERVER narrowed this set; the browser only describes it.
+   *
+   * `lifecycleView` used to do the filtering here, over the twenty-five rows the page held, which
+   * made «active and spending» mean «whichever of the first page are active». The request carries
+   * the lifecycle now, so these rows are already the right ones and re-filtering them would be a
+   * second opinion about the same question.
+   *
+   * It is still called, for the one thing it knows that the server's answer cannot express: whether
+   * relevance was computable at all. When the metrics window has not answered, «active only» would
+   * render an empty workspace as a statement about the account rather than about a request still in
+   * flight, and the view says so instead.
+   */
   const lifecycleShown = useMemo(
-    () => lifecycleView(lifecycleRows, { lifecycle, windowEnd: range.to, metricsKnown }),
-    [lifecycleRows, lifecycle, range.to, metricsKnown],
+    () => lifecycleView(lifecycleRows, { lifecycle: 'all', windowEnd: range.to, metricsKnown }),
+    [lifecycleRows, range.to, metricsKnown],
   )
+
+  /*
+   * Counted by the server over the project, before it narrowed. A chip's number has to describe the
+   * list that chip leads to, and counting the rows we were handed would report «inactive 0» beside a
+   * control that reveals thirty.
+   */
+  const lifecycleCounts = campaignsQuery.data?.lifecycleCounts ?? lifecycleShown.counts
 
   const visibleCampaigns = lifecycleShown.rows
 
@@ -513,8 +545,14 @@ export function CampaignsPage() {
    * Read through the canonical helpers, so this screen cannot disagree with the two that already
    * read the same totals correctly.
    */
-  const cpaText = rowCostPer(k, 'cpa', 'conversions', summary.data?.currency ?? null)
-  const roasText = rowRoas(k)
+  /*
+   * Spend through the canonical reader, so this screen cannot disagree with the two that already
+   * read the same totals — a withheld or multi-currency total renders as the contract says, never
+   * as a zero.
+   */
+  /* Spend through the canonical reader, so this screen cannot disagree with the two that read the
+   * same totals — a withheld or multi-currency total renders as the contract says, never as zero. */
+  const spendText = formatMoneyReading(readMoney(k, 'spend', summary.data?.currency ?? null, ar), money)
 
   /*
    * CAMP-COMPARE-001 — a delta is absent when there is nothing to compare against, not «unchanged».
@@ -558,52 +596,86 @@ export function CampaignsPage() {
             <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{ar ? 'الحملات' : 'Campaigns'}</h1>
             <ProvenanceBadge provenance={summary.data?.provenance} />
           </div>
+          {/*
+            * VISUAL-DECISION-001 — the count is data; the sentence around it was not.
+            *
+            * «each project is isolated from the others» is a true statement about the product that
+            * every reader of this page has already learned, printed on every visit above the answer
+            * they came for. The count stays because it is a figure; the explanation goes, which is
+            * the rule this surface is being held to — data, then visual, then comparison, then the
+            * decision, and prose only for a warning or a data-quality truth.
+            */}
           <p className="mt-1 text-sm text-text-secondary">
             <span className="tnum font-semibold text-text-primary">{countedCampaigns(counts.total, ar ? 'ar' : 'en')}</span>
-            {ar ? ' في المشروع الحالي — كل مشروع معزول عن غيره.' : ' in the current project — each project is isolated from the others.'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        {/*
+          * VISUAL-DECISION-001 — the operational header: find, narrow, choose a window, create.
+          *
+          * Search and the two taxonomy selects sat below the view switcher, so «find the campaign I
+          * came for» lived underneath the charts rather than beside the title. They are controls over
+          * the whole page and now read as one row with it. The state chips stay where they are —
+          * they are a narrowing OF the list and belong against the list.
+          */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-56">
+            <Search size={15} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-text-muted" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              data-testid="campaigns-search"
+              placeholder={ar ? 'ابحث في حملات المشروع…' : 'Search this project’s campaigns…'}
+              className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+            />
+          </div>
+          {/* Sized, because the control is `w-full` by default and a full-width select in a header
+              row pushes everything after it onto a line of its own. */}
+          <Select className="w-full sm:w-40" value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
+          <Select className="w-full sm:w-44" value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CANONICAL_OBJECTIVE_KEYS.map((o) => ({ value: o, label: canonicalObjectiveLabel(o, locale) }))]} />
           <RangeTabs value={days} onChange={setDays} />
           {canCreate && <Button onClick={() => setModalOpen(true)}><Plus size={16} /> {t('new_campaign')}</Button>}
         </div>
       </div>
 
-      {/* Summary cards — CURRENT PROJECT only */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard label={ar ? 'نشطة' : 'Active'} value={String(counts.active ?? 0)} sub={ar ? `${counts.total} إجمالًا` : `${counts.total} in total`} tone="success" />
-        {/*
-          CAMP-COPY-001 — «تحتاج مراجعة» under a zero asserted that nothing needed reviewing and
-          that it needed reviewing. The caption follows the count, and the warning tone with it.
+      {/*
+        * VISUAL-DECISION-001 — four primary figures, then everything else at its own weight.
+        *
+        * This was seven oversized cards over a budget block of four more, so eleven numbers stood
+        * between opening the page and seeing a campaign. The operator's questions on arrival are
+        * «what is running», «what needs me», «what is it costing», «what is it returning», and each
+        * now has one card.
+        *
+        * The rest did not become less true, only less loud. Budget, remaining, forecast, cost per
+        * result, ROAS and the paused count moved into a compact strip that reads in one line — and
+        * every money guarantee moved WITH them, through the same canonical readers, proved in
+        * `campaignSecondaryStrip.test.tsx` where the cards' own tests now live. Nothing is restated
+        * in a second place and nothing is computed twice.
         */}
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <StatCard label={ar ? 'نشطة' : 'Active'} value={String(counts.active ?? 0)} sub={ar ? `${counts.total} إجمالًا` : `${counts.total} in total`} tone="success" />
         <StatCard
-          label={ar ? 'متوقفة' : 'Paused'}
-          value={String(counts.paused ?? 0)}
-          sub={(counts.paused ?? 0) > 0 ? (ar ? 'تحتاج مراجعة' : 'Need a look') : (ar ? 'لا شيء متوقف' : 'None paused')}
-          tone={(counts.paused ?? 0) > 0 ? 'warning' : undefined}
+          testid="campaigns-attention"
+          label={ar ? 'تحتاج تدخلًا' : 'Needs attention'}
+          value={String(attention.length)}
+          sub={attention.length > 0 ? (ar ? 'افتح القائمة' : 'Open the list') : (ar ? 'لا شيء الآن' : 'Nothing right now')}
+          tone={attention.length > 0 ? 'warning' : undefined}
         />
-        <StatCard
-          testid="campaigns-budget-total"
-          label={ar ? 'الميزانية' : 'Budget'}
-          value={!budgetTotals.known
-            ? '—'
-            : budgetTotals.currencyCount > 1
-              ? (ar ? `${budgetTotals.currencyCount} عملات` : `${budgetTotals.currencyCount} currencies`)
-              : money(budgetTotals.total, budgetTotals.currency ?? undefined)}
-          sub={!budgetTotals.known
-            ? (ar ? 'لم تُحدَّد ميزانية لأي حملة' : 'No campaign has a budget set')
-            : budgetTotals.currencyCount > 1
-              ? (ar ? 'ميزانيات بعملات مختلفة — لا تُجمع' : 'Budgets in different currencies — not summed')
-              : budgetTotals.spent === null
-                ? (ar ? 'المصروف غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend unavailable — partial or multi-currency')
-                : ar
-                  ? `مصروف ${money(budgetTotals.spent, budgetTotals.spentCurrency ?? budgetTotals.currency ?? undefined)}`
-                  : `${money(budgetTotals.spent, budgetTotals.spentCurrency ?? budgetTotals.currency ?? undefined)} spent`}
-        />
+        <StatCard testid="campaigns-spend" label={ar ? 'الإنفاق' : 'Spend'} value={spendText} delta={cmp(d.spend)} />
         <StatCard label={ar ? 'النتائج' : 'Results'} value={num(k?.conversions)} delta={cmp(d.conversions)} />
-        <StatCard label="CPA" value={cpaText} delta={cmp(d.cpa)} invert />
-        <StatCard label="ROAS" value={roasText} delta={cmp(d.roas)} />
       </div>
+
+      {/*
+        * The forecast comes from `portfolioBudget`, the same function the pacing block below reads,
+        * so the two cannot disagree about where the period is heading. The rest of the strip's
+        * budget figures keep the page's stricter spend rule — see the strip's own note.
+        */}
+      <CampaignSecondaryStrip
+        totals={k}
+        budget={{ ...budgetTotals, projected: portfolioBudget(budget.data ?? []).projected }}
+        currency={summary.data?.currency ?? null}
+        paused={counts.paused ?? 0}
+        ar={ar}
+      />
 
       {/* View switcher — the five modes of CAMPAIGN-010. */}
       <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-surface-secondary p-1">
@@ -712,10 +784,19 @@ export function CampaignsPage() {
                   : <PlatformDonutChart data={platformSpend.data} centerLabel={ar ? 'الإجمالي' : 'Total'} centerValue={compact(platformSpend.data.reduce((a, b) => a + b.value, 0))} height={200} />}
             </ChartCard>
           </div>
-          <div className="grid gap-4 lg:grid-cols-3">
-            <ChartCard title={ar ? 'حالات الحملات' : 'Campaign statuses'} subtitle={ar ? 'توزيع الحالة' : 'How they break down'}>
-              {statusDonut.length ? <PlatformDonutChart data={statusDonut} colorBy="series" centerLabel={ar ? 'الحملات' : 'Campaigns'} centerValue={String(counts.total)} height={190} /> : <EmptyState title={ar ? 'لا حملات' : 'No campaigns'} />}
-            </ChartCard>
+          {/*
+            * VISUAL-DECISION-001 — the status donut is gone, and the ranking took its column.
+            *
+            * Status IS part-to-whole, so the shape was not wrong; the chart was. Every figure in it
+            * — active, paused, needs attention — is already a number in the health strip at the top
+            * of this page, so it restated what the reader had just read, as a picture, in a third of
+            * a row. One visualisation answers one decision, and «how do my campaigns break down by
+            * status» is not a decision anybody opens this page to make.
+            *
+            * The spend ranking underneath it answers one: which campaign is taking the money. It now
+            * has the width to show more than two bars.
+            */}
+          <div className="grid gap-4">
             <ChartCard
               title={ar ? 'أفضل الحملات' : 'Best campaigns'}
               subtitle={
@@ -723,7 +804,6 @@ export function CampaignsPage() {
                   ? (ar ? `حسب الإنفاق — ${topCampaigns.dropped} غير محتسَبة` : `By spend — ${topCampaigns.dropped} withheld`)
                   : (ar ? 'حسب الإنفاق' : 'By spend')
               }
-              className="lg:col-span-2"
             >
               {topCampaigns === null
                 ? <div className="flex h-[190px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'ترتيب الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend ranking unavailable — partial or multi-currency amounts'}</div>
@@ -845,14 +925,6 @@ export function CampaignsPage() {
         <>
           {/* Filters — search + taxonomy chips for status and objective. */}
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative flex-1">
-                <Search size={15} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-text-muted" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={ar ? 'ابحث في حملات المشروع…' : 'Search this project’s campaigns…'} className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
-              </div>
-              <Select value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
-              <Select value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CANONICAL_OBJECTIVE_KEYS.map((o) => ({ value: o, label: canonicalObjectiveLabel(o, locale) }))]} />
-            </div>
             {/* Taxonomy chips — the same taxonomy the selects use, one tap away, with live counts. */}
             <div className="flex flex-wrap gap-1.5">
             {/*
@@ -869,9 +941,9 @@ export function CampaignsPage() {
                 list is worse than one sorted low.
               */}
               {LIFECYCLE_KEYS.map((key) => (
-                <Chip key={key} testid="lifecycle-chip" active={lifecycleShown.applied === key} onClick={() => setLifecycle(key)}>
+                <Chip key={key} testid="lifecycle-chip" active={lifecycle === key} onClick={() => setLifecycle(key)}>
                   {LIFECYCLE_LABELS[key][ar ? 'ar' : 'en']}{' '}
-                  <span className="tnum" data-testid={`lifecycle-count-${key}`}>{lifecycleShown.counts[key]}</span>
+                  <span className="tnum" data-testid={`lifecycle-count-${key}`}>{lifecycleCounts[key]}</span>
                 </Chip>
               ))}
               <Chip active={status === '' && objective === ''} onClick={() => { setStatus(''); setObjective('') }}>{ar ? 'الكل' : 'All'} <span className="tnum">{counts.total}</span></Chip>
@@ -918,17 +990,57 @@ export function CampaignsPage() {
               <EmptyState title={ar ? 'لا توجد حملات تحتاج تدخلًا' : 'Nothing needs attention'} description={ar ? 'كل حملات المشروع مرتبطة بمنصاتها وتنفق ضمن ميزانياتها وتحقق نتائج في الفترة المحددة.' : 'Every campaign in this project is linked to its platform, spending within budget and producing results in the selected period.'} />
             ) : (
               <div className="space-y-2">
+                {/*
+                  * A container with a link in it, not a button with a link inside it.
+                  *
+                  * This was a `<button>` wrapping the whole card, and putting the campaign's own link
+                  * inside one nests an interactive element in an interactive element: invalid HTML,
+                  * ambiguous to a screen reader, unpredictable under keyboard. The name is the
+                  * control now — which is also the rule this page is held to, that a campaign name
+                  * is the way into its detail.
+                  */}
                 {attention.map(({ c, flags }) => (
-                  <button
+                  <div
                     key={c.id}
                     data-testid="attention-row"
-                    onClick={() => navigate(`/campaigns/${projectId}/${c.id}`)}
                     className="flex w-full flex-col gap-2 rounded-2xl border border-border bg-surface p-4 text-start shadow-[var(--shadow-small)] transition-colors hover:border-brand-300 hover:bg-surface-hover"
                   >
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-bold text-text-primary">{c.name}</span>
+                      {/*
+                        * The attention list is the most actionable surface here, so its names are
+                        * links too — a reader triaging six campaigns opens them in tabs. The card
+                        * around it still navigates, for the rest of its area.
+                        */}
+                      <span className="font-bold">
+                        <CampaignLink projectId={projectId} campaignId={c.id} name={c.name} className="text-text-primary" />
+                      </span>
                       <Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge>
                       <Badge tone="neutral">{objectiveLabel(c.objective, locale)}</Badge>
+                      {/*
+                        * VISUAL-DECISION-001 — what is at stake, beside why it is flagged.
+                        *
+                        * The list was ranked by severity and said nothing about size, so «three
+                        * campaigns need you» gave no way to choose between them. An operator triages
+                        * by impact: the one burning 36K outranks the one burning 300, whatever the
+                        * flag count says. Read through the same objective-aware helpers the table
+                        * uses, so a withheld spend or an unreported result says so here too.
+                        */}
+                      <span className="ms-auto flex items-center gap-3 text-xs text-text-secondary">
+                        <span className="inline-flex items-baseline gap-1">
+                          <span className="text-text-muted">{ar ? 'الإنفاق' : 'Spend'}</span>
+                          <MetricCell reading={campaignSpendReading(metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)} locale={locale} />
+                        </span>
+                        {(() => {
+                          const head = campaignHeadline(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)
+
+                          return head === null ? null : (
+                            <span className="inline-flex items-baseline gap-1">
+                              <span className="text-text-muted">{head.label}</span>
+                              <MetricCell reading={head.reading} locale={locale} />
+                            </span>
+                          )
+                        })()}
+                      </span>
                     </div>
                     <ul className="space-y-1">
                       {flags.map((f) => (
@@ -938,7 +1050,7 @@ export function CampaignsPage() {
                         </li>
                       ))}
                     </ul>
-                  </button>
+                  </div>
                 ))}
               </div>
             )
@@ -952,8 +1064,8 @@ export function CampaignsPage() {
               title={ar ? 'لا توجد حملات نشطة في هذه الفترة' : 'Nothing is running in this period'}
               description={
                 ar
-                  ? `${countedCampaigns(lifecycleShown.counts.inactive, 'ar')} متوقفة أو منتهية — اعرض «غير النشطة» للاطلاع عليها.`
-                  : `${countedCampaigns(lifecycleShown.counts.inactive, 'en')} have stopped or finished — open «Inactive» to see them.`
+                  ? `${countedCampaigns(lifecycleCounts.inactive, 'ar')} متوقفة أو منتهية — اعرض «غير النشطة» للاطلاع عليها.`
+                  : `${countedCampaigns(lifecycleCounts.inactive, 'en')} have stopped or finished — open «Inactive» to see them.`
               }
             />
           ) : view === 'cards' ? (
@@ -1017,6 +1129,8 @@ export function CampaignsPage() {
                     <SortableHeader id="spend" label={ar ? 'الإنفاق' : 'Spend'} sort={sort} dir={dir} onSort={applySort} ar={ar} align="end" />
                     <SortableHeader id="results" label={ar ? 'النتائج' : 'Results'} sort={sort} dir={dir} onSort={applySort} ar={ar} align="end" />
                     <th className="p-3 text-center">{ar ? 'تكلفة النتيجة' : 'Cost per result'}</th>
+                    {/* Shown for the objectives that name a return; blank — not «—» — for the rest. */}
+                    <th className="p-3 text-center">{ar ? 'العائد' : 'Return'}</th>
                     <th className="p-3 text-center">{ar ? 'الميزانية' : 'Budget'}</th>
                     <th className="p-3 text-center">{ar ? 'مرتبطة' : 'Linked'}</th>
                   </tr>
@@ -1026,8 +1140,19 @@ export function CampaignsPage() {
                     const m = metricsByCampaign.get(c.id) as Record<string, unknown> | undefined
 
                     return (
-                      <tr key={c.id} data-testid="campaign-row" className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-hover" onClick={() => navigate(`/campaigns/${projectId}/${c.id}`)}>
-                        <td className="p-3 font-semibold text-text-primary">{c.name}</td>
+                      <tr key={c.id} data-testid="campaign-row" className="border-b border-border last:border-0 hover:bg-surface-hover">
+                        {/*
+                          * CAMPAIGN-DRILL-001 — the NAME is the way in, and it is a real link.
+                          *
+                          * The row carried an `onClick` that navigated, which reads as clickable and
+                          * is not: a div handler cannot be opened in a new tab, middle-clicked,
+                          * copied as a link or reached by keyboard, and it routed through the
+                          * unprefixed path, where the portal redirect drops the state carrying «back
+                          * to where you were». An anchor does all of those by being one.
+                          */}
+                        <td className="p-3 font-semibold">
+                          <CampaignLink projectId={projectId} campaignId={c.id} name={c.name} className="text-text-primary" />
+                        </td>
                         <td className="p-3 text-text-secondary">{objectiveLabel(c.objective, locale)}</td>
                         <td className="p-3"><Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge></td>
                         {/*
@@ -1038,6 +1163,23 @@ export function CampaignsPage() {
                         <td className="p-3 text-center"><MetricCell reading={campaignSpendReading(m, ar)} locale={locale} /></td>
                         <td className="p-3 text-center"><MetricCell reading={campaignHeadline(c.objective, m, ar)?.reading ?? null} locale={locale} /></td>
                         <td className="p-3 text-center"><MetricCell reading={campaignEfficiency(c.objective, m, ar)?.reading ?? null} locale={locale} /></td>
+                        {/*
+                          * An objective with no return figure gets an EMPTY cell, not «—».
+                          *
+                          * `MetricCell` renders «—» for a null reading, and «—» in this product means
+                          * «the platform had this and did not give it». An awareness campaign was
+                          * never bought to return revenue, so that sentence is false about it — the
+                          * honest rendering is nothing at all. Checked in the browser, where the
+                          * first version of this column printed «—» on every traffic and awareness
+                          * row while its own comment claimed it printed nothing.
+                          */}
+                        <td className="p-3 text-center">
+                          {(() => {
+                            const ret = campaignReturn(c.objective, m, ar)
+
+                            return ret === null ? null : <MetricCell reading={ret.reading} locale={locale} />
+                          })()}
+                        </td>
                         <td className="p-3 text-center"><span className="tnum">{money(c.total_budget, c.budget_currency)}</span></td>
                         <td className="p-3 text-center"><span className="tnum">{c.external_campaigns_count ?? 0}</span></td>
                       </tr>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowRight, Archive, Pause, Pencil, Play } from 'lucide-react'
 import {
@@ -78,6 +78,14 @@ export function CampaignDetailPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { projectId = '', campaignId = '' } = useParams()
+  /*
+   * Only an in-app path is honoured. `state` is attacker-controllable in principle — it survives a
+   * history entry — so a value that is not a plain absolute path on this origin is discarded rather
+   * than navigated to.
+   */
+  const location = useLocation()
+  const fromState = (location.state as { from?: unknown } | null)?.from
+  const cameFrom = typeof fromState === 'string' && /^\/[^/\\]/.test(fromState) ? fromState : null
   const [sp, setSp] = useSearchParams()
   // Resolve the owner id to a real member name (same source as the edit modal's owner select).
   const usersQ = useQuery({ queryKey: ['users'], queryFn: () => listUsers() })
@@ -196,11 +204,24 @@ export function CampaignDetailPage() {
 
   return (
     <section className="space-y-4">
+      {/*
+        * CAMPAIGN-DRILL-001 — back to where the reader actually came from.
+        *
+        * This always returned to the campaigns list, which was right while the list was the only way
+        * in. Now a campaign is reachable from the dashboard ranking, the movers and the budget table,
+        * and sending a reader who arrived from one of those to a list they never opened loses the
+        * scope they were working in — the filters, the window, the place on the page.
+        *
+        * `state.from` is set by `CampaignLink`. Absent — a pasted URL, a refresh, an older link —
+        * the campaigns list is still the right answer, so the fallback is the previous behaviour
+        * rather than a dead control.
+        */}
       <button
-        onClick={() => navigate('/campaigns')}
+        onClick={() => navigate(cameFrom ?? '/campaigns')}
         className="inline-flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary"
+        data-testid="campaign-detail-back"
       >
-        <ArrowRight size={14} className="rtl:rotate-180" /> {t('back_to_campaigns')}
+        <ArrowRight size={14} className="rtl:rotate-180" /> {cameFrom === null ? t('back_to_campaigns') : t('back_to_where_you_were')}
       </button>
 
       {/* ===== Command-center header ===== */}

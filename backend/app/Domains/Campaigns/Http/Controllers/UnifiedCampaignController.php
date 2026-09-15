@@ -92,8 +92,16 @@ final class UnifiedCampaignController extends Controller
          */
         $counting = clone $query;
 
+        /*
+         * Counted on the ELOQUENT builder, because `->getQuery()` drops the global scopes.
+         *
+         * `$total` below is derived from the same `$counting` and stayed on the model, so it kept
+         * the project and tenant scopes. This line reached through to the underlying query builder
+         * and lost them: one base query, two scopes, two different answers about the same list. The
+         * Campaigns page showed «20 active» above «3 in total» on the demo estate, which is the
+         * first question that surface exists to answer, answered with other projects' campaigns.
+         */
         $counts = (clone $counting)->reorder()
-            ->getQuery()
             ->select('status')
             ->selectRaw('count(*) as c')
             ->groupBy('status')
@@ -102,6 +110,22 @@ final class UnifiedCampaignController extends Controller
             ->all();
 
         $ids = (clone $counting)->reorder()->pluck('id')->map(static fn (mixed $i): string => (string) $i)->all();
+
+        /*
+         * CAMPAIGNS-LEDGER-001 — the lifecycle is applied HERE, over the project, before the cut.
+         *
+         * The workspace computed «active only» in the browser, over the twenty-five rows it happened
+         * to be holding. That is the defect this endpoint was built to remove for ordering — «the
+         * most relevant of the twenty-five newest» — arriving again one control along: on a project
+         * with a hundred campaigns the chip meant «whichever of the first page are active», and the
+         * count beside it described a different set from the list underneath.
+         *
+         * Relevance is already computed a few lines down, because the ordering needs it. Asking it
+         * the same question costs one pass over rows this request was reading anyway, and the page,
+         * the total and the counts then describe one set.
+         */
+        $lifecycleCounts = $this->lifecycleCounts($request, $ids);
+        $ids = $this->narrowToLifecycle($request, $ids);
         $total = count($ids);
 
         $ordered = $this->relevanceOrder($request, $ids);
@@ -128,6 +152,14 @@ final class UnifiedCampaignController extends Controller
                 'current_page' => $page,
                 'last_page' => max(1, (int) ceil($total / $perPage)),
                 'counts' => $counts,
+                /*
+                 * Counted over the set BEFORE the lifecycle narrowed it, because that is what the
+                 * chips offer: «active 2 · inactive 1» has to describe what choosing each one would
+                 * show. Counting the narrowed rows would report «inactive 0» while standing next to
+                 * a control that reveals one, which is the page telling the reader their own filter
+                 * is not there.
+                 */
+                'lifecycle_counts' => $lifecycleCounts,
             ],
         );
     }
@@ -152,6 +184,81 @@ final class UnifiedCampaignController extends Controller
      * falls back to RELEVANCE, which is the ordering the workspace is designed around.
      */
     private const SORTABLE = ['spend', 'results', 'name'];
+
+    /**
+     * The ids a lifecycle leaves, read through the SAME relevance rule the ordering uses.
+     *
+     * `active` is «serving or idle» and `inactive` is «stopped», which is the definition the
+     * workspace states: a campaign switched on and spending nothing is not finished — it is the one
+     * most likely to need somebody. Status alone is the definition `REPORT-SCOPE-SELECTION-001`
+     * warns against, so it is not used here either.
+     *
+     * An unrecognised value narrows nothing. A control that cleared itself to an unknown string
+     * would otherwise empty the workspace and read as «this project has no campaigns».
+     *
+     * @param  list<string>  $ids
+     * @return list<string>
+     */
+    private function narrowToLifecycle(Request $request, array $ids): array
+    {
+        $lifecycle = $request->string('lifecycle')->toString();
+
+        if ($ids === [] || ! in_array($lifecycle, ['active', 'inactive'], true)) {
+            return $ids;
+        }
+
+        $active = $this->classifyActive($request, $ids);
+
+        return $lifecycle === 'active'
+            ? $active
+            : array_values(array_diff($ids, $active));
+    }
+
+    /**
+     * How many campaigns each lifecycle chip would show, over the whole filtered project.
+     *
+     * Read through the same `CampaignRelevance` the narrowing and the ordering use, so the number on
+     * a chip and the list behind it cannot disagree.
+     *
+     * @param  list<string>  $ids
+     * @return array{active:int, inactive:int, all:int}
+     */
+    private function lifecycleCounts(Request $request, array $ids): array
+    {
+        if ($ids === []) {
+            return ['active' => 0, 'inactive' => 0, 'all' => 0];
+        }
+
+        $active = count($this->classifyActive($request, $ids));
+
+        return ['active' => $active, 'inactive' => count($ids) - $active, 'all' => count($ids)];
+    }
+
+    /**
+     * The ids that are NOT stopped — «serving or idle».
+     *
+     * A campaign switched on and spending nothing is not finished; it is the one most likely to need
+     * somebody, which is why status alone is not the definition here either.
+     *
+     * @param  list<string>  $ids
+     * @return list<string>
+     */
+    private function classifyActive(Request $request, array $ids): array
+    {
+        [$from, $to] = $this->relevanceWindow($request);
+
+        $metrics = collect(app(MetricsAggregator::class)->forProjects([$request->route('project')])->byCampaign($from, $to))
+            ->keyBy(fn (array $r): string => (string) $r['campaign_id']);
+
+        $statuses = UnifiedCampaign::query()->whereIn('id', $ids)->pluck('status', 'id');
+        $relevance = app(CampaignRelevance::class);
+        $windowEnd = $to->toDateString();
+
+        return array_values(array_filter($ids, static fn (string $id): bool => $relevance->of([
+            'status' => $statuses[$id] ?? null,
+            'last_active_on' => $metrics->get($id)['last_active_on'] ?? null,
+        ], $windowEnd) !== 'stopped'));
+    }
 
     private function relevanceOrder(Request $request, array $ids): array
     {

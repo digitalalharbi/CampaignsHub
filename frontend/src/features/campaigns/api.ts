@@ -9,6 +9,16 @@ export interface CampaignListParams {
   objective?: string
   search?: string
   /**
+   * CAMPAIGNS-LEDGER-001 — «active only» asked of the SERVER, over the whole project.
+   *
+   * This was computed in the browser over the twenty-five rows the page happened to hold, which is
+   * the silent truncation this list moved its ranking server-side to avoid, one control along: on a
+   * project of a hundred campaigns the chip meant «whichever of the first page are active» while
+   * the count beside it described the project. The server reads it through the same relevance rule
+   * the ordering uses, so the page, the total and the counts describe one set.
+   */
+  lifecycle?: 'active' | 'inactive' | 'all'
+  /**
    * The column the reader chose, ordered SERVER-side over the whole filtered set.
    *
    * Sorting the page the browser holds would answer «the dearest of the most relevant twenty-five»
@@ -27,6 +37,12 @@ export interface CampaignPage {
   lastPage: number
   /** Per status, over the whole FILTERED project — never over the rows that fitted on this page. */
   counts: Record<string, number>
+  /**
+   * Per lifecycle, counted BEFORE the lifecycle narrowed the set — so «active 2 · inactive 1»
+   * describes the two lists the two chips lead to, whichever one is currently applied. Null from a
+   * server that does not send them.
+   */
+  lifecycleCounts: { active: number; inactive: number; all: number } | null
 }
 
 /**
@@ -50,7 +66,13 @@ export function listCampaigns(
     .then((r) => {
       const campaigns = r.data.data ?? []
       const meta = r.data.meta as
-        | { total?: number; current_page?: number; last_page?: number; counts?: Record<string, number> }
+        | {
+            total?: number
+            current_page?: number
+            last_page?: number
+            counts?: Record<string, number>
+            lifecycle_counts?: { active: number; inactive: number; all: number }
+          }
         | undefined
 
       return {
@@ -63,6 +85,12 @@ export function listCampaigns(
          * it is what the page did before, and it can only under-count a bounded list rather than
          * invent campaigns that do not exist.
          */
+        /*
+         * Counted by the server over the whole project, before the lifecycle narrowed it — so a
+         * chip's number describes the list that chip leads to. Absent on an older server, and the
+         * page falls back to what it can see, which under-reports rather than inventing.
+         */
+        lifecycleCounts: meta?.lifecycle_counts ?? null,
         counts: meta?.counts ?? campaigns.reduce<Record<string, number>>((acc, c) => {
           acc[c.status] = (acc[c.status] ?? 0) + 1
 

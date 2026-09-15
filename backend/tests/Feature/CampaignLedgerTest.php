@@ -172,6 +172,117 @@ final class CampaignLedgerTest extends TestCase
         $this->assertSame(7, $meta['counts']['active']);
     }
 
+    /**
+     * And the project is not «every project» — CAMPAIGNS-LEDGER-001, the half the test above cannot see.
+     *
+     * The case above proves the counts describe the project rather than the PAGE, and it holds one
+     * project, so a count that reaches past the project entirely looks identical to a correct one.
+     * It did reach past it. `$counts` was built through `->getQuery()`, which returns the underlying
+     * query builder and drops the model's global scopes with it, while `$total` stayed on the
+     * Eloquent builder and kept them. One base query, two scopes, two different answers about the
+     * same list.
+     *
+     * Observed in the browser on the demo estate before the fix: `total: 3` beside
+     * `counts: {draft: 1, active: 20, paused: 3}` — the Campaigns page reporting «20 active» above
+     * «3 in total», which is the first question that surface exists to answer.
+     */
+    public function test_the_counts_do_not_reach_into_another_project(): void
+    {
+        $this->campaign('Ours', 'active', now()->toDateString(), 5);
+        $this->campaign('Ours paused', 'paused');
+
+        $elsewhere = Project::create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $this->project->client_workspace_id,
+            'name' => 'Another project', 'status' => 'active',
+        ]);
+
+        for ($i = 0; $i < 9; $i++) {
+            UnifiedCampaign::create([
+                'tenant_id' => $this->tenant->id, 'project_id' => $elsewhere->id,
+                'name' => 'Theirs '.$i, 'objective' => 'sales', 'status' => 'active',
+                'total_budget' => 1_000, 'budget_currency' => 'SAR',
+            ]);
+        }
+
+        [, $meta] = $this->list('per_page=25');
+
+        $this->assertSame(2, $meta['total'], 'the total counted another project’s campaigns');
+        $this->assertSame(1, $meta['counts']['active'] ?? 0, 'the active count counted another project’s campaigns');
+        $this->assertSame(1, $meta['counts']['paused'] ?? 0);
+    }
+
+    /**
+     * CAMPAIGNS-LEDGER-001 — «active only» is a question for the SERVER, over the whole project.
+     *
+     * The workspace's lifecycle chips were computed in the browser, over the twenty-five rows the
+     * page happened to be holding. That is the failure this row's own docblock describes for
+     * ordering — «the most relevant of the twenty-five newest» — reintroduced one control along: on
+     * a project with a hundred campaigns, «active and spending» meant «whichever of the first
+     * twenty-five are active», and the count beside it described a different set from the list.
+     *
+     * Relevance is already computed here, because the ordering needs it. Filtering by it costs one
+     * pass over the same rows, before the page is cut — so the page, the total and the counts
+     * describe one set.
+     */
+    public function test_active_only_is_applied_over_the_project_and_not_over_the_page(): void
+    {
+        // Thirty stopped campaigns created most recently, so they fill the first page by `latest()`.
+        $this->estate(30);
+        $serving = $this->campaign('Still serving', 'active', now()->toDateString(), 900);
+
+        [$rows, $meta] = $this->list('per_page=25&lifecycle=active');
+
+        $this->assertSame(1, $meta['total'], 'the total still described every campaign in the project');
+        $this->assertCount(1, $rows, 'the page carried campaigns the lifecycle excluded');
+        $this->assertSame((string) $serving->id, (string) $rows[0]['id']);
+    }
+
+    /** And «inactive» is its complement over the same set — never «the rest of this page». */
+    public function test_inactive_is_the_complement_over_the_whole_project(): void
+    {
+        $this->estate(30);
+        $this->campaign('Still serving', 'active', now()->toDateString(), 900);
+
+        [, $meta] = $this->list('per_page=25&lifecycle=inactive');
+
+        $this->assertSame(30, $meta['total']);
+    }
+
+    /** Asking for nothing in particular still returns everything: a default that hides is not a default. */
+    public function test_no_lifecycle_asked_is_every_campaign(): void
+    {
+        $this->estate(4);
+        $this->campaign('Still serving', 'active', now()->toDateString(), 900);
+
+        [, $meta] = $this->list('per_page=25');
+
+        $this->assertSame(5, $meta['total']);
+    }
+
+    /**
+     * The chips count what choosing them would SHOW, not what the current choice left behind.
+     *
+     * The lifecycle counts are taken before the narrowing, because «active 1 · inactive 30» has to
+     * describe the two lists the two controls lead to. Counted after, «inactive» would read 0 while
+     * standing beside a control that reveals thirty — the page telling the reader their own filter
+     * is not there.
+     */
+    public function test_the_lifecycle_counts_describe_both_chips_whichever_is_applied(): void
+    {
+        $this->estate(30);
+        $this->campaign('Still serving', 'active', now()->toDateString(), 900);
+
+        [, $onActive] = $this->list('per_page=25&lifecycle=active');
+        [, $onInactive] = $this->list('per_page=25&lifecycle=inactive');
+
+        foreach ([$onActive, $onInactive] as $meta) {
+            $this->assertSame(1, $meta['lifecycle_counts']['active']);
+            $this->assertSame(30, $meta['lifecycle_counts']['inactive']);
+            $this->assertSame(31, $meta['lifecycle_counts']['all']);
+        }
+    }
+
     /** A filter narrows the page, the total and the counts together — one set, described once. */
     public function test_a_filter_narrows_everything_together(): void
     {

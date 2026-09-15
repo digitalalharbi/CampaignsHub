@@ -33,14 +33,22 @@ describe('the campaigns ledger', () => {
   })
   afterEach(() => signOut())
 
-  /* A donut of the first twenty-five looks exactly like a donut of the project. */
+  /**
+   * A page of twenty-five must not be mistaken for the project — one row returned, 214 stated.
+   *
+   * This read the bare text «214», which was the status donut's centre value. That donut is gone:
+   * every figure in it was already a number in the health strip above it, so it restated what the
+   * reader had just read, as a picture, in a third of a row. The claim it was asserting is not gone
+   * — the header still states the project's own total — so the assertion moved to the element that
+   * still makes it rather than being deleted with the chart.
+   */
   it('counts the project, not the rows that fitted', async () => {
     vi.mocked(listCampaigns).mockResolvedValue(
       campaignPage([campaign('a')], { total: 214, lastPage: 9, counts: { active: 180, paused: 34 } }),
     )
     renderWithProviders(<CampaignsPage />, { locale: 'en' })
 
-    expect(await screen.findByText('214')).toBeInTheDocument()
+    expect(await screen.findByText('214 campaigns')).toBeInTheDocument()
   })
 
   it('says which page of how many it is showing', async () => {
