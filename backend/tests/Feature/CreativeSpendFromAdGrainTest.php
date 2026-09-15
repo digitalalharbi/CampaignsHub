@@ -122,6 +122,83 @@ final class CreativeSpendFromAdGrainTest extends TestCase
         $this->assertSame(300.0, (float) $row['clicks']);
     }
 
+    /**
+     * CONTENT-KPI-COVERAGE-002 — the RESULT a lead campaign was bought for.
+     *
+     * `entity_daily_metrics` carries `leads`, `sign_ups`, `installs`, `app_opens` and `page_views`.
+     * `creative_daily_metrics` carries none of them, and `CreativeMetrics::SUMS` was written against
+     * that table — so the ad-grain fallback summed spend, impressions and clicks and dropped, at the
+     * point of reading them, the columns holding the answer the campaign exists for.
+     *
+     * The consequence is the owner's reopened defect in its most literal form: a Meta lead-gen
+     * creative shows Spend, Clicks and a conversion rate, and no Results and no Cost per result —
+     * the two cells a lead campaign is actually judged by — while the figures sit in the database
+     * one join away.
+     */
+    public function test_a_lead_creative_reports_the_leads_its_ads_reported(): void
+    {
+        $creative = $this->creative('cr-leads');
+        $this->adWithMetrics($creative, spend: 400.0, impressions: 10_000, clicks: 250, extra: ['leads' => 20]);
+
+        $row = $this->figures($creative);
+
+        $this->assertSame(20.0, (float) ($row['leads'] ?? -1), 'the leads its ads reported never reached the creative');
+    }
+
+    /** And the cost per one, which is the figure a lead campaign is judged by. */
+    public function test_cost_per_lead_is_derived_from_the_spend_and_the_leads(): void
+    {
+        $creative = $this->creative('cr-cpl');
+        $this->adWithMetrics($creative, spend: 400.0, impressions: 10_000, clicks: 250, extra: ['leads' => 20]);
+
+        $row = $this->figures($creative);
+
+        $this->assertSame(20.0, (float) ($row['cpl'] ?? -1), '400 spent for 20 leads is 20 each');
+    }
+
+    /** An app campaign is the same shape with a different noun, and must not be a special case. */
+    public function test_an_app_creative_reports_installs_and_the_cost_of_one(): void
+    {
+        $creative = $this->creative('cr-installs');
+        $this->adWithMetrics($creative, spend: 300.0, impressions: 5_000, clicks: 100, extra: ['installs' => 25]);
+
+        $row = $this->figures($creative);
+
+        $this->assertSame(25.0, (float) ($row['installs'] ?? -1));
+        $this->assertSame(12.0, (float) ($row['cpi'] ?? -1), '300 spent for 25 installs is 12 each');
+    }
+
+    /**
+     * A result nobody reported stays absent, rather than becoming a zero.
+     *
+     * The whole module's rule: an unreported metric is «not reported», not «none». A creative whose
+     * ads sent no `leads` must not acquire `leads = 0` and a cost per lead of infinity.
+     */
+    public function test_a_result_the_platform_never_sent_is_absent_and_not_zero(): void
+    {
+        $creative = $this->creative('cr-silent');
+        $this->adWithMetrics($creative, spend: 90.0, impressions: 1_000, clicks: 30);
+
+        $row = $this->figures($creative);
+
+        $this->assertNull($row['leads'] ?? null, 'a creative acquired leads nobody reported');
+        $this->assertNull($row['cpl'] ?? null, 'a cost per lead was computed from no leads');
+    }
+
+    /** @return array<string, mixed> */
+    private function figures(ExternalCreative $creative): array
+    {
+        $all = app(CreativeMetrics::class)->forCreatives(
+            [(string) $creative->getKey()],
+            Carbon::today()->subDays(7),
+            Carbon::today(),
+        );
+
+        $this->assertArrayHasKey((string) $creative->getKey(), $all, 'the creative reported nothing at all');
+
+        return $all[(string) $creative->getKey()];
+    }
+
     /** Several ads on one creative is what that creative cost, not a race between them. */
     public function test_ads_sharing_a_creative_are_summed(): void
     {
@@ -317,7 +394,7 @@ final class CreativeSpendFromAdGrainTest extends TestCase
         ]);
     }
 
-    private function adWithMetrics(ExternalCreative $creative, float $spend, float $impressions, float $clicks): void
+    private function adWithMetrics(ExternalCreative $creative, float $spend, float $impressions, float $clicks, array $extra = []): void
     {
         $ad = ExternalAd::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->getKey(),
@@ -331,12 +408,12 @@ final class CreativeSpendFromAdGrainTest extends TestCase
             'source_type' => 'api',
         ]);
 
-        $this->metricsFor($ad, $spend, $impressions, $clicks);
+        $this->metricsFor($ad, $spend, $impressions, $clicks, $extra);
     }
 
-    private function metricsFor(ExternalAd $ad, float $spend, float $impressions, float $clicks): void
+    private function metricsFor(ExternalAd $ad, float $spend, float $impressions, float $clicks, array $extra = []): void
     {
-        DB::table('entity_daily_metrics')->insert([
+        DB::table('entity_daily_metrics')->insert(array_merge([
             'id' => (string) Str::uuid(),
             'tenant_id' => $this->tenant->getKey(),
             'project_id' => $this->project->getKey(),
@@ -352,6 +429,6 @@ final class CreativeSpendFromAdGrainTest extends TestCase
             'clicks' => $clicks,
             'created_at' => now(),
             'updated_at' => now(),
-        ]);
+        ], $extra));
     }
 }

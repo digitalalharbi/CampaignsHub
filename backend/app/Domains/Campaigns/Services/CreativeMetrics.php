@@ -54,6 +54,17 @@ final class CreativeMetrics
     ];
 
     /**
+     * Derived figures whose NUMERATOR only the ad grain has — CONTENT-KPI-COVERAGE-002.
+     *
+     * `cpl` is spend over leads and `cpi` is spend over installs, and `creative_daily_metrics` has
+     * neither column. Putting them in `DERIVED` would make them producible for every creative, which
+     * is a promise of an empty cell on any creative whose figures come from the creative table — the
+     * exact thing `ObjectiveAwareKpiTest` guards, and it caught this. They are producible only when
+     * the row came from the grain that can answer them.
+     */
+    private const AD_GRAIN_DERIVED = ['cpl', 'cpi'];
+
+    /**
      * Averaged COLUMNS, which are not derived — carried over from CONTENT-KPI-COLLAPSE-001.
      *
      * `frequency` and `video_avg_watch_seconds` sat in {@see self::DERIVED}, and nothing in
@@ -115,6 +126,29 @@ final class CreativeMetrics
         'video_p75' => 'video_p75',
         'video_p100' => 'video_p100',
         'video_completions' => 'video_completions',
+    ];
+
+    /**
+     * CONTENT-KPI-COVERAGE-002 — the results a creative table cannot hold, and an ad table can.
+     *
+     * `SUMS` above is the column list of `creative_daily_metrics`, and every query in this service
+     * was written against it. `entity_daily_metrics` — the ad grain the fallback reads when a
+     * provider breaks its figures down per ad and not per creative — carries five more: the columns
+     * that hold what a campaign was actually bought for.
+     *
+     * Leaving them out was the owner's reopened defect stated exactly: a Meta lead-gen creative
+     * showed spend, clicks and a conversion rate, and no Results and no Cost per result — the two
+     * cells that decide whether the creative worked — while the leads sat in the database one join
+     * away. They are kept separate from `SUMS` rather than merged into it because the creative-grain
+     * queries name their columns unguarded, and `SUM(leads)` against a table without the column is
+     * not a missing figure, it is a broken page.
+     */
+    private const AD_GRAIN_SUMS = [
+        'leads' => 'leads',
+        'sign_ups' => 'sign_ups',
+        'installs' => 'installs',
+        'app_opens' => 'app_opens',
+        'page_views' => 'page_views',
     ];
 
     /**
@@ -264,7 +298,7 @@ final class CreativeMetrics
 
         $select = ['external_ads.creative_id as creative_id'];
 
-        foreach (self::SUMS as $alias => $column) {
+        foreach ([...self::SUMS, ...self::AD_GRAIN_SUMS] as $alias => $column) {
             if (in_array($column, $entityColumns, true)) {
                 $select[] = "SUM(entity_daily_metrics.{$column}) AS {$alias}";
             }
@@ -396,7 +430,16 @@ final class CreativeMetrics
         $num = static fn (string $key): ?float => ($row[$key] ?? null) === null ? null : (float) $row[$key];
 
         $figures = [];
-        foreach (array_keys(self::SUMS) as $key) {
+        /*
+         * The ad-grain results are read the same way, and their absence means the same thing.
+         *
+         * `shape()` runs for both grains, and the creative-grain row has no `leads` key at all — so
+         * `$num` returns null and the metric is «not reported», which is exactly right for a table
+         * that cannot hold it. Listing them here rather than only in the ad-grain branch keeps one
+         * shaping path for both, which is the property that stopped the two grains disagreeing in
+         * the first place.
+         */
+        foreach ([...array_keys(self::SUMS), ...array_keys(self::AD_GRAIN_SUMS)] as $key) {
             $figures[$key] = $num($key);
         }
 
@@ -418,7 +461,7 @@ final class CreativeMetrics
         // absent from the map and renders as «no data» rather than «not provided» on an awareness
         // creative, which is the weaker of the two true statements.
         $figures['reported']['orders'] = $row['conversions'] !== null;
-        foreach (array_keys(self::SUMS) as $key) {
+        foreach ([...array_keys(self::SUMS), ...array_keys(self::AD_GRAIN_SUMS)] as $key) {
             /*
              * Absent and null are the same answer here: «the platform did not report this».
              *
@@ -479,6 +522,17 @@ final class CreativeMetrics
         $figures['cpc'] = $this->ratio($spend, $clicks);
         $figures['cpm'] = $impressions ? $this->ratio($spend, $impressions / 1000) : null;
         $figures['cpa'] = $this->ratio($spend, $conversions);
+        /*
+         * The cost of the result the campaign was bought for — CONTENT-KPI-COVERAGE-002.
+         *
+         * `ObjectiveFamily::Leads` leads with `cpl` and `App` with `cpi`, and neither was ever
+         * computed: the family named the verdict and the service produced no figure for it, so the
+         * filter below dropped the cell and the card led with whatever came next. `ratio()` returns
+         * null when the denominator is missing or zero, so a creative whose platform reported no
+         * leads gets «not reported» rather than a cost per nothing.
+         */
+        $figures['cpl'] = $this->ratio($spend, $num('leads'));
+        $figures['cpi'] = $this->ratio($spend, $num('installs'));
         $figures['roas'] = $this->ratio($revenue, $spend);
         $figures['conversion_rate'] = $this->ratio($conversions, $clicks);
         $figures['aov'] = $this->ratio($revenue, $conversions);
@@ -780,8 +834,25 @@ final class CreativeMetrics
      */
     private function supportable(array $metrics, ?array $figures = null): array
     {
+        /*
+         * «Can this service produce the metric at all» — now a question about the GRAIN.
+         *
+         * This asked `SUMS`, the creative table's column list, and that was the whole truth when the
+         * creative table was the only source. Since the ad-grain fallback, a creative's figures may
+         * come from `entity_daily_metrics`, which holds the results `creative_daily_metrics` cannot
+         * — so a lead campaign's `leads` and `cpl` were struck from the family's own list before the
+         * availability test could ever see them present.
+         *
+         * The row itself decides: a figure is producible if this service can compute it for the
+         * grain the row actually came from. With no figures to inspect — a card being described
+         * rather than rendered — the conservative answer is the creative table's, which is what
+         * every caller had before and is the right promise to make about a creative in general.
+         */
+        $fromAdGrain = ($figures['grain'] ?? null) === 'ad';
+
         $producible = fn (string $key): bool => array_key_exists($key, self::SUMS)
-            || in_array($key, self::DERIVED, true);
+            || in_array($key, self::DERIVED, true)
+            || ($fromAdGrain && (array_key_exists($key, self::AD_GRAIN_SUMS) || in_array($key, self::AD_GRAIN_DERIVED, true)));
 
         $kept = array_values(array_filter($metrics, $producible));
 
