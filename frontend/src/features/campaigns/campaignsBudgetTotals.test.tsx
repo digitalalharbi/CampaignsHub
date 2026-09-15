@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { CampaignsPage } from './CampaignsPage'
 import type { UnifiedCampaign } from './types'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
@@ -116,8 +116,20 @@ describe('the project budget card over withheld spend', () => {
     ])
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
 
-    // One currency, one figure: nameable, exact, and checkable against the platform.
-    expect(await screen.findByText(/USD spent/)).toBeInTheDocument()
+    /*
+     * One currency, one figure: nameable, exact, checkable against the platform.
+     *
+     * The guarantee is that the spend is stated in the currency it was actually spent in, never
+     * assumed into the project's. It now reads on the secondary strip rather than under a KPI card —
+     * the card was replaced by a compact row, and the assertion moved with the figure rather than
+     * being dropped with the component.
+     *
+     * Waited on the VALUE, not on the container: the strip renders immediately and fills in when
+     * the budget query answers, so asserting on the element the moment it exists asserts on dashes.
+     */
+    await waitFor(() =>
+      expect(screen.getByTestId('campaigns-secondary-strip').textContent ?? '').toContain('USD'),
+    )
     // «0 SAR spent» is exactly the lie this branch replaces.
     expect(screen.queryByText(/SAR spent/)).not.toBeInTheDocument()
   })

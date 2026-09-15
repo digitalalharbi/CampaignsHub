@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { CampaignsPage } from './CampaignsPage'
 import type { UnifiedCampaign } from './types'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
@@ -146,9 +146,17 @@ describe('the spend charts over withheld money', () => {
   it('still draws the ring when every campaign spend is comparable', async () => {
     route({ budget: [budgetRow({ campaign_id: 'c1', spent: 1000 })] })
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
-    // The budget caption proves the page settled before the view is switched.
-    // «1K», not «1.0K»: NUMBER-PRESENTATION-001 drops a decimal that carries no information.
-    expect(await screen.findByText(/1K SAR spent/)).toBeInTheDocument()
+    /*
+     * The spend figure proves the page settled before the view is switched — it is a
+     * synchronisation point, not the subject; the ring below is the subject.
+     *
+     * It reads on the secondary strip now rather than under a KPI card, the budget card having been
+     * replaced by a compact row. «1K», not «1.0K»: NUMBER-PRESENTATION-001 drops a decimal carrying
+     * no information.
+     */
+    await waitFor(() =>
+      expect(screen.getByTestId('campaigns-secondary-strip').textContent ?? '').toContain('1K SAR'),
+    )
     await openOverview()
 
     // The ring states the real ratio; the refusal is for the withheld case alone.

@@ -112,7 +112,12 @@ describe('the Campaigns summary row', () => {
 
     await screen.findByText('40.48 USD')
 
-    expect(screen.getByText('None paused')).toBeInTheDocument()
+    /*
+     * «Need a look» under a zero asserted both that nothing needed reviewing and that it did. The
+     * caption follows the count, and it follows it onto the secondary strip: paused is a fact, and
+     * «what needs me» is the question, so only the question earned a primary card.
+     */
+    expect(screen.getByTestId('campaigns-paused').textContent ?? '').not.toContain('Need a look')
     expect(screen.queryByText('Need a look')).not.toBeInTheDocument()
   })
 })

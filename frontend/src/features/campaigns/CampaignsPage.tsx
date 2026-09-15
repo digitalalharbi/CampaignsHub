@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { StatCard as SharedStatCard } from '@/components/ui/StatCard'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
+import { CampaignSecondaryStrip } from './CampaignSecondaryStrip'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { BarChart3, GitCompare, LayoutGrid, Plus, Rows, Search, TriangleAlert } from 'lucide-react'
@@ -40,9 +41,9 @@ import { ChartCard, PlatformDonutChart, ProgressRing, RankingBarChart, SpendReve
 import { useBudget, useCampaigns, usePlatforms, useSummary, useTimeseries, type BudgetRow } from '@/features/analytics/api'
 import { useLastNDaysRange } from '@/features/analytics/hooks'
 import { ProvenanceBadge, RangeTabs, TrendPill } from '@/features/analytics/components'
-import { compact, money, num, rowCostPer, rowRoas } from '@/features/analytics/format'
+import { compact, money, num } from '@/features/analytics/format'
 import { campaigns as countedCampaigns } from '@/lib/counted'
-import { rankableMoney, resolveMoneySeries, type MoneyTotals } from '@/lib/money/contract'
+import { formatMoneyReading, rankableMoney, readMoney, resolveMoneySeries, type MoneyTotals } from '@/lib/money/contract'
 import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
@@ -548,8 +549,9 @@ export function CampaignsPage() {
    * read the same totals — a withheld or multi-currency total renders as the contract says, never
    * as a zero.
    */
-  const cpaText = rowCostPer(k, 'cpa', 'conversions', summary.data?.currency ?? null)
-  const roasText = rowRoas(k)
+  /* Spend through the canonical reader, so this screen cannot disagree with the two that read the
+   * same totals — a withheld or multi-currency total renders as the contract says, never as zero. */
+  const spendText = formatMoneyReading(readMoney(k, 'spend', summary.data?.currency ?? null, ar), money)
 
   /*
    * CAMP-COMPARE-001 — a delta is absent when there is nothing to compare against, not «unchanged».
@@ -612,41 +614,45 @@ export function CampaignsPage() {
         </div>
       </div>
 
-      {/* Summary cards — CURRENT PROJECT only */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard label={ar ? 'نشطة' : 'Active'} value={String(counts.active ?? 0)} sub={ar ? `${counts.total} إجمالًا` : `${counts.total} in total`} tone="success" />
-        {/*
-          CAMP-COPY-001 — «تحتاج مراجعة» under a zero asserted that nothing needed reviewing and
-          that it needed reviewing. The caption follows the count, and the warning tone with it.
+      {/*
+        * VISUAL-DECISION-001 — four primary figures, then everything else at its own weight.
+        *
+        * This was seven oversized cards over a budget block of four more, so eleven numbers stood
+        * between opening the page and seeing a campaign. The operator's questions on arrival are
+        * «what is running», «what needs me», «what is it costing», «what is it returning», and each
+        * now has one card.
+        *
+        * The rest did not become less true, only less loud. Budget, remaining, forecast, cost per
+        * result, ROAS and the paused count moved into a compact strip that reads in one line — and
+        * every money guarantee moved WITH them, through the same canonical readers, proved in
+        * `campaignSecondaryStrip.test.tsx` where the cards' own tests now live. Nothing is restated
+        * in a second place and nothing is computed twice.
         */}
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <StatCard label={ar ? 'نشطة' : 'Active'} value={String(counts.active ?? 0)} sub={ar ? `${counts.total} إجمالًا` : `${counts.total} in total`} tone="success" />
         <StatCard
-          label={ar ? 'متوقفة' : 'Paused'}
-          value={String(counts.paused ?? 0)}
-          sub={(counts.paused ?? 0) > 0 ? (ar ? 'تحتاج مراجعة' : 'Need a look') : (ar ? 'لا شيء متوقف' : 'None paused')}
-          tone={(counts.paused ?? 0) > 0 ? 'warning' : undefined}
+          testid="campaigns-attention"
+          label={ar ? 'تحتاج تدخلًا' : 'Needs attention'}
+          value={String(attention.length)}
+          sub={attention.length > 0 ? (ar ? 'افتح القائمة' : 'Open the list') : (ar ? 'لا شيء الآن' : 'Nothing right now')}
+          tone={attention.length > 0 ? 'warning' : undefined}
         />
-        <StatCard
-          testid="campaigns-budget-total"
-          label={ar ? 'الميزانية' : 'Budget'}
-          value={!budgetTotals.known
-            ? '—'
-            : budgetTotals.currencyCount > 1
-              ? (ar ? `${budgetTotals.currencyCount} عملات` : `${budgetTotals.currencyCount} currencies`)
-              : money(budgetTotals.total, budgetTotals.currency ?? undefined)}
-          sub={!budgetTotals.known
-            ? (ar ? 'لم تُحدَّد ميزانية لأي حملة' : 'No campaign has a budget set')
-            : budgetTotals.currencyCount > 1
-              ? (ar ? 'ميزانيات بعملات مختلفة — لا تُجمع' : 'Budgets in different currencies — not summed')
-              : budgetTotals.spent === null
-                ? (ar ? 'المصروف غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend unavailable — partial or multi-currency')
-                : ar
-                  ? `مصروف ${money(budgetTotals.spent, budgetTotals.spentCurrency ?? budgetTotals.currency ?? undefined)}`
-                  : `${money(budgetTotals.spent, budgetTotals.spentCurrency ?? budgetTotals.currency ?? undefined)} spent`}
-        />
+        <StatCard testid="campaigns-spend" label={ar ? 'الإنفاق' : 'Spend'} value={spendText} delta={cmp(d.spend)} />
         <StatCard label={ar ? 'النتائج' : 'Results'} value={num(k?.conversions)} delta={cmp(d.conversions)} />
-        <StatCard label="CPA" value={cpaText} delta={cmp(d.cpa)} invert />
-        <StatCard label="ROAS" value={roasText} delta={cmp(d.roas)} />
       </div>
+
+      {/*
+        * The forecast comes from `portfolioBudget`, the same function the pacing block below reads,
+        * so the two cannot disagree about where the period is heading. The rest of the strip's
+        * budget figures keep the page's stricter spend rule — see the strip's own note.
+        */}
+      <CampaignSecondaryStrip
+        totals={k}
+        budget={{ ...budgetTotals, projected: portfolioBudget(budget.data ?? []).projected }}
+        currency={summary.data?.currency ?? null}
+        paused={counts.paused ?? 0}
+        ar={ar}
+      />
 
       {/* View switcher — the five modes of CAMPAIGN-010. */}
       <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-surface-secondary p-1">
