@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\Domains\Integrations\Catalogue\ProviderDisplayName;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -42,6 +43,33 @@ final class ProbeWorkflowsStayReadOnlyTest extends TestCase
                     "$file:".($number + 1).' passes --sync, which writes. A workflow described as read-only must stay read-only.',
                 );
             }
+        }
+    }
+
+    /**
+     * The diagnosis form offers provider keys, and they have to be the keys the DATA uses.
+     *
+     * It offered `google_ads`. No row carries that, so a run with it answers «No external account
+     * matches that filter» — a sentence indistinguishable from «this provider has no accounts», and
+     * exactly the wrong conclusion to hand someone asking why a provider has gone quiet. It was read
+     * as a real Google estate of zero before the second run with `google` agreed by accident.
+     */
+    public function test_the_diagnosis_form_offers_provider_keys_that_exist(): void
+    {
+        $path = dirname(__DIR__, 3).'/.github/workflows/production-diagnostics.yml';
+        $yaml = (string) file_get_contents($path);
+
+        $matched = preg_match("/Provider key to diagnose \(([^)]*)\)/", $yaml, $found);
+        $this->assertSame(1, $matched, 'The provider input lost its list of keys.');
+
+        $known = array_keys(ProviderDisplayName::NAMES);
+
+        foreach (array_map('trim', explode(',', $found[1])) as $offered) {
+            $this->assertContains(
+                $offered,
+                $known,
+                "The diagnosis form offers provider key `{$offered}`, which no account can carry.",
+            );
         }
     }
 }
