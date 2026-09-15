@@ -87,16 +87,38 @@ const LABELS: Record<string, { ar: string; en: string }> = {
   video_views_3s: { ar: 'مشاهدات 3 ثوانٍ', en: '3-second views' },
   video_p100: { ar: 'مشاهدات مكتملة', en: 'Completed views' },
   video_avg_watch_seconds: { ar: 'متوسط مدة المشاهدة', en: 'Average watch time' },
+  /*
+   * Owner defect 94d — the same hole as the comment above, three families later.
+   *
+   * `metricLabel` falls back to the KEY, and eight keys that `ObjectiveFamily::headlineMetrics()`
+   * can ask for had no entry: a leads creative's headline row read `leads` and `cpl`, an engagement
+   * creative read `engagement_rate` and `cpe`, and an app creative read `installs` and `cpi` — raw
+   * English identifiers in the middle of Arabic copy, on the row that carries the most important
+   * figures the card has.
+   *
+   * A list that must cover an enum is guarded by a test now rather than by remembering, because this
+   * is the second time it drifted and the first fix was a comment saying it must not.
+   */
+  leads: { ar: 'العملاء المحتملون', en: 'Leads' },
+  cpl: { ar: 'تكلفة العميل المحتمل', en: 'Cost per lead' },
+  installs: { ar: 'التثبيتات', en: 'Installs' },
+  cpi: { ar: 'تكلفة التثبيت', en: 'Cost per install' },
+  sign_ups: { ar: 'التسجيلات', en: 'Sign-ups' },
+  app_opens: { ar: 'فتحات التطبيق', en: 'App opens' },
+  page_views: { ar: 'مشاهدات الصفحة', en: 'Page views' },
+  engagement_rate: { ar: 'معدل التفاعل', en: 'Engagement rate' },
+  cpe: { ar: 'تكلفة التفاعل', en: 'Cost per engagement' },
 }
 
 export const metricLabel = (key: string, locale: Locale): string =>
   LABELS[key] ? LABELS[key][locale === 'ar' ? 'ar' : 'en'] : key
 
-const RATE = new Set(['ctr', 'conversion_rate', 'view_rate', 'completion_rate', 'hook_rate'])
+const RATE = new Set(['ctr', 'conversion_rate', 'view_rate', 'completion_rate', 'hook_rate', 'engagement_rate'])
 // Every cost carries its currency. `aov`, `cost_per_view` and `cost_per_lpv` were missing, so three
 // headline figures rendered as bare numbers beside ones that named the currency — which reads as a
 // count rather than as money.
-const MONEY = new Set(['spend', 'revenue', 'cpc', 'cpm', 'cpa', 'aov', 'cost_per_view', 'cost_per_lpv'])
+// `cpl`, `cpi` and `cpe` are costs too — a cost without its currency reads as a count.
+const MONEY = new Set(['spend', 'revenue', 'cpc', 'cpm', 'cpa', 'aov', 'cost_per_view', 'cost_per_lpv', 'cpl', 'cpi', 'cpe'])
 
 /**
  * Which of the primitive's kinds a creative metric is — the one place that decides.
