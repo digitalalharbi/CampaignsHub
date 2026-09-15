@@ -1,7 +1,7 @@
 import { Num } from '@/components/ui/Num'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeftRight } from 'lucide-react'
+import { ArrowLeftRight, Eye } from 'lucide-react'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import {
   Bar,
@@ -89,6 +89,7 @@ import {
   type CanonicalObjectiveKey,
 } from '@/features/campaigns/canonicalObjectives'
 import { CampaignLink } from '@/features/campaigns/CampaignLink'
+import { CampaignQuickPreview } from './CampaignQuickPreview'
 import { providerLabel } from '@/features/campaigns/labels'
 
 /** The six platforms this product unifies, in the product's own order (PLATFORM-ORDER-001). */
@@ -1022,6 +1023,15 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
 
 function CampaignsTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
+  /*
+   * VISUAL-DECISION-001 — the preview is an EXTRA affordance, never a step.
+   *
+   * The campaign name goes straight to the canonical detail, because a reader who already knows
+   * which campaign they want should not be made to pass through a summary of it first. The eye
+   * beside it opens the shallow answer for a reader who is still deciding which one to open. One
+   * row, two questions, and neither blocks the other.
+   */
+  const [previewing, setPreviewing] = useState<string | null>(null)
   const c = useCampaigns(projectId, range, filters)
   const s = useSummary(projectId, range, filters)
   /*
@@ -1137,7 +1147,18 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
              * aggregator's `unified_campaign_id` and exactly what the detail route takes. A reader
              * ranking campaigns by spend is one click from asking «why», and the click did not exist.
              */
-            <CampaignLink key="n" projectId={projectId} campaignId={r.campaign_id} name={r.campaign_name} className="font-semibold text-text-primary" />,
+            <span key="n" className="flex items-center gap-1.5">
+              <CampaignLink projectId={projectId} campaignId={r.campaign_id} name={r.campaign_name} className="font-semibold text-text-primary" />
+              <button
+                onClick={() => setPreviewing(previewing === r.campaign_id ? null : r.campaign_id)}
+                data-testid={`campaign-quick-preview-open-${r.campaign_id}`}
+                aria-label={ar ? 'معاينة سريعة' : 'Quick preview'}
+                title={ar ? 'معاينة سريعة' : 'Quick preview'}
+                className="rounded p-0.5 text-text-muted hover:bg-surface-hover hover:text-text-primary"
+              >
+                <Eye size={13} />
+              </button>
+            </span>,
             <PlatformCell key="p" provider={r.provider} />,
             /*
              * MONEY-TRUTH-002, continued — this table sits directly beneath the platform table that
@@ -1163,6 +1184,23 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
           ])}
           initialSort={{ column: 2, dir: 'desc' }}
         />
+        {/*
+          * Beneath the table rather than floating over the row.
+          *
+          * A popover anchored to a cell in a sortable, horizontally scrollable table is a positioning
+          * problem in two writing directions and three browsers, and the Owner asked for «no giant
+          * modal» rather than for a popover specifically. A compact card under the table is readable
+          * at every width, cannot cover the row it describes, and needs no escape handling to dismiss.
+          */}
+        {previewing !== null && (() => {
+          const row = rows.find((r) => r.campaign_id === previewing)
+
+          return row === undefined ? null : (
+            <div className="mt-3">
+              <CampaignQuickPreview row={row} projectId={projectId} range={range} filters={filters} onClose={() => setPreviewing(null)} />
+            </div>
+          )
+        })()}
       </Panel>
 
     </div>
