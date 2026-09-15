@@ -12,6 +12,8 @@ import {
   Pie,
   PieChart,
   ResponsiveContainer,
+  Scatter,
+  ScatterChart,
   Tooltip,
   XAxis,
   YAxis,
@@ -380,5 +382,73 @@ export function ChartCard({ title, subtitle, action, children, className = '' }:
       </div>
       {children}
     </section>
+  )
+}
+
+/**
+ * VISUAL-DECISION-001 — spend against what it bought, for the one decision a ranking cannot answer.
+ *
+ * A ranked bar says which campaign spends most; a cost-per-result column says which is efficient.
+ * Neither answers «where is the money going that is NOT working», because that is a question about
+ * two axes at once: a campaign high on spend and high on cost per result is the one to open first,
+ * and it can sit mid-table on both lists.
+ *
+ * ## What it refuses to plot
+ *
+ * A point needs both coordinates to mean anything. A campaign whose spend is withheld, or whose
+ * cost per result the platform never reported, has no position — and placing it at zero would put
+ * the campaigns we know least about in the corner that reads «cheap and efficient». They are
+ * excluded and COUNTED, and the count is rendered by the caller, because a chart that silently drops
+ * rows is a chart that lies about the estate.
+ */
+export function SpendEfficiencyScatter({
+  points,
+  currency,
+  ar,
+  height = 240,
+}: {
+  points: Array<{ id: string; name: string; spend: number; costPer: number }>
+  currency: string | null
+  ar: boolean
+  height?: number
+}) {
+  if (points.length === 0) {
+    return (
+      <div className="flex items-center justify-center text-center text-xs text-text-muted" style={{ height }}>
+        {ar
+          ? 'لا حملة تحمل إنفاقًا وتكلفة نتيجة معًا في هذه الفترة'
+          : 'No campaign has both a spend and a cost per result in this period'}
+      </div>
+    )
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <ScatterChart margin={{ top: 8, right: 12, bottom: 24, left: 8 }}>
+        <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
+        <XAxis
+          type="number"
+          dataKey="spend"
+          name={ar ? 'الإنفاق' : 'Spend'}
+          tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+          tickFormatter={(v: number) => compact(v)}
+        />
+        <YAxis
+          type="number"
+          dataKey="costPer"
+          name={ar ? 'تكلفة النتيجة' : 'Cost / result'}
+          tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+          tickFormatter={(v: number) => compact(v)}
+          width={48}
+        />
+        <Tooltip
+          cursor={{ strokeDasharray: '3 3' }}
+          contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12, fontSize: 12 }}
+          formatter={(value: number, key: string) => [money(value, currency ?? undefined), key]}
+          labelFormatter={() => ''}
+        />
+        <Scatter data={points} fill="var(--brand-600)" />
+      </ScatterChart>
+    </ResponsiveContainer>
   )
 }
