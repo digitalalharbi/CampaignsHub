@@ -1258,7 +1258,7 @@ export function CreativesPage() {
           creative={creatives[viewerIndex]}
           locale={ar ? 'ar' : 'en'}
           /* This library's own window and currency — the popup never decides what «this period» is. */
-          figures={creativeDialogFigures(creatives[viewerIndex].metrics ?? undefined, data?.currency ?? null, ar)}
+          figures={creativeDialogFigures(creatives[viewerIndex].metrics ?? undefined, data?.currency ?? null, ar, creatives[viewerIndex].headline_metrics ?? [])}
           trend={currentProjectId
             ? (
               <CreativeTrend

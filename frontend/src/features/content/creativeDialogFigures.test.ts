@@ -196,3 +196,56 @@ describe('the figures a creative’s dialog carries', () => {
     expect(find(figures, 'CPC')).toBeDefined()
   })
 })
+
+/**
+ * Owner defect 94f — the popup carries the objective's own result, not only the universal figures.
+ *
+ * Spend, impressions, clicks, CTR, CPC and CPM are true of every creative and, for four families of
+ * eight, omit the one figure that says whether the creative worked. The card is objective-aware; the
+ * popup one click away was not, so the two disagreed about what mattered for the same creative.
+ */
+describe('the objective’s own figures in the dialog', () => {
+  it('shows a leads creative its leads and its cost per lead', () => {
+    const figures = creativeDialogFigures(
+      { spend: 400, impressions: 10000, clicks: 250, ctr: 0.025, cpc: 1.6, cpm: 40, leads: 20, cpl: 20 } as never,
+      'SAR', false, ['spend', 'leads', 'cpl', 'conversion_rate', 'clicks'],
+    )
+    const labels = figures.map((f) => f.label)
+
+    expect(labels).toContain('Leads')
+    expect(labels).toContain('Cost per lead')
+    // And the cost carries its currency, because a cost without one reads as a count.
+    expect(figures.find((f) => f.label === 'Cost per lead')?.value).toContain('SAR')
+  })
+
+  it('shows an app creative its installs and its cost per install', () => {
+    const labels = creativeDialogFigures(
+      { spend: 900, impressions: 5000, clicks: 100, installs: 45, cpi: 20, sign_ups: 12 } as never,
+      'SAR', false, ['spend', 'installs', 'cpi', 'sign_ups', 'app_opens'],
+    ).map((f) => f.label)
+
+    expect(labels).toContain('Installs')
+    expect(labels).toContain('Cost per install')
+    expect(labels).toContain('Sign-ups')
+    // `app_opens` is asked for and this creative has none reported — left out, never shown as «—».
+    expect(labels).not.toContain('App opens')
+  })
+
+  /** A figure already in the universal list is not printed twice. */
+  it('never repeats a figure the fixed list already carries', () => {
+    const labels = creativeDialogFigures(
+      { spend: 100, impressions: 10, clicks: 5, ctr: 0.5, cpc: 20, cpm: 10000 } as never,
+      'SAR', false, ['spend', 'impressions', 'clicks', 'ctr', 'cpm'],
+    ).map((f) => f.label)
+
+    expect(new Set(labels).size).toBe(labels.length)
+  })
+
+  /** Given no objective metrics it behaves exactly as before — the universal figures, nothing added. */
+  it('is unchanged when the objective asks for nothing extra', () => {
+    const before = creativeDialogFigures({ spend: 10, impressions: 2, clicks: 1 } as never, 'SAR', false)
+    const after = creativeDialogFigures({ spend: 10, impressions: 2, clicks: 1 } as never, 'SAR', false, ['spend', 'clicks'])
+
+    expect(after).toEqual(before)
+  })
+})
