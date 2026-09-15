@@ -12,6 +12,7 @@ use App\Domains\Integrations\Console\AcceptStructureSyncCommand;
 use App\Domains\Integrations\Console\CloseAbandonedSyncRunsCommand;
 use App\Domains\Integrations\Console\DiagnoseSyncCommand;
 use App\Domains\Integrations\Console\GoogleAdsAccessCommand;
+use App\Domains\Integrations\Console\MetaSyncProbeCommand;
 use App\Domains\Integrations\Console\ProbeInsightsCommand;
 use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
 use App\Domains\Integrations\Console\QuarantineSandboxRowsCommand;
@@ -97,6 +98,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // provider and writes nothing, which is what makes it safe to point at production.
         DiagnoseSyncCommand::class,
         GoogleAdsAccessCommand::class,
+        MetaSyncProbeCommand::class,
         RenormaliseReportingCurrency::class,
         // INTEG-RUNTIME §7 — asks the provider over a chosen window and stores nothing, which is what
         // separates «the account was quiet» from «the request cannot return rows for this account».
