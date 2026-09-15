@@ -90,6 +90,7 @@ import {
 } from '@/features/campaigns/canonicalObjectives'
 import { CampaignLink } from '@/features/campaigns/CampaignLink'
 import { CampaignQuickPreview } from './CampaignQuickPreview'
+import { bestByRoas, worstByRoas } from './campaignRoasPanels'
 import { providerLabel } from '@/features/campaigns/labels'
 
 /** The six platforms this product unifies, in the product's own order (PLATFORM-ORDER-001). */
@@ -1049,8 +1050,16 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
    */
   const reportingCurrency = useSummary(projectId, range, filters).data?.currency ?? null
   const rows = c.data ?? []
-  const best = rows[0]
-  const worst = [...rows].filter((r) => r.spend > 0).sort((a, b) => (a.roas ?? 0) - (b.roas ?? 0))[0]
+  /*
+   * MONEY-TRUTH — chosen BY ROAS, from the rows that reported one.
+   *
+   * `best` was `rows[0]`, and campaign rows arrive spend-ordered, so a panel headed «أفضل حملة
+   * (ROAS)» named the biggest spender. `worst` sorted on `(a.roas ?? 0)`, which sinks a campaign
+   * whose platform never reported a return to the bottom — «needs a look» naming a campaign nobody
+   * has a figure for, over one that genuinely returned little. See `campaignRoasPanels`.
+   */
+  const best = bestByRoas(rows)
+  const worst = worstByRoas(rows)
   return (
     <div className="space-y-4">
       {/*
