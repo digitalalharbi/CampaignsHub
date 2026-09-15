@@ -88,6 +88,7 @@ import {
   rawObjectivesFor,
   type CanonicalObjectiveKey,
 } from '@/features/campaigns/canonicalObjectives'
+import { CampaignLink } from '@/features/campaigns/CampaignLink'
 import { providerLabel } from '@/features/campaigns/labels'
 
 /** The six platforms this product unifies, in the product's own order (PLATFORM-ORDER-001). */
@@ -1085,7 +1086,7 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
         <Panel title={ar ? 'أفضل حملة (ROAS)' : 'Best campaign (ROAS)'} loading={c.isLoading} error={c.isError}>
           {best && (
             <div>
-              <div className="text-lg font-bold text-text-primary">{best.campaign_name}</div>
+              <div className="text-lg font-bold"><CampaignLink projectId={projectId} campaignId={best.campaign_id} name={best.campaign_name} className="text-text-primary" testid="best-campaign-link" /></div>
               <div className="mt-1 text-sm text-text-secondary">
                 ROAS <span className="tnum font-semibold text-success">{rowRoas(best)}</span> · {ar ? 'إنفاق' : 'spend'} {rowMoney(best, 'spend')}
               </div>
@@ -1095,7 +1096,7 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
         <Panel title={ar ? 'تحتاج مراجعة (أدنى ROAS)' : 'Needs a look (lowest ROAS)'} loading={c.isLoading} error={c.isError}>
           {worst ? (
             <div>
-              <div className="text-lg font-bold text-text-primary">{worst.campaign_name}</div>
+              <div className="text-lg font-bold"><CampaignLink projectId={projectId} campaignId={worst.campaign_id} name={worst.campaign_name} className="text-text-primary" testid="worst-campaign-link" /></div>
               <div className="mt-1 text-sm text-text-secondary">
                 ROAS <span className="tnum font-semibold text-danger">{rowRoas(worst)}</span> · {ar ? 'إنفاق' : 'spend'} {rowMoney(worst, 'spend')}
               </div>
@@ -1129,7 +1130,14 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
         <MetricTable
           head={ar ? ['الحملة', 'المنصة', 'الإنفاق', 'الإيرادات', 'النتائج', 'CPA', 'ROAS'] : ['Campaign', 'Platform', 'Spend', 'Revenue', 'Results', 'CPA', 'ROAS']}
           rows={rows.map((r) => [
-            <span key="n" className="font-semibold text-text-primary">{r.campaign_name ?? '—'}</span>,
+            /*
+             * CAMPAIGN-DRILL-001 — the name is the way in.
+             *
+             * This printed the name and the row already carried `campaign_id`, which is the
+             * aggregator's `unified_campaign_id` and exactly what the detail route takes. A reader
+             * ranking campaigns by spend is one click from asking «why», and the click did not exist.
+             */
+            <CampaignLink key="n" projectId={projectId} campaignId={r.campaign_id} name={r.campaign_name} className="font-semibold text-text-primary" />,
             <PlatformCell key="p" provider={r.provider} />,
             /*
              * MONEY-TRUTH-002, continued — this table sits directly beneath the platform table that
@@ -1481,7 +1489,8 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
                   : undefined
 
           return [
-            <span key="n" className="font-semibold text-text-primary">{r.campaign_name}</span>,
+            /* CAMPAIGN-DRILL-001 — a budget row names a campaign, and «why is it pacing like this» is one click. */
+            <CampaignLink key="n" projectId={projectId} campaignId={r.campaign_id} name={r.campaign_name} className="font-semibold text-text-primary" />,
             money(r.budget, r.budget_currency ?? undefined),
             r.spent === null
               ? <span key="s" className="text-text-muted" title={basisNote}>—</span>
