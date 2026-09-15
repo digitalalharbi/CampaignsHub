@@ -21,7 +21,9 @@ import { buildGeneratedClientReport } from './report-builder'
 test.use({ storageState: AUTH.owner })
 
 test('export → download → the XLSX and CSV a person receives are real files carrying the real figures', async ({ page }) => {
-  test.setTimeout(240_000)
+  // Two full export cycles — queue, poll, download — each with its own reload, and webkit is the
+  // slowest of the three under gate load.
+  test.setTimeout(420_000)
 
   const { projectId, reportId } = await buildGeneratedClientReport(page, `E2E TABULAR ${Date.now()}`)
 
@@ -97,7 +99,6 @@ test('export → download → the XLSX and CSV a person receives are real files 
 
   const platformRows: string[][] = []
   for (let i = headerAt + 1; i < lines.length && lines[i].trim() !== ''; i++) platformRows.push(cells(lines[i]))
-  expect(platformRows.length, 'the CSV names no platform at all').toBeGreaterThan(0)
 
   /*
    * The figures in the file are the figures the product reports.
@@ -108,16 +109,38 @@ test('export → download → the XLSX and CSV a person receives are real files 
   const data = (await (await page.request.get(reportUrl, { headers: API_HEADERS })).json()).data as {
     is_demo?: boolean
     exports: ExportRow[]
-    snapshot?: { platforms?: Array<{ provider?: string; spend?: number | string }> }
+    data?: { platforms?: Array<{ provider?: string; spend?: number | string }> }
   }
-  const apiPlatforms = data.snapshot?.platforms ?? []
-  if (apiPlatforms.length > 0) {
-    const round = (n: number) => Math.round(n * 100) / 100
-    const fromFile = round(platformRows.reduce((s, r) => s + (Number(r[1]) || 0), 0))
-    const fromApi = round(apiPlatforms.reduce((s, p) => s + (Number(p.spend) || 0), 0))
-    expect(fromFile, 'the CSV spend does not reconcile with the report the API serves').toBeCloseTo(fromApi, 2)
-    expect(platformRows.map((r) => r[0]).sort()).toEqual(apiPlatforms.map((p) => String(p.provider ?? '')).sort())
-  }
+  /*
+   * Reconciled in BOTH directions, which is why there is no «and there must be at least one».
+   *
+   * The first version required a platform row outright, and the gate's freshly seeded project does
+   * not always have spend in the window the builder picks — so the test failed on three browsers
+   * for a report that was entirely correct and empty. Requiring rows asserts the seed, not the
+   * product.
+   *
+   * Dropping the requirement without replacing it would leave a test that passes on an empty file,
+   * which is the worse failure. So the file and the API are held to the SAME answer: every provider
+   * the API reports appears in the CSV, no provider appears that the API does not, and the money
+   * adds up. An empty report then passes only if the CSV is empty too, and a report with figures
+   * cannot pass unless the file carries them.
+   */
+  /*
+   * `show()` puts the generated payload under `data`, the same key the report model uses. The first
+   * version of this read `snapshot`, which does not exist — so the list was always empty and the
+   * comparison guarded by it never ran at all. A reconciliation against an always-empty array is
+   * the vacuous pass this file exists to avoid.
+   */
+  const apiPlatforms = data.data?.platforms ?? []
+  const round = (n: number) => Math.round(n * 100) / 100
+
+  expect(platformRows.map((r) => r[0]).sort(), 'the CSV and the API disagree about which platforms ran')
+    .toEqual(apiPlatforms.map((p) => String(p.provider ?? '')).sort())
+
+  expect(
+    round(platformRows.reduce((sum, r) => sum + (Number(r[1]) || 0), 0)),
+    'the CSV spend does not reconcile with the report the API serves',
+  ).toBeCloseTo(round(apiPlatforms.reduce((sum, p) => sum + (Number(p.spend) || 0), 0)), 2)
 
   /*
    * And the file is not a demo file.
