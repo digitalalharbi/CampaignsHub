@@ -85,8 +85,17 @@ final class TaskController extends Controller
 
         $page = $query->paginate(min(max($request->integer('per_page', 25), 1), 100));
 
+        /*
+         * Counted on the ELOQUENT builder. `->getQuery()` returns the underlying query builder and
+         * drops every global scope with it, and `Task` carries `BelongsToTenant` and
+         * `BelongsToProject` — so this status breakdown counted other projects' and other tenants'
+         * tasks while the page beside it showed this project's.
+         *
+         * Third occurrence of one line in three controllers. The campaigns ledger reported «20
+         * active» for a project holding three, and the sync-run log attributed other pipelines'
+         * failures to whoever was reading.
+         */
         $byStatus = (clone $counting)->reorder()
-            ->getQuery()
             ->select('status')
             ->selectRaw('count(*) as c')
             ->groupBy('status')

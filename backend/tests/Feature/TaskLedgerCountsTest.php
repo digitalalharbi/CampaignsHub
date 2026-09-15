@@ -115,6 +115,59 @@ final class TaskLedgerCountsTest extends TestCase
     }
 
     /** A completed task past its due date is not overdue — it is done. */
+    /**
+     * And «everything» is this project's everything — `->getQuery()` is how it stopped being.
+     *
+     * The case above proves the counts describe the whole set rather than the PAGE, and it holds one
+     * project, so a count reaching past the project entirely is indistinguishable from a correct one.
+     * The breakdown was built by dropping to the underlying query builder, which leaves every global
+     * scope behind — and `Task` carries `BelongsToTenant` and `BelongsToProject`.
+     *
+     * Third controller with the same line. The campaigns ledger reported «20 active» for a project
+     * holding three; the sync-run log attributed other pipelines' failures to whoever was reading;
+     * here it is «51 open» over somebody else's backlog.
+     */
+    public function test_the_project_scoped_counts_do_not_reach_into_another_project(): void
+    {
+        $this->task('todo');
+        $this->task('done');
+
+        $elsewhere = Project::create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $this->project->client_workspace_id,
+            'name' => 'Another project', 'status' => 'active',
+        ]);
+
+        for ($i = 0; $i < 8; $i++) {
+            Task::create([
+                'tenant_id' => $this->tenant->id, 'project_id' => $elsewhere->id,
+                'title' => 'Theirs '.$i, 'status' => 'todo', 'priority' => 'medium',
+                'created_by' => $this->user->id, 'due_date' => null,
+            ]);
+        }
+
+        /*
+         * The PROJECT-scoped route, not the workspace one.
+         *
+         * `/api/v1/tasks` is tenant-wide by design — counting the tenant's other projects there is
+         * the correct answer, and my first version asserted against it and was rightly refused.
+         * `/api/v1/projects/{id}/tasks` is the one that promises a project, and it is the one
+         * `->getQuery()` was quietly breaking.
+         */
+        $res = $this->actingAs($this->user, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->project->id}/tasks")
+            ->assertOk();
+        $meta = (array) $res->json('meta');
+
+        /*
+         * `open` is the leak-sensitive figure: eight of the other project's nine tasks are `todo`,
+         * so an unscoped count reads 9 where this project has 1. The page beside it returns 2 rows
+         * either way, which is exactly why the discrepancy was invisible.
+         */
+        $this->assertCount(2, (array) $res->json('data'), 'the page itself was never unscoped');
+        $this->assertSame(1, $meta['counts']['open'], 'the open count reached into another project');
+    }
+
     public function test_a_finished_task_is_never_counted_overdue(): void
     {
         $this->task('completed', Carbon::now()->subWeek()->toDateString());

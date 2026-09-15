@@ -63,8 +63,18 @@ final class SyncRunController extends Controller
             ->when($filters['provider'] ?? null, fn ($q, $v) => $q->where('provider', $v))
             ->when($filters['status'] ?? null, fn ($q, $v) => $q->where('status', $v));
 
+        /*
+         * Counted on the ELOQUENT builder — `->getQuery()` returns the underlying query builder and
+         * leaves every global scope behind, and `MetricSyncRun` carries two: `BelongsToTenant` and
+         * `BelongsToProject`. This summary, and the total derived from it, counted runs belonging to
+         * other projects and other TENANTS.
+         *
+         * The same line caused the campaign status counts to report «20 active» for a project
+         * holding three, and it is worse on this surface: «14 failed syncs» attributed to a project
+         * that had two is a verdict about somebody else's pipeline, on the page an operator consults
+         * to decide whether to trust their own figures.
+         */
         $summary = $scope()->reorder()
-            ->getQuery()
             ->select('status')
             ->selectRaw('count(*) as c')
             ->groupBy('status')
