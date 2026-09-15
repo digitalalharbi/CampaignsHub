@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, switchToEnglish } from './helpers'
+import { AUTH, csrfHeaders, seededProject, switchToEnglish } from './helpers'
 
 /**
  * LAUNCH-SUCCESS-001 — the launch moment, proven against a launch that really happened.
@@ -12,19 +12,30 @@ import { AUTH, switchToEnglish } from './helpers'
 
 test.use({ storageState: AUTH.advertiser })
 
-/** Create a draft campaign through the UI and open it. Returns its name. */
+/**
+ * Create a draft campaign and open it. Returns its name.
+ *
+ * Built through the API rather than by typing into the form and then hunting the new card in the
+ * list. The first version did exactly that and passed alone and failed in a suite: by then other
+ * specs had filled the project with campaigns of their own, and «the card with my name on it» had
+ * become a question about ordering and pagination rather than about launching anything. The campaign
+ * is a FIXTURE here; the launch is the subject, and a fixture should not be able to fail for reasons
+ * the subject knows nothing about.
+ */
 async function createDraftCampaign(page: import('@playwright/test').Page): Promise<string> {
-  await page.goto('/app/campaigns')
-  await expect(page.getByTestId('view-overview')).toBeVisible({ timeout: 20000 })
-  await page.getByRole('button', { name: /New campaign|حملة جديدة/ }).click()
-
+  const headers = await csrfHeaders(page.request)
+  const projectId = await seededProject(page.request, 'Growth — Acquisition')
   const name = `E2E Launch ${Date.now()}`
-  await page.getByLabel(/Campaign name|اسم الحملة/).fill(name)
-  await page.getByRole('button', { name: /^Save$|^حفظ$/ }).click()
 
-  await page.getByTestId('view-cards').click()
-  await page.getByText(name).click()
-  await expect(page).toHaveURL(/\/campaigns\/[^/]+\/[^/]+/)
+  const created = await page.request.post(`/api/v1/projects/${projectId}/campaigns`, {
+    headers,
+    data: { name, objective: 'sales', total_budget: 15000, budget_currency: 'SAR' },
+  })
+  expect(created.ok()).toBeTruthy()
+  const id = (await created.json()).data.id as string
+
+  await page.goto(`/app/campaigns/${projectId}/${id}`)
+  await expect(page.getByRole('button', { name: /^Activate$|^تفعيل$/ })).toBeVisible({ timeout: 20000 })
 
   return name
 }
