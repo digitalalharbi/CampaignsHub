@@ -77,6 +77,61 @@
   line-gap-override: 0%;
 }
 
+/*
+  MKT-FIX-001 residual — and the Arabic half of it, which was left alone for the wrong reason.
+
+  The Latin fallback above closed the English shift, and Arabic was deliberately not touched because
+  its WIDTH measured within one per cent of IBM Plex Sans Arabic. That reasoning was sound about
+  width and beside the point about layout: a shift is line boxes moving, and line boxes are vertical.
+
+  Measured on the deployed site at 100px, IBM Plex Sans Arabic against the system Arabic face macOS
+  actually substitutes:
+
+      line height   150   vs  137   (+9.5%)
+      ascent        109   vs   90   (+21%)
+      descent        41   vs   33   (+24%)
+
+  That is the production shift, arithmetically: a 12.5px line painted 16.875px tall in the fallback
+  and 18px once Plex arrives, with everything below it pushed down. Cold-load CLS on campaignshub.io
+  measured 0.0375 at 390px and 393px — one shift entry, at 691ms, the moment the Arabic face lands.
+
+  So the substitute is given Plex's line box. Tuned BY MEASUREMENT, and corrected three times by it:
+
+    1. `local('Geeza Pro')` — the face macOS actually substitutes — cannot be matched by `local()` at
+       all in Chromium. Declared alone it resolved to NOTHING and the whole face fell through, which
+       measures identically to having done no work. The src list is now four faces PROVEN to resolve.
+    2. `size-adjust` multiplies the overridden metrics rather than sitting beside them: 109% + 41% at
+       `size-adjust: 104.8%` produced a 157px line, not 150. The overrides are therefore the target
+       line divided by the size adjustment, kept in Plex's own 109:41 ratio.
+    3. Width was 18.47% narrow at `size-adjust: 100%`, which matters even though the shift is
+       vertical — a narrower substitute wraps to fewer lines and reflows when the real face lands.
+
+  Final, measured on the deployed stylesheet against the real face at 100px:
+
+      line   150 vs 150   0.00%
+      width  1872.81 vs 1868.83   -0.21%
+
+  `ascent-override` and `descent-override` decide the line box whatever face `local()` resolves to on
+  a given host, so the vertical fix holds even where the width tuning does not — which is what makes
+  this deterministic on a phone nobody here can measure.
+
+  Bounded to Arabic, for the reason the face above is bounded to Latin: a `@font-face` with no
+  `unicode-range` answers for every codepoint, and one such face put `ArialMT` into a client's
+  Arabic PDF in place of the brand face.
+*/
+@font-face {
+  font-family: 'Plex Arabic Fallback';
+  /* Real family names only. A CSS generic here matches nothing and fails silently. */
+  src: local('Al Nile'), local('Baghdad'), local('Damascus'), local('Tahoma');
+  /* IBM Plex Sans Arabic's own coverage, and not one codepoint beyond it. */
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF,
+    U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+  size-adjust: 125.3%;
+  ascent-override: 87.0%;
+  descent-override: 32.7%;
+  line-gap-override: 0%;
+}
+
 
 :root {
   /* ---- Brand + semantic color ---- */
@@ -182,8 +237,8 @@
   --radius-pill: 999px;
 
   /* ---- Typography: families (Latin→Inter, Arabic→Plex; ordered so each script picks its own) ---- */
-  --font-body: 'Inter Variable', 'Inter Fallback', 'IBM Plex Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-heading: 'Inter Variable', 'Inter Fallback', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+  --font-body: 'Inter Variable', 'Inter Fallback', 'IBM Plex Sans Arabic', 'Plex Arabic Fallback', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: 'Inter Variable', 'Inter Fallback', 'IBM Plex Sans Arabic', 'Plex Arabic Fallback', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', 'IBM Plex Sans Arabic', monospace;
 
   /* ---- Typography: scale (rem, 1rem = 16px). Never smaller than 13px for real text. ---- */
