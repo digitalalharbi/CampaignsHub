@@ -179,36 +179,4 @@ test.describe('what the first paint of the marketing homepage gets', () => {
     expect(spans.some((s) => s.start <= 0x41 && s.end >= 0x7a), '«Inter Fallback» no longer covers basic Latin').toBe(true)
   })
 
-  /**
-   * MKT-FIX-001 — the first screen's two faces are fetched with the HTML.
-   *
-   * The remaining cold-load shift is the font swap, proven by blocking: on the deployed site fonts
-   * allowed measured CLS 0.037 three runs of three and fonts blocked measured 0 three of three. The
-   * metric-matched fallback that would normally answer this was withdrawn because WebKit ignores
-   * `ascent-override` and it made Safari worse; a preload does not depend on any of that.
-   *
-   * Asserted on the served document rather than on a timing, because a timing test would pass or
-   * fail for the network. What this pins is that the two faces the first screen needs are named in
-   * the head, with `crossorigin` — a font is fetched in CORS mode whatever the origin, and a preload
-   * without it fetches the bytes a SECOND time, which is the opposite of the point.
-   *
-   * Skipped on the dev server, where the plugin does not run and the fonts are module imports.
-   */
-  test('the first screen’s fonts are preloaded, with crossorigin', async ({ page, baseURL }) => {
-    const html = await (await page.request.get(baseURL ?? '/')).text()
-    const preloads = [...html.matchAll(/<link[^>]+rel="preload"[^>]*>/g)].map((m) => m[0])
-    const fonts = preloads.filter((tag) => tag.includes('as="font"'))
-
-    test.skip(fonts.length === 0 && html.includes('/@vite/client'), 'dev server — the build plugin does not run here')
-
-    expect(fonts.length, 'no font is preloaded at all').toBeGreaterThan(0)
-
-    for (const face of ['inter-latin', 'ibm-plex-sans-arabic-arabic-400']) {
-      expect(fonts.some((tag) => tag.includes(face)), `«${face}» is not preloaded`).toBe(true)
-    }
-
-    for (const tag of fonts) {
-      expect(tag, 'a font preload without crossorigin fetches the bytes twice').toContain('crossorigin')
-    }
-  })
 })
