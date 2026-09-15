@@ -1016,6 +1016,31 @@ export function CampaignsPage() {
                       </span>
                       <Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge>
                       <Badge tone="neutral">{objectiveLabel(c.objective, locale)}</Badge>
+                      {/*
+                        * VISUAL-DECISION-001 — what is at stake, beside why it is flagged.
+                        *
+                        * The list was ranked by severity and said nothing about size, so «three
+                        * campaigns need you» gave no way to choose between them. An operator triages
+                        * by impact: the one burning 36K outranks the one burning 300, whatever the
+                        * flag count says. Read through the same objective-aware helpers the table
+                        * uses, so a withheld spend or an unreported result says so here too.
+                        */}
+                      <span className="ms-auto flex items-center gap-3 text-xs text-text-secondary">
+                        <span className="inline-flex items-baseline gap-1">
+                          <span className="text-text-muted">{ar ? 'الإنفاق' : 'Spend'}</span>
+                          <MetricCell reading={campaignSpendReading(metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)} locale={locale} />
+                        </span>
+                        {(() => {
+                          const head = campaignHeadline(c.objective, metricsByCampaign.get(c.id) as Record<string, unknown> | undefined, ar)
+
+                          return head === null ? null : (
+                            <span className="inline-flex items-baseline gap-1">
+                              <span className="text-text-muted">{head.label}</span>
+                              <MetricCell reading={head.reading} locale={locale} />
+                            </span>
+                          )
+                        })()}
+                      </span>
                     </div>
                     <ul className="space-y-1">
                       {flags.map((f) => (
