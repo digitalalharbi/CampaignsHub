@@ -155,23 +155,50 @@ final class ReportCreativeMedia
      */
     private function walkSections(array $data, callable $each): array
     {
-        foreach (['ads', 'ads_roster', 'worst_creatives', 'top_creatives'] as $key) {
+        foreach (['ads_roster', 'worst_creatives', 'top_creatives'] as $key) {
             if (is_array($data[$key] ?? null)) {
                 $data[$key] = $each(array_values($data[$key]));
             }
         }
 
-        // The objective groups nest their own ranked ads — REPORT-AD-PREVIEW-001 §A.
-        if (is_array($data['ads_groups'] ?? null)) {
-            $data['ads_groups'] = array_map(static function ($group) use ($each) {
-                if (is_array($group) && is_array($group['ads'] ?? null)) {
-                    $group['ads'] = $each(array_values($group['ads']));
-                }
+        return self::walkAdLists($data, $each);
+    }
 
-                return $group;
-            }, $data['ads_groups']);
+    /**
+     * Every `ads` list in the document, at whatever depth it sits.
+     *
+     * This was a list of section names, and the list rotted twice. `ads_groups` nests its ads one
+     * level down and had to be added by hand; `ads_platform_groups` — provider, then objective
+     * family, then ads — arrived later and was never added at all, so an ad in the detailed
+     * report's platform rung kept a preview URL that had expired while the same ad one section over
+     * was refreshed. That is this requirement's own defect, surviving in the newest place it can
+     * occur.
+     *
+     * Keyed on `ads` rather than on «anything with an id», which preserves the reason the sections
+     * were named in the first place: a sweep by id would also find campaigns, ad sets, platforms
+     * and funnel stages, and would hand each of them a creative's preview envelope. What changed is
+     * where the walk LOOKS, not what it is willing to recognise.
+     *
+     * @param  callable(list<array<string, mixed>>): list<array<string, mixed>>  $each
+     * @param  array<string, mixed>  $node
+     * @return array<string, mixed>
+     */
+    private static function walkAdLists(array $node, callable $each): array
+    {
+        foreach ($node as $key => $value) {
+            if (! is_array($value)) {
+                continue;
+            }
+
+            if ($key === 'ads') {
+                $node[$key] = $each(array_values($value));
+
+                continue;
+            }
+
+            $node[$key] = self::walkAdLists($value, $each);
         }
 
-        return $data;
+        return $node;
     }
 }
