@@ -1,5 +1,46 @@
 # Active execution state
 
+_Reconciled from Git on 2026-09-16. When this file and Git disagree, Git is right._
+
+## Where Git is (2026-09-16)
+
+`origin/main` = **`312a7572` (#433)**. Eleven merges landed since `288bc48d` (#422): #423, #424,
+#425, #426, #427, #428, #429, #430, #431, #433. **#432 is open** (`mkt-preload-heading-weight`,
+`3c71f3c6`, `mergeStateStatus=BLOCKED`, `frontend` and `image` green, `backend` and the three
+`gate` checks not reported). #432 is the Marketing cold-load lane and is not part of either closure.
+
+## The execution model, changed by the Owner on 2026-09-16
+
+The parent session no longer implements. It coordinates: it reads state, controls merge order and
+records blockers. Product work happens in two isolated child workspaces, each with its own branch
+and worktree cut from fresh `main`:
+
+- **CONTENT CLOSURE — OWNER P0** · `owner/content-closure-p0` · Content only.
+- **REPORTS CLOSURE — OWNER P0** · `owner/reports-closure-p0` · Reports only.
+
+**WIP limit: one branch each, preferably one closure PR each.** No stream of micro-PRs. No shared
+worktree, no shared branch, no cherry-picking between children. Merge order is Content, then
+Reports rebased on fresh main and re-gated — one merge chain at a time, which matters because
+auto-merge is disabled on this repository and every merge invalidates the other's «up to date».
+
+## The queue that is neither child's
+
+These stay in the Matrix and must not be pulled into a closure branch: Marketing cold-load
+stability (#432 and MKT-FIX-001), Meta re-authorisation, Google OAuth, LinkedIn verification under
+a currently-spending campaign, TikTok, X Ads, Salla/Zid, Dashboard / Campaigns / Analytics /
+Budgets acceptance, Recommendations, Alerts, Tasks, Files, Settings, subscription verification,
+and Production acceptance of the launch success experience.
+
+## What the Owner's 2026-09-16 observation changed in the Matrix
+
+`REPORT-PRODUCT-MODEL-001` read **VERIFIED**. The Owner reports that the modes render effectively
+the same product, and a Production observation outranks a stale VERIFIED claim, so it now reads
+**PARTIAL** with the observation recorded on the row. Two rows were added to the Owner defect
+register — 95 (Content metric inconsistency and the missing previews) and 96 (report modes that do
+not differ) — so that neither can disappear under the words «Content» or «Reports».
+
+## Everything below is the earlier record, kept because its reasoning still applies
+
 _Reconciled from Git on 2026-09-14. It had been left at #362 while `origin/main` reached #404 —
 when this file and Git disagree, Git is right._
 

@@ -1,4 +1,68 @@
-# START HERE — 2026-09-15 (reconciled from Git)
+# START HERE — 2026-09-16 (session reset; parent is coordinator only)
+
+Read this file, then `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then `git log origin/main`.
+
+**Git is the authority. This file is a summary of it and goes stale between runs — when the two
+disagree, Git is right.**
+
+## Where Git is
+
+`origin/main` = **`312a7572` (#433)**.
+
+Merged since `288bc48d` (#422), in order: #423 the premium launch success experience · #424 one
+definition of «needs attention» · #425 the error-persistence contract and the Save-accounts
+feedback · #426 four Content defects found by enumerating the vocabulary · #427 a hidden report
+section that still shipped its figures · #428 the read-only Meta access probe workflow · #429
+LinkedIn's round trip and the disconnect that could leave a project syncing · #430 the two faces
+fetched with the HTML · #431 the wizard's first-sync outcome · #433 what asking Meta directly said.
+
+**Open: #432** (`mkt-preload-heading-weight`, head `3c71f3c6`) — Marketing cold-load stability, the
+hero heading's own weight. `mergeStateStatus=BLOCKED`; `frontend` and `image` green, `backend` and
+the three `gate` checks not reported. It belongs to the Marketing lane and **must not be absorbed
+into the Content or Reports closure branches.**
+
+## The execution model from 2026-09-16
+
+The parent session is **coordinator only** — state reader, merge-order controller, blocker recorder.
+It does not write feature code. Two isolated child workspaces own the two open P0 products:
+
+| Child workspace | Branch | Worktree | Scope |
+|---|---|---|---|
+| CONTENT CLOSURE — OWNER P0 | `owner/content-closure-p0` | `CampaignsHub-lanes/content-closure-p0` | Content only |
+| REPORTS CLOSURE — OWNER P0 | `owner/reports-closure-p0` | `CampaignsHub-lanes/reports-closure-p0` | Reports only |
+
+Merge order is **Content first, then Reports rebased on fresh main and re-gated.** One merge chain
+at a time. Neither child may edit the other's files; a shared file is owned by one child and
+recorded as a dependency by the other.
+
+## The two Owner P0s, which no label may absorb
+
+- **Content** — `OWNER_OBSERVED_DEFECTS.md` row 95. Metrics are inconsistent in Production:
+  sometimes the KPIs appear and Spend is missing, sometimes Spend appears and the KPIs disappear.
+  Everything legitimately available must render together for the same creative, period and scope,
+  across card → popup → Content Analytics → Reports. `0` stays a real zero; unavailable stays `—`;
+  nothing is derived to fill a gap. The media half — a promoted creative with no visible preview
+  where provider media exists — stays open with rows 1–12, and withheld / expired / unavailable /
+  no-media stay four distinct states.
+- **Reports** — `OWNER_OBSERVED_DEFECTS.md` row 96. The surface exposes modes and options, and the
+  reports it renders look effectively the same. Executive Summary must be structurally different
+  from Detailed rather than Detailed with sections hidden; Client must differ from Internal where
+  configured; every setting must travel saved config → domain/service → payload → renderer →
+  snapshot → export, or be removed. `REPORT-PRODUCT-MODEL-001` was **downgraded VERIFIED → PARTIAL**
+  on this observation.
+
+Neither closes on tests, CI, a merge or a deploy. Both close on the Owner seeing it in Production.
+
+## What still needs the Owner, and nobody else can do
+
+- **Meta** — re-authorise the connection (fresh consent, a user token that can identify itself),
+  *then* grant `ads_read` / `ads_management` on `act_3493018704182532`. The probe's first production
+  run returned `code 100 · subcode 33 · GraphMethodException` on `/me`, which is the token failing
+  to identify itself — a different failure from the syncs' `(#200) ads_read`, and the reason
+  re-authorisation comes before the grant.
+- **Google Ads** — nothing has ever been connected; an account must be connected through OAuth.
+
+## Everything below is the earlier record, kept because its reasoning still applies
 
 Read this file, then `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then `git log origin/main`.
 
