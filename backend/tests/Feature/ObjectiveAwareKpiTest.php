@@ -85,6 +85,42 @@ final class ObjectiveAwareKpiTest extends TestCase
         $this->assertNotContains('roas', $this->metrics->headline('app_installs'));
     }
 
+    /**
+     * CONTENT-KPI-COVERAGE-002 — and the card DOES lead with the result when the figures can answer it.
+     *
+     * The rule the test above states is about the creative table, and it stays true. It became a
+     * half-truth when the ad-grain fallback arrived: a Meta lead-gen creative whose figures are summed
+     * from `entity_daily_metrics` genuinely has `leads`, so striking `leads` and `cpl` from its
+     * headline hid the two cells the campaign is judged by while the numbers sat in the row.
+     *
+     * The grain the row came from is the thing that decides, which is why `shape()` marks it. Asserted
+     * from both directions, because a filter that is wrong in one direction is a hidden cell and wrong
+     * in the other is a permanent «no data».
+     */
+    public function test_a_lead_creative_measured_at_ad_grain_leads_with_its_result(): void
+    {
+        $adGrain = ['grain' => 'ad', 'spend' => 400.0, 'leads' => 20.0, 'cpl' => 20.0, 'clicks' => 250.0,
+            'reported' => ['spend' => true, 'leads' => true, 'clicks' => true]];
+
+        $headline = $this->metrics->headline('leads', $adGrain);
+
+        $this->assertContains('leads', $headline, 'the result the campaign was bought for');
+        $this->assertContains('cpl', $headline, 'and what one of them cost');
+    }
+
+    /** The same creative measured at creative grain cannot answer it, and must not promise to. */
+    public function test_a_lead_creative_measured_at_creative_grain_still_drops_it(): void
+    {
+        $creativeGrain = ['grain' => 'creative', 'spend' => 400.0, 'clicks' => 250.0,
+            'reported' => ['spend' => true, 'clicks' => true]];
+
+        $headline = $this->metrics->headline('leads', $creativeGrain);
+
+        $this->assertNotContains('leads', $headline);
+        $this->assertNotContains('cpl', $headline);
+        $this->assertContains('spend', $headline);
+    }
+
     /** Engagement means engagements — a click is a different thing a person did. */
     public function test_an_engagement_campaign_leads_with_engagements_not_clicks(): void
     {
