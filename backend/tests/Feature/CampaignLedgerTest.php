@@ -172,6 +172,46 @@ final class CampaignLedgerTest extends TestCase
         $this->assertSame(7, $meta['counts']['active']);
     }
 
+    /**
+     * And the project is not «every project» — CAMPAIGNS-LEDGER-001, the half the test above cannot see.
+     *
+     * The case above proves the counts describe the project rather than the PAGE, and it holds one
+     * project, so a count that reaches past the project entirely looks identical to a correct one.
+     * It did reach past it. `$counts` was built through `->getQuery()`, which returns the underlying
+     * query builder and drops the model's global scopes with it, while `$total` stayed on the
+     * Eloquent builder and kept them. One base query, two scopes, two different answers about the
+     * same list.
+     *
+     * Observed in the browser on the demo estate before the fix: `total: 3` beside
+     * `counts: {draft: 1, active: 20, paused: 3}` — the Campaigns page reporting «20 active» above
+     * «3 in total», which is the first question that surface exists to answer.
+     */
+    public function test_the_counts_do_not_reach_into_another_project(): void
+    {
+        $this->campaign('Ours', 'active', now()->toDateString(), 5);
+        $this->campaign('Ours paused', 'paused');
+
+        $elsewhere = Project::create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $this->project->client_workspace_id,
+            'name' => 'Another project', 'status' => 'active',
+        ]);
+
+        for ($i = 0; $i < 9; $i++) {
+            UnifiedCampaign::create([
+                'tenant_id' => $this->tenant->id, 'project_id' => $elsewhere->id,
+                'name' => 'Theirs '.$i, 'objective' => 'sales', 'status' => 'active',
+                'total_budget' => 1_000, 'budget_currency' => 'SAR',
+            ]);
+        }
+
+        [, $meta] = $this->list('per_page=25');
+
+        $this->assertSame(2, $meta['total'], 'the total counted another project’s campaigns');
+        $this->assertSame(1, $meta['counts']['active'] ?? 0, 'the active count counted another project’s campaigns');
+        $this->assertSame(1, $meta['counts']['paused'] ?? 0);
+    }
+
     /** A filter narrows the page, the total and the counts together — one set, described once. */
     public function test_a_filter_narrows_everything_together(): void
     {

@@ -92,8 +92,16 @@ final class UnifiedCampaignController extends Controller
          */
         $counting = clone $query;
 
+        /*
+         * Counted on the ELOQUENT builder, because `->getQuery()` drops the global scopes.
+         *
+         * `$total` below is derived from the same `$counting` and stayed on the model, so it kept
+         * the project and tenant scopes. This line reached through to the underlying query builder
+         * and lost them: one base query, two scopes, two different answers about the same list. The
+         * Campaigns page showed «20 active» above «3 in total» on the demo estate, which is the
+         * first question that surface exists to answer, answered with other projects' campaigns.
+         */
         $counts = (clone $counting)->reorder()
-            ->getQuery()
             ->select('status')
             ->selectRaw('count(*) as c')
             ->groupBy('status')
