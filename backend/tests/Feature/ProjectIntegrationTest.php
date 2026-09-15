@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -14,6 +15,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -166,6 +168,71 @@ final class ProjectIntegrationTest extends TestCase
 
         $this->assertDatabaseHas('provider_connections', ['id' => $connectionId, 'status' => 'revoked']);
         $this->assertDatabaseHas('project_integration_bindings', ['external_account_id' => $accountId, 'is_active' => false]);
+    }
+
+    /**
+     * Revoking reaches every project, and that is the whole point of the scope bypass.
+     *
+     * `ProviderConnectionController::revoke()` disables bindings with
+     * `withoutGlobalScope(ProjectScope::class)` and says it is deliberate. Nothing tested it: the
+     * existing case binds one account in one project, which passes just as well if the bypass is
+     * removed.
+     *
+     * What the bypass prevents is a disconnected provider that keeps syncing somewhere else. An
+     * operator who disconnects a connection has withdrawn it — if a binding in another project
+     * survived, the product would go on pulling that advertiser's data with a credential its owner
+     * believes they revoked, and the integrations page would show the connection as gone.
+     */
+    public function test_revoking_disables_bindings_in_every_project_not_only_the_current_one(): void
+    {
+        $first = $this->connectAndGetAdAccount($this->projectA);
+        $connection = ProviderConnection::withoutGlobalScopes()->firstOrFail();
+
+        /*
+         * A SECOND account on the same connection, because the sandbox discovers one.
+         *
+         * The guard that caught this is worth keeping in mind: the first version asserted two
+         * accounts existed and failed rather than silently binding the same account twice, which
+         * would have passed while testing nothing.
+         */
+        $second = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $connection->tenant_id,
+            'provider_connection_id' => $connection->id,
+            'provider' => $connection->provider,
+            'account_type' => 'ad_account',
+            'external_id' => 'sbx-second-account',
+            'name' => 'Second ad account',
+            'status' => 'active',
+            'discovered_at' => now(),
+        ]);
+
+        $adAccounts = [$first, (string) $second->id];
+
+        // One account per project — an account may only belong to one, which is why this needs two.
+        $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$this->projectA->id}/integrations/bindings", [
+            'external_account_id' => $adAccounts[0], 'purpose' => 'advertising',
+        ])->assertCreated();
+
+        $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$this->projectB->id}/integrations/bindings", [
+            'external_account_id' => $adAccounts[1], 'purpose' => 'advertising',
+        ])->assertCreated();
+
+        $connectionId = ProviderConnection::withoutGlobalScopes()->first()->id;
+
+        // Revoked from ONE project's context; the connection is not that project's to keep alive.
+        $this->actingAs($this->user, 'sanctum')
+            ->postJson("/api/v1/connections/{$connectionId}/revoke")
+            ->assertOk();
+
+        foreach ([$adAccounts[0], $adAccounts[1]] as $accountId) {
+            $this->assertDatabaseHas('project_integration_bindings', [
+                'external_account_id' => $accountId, 'is_active' => false,
+            ]);
+        }
+
+        // Disabled, never deleted — the bindings are what make months of metrics their project's.
+        $this->assertSame(2, DB::table('project_integration_bindings')
+            ->whereIn('external_account_id', [$adAccounts[0], $adAccounts[1]])->count());
     }
 
     public function test_sync_records_a_run_and_updates_last_sync(): void
