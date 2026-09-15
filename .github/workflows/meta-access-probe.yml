@@ -1,0 +1,47 @@
+name: Meta Access Probe
+
+# INTEGRATION-META-001 — ask Meta what this token can actually do, and store nothing.
+#
+# The production diagnosis next door reads the run log: it can say every sync FAILED and print the
+# provider's sentence, which is how `(#200) Ad account owner has NOT grant ads_management or ads_read
+# permission` was established. What it cannot say is which of the several things that sentence might
+# mean is true right now — a revoked token, a permission never granted, an app restriction, a business
+# that withdrew access. Those need Meta asked directly.
+#
+# `integrations:meta-probe` without `--sync` calls two read endpoints, `/me/permissions` and
+# `/me/adaccounts`, and classifies what comes back. It refreshes nothing, rotates nothing, queues
+# nothing and writes no row.
+#
+# Manual only, and the command is FIXED here exactly as the diagnosis workflow fixes its own. There
+# is no input that becomes part of a command line, and `--sync` — which does write — is deliberately
+# not reachable from this workflow at all: a probe that can quietly start writing metric rows is no
+# longer a probe.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Probe Meta access on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            # The application lives in a container; there is no `php` on the host's PATH.
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan integrations:meta-probe
