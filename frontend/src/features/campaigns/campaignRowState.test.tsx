@@ -157,12 +157,18 @@ describe('the concise state on a campaign row', () => {
   /**
    * The landing answer describes the same set the list shows, and keeps its silences apart.
    *
-   * The fixtures hold one broken campaign, one healthy, one whose connector reported nothing, and one
-   * on-but-quiet. «Not measured» must appear as its own answer rather than being absorbed into the
-   * healthy count — that absorption is the opaque score this requirement forbids, on the first figure
-   * a reader sees.
+   * NEEDS-ATTENTION-ONE-DEFINITION-001 changed which bucket the silent campaign lands in, and the
+   * change is the point. It used to be counted «not measured» by the strip while the card beside it
+   * counted it as needing attention — two numbers under the same words. It is `active` and spent
+   * nothing in the period, which the flags call out with a reason a reader can open, so attention is
+   * where its own evidence puts it.
+   *
+   * What has not changed, and is asserted here directly, is the guarantee underneath: it is never
+   * absorbed into HEALTHY. Only the one campaign that was examined and found fine is counted there —
+   * an absence of evidence published as evidence of health is the opaque score this requirement
+   * forbids, on the first figure a reader sees.
    */
-  it('answers what needs attention without folding the unmeasured into the healthy', async () => {
+  it('answers what needs attention and never counts an unexamined campaign as healthy', async () => {
     renderWithProviders(<CampaignsPage />, { locale: 'en' })
     fireEvent.click(await screen.findByTestId('view-cards'))
 
@@ -170,7 +176,19 @@ describe('the concise state on a campaign row', () => {
 
     const landing = screen.getByTestId('campaigns-landing-answer')
     expect(landing).toHaveTextContent('need attention')
-    expect(screen.getByTestId('landing-unexamined')).toHaveTextContent('not measured')
+
+    /*
+     * Two healthy — «Healthy» and «On but quiet», both of which spent and produced results in the
+     * period. The silent campaign is NOT among them, which is the guarantee: two of four, never
+     * three, because a campaign whose connector reported nothing cannot be one of the fine ones.
+     */
+    expect(screen.getByTestId('landing-healthy')).toHaveTextContent('2 with nothing to flag')
+    expect(screen.getByTestId('landing-attention')).toHaveTextContent('2 need attention')
+
+    // And the strip's number is the card's number — one phrase, one engine.
+    const strip = screen.getByTestId('landing-attention').textContent?.match(/\d+/)?.[0]
+    const card = screen.getByTestId('campaigns-attention').textContent?.match(/\d+/)?.[0]
+    expect(strip).toBe(card)
   })
 
   /** No budget row can be paced in these fixtures, so pacing is said to be unmeasurable, not zero. */
