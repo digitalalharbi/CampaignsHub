@@ -53,7 +53,7 @@ describe('the campaign quick preview', () => {
   it('shows a dash where the platform reported nothing, not a zero', () => {
     renderWithProviders(
       <CampaignQuickPreview
-        row={row({ revenue: null, conversions: null } as Partial<CampaignRow>)}
+        row={row({ revenue: null, conversions: null } as unknown as Partial<CampaignRow>)}
         projectId="p1"
         range={{ from: '2026-09-01', to: '2026-09-30' }}
         onClose={() => {}}

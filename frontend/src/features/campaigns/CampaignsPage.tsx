@@ -190,6 +190,11 @@ export function CampaignsPage() {
 
   useEffect(() => setPage(1), [projectId, status, objectiveParam, search])
 
+  const metricCampaigns = useCampaigns(projectId, range)
+
+  /* Relevance is read from the metrics window; before it answers, nothing about it is known. */
+  const metricsKnown = !metricCampaigns.isPending && !metricCampaigns.isError
+
   const campaignsQuery = useQuery({
     /*
      * ANALYTICS-OBJECTIVE-SYSTEM-001 — the reader picks a canonical objective, the server gets the
@@ -199,9 +204,20 @@ export function CampaignsPage() {
      * query, and keying on the canonical label instead would be one cache entry per label over
      * whatever the previous scope fetched.
      */
-    queryKey: ['project', projectId, 'campaigns', { status, objective: objectiveParam, search, sort, dir }, page],
+    queryKey: ['project', projectId, 'campaigns', { status, objective: objectiveParam, search, sort, dir, lifecycle, metricsKnown }, page],
     queryFn: () => listCampaigns(projectId!, {
       status: status || undefined, objective: objectiveParam, search: search || undefined,
+      /*
+       * «all» is the absence of the filter, not a third value the server has to know about.
+       *
+       * And nothing is asked for while the metrics window has not answered. The rule this page has
+       * always kept is that a view which cannot be computed is not «nothing is active»: narrowing
+       * before the reader's own metrics have arrived would render a short list, and a short list is
+       * read as a fact about the account rather than as a request still in flight. The server could
+       * answer — it computes relevance from its own query — but the page cannot yet TELL the reader
+       * which of the two they are looking at, and that is the part that matters.
+       */
+      lifecycle: lifecycle === 'all' || !metricsKnown ? undefined : lifecycle,
       /* Undefined when nothing is chosen — an empty string is a value, and «no sort» is not one. */
       sort: sort || undefined, dir: sort ? dir : undefined,
       page, from: range.from, to: range.to,
@@ -213,7 +229,6 @@ export function CampaignsPage() {
   const timeseries = useTimeseries(view === 'overview' ? projectId : null, range)
   const platforms = usePlatforms(view === 'overview' ? projectId : null, range)
   const budget = useBudget(projectId, range)
-  const metricCampaigns = useCampaigns(projectId, range)
 
   /*
    * CAMPAIGNS-LEDGER-001 — the rows are a page; the counts are the PROJECT's.
@@ -361,7 +376,6 @@ export function CampaignsPage() {
    * «active only» over unknown relevance would render an empty workspace as a statement about the
    * account rather than about a request that has not answered.
    */
-  const metricsKnown = !metricCampaigns.isPending && !metricCampaigns.isError
 
   const lifecycleRows = useMemo(
     () => campaigns.map((c) => {
@@ -372,10 +386,30 @@ export function CampaignsPage() {
     [campaigns, metricsByCampaign],
   )
 
+  /*
+   * CAMPAIGNS-LEDGER-001 — the SERVER narrowed this set; the browser only describes it.
+   *
+   * `lifecycleView` used to do the filtering here, over the twenty-five rows the page held, which
+   * made «active and spending» mean «whichever of the first page are active». The request carries
+   * the lifecycle now, so these rows are already the right ones and re-filtering them would be a
+   * second opinion about the same question.
+   *
+   * It is still called, for the one thing it knows that the server's answer cannot express: whether
+   * relevance was computable at all. When the metrics window has not answered, «active only» would
+   * render an empty workspace as a statement about the account rather than about a request still in
+   * flight, and the view says so instead.
+   */
   const lifecycleShown = useMemo(
-    () => lifecycleView(lifecycleRows, { lifecycle, windowEnd: range.to, metricsKnown }),
-    [lifecycleRows, lifecycle, range.to, metricsKnown],
+    () => lifecycleView(lifecycleRows, { lifecycle: 'all', windowEnd: range.to, metricsKnown }),
+    [lifecycleRows, range.to, metricsKnown],
   )
+
+  /*
+   * Counted by the server over the project, before it narrowed. A chip's number has to describe the
+   * list that chip leads to, and counting the rows we were handed would report «inactive 0» beside a
+   * control that reveals thirty.
+   */
+  const lifecycleCounts = campaignsQuery.data?.lifecycleCounts ?? lifecycleShown.counts
 
   const visibleCampaigns = lifecycleShown.rows
 
@@ -508,6 +542,11 @@ export function CampaignsPage() {
    *
    * Read through the canonical helpers, so this screen cannot disagree with the two that already
    * read the same totals correctly.
+   */
+  /*
+   * Spend through the canonical reader, so this screen cannot disagree with the two that already
+   * read the same totals — a withheld or multi-currency total renders as the contract says, never
+   * as a zero.
    */
   const cpaText = rowCostPer(k, 'cpa', 'conversions', summary.data?.currency ?? null)
   const roasText = rowRoas(k)
@@ -881,9 +920,9 @@ export function CampaignsPage() {
                 list is worse than one sorted low.
               */}
               {LIFECYCLE_KEYS.map((key) => (
-                <Chip key={key} testid="lifecycle-chip" active={lifecycleShown.applied === key} onClick={() => setLifecycle(key)}>
+                <Chip key={key} testid="lifecycle-chip" active={lifecycle === key} onClick={() => setLifecycle(key)}>
                   {LIFECYCLE_LABELS[key][ar ? 'ar' : 'en']}{' '}
-                  <span className="tnum" data-testid={`lifecycle-count-${key}`}>{lifecycleShown.counts[key]}</span>
+                  <span className="tnum" data-testid={`lifecycle-count-${key}`}>{lifecycleCounts[key]}</span>
                 </Chip>
               ))}
               <Chip active={status === '' && objective === ''} onClick={() => { setStatus(''); setObjective('') }}>{ar ? 'الكل' : 'All'} <span className="tnum">{counts.total}</span></Chip>
@@ -964,8 +1003,8 @@ export function CampaignsPage() {
               title={ar ? 'لا توجد حملات نشطة في هذه الفترة' : 'Nothing is running in this period'}
               description={
                 ar
-                  ? `${countedCampaigns(lifecycleShown.counts.inactive, 'ar')} متوقفة أو منتهية — اعرض «غير النشطة» للاطلاع عليها.`
-                  : `${countedCampaigns(lifecycleShown.counts.inactive, 'en')} have stopped or finished — open «Inactive» to see them.`
+                  ? `${countedCampaigns(lifecycleCounts.inactive, 'ar')} متوقفة أو منتهية — اعرض «غير النشطة» للاطلاع عليها.`
+                  : `${countedCampaigns(lifecycleCounts.inactive, 'en')} have stopped or finished — open «Inactive» to see them.`
               }
             />
           ) : view === 'cards' ? (

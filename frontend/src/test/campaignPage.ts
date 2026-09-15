@@ -14,6 +14,8 @@ export function campaignPage(campaigns: UnifiedCampaign[], over: Partial<Campaig
     total: campaigns.length,
     page: 1,
     lastPage: 1,
+    /* Null by default, which is what a server that does not send them looks like. */
+    lifecycleCounts: null,
     counts: campaigns.reduce<Record<string, number>>((acc, c) => {
       acc[c.status] = (acc[c.status] ?? 0) + 1
 
