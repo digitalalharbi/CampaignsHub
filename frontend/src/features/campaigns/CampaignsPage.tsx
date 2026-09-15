@@ -415,20 +415,6 @@ export function CampaignsPage() {
 
   const visibleCampaigns = lifecycleShown.rows
 
-  /*
-   * Computed over the campaigns the reader is actually looking at, not the whole project: an answer
-   * about «what needs attention» must describe the same set the list below it shows, or the two
-   * disagree and the reader cannot tell which is wrong.
-   */
-  const landing = useMemo(
-    () => landingAnswer(
-      visibleCampaigns.map((c) => ({ id: c.id, objective: c.objective })),
-      metricsByCampaign as Map<string, Record<string, unknown>>,
-      budget.data,
-    ),
-    [visibleCampaigns, metricsByCampaign, budget.data],
-  )
-
   const attention = useMemo(
     () => orderAttention(campaigns
       .map((c) => ({ c, flags: attentionFlags(c, metricsByCampaign.get(c.id), summary.data?.currency ?? null) }))
@@ -457,6 +443,26 @@ export function CampaignsPage() {
    * either changed.
    */
   const attentionIds = useMemo(() => new Set(attention.map((a) => a.id)), [attention])
+
+  /*
+   * Computed over the campaigns the reader is actually looking at, not the whole project: an answer
+   * about «what needs attention» must describe the same set the list below it shows, or the two
+   * disagree and the reader cannot tell which is wrong.
+   *
+   * NEEDS-ATTENTION-ONE-DEFINITION-001 — and it is handed `attentionIds` rather than deciding for
+   * itself. It used to ask a second engine, so this strip and the card above it printed two
+   * different counts under the same words. It now sorts the rows the flags did NOT raise into
+   * «examined and fine» and «nothing could be said», which is the part it alone knows.
+   */
+  const landing = useMemo(
+    () => landingAnswer(
+      visibleCampaigns.map((c) => ({ id: c.id, objective: c.objective })),
+      metricsByCampaign as Map<string, Record<string, unknown>>,
+      budget.data,
+      attentionIds,
+    ),
+    [visibleCampaigns, metricsByCampaign, budget.data, attentionIds],
+  )
 
   const orderedCampaigns = useMemo(
     () => byPriority(
