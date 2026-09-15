@@ -1,5 +1,6 @@
 import { realpathSync } from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
+import { preloadCriticalFonts } from './src/build/preloadCriticalFonts.js'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
@@ -32,7 +33,7 @@ const CACHE_DIR = process.env.VITE_CACHE_DIR
 // https://vite.dev/config/
 export default defineConfig({
   ...(CACHE_DIR === undefined ? {} : { cacheDir: CACHE_DIR }),
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), preloadCriticalFonts()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

@@ -178,4 +178,5 @@ test.describe('what the first paint of the marketing homepage gets', () => {
     // And it does still answer for Latin, or it is not a metric fallback at all.
     expect(spans.some((s) => s.start <= 0x41 && s.end >= 0x7a), '«Inter Fallback» no longer covers basic Latin').toBe(true)
   })
+
 })
