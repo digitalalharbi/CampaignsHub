@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { useUi } from '@/stores/ui'
 import { SlideBody, type ReportData, type Slide } from './InteractiveReport'
 
 /**
@@ -33,6 +34,8 @@ const slide: Slide = { id: 'recommendations', type: 'recommendations', order: 1,
 const meta = { reportName: 'تقرير', platforms: ['meta'] }
 
 describe('what a summary does with a long list', () => {
+  afterEach(() => useUi.setState({ locale: 'ar' }))
+
   it('shows the few at the top and states how many it is not showing', () => {
     render(<SlideBody slide={slide} data={{ ...base, form: 'executive_summary' } as ReportData} meta={meta} />)
 
@@ -61,5 +64,28 @@ describe('what a summary does with a long list', () => {
 
     expect(screen.getByText('أ')).toBeInTheDocument()
     expect(screen.queryByTestId('summary-trimmed-note')).not.toBeInTheDocument()
+  })
+
+  /**
+   * And it says it in the reader's own language.
+   *
+   * This sentence was written in Arabic and only Arabic, in a file whose other four components read
+   * the locale. An English reader of a summary report was told «و٨ أخرى في التقرير التفصيلي.» — a
+   * line whose whole job is to stop them believing the short list is all there is, delivered in a
+   * script they may not read. The count is the part that matters and the sentence around it was the
+   * part nobody localised.
+   */
+  it('says how many are missing in the language the reader is using', () => {
+    useUi.setState({ locale: 'en' })
+    render(<SlideBody slide={slide} data={{ ...base, form: 'executive_summary' } as ReportData} meta={meta} />)
+
+    // Both trimmed lists carry the note — findings and recommendations — and both must speak English.
+    const notes = screen.getAllByTestId('summary-trimmed-note')
+
+    expect(notes.length).toBeGreaterThan(0)
+    for (const note of notes) {
+      expect(note.textContent ?? '', 'an English reader was told about the rest in Arabic').not.toMatch(/[\u0600-\u06FF]/)
+      expect(note.textContent ?? '').toMatch(/\d/)
+    }
   })
 })

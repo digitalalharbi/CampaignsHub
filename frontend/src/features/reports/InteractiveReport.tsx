@@ -631,12 +631,21 @@ function trimmedForForm<T>(items: T[], form: string | null | undefined): { shown
   return { shown: items.slice(0, SUMMARY_NOTES), hidden: items.length - SUMMARY_NOTES }
 }
 
+/*
+ * The sentence that stops a short list reading as the whole list — in the reader's own language.
+ *
+ * It was written in Arabic only, in a file whose other components all read the locale. An English
+ * reader of a summary report was told «و٨ أخرى في التقرير التفصيلي.»: a line whose entire job is to
+ * correct an impression, delivered in a script they may not read. The count was localised and the
+ * sentence holding it was not.
+ */
 function MoreInTheFullReport({ hidden }: { hidden: number }) {
+  const ar = useUi((s) => s.locale) === 'ar'
   if (hidden < 1) return null
 
   return (
     <p className="mt-2 text-xs text-text-muted" data-testid="summary-trimmed-note">
-      {`و${hidden} أخرى في التقرير التفصيلي.`}
+      {ar ? `و${hidden} أخرى في التقرير التفصيلي.` : `And ${hidden} more in the detailed report.`}
     </p>
   )
 }

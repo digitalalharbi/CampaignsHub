@@ -98,4 +98,84 @@ test.describe('what the first paint of the marketing homepage gets', () => {
 
     expect(state).toEqual({ dir: 'rtl', lang: 'ar', theme: 'dark' })
   })
+
+  /*
+   * The metric fallback answers for Latin and declines everything else.
+   *
+   * `Inter Fallback` exists to occupy the space Inter will take, and it is listed BEFORE
+   * «IBM Plex Sans Arabic». A `@font-face` with no `unicode-range` claims every codepoint, so on any
+   * host that has Arial — which carries Arabic — the fallback answered for the Arabic too. The
+   * client PDF made it visible: Chromium prints the report through this stylesheet, and the
+   * downloaded Arabic document embedded `ArialMT` alone.
+   *
+   * Asserted on the SERVED bytes rather than through a rendered page, for the reason the previous
+   * attempt at a guard here failed: the unit harness stubs CSS, so a test that read this file
+   * through the bundler would have passed on an empty string. And asserted on the declaration rather
+   * than on which face a glyph resolves to, because that answer depends on which fonts the host
+   * happens to have installed — which is exactly why CI did not catch this.
+   */
+  test('the Latin metric fallback does not claim Arabic', async ({ page }) => {
+    await page.goto('/')
+
+    /*
+     * Read through the CSSOM rather than by fetching a stylesheet URL.
+     *
+     * The first version matched `href="….css"` in the document and fetched it. That is how the
+     * production build serves CSS and not how the dev server does — Vite injects it as a module, the
+     * document links nothing, and the guard failed for the harness instead of for the code. The
+     * CSSOM is the same declaration either way.
+     */
+    const range = await page.evaluate(() => {
+      for (const sheet of Array.from(document.styleSheets)) {
+        let rules: CSSRuleList
+        try {
+          rules = sheet.cssRules
+        } catch {
+          continue // a cross-origin sheet; ours are not
+        }
+        for (const rule of Array.from(rules)) {
+          const face = rule as CSSFontFaceRule
+          if (face.style?.getPropertyValue('font-family')?.includes('Inter Fallback')) {
+            return face.style.getPropertyValue('unicode-range')
+          }
+        }
+      }
+      return null
+    })
+
+    expect(range, 'no «Inter Fallback» face is declared at all').not.toBeNull()
+    expect(range, '«Inter Fallback» claims every codepoint, Arabic included').not.toBe('')
+
+    /*
+     * Parsed, not pattern-matched.
+     *
+     * The CSSOM normalises what the stylesheet says: `U+0000-00FF` comes back as `U+0-FF`, so a
+     * regex written against the source text asserts the serialiser's habits rather than the coverage
+     * — and the Arabic block would come back as `U+600-6FF`, which a `/U\+06/` pattern misses in the
+     * one direction that matters.
+     */
+    const spans = range!.split(',').map((part) => {
+      const [lo, hi] = part.trim().replace(/^u\+/i, '').split('-')
+      const start = parseInt(lo, 16)
+
+      return { start, end: hi === undefined ? start : parseInt(hi, 16) }
+    })
+
+    /*
+     * Arabic and its presentation forms. A face that answers for any of them is the defect: the
+     * Latin metric fallback speaking for the brand's own script.
+     *
+     * Forms-B stops at FEFC rather than at the block's FEFF, because FEFF is the byte-order mark and
+     * Inter's own Latin subset legitimately declares it. Asserted against the block boundary, this
+     * guard would have failed on the correct stylesheet — a guard that cries at the right answer gets
+     * loosened by whoever meets it next, which is how a guard becomes decoration.
+     */
+    for (const [from, to, name] of [[0x0600, 0x06ff, 'Arabic'], [0xfb50, 0xfdff, 'Arabic Presentation Forms-A'], [0xfe70, 0xfefc, 'Arabic Presentation Forms-B']] as const) {
+      const claimed = spans.find((s) => s.start <= to && s.end >= from)
+      expect(claimed, `«Inter Fallback» claims ${name} (U+${claimed?.start.toString(16)}–${claimed?.end.toString(16)})`).toBeUndefined()
+    }
+
+    // And it does still answer for Latin, or it is not a metric fallback at all.
+    expect(spans.some((s) => s.start <= 0x41 && s.end >= 0x7a), '«Inter Fallback» no longer covers basic Latin').toBe(true)
+  })
 })

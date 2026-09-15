@@ -15,9 +15,10 @@ import { VideoPoster } from './VideoPoster'
  * give-up declines because there IS a frame, and nothing sets `painted` because no event came to say
  * so. The card sits unpainted for ever, which is the owner's blank card.
  */
-const withReadyState = (value: number): HTMLVideoElement => {
+const withReadyState = (value: number, error: MediaError | null = null): HTMLVideoElement => {
   const el = screen.getByTestId('creative-video-poster') as HTMLVideoElement
   Object.defineProperty(el, 'readyState', { configurable: true, get: () => value })
+  Object.defineProperty(el, 'error', { configurable: true, get: () => error })
 
   return el
 }
@@ -40,6 +41,37 @@ describe('a video card that can neither paint nor give up', () => {
       'the frame was there and the card never said so',
     ).toBe('true')
     expect(onUnavailable, 'a card with a frame reported itself unavailable').not.toHaveBeenCalled()
+  })
+
+  /**
+   * And a frame the browser has since given up on is not a frame.
+   *
+   * `readyState` does not fall back when a media element fails: `HAVE_CURRENT_DATA` is retained
+   * alongside a set `error`, so `settle()` — which asked only about the frame — marked the card
+   * painted over an element the browser had abandoned. The card then held an empty box reporting
+   * `data-painted="true"`, which is the blank rectangle with a claim attached to it.
+   *
+   * `onError` exists for this and is not enough on its own: it is the EVENT, and the error can be set
+   * before this component's listener is attached — a cached failure, or a source that failed during
+   * hydration. The state is the thing to ask about, at the moment the decision is made.
+   *
+   * Reported by CI's WebKit on the content grid: the poster still mounted, `data-painted="true"`, and
+   * `video.error` non-null.
+   */
+  it('gives up on an element the browser has errored, even with a frame in hand', () => {
+    vi.useFakeTimers()
+    const onUnavailable = vi.fn()
+
+    render(<VideoPoster src="https://cdn.example/film.mp4" className="h-8 w-8" onUnavailable={onUnavailable} />)
+
+    withReadyState(2, { code: 3, message: 'decode failed' } as MediaError)
+    act(() => { vi.advanceTimersByTime(9000) })
+
+    expect(onUnavailable, 'an errored element was presented as a painted frame').toHaveBeenCalled()
+    expect(
+      screen.getByTestId('creative-video-poster').getAttribute('data-painted'),
+      'the card claimed a frame the browser had given up on',
+    ).toBe('false')
   })
 
   /** And the other branch is unchanged: no data by the budget is still an honest absence. */

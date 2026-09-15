@@ -29,11 +29,26 @@
   `line-gap-override: 0%` because Inter reports none, and a fallback inventing one would push every
   line down by a hair — which is the shift this exists to remove, in the other direction.
 
-  ## Arabic is deliberately left alone
+  ## Arabic is deliberately left alone — and `unicode-range` is what makes that true
 
   «كامبينز هب الحملات» measures 746.37px in IBM Plex Sans Arabic against 739.21px in the system
   fallback — within one per cent. It is not the mover, and a correction that small is more likely to
   make the Arabic worse than better.
+
+  Leaving it alone was the intent and not, at first, the behaviour. This face sits BEFORE
+  «IBM Plex Sans Arabic» in the stack, and a `@font-face` with no `unicode-range` claims every
+  codepoint — so Arial, which does carry Arabic, answered for the Arabic too. The client PDF is the
+  surface where that became visible rather than subtle: Chromium prints the report through the app's
+  own stylesheet, and the downloaded Arabic PDF embedded `ArialMT` and nothing else. The brand face
+  was absent from the document a client keeps, in the name of a fallback that exists only to hold
+  Inter's Latin metrics for a few hundred milliseconds.
+
+  It was invisible in CI because the render image has no Arial, Helvetica or Liberation Sans, so
+  `local()` matched nothing and the stack fell through to the right face by accident. A defect that
+  depends on which fonts the host happens to have is not one a gate will find for you.
+
+  The range below is Inter's own Latin coverage. Outside it this face declines, the stack continues,
+  and Arabic reaches IBM Plex Sans Arabic as it always should have.
 
   ## There is no automated guard on these numbers, and that is stated rather than hidden
 
@@ -52,6 +67,10 @@
 @font-face {
   font-family: 'Inter Fallback';
   src: local('Arial'), local('Helvetica'), local('Liberation Sans');
+  /* Inter's Latin coverage, and not one codepoint beyond it — see «Arabic is deliberately left alone». */
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
   size-adjust: 106%;
   ascent-override: 91.5%;
   descent-override: 22.6%;

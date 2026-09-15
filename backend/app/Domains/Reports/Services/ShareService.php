@@ -167,10 +167,12 @@ final class ShareService
      *
      * CLIENT-REPORT-MONEY-REDACTION-001 — the enumeration below was one section long.
      *
-     * `ReportCreativeMedia` walks `ads`, `ads_roster`, `worst_creatives`, `top_creatives` and
-     * `ads_groups[].ads`. The snapshot sanitizer named `top_creatives` and the live sanitizer named
-     * none of them, so an operator who hid spend found it again on the ads gallery — the most-read
-     * part of a client report — and on the roster beneath it. This is the failure the live
+     * `ReportCreativeMedia` walks `ads_roster`, `worst_creatives`, `top_creatives` and every `ads`
+     * list at any depth — it named `ads_groups[].ads` by hand until `ads_platform_groups` arrived
+     * and was not named, and it now looks for the key instead of for the section. The snapshot
+     * sanitizer here named `top_creatives` and the live sanitizer named none of them, so an operator
+     * who hid spend found it again on the ads gallery — the most-read part of a client report — and
+     * on the roster beneath it. This is the failure the live
      * sanitizer's own comment predicted: «a section added to the payload and not to this list is a
      * section that ignores the link's hide flags».
      *
