@@ -5,7 +5,9 @@ import {
   applyAccountSelection, confirmAccountSelection, fetchConnectionHierarchy, fetchDiscoveredAccounts,
   fetchPlanUsage, listProjectBindings, refreshDiscoveredAccounts,
   type DiscoveredAccount, type ProjectBinding,
+  getAccountLogs,
 } from './api'
+import { firstSyncOutcome } from './firstSyncOutcome'
 import { createProject, listClientWorkspaces, listProjects } from '@/features/projects/api'
 import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
@@ -201,6 +203,38 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
    * this asks, which is why `needsWorkspace` is driven by that response rather than guessed at here.
    */
   const [diff, setDiff] = useState<{ added: string[]; unchanged: string[]; removed: string[] } | null>(null)
+  const [confirmedAt, setConfirmedAt] = useState<number | null>(null)
+
+  /*
+   * INTEGRATION-FIRST-SYNC-OUTCOME-001 — the wizard watches the sync it started.
+   *
+   * «Connected. The first sync has started» was the dialog's last word whatever happened next: a run
+   * that imported four thousand rows and a run the provider refused left the reader with the same
+   * sentence and a button to close. The owner's journey ends `first sync → progress →
+   * success/failure → freshness`, and this is the middle of it.
+   *
+   * ONE account is polled — the first of the selection — and the panel says so. Polling all of them
+   * would be a request per account every two seconds against a dialog somebody is about to close,
+   * and the integrations page is where a full picture belongs.
+   *
+   * It stops on its own: `refetchInterval` returns false once the run has an answer, so a failed
+   * sync does not keep a timer alive behind a closed dialog.
+   */
+  const watchedAccount = [...selected][0] ?? null
+  const firstSyncRuns = useQuery({
+    queryKey: ['first-sync', watchedAccount, confirmedAt],
+    queryFn: () => getAccountLogs(watchedAccount!),
+    enabled: current === 'done' && watchedAccount !== null && confirmedAt !== null,
+    refetchInterval: (query) => {
+      const outcome = firstSyncOutcome(query.state.data?.runs, confirmedAt ?? 0)
+
+      return outcome.state === 'queued' || outcome.state === 'running' ? 2000 : false
+    },
+    // Ninety seconds of polling, then the panel says where to look instead of spinning for ever.
+    retry: false,
+  })
+
+  const firstSync = firstSyncOutcome(firstSyncRuns.data?.runs, confirmedAt ?? 0)
 
   const save = useMutation({
     // The previous answer is cleared before asking again, so a retry cannot show the last success
@@ -275,6 +309,14 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
       await queryClient.invalidateQueries({ queryKey: ['plan-usage'] })
       await queryClient.invalidateQueries({ queryKey: ['connectors'] })
       await queryClient.invalidateQueries({ queryKey: ['connection-states'] })
+      /*
+       * When the first sync was asked for — the line that separates THIS outcome from history.
+       *
+       * An account bound to a second project already has runs, and yesterday's success is not this
+       * button's result. Recorded a second early because the server's clock and the browser's are
+       * not the same clock, and a run that started «just before» this instant is still ours.
+       */
+      setConfirmedAt(Date.now() - 1000)
       setStep('done')
     },
   })
@@ -734,6 +776,41 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
             {ar
               ? 'ستظهر الحملات والمقاييس داخل المشروع بعد اكتمال المزامنة الأولى.'
               : 'Campaigns and metrics appear in the project once the first sync completes.'}
+          </p>
+
+          {/*
+            And then what actually happened — see `firstSyncOutcome`.
+
+            A refusal shows the PROVIDER's own words, which the storage contract finally lets it
+            carry whole. The moment a person most needs to read «(#200) … has NOT grant ads_read» is
+            the moment they have just finished connecting.
+          */}
+          <p className="flex items-start gap-2 text-sm" data-testid={`wizard-first-sync-${firstSync.state}`}>
+            {firstSync.state === 'queued' && (
+              <span className="text-text-muted">{ar ? 'في الطابور…' : 'Queued…'}</span>
+            )}
+            {firstSync.state === 'running' && (
+              <><Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-text-muted" aria-hidden />
+                <span className="text-text-muted">{ar ? 'تجري المزامنة…' : 'Syncing…'}</span></>
+            )}
+            {firstSync.state === 'imported' && (
+              <><Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
+                <span className="tnum text-success">
+                  {ar ? `اكتملت — ${firstSync.rows.toLocaleString('en-US')} صفًا` : `Done — ${firstSync.rows.toLocaleString('en-US')} rows imported`}
+                </span></>
+            )}
+            {/* Reported honestly: the platform answered, and it had nothing for this window. */}
+            {firstSync.state === 'no_data' && (
+              <span className="text-text-muted">
+                {ar ? 'اكتملت — لم تُبلِّغ المنصة بأي بيانات لهذه الفترة.' : 'Done — the platform reported no data for this window.'}
+              </span>
+            )}
+            {firstSync.state === 'failed' && (
+              <><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden />
+                <span className="text-danger">
+                  {firstSync.reason ?? (ar ? 'تعذّرت المزامنة الأولى.' : 'The first sync did not complete.')}
+                </span></>
+            )}
           </p>
         </section>
       )}

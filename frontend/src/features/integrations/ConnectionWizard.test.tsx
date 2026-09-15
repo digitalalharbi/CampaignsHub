@@ -29,6 +29,7 @@ const state = vi.hoisted(() => ({
   projects: [] as Array<{ id: string; name: string }>,
   parents: [] as Array<{ external_id: string; name: string | null; account_count: number }>,
   createError: null as unknown,
+  runs: [] as never[],
 }))
 
 vi.mock('@/features/projects/api', async (importOriginal) => ({
@@ -70,6 +71,7 @@ vi.mock('./api', async (importOriginal) => {
       calls.confirmed.push(input)
       return Promise.resolve({ connected: input.externalAccountIds.length })
     },
+    getAccountLogs: () => Promise.resolve({ account: { id: 'acct-1' }, runs: state.runs }),
     refreshDiscoveredAccounts: (id: string) => {
       calls.refreshed.push(id)
       return Promise.resolve({ discovered: 2, created: 0, named: 1, access_lost: 0 })
@@ -275,5 +277,56 @@ describe('ConnectionWizard — the organisation step is a question, not a formal
 
     expect(await screen.findByTestId('wizard-step-parent')).toBeInTheDocument()
     expect(screen.getByText('Beta Media')).toBeInTheDocument()
+  })
+})
+
+/**
+ * INTEGRATION-FIRST-SYNC-OUTCOME-001 — the dialog stops going quiet after «the first sync started».
+ *
+ * The refusal case is the one that matters: a provider that says no now carries its own words all
+ * the way to the screen, and the moment a person most needs to read «(#200) … has NOT grant
+ * ads_read» is the moment they have just finished connecting.
+ */
+describe('what the wizard says the first sync did', () => {
+  const row = (over: Record<string, unknown>) => ({
+    id: 'r', provider: 'snapchat', status: 'success', trigger: 'automatic',
+    window_start: null, window_end: null, provider_rows: null, parsed_rows: null, mapped_rows: null,
+    metrics_imported: 0, duration_seconds: 1, attempts: 1,
+    // Ahead of the confirmation, which is what marks a run as this one's rather than history.
+    started_at: new Date(Date.now() + 5000).toISOString(), finished_at: null, error: null,
+    repeats: 1, repeats_since: null, ...over,
+  })
+
+  const confirmInto = async () => {
+    state.projects = [{ id: 'proj-1', name: 'مشروع قائم' }]
+    state.parents = [{ external_id: 'org-1', name: 'Acme Media', account_count: 2 }]
+    await reachProjectStep()
+    fireEvent.click(screen.getByText('مشروع قائم'))
+    fireEvent.click(await screen.findByTestId('wizard-confirm'))
+  }
+
+  it('shows the provider’s own reason when the first sync is refused', async () => {
+    state.runs = [row({ status: 'failed', error: '(#200) Ad account owner has NOT grant ads_management or ads_read permission · code 200' })] as never[]
+
+    await confirmInto()
+
+    expect(await screen.findByTestId('wizard-first-sync-failed')).toHaveTextContent('ads_read')
+  })
+
+  it('states what was imported when the first sync succeeds', async () => {
+    state.runs = [row({ status: 'success', metrics_imported: 936 })] as never[]
+
+    await confirmInto()
+
+    expect(await screen.findByTestId('wizard-first-sync-imported')).toHaveTextContent('936')
+  })
+
+  /** Nothing yet is «queued» — never a success, and never a failure. */
+  it('says queued while no run has appeared', async () => {
+    state.runs = [] as never[]
+
+    await confirmInto()
+
+    expect(await screen.findByTestId('wizard-first-sync-queued')).toBeInTheDocument()
   })
 })
