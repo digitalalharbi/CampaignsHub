@@ -186,7 +186,10 @@ final class ReportAds
              * semantics a blanket copy would flatten (`spend` must stay NULL when the conversion is
              * unavailable, never `?? 0`), so they are written last and win.
              */
-            ...$row['metrics'],
+            // `?? []`, because a row without metrics reaches here: every read beside this one is
+            // null-safe and a bare spread of a missing key is a fatal, which took the whole shared
+            // client link to a 500 rather than to a report with fewer figures.
+            ...($row['metrics'] ?? []),
             'spend' => $row['metrics']['spend'] ?? null,
             'spend_original' => $row['metrics']['spend_original'] ?? null,
             'spend_withheld_rows' => $row['metrics']['spend_withheld_rows'] ?? null,
