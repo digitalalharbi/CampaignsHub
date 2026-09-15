@@ -7,7 +7,17 @@ disagree, Git is right.**
 
 ## 2026-09-15 — where this session stopped
 
-`origin/main` = `cae0cb42` (#419), deployed and confirmed serving.
+`origin/main` = `2c312917` (#420), deploy run succeeded and the served bundle confirms it: the
+production asset hashes moved (`index-n3GAhzwK.js` → `index-Dcg0rZZf.js`, `index-DmSFRYgc.css` →
+`index-fMYwqRn8.css`). Nothing in #420 is reachable without signing in, so its BEHAVIOUR stays
+`BLOCKED_OPERATIONAL_EVIDENCE` in this lane — the deploy is verified, the screens are not.
+
+**#420 merged after that line was first written.** It is the Campaigns Command Center: project-scoped
+status counts, server-side lifecycle filtering with the chip counts taken BEFORE the narrowing,
+universal campaign drill-down as real anchors on six surfaces, four primary KPIs with every money
+guarantee migrated into a compact secondary strip and re-proved there, an objective-aware return
+column that renders an EMPTY cell rather than «—» where it does not apply, the Analytics Quick
+Preview, the compact operational header, and attention rows carrying what is at stake.
 
 ### Merged this run, each with six green checks and a confirmed deploy
 
@@ -40,16 +50,31 @@ lane, which holds no production credentials.
 
 ## IN FLIGHT — pick this up first
 
-**PR #420 `campaigns-drilldown`** — the Campaigns Command Center. Nine commits, all six checks green
-on the last full run, one commit pushed after it (attention rows carrying spend + objective result)
-awaiting its own run.
+**PR #421 `shared-link-exports`** — eight commits, CI running when this was written. Full suites
+green locally (backend 3626, frontend 2695). It carries:
+
+- the client's own download surface (`/reports/shared/{token}/download/{format}`), which had NO test
+  while being the file a client actually receives;
+- **the same scope-dropping line found in two more controllers.** `->getQuery()` unwraps a builder
+  without applying scopes — `toBase()` is the one that keeps them, confirmed in the framework source.
+  `SyncRunController` counted other projects' AND other TENANTS' runs into the summary an operator
+  reads to decide whether their own figures are trustworthy; `TaskController`'s project-scoped route
+  counted other projects' tasks while returning this project's rows. Both proved by restoring the
+  line, and the MECHANISM is now guarded — no application code may unwrap a builder past its scopes;
+- `objectiveFamiliesInScope()` proved, the function standing between the product and a generic
+  «Results» that sums purchases, leads and installs;
+- a spend-versus-efficiency scatter component, not yet wired into the page.
 
 Merge it, confirm the DEPLOY ran (not just the merge), then browser-verify.
 
 ## NEXT EXECUTABLE ACTIONS, in order
 
-1. **#420 → merge → deploy → production verify.** The deploy is the step that fails silently; check
+1. **#421 → merge → deploy → production verify.** The deploy is the step that fails silently; check
    the run, and check a served asset hash rather than the merge.
+2. **Wire `SpendEfficiencyScatter` into the Campaigns page.** The component and its tests land with
+   #421; the page is on main. One decision it answers that no ranking can: high spend AND high cost
+   per result. It must keep refusing to plot a campaign missing either coordinate — placing it at the
+   origin would put the campaigns we know least about in the corner reading «cheap and efficient».
 2. **Campaigns, remaining from the owner's list:** spend-vs-efficiency scatter where semantically
    valid, objective/platform contribution, movers. Strongest/weakest, budget pacing and the trend
    already exist. Do not add a chart that does not answer a decision.

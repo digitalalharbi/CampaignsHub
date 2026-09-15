@@ -118,22 +118,78 @@ final class PlatformHttp
         return true;
     }
 
-    /** The most useful sentence available about why an answer was not a success. */
+    /**
+     * The most useful sentence available about why an answer was not a success — WITH its identifiers.
+     *
+     * This returned the human sentence alone, and the human sentence is the one part of a refusal
+     * that cannot be acted on. «Error validating access token: Session has expired» does not say
+     * whether the person's session lapsed or their permission was withdrawn; Meta's `error_subcode`
+     * does, and it was discarded on the way into `last_error` along with the `fbtrace_id` Meta's own
+     * support asks for. Snapchat and TikTok send a `request_id` for the same purpose.
+     *
+     * So the identifiers travel with the sentence. They are identifiers — a code, a subcode, a trace
+     * reference — and no token, secret or credential is read here.
+     *
+     * `GoogleAdsConnector` assembles its own richer refusal and does not come through this path, so
+     * nothing is double-reported.
+     */
     public static function reason(Response $response): string
     {
         /** @var array<string,mixed> $body */
         $body = $response->json() ?? [];
 
+        /** @var array<string,mixed> $error */
+        $error = is_array($body['error'] ?? null) ? $body['error'] : [];
+
+        $sentence = null;
+
         foreach (['message', 'error_description', 'display_message', 'debug_message'] as $key) {
             if (isset($body[$key]) && is_string($body[$key]) && $body[$key] !== '') {
-                return $body[$key];
+                $sentence = $body[$key];
+                break;
             }
         }
 
-        if (isset($body['error']) && is_array($body['error']) && isset($body['error']['message'])) {
-            return (string) $body['error']['message'];
+        if ($sentence === null && isset($error['message']) && is_string($error['message'])) {
+            $sentence = $error['message'];
         }
 
-        return 'HTTP '.$response->status().': '.mb_substr(trim($response->body()), 0, 200);
+        if ($sentence === null) {
+            return 'HTTP '.$response->status().': '.mb_substr(trim($response->body()), 0, 200);
+        }
+
+        return implode(' · ', array_merge([$sentence], self::identifiers($body, $error)));
+    }
+
+    /**
+     * The provider's own references for this refusal, named so a reader knows what they are holding.
+     *
+     * Read from both the envelope and the nested `error` object, because the providers disagree about
+     * where they put them and a reader does not care which.
+     *
+     * @param  array<string,mixed>  $body
+     * @param  array<string,mixed>  $error
+     * @return list<string>
+     */
+    private static function identifiers(array $body, array $error): array
+    {
+        $out = [];
+
+        foreach (['code' => 'code', 'error_subcode' => 'subcode', 'fbtrace_id' => 'trace', 'request_id' => 'request', 'log_id' => 'log'] as $key => $label) {
+            $value = $error[$key] ?? $body[$key] ?? null;
+
+            if (is_string($value) && $value !== '') {
+                $out[] = $label.' '.$value;
+
+                continue;
+            }
+
+            /* `is_numeric` already excludes booleans, so a guard against them would never fire. */
+            if (is_int($value) || is_numeric($value)) {
+                $out[] = $label.' '.$value;
+            }
+        }
+
+        return $out;
     }
 }
