@@ -53,11 +53,23 @@ final class BudgetRiskAlertTruthTest extends TestCase
         $this->project = Project::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $client->id, 'name' => 'P', 'status' => 'active']);
     }
 
+    /**
+     * A name with no digits in it, because a test below forbids a digit sequence in the message.
+     *
+     * It was `'Camp '.uniqid()`, a hex string — and the alert message names the campaign, so a
+     * suffix that happened to contain `375` failed «the alarm must not name 375%» on a run where the
+     * product was entirely correct. Observed: `Camp 6aa89485b375a`. A fixture that can fail for a
+     * reason unrelated to its subject is a test that gets loosened by whoever meets it at 2am.
+     *
+     * The digits are mapped out rather than randomised away: `Str::random()` is alphanumeric, so it
+     * would have left exactly the same collision in place at a lower rate, which is the worse of the
+     * two outcomes. `strtr` keeps the uniqueness `uniqid()` was there for.
+     */
     private function campaign(float $budget, string $currency = 'SAR'): UnifiedCampaign
     {
         return UnifiedCampaign::create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
-            'name' => 'Camp '.uniqid(), 'objective' => 'conversions', 'status' => 'active',
+            'name' => 'Camp '.strtr(uniqid(), '0123456789', 'abcdefghij'), 'objective' => 'conversions', 'status' => 'active',
             'total_budget' => $budget, 'budget_currency' => $currency,
         ]);
     }
