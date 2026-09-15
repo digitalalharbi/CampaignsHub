@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowRight, Archive, Pause, Pencil, Play } from 'lucide-react'
@@ -162,6 +162,20 @@ export function CampaignDetailPage() {
    */
   const [launch, setLaunch] = useState<LaunchOutcome | null>(null)
 
+  /*
+   * A second click inside the same tick must not post twice.
+   *
+   * `statusMutation.isPending` is the obvious guard and it is not enough: it only becomes true after
+   * React re-renders, so two clicks landing before that both see `false` and both fire. A ref flips
+   * synchronously, which is the only thing fast enough to stand between a pointer and a POST.
+   */
+  const transitionInFlight = useRef(false)
+  const transition = (action: 'pause' | 'activate') => {
+    if (transitionInFlight.current) return
+    transitionInFlight.current = true
+    statusMutation.mutate(action)
+  }
+
   const statusMutation = useMutation({
     mutationFn: async (action: 'pause' | 'activate') => {
       if (action === 'pause') return campaignAction(projectId, campaignId, 'pause')
@@ -172,6 +186,7 @@ export function CampaignDetailPage() {
       return envelope.data
     },
     onSuccess: invalidate,
+    onSettled: () => { transitionInFlight.current = false },
   })
   const archiveMutation = useMutation({
     mutationFn: () => archiveCampaign(projectId, campaignId),
@@ -279,11 +294,11 @@ export function CampaignDetailPage() {
             )}
             {canPause && c.status === 'active' && (
               <Button variant="secondary" loading={statusMutation.isPending && statusMutation.variables === 'pause'}
-                onClick={() => statusMutation.mutate('pause')}><Pause size={14} /> {t('pause')}</Button>
+                onClick={() => transition('pause')}><Pause size={14} /> {t('pause')}</Button>
             )}
             {canUpdate && c.status !== 'active' && c.status !== 'archived' && (
               <Button variant="secondary" loading={statusMutation.isPending && statusMutation.variables === 'activate'}
-                onClick={() => statusMutation.mutate('activate')}><Play size={14} /> {t('activate')}</Button>
+                onClick={() => transition('activate')}><Play size={14} /> {t('activate')}</Button>
             )}
             {canUpdate && (
               <Button variant="ghost" loading={archiveMutation.isPending} onClick={() => archiveMutation.mutate()}>
