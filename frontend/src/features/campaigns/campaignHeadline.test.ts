@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { campaignEfficiency, campaignHeadline } from './campaignHeadline'
+import { campaignEfficiency, campaignHeadline, campaignReturn } from './campaignHeadline'
 
 /**
  * CAMPAIGN-INTELLIGENCE-HUB — the row carries the result the campaign was BOUGHT for.
@@ -91,6 +91,51 @@ describe('the result a campaign row leads with', () => {
  * A second hand-written objective→cost map would be a fourth place the taxonomy lives, and the first
  * new objective would put it out of step with the other three.
  */
+describe('what the campaign returned, where returning was the point', () => {
+  /**
+   * The objective's own ordering decides which return figure leads, and for sales that is revenue.
+   *
+   * `sales` names `['purchases', 'cpa', 'revenue', 'roas']`, so the money returned comes before the
+   * ratio — which is the catalogue's considered answer and not this column's to overrule. My first
+   * version of this test asserted `roas` because that was the figure I had in mind; the taxonomy had
+   * already decided otherwise, and deferring to it is the whole reason the column reads from it.
+   */
+  it('gives a sales campaign the return its objective leads with', () => {
+    expect(campaignReturn('sales', row({ revenue: 9000, reported: { revenue: true } }), false)?.key).toBe('revenue')
+  })
+
+  /**
+   * An awareness campaign gets NOTHING here, and that is the distinction the column exists to keep.
+   *
+   * «Not applicable to this objective» is not «unavailable». A «—» claims the platform had a figure
+   * and could not give it; null renders no cell at all, which is the true statement about a campaign
+   * that was never bought to return anything. The objective's own primary list decides — nothing
+   * here knows what awareness means.
+   */
+  it('gives an awareness campaign no return column at all', () => {
+    expect(campaignReturn('awareness', row({ roas: 3.2 }), false)).toBeNull()
+  })
+
+  /** A traffic campaign is the same case, and must not be handed a sales verdict by accident. */
+  it('gives a traffic campaign no return column either', () => {
+    expect(campaignReturn('traffic', row({ roas: 9 }), false)).toBeNull()
+  })
+
+  /**
+   * A sales campaign whose platform never reported revenue says so rather than showing a zero.
+   *
+   * The absence has to be stated in the `reported` map, not by the value: `byCampaign()` sums with
+   * COALESCE, so a revenue nobody sent arrives as 0 and is indistinguishable from a real zero by
+   * looking at it. My first version passed `revenue: 0` against the fixture's default map, which
+   * says revenue WAS reported — so it asserted a reported zero and was right to fail.
+   */
+  it('says a sales return was never reported instead of printing zero', () => {
+    const r = campaignReturn('sales', row({ revenue: 0, reported: { spend: true } }), false)
+
+    expect(r?.reading.kind).not.toBe('value')
+  })
+})
+
 describe('what the result cost', () => {
   it('pairs a sales campaign with its cost per order', () => {
     expect(campaignEfficiency('sales', row({ cpa: 41.6 }), false)?.key).toBe('cpa')

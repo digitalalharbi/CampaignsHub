@@ -14,7 +14,7 @@ import { campaignStatusLabel, campaignStatusTone, objectiveLabel } from './label
 import { CAMPAIGN_STATUSES, type UnifiedCampaign } from './types'
 import { CANONICAL_OBJECTIVE_KEYS, canonicalObjectiveLabel, canonicalOfRaw, rawObjectivesFor, type CanonicalObjectiveKey } from './canonicalObjectives'
 import { LIFECYCLE_KEYS, lifecycleView, type Lifecycle } from './campaignLifecycleView'
-import { campaignEfficiency, campaignHeadline, campaignSpendReading, type CampaignHeadline } from './campaignHeadline'
+import { campaignEfficiency, campaignHeadline, campaignReturn, campaignSpendReading, type CampaignHeadline } from './campaignHeadline'
 import type { MetricReading } from '@/components/ui/MetricStrip'
 import { campaignRelevance, type CampaignRelevance } from './campaignRelevance'
 import { SpendLimitChip } from '@/features/budget/SpendLimitChip'
@@ -1090,6 +1090,8 @@ export function CampaignsPage() {
                     <SortableHeader id="spend" label={ar ? 'الإنفاق' : 'Spend'} sort={sort} dir={dir} onSort={applySort} ar={ar} align="end" />
                     <SortableHeader id="results" label={ar ? 'النتائج' : 'Results'} sort={sort} dir={dir} onSort={applySort} ar={ar} align="end" />
                     <th className="p-3 text-center">{ar ? 'تكلفة النتيجة' : 'Cost per result'}</th>
+                    {/* Shown for the objectives that name a return; blank — not «—» — for the rest. */}
+                    <th className="p-3 text-center">{ar ? 'العائد' : 'Return'}</th>
                     <th className="p-3 text-center">{ar ? 'الميزانية' : 'Budget'}</th>
                     <th className="p-3 text-center">{ar ? 'مرتبطة' : 'Linked'}</th>
                   </tr>
@@ -1122,6 +1124,23 @@ export function CampaignsPage() {
                         <td className="p-3 text-center"><MetricCell reading={campaignSpendReading(m, ar)} locale={locale} /></td>
                         <td className="p-3 text-center"><MetricCell reading={campaignHeadline(c.objective, m, ar)?.reading ?? null} locale={locale} /></td>
                         <td className="p-3 text-center"><MetricCell reading={campaignEfficiency(c.objective, m, ar)?.reading ?? null} locale={locale} /></td>
+                        {/*
+                          * An objective with no return figure gets an EMPTY cell, not «—».
+                          *
+                          * `MetricCell` renders «—» for a null reading, and «—» in this product means
+                          * «the platform had this and did not give it». An awareness campaign was
+                          * never bought to return revenue, so that sentence is false about it — the
+                          * honest rendering is nothing at all. Checked in the browser, where the
+                          * first version of this column printed «—» on every traffic and awareness
+                          * row while its own comment claimed it printed nothing.
+                          */}
+                        <td className="p-3 text-center">
+                          {(() => {
+                            const ret = campaignReturn(c.objective, m, ar)
+
+                            return ret === null ? null : <MetricCell reading={ret.reading} locale={locale} />
+                          })()}
+                        </td>
                         <td className="p-3 text-center"><span className="tnum">{money(c.total_budget, c.budget_currency)}</span></td>
                         <td className="p-3 text-center"><span className="tnum">{c.external_campaigns_count ?? 0}</span></td>
                       </tr>
