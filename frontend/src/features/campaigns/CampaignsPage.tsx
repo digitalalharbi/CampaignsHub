@@ -609,7 +609,29 @@ export function CampaignsPage() {
             <span className="tnum font-semibold text-text-primary">{countedCampaigns(counts.total, ar ? 'ar' : 'en')}</span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        {/*
+          * VISUAL-DECISION-001 — the operational header: find, narrow, choose a window, create.
+          *
+          * Search and the two taxonomy selects sat below the view switcher, so «find the campaign I
+          * came for» lived underneath the charts rather than beside the title. They are controls over
+          * the whole page and now read as one row with it. The state chips stay where they are —
+          * they are a narrowing OF the list and belong against the list.
+          */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-56">
+            <Search size={15} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-text-muted" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              data-testid="campaigns-search"
+              placeholder={ar ? 'ابحث في حملات المشروع…' : 'Search this project’s campaigns…'}
+              className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+            />
+          </div>
+          {/* Sized, because the control is `w-full` by default and a full-width select in a header
+              row pushes everything after it onto a line of its own. */}
+          <Select className="w-full sm:w-40" value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
+          <Select className="w-full sm:w-44" value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CANONICAL_OBJECTIVE_KEYS.map((o) => ({ value: o, label: canonicalObjectiveLabel(o, locale) }))]} />
           <RangeTabs value={days} onChange={setDays} />
           {canCreate && <Button onClick={() => setModalOpen(true)}><Plus size={16} /> {t('new_campaign')}</Button>}
         </div>
@@ -903,14 +925,6 @@ export function CampaignsPage() {
         <>
           {/* Filters — search + taxonomy chips for status and objective. */}
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative flex-1">
-                <Search size={15} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-text-muted" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={ar ? 'ابحث في حملات المشروع…' : 'Search this project’s campaigns…'} className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
-              </div>
-              <Select value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
-              <Select value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CANONICAL_OBJECTIVE_KEYS.map((o) => ({ value: o, label: canonicalObjectiveLabel(o, locale) }))]} />
-            </div>
             {/* Taxonomy chips — the same taxonomy the selects use, one tap away, with live counts. */}
             <div className="flex flex-wrap gap-1.5">
             {/*
