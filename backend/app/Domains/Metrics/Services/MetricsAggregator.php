@@ -878,7 +878,15 @@ final class MetricsAggregator
         foreach ($rows as &$r) {
             $r['spend_share'] = $totalSpend > 0 ? round(((float) ($r['spend'] ?? 0)) / $totalSpend, 4) : null;
         }
-        usort($rows, fn ($a, $b) => $b['spend'] <=> $a['spend']);
+        /*
+         * Spend, and then the provider — ENTITY-RELEVANCE-ORDERING-001.
+         *
+         * This was `$b['spend'] <=> $a['spend']` and nothing else. Every platform that spent the same
+         * compared equal, which on a project before it starts is all of them, and this query has no
+         * `ORDER BY` to fall back on. See `orderBySpendThen()` for why a stable sort downstream does
+         * not rescue it.
+         */
+        $rows = self::orderBySpendThen($rows, 'provider');
 
         return $rows;
     }
@@ -915,7 +923,7 @@ final class MetricsAggregator
             ->whereIn('id', $rows->pluck('account_id')->filter()->all())
             ->pluck('name', 'id');
 
-        return $rows->map(fn ($r): array => [
+        $rows = $rows->map(fn ($r): array => [
             'account_id' => $r->account_id === null ? null : (string) $r->account_id,
             'provider' => $r->provider,
             /*
@@ -925,6 +933,21 @@ final class MetricsAggregator
              */
             'account_name' => $r->account_id === null ? null : ($names[$r->account_id] ?? null),
         ] + $this->withDerived((array) $r))->all();
+
+        /*
+         * ENTITY-RELEVANCE-ORDERING-001 — this returned rows in NO stated order at all.
+         *
+         * `GROUP BY` carries no `ORDER BY`, and PostgreSQL promises nothing about what comes back, so
+         * «what moved between the accounts» — the tab's own question — was answered in whatever order
+         * the database happened to produce, and could answer it differently on two identical
+         * requests. The campaign breakdown has had a total order since that was found there; this one
+         * never got it.
+         *
+         * Spend first and then the account id, for the reason `orderBySpendThen()` gives: an id is
+         * deterministic where a name can be renamed between two requests that should have agreed, and
+         * two accounts may legitimately share a name.
+         */
+        return self::orderBySpendThen($rows, 'account_id');
     }
 
     /** @return list<array<string, mixed>> one row per unified campaign (id/name/provider) ranked by spend. */
@@ -1466,8 +1489,43 @@ final class MetricsAggregator
      */
     public static function orderCampaignRows(array $rows): array
     {
-        usort($rows, static fn (array $a, array $b): int => [(float) $b['spend'], (string) $a['campaign_id']]
-            <=> [(float) $a['spend'], (string) $b['campaign_id']]);
+        return self::orderBySpendThen($rows, 'campaign_id');
+    }
+
+    /**
+     * ENTITY-RELEVANCE-ORDERING-001 — the same rule, for every breakdown that has one.
+     *
+     * ## Why this was extracted
+     *
+     * The reasoning above is not about campaigns. It is about a list sorted on a figure that ties, and
+     * it was written for `byCampaign()` and applied nowhere else — so the rule existed, correctly
+     * argued, in one of the three breakdowns that need it:
+     *
+     *   - `byProvider()` sorted on `spend` ALONE. Two platforms that spent the same — or the several
+     *     that spent nothing, which is every platform on a project before it starts — compared equal,
+     *     and `GROUP BY provider` carries no `ORDER BY`, so what a reader saw was whatever the
+     *     database happened to return. This is the list behind the platform comparison table and the
+     *     spend donut on a client's own report.
+     *   - `byAccount()` had no ordering AT ALL. «What moved between the accounts» is the tab's
+     *     question and the rows arrived in no stated order.
+     *
+     * ## Sorted, and then sorted again downstream
+     *
+     * Every table that renders these sorts stably — `MetricTable` and JavaScript's own `sort` both
+     * keep equal elements where they found them — so a stable sort over a non-deterministic order is
+     * a non-deterministic order. Fixing it at the source fixes it for the chart, the table, the
+     * export and the PDF at once, which is the point of fixing it at the source.
+     *
+     * The tiebreak is an ID, never a name: two accounts may legitimately share a name, and a name can
+     * be renamed between two requests that should have agreed.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    public static function orderBySpendThen(array $rows, string $tiebreak): array
+    {
+        usort($rows, static fn (array $a, array $b): int => [(float) ($b['spend'] ?? 0), (string) ($a[$tiebreak] ?? '')]
+            <=> [(float) ($a['spend'] ?? 0), (string) ($b[$tiebreak] ?? '')]);
 
         return $rows;
     }
