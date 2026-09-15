@@ -7,7 +7,10 @@ disagree, Git is right.**
 
 ## 2026-09-15 — where this session stopped
 
-`origin/main` = `2c312917` (#420).
+`origin/main` = `2c312917` (#420), deploy run succeeded and the served bundle confirms it: the
+production asset hashes moved (`index-n3GAhzwK.js` → `index-Dcg0rZZf.js`, `index-DmSFRYgc.css` →
+`index-fMYwqRn8.css`). Nothing in #420 is reachable without signing in, so its BEHAVIOUR stays
+`BLOCKED_OPERATIONAL_EVIDENCE` in this lane — the deploy is verified, the screens are not.
 
 **#420 merged after that line was first written.** It is the Campaigns Command Center: project-scoped
 status counts, server-side lifecycle filtering with the chip counts taken BEFORE the narrowing,
