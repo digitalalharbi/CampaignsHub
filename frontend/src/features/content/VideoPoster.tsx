@@ -91,7 +91,7 @@ export function VideoPoster({
        * Asking the element at the deadline closes it: the frame is there or it is not, and either
        * answer is one the reader can act on.
        */
-      if (ref.current !== null && ref.current.readyState >= 2) {
+      if (ref.current !== null && ! ref.current.error && ref.current.readyState >= 2) {
         settle()
 
         return
@@ -130,7 +130,32 @@ export function VideoPoster({
    */
   const settle = () => {
     const el = ref.current
-    if (el === null || el.readyState < 2) return
+    if (el === null) return
+
+    /*
+     * A frame the browser has since given up on is not a frame.
+     *
+     * `readyState` does not fall back on failure: an element that errored keeps
+     * `HAVE_CURRENT_DATA` alongside a set `error`, so asking only about the frame marked the card
+     * painted over something the browser had abandoned — an empty box reporting
+     * `data-painted="true"`, which is the blank rectangle with a claim attached. Reported by CI's
+     * WebKit on the content grid, with the poster still mounted and `video.error` non-null.
+     *
+     * `onError` below exists for this and cannot cover it alone: that is the EVENT, and the error can
+     * already be set before this component's listener attaches — a cached failure, or a source that
+     * failed during hydration. The state is what the decision should rest on.
+     *
+     * Truthiness rather than `!== null`, because jsdom leaves the property `undefined` — and a guard
+     * written as `!== null` there treats every healthy element as a failed one, which is the same
+     * mistake in the opposite direction.
+     */
+    if (el.error) {
+      onUnavailable()
+
+      return
+    }
+
+    if (el.readyState < 2) return
 
     if (gaveUp.current !== null) {
       clearTimeout(gaveUp.current)
