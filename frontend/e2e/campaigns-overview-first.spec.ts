@@ -81,4 +81,39 @@ test.describe('the campaigns workspace', () => {
 
     await expect(page.getByTestId('view-table')).toHaveAttribute('aria-pressed', 'true')
   })
+
+  /**
+   * NEEDS-ATTENTION-ONE-DEFINITION-001 — the screen says the number once.
+   *
+   * The KPI card, the band chip and the landing strip all print «needs attention» within one
+   * viewport of each other. They used to come from two engines — operational flags for the card and
+   * the list, a metrics weakness for the strip — so a reader could see two different counts under
+   * the same words and had no way to tell which was wrong.
+   *
+   * Asserted in a real browser against the real API, because that disagreement only ever appeared
+   * where both numbers were rendered from the same data at the same moment.
+   */
+  test('the attention count is the same number wherever it appears', async ({ page, request }) => {
+    test.setTimeout(180_000)
+
+    await openCampaigns(page, request)
+
+    const card = (await page.getByTestId('campaigns-attention').innerText()).match(/\d+/)?.[0]
+    expect(card).toBeDefined()
+
+    const band = (await page.getByTestId('campaigns-band-attention').innerText()).match(/\d+/)?.[0]
+    expect(band).toBe(card)
+
+    /*
+     * The strip renders its chip only when the count is above zero, which is itself the contract —
+     * so «nothing needs attention» is proven by the chip's absence rather than by a zero.
+     */
+    const strip = page.getByTestId('landing-attention')
+    if (card === '0') {
+      await expect(strip).toBeHidden()
+    } else {
+      await expect(strip).toBeVisible()
+      expect((await strip.innerText()).match(/\d+/)?.[0]).toBe(card)
+    }
+  })
 })
