@@ -8,6 +8,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Integrations\Support\ProviderErrorText;
 use Illuminate\Support\Carbon;
 
 /**
@@ -96,7 +97,7 @@ final class AccountDiscovery
         } catch (\Throwable $e) {
             $connection->forceFill([
                 'discovery_blocked_reason' => $this->classify($e),
-                'last_error' => mb_substr($e->getMessage(), 0, 1000),
+                'last_error' => ProviderErrorText::forStorage($e->getMessage()),
             ])->save();
 
             throw $e;

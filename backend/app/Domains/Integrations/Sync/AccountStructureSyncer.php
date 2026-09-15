@@ -15,6 +15,7 @@ use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Providers\SnapchatConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Enums\SyncRunStatus;
 use Illuminate\Support\Carbon;
@@ -223,7 +224,7 @@ final class AccountStructureSyncer
             'records' => $records,
             // The column is a plain string; a long chain of per-step complaints is trimmed rather than
             // allowed to fail the write that is recording the failure.
-            'error' => $error === null ? null : mb_substr($error, 0, 250),
+            'error' => ProviderErrorText::forStorage($error),
             'finished_at' => Carbon::now(),
         ])->save();
 

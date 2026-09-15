@@ -203,6 +203,9 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
   const [diff, setDiff] = useState<{ added: string[]; unchanged: string[]; removed: string[] } | null>(null)
 
   const save = useMutation({
+    // The previous answer is cleared before asking again, so a retry cannot show the last success
+    // beside the new failure — two verdicts about one press is worse than none.
+    onMutate: () => { setDiff(null) },
     mutationFn: () => applyAccountSelection({
       projectId: manageProjectId!,
       connectionId,
@@ -683,6 +686,24 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
             </p>
           )}
         </section>
+      )}
+
+      {/*
+        SAVE-ACCOUNTS-SILENCE-001 — a refused save says so.
+
+        «Save accounts» had a success state and no failure state at all. The confirm button beside it
+        renders `confirm.isError`; this one rendered nothing, so a 403, a plan refusal or a dropped
+        request stopped the spinner and left the dialog exactly as it was. The owner reported it the
+        only way it can be experienced: pressing Save appeared to do nothing.
+
+        Placed beside the diff, because those two are the answer to the same press and a reader
+        should not have to look in two places to find out which one they got.
+      */}
+      {save.isError && (
+        <p className="flex items-start gap-2 rounded-lg border border-danger bg-danger-soft p-3 text-sm text-danger" data-testid="wizard-save-error">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          {toApiError(save.error).message}
+        </p>
       )}
 
       {/*

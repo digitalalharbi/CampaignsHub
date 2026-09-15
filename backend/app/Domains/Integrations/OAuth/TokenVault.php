@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\OAuth;
 
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Support\ProviderErrorText;
 use Illuminate\Support\Carbon;
 use RuntimeException;
 use Throwable;
@@ -199,7 +200,7 @@ final class TokenVault
         $connection->forceFill([
             'status' => 'error',
             // The column is a string, and a provider's error body can be a page long.
-            'last_error' => mb_substr($reason, 0, 250),
+            'last_error' => ProviderErrorText::forStorage($reason),
             'last_health_check_at' => Carbon::now(),
         ])->save();
     }

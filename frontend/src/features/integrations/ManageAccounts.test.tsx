@@ -162,4 +162,51 @@ describe('managing the accounts of a connected source', () => {
     const sent = vi.mocked(applyAccountSelection).mock.calls.at(-1)?.[0].externalAccountIds ?? []
     expect([...sent].sort()).toEqual(['a1', 'a2'])
   })
+
+  /**
+   * SAVE-ACCOUNTS-SILENCE-001 — «pressing Save accounts must never appear to do nothing».
+   *
+   * The owner reported it the only way it can be experienced. The mutation had `onSuccess` and no
+   * failure state at all: the confirm button beside it rendered `confirm.isError`, this one rendered
+   * nothing, so a refusal stopped the spinner and left the dialog exactly as it had been. There is no
+   * way to tell that apart from a press that never registered.
+   */
+  it('says so when the save is refused, rather than going quiet', async () => {
+    vi.mocked(applyAccountSelection).mockRejectedValue(
+      Object.assign(new Error('Request failed'), {
+        response: { status: 422, data: { message: 'This project already holds its plan’s accounts.' } },
+      }),
+    )
+
+    renderWithProviders(<ConnectionWizard connectionId="c1" manageProjectId="p1" onClose={() => {}} />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('wizard-save-selection'))
+
+    const failure = await screen.findByTestId('wizard-save-error')
+    expect(failure).toHaveTextContent('plan')
+    // And no success beside it — one press has one answer.
+    expect(screen.queryByTestId('wizard-selection-diff')).not.toBeInTheDocument()
+  })
+
+  /**
+   * A retry must not leave the previous verdict on screen.
+   *
+   * The diff is state, not a render of the mutation, so without clearing it a save that succeeded
+   * and then failed would show «1 added» and a refusal together — two answers to one press, which is
+   * worse than none.
+   */
+  it('clears the previous answer before asking again', async () => {
+    renderWithProviders(<ConnectionWizard connectionId="c1" manageProjectId="p1" onClose={() => {}} />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('wizard-save-selection'))
+    expect(await screen.findByTestId('wizard-selection-diff')).toBeInTheDocument()
+
+    vi.mocked(applyAccountSelection).mockRejectedValue(
+      Object.assign(new Error('Request failed'), { response: { status: 500, data: { message: 'Server error.' } } }),
+    )
+    fireEvent.click(screen.getByTestId('wizard-save-selection'))
+
+    await screen.findByTestId('wizard-save-error')
+    expect(screen.queryByTestId('wizard-selection-diff')).not.toBeInTheDocument()
+  })
 })
