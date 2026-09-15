@@ -20,10 +20,20 @@ import { buildGeneratedClientReport } from './report-builder'
  */
 test.use({ storageState: AUTH.owner })
 
-test('export → download → the XLSX and CSV a person receives are real files carrying the real figures', async ({ page }) => {
-  // Two full export cycles — queue, poll, download — each with its own reload, and webkit is the
-  // slowest of the three under gate load.
-  test.setTimeout(420_000)
+test('export → download → the XLSX and CSV a person receives are real files carrying the real figures', async ({ page, browserName }) => {
+  /*
+   * The budget, and why webkit gets more of it — GATE-WK-001's pattern, not a product difference.
+   *
+   * This test does two complete export cycles: build the report, queue a render, poll the queue,
+   * reload, click the download, read the bytes — twice. On this machine webkit finishes the whole
+   * thing in 54 seconds. On the gate, sharing a runner with the rest of the suite, the same test
+   * took seven minutes and died on `waitForEvent('download')` at 420 seconds.
+   *
+   * That is load, not Safari: the download fires there, and the two faster engines pass the same
+   * assertions on the same file. Raising the budget for the slow engine is the honest fix; trimming
+   * the assertions or skipping webkit would trade away the coverage this test exists for.
+   */
+  test.setTimeout(browserName === 'webkit' ? 900_000 : 420_000)
 
   const { projectId, reportId } = await buildGeneratedClientReport(page, `E2E TABULAR ${Date.now()}`)
 
