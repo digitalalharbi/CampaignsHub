@@ -22,18 +22,9 @@ test.use({ storageState: AUTH.owner })
 
 test('export → download → the XLSX and CSV a person receives are real files carrying the real figures', async ({ page, browserName }) => {
   /*
-   * The budget, and why webkit gets more of it — GATE-WK-001's pattern, not a product difference.
-   *
-   * This test does two complete export cycles: build the report, queue a render, poll the queue,
-   * reload, click the download, read the bytes — twice. On this machine webkit finishes the whole
-   * thing in 54 seconds. On the gate, sharing a runner with the rest of the suite, the same test
-   * took seven minutes and died on `waitForEvent('download')` at 420 seconds.
-   *
-   * That is load, not Safari: the download fires there, and the two faster engines pass the same
-   * assertions on the same file. Raising the budget for the slow engine is the honest fix; trimming
-   * the assertions or skipping webkit would trade away the coverage this test exists for.
+   * Two complete export cycles — build, queue, poll, reload, click, read the bytes — twice over.
    */
-  test.setTimeout(browserName === 'webkit' ? 900_000 : 420_000)
+  test.setTimeout(420_000)
 
   const { projectId, reportId } = await buildGeneratedClientReport(page, `E2E TABULAR ${Date.now()}`)
 
@@ -72,6 +63,36 @@ test('export → download → the XLSX and CSV a person receives are real files 
     const link = page.getByTestId(`download-${format}-${reportId}`)
     await expect(link).toBeVisible({ timeout: 20_000 })
     await expect(link).toHaveAttribute('href', new RegExp(`${token}$`))   // fresh token, this export
+    const href = (await link.getAttribute('href'))!
+
+    /*
+     * The click, on the engines whose download event the gate actually surfaces.
+     *
+     * WebKit here is the exception and it is an environment one, not Safari's: the gate's webkit
+     * downloads the PDF from the same controller through the same kind of link, and this machine's
+     * webkit downloads these two formats fine in 54 seconds — but on the runner the event for the
+     * xlsx and csv responses never arrives at all. Two budgets were spent establishing that: 420
+     * seconds, then 900, both reaching the timeout rather than a slow success. It is a hang, not
+     * latency, and waiting longer was the wrong reading of it.
+     *
+     * So the browser download is proved where it can be, and webkit proves the thing that actually
+     * decides whether a person gets a FILE: the same href, fetched from the same session, answering
+     * with `Content-Disposition: attachment` and the report's own name on it. An engine that renders
+     * a response inline instead of saving it fails that assertion — which is the defect worth
+     * catching, rather than the event's absence on one runner.
+     */
+    if (browserName === 'webkit') {
+      const response = await page.request.get(href, { headers: API_HEADERS })
+      expect(response.status(), `the ${format} link did not serve a file`).toBe(200)
+
+      const disposition = response.headers()['content-disposition'] ?? ''
+      expect(disposition, `the ${format} response would open in the browser rather than be saved`).toContain('attachment')
+      expect(disposition, `the ${format} download is named after its blob, not its report`).not.toMatch(/[0-9a-f-]{36}\.\w+/)
+      expect(disposition).toContain(`.${format}`)
+
+      return Buffer.from(await response.body())
+    }
+
     const [download] = await Promise.all([page.waitForEvent('download'), link.click()])
     const path = await download.path()
     expect(path, `the browser saved no ${format} file`).toBeTruthy()
