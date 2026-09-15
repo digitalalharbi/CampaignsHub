@@ -51,7 +51,7 @@ final class ReportExporter
         $this->gate->ensureReady($report);
         // SINGLE enforcement point: every export path (admin export, scheduled, email, share) is filtered
         // by the report's audience here — an authenticated admin can NEVER bypass client filtering.
-        $data = $this->audienceData($report);
+        $data = $this->withoutHiddenSections($report, $this->audienceData($report));
 
         return match ($format) {
             'csv' => $this->csv($report, $data),
@@ -59,6 +59,59 @@ final class ReportExporter
             'pdf' => $this->pdf($report, $data),
             default => throw new \InvalidArgumentException("Unsupported format: {$format}"),
         };
+    }
+
+    /**
+     * REPORT-OPTION-TRAVEL-001 — a section the reader turned off leaves the bytes too.
+     *
+     * `config.slides` carries a `visible` flag and BOTH renderers honour it: `InteractiveReport` and
+     * `PrintReport` each filter on it before drawing. The file did not — the CSV is built from the
+     * data keys and never looked at the slides — so a hidden section travelled to the web view and
+     * the PDF and still shipped its figures in the spreadsheet.
+     *
+     * That is worse than an inconsistency, because this class already states the rule it broke: what
+     * the client cannot see must not be in the bytes they were sent.
+     *
+     * Conservative on purpose. A slide type this map does not know leaves its data alone, and a
+     * report with NO slide list keeps everything: absent is not hidden, and a report generated before
+     * the flag existed must not quietly lose sections.
+     *
+     * @param  array<string,mixed>  $data
+     * @return array<string,mixed>
+     */
+    private function withoutHiddenSections(Report $report, array $data): array
+    {
+        $slides = $report->config['slides'] ?? null;
+
+        if (! is_array($slides) || $slides === []) {
+            return $data;
+        }
+
+        /** @var array<string, list<string>> $keysOf — slide type → the data keys it draws from. */
+        $keysOf = [
+            'campaigns' => ['campaigns'],
+            'funnel' => ['funnel'],
+            'budget' => ['budget'],
+            'ads' => ['ads', 'ads_roster', 'ads_groups', 'ads_platform_groups', 'creatives'],
+            'next_steps' => ['next_steps'],
+            'recommendations' => ['recommendations'],
+            'observations' => ['findings'],
+            'objective_performance' => ['objective_performance'],
+            'platform_comparison' => ['platforms'],
+            'comparison' => ['comparison'],
+        ];
+
+        foreach ($slides as $slide) {
+            if (! is_array($slide) || ($slide['visible'] ?? true) !== false) {
+                continue;
+            }
+
+            foreach ($keysOf[$slide['type'] ?? ''] ?? [] as $key) {
+                unset($data[$key]);
+            }
+        }
+
+        return $data;
     }
 
     /**
