@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { CampaignLink } from '@/features/campaigns/CampaignLink'
 import { fmtDateTime } from '@/lib/datetime'
 import { AlertTriangle } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
@@ -213,12 +214,21 @@ export function UnifiedCampaignOverview({
   title,
   headerRight,
   lang = 'ar',
+  projectId = null,
 }: {
   vm: OverviewVM
   variant?: OverviewVariant
   compact?: boolean
   title?: string
   headerRight?: ReactNode
+  /*
+   * CAMPAIGN-DRILL-001 — the project a row can be opened in.
+   *
+   * This overview is rendered on the dashboard, inside Analytics and on the marketing preview, and
+   * only the first two have a project pinned. Null is honest about the third: the campaign names
+   * stay printed and simply are not links, rather than routing somewhere that cannot resolve.
+   */
+  projectId?: string | null
   lang?: 'ar' | 'en'
 }) {
   const w = OVERVIEW_COPY[lang]
@@ -305,7 +315,9 @@ export function UnifiedCampaignOverview({
               <tbody>
                 {vm.topCampaigns.slice(0, topN).map((cp) => (
                   <tr key={cp.id} className={`border-b last:border-0 ${c.rowBorder}`}>
-                    <td className={`py-1.5 pe-2 font-semibold ${c.value}`}>{cp.name}</td>
+                    <td className={`py-1.5 pe-2 font-semibold ${c.value}`}>
+                      <CampaignLink projectId={projectId} campaignId={cp.id} name={cp.name} />
+                    </td>
                     <td className="py-1.5">
                       <span className={`inline-flex items-center gap-1.5 ${c.sub}`}>
                         <span className="h-2 w-2 rounded-full" style={{ background: providerColor(cp.provider) }} />
