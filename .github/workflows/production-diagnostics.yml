@@ -14,7 +14,11 @@ on:
   workflow_dispatch:
     inputs:
       provider:
-        description: 'Provider key to diagnose (snapchat, meta, tiktok, google_ads, x, linkedin, salla, zid)'
+        # The keys the DATA uses, from `ProviderDisplayName::NAMES`. This list said `google_ads`,
+        # which matches no row: a diagnosis run with it answers «No external account matches that
+        # filter» — indistinguishable from «this provider has no accounts», which is exactly the
+        # wrong conclusion to hand someone asking why a provider is quiet.
+        description: 'Provider key to diagnose (snapchat, tiktok, meta, google, x, linkedin, salla, zid)'
         required: false
         default: 'snapchat'
       account:
