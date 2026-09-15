@@ -162,4 +162,38 @@ describe('CampaignDetailPage', () => {
     await waitFor(() => expect(activateCampaign).toHaveBeenCalledWith('p1', 'c1'))
     expect(screen.queryByTestId('launch-success')).not.toBeInTheDocument()
   })
+  /**
+   * Two clicks, one celebration.
+   *
+   * The button is disabled while the activation is in flight and stops rendering once the campaign
+   * is active, so the moment is bound to the transition rather than to the pointer. This asserts the
+   * consequence — one POST, one dialog — because that is what a reader would notice if it broke.
+   */
+  it('does not celebrate twice when the button is clicked twice', async () => {
+    vi.mocked(getCampaign).mockResolvedValue({ ...active, status: 'draft' })
+    let resolve: ((value: unknown) => void) | undefined
+    vi.mocked(activateCampaign).mockReturnValue(new Promise((r) => { resolve = r }) as never)
+    signInWith(['campaigns.view', 'campaigns.update'])
+    renderWithProviders(<CampaignDetailPage />, DETAIL_ROUTE)
+    await screen.findByText('National Day')
+
+    const button = screen.getByText('Activate').closest('button')!
+    fireEvent.click(button)
+    fireEvent.click(button)
+
+    await waitFor(() => expect(button).toBeDisabled())
+    expect(activateCampaign).toHaveBeenCalledTimes(1)
+
+    resolve!({
+      success: true, message: 'ok', data: { ...active, status: 'active' }, errors: null,
+      meta: { launch: {
+        campaign_id: 'c1', project_id: 'p1', name: 'National Day', objective: 'sales',
+        total_budget: 50000, budget_currency: 'SAR', activated_at: '2026-09-15T09:30:00+00:00',
+        platforms: [], platforms_live: 0, platforms_total: 0, outcome: 'launched',
+      } },
+    })
+
+    expect(await screen.findByTestId('launch-success')).toBeInTheDocument()
+    expect(screen.getAllByTestId('launch-success')).toHaveLength(1)
+  })
 })

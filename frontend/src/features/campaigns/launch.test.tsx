@@ -108,7 +108,7 @@ describe('the launch moment', () => {
 
     expect(screen.getByTestId('launch-success-note')).toBeInTheDocument()
     const badges = screen.getByTestId('launch-success-badges')
-    expect(badges).toHaveTextContent('pending')
+    expect(badges).toHaveTextContent('Pending')
     expect(badges).not.toHaveTextContent('Meta')
     expect(screen.getByTestId('launch-success-facts')).toHaveTextContent('1/2')
   })
@@ -161,5 +161,23 @@ describe('the launch moment', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
 
     expect(screen.queryByTestId('launch-success')).not.toBeInTheDocument()
+  })
+  /**
+   * Motion is the moment's manners, never its content.
+   *
+   * Asserted on the rendered class list rather than by eye: every animation has to sit behind
+   * `motion-safe:`, so a reader who asked their system for stillness gets the same mark, the same
+   * headline, the same facts and the same actions — just still. One unguarded `animate-` would move
+   * for them anyway, and nothing else in the suite would notice.
+   */
+  it('puts every animation behind the reader’s motion preference', () => {
+    renderWithProviders(<CampaignLaunchSuccess outcome={outcomeOf()} onDismiss={vi.fn()} />, { route: '/app/campaigns/p1/c1' })
+
+    const animated = [...screen.getByTestId('launch-success-backdrop').querySelectorAll('[class*="animate-"]')]
+    expect(animated.length).toBeGreaterThan(0)
+    for (const el of animated) {
+      // `className` on an SVG element is an SVGAnimatedString, not a string — read the attribute.
+      expect(el.getAttribute('class') ?? '').toContain('motion-safe:animate-')
+    }
   })
 })
