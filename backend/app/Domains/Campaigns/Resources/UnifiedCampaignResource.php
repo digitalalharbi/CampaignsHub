@@ -31,6 +31,12 @@ final class UnifiedCampaignResource extends JsonResource
              */
             'objective_provenance' => app(CampaignObjectiveResolver::class)->provenance($this->resource),
             'status' => $this->status,
+            /*
+             * When this campaign went live, by the server's clock (LAUNCH-SUCCESS-001). Null until it
+             * has been activated at least once. `updated_at` is not a substitute — it moves on every
+             * rename, so it would drift away from the launch it was standing in for.
+             */
+            'activated_at' => optional($this->activated_at)->toIso8601String(),
             'stage' => $this->stage,
             'performance_label' => $this->performance_label,
             'priority' => $this->priority,

@@ -95,3 +95,50 @@
   border-radius: 999px;
   border: 3px solid var(--surface);
 }
+
+/*
+ * SUCCESS-MOMENT-001 — the motion of a confirmation.
+ *
+ * Four short animations and nothing that loops forever except a slow glow. Each is applied through
+ * `motion-safe:`, so `prefers-reduced-motion: reduce` removes every one of them and leaves the same
+ * information on screen: the mark, the headline, the facts, the actions. The animation is this
+ * moment's manners, never its content — a reader who has asked for stillness has asked for the
+ * product to be quieter, not to tell them less.
+ */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* The ring draws itself once, clockwise from the top. */
+@keyframes drawRing {
+  from { stroke-dashoffset: 214; }
+  to { stroke-dashoffset: 0; }
+}
+
+/* The mark lands a beat after the ring closes, rather than arriving with it. */
+@keyframes markIn {
+  from { opacity: 0; transform: scale(0.5); }
+  60% { transform: scale(1.08); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* One breath of glow, slow enough to read as depth rather than as a blink. */
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.45; transform: scale(0.94); }
+  50% { opacity: 0.85; transform: scale(1.06); }
+}
+
+/*
+ * Four sparks, outward, once. `--a` is set per spark so they leave at even angles; they fade as they
+ * travel and are never repeated. A confetti burst would be a different product's voice.
+ */
+@keyframes spark {
+  from { opacity: 1; transform: rotate(var(--a)) translateX(0) scale(1); }
+  to { opacity: 0; transform: rotate(var(--a)) translateX(46px) scale(0.4); }
+}
