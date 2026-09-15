@@ -299,6 +299,12 @@ export async function postData<T>(url: string, body?: unknown): Promise<T> {
   return response.data.data
 }
 
+/** The whole envelope for a POST — see {@link getEnvelope}; used where `meta` carries a result. */
+export async function postEnvelope<T>(url: string, body?: unknown): Promise<ApiEnvelope<T>> {
+  const response = await api.post<ApiEnvelope<T>>(url, body)
+  return response.data
+}
+
 export async function putData<T>(url: string, body?: unknown): Promise<T> {
   const response = await api.put<ApiEnvelope<T>>(url, body)
   return response.data.data

@@ -26,7 +26,7 @@ final class UnifiedCampaign extends Model
 
     protected $fillable = [
         'tenant_id', 'project_id', 'client_workspace_id', 'name', 'client_display_name', 'objective', 'status',
-        'stage', 'performance_label', 'priority',
+        'stage', 'performance_label', 'priority', 'activated_at',
         'total_budget', 'budget_currency', 'starts_on', 'ends_on', 'primary_conversion_purpose',
         'attribution_model', 'attribution_window', 'owner_id', 'target_kpi', 'audience', 'regions',
         'platforms', 'audiences', 'conversion_events', 'creative_types', 'tags',
@@ -35,6 +35,7 @@ final class UnifiedCampaign extends Model
 
     protected $casts = [
         'total_budget' => 'decimal:4',
+        'activated_at' => 'immutable_datetime',
         'starts_on' => 'date',
         'ends_on' => 'date',
         'target_kpi' => 'array',

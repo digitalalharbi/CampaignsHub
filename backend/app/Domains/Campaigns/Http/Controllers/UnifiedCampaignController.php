@@ -14,6 +14,7 @@ use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Resources\ExternalCampaignResource;
 use App\Domains\Campaigns\Resources\UnifiedCampaignResource;
+use App\Domains\Campaigns\Services\CampaignLaunchOutcome;
 use App\Domains\Campaigns\Services\CampaignLinker;
 use App\Domains\Campaigns\Services\CampaignRelevance;
 use App\Domains\Metrics\Services\MetricsAggregator;
@@ -404,11 +405,11 @@ final class UnifiedCampaignController extends Controller
         return $this->transition($campaign, CampaignStatus::Paused, 'campaign.paused', $audit);
     }
 
-    public function activate(Request $request, string $project, string $campaign, AuditLogger $audit): JsonResponse
+    public function activate(Request $request, string $project, string $campaign, AuditLogger $audit, CampaignLaunchOutcome $outcome): JsonResponse
     {
         abort_unless($request->user()->hasPermission('campaigns.update'), 403);
 
-        return $this->transition($campaign, CampaignStatus::Active, 'campaign.activated', $audit);
+        return $this->transition($campaign, CampaignStatus::Active, 'campaign.activated', $audit, $outcome);
     }
 
     public function destroy(Request $request, string $project, string $campaign, AuditLogger $audit): JsonResponse
@@ -491,13 +492,28 @@ final class UnifiedCampaignController extends Controller
 
     // ---- helpers -------------------------------------------------------------------------------
 
-    private function transition(string $campaign, CampaignStatus $status, string $action, AuditLogger $audit): JsonResponse
+    /**
+     * LAUNCH-SUCCESS-001 — an activation stamps `activated_at` and answers with what went live.
+     *
+     * The timestamp is written here, on the server, because it is the only clock that witnessed the
+     * transition; a client that needed to know when a campaign launched previously had nothing to
+     * read but its own. `$outcome` is passed only by {@see self::activate()}, so a pause can never
+     * return a launch payload for a UI to celebrate.
+     */
+    private function transition(string $campaign, CampaignStatus $status, string $action, AuditLogger $audit, ?CampaignLaunchOutcome $outcome = null): JsonResponse
     {
         $model = $this->find($campaign);
-        $model->update(['status' => $status->value]);
+        $model->update([
+            'status' => $status->value,
+            ...($status === CampaignStatus::Active ? ['activated_at' => now()] : []),
+        ]);
         $audit->log(action: $action, entityType: UnifiedCampaign::class, entityId: (string) $model->id, after: ['status' => $status->value]);
 
-        return ApiResponse::success(new UnifiedCampaignResource($model), 'Campaign status updated.');
+        return ApiResponse::success(
+            new UnifiedCampaignResource($model),
+            'Campaign status updated.',
+            meta: $outcome !== null ? ['launch' => $outcome->for($model)] : [],
+        );
     }
 
     /** @return array<string, mixed> */

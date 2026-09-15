@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowRight, Archive, Pause, Pencil, Play } from 'lucide-react'
 import {
+  activateCampaign,
   archiveCampaign,
   campaignAction,
   getCampaign,
@@ -11,6 +12,8 @@ import {
   updateCampaign,
 } from './api'
 import { CampaignFormModal } from './CampaignFormModal'
+import { CampaignLaunchSuccess } from './CampaignLaunchSuccess'
+import { readLaunchOutcome, type LaunchOutcome } from './launch'
 import { listUsers } from '@/features/projects/api'
 import { LinkExternalModal } from './LinkExternalModal'
 import {
@@ -143,9 +146,47 @@ export function CampaignDetailPage() {
     queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'campaigns'] })
   }
 
+  /*
+   * LAUNCH-SUCCESS-001 — the launch moment lives in state that only a server response can fill.
+   *
+   * `launch` is set from `readLaunchOutcome`, which returns null unless the activate response both
+   * carried `meta.launch` and came back with the campaign `active`. So a failed activation lands in
+   * `onError` with `launch` still null and nothing to celebrate, and a pause — which returns no
+   * launch payload at all — cannot set it either.
+   *
+   * It is component state and nothing else: no URL flag, no storage. A reload re-mounts this page
+   * with `launch` back to null, so the celebration cannot replay for a launch that already happened
+   * one navigation ago. And because `mutate` is disabled while the mutation is pending and the
+   * activate button only renders while the campaign is NOT active, a second click has nothing to
+   * fire at — the moment is bound to the transition, not to the button.
+   */
+  const [launch, setLaunch] = useState<LaunchOutcome | null>(null)
+
+  /*
+   * A second click inside the same tick must not post twice.
+   *
+   * `statusMutation.isPending` is the obvious guard and it is not enough: it only becomes true after
+   * React re-renders, so two clicks landing before that both see `false` and both fire. A ref flips
+   * synchronously, which is the only thing fast enough to stand between a pointer and a POST.
+   */
+  const transitionInFlight = useRef(false)
+  const transition = (action: 'pause' | 'activate') => {
+    if (transitionInFlight.current) return
+    transitionInFlight.current = true
+    statusMutation.mutate(action)
+  }
+
   const statusMutation = useMutation({
-    mutationFn: (action: 'pause' | 'activate') => campaignAction(projectId, campaignId, action),
+    mutationFn: async (action: 'pause' | 'activate') => {
+      if (action === 'pause') return campaignAction(projectId, campaignId, 'pause')
+
+      const envelope = await activateCampaign(projectId, campaignId)
+      setLaunch(readLaunchOutcome(envelope))
+
+      return envelope.data
+    },
     onSuccess: invalidate,
+    onSettled: () => { transitionInFlight.current = false },
   })
   const archiveMutation = useMutation({
     mutationFn: () => archiveCampaign(projectId, campaignId),
@@ -253,11 +294,11 @@ export function CampaignDetailPage() {
             )}
             {canPause && c.status === 'active' && (
               <Button variant="secondary" loading={statusMutation.isPending && statusMutation.variables === 'pause'}
-                onClick={() => statusMutation.mutate('pause')}><Pause size={14} /> {t('pause')}</Button>
+                onClick={() => transition('pause')}><Pause size={14} /> {t('pause')}</Button>
             )}
             {canUpdate && c.status !== 'active' && c.status !== 'archived' && (
               <Button variant="secondary" loading={statusMutation.isPending && statusMutation.variables === 'activate'}
-                onClick={() => statusMutation.mutate('activate')}><Play size={14} /> {t('activate')}</Button>
+                onClick={() => transition('activate')}><Play size={14} /> {t('activate')}</Button>
             )}
             {canUpdate && (
               <Button variant="ghost" loading={archiveMutation.isPending} onClick={() => archiveMutation.mutate()}>
@@ -267,7 +308,9 @@ export function CampaignDetailPage() {
           </div>
         </div>
 
-        {/* Header facts grid — campaign-scoped context. */}
+        <CampaignLaunchSuccess outcome={launch} onDismiss={() => setLaunch(null)} />
+
+      {/* Header facts grid — campaign-scoped context. */}
         <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 border-t border-border pt-3 text-sm sm:grid-cols-3 lg:grid-cols-4">
           <HeaderFact label={t('period_label')}>
             <span className="tnum text-xs">{c.starts_on || c.ends_on ? `${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}` : '—'}</span>
