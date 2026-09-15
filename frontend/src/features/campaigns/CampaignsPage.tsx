@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { StatCard as SharedStatCard } from '@/components/ui/StatCard'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
+import { CampaignLink } from './CampaignLink'
 import { CampaignSecondaryStrip } from './CampaignSecondaryStrip'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -975,15 +976,30 @@ export function CampaignsPage() {
               <EmptyState title={ar ? 'لا توجد حملات تحتاج تدخلًا' : 'Nothing needs attention'} description={ar ? 'كل حملات المشروع مرتبطة بمنصاتها وتنفق ضمن ميزانياتها وتحقق نتائج في الفترة المحددة.' : 'Every campaign in this project is linked to its platform, spending within budget and producing results in the selected period.'} />
             ) : (
               <div className="space-y-2">
+                {/*
+                  * A container with a link in it, not a button with a link inside it.
+                  *
+                  * This was a `<button>` wrapping the whole card, and putting the campaign's own link
+                  * inside one nests an interactive element in an interactive element: invalid HTML,
+                  * ambiguous to a screen reader, unpredictable under keyboard. The name is the
+                  * control now — which is also the rule this page is held to, that a campaign name
+                  * is the way into its detail.
+                  */}
                 {attention.map(({ c, flags }) => (
-                  <button
+                  <div
                     key={c.id}
                     data-testid="attention-row"
-                    onClick={() => navigate(`/campaigns/${projectId}/${c.id}`)}
                     className="flex w-full flex-col gap-2 rounded-2xl border border-border bg-surface p-4 text-start shadow-[var(--shadow-small)] transition-colors hover:border-brand-300 hover:bg-surface-hover"
                   >
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-bold text-text-primary">{c.name}</span>
+                      {/*
+                        * The attention list is the most actionable surface here, so its names are
+                        * links too — a reader triaging six campaigns opens them in tabs. The card
+                        * around it still navigates, for the rest of its area.
+                        */}
+                      <span className="font-bold">
+                        <CampaignLink projectId={projectId} campaignId={c.id} name={c.name} className="text-text-primary" />
+                      </span>
                       <Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge>
                       <Badge tone="neutral">{objectiveLabel(c.objective, locale)}</Badge>
                     </div>
@@ -995,7 +1011,7 @@ export function CampaignsPage() {
                         </li>
                       ))}
                     </ul>
-                  </button>
+                  </div>
                 ))}
               </div>
             )
@@ -1083,8 +1099,19 @@ export function CampaignsPage() {
                     const m = metricsByCampaign.get(c.id) as Record<string, unknown> | undefined
 
                     return (
-                      <tr key={c.id} data-testid="campaign-row" className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-hover" onClick={() => navigate(`/campaigns/${projectId}/${c.id}`)}>
-                        <td className="p-3 font-semibold text-text-primary">{c.name}</td>
+                      <tr key={c.id} data-testid="campaign-row" className="border-b border-border last:border-0 hover:bg-surface-hover">
+                        {/*
+                          * CAMPAIGN-DRILL-001 — the NAME is the way in, and it is a real link.
+                          *
+                          * The row carried an `onClick` that navigated, which reads as clickable and
+                          * is not: a div handler cannot be opened in a new tab, middle-clicked,
+                          * copied as a link or reached by keyboard, and it routed through the
+                          * unprefixed path, where the portal redirect drops the state carrying «back
+                          * to where you were». An anchor does all of those by being one.
+                          */}
+                        <td className="p-3 font-semibold">
+                          <CampaignLink projectId={projectId} campaignId={c.id} name={c.name} className="text-text-primary" />
+                        </td>
                         <td className="p-3 text-text-secondary">{objectiveLabel(c.objective, locale)}</td>
                         <td className="p-3"><Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge></td>
                         {/*
