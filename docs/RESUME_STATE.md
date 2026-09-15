@@ -5,6 +5,48 @@ Read this file, then `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then `git log o
 **Git is the authority. This file is a summary of it and goes stale between runs — when the two
 disagree, Git is right.**
 
+## 2026-09-15, later — reconciled again, and it was stale again
+
+`origin/main` = **`288bc48d` (#422)**. This file said `2c312917` (#420): two merges out of date, on
+the run whose own header warns that it goes stale. Reconciled from Git rather than trusted.
+
+Merged since the section below was written:
+
+- **#421** The client's download, the unwatched function, and the line that drops the bound.
+- **#422** Ask the account, not the app — the Meta access probe (`integrations:meta-probe`), the
+  provider error sentence carrying its identifiers (code, subcode, fbtrace_id, request id), the ROAS
+  panels that named the wrong campaign because `reported` carries summed columns and never derived
+  ones, and the spend-efficiency scatter that refuses to plot a campaign missing a coordinate rather
+  than placing it at the origin. **Production-verified**: the deploy ran on `288bc48d` and the
+  served bundle `/assets/index-BdSC2A2l.js` carries that merge's own strings.
+
+**Open PR: #423** — the premium launch success experience. Five checks green, the webkit gate
+running. It is Phase D of the owner's closure order and is already implemented, not pending.
+
+**Prepared locally, in queue order behind it:**
+
+1. `needs-attention-one-definition` — one screen said «needs attention» twice from two engines; the
+   flags now own the phrase. 2716 unit, 33 E2E across three browsers, fail-first proven.
+2. `meta-probe-workflow` — a read-only Meta Access Probe workflow, a guard that refuses `--sync` in
+   any workflow described as read-only, a provider list corrected to keys an account can carry, and
+   the Meta / Google / Content production evidence recorded in the owner's ledger.
+3. `mkt-boot-residual` — MKT-FIX-001 re-measurement, in progress.
+
+### What production said on 2026-09-15, read-only, and what it settles
+
+- **Meta** — 4 accounts, 3 bound to nothing, the one bound account failing every insight and
+  structure run with `(#200) … has NOT grant ads_management or ads_read`. Downstream rows stop at
+  2026-09-06. `PERMISSION_REVOKED` → **BLOCKED_EXTERNAL_CREDENTIALS**; the grant is the owner's.
+- **Google** — `No external account matches that filter` for provider `google`: nothing has ever
+  been connected. Asked twice, because the first ask used the diagnosis form's own suggested key
+  `google_ads`, which matches no row and answers identically to an empty estate.
+  **BLOCKED_EXTERNAL_CREDENTIALS**.
+- **Content (Snapchat)** — structure sweeps succeeding with zero orphans at every level, 936 rows
+  stored every half hour, 24 of 24 first-page cards with something to draw. The sampled creatives'
+  `conversions 0 / revenue 0 / roas 0` was checked against Snapchat's own retained body and is the
+  truth, not a fabricated zero. Creative-grain spend carries withheld rows and renders as the money
+  contract's `partial`. Open and unproven: 160 of 1526 creatives carry any figure.
+
 ## 2026-09-15 — where this session stopped
 
 `origin/main` = `2c312917` (#420), deploy run succeeded and the served bundle confirms it: the
