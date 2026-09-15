@@ -42,6 +42,21 @@
   --color-warning: var(--warning);
   --color-danger: var(--danger);
   --color-info: var(--info);
+  /*
+   * SAVE-ACCOUNTS-SILENCE-001 — the soft backgrounds three panels already ask for.
+   *
+   * `bg-success-soft` and `bg-warning-soft` were in use on the connection wizard and generated
+   * NOTHING: Tailwind builds a utility only for a colour the theme declares, so the success panel and
+   * the over-limit warning rendered as bordered boxes with no fill at all. Checked in the built
+   * stylesheet rather than by eye — neither class appears in it.
+   *
+   * These are the palette's own `*-background` values, which have existed in both themes all along
+   * and were simply never exposed. Named `-soft` because that is what the components already call
+   * them; inventing a second set of colours would be how a palette grows two answers for one thing.
+   */
+  --color-success-soft: var(--positive-background);
+  --color-warning-soft: var(--warning-background);
+  --color-danger-soft: var(--negative-background);
   --color-purple: var(--purple);
   --color-teal: var(--teal);
 
