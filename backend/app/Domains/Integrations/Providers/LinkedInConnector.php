@@ -137,6 +137,18 @@ final class LinkedInConnector extends ApiAdvertisingConnector
                 'external_id' => (string) $a['id'],
                 'name' => (string) ($a['name'] ?? $a['id']),
                 'currency' => isset($a['currency']) ? (string) $a['currency'] : null,
+                /*
+                 * LinkedIn does not report a timezone on an ad account, and this says so on purpose.
+                 *
+                 * Production shows `timezone=NOT CAPTURED` on all eleven discovered accounts, beside
+                 * Snapchat and Meta reporting `Asia/Riyadh`. That asymmetry reads like an omission
+                 * and is not one: `adAccounts` carries no timezone field to read.
+                 *
+                 * Left null rather than defaulted to the tenant's zone, which is the tempting fix and
+                 * the wrong one: a day boundary invented here would silently re-bucket every daily
+                 * metric onto dates the platform never agreed to, and the figures would look right.
+                 * A missing timezone is a fact about LinkedIn; a guessed one is a fact about us.
+                 */
                 'timezone' => null,
                 'status' => strtolower((string) ($a['status'] ?? 'active')),
                 'parent_external_id' => null,

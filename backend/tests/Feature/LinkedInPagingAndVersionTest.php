@@ -246,6 +246,41 @@ final class LinkedInPagingAndVersionTest extends TestCase
         ], range($from, $from + $many - 1));
     }
 
+    /**
+     * LinkedIn reports no timezone, and the discovery must not invent one.
+     *
+     * Production shows `timezone=NOT CAPTURED` on all eleven discovered LinkedIn accounts, beside
+     * Snapchat and Meta reporting `Asia/Riyadh`. The asymmetry is the provider's: `adAccounts` has no
+     * timezone field. Defaulting to the tenant's zone is the tempting fix and the wrong one — a day
+     * boundary invented here would re-bucket every daily metric onto dates the platform never agreed
+     * to, and the figures would look right while being wrong.
+     */
+    public function test_a_discovered_account_reports_no_timezone_rather_than_a_guessed_one(): void
+    {
+        Http::fake([
+            'api.linkedin.com/rest/adAccounts*' => Http::response([
+                'elements' => [
+                    ['id' => 515717402, 'name' => 'Realpicturesa', 'currency' => 'USD', 'status' => 'ACTIVE'],
+                ],
+            ], 200),
+        ]);
+
+        $this->configure('linkedin');
+        $accounts = $this->bound('linkedin')->listAdAccounts();
+
+        $this->assertCount(1, $accounts);
+        /*
+         * Absent or null — the distinction does not matter, and asserting `null` specifically failed
+         * for that reason: `listAdAccounts()` drops the key entirely. What matters is that no ZONE
+         * is ever produced, which is what this says.
+         */
+        $this->assertNull($accounts[0]['timezone'] ?? null, 'LinkedIn discovery invented a timezone the provider never sent');
+        // The fields it DOES report still arrive, so «null timezone» is not a broken mapping.
+        $this->assertSame('515717402', $accounts[0]['external_id']);
+        $this->assertSame('Realpicturesa', $accounts[0]['name']);
+        $this->assertSame('USD', $accounts[0]['currency']);
+    }
+
     private function configure(string $platform): void
     {
         foreach (PlatformCredentials::for($platform)->requires() as $key) {
