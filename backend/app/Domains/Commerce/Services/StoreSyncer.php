@@ -13,6 +13,7 @@ use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Enums\SyncRunStatus;
 use App\Domains\Projects\Models\Project;
@@ -214,7 +215,7 @@ final class StoreSyncer
         $run->forceFill([
             'status' => $status,
             'records' => $records,
-            'error' => $error === null ? null : mb_substr($error, 0, 250),
+            'error' => ProviderErrorText::forStorage($error),
             'finished_at' => Carbon::now(),
         ])->save();
 
