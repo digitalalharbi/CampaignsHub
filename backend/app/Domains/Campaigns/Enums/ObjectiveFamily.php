@@ -85,7 +85,18 @@ enum ObjectiveFamily: string
             // CPL is not CPA: a lead is not a customer, and conflating them prices the wrong thing.
             self::Leads => ['spend', 'leads', 'cpl', 'conversion_rate', 'clicks'],
             self::Sales => ['spend', 'orders', 'cpa', 'revenue', 'roas', 'conversion_rate', 'aov'],
-            self::App => ['spend', 'installs', 'cpi', 'registrations', 'in_app_events'],
+            /*
+             * Owner defect 94d — `registrations` and `in_app_events` were names nothing produces.
+             *
+             * Neither appears in `CreativeMetrics`' sums or its derived figures, so an app creative's
+             * card asked for two figures that could never arrive and showed «—» in both, forever —
+             * indistinguishable, to a reader, from a platform that did not report them. A promise
+             * nothing computes is the same defect as a figure nothing reads, told from the other end.
+             *
+             * The columns exist and are called something else: `sign_ups` and `app_opens` are in the
+             * ad grain and have been all along.
+             */
+            self::App => ['spend', 'installs', 'cpi', 'sign_ups', 'app_opens'],
             /*
              * An unclassified campaign gets the figures that are true of every campaign.
              *
