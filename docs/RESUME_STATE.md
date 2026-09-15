@@ -1,10 +1,84 @@
-# START HERE — 2026-09-14 (reconciled from Git)
+# START HERE — 2026-09-15 (reconciled from Git)
 
 Read this file, then `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then `git log origin/main`.
 
 **Git is the authority. This file is a summary of it and goes stale between runs — when the two
-disagree, Git is right.** It had been left at #327 while `origin/main` reached #404, which is why
-that sentence is now the second line rather than a footnote.
+disagree, Git is right.**
+
+## 2026-09-15 — where this session stopped
+
+`origin/main` = `cae0cb42` (#419), deployed and confirmed serving.
+
+### Merged this run, each with six green checks and a confirmed deploy
+
+- **#416** Rules written once and applied in one place — the report itself asserted to carry only
+  live figures; total ordering applied to the provider and account breakdowns, not campaigns alone;
+  multi-card creatives classified as carousels rather than stills.
+- **#417** The file a client receives — client exports were failing in ALL THREE formats
+  (`campaign_management_entity`: the sanitiser named sections and did not know about
+  `ads_platform_groups`); the Arabic brand face was absent from every client PDF (a metric fallback
+  with no `unicode-range` claimed Arabic and Arial answered for it); a frame the browser had given
+  up on counted as a frame; expired media was never recovered in the detailed report's platform rung.
+- **#418** Two rules the product states — the four absence sentences held distinct as a property in
+  both languages; every number formatter required to name a Latin-by-construction locale, which
+  found `DeliveryLog` relying on a CLDR default that `ar-SA` would have flipped.
+- **#419** Content Results and Cost-per-result recovered from the ad grain (`leads`, `installs`,
+  `sign_ups`, `app_opens`, `page_views` existed in `entity_daily_metrics` and were dropped at the
+  point of reading them; `cpl`/`cpi` were named as verdicts and never computed); Live link and saved
+  document required to agree; the exact `GoogleAdsFailure` printed instead of only its bucket.
+
+### Production-verified on the live site
+
+- `#413` boot stability: `<html lang="ar" dir="rtl" data-theme="dark">` served, CLS 0.0000 at 390px.
+- `#417` font fallback: asset hash moved `DMI56SSI` → `DmSFRYgc` and `unicode-range` is present on
+  `Inter Fallback`. **Its first deploy run FAILED** (`Run Command Timeout`, the SSH action's 600s
+  limit during the VPS build) and production was still serving the previous commit; a re-run landed
+  it. A merge is not a deploy, and the asset hash is the proof.
+
+Everything else merged is backend or behind authentication: `BLOCKED_OPERATIONAL_EVIDENCE` in this
+lane, which holds no production credentials.
+
+## IN FLIGHT — pick this up first
+
+**PR #420 `campaigns-drilldown`** — the Campaigns Command Center. Nine commits, all six checks green
+on the last full run, one commit pushed after it (attention rows carrying spend + objective result)
+awaiting its own run.
+
+Merge it, confirm the DEPLOY ran (not just the merge), then browser-verify.
+
+## NEXT EXECUTABLE ACTIONS, in order
+
+1. **#420 → merge → deploy → production verify.** The deploy is the step that fails silently; check
+   the run, and check a served asset hash rather than the merge.
+2. **Campaigns, remaining from the owner's list:** spend-vs-efficiency scatter where semantically
+   valid, objective/platform contribution, movers. Strongest/weakest, budget pacing and the trend
+   already exist. Do not add a chart that does not answer a decision.
+3. **Content:** story/vertical, catalog/DPA, multi-asset preview shapes. Collection tile fetch stays
+   `BLOCKED_EXTERNAL_CREDENTIALS` — the Snapchat `collection_properties` shape is unobservable here
+   and guessing it would be fabrication.
+4. **Reports:** exports end to end for the shared public link (the same exporter, so #417's fix
+   covers it — prove it), audience semantics, report-creation settings affecting output.
+5. **Google steps 7–9:** need a real authorised account. `integrations:google-access --probe` now
+   performs discovery through the product's own path and prints the exact failure; run it on
+   production after re-authorising.
+6. **Cross-surface reconciliation:** the analytics summary ↔ generated report pair and the live ↔
+   detailed pair are locked by tests. Content card → popup → Content Analytics → Reports is not.
+
+## What kept being true this session
+
+The dominant defect was not a wrong calculation. It was **a correct answer computed where nothing
+reads it**: a sanitiser naming sections instead of finding them, a media walk with the same list, an
+ordering rule applied to one breakdown of three, the exact Google failure stored and printed nowhere,
+`campaign_id` on every analytics row with no link on any of them, and status counts scoped by a
+builder the total did not share.
+
+It also showed up in my own work — a reconciliation reading a key that does not exist, a guard that
+matched nothing, a comment claiming work not done, a `—` where the code promised nothing. The
+injection step is what caught those, not the passing run.
+
+---
+
+## Earlier runs (kept for history)
 
 ## 2026-09-14 (later the same day) — where this stopped
 
