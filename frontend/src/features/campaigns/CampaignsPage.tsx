@@ -38,7 +38,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { EmptyState, Skeleton } from '@/components/ui/States'
-import { ChartCard, PlatformDonutChart, ProgressRing, RankingBarChart, SpendRevenueAreaChart } from '@/features/analytics/charts'
+import { ChartCard, PlatformDonutChart, ProgressRing, RankingBarChart, SpendEfficiencyScatter, SpendRevenueAreaChart } from '@/features/analytics/charts'
 import { useBudget, useCampaigns, usePlatforms, useSummary, useTimeseries, type BudgetRow } from '@/features/analytics/api'
 import { useLastNDaysRange } from '@/features/analytics/hooks'
 import { ProvenanceBadge, RangeTabs, TrendPill } from '@/features/analytics/components'
@@ -429,6 +429,49 @@ export function CampaignsPage() {
     [visibleCampaigns, metricsByCampaign, budget.data],
   )
 
+  /*
+   * The points the efficiency chart may plot, and the ones it must not.
+   *
+   * A point needs BOTH coordinates. A campaign whose spend is withheld, or whose cost per result the
+   * platform never reported, has no position — and placing it at zero would put the campaigns we know
+   * LEAST about in the corner that reads «cheap and efficient», which is the most confident spot on
+   * the chart handed to the least evidence. They are excluded and counted; the card states the count.
+   *
+   * Read through the same objective-aware helpers the table uses, so the chart and the row beneath it
+   * cannot disagree about the same campaign.
+   */
+  const efficiency = useMemo(() => {
+    const points: Array<{ id: string; name: string; spend: number; costPer: number }> = []
+    let excluded = 0
+
+    for (const c of visibleCampaigns) {
+      const m = metricsByCampaign.get(c.id) as Record<string, unknown> | undefined
+      const spendReading = campaignSpendReading(m, ar)
+      const cost = campaignEfficiency(c.objective, m, ar)
+
+      /*
+       * The READING decides whether there is a figure; the ROW supplies it.
+       *
+       * Only a `value` reading is the platform answering — withheld, not-provided and unavailable are
+       * all declines, and each must keep the campaign off the chart. But the reading carries display
+       * text («36.3K», «36,339.30»), and the first version of this parsed that: `Number('36.3K')` is
+       * NaN, so every campaign was excluded and the card announced «3 without both figures» over an
+       * estate where three had them. Caught by opening the page.
+       */
+      const plotted = spendReading !== null && spendReading.kind === 'value' && cost !== null && cost.reading.kind === 'value'
+      const spend = plotted ? Number(m?.spend ?? Number.NaN) : Number.NaN
+      const costPer = plotted ? Number((m ?? {})[cost.key] ?? Number.NaN) : Number.NaN
+
+      if (Number.isFinite(spend) && Number.isFinite(costPer) && spend > 0) {
+        points.push({ id: c.id, name: c.name, spend, costPer })
+      } else {
+        excluded += 1
+      }
+    }
+
+    return { points, excluded }
+  }, [visibleCampaigns, metricsByCampaign, ar])
+
   const attention = useMemo(
     () => orderAttention(campaigns
       .map((c) => ({ c, flags: attentionFlags(c, metricsByCampaign.get(c.id), summary.data?.currency ?? null) }))
@@ -812,6 +855,26 @@ export function CampaignsPage() {
                   : budgetTotals.consumed !== null && budgetTotals.spent !== null
                     ? <div className="flex h-[190px] items-center justify-center"><ProgressRing value={budgetTotals.consumed} sublabel={`${compact(budgetTotals.spent)} / ${compact(budgetTotals.total)}`} size={140} tone={budgetTotals.consumed > 0.95 ? 'danger' : 'brand'} /></div>
                     : <div className="flex h-[190px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'استهلاك الميزانية غير متاح — المصروف بمبالغ جزئية أو بعملة مختلفة عن الميزانية' : 'Budget consumption unavailable — spend is partial or in a different currency'}</div>}
+            </ChartCard>
+          </div>
+          {/*
+            * VISUAL-DECISION-001 — the one chart the ranking and the column cannot replace.
+            *
+            * «Where is money going that is not working» needs both axes at once, and the campaign it
+            * names can sit mid-table on spend and mid-table on cost. The subtitle states how many
+            * campaigns could not be placed, because a chart that silently drops rows lies about the
+            * estate it claims to describe.
+            */}
+          <div className="grid gap-4">
+            <ChartCard
+              title={ar ? 'الإنفاق مقابل الكفاءة' : 'Spend against efficiency'}
+              subtitle={
+                efficiency.excluded > 0
+                  ? (ar ? `${efficiency.excluded} بلا إحداثيَّين — غير مرسومة` : `${efficiency.excluded} without both figures — not plotted`)
+                  : (ar ? 'أعلى يمينًا: إنفاق أكبر بتكلفة أعلى' : 'Up and right: more spend at a higher cost')
+              }
+            >
+              <SpendEfficiencyScatter points={efficiency.points} currency={summary.data?.currency ?? null} ar={ar} />
             </ChartCard>
           </div>
           {mix !== null && mix.rows.length > 0 && (
