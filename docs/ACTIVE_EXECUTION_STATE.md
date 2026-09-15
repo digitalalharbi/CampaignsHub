@@ -3,7 +3,44 @@
 _Reconciled from Git on 2026-09-14. It had been left at #362 while `origin/main` reached #404 —
 when this file and Git disagree, Git is right._
 
-## Where Git is (2026-09-14, later the same day)
+## Where Git is (2026-09-15)
+
+`origin/main` = **`288bc48d` (#422)**.
+
+**This file said `e5408a58` (#412). It was ten merges out of date** — the same failure its own 2026-09-14
+section documents, repeated. Reconciled against Git rather than trusted, which is the owner's standing
+instruction and the reason this section is rewritten rather than appended to.
+
+Merged since #412: #413 … #420 (the Campaigns Command Center), #421 (the client's download and the
+scope-dropping line), #422 (the Meta access probe, the provider error sentence that carries its
+identifiers, and two ROAS panels that named the wrong campaign). Every one merged with six green
+checks; #420 and #422 additionally verified against the served production bundle.
+
+### The executable queue, from the owner's closure order
+
+Phase D is **already built** and is PR #423 — the premium launch success experience, bound to the
+server's own launch result, five checks green.
+
+Phase A is where the work is, and the four streams are not equally executable:
+
+- **A1 Content** — production evidence taken 2026-09-15 says the Snapchat chain is sound end to end
+  (zero orphans, 936 rows a half hour, 24/24 cards drawing). One clause remains open and unproven:
+  160 of 1526 creatives carry any figure. The provider-specific shapes that need credentials are
+  recorded per clause, not as a blocked module.
+- **A2 Reports** — the largest genuinely executable surface remaining.
+- **A3 Integrations** — Meta and Google are `BLOCKED_EXTERNAL_CREDENTIALS` with dated production
+  evidence; the Save-accounts defect and the `SQLSTATE[22001]` error-persistence contract are NOT
+  blocked and are executable now.
+- **A4 Marketing boot** — reopened by the owner; being re-measured on real cold loads against the
+  deployed site rather than assumed closed from the last run's numbers.
+
+### Why «141 not VERIFIED» is the honest count
+
+The matrix holds 603 requirement rows. 457 read VERIFIED; the rest are 32 IMPLEMENTED_NOT_VERIFIED,
+30 PARTIAL, 18 BLOCKED_EXTERNAL_CREDENTIALS, 16 IN_PROGRESS and 11 BLOCKED_OPERATIONAL_EVIDENCE.
+That distribution is the queue, and it is read from the file rather than restated from memory.
+
+## The earlier reconciliation of 2026-09-14, kept because its reasoning still applies
 
 `origin/main` = `e5408a58` (#412).
 
