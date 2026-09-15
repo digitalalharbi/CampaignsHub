@@ -49,10 +49,28 @@ describe('the campaigns workspace, opened cold', () => {
     vi.clearAllMocks()
     vi.mocked(listProjects).mockResolvedValue([])
     vi.mocked(listUsers).mockResolvedValue([])
-    vi.mocked(listCampaigns).mockResolvedValue(campaignPage([
+    /*
+     * The mock answers the way the SERVER does — CAMPAIGNS-LEDGER-001.
+     *
+     * The lifecycle is applied on the server now, over the whole project and before the page is cut,
+     * so a fixture that returns every campaign whatever was asked describes an endpoint that no
+     * longer exists. It would also make the page look as though it had stopped filtering, when what
+     * changed is WHERE the filtering happens.
+     */
+    const all = [
       campaign('running', 'Still running', 'active'),
       campaign('finished', 'Last year', 'completed'),
-    ]))
+    ]
+    vi.mocked(listCampaigns).mockImplementation(async (_project, params) => {
+      const lifecycle = (params ?? {}).lifecycle
+
+      return campaignPage(
+        lifecycle === 'active' ? all.filter((c) => c.id === 'running')
+          : lifecycle === 'inactive' ? all.filter((c) => c.id === 'finished')
+            : all,
+        { lifecycleCounts: { active: 1, inactive: 1, all: 2 } },
+      )
+    })
     metrics.value = {
       data: [
         { campaign_id: 'running', spend: 10, last_active_on: today },
@@ -69,14 +87,28 @@ describe('the campaigns workspace, opened cold', () => {
 
   const openList = async () => fireEvent.click(await screen.findByTestId('view-cards'))
 
-  it('shows what is running and leaves the finished one out of the default view', async () => {
+  /**
+   * CAMPAIGNS-LEDGER-001 — «active only» is now ASKED of the server, not applied to the answer.
+   *
+   * This filtered in the browser, over the twenty-five rows the page happened to hold, which made
+   * the chip mean «whichever of the first page are active» on any project large enough for the
+   * question to matter. The request carries the lifecycle now, so what this can assert is that the
+   * page ASKS for the right thing — filtering the mocked answer again would be asserting a second
+   * implementation of a rule that no longer lives here.
+   *
+   * The behaviour itself is proved where it now happens:
+   * `CampaignLedgerTest::test_active_only_is_applied_over_the_project_and_not_over_the_page`.
+   */
+  it('asks the server for what is running, rather than filtering the answer', async () => {
     renderWithProviders(<CampaignsPage />, { locale: 'en' })
     await openList()
 
-    expect(await screen.findByText('Still running')).toBeInTheDocument()
-    // A finished campaign that outspent it by four orders of magnitude is not the first thing an
-    // operator should be shown — it is not something they can act on.
-    expect(screen.queryByText('Last year')).not.toBeInTheDocument()
+    await screen.findByText('Still running')
+
+    expect(vi.mocked(listCampaigns)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ lifecycle: 'active' }),
+    )
   })
 
   /** Never hidden: the count is on screen and one click brings it back. */
