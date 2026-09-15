@@ -98,22 +98,44 @@ test.describe('the campaigns workspace', () => {
 
     await openCampaigns(page, request)
 
-    const card = (await page.getByTestId('campaigns-attention').innerText()).match(/\d+/)?.[0]
-    expect(card).toBeDefined()
+    /*
+     * Sampled in ONE evaluate, and polled until the page settles.
+     *
+     * The first version read the card and then the band in two separate round trips, and failed on
+     * webkit under CI load: the page re-rendered between them — a metrics query resolving — so it
+     * compared a number from one paint against a number from the next. That is a flaw in the
+     * measurement, not a disagreement in the product.
+     *
+     * The claim being tested is «once settled, the three agree», so the poll is the honest shape of
+     * it: if they never agree it still fails, and it cannot fail for having looked twice.
+     */
+    const readAll = () => page.evaluate(() => {
+      const digits = (id: string): string | null => {
+        const el = document.querySelector(`[data-testid="${id}"]`)
 
-    const band = (await page.getByTestId('campaigns-band-attention').innerText()).match(/\d+/)?.[0]
-    expect(band).toBe(card)
+        return el === null ? null : (el.textContent ?? '').match(/\d+/)?.[0] ?? null
+      }
+
+      return { card: digits('campaigns-attention'), band: digits('campaigns-band-attention'), strip: digits('landing-attention') }
+    })
+
+    await expect.poll(async () => {
+      const { card, band } = await readAll()
+
+      return card !== null && card === band
+    }, { message: 'the KPI card and the band chip never agreed about the attention count' }).toBe(true)
 
     /*
      * The strip renders its chip only when the count is above zero, which is itself the contract —
      * so «nothing needs attention» is proven by the chip's absence rather than by a zero.
      */
-    const strip = page.getByTestId('landing-attention')
+    const { card, strip } = await readAll()
+
     if (card === '0') {
-      await expect(strip).toBeHidden()
+      await expect(page.getByTestId('landing-attention')).toBeHidden()
     } else {
-      await expect(strip).toBeVisible()
-      expect((await strip.innerText()).match(/\d+/)?.[0]).toBe(card)
+      await expect(page.getByTestId('landing-attention')).toBeVisible()
+      expect(strip).toBe(card)
     }
   })
 })
