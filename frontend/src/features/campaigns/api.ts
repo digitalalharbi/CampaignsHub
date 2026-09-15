@@ -1,4 +1,4 @@
-import { api, ensureCsrfCookie, deleteData, getData, postData } from '@/lib/api/client'
+import { api, ensureCsrfCookie, deleteData, getData, postData, postEnvelope } from '@/lib/api/client'
 import type { ApiEnvelope } from '@/lib/api/types'
 import type { ExternalCampaign, UnifiedCampaign } from './types'
 
@@ -146,13 +146,20 @@ export async function updateCampaign(
   return res.data.data
 }
 
-export async function campaignAction(
-  projectId: string,
-  campaignId: string,
-  action: 'pause' | 'activate',
-): Promise<UnifiedCampaign> {
+export async function campaignAction(projectId: string, campaignId: string, action: 'pause' | 'activate'): Promise<UnifiedCampaign> {
   await ensureCsrfCookie()
   return postData<UnifiedCampaign>(`${base(projectId)}/${campaignId}/${action}`)
+}
+
+/**
+ * Activate, and keep the server's account of what went live (LAUNCH-SUCCESS-001).
+ *
+ * Separate from {@link campaignAction} because the envelope is the point: `meta.launch` is the only
+ * evidence the success experience is allowed to render, and `postData` throws it away.
+ */
+export async function activateCampaign(projectId: string, campaignId: string): Promise<ApiEnvelope<UnifiedCampaign>> {
+  await ensureCsrfCookie()
+  return postEnvelope<UnifiedCampaign>(`${base(projectId)}/${campaignId}/activate`)
 }
 
 export async function archiveCampaign(projectId: string, campaignId: string): Promise<null> {

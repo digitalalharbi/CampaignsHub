@@ -40,7 +40,7 @@ import { useUi } from '@/stores/ui'
  * a campaign identity is not a client's to follow — so it is not given a control that pretends
  * otherwise.
  */
-function portalBaseOf(pathname: string): string | null {
+export function portalBaseOf(pathname: string): string | null {
   if (pathname.startsWith('/agency')) return '/agency'
   if (pathname.startsWith('/app')) return '/app'
 
