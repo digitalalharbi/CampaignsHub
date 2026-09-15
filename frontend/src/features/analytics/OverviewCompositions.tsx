@@ -140,7 +140,9 @@ export function useOverviewData({ projectId, range, filters, objective }: Overvi
     ar,
   })
 
-  return { ar, s, ts, objective, reportingCurrency, points, series, chartCurrency, comparable, drivers, strip, vm, campaigns, platformRows }
+  // `projectId` travels with the data so the overview's campaign rows can open the campaign
+  // they name — CAMPAIGN-DRILL-001.
+  return { ar, s, ts, objective, reportingCurrency, points, series, chartCurrency, comparable, drivers, strip, vm, campaigns, platformRows, projectId }
 }
 
 export type OverviewData = ReturnType<typeof useOverviewData>
@@ -396,7 +398,7 @@ export function DashboardOverview(d: OverviewData) {
         <StoreLedger commerce={s.data?.commerce ?? null} ar={ar} />
 
         {/* The comparisons, the details and the alerts — «أ», shared with the marketing preview. */}
-        <UnifiedCampaignOverview vm={vm} lang={ar ? 'ar' : 'en'} />
+        <UnifiedCampaignOverview vm={vm} lang={ar ? 'ar' : 'en'} projectId={d.projectId} />
 
         {/*
          * ANALYTICS-DIAGNOSTIC-INTELLIGENCE-001 — kept, and kept BELOW everything that draws.
@@ -632,7 +634,7 @@ export function AnalyticsOverview(d: OverviewData) {
         </Panel>
 
         {/* The comparisons, the details and the alerts — «أ», shared with the marketing preview. */}
-        <UnifiedCampaignOverview vm={vm} lang={ar ? 'ar' : 'en'} />
+        <UnifiedCampaignOverview vm={vm} lang={ar ? 'ar' : 'en'} projectId={d.projectId} />
       </section>
 
       {/*
