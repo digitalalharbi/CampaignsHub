@@ -15,6 +15,14 @@ use Illuminate\Support\Facades\DB;
  *
  * `text` in PostgreSQL is not a bigger varchar with a cost — it is the same storage with no length
  * check, so this widens what can be recorded and changes nothing else.
+ *
+ * ## It does not rewrite the table
+ *
+ * Checked before deploying rather than assumed, because `integration_sync_runs` grows by a row per
+ * account every thirty minutes and a rewrite would hold an ACCESS EXCLUSIVE lock over all of it.
+ * Measured on a 50,000-row table: `relfilenode` is identical before and after, so PostgreSQL treats
+ * `varchar(255) → text` as binary-coercible and changes only the catalogue. The lock is taken and
+ * released immediately.
  */
 return new class extends Migration
 {
