@@ -168,6 +168,25 @@ final class ReportAds
              * it under the same key names the frontend money reader already uses, so the ad card
              * renders «412.50 USD» through the one contract rather than a second opinion.
              */
+            /*
+             * Owner defect 94h — every figure travels, then the money keys are restated deliberately.
+             *
+             * This projection named nine metrics by hand, so the report's RANKED creatives carried
+             * `ctr`, `cpa` and `roas` and dropped `cpc`, `cpm`, `cpl`, `cpi`, `cpe`, `leads`,
+             * `installs`, `sign_ups`, `app_opens`, `page_views`, `reach` and every video figure —
+             * while the roster beside it and the content library carried them. The same creative
+             * showed a cost per click on three surfaces and an empty cell on the fourth.
+             *
+             * Worse for a lead-generation report: the ranked ad had no CPL at all, which is the one
+             * figure that section exists to justify its ranking with. The comment on the caller
+             * already promised «the objective's own indicators beside the preview» — the projection
+             * simply never kept it, which is a promise made where nothing computes it.
+             *
+             * Spreading first and restating after is deliberate: the money keys below carry
+             * semantics a blanket copy would flatten (`spend` must stay NULL when the conversion is
+             * unavailable, never `?? 0`), so they are written last and win.
+             */
+            ...$row['metrics'],
             'spend' => $row['metrics']['spend'] ?? null,
             'spend_original' => $row['metrics']['spend_original'] ?? null,
             'spend_withheld_rows' => $row['metrics']['spend_withheld_rows'] ?? null,

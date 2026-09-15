@@ -219,7 +219,7 @@ final class CreativeSurfaceReconciliationTest extends TestCase
     /**
      * The nine figures the owner named, read off each surface and compared with each other.
      */
-    public function test_every_surface_reports_the_same_nine_figures(): void
+    public function test_every_surface_reports_the_same_figures(): void
     {
         $library = $this->library()['metrics'] ?? null;
         $detail = $this->detail()['metrics'] ?? null;
@@ -235,7 +235,25 @@ final class CreativeSurfaceReconciliationTest extends TestCase
             'report ranked' => $ranked['metrics'] ?? $ranked,
         ];
 
-        foreach (['spend', 'impressions', 'clicks', 'ctr', 'conversions', 'cpa', 'revenue', 'roas'] as $metric) {
+        /*
+         * The owner's OWN mandatory Content list, not a sample of it.
+         *
+         * This asserted eight figures. The owner names far more — reach, CPC, CPM, results and cost
+         * per result for every objective, purchases, leads and CPL, sign-ups, installs and CPI, app
+         * opens, page views, the video figures — and a metric that is not compared here is a metric
+         * free to differ between the card and the report without anything noticing.
+         *
+         * A figure no surface reports reconciles trivially as null-everywhere, and that is worth
+         * asserting too: it is precisely how «0 on the card, — in the report» would arrive.
+         */
+        $mandatory = [
+            'spend', 'impressions', 'reach', 'clicks', 'ctr', 'cpc', 'cpm',
+            'conversions', 'orders', 'purchases', 'cpa', 'revenue', 'roas',
+            'leads', 'cpl', 'sign_ups', 'installs', 'cpi', 'app_opens', 'page_views',
+            'landing_page_views', 'video_views', 'video_p100', 'completion_rate', 'engagements',
+        ];
+
+        foreach ($mandatory as $metric) {
             $seen = [];
 
             foreach ($surfaces as $name => $figures) {
