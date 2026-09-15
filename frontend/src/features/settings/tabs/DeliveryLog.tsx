@@ -58,7 +58,17 @@ export function DeliveryLog() {
     const parsed = Date.parse(iso)
     if (Number.isNaN(parsed)) return iso
 
-    return new Date(parsed).toLocaleString(ar ? 'ar' : 'en-GB', {
+    /*
+     * `ar-SA-u-nu-latn`, not `ar` — NUMBER-PRESENTATION-001.
+     *
+     * Bare `ar` renders Latin digits today, but by a CLDR default for the language-only tag rather
+     * than by anything this code states: `ar-SA` and `ar-EG` both resolve to `arab` and would print
+     * «١٥‏/٩‏/٢٠٢٦». Someone correcting this to the market's own regional tag — the obvious edit in a
+     * Saudi product — would flip every timestamp in the delivery log to Arabic-Indic digits and
+     * never touch a number. The other six call sites in this tree already pin the extension; this
+     * one was the exception.
+     */
+    return new Date(parsed).toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', {
       day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
     })
   }

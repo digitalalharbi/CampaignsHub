@@ -279,4 +279,47 @@ describe('the frame an ad is drawn in', () => {
     expect(frameAspect(preview())).toBeNull()
     expect(frameAspect(null)).toBeNull()
   })
+
+  /**
+   * «Four different sentences, and they must stay four» — in both languages, and for every state.
+   *
+   * The cases above each assert that one state contains one distinctive phrase, and in English only:
+   * the Arabic side is spot-checked on `withheld` alone. That catches a sentence that changes and
+   * misses the failure this requirement is actually about — two states quietly answering with the
+   * SAME sentence, which is how a distinction disappears without any test going red. It is also the
+   * failure that arrives with the seventh state, not the sixth, and a list of per-state phrases will
+   * not be waiting for it.
+   *
+   * So the property is asserted instead of the instances: every state says something, and no two
+   * states say the same thing, in Arabic and in English independently.
+   *
+   * `absenceShort` is deliberately NOT held to this. It is a badge in a grid, and it collapses
+   * `unavailable` and `no_media` into «No file» on purpose: to the operator reading a wall of cards
+   * both mean «the platform gave nothing», and the sentence beneath is where the two are told apart.
+   * A guard that forbade that collapse would be inventing a distinction the product decided against.
+   */
+  it.each([true, false])('says something different for every silence (arabic=%s)', (ar) => {
+    /*
+     * The states the TYPE has, not the ones the reason map happens to name.
+     *
+     * The first version of this listed `collection_pending` and `no_media` — two keys that exist in
+     * the reason map but are not `state` values, and it reached them through an `as Partial<…>`
+     * cast that turned the compiler off at exactly the wrong moment. Both fell through
+     * `preview.state !== 'available'` carrying an unknown reason and came back as «unavailable», so
+     * the guard reported a collision the product does not have. A cast that silences the checker is
+     * how a fixture comes to describe a system that is not there.
+     */
+    const states = ['withheld', 'expired', 'unavailable', 'never_fetched', 'shape_not_fetched'] as const
+    const said = new Map<string, string>()
+
+    for (const state of states) {
+      const sentence = absenceLabel(readPreview(preview({ state }), ar), ar)
+
+      expect(sentence.trim(), `«${state}» says nothing at all`).not.toBe('')
+
+      const already = said.get(sentence)
+      expect(already, `«${state}» and «${already}» are the same sentence — a silence lost its meaning`).toBeUndefined()
+      said.set(sentence, state)
+    }
+  })
 })
