@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Console;
 
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
+use App\Domains\Integrations\Services\AccountDiscovery;
 use Illuminate\Console\Command;
 
 /**
@@ -28,9 +30,9 @@ use Illuminate\Console\Command;
  */
 final class GoogleAdsAccessCommand extends Command
 {
-    protected $signature = 'integrations:google-access';
+    protected $signature = 'integrations:google-access {--probe : Ask Google now, instead of reporting the last answer it gave}';
 
-    protected $description = 'Show which Google Cloud project the Google Ads OAuth client belongs to, and each connection\'s last discovery outcome.';
+    protected $description = 'Show which Google Cloud project the Google Ads OAuth client belongs to, and each connection\'s discovery outcome — stored, or attempted now with --probe.';
 
     public function handle(): int
     {
@@ -62,6 +64,14 @@ final class GoogleAdsAccessCommand extends Command
             return self::SUCCESS;
         }
 
+        if ($this->option('probe')) {
+            foreach ($connections as $connection) {
+                $this->probe($connection);
+            }
+
+            $connections = $connections->map(static fn (ProviderConnection $c) => $c->fresh() ?? $c);
+        }
+
         $this->table(
             ['connection', 'status', 'last attempt', 'last success', 'blocked reason'],
             $connections->map(fn (ProviderConnection $c): array => [
@@ -73,7 +83,85 @@ final class GoogleAdsAccessCommand extends Command
             ])->all(),
         );
 
+        /*
+         * GADS-HIERARCHY-001 step 6 — what Google ACTUALLY said, not how we filed it.
+         *
+         * `discovery_blocked_reason` is a classification: `provider_project_not_approved`,
+         * `discovery_failed`. It tells an operator which bucket the failure is in and nothing about
+         * which customer, which login context, or which `GoogleAdsFailure` member. The connector
+         * already assembles all three — «authorizationError=USER_PERMISSION_DENIED | customer … |
+         * login-customer-id … | request …» — and `AccountDiscovery` stores it on `last_error`, where
+         * this command was not reading it. A sentence computed carefully and shown to nobody.
+         */
+        foreach ($connections as $connection) {
+            if ($connection->last_error === null || $connection->last_error === '') {
+                continue;
+            }
+
+            $this->newLine();
+            $this->line('Connection '.$connection->getKey().' — what Google said:');
+
+            /*
+             * One fact per line, because the sentence is pipe-delimited and long.
+             *
+             * Printed whole it wraps at the terminal width, and the wrap lands wherever it lands —
+             * through the middle of «login-customer-id 1112223334» as often as not, which is the one
+             * field an operator is scanning for. The delimiter is already there; using it costs
+             * nothing and makes the answer readable at any width.
+             */
+            foreach (explode(' | ', $connection->last_error) as $fact) {
+                $this->warn('  '.trim($fact));
+            }
+        }
+
         return self::SUCCESS;
+    }
+
+    /**
+     * Ask Google now.
+     *
+     * The table above reports the last answer, which for a connection nobody has re-authorised is an
+     * answer from before the Cloud project was approved — and reads as a live refusal. This performs
+     * the real discovery through the path the product itself uses, so a re-authorisation can be
+     * confirmed in one command rather than by triggering the wizard and reading the result sideways.
+     *
+     * Failures are caught and reported rather than thrown: the point is to describe every connection
+     * in one run, and `AccountDiscovery` has already recorded the outcome on the connection by the
+     * time the exception reaches here.
+     */
+    private function probe(ProviderConnection $connection): void
+    {
+        $this->line('Probing connection '.$connection->getKey().' …');
+
+        try {
+            $result = app(AccountDiscovery::class)->refresh($connection);
+        } catch (\Throwable $e) {
+            $this->error('  discovery refused — see «what Google said» below.');
+
+            return;
+        }
+
+        $accounts = ExternalAccount::withoutGlobalScopes()
+            ->where('provider_connection_id', $connection->getKey())
+            ->where('account_type', 'ad_account')
+            ->get(['external_id', 'parent_external_id']);
+
+        /*
+         * GADS-MCC-001 — an account reached THROUGH a manager carries the manager it was reached
+         * through; one held directly carries null. That single column is the hierarchy answer, and
+         * printing the split is what distinguishes «the MCC resolved» from «one direct advertiser».
+         */
+        $throughManager = $accounts->filter(static fn ($a): bool => $a->parent_external_id !== null)->count();
+
+        $this->info(sprintf(
+            '  discovered %d, created %d, named %d, access lost %d — %d reached through a manager, %d held directly.',
+            $result['discovered'],
+            $result['created'],
+            $result['named'],
+            $result['access_lost'],
+            $throughManager,
+            $accounts->count() - $throughManager,
+        ));
     }
 
     /** The leading segment of a Google OAuth client id is its Cloud project number. */
