@@ -80,6 +80,27 @@ on:
         type: boolean
         required: false
         default: false
+      content_creative:
+        description: 'Owner defect 95 — walk ONE creative from the provider rows to every Content surface (id, ours or the provider''s own). Read-only.'
+        required: false
+        default: ''
+      content_scope:
+        description: 'Owner defect 95 — reconcile a whole project''s LIBRARY: what the headline strip states against what the cards state, and the gap in money.'
+        type: boolean
+        required: false
+        default: false
+      content_project:
+        description: 'Optional: the project for content_scope. Omitted: the one holding the most creatives.'
+        required: false
+        default: ''
+      content_from:
+        description: 'Optional window start for the Content walk (YYYY-MM-DD). Default: 29 days before content_to.'
+        required: false
+        default: ''
+      content_to:
+        description: 'Optional window end for the Content walk (YYYY-MM-DD). Default: today.'
+        required: false
+        default: ''
       quarantine_sandbox:
         description: 'Report the sandbox rows sitting in LIVE accounts. Reports only; never deletes from this workflow.'
         type: boolean
@@ -208,3 +229,65 @@ jobs:
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan integrations:quarantine-sandbox --provider="${PROVIDER}"
+
+  # ── The Content truth chain ──────────────────────────────────────────────────────────────────────
+  #
+  # Owner defect 95: «Content metrics are fundamentally inconsistent in Production — sometimes the
+  # KPIs appear but Spend is missing, sometimes Spend appears and the other KPIs disappear», and the
+  # register records under root cause that the chain «has never been reconciled end to end on one
+  # creative».
+  #
+  # It cannot be reconciled from a laptop, and that is not a preference. The defect lives on a
+  # connected ad account; every credential on a development install is a seeded placeholder; and the
+  # seeded library cannot even produce the shape — there is no creative in it whose figures exist only
+  # at the ad grain, which is what five of six providers produce. So the walk has to run where the
+  # rows are, and this is the only way to ask production a question.
+  #
+  # `content:reconcile` calls the product's OWN services at every rung — `CreativeRows::present()` as
+  # `CreativeAnalysisController` calls it, `lean()` as `ReportAds` calls it, `CreativeMetrics::
+  # forCreatives` and `::totalsFor` as the controller calls them, `CreativePresenter::preview()` as
+  # every surface does — so it cannot report a divergence the running product does not have. An
+  # instrument that reaches around a step of the real pipeline invents defects that are its own, and
+  # this repository has paid for that twice.
+  #
+  # It writes nothing, queues nothing and calls no provider, which is what makes it safe to point at a
+  # live account while a customer is looking at the same screen. And it prints no url, no token and no
+  # signed asset link — the preview rung reports the STATE and whether each url exists. A workflow log
+  # is readable by anybody with repository access, which is not the same audience as the ad account.
+  #
+  # Runs only when asked, so the default dispatch stays a pure read of what is already recorded.
+  content:
+    if: inputs.content_creative != '' || inputs.content_scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Reconcile the Content chain on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          CREATIVE: ${{ inputs.content_creative }}
+          SCOPE: ${{ inputs.content_scope && '--scope' || '' }}
+          PROJECT: ${{ inputs.content_project }}
+          FROM: ${{ inputs.content_from }}
+          TO: ${{ inputs.content_to }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: CREATIVE,SCOPE,PROJECT,FROM,TO
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            # Quoted, and passed as VALUES to a fixed command. Nothing here builds a command from
+            # input — the same rule the diagnose job states, for the same reason.
+            #
+            # The empty options are deliberate rather than conditional: the command's own defaults are
+            # «the busiest creative» and «the last thirty days», which is what a reader who names
+            # neither actually wants, and a shell that assembles flags conditionally is a shell that
+            # eventually assembles a command.
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan content:reconcile \
+                "${CREATIVE}" --project="${PROJECT}" --from="${FROM}" --to="${TO}" ${SCOPE}
