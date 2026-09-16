@@ -676,12 +676,34 @@ export async function walkRail(page: Page, hrefs: string[]): Promise<void> {
    */
   test.setTimeout(Math.max(test.info().timeout, railBudget(hrefs.length)))
 
-  const problems: string[] = []
+  /*
+   * Each problem is stamped with the address the main frame was on when it fired — and that is the
+   * whole difference between evidence and noise here.
+   *
+   * The first version cleared this list immediately before `page.goto`, which is precisely when the
+   * PREVIOUS page's in-flight requests are cancelled by the navigation that replaces it. Those
+   * cancellations therefore landed in the NEW iteration's list, and being first they filled its
+   * five-entry cap. That is what produced the most confident-looking line this helper has ever
+   * printed — «requestfailed: …/api/v1/client-workspaces — Load request cancelled | requestfailed:
+   * …/api/v1/projects — Load request cancelled | …fonts…» under a blank `/agency/tasks`, which reads
+   * as «everything this page asked for was cancelled» and is really «the page before it ended
+   * normally». Whatever actually broke was pushed out of the report by its own predecessor's exhaust.
+   *
+   * During a navigation the main frame still reports the OLD url until the new document commits, so
+   * the stamp separates the two without needing to know which request belonged to which document.
+   */
+  const problems: Array<{ at: string; text: string }> = []
+  const note = (text: string) => problems.push({ at: page.url(), text })
+
   page.on('console', (m) => {
-    if (m.type() === 'error') problems.push(`console: ${m.text()}`)
+    if (m.type() === 'error') note(`console: ${m.text()}`)
   })
-  page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`))
-  page.on('requestfailed', (r) => problems.push(`requestfailed: ${r.url()} — ${r.failure()?.errorText ?? '?'}`))
+  page.on('pageerror', (e) => note(`pageerror: ${e.message}`))
+  page.on('requestfailed', (r) => note(`requestfailed: ${r.url()} — ${r.failure()?.errorText ?? '?'}`))
+
+  /* A cancelled font is the least informative thing a torn-down page can say, and there are two of
+     them on every navigation. Reported, never first, so a real failure cannot be crowded out. */
+  const interesting = (text: string) => !/\.(woff2?|ttf|otf)\b/.test(text)
 
   for (const href of hrefs) {
     problems.length = 0
@@ -695,6 +717,41 @@ export async function walkRail(page: Page, hrefs: string[]): Promise<void> {
     } catch (failure) {
       const body = (await page.locator('body').innerText().catch(() => '')).trim()
 
+      /*
+       * Did the module graph run, and if it did, what is the app waiting for?
+       *
+       * «The app never mounted», «the app mounted and rendered nothing» and «the app is still waiting
+       * for its session» are three bugs with three different owners, and a blank body cannot tell any
+       * of them apart — it reports all three as nothing.
+       *
+       * This was worth measuring rather than assuming. Hanging `/auth/me` alone reproduces the exact
+       * shape this helper has been reporting as «the app never mounted»: 200, no `<main>`, no `<nav>`,
+       * an empty body and NOTHING in the console. What it does not reproduce is an absent app —
+       * `#root` has a child, because `RequireAuth` renders a full-screen spinner while the session
+       * probe is in flight, and a spinner has no text. So the sentence was itself a wrong diagnosis,
+       * printed with confidence, in the place everyone looked first.
+       *
+       * An empty `#root` means the entry module never executed, which points at the dev server. A
+       * `#root` holding the spinner means the shell is alive and one request has not come back, which
+       * points at the backend. The next occurrence says which.
+       */
+      const mount = await page.evaluate(() => {
+        const root = document.getElementById('root')
+
+        return {
+          readyState: document.readyState,
+          rootPresent: root !== null,
+          rootChildren: root?.childElementCount ?? 0,
+          /* `RequireAuth`'s session-probe spinner, by the label it already carries for screen readers. */
+          waitingOnSession: document.querySelector('[aria-label="Loading"]') !== null,
+          scripts: [...document.querySelectorAll('script[src]')].map((s) => s.getAttribute('src') ?? '').slice(0, 3),
+        }
+      }).catch(() => null)
+
+      const here = problems.filter((p) => p.at === page.url())
+      const carried = problems.length - here.length
+      const ordered = [...here.filter((p) => interesting(p.text)), ...here.filter((p) => !interesting(p.text))]
+
       throw new Error(
         [
           `${href} did not render.`,
@@ -702,8 +759,12 @@ export async function walkRail(page: Page, hrefs: string[]): Promise<void> {
           `  ended on        : ${page.url()}`,
           `  <main> present  : ${(await page.locator('main').count()) > 0}`,
           `  <nav> present   : ${(await page.locator('nav').count()) > 0}`,
-          `  body text       : ${body === '' ? '(the document is blank — the app never mounted)' : body.slice(0, 200)}`,
-          `  browser said    : ${problems.length === 0 ? '(nothing)' : problems.slice(0, 5).join(' | ')}`,
+          `  mount point     : ${mount === null ? '(the page could not be evaluated)' : `#root ${mount.rootPresent ? 'present' : 'ABSENT'}, ${mount.rootChildren} children, document ${mount.readyState}, scripts ${mount.scripts.join(', ') || '(none)'}`}`,
+          `  waiting on      : ${mount === null ? '(unknown)' : mount.waitingOnSession ? 'the session probe — RequireAuth is still showing its spinner' : '(not the session probe)'}`,
+          /* Says what it saw, not what it concluded — see the mount-point note above. */
+          `  body text       : ${body === '' ? '(no text — which is also what a spinner looks like)' : body.slice(0, 200)}`,
+          `  browser said    : ${ordered.length === 0 ? '(nothing on this page)' : ordered.slice(0, 12).map((p) => p.text).join(' | ')}`,
+          `  carried over    : ${carried} event(s) from the page before this one, not counted above`,
           '',
           String(failure),
         ].join('\n'),

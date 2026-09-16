@@ -458,8 +458,28 @@ export function CampaignsPage() {
     return { points, excluded }
   }, [visibleCampaigns, metricsByCampaign, ar])
 
+  /*
+   * ATTENTION-REQUEST-STATE-001 — a request that has not answered is not a finding about the account.
+   *
+   * Every flag below reads `metricsByCampaign.get(id)`, and that lookup is `undefined` for three
+   * different facts: the platform reported nothing for this campaign, the request is still in flight,
+   * and the request FAILED. `attentionFlags` then raises `no_metrics` — «لا توجد بيانات أداء لهذه
+   * الحملة في الفترة المحددة» — for all three, so opening the workspace flashed «تحتاج تدخلًا N» in
+   * warning tone with a banner offering to open the reasons, and a 403 or a dead metrics endpoint made
+   * that permanent: a claim about the customer's account assembled out of a request that never
+   * answered.
+   *
+   * `metricsKnown` is the page's OWN distinction, already used by the lifecycle view one memo below
+   * with a comment saying the same thing — a short list «is read as a fact about the account rather
+   * than as a request still in flight». Asking it here rather than inventing a second notion of
+   * «known». No verdict is produced until the figures are in, and the card says which of the two
+   * silences it is looking at rather than printing a zero that would read as «nothing is wrong».
+   *
+   * Found by the gate: `campaigns-overview-first.spec.ts` lost webkit four times in two days on this
+   * transient, because the slowest engine is the one that looks while the count is still wrong.
+   */
   const attention = useMemo(
-    () => orderAttention(campaigns
+    () => !metricsKnown ? [] : orderAttention(campaigns
       .map((c) => ({ c, flags: attentionFlags(c, metricsByCampaign.get(c.id), summary.data?.currency ?? null) }))
       .filter((x) => x.flags.length > 0)
       /*
@@ -472,7 +492,7 @@ export function CampaignsPage() {
       .map((x) => ({ ...x, id: x.c.id, rank: attentionRank(x.flags), name: x.c.name }))),
     // The reporting currency decides whether an over-budget comparison is possible at all, so the
     // flags must recompute when it arrives — otherwise the first render's «no verdict» would stick.
-    [campaigns, metricsByCampaign, summary.data?.currency],
+    [campaigns, metricsByCampaign, summary.data?.currency, metricsKnown],
   )
 
   /*
@@ -702,12 +722,21 @@ export function CampaignsPage() {
         */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard label={ar ? 'نشطة' : 'Active'} value={String(counts.active ?? 0)} sub={ar ? `${counts.total} إجمالًا` : `${counts.total} in total`} tone="success" />
+        {/*
+          ATTENTION-REQUEST-STATE-001 — «0» is an answer, and there is not one yet.
+          Pending and failed are kept apart because they need different people: one resolves itself,
+          the other is a request somebody has to look at.
+        */}
         <StatCard
           testid="campaigns-attention"
           label={ar ? 'تحتاج تدخلًا' : 'Needs attention'}
-          value={String(attention.length)}
-          sub={attention.length > 0 ? (ar ? 'افتح القائمة' : 'Open the list') : (ar ? 'لا شيء الآن' : 'Nothing right now')}
-          tone={attention.length > 0 ? 'warning' : undefined}
+          value={metricsKnown ? String(attention.length) : '—'}
+          sub={!metricsKnown
+            ? (metricCampaigns.isError
+                ? (ar ? 'تعذّر قراءة أرقام الحملات' : 'The campaign figures could not be read')
+                : (ar ? 'بانتظار أرقام الحملات' : 'Waiting for the campaign figures'))
+            : attention.length > 0 ? (ar ? 'افتح القائمة' : 'Open the list') : (ar ? 'لا شيء الآن' : 'Nothing right now')}
+          tone={metricsKnown && attention.length > 0 ? 'warning' : undefined}
         />
         <StatCard testid="campaigns-spend" label={ar ? 'الإنفاق' : 'Spend'} value={spendText} delta={cmp(d.spend)} />
         <StatCard label={ar ? 'النتائج' : 'Results'} value={num(k?.conversions)} delta={cmp(d.conversions)} />
@@ -1055,7 +1084,30 @@ export function CampaignsPage() {
           ) : campaigns.length === 0 ? (
             <EmptyState title={t('no_campaigns')} description={t('no_campaigns_hint')} />
           ) : view === 'attention' ? (
-            attention.length === 0 ? (
+            /*
+              ATTENTION-REQUEST-STATE-001 — «nothing needs attention» is an answer, and there is not
+              one yet.
+
+              Every rule this list runs reads the period's per-campaign figures. Before they arrive,
+              or when the request for them failed, the list used to fabricate a verdict out of their
+              absence — «no performance data for this campaign», on every campaign — and, once that
+              was gated, it swung to the opposite false claim and told the reader their whole project
+              was fine. The same distinction `lifecycle-degraded` already draws three blocks above,
+              drawn here: the page says which silence it is in, and a refusal says so separately
+              because it needs somebody to look rather than resolving itself.
+            */
+            !metricsKnown ? (
+              <EmptyState
+                title={ar ? 'لم تُقيَّم الحملات بعد' : 'The campaigns have not been judged yet'}
+                description={metricCampaigns.isError
+                  ? (ar
+                      ? 'تعذّر قراءة مؤشرات الفترة، فلا يمكن قول أي حملة تحتاج تدخلًا. أعد المحاولة أو راجع صلاحياتك.'
+                      : 'This period’s figures could not be read, so which campaigns need attention cannot be said. Retry, or check your access.')
+                  : (ar
+                      ? 'ما إن تصل مؤشرات الفترة حتى تُعرض الحملات التي تحتاج تدخلًا وأسبابها.'
+                      : 'Once this period’s figures arrive, the campaigns that need attention will be listed with their reasons.')}
+              />
+            ) : attention.length === 0 ? (
               <EmptyState title={ar ? 'لا توجد حملات تحتاج تدخلًا' : 'Nothing needs attention'} description={ar ? 'كل حملات المشروع مرتبطة بمنصاتها وتنفق ضمن ميزانياتها وتحقق نتائج في الفترة المحددة.' : 'Every campaign in this project is linked to its platform, spending within budget and producing results in the selected period.'} />
             ) : (
               <div className="space-y-2">

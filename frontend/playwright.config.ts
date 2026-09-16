@@ -121,6 +121,25 @@ export default defineConfig({
       url: E2E_ORIGIN,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
+      /*
+       * Its own log reaches the run — and this is the instrument two separate investigations have
+       * already needed and not had.
+       *
+       * Playwright's default for a `webServer` is `stdout: 'ignore'`, so everything Vite says after
+       * it prints its address is thrown away. Twice now a webkit failure has been written up as «the
+       * Vite dev server re-optimising its module graph» — in `contentLength`'s own docblock, and
+       * again for GATE-VITE-001 — and neither time could anyone point at the line that says so,
+       * because the only process that knows is the one nobody is listening to. `optimized
+       * dependencies changed. reloading`, `new dependencies optimized: …`, a 504 on an outdated dep
+       * and a `full-reload` are all one line each, and one of them is either there or it is not.
+       *
+       * Only the two Vite servers. The backend's stdout stays redirected to a file on purpose
+       * (SERVELOG-001): Laravel's dev-server router writes a line per request, tens of thousands over
+       * a run, and a reader that stalls turns that into `Broken pipe` notices INSIDE the JSON
+       * responses. Vite is quiet by comparison — it speaks when something happens, which is exactly
+       * when this is worth reading.
+       */
+      stdout: 'pipe',
       env: { VITE_API_TARGET: E2E_API_TARGET },
     },
     {
@@ -149,6 +168,8 @@ export default defineConfig({
        * the browser as «Load failed», the proxy as 502, and a `page.goto` as a navigation that never
        * fires `load`.
        */
+      /* The print server's too — GATE-VITE-001 was diagnosed from a hypothesis about exactly this. */
+      stdout: 'pipe',
       env: { VITE_API_TARGET: E2E_API_TARGET, VITE_CACHE_DIR: 'node_modules/.vite-print' },
     },
   ],

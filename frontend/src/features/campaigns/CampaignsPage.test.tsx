@@ -66,9 +66,24 @@ describe('CampaignsPage', () => {
     expect(await screen.findByText('اختر حملات للمقارنة')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('view-attention'))
-    // One linked, active, on-budget campaign with no metrics loaded is reported as "no data",
-    // never silently treated as healthy.
-    expect(await screen.findByTestId('attention-row')).toBeInTheDocument()
+    /*
+     * ATTENTION-REQUEST-STATE-001 — rewritten, and the claim it was written for is kept.
+     *
+     * It asserted an `attention-row` for «one linked, active, on-budget campaign with no metrics
+     * loaded», on the reasoning that it must never be «silently treated as healthy». The reasoning is
+     * right and the rendering was the other false claim: no metrics are loaded here because nothing in
+     * this test answers that request, so the row said «no performance data for this campaign in the
+     * selected period» — a finding about the account manufactured out of a request still in flight,
+     * and the transient that cost the webkit gate four runs.
+     *
+     * Neither silently healthy nor falsely flagged: the view says it has not judged them yet. That a
+     * campaign the platform genuinely reported nothing for IS still raised is asserted where the
+     * figures actually arrive — `campaignAttentionRequestState.test.tsx`, «still raises the verdict
+     * once the figures are in».
+     */
+    expect(await screen.findByText(/have not been judged yet/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('attention-row')).toBeNull()
+    expect(screen.queryByText(/Nothing needs attention/i)).toBeNull()
   })
 
   it('filters by taxonomy chips without leaving the list', async () => {
