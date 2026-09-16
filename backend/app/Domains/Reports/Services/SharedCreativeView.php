@@ -14,9 +14,9 @@ use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativePulse;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Campaigns\Support\CreativeDemoPolicy;
-use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -338,7 +338,7 @@ final class SharedCreativeView
             'from' => $from->toDateString(),
             'to' => $to->toDateString(),
             'providers' => $this->narrow($requested['providers'] ?? null, $ceiling['providers']),
-            'campaign_ids' => $this->withinAccounts(
+            'campaign_ids' => AccountCampaignCeiling::campaigns(
                 $this->narrow($requested['campaign_ids'] ?? null, $ceiling['campaign_ids']),
                 $ceiling['account_ids'],
             ),
@@ -963,52 +963,5 @@ final class SharedCreativeView
                 'source' => 'platform_reported',
             ];
         })->values()->all();
-    }
-
-    /**
-     * The campaign bound, narrowed to the ad accounts the link was granted.
-     *
-     * A share carries an ACCOUNT axis and this class never read it, while serving the same token as
-     * the report body. Measured on the demo world: a link whose ceiling named ONE account and whose
-     * campaign list spanned two returned twelve creatives — four from the granted account and EIGHT
-     * from campaigns in an account the link was never scoped to, carrying their names, previews and
-     * destination URLs, on a surface with no session behind it.
-     *
-     * Creatives hold no account column, so the bound travels through their campaigns. It is resolved
-     * from `daily_metrics.external_account_id` and NOT from `external_campaigns.external_account_id`,
-     * which is a different identifier space: measured on one campaign, the structural column says
-     * `20927551…` where the metrics say `7f3f1aa2…`, and the share's own axis is validated against
-     * `DailyMetric` when the link is built. Resolving it structurally would have matched nothing and
-     * looked like a working ceiling — failing closed for the wrong reason is still a wrong answer, and
-     * one that hides itself.
-     *
-     * An empty account ceiling is «every account», the reading `applyTo()` gives it on the report
-     * body; a ceiling that resolves to no campaign at all becomes IMPOSSIBLE rather than «no bound»,
-     * which is the same refusal `resolvedCampaignIds()` makes when a stale selection empties out.
-     *
-     * @param  list<string>  $campaignIds
-     * @param  list<string>  $accountIds
-     * @return list<string>
-     */
-    private function withinAccounts(array $campaignIds, array $accountIds): array
-    {
-        if ($accountIds === []) {
-            return $campaignIds;
-        }
-
-        $granted = DailyMetric::query()
-            ->withoutGlobalScopes()
-            ->whereIn('external_account_id', $accountIds)
-            ->whereNotNull('unified_campaign_id')
-            ->distinct()
-            ->pluck('unified_campaign_id')
-            ->map(static fn ($id): string => (string) $id)
-            ->all();
-
-        $within = $campaignIds === []
-            ? $granted
-            : array_values(array_intersect($campaignIds, $granted));
-
-        return $within === [] ? [ReportScope::IMPOSSIBLE] : $within;
     }
 }
