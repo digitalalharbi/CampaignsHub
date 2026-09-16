@@ -111,6 +111,11 @@ on:
         type: boolean
         required: false
         default: false
+      content_raw:
+        description: 'With content_census: for creatives whose spend is refused as a zero original, read the retained provider bodies and count how spend arrived (absent / null / zero / positive). Never an amount.'
+        type: boolean
+        required: false
+        default: false
       quarantine_sandbox:
         description: 'Report the sandbox rows sitting in LIVE accounts. Reports only; never deletes from this workflow.'
         type: boolean
@@ -327,13 +332,14 @@ jobs:
           FROM: ${{ inputs.content_from }}
           TO: ${{ inputs.content_to }}
           FETCH: ${{ inputs.content_fetch && '--fetch' || '' }}
+          RAW: ${{ inputs.content_raw && '--raw' || '' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
           command_timeout: 12m
-          envs: PROJECT,FROM,TO,FETCH
+          envs: PROJECT,FROM,TO,FETCH,RAW
           script: |
             set -Eeuo pipefail
             cd /opt/campaignshub
@@ -343,4 +349,4 @@ jobs:
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan content:census \
-                --project="${PROJECT}" --from="${FROM}" --to="${TO}" --list="200" ${FETCH}
+                --project="${PROJECT}" --from="${FROM}" --to="${TO}" --list="200" ${FETCH} ${RAW}
