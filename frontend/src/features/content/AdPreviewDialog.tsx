@@ -308,6 +308,23 @@ export function AdPreviewDialog({
         )}
 
         {/*
+          Content Production Recovery — PART of the set came from the ads.
+
+          A creative the platform reports directly can still leave a figure out — on the live Snapchat
+          account 90 creatives had their Spend, revenue or landing-page views only on their ads. Those
+          figures are now taken from the ads (never added to the creative's own), and `from_ads` names
+          them. The provenance is stated once, for the set, exactly as for a wholly ad-grain creative.
+        */}
+        {(creative.metrics as { grain?: string } | null)?.grain !== 'ad'
+          && ((creative.metrics as { from_ads?: unknown } | null)?.from_ads as unknown[] | undefined)?.length ? (
+          <p data-testid="ad-preview-dialog-grain-partial" className="mt-1.5 text-[11px] leading-snug text-text-muted">
+            {ar
+              ? 'بعض هذه الأرقام مجموعة من إعلانات هذا التصميم، حيث لم تُبلّغ عنها المنصة على مستوى التصميم نفسه.'
+              : 'Some of these figures are summed from the ads that ran this creative, where the platform did not report them for the creative itself.'}
+          </p>
+        ) : null}
+
+        {/*
           And the chart, HIGH — the answer to «is this getting better or worse».
 
           It was last, under eight metadata rows, which on a phone put it off the screen entirely in

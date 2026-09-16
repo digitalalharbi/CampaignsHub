@@ -70,3 +70,34 @@ describe('a figure summed from ads says so', () => {
     expect(screen.queryByTestId('ad-preview-dialog-grain')).toBeNull()
   })
 })
+
+describe('a set partly filled from the ads says so', () => {
+  it('states it when the creative reported itself and some figures came from its ads', () => {
+    renderWithProviders(
+      <AdPreviewDialog
+        locale="en"
+        creative={creative({ grain: 'creative', spend: 100, from_ads: ['spend', 'cpa'] })}
+        onClose={() => {}}
+        figures={[{ label: 'Spend', value: '100 SAR' }]}
+      />,
+      { locale: 'en' },
+    )
+
+    expect(screen.getByTestId('ad-preview-dialog-grain-partial')).toHaveTextContent(/summed from the ads/i)
+    expect(screen.queryByTestId('ad-preview-dialog-grain')).toBeNull()
+  })
+
+  it('says nothing when nothing was taken from the ads', () => {
+    renderWithProviders(
+      <AdPreviewDialog
+        locale="en"
+        creative={creative({ grain: 'creative', spend: 100, from_ads: [] })}
+        onClose={() => {}}
+        figures={[{ label: 'Spend', value: '100 SAR' }]}
+      />,
+      { locale: 'en' },
+    )
+
+    expect(screen.queryByTestId('ad-preview-dialog-grain-partial')).toBeNull()
+  })
+})

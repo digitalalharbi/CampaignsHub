@@ -243,14 +243,14 @@ final class ContentDefectCensusTest extends TestCase
     }
 
     /** @param array<string, float|int> $figures */
-    private function creativeRow(ExternalCreative $creative, array $figures): void
+    private function creativeRow(ExternalCreative $creative, array $figures, ?Carbon $day = null): void
     {
         DB::table('creative_daily_metrics')->insert([
             'id' => (string) Str::uuid(),
             'tenant_id' => $this->tenant->getKey(),
             'project_id' => $this->project->getKey(),
             'creative_id' => $creative->getKey(),
-            'metric_date' => Carbon::today()->subDay()->toDateString(),
+            'metric_date' => ($day ?? Carbon::today()->subDay())->toDateString(),
             ...$figures,
             'created_at' => now(),
             'updated_at' => now(),
@@ -298,7 +298,14 @@ final class ContentDefectCensusTest extends TestCase
             'asset_url' => 'data:image/png;base64,AAAA',
         ]);
 
-        $this->creativeRow($creative, ['spend' => 120.0, 'impressions' => 9_000, 'clicks' => 140]);
+        /*
+         * The creative grain spans TWO days and its ads ONE, so the product correctly refuses to fill
+         * the creative's figures from a grain covering fewer days — and the census must still report
+         * the leads the card does not state. With equal coverage the product now fills them, which is
+         * the fix this census exists to measure, and the creative correctly leaves D.
+         */
+        $this->creativeRow($creative, ['spend' => 60.0, 'impressions' => 4_500, 'clicks' => 70]);
+        $this->creativeRow($creative, ['spend' => 60.0, 'impressions' => 4_500, 'clicks' => 70], Carbon::today()->subDays(2));
         $this->adRow($creative, ['spend' => 120.0, 'impressions' => 9_000, 'clicks' => 140, 'leads' => 12]);
 
         return $creative;
