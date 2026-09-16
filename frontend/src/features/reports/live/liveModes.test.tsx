@@ -197,3 +197,31 @@ describe('the states a reader must never see collapsed', () => {
     expect(screen.getByTestId('live-kpis')).toBeInTheDocument()
   })
 })
+
+describe('a link left open stays live', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+  })
+
+  function visibility(state: 'visible' | 'hidden') {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state })
+  }
+
+  it('recomputes on its own while the page is visible, and asks nothing while it is hidden', async () => {
+    answerByProvider()
+    visibility('visible')
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+    await screen.findByTestId('live-mode-dashboard')
+    const opened = vi.mocked(fetchLiveShared).mock.calls.length
+
+    visibility('hidden')
+    await vi.advanceTimersByTimeAsync(6 * 60_000)
+    expect(vi.mocked(fetchLiveShared).mock.calls.length, 'a hidden tab spent the public ration').toBe(opened)
+
+    visibility('visible')
+    await vi.advanceTimersByTimeAsync(60_000)
+    await waitFor(() => expect(vi.mocked(fetchLiveShared).mock.calls.length).toBeGreaterThan(opened))
+  })
+})
