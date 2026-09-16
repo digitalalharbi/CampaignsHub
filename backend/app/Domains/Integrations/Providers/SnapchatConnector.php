@@ -1069,8 +1069,10 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
 
         foreach (self::ENTITY_METRICS as $canonical => $field) {
             // ABSENT, not zero: a metric this account does not report arrives as a missing key so
-            // the column stays null and the reader says «not reported» rather than «none».
-            if (! array_key_exists($field, $stats)) {
+            // the column stays null and the reader says «not reported» rather than «none». A JSON
+            // null is the same answer — `(float) null` is 0, and casting it stored a reported zero
+            // the platform never sent. A real 0 still arrives as 0.
+            if (! array_key_exists($field, $stats) || $stats[$field] === null) {
                 continue;
             }
 
@@ -1245,8 +1247,12 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
              * stores no row for it and every surface says «غير مُرسَل» rather than printing a
              * measured zero. An awareness campaign that was never asked to sell anything has no
              * purchases; it does not have zero of them.
+             *
+             * A PRESENT JSON null is the same answer, and it was not treated as one: `(float) null`
+             * is 0, so a null spend was stored as a spend of zero. TikTok's connector already skips
+             * nulls for exactly this reason.
              */
-            if (! array_key_exists($field, $stats)) {
+            if (! array_key_exists($field, $stats) || $stats[$field] === null) {
                 continue;
             }
 

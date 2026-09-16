@@ -246,6 +246,48 @@ final class EntityDailyMetricsTest extends TestCase
     }
 
     /**
+     * A JSON null is «not reported», never a measured zero — at the ad and ad-squad grain.
+     *
+     * `entityPointToRow()` skipped a MISSING key and cast a PRESENT one with `(float)`, so
+     * `"spend": null` was stored as a spend of 0: a fabricated reported zero, on any metric, on any
+     * Snapchat row where the platform sent null. A genuine zero must still arrive as zero.
+     */
+    public function test_a_null_stat_stays_unreported_and_a_real_zero_stays_zero(): void
+    {
+        Http::fake([
+            '*/campaigns/cmp-1/stats*' => Http::response(['timeseries_stats' => [
+                ['timeseries_stat' => ['breakdown_stats' => ['ad' => [
+                    ['id' => 'ad-1', 'timeseries' => [
+                        ['start_time' => '2026-08-01T00:00:00.000-07:00', 'stats' => [
+                            'spend' => null,
+                            'impressions' => null,
+                            'swipes' => 7,
+                            'native_leads' => 0,
+                        ]],
+                    ]],
+                ]]]],
+            ]], 200),
+            '*' => Http::response([], 200),
+        ]);
+
+        $rows = $this->connector()->fetchEntityInsights(
+            new OAuthTokens('AT', 'RT', Carbon::now()->addDay()),
+            'act-1',
+            'campaigns',
+            'ad',
+            ['cmp-1'],
+            '2026-08-01',
+            '2026-08-01',
+        );
+
+        $this->assertCount(1, $rows);
+        $this->assertArrayNotHasKey('spend', $rows[0], 'a JSON null spend became a reported zero');
+        $this->assertArrayNotHasKey('impressions', $rows[0], 'a JSON null impressions became a reported zero');
+        $this->assertEqualsWithDelta(7, $rows[0]['clicks'], 0.01);
+        $this->assertSame(0.0, $rows[0]['leads'], 'a real zero must still arrive as zero');
+    }
+
+    /**
      * Landing-page views are the DELIVERY metric, not pixel page views.
      *
      * Snapchat's Marketing API measurement reference publishes both: `landing_page_views` — «# of times
