@@ -1,5 +1,5 @@
 import { canonicalObjectiveLabel, type CanonicalObjectiveKey } from '@/features/campaigns/canonicalObjectives'
-import { aspectClass } from '@/features/content/adPreview'
+import { aspectClass, clientAbsence, readPreview } from '@/features/content/adPreview'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -857,7 +857,7 @@ function SharedCreativeDetail({
             />
           ) : (
             <p className="p-6 text-center text-xs text-text-muted">
-              {(ar ? preview.note_ar : preview.note_en) ?? '—'}
+              {clientAbsence(readPreview(preview, ar), ar).sentence}
             </p>
           )}
         </div>
@@ -1081,7 +1081,7 @@ function CreativeTile({
           />
         ) : (
           <span className="flex aspect-square w-full items-center justify-center px-2 text-center text-[11px] text-text-muted">
-            {(locale === 'ar' ? preview.note_ar : preview.note_en) ?? '—'}
+            {clientAbsence(readPreview(preview, locale === 'ar'), locale === 'ar').short}
           </span>
         )}
       </button>

@@ -402,7 +402,7 @@ function AdCard({
   const ar = locale === 'ar'
   const body = (
     <>
-      <AdPoster preview={ad.preview ?? null} name={ad.name ?? ''} className="h-32 w-full" testid={testidPrefix} />
+      <AdPoster preview={ad.preview ?? null} name={ad.name ?? ''} className="h-32 w-full" testid={testidPrefix} forClient />
 
       <div className="min-w-0">
         <div className="truncate text-sm font-bold text-text-primary" title={ad.name ?? undefined}>
