@@ -1,3 +1,4 @@
+import { liveSpark } from './liveSpark'
 import { KpiCard, TrendPill } from '@/features/analytics/components'
 import { Num } from '@/components/ui/Num'
 import type { LivePayload } from '../api'
@@ -41,7 +42,6 @@ export function LiveKpiBoard({
 }) {
   const t = payload.totals
   const d = payload.deltas ?? {}
-  const series = (key: string) => payload.timeseries.map((r) => Number(r[key] ?? 0))
   const known = keys.filter((k) => reader.meta[k])
   const hero = known.slice(0, 4)
   const rest = heroOnly ? [] : known.slice(4)
@@ -61,7 +61,7 @@ export function LiveKpiBoard({
               exact={read.exact ?? undefined}
               delta={d[key]}
               invertGood={meta.invertGood}
-              spark={meta.spark ? series(key) : undefined}
+              spark={liveSpark(key, payload.timeseries)}
             />
           )
         })}
