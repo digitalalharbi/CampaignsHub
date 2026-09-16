@@ -117,6 +117,46 @@ final class SharedLinkDownloadTest extends TestCase
     }
 
     /**
+     * The figure on the page and the figure in the file are the SAME figure.
+     *
+     * The brief's own words: «headline metrics must reconcile» across every output. It is not
+     * satisfied by the file merely being produced — a client reads a spend on the link, downloads
+     * the spreadsheet, and the two numbers are put side by side by the person least able to explain
+     * a difference. The existing cases here assert that the CSV names a platform and carries no
+     * campaign identity; neither would notice the figures drifting.
+     *
+     * They CAN drift. The two paths are not one call: the page is served by
+     * `PublicReportController::show`, while the download replicates the report, merges the share's
+     * render flags, refreshes creative media and runs `sanitize()` before the exporter reads it.
+     * Sharing a source is the reason they SHOULD agree; it is not the same as agreeing, which is
+     * the argument `LiveAndDetailedAgreeTest` already makes for the other pair.
+     *
+     * Asserted between the two SURFACES rather than against a literal. A test pinned to «1000»
+     * passes while both drift together, and drifting together is exactly what happens when a
+     * transformation is added to the shared step.
+     */
+    public function test_the_downloaded_file_states_the_same_headline_the_link_does(): void
+    {
+        $token = $this->link();
+
+        $onThePage = $this->get("/api/v1/reports/shared/{$token}")
+            ->assertOk()
+            ->json('data.data.kpis.spend');
+
+        $this->assertNotNull($onThePage, 'the link published no headline spend to reconcile against');
+
+        $csv = $this->get("/api/v1/reports/shared/{$token}/download/csv")
+            ->assertOk()
+            ->streamedContent();
+
+        $this->assertMatchesRegularExpression(
+            '/^spend,'.preg_quote((string) (float) $onThePage, '/').'(\.0+)?$/m',
+            $csv,
+            'the client reads one spend on the link and a different one in the file they downloaded',
+        );
+    }
+
+    /**
      * The whole reason this surface is worth a test: the file is produced, AND it is clean.
      *
      * A client export that succeeds by shipping campaign identity is worse than one that refuses.
