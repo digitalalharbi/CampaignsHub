@@ -5,6 +5,8 @@ import { mixedResultsNote, type ResultPart } from './reportMetrics'
 import { brand, productName } from '@/lib/brand'
 import { ReportWatermark } from './ReportWatermark'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
+import { clientAbsence, readPreview } from '@/features/content/adPreview'
+import type { CreativePreview } from '@/features/content/api'
 
 /**
  * English, LTR, A4-portrait DOCUMENT rendering of a report (distinct from the RTL 16:9 slide
@@ -42,13 +44,6 @@ type AdRow = {
 }
 
 /** Why a picture is not here, in the words the library uses for the same state. */
-const PRINT_ABSENCE: Record<string, string> = {
-  withheld: 'Preview link carries a credential',
-  expired: 'Platform link expired',
-  unavailable: 'Platform does not expose the file',
-  no_media: 'Platform sent no file',
-}
-
 const PRINT_ADS_ABSENT: Record<string, string> = {
   no_creatives_in_window: 'No ad-level rows were recorded in this window — the figures above are at campaign level.',
   no_rankable_metric_for_this_objective: 'The platforms reported no metric this objective can be ranked on, so no ranked ads are shown.',
@@ -229,12 +224,17 @@ export function PrintDocument({
     carries a picture, and the other three carry their own sentence rather than an empty frame.
   */
   const adRows = ((data.ads ?? []) as AdRow[]).slice(0, 12).map((ad) => {
-    const preview = (ad.preview ?? null) as { state?: string; thumbnail_url?: string | null; image_url?: string | null; note_en?: string | null } | null
+    const preview = (ad.preview ?? null) as { state?: string; thumbnail_url?: string | null; image_url?: string | null } | null
     const usable = preview?.state === 'available' ? (preview.thumbnail_url ?? preview.image_url ?? null) : null
 
     return {
       thumb: usable,
-      absence: preview?.note_en ?? PRINT_ABSENCE[preview?.state ?? 'unavailable'] ?? PRINT_ABSENCE.unavailable,
+      /*
+       * CLIENT-DIAGNOSTIC-SEPARATION-001 — the forwarded file says a missing picture in the client's
+       * words, as every other client surface does: never the server's operator note, and never how
+       * our platform link failed.
+       */
+      absence: clientAbsence(readPreview(ad.preview as CreativePreview | null | undefined, false), false).sentence,
       name: String(ad.name ?? '—'),
       provider: String(ad.provider ?? '—'),
       spend: ad.spend === null || ad.spend === undefined ? '—' : money(Number(ad.spend), currency),
