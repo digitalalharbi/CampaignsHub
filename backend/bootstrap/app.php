@@ -20,6 +20,7 @@ use App\Domains\Integrations\Console\ProbeInsightsCommand;
 use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
 use App\Domains\Integrations\Console\QuarantineSandboxRowsCommand;
 use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
+use App\Domains\Integrations\Console\ScopeAuditCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
 use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
@@ -100,6 +101,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // INTEG-RUNTIME §7 — read-only: where a sync's rows stopped, with the four counts. Calls no
         // provider and writes nothing, which is what makes it safe to point at production.
         DiagnoseSyncCommand::class,
+        // ACCOUNT-SCOPE-ISOLATION-001 — read-only: per project and grain, which ad accounts the stored
+        // rows belong to, classified against the project's bindings. Writes nothing.
+        ScopeAuditCommand::class,
         // Owner defect 95 — read-only: one creative walked from the provider rows to every Content
         // surface, with the divergences named. Calls no provider and writes nothing.
         ReconcileContentMetricsCommand::class,
