@@ -6,9 +6,14 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Models\ExternalAd;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
@@ -203,5 +208,145 @@ final class ContentKpiTotalsTest extends TestCase
     public function test_an_empty_library_has_no_totals(): void
     {
         $this->assertNull($this->library()['totals']);
+    }
+
+    /**
+     * Owner defect 95 — the strip carries what the CARDS carry, on an account with no creative grain.
+     *
+     * This is the endpoint half of `ContentMetricCoexistenceTest`, and it is the reading the owner
+     * actually reported: on a Meta, Google, TikTok, LinkedIn or X account `creative_daily_metrics` is
+     * empty by design — `AccountMetricsSyncer` asks for creative-level insights behind
+     * `instanceof ReportsCreativeInsights` and Snapchat is the only implementor — so the cards fell
+     * back to the ads that ran each creative while the strip, which queried the creative table alone,
+     * reported nothing at all. Spend on the cards, silence directly above them, one viewport.
+     *
+     * Asserted against the CARDS rather than against a literal, deliberately. A literal still passes
+     * on the day the two drift together, and the property this endpoint owes its reader is that the
+     * headline cannot contradict the rows beneath it.
+     */
+    public function test_the_headline_strip_answers_for_a_library_whose_figures_are_at_the_ad_grain(): void
+    {
+        $this->adGrainEstate();
+
+        $data = $this->library();
+
+        $this->assertCount(3, $data['creatives'], 'the page should be three rows of the estate');
+
+        $spendOnCards = 0.0;
+        foreach ($data['creatives'] as $row) {
+            $this->assertNotNull($row['metrics'], 'a card reported nothing, so this case proves nothing');
+            $spendOnCards += (float) $row['metrics']['spend'];
+        }
+
+        $this->assertGreaterThan(0.0, $spendOnCards, 'the cards carry no spend, so the strip has nothing to contradict');
+
+        $this->assertNotNull(
+            $data['totals'],
+            'the cards carry spend and the headline strip above them says nothing was reported',
+        );
+        /* Six creatives at 50 each — the whole library, not the three-row page. */
+        $this->assertSame(300.0, (float) $data['totals']['spend'], 'the strip lost the spend the cards show');
+        $this->assertSame(60.0, (float) $data['totals']['leads'], 'the result the campaign was bought for never reached the strip');
+        $this->assertSame(5.0, (float) $data['totals']['cpl'], 'cost per lead was not derived from the pooled figures');
+    }
+
+    /**
+     * Six creatives whose figures exist ONLY at the ad grain — the shape five of six providers have.
+     *
+     * `external_ads.creative_id` is the canonical relation, so the ad rows are attributable; nothing
+     * is written to `creative_daily_metrics`, which is exactly what a Meta sync leaves behind.
+     */
+    private function adGrainEstate(): void
+    {
+        $unified = UnifiedCampaign::create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'provider' => 'meta',
+            'external_id' => 'c-leads',
+            'name' => 'Lead gen',
+            'status' => 'active',
+            'objective' => 'leads',
+        ]);
+
+        /*
+         * A real bound account, because `external_campaigns.external_account_id` is NOT NULL — the
+         * schema's own statement that a provider campaign belongs to an account somebody connected.
+         */
+        $credential = new IntegrationCredential([
+            'provider' => 'meta', 'credential_scope' => 'project_only',
+            'credential_type' => 'oauth', 'status' => 'active',
+        ]);
+        $credential->setPayload('t');
+        $credential->save();
+
+        $connection = ProviderConnection::create([
+            'credential_id' => $credential->id, 'provider' => 'meta',
+            'connection_name' => 'meta', 'scope' => 'project_only', 'status' => 'connected',
+        ]);
+
+        $account = ExternalAccount::withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'provider_connection_id' => $connection->getKey(),
+            'provider' => 'meta',
+            'account_type' => 'ad_account',
+            'external_id' => 'act-leads',
+            'name' => 'Meta',
+            'status' => 'active',
+        ]);
+
+        $external = ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'external_account_id' => $account->getKey(),
+            'provider' => 'meta',
+            'external_id' => 'ext-c-leads',
+            'name' => 'Lead gen',
+            'status' => 'active',
+        ]);
+
+        for ($i = 1; $i <= 6; $i++) {
+            $creative = ExternalCreative::create([
+                'tenant_id' => $this->tenant->id,
+                'project_id' => $this->project->id,
+                'campaign_id' => $unified->id,
+                'provider' => 'meta',
+                'external_creative_id' => "ec-adgrain-{$i}",
+                'name' => "Ad-grain creative {$i}",
+                'format' => 'image',
+                'asset_url' => 'https://cdn.test/a.jpg',
+            ]);
+
+            $ad = ExternalAd::withoutGlobalScopes()->create([
+                'tenant_id' => $this->tenant->id,
+                'project_id' => $this->project->id,
+                'external_campaign_id' => $external->getKey(),
+                'creative_id' => $creative->id,
+                'provider' => 'meta',
+                'external_id' => "ad-adgrain-{$i}",
+                'name' => "Ad {$i}",
+                'status' => 'active',
+                'source_type' => 'api',
+            ]);
+
+            DB::table('entity_daily_metrics')->insert([
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $this->tenant->id,
+                'project_id' => $this->project->id,
+                'provider' => 'meta',
+                'entity_type' => 'ad',
+                'entity_id' => $ad->getKey(),
+                'external_entity_id' => "ad-adgrain-{$i}",
+                'external_campaign_id' => $external->getKey(),
+                'metric_date' => now()->subDay()->toDateString(),
+                'attribution_window' => 'default',
+                'spend' => 50,
+                'impressions' => 2_000,
+                'clicks' => 60,
+                'leads' => 10,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
     }
 }
