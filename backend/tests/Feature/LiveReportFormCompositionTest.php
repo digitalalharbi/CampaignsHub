@@ -158,6 +158,97 @@ final class LiveReportFormCompositionTest extends TestCase
     }
 
     /**
+     * The Owner's DETAILED list, turned from prose into a guard.
+     *
+     * Row 96 asks for report products that are «materially different», and names what the detailed
+     * one must contain: complete KPI depth, timeseries trends, platform-by-platform sections, the
+     * objective breakdown, budget and pacing, funnel and store, promoted creatives, platform-specific
+     * top creatives, ALL promoted creatives reachable, recommendations, analytical tables, and
+     * freshness / data-quality context.
+     *
+     * Every item on that list is a key here, so a section that quietly stops being emitted fails on
+     * the CLAUSE IT BREAKS rather than on a diff nobody reads. The case above proves the two blocks a
+     * summary drops; this proves the other ten never silently went with them — a trimming aimed at
+     * the summary that reached the detailed product would otherwise be invisible until a client
+     * opened one.
+     *
+     * ## Presence is not enough, and the first version of this got that wrong
+     *
+     * `ReportComposition` trims by EMPTYING — `funnel => []`, `store_funnel => null` — so the keys
+     * survive a trimming and `assertArrayHasKey` passes on a section that is gone. Written that way
+     * first, this guard did not fail when the trimming was injected into the detailed product: the
+     * old case beside it caught that, and this one watched it happen. So the three sections the
+     * composition can empty are asserted NON-EMPTY, which is the only assertion that can tell «still
+     * here» from «still keyed».
+     *
+     * The rest are asserted on presence alone, deliberately: what belongs inside each is the subject
+     * of its own tests, and pinning values here would make this fail for reasons that have nothing
+     * to do with composition.
+     *
+     * Two items on the list are deliberately NOT keys, and the reason each is where it is matters:
+     *
+     *  - «ALL promoted creatives reachable» is `ads_roster`, which a summary also carries. Row 96's
+     *    reachability is the CAP, held in `ReportAds` and driven by the form — see the note in
+     *    `ReportComposition::DETAILED_ONLY` on why emptying the key would delete the COUNT with the
+     *    table and restore REPORT-CREATIVE-TRUTH-001's own defect.
+     *  - «freshness / data-quality context» is `freshness`, and its DIAGNOSTIC half is withheld from
+     *    a client audience by CLIENT-DIAGNOSTIC-SEPARATION-001. That is not a conflict with this
+     *    list: an internal reader gets the operator's account, and a client gets the fact that
+     *    concerns them — which figures the period does not include — rather than our sync clock.
+     */
+    public function test_the_detailed_report_carries_every_section_the_owner_named(): void
+    {
+        $detailed = $this->payloadFor('detailed');
+
+        $promised = [
+            'totals' => 'complete KPI depth',
+            'timeseries' => 'timeseries trends',
+            'platforms' => 'platform-by-platform sections',
+            'objective_performance' => 'the objective breakdown',
+            'budget' => 'budget and pacing',
+            'funnel' => 'the funnel',
+            'store_funnel' => 'the store reconciliation',
+            'ads' => 'promoted creatives',
+            'ads_platform_groups' => 'platform-specific top creatives',
+            'ads_roster' => 'all promoted creatives reachable',
+            'campaigns' => 'the analytical tables',
+            'freshness' => 'freshness and data-quality context',
+        ];
+
+        /*
+         * Where a surviving key CAN express the difference, and where it genuinely cannot.
+         *
+         * Only `funnel` is asserted non-empty, and the other two are excluded for a reason that is a
+         * property of the data rather than a gap in this fixture. The trimming empties a section; so
+         * does an account that has nothing to put in it. `store_funnel` is null when trimmed AND null
+         * for a project with no shop connected — most of them — and `ads_platform_groups` is empty
+         * when trimmed AND empty for a project whose creatives carry no per-platform ranking. The two
+         * states are the same value, so no assertion here can separate them, and one that tried would
+         * fail for honest reports.
+         *
+         * That is not a hole: the case directly above proves the summary drops both, which is the
+         * claim that matters. What this case adds for them is that the KEY is still emitted, so a
+         * consumer reading the detailed payload finds the section rather than an absent field.
+         */
+        $trimmable = ['funnel'];
+
+        foreach ($promised as $key => $clause) {
+            $this->assertArrayHasKey(
+                $key,
+                $detailed,
+                "the detailed report no longer carries {$clause} — row 96 names it as something this product must contain",
+            );
+
+            if (in_array($key, $trimmable, true)) {
+                $this->assertNotEmpty(
+                    $detailed[$key],
+                    "the detailed report was trimmed of {$clause} — the key survived and the section did not",
+                );
+            }
+        }
+    }
+
+    /**
      * The summary keeps what it is FOR — the Owner's own Executive list, handoff §10.
      *
      * Written because the obvious way to make a summary shorter is to keep trimming, and three of
