@@ -111,8 +111,8 @@ const PAYLOAD = {
 
 describe('the four report products', () => {
   it('names each of the four, and never describes a live page as a snapshot', () => {
-    expect(productName('live', 'executive_summary', 'en')).toBe('Live dashboard')
-    expect(productName('live', 'detailed', 'en')).toBe('Live detailed report')
+    expect(productName('live', 'executive_summary', 'en')).toBe('Live summary')
+    expect(productName('live', 'detailed', 'en')).toBe('Live performance dashboard')
     expect(productName('snapshot', 'executive_summary', 'en')).toBe('Executive summary')
     expect(productName('snapshot', 'detailed', 'en')).toBe('Detailed report')
 
@@ -135,7 +135,7 @@ describe('the four report products', () => {
         expect(productLabel(mode, form, 'ar')).not.toContain('حمل')
       }
     }
-    expect(productLabel('live', 'executive_summary', 'ar')).toContain('لوحة مباشرة')
+    expect(productLabel('live', 'executive_summary', 'ar')).toContain('ملخص مباشر')
     expect(productLabel('snapshot', 'detailed', 'ar')).toContain('تقرير تفصيلي')
   })
 })

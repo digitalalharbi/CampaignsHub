@@ -163,7 +163,7 @@ export function LiveSharedReport({
      */
     <div className="grid gap-4 [&>*]:min-w-0" data-testid="live-report" data-mode={mode}>
       {offered.length > 1 && (
-        <nav role="tablist" aria-label={ar ? 'طريقة العرض' : 'View'} data-testid="live-modes" className="flex gap-1 overflow-x-auto rounded-2xl border border-border bg-surface p-1">
+        <nav role="tablist" aria-label={ar ? 'طريقة العرض' : 'View'} data-testid="live-modes" className="grid grid-cols-4 gap-1 rounded-2xl border border-border bg-surface p-1">
           {offered.map((m) => {
             const Icon = MODE_ICONS[m]
             const selected = m === mode
@@ -176,7 +176,7 @@ export function LiveSharedReport({
                 aria-selected={selected}
                 data-testid={`live-mode-tab-${m}`}
                 onClick={() => navigate(m)}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors ${
+                className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-semibold transition-colors sm:flex-row sm:gap-1.5 sm:px-3.5 sm:text-sm ${
                   selected ? 'bg-brand-600 text-white' : 'text-text-secondary hover:bg-surface-hover'
                 }`}
               >

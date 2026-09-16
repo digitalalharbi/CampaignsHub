@@ -140,7 +140,7 @@ export function PublicReport() {
   return (
     <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-background text-text-primary">
       <header className="sticky top-0 z-10 border-b border-border bg-surface/85 px-4 py-3 backdrop-blur-md sm:px-8">
-        <div className="mx-auto flex max-w-[1100px] items-center justify-between">
+        <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-3">
           {/*
             BRANDING-HIERARCHY-001 — the client's own identity, or the agency's, or the product's.
           
@@ -149,25 +149,27 @@ export function PublicReport() {
             chain is resolved by the backend, which alone knows the tenant; `logoUrl` is null rather
             than a URL that 404s, because a broken image here reads as a broken report.
           */}
-          <span className="flex items-center gap-2">
+          <span className="flex min-w-0 items-center gap-2">
             {identity.logoUrl && (
-              <img src={identity.logoUrl} alt="" data-testid="shared-report-logo" onError={hideBrokenLogo} className="h-7 w-auto max-w-[160px] object-contain" />
+              <img src={identity.logoUrl} alt="" data-testid="shared-report-logo" onError={hideBrokenLogo} className="h-7 w-auto max-w-[120px] shrink-0 object-contain sm:max-w-[160px]" />
             )}
-            <span className="font-heading text-lg font-extrabold tracking-tight" data-testid="shared-report-name">{identity.name}</span>
+            <span className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-2">
+            <span className="truncate font-heading text-base font-extrabold tracking-tight sm:text-lg" data-testid="shared-report-name">{identity.name}</span>
             {identity.by && (
-              <span className="text-xs text-text-secondary" data-testid="shared-report-by">
+              <span className="truncate text-xs text-text-secondary" data-testid="shared-report-by">
                 {locale === 'ar' ? `بواسطة ${identity.by}` : `by ${identity.by}`}
               </span>
             )}
+            </span>
           </span>
           {report && (
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               {report.is_demo && <span className="rounded-full bg-[var(--warning-background)] px-2 py-0.5 text-xs font-semibold text-warning">Demo</span>}
               {report.settings.allow_download && state === 'ready' && (
                 <div className="flex gap-1">
                   {(['pdf', 'xlsx', 'csv'] as ReportFormat[]).map((f) => (
-                    <a key={f} href={sharedDownloadUrl(token, f)} className="rounded-lg border border-border px-2 py-1 text-xs font-semibold hover:bg-surface-hover">
-                      <Download size={12} className="inline" /> {f.toUpperCase()}
+                    <a key={f} href={sharedDownloadUrl(token, f)} aria-label={`${locale === 'ar' ? 'تنزيل' : 'Download'} ${f.toUpperCase()}`} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold hover:bg-surface-hover">
+                      <Download size={12} aria-hidden /> <span className="hidden sm:inline">{f.toUpperCase()}</span>
                     </a>
                   ))}
                 </div>
@@ -177,8 +179,17 @@ export function PublicReport() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1100px] px-4 py-8 sm:px-8">
-        {state === 'loading' && <p className="py-20 text-center text-text-secondary">جارٍ التحميل…</p>}
+      <main className="mx-auto max-w-[1240px] px-4 py-6 sm:px-8 sm:py-8">
+        {/* A shape rather than a sentence: the page is about to be a dashboard, so it looks like one while it loads. */}
+        {state === 'loading' && (
+          <div data-testid="shared-report-loading" aria-busy="true" aria-label={locale === 'ar' ? 'جارٍ التحميل' : 'Loading'} className="grid gap-4">
+            <div className="h-10 w-2/3 animate-pulse rounded-xl bg-surface-secondary" />
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[0, 1, 2, 3].map((i) => <div key={i} className="h-32 animate-pulse rounded-2xl bg-surface-secondary" />)}
+            </div>
+            <div className="h-72 animate-pulse rounded-2xl bg-surface-secondary" />
+          </div>
+        )}
 
         {state === 'password' && (
           <div className="mx-auto max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
