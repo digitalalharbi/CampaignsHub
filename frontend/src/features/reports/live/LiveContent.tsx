@@ -64,13 +64,17 @@ export function ContentTile({
           </div>
         )}
       </div>
+      {/*
+        Rows on a phone, columns above it. Three columns in a two-up phone grid left each cell about
+        fifty pixels: a label cut to «نسبة ا…» and «3.11%» broken across two lines. A figure is never
+        truncated — «…05 SAR» hides the one part of it that matters.
+      */}
       {figures.length > 0 && (
-        <dl className="grid grid-cols-3 gap-1.5 text-center">
+        <dl className="grid grid-cols-1 gap-1 sm:grid-cols-3 sm:gap-1.5 sm:text-center">
           {figures.map((f) => (
-            <div key={f.label} className="min-w-0 rounded-lg bg-surface-secondary px-1 py-1.5">
+            <div key={f.label} className="flex min-w-0 items-baseline justify-between gap-2 rounded-lg bg-surface-secondary px-2 py-1 sm:block sm:px-1 sm:py-1.5">
               <dt className="truncate text-[10px] font-semibold text-text-muted">{f.label}</dt>
-              {/* Never truncated: «…05 SAR» hides the one part of a figure that matters. */}
-              <dd className="tnum text-[11px] font-bold leading-tight text-text-primary [overflow-wrap:anywhere]"><Num>{f.value}</Num></dd>
+              <dd className="tnum whitespace-nowrap text-[11px] font-bold leading-tight text-text-primary"><Num>{f.value}</Num></dd>
             </div>
           ))}
         </dl>
