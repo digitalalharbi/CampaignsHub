@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Console\Commands\ProvisionPlatformCommand;
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
 use App\Domains\Alerts\Console\EvaluateAlerts;
+use App\Domains\Campaigns\Console\ContentDefectCensusCommand;
 use App\Domains\Campaigns\Console\ReconcileContentMetricsCommand;
 use App\Domains\Commerce\Console\SyncStoresCommand;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
@@ -101,6 +102,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Owner defect 95 — read-only: one creative walked from the provider rows to every Content
         // surface, with the divergences named. Calls no provider and writes nothing.
         ReconcileContentMetricsCommand::class,
+        ContentDefectCensusCommand::class,
         GoogleAdsAccessCommand::class,
         MetaSyncProbeCommand::class,
         RenormaliseReportingCurrency::class,

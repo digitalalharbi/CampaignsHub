@@ -186,42 +186,7 @@ final class CreativeMetrics
             return [];
         }
 
-        $select = ['creative_id'];
-        foreach (self::SUMS as $alias => $column) {
-            $select[] = "SUM({$column}) AS {$alias}";
-        }
-        // Frequency is an average of a ratio, not a sum: adding daily frequencies would produce a
-        // number that grows with the length of the window and means nothing.
-        $select[] = 'AVG(frequency) AS frequency';
-        $select[] = 'AVG(video_avg_watch_seconds) AS video_avg_watch_seconds';
-        $select[] = 'COUNT(DISTINCT metric_date) AS active_days';
-
-        foreach (self::MONEY_TRUTH as $alias => $expression) {
-            $select[] = "{$expression} AS {$alias}";
-        }
-
-        $rows = DB::table('creative_daily_metrics')
-            ->whereIn('creative_id', $creativeIds)
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
-            ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'creative_daily_metrics', app(ProjectContext::class)->projectId()))
-            ->groupBy('creative_id')
-            ->selectRaw(implode(', ', $select))
-            ->get();
-
-        $out = [];
-        foreach ($rows as $row) {
-            $figures = $this->shape((array) $row);
-            /*
-             * Where the number came from, carried with it.
-             *
-             * `creative` is the platform reporting this creative directly. `ad` is a sum over the ads
-             * that ran it — the same money, attributed rather than reported, and a surface is
-             * entitled to say which it is holding. The alternative is a figure whose provenance only
-             * the query knows, which is how «trustworthy» becomes unanswerable.
-             */
-            $figures['grain'] = 'creative';
-            $out[(string) $row->creative_id] = $figures;
-        }
+        $out = $this->fromCreativeGrain($creativeIds, $from, $to);
 
         /*
          * CONTENT-SPEND-ALWAYS-001 — the figures exist one rung up, and nothing was reading them.
@@ -266,6 +231,95 @@ final class CreativeMetrics
         }
 
         return $out;
+    }
+
+    /**
+     * A creative's figures as the platform reported them FOR THE CREATIVE — `creative_daily_metrics`.
+     *
+     * Extracted from `forCreatives()` unchanged, so the content census can ask each grain on its own
+     * through the very query the product runs rather than through a copy of it.
+     *
+     * @param  list<string>  $creativeIds
+     * @return array<string, array<string, mixed>>
+     */
+    private function fromCreativeGrain(array $creativeIds, Carbon $from, Carbon $to): array
+    {
+        if ($creativeIds === []) {
+            return [];
+        }
+
+        $select = ['creative_id'];
+        foreach (self::SUMS as $alias => $column) {
+            $select[] = "SUM({$column}) AS {$alias}";
+        }
+        // Frequency is an average of a ratio, not a sum: adding daily frequencies would produce a
+        // number that grows with the length of the window and means nothing.
+        $select[] = 'AVG(frequency) AS frequency';
+        $select[] = 'AVG(video_avg_watch_seconds) AS video_avg_watch_seconds';
+        $select[] = 'COUNT(DISTINCT metric_date) AS active_days';
+
+        foreach (self::MONEY_TRUTH as $alias => $expression) {
+            $select[] = "{$expression} AS {$alias}";
+        }
+
+        $rows = DB::table('creative_daily_metrics')
+            ->whereIn('creative_id', $creativeIds)
+            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'creative_daily_metrics', app(ProjectContext::class)->projectId()))
+            ->groupBy('creative_id')
+            ->selectRaw(implode(', ', $select))
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $figures = $this->shape((array) $row);
+            /*
+             * Where the number came from, carried with it.
+             *
+             * `creative` is the platform reporting this creative directly. `ad` is a sum over the ads
+             * that ran it — the same money, attributed rather than reported, and a surface is
+             * entitled to say which it is holding. The alternative is a figure whose provenance only
+             * the query knows, which is how «trustworthy» becomes unanswerable.
+             */
+            $figures['grain'] = 'creative';
+            $out[(string) $row->creative_id] = $figures;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Both grains for the same creatives, kept APART — the question `forCreatives()` never asks.
+     *
+     * `forCreatives()` answers from a creative's own rows when it has any and from its ads only when
+     * it has none, and that is the right rule for a card. It is also the rule that makes one class of
+     * defect invisible from the card: a creative whose platform reports spend at creative grain while
+     * the RESULTS it was bought for sit on its ads. The content census asks both grains separately,
+     * through the same two queries, so it can say which rung a missing figure fell off.
+     *
+     * @param  list<string>  $creativeIds
+     * @return array{creative: array<string, array<string, mixed>>, ad: array<string, array<string, mixed>>}
+     */
+    public function byGrain(array $creativeIds, Carbon $from, Carbon $to): array
+    {
+        return [
+            'creative' => $this->fromCreativeGrain($creativeIds, $from, $to),
+            'ad' => $this->fromAdGrain($creativeIds, $from, $to),
+        ];
+    }
+
+    /**
+     * Whether a surface can STATE this figure for this row — the card's own test, made askable.
+     *
+     * Delegates to the private rule `headline()` filters by, including the money contract's withheld
+     * case, so a diagnostic asking «does this card show spend» gets the product's answer rather than
+     * a second opinion about what withheld money means.
+     *
+     * @param  array<string, mixed>  $figures
+     */
+    public function statable(array $figures, string $key): bool
+    {
+        return $this->answerable($figures, $key);
     }
 
     /*
