@@ -130,6 +130,29 @@ export type AdPlatformGroup = {
   candidates?: number
 }
 
+/**
+ * How many objective groups a DECK SLIDE may carry — measured, not chosen.
+ *
+ * A slide is a fixed landscape page and the renderer fails it below a 0.85 fit. At five groups of
+ * three cards the fit measured 0.355 with 108 elements clipped; this number is the one that renders
+ * inside the floor on the largest shape audited (six platforms, five objectives, 240 creatives).
+ */
+const PAGED_GROUPS = 1
+
+/*
+ * Reducing the CARDS inside a group was tried and reverted, because it bought nothing.
+ *
+ * Two groups of three measured 0.80; two groups of two measured 0.80 — identical. The cards sit in a
+ * three-column grid, so two and three occupy the same single row and the same height. What drives
+ * this slide's height is the number of GROUP BLOCKS, each carrying its own heading, its ordering
+ * reason and a card row. So the bound is on groups, and each kept group keeps its full complement of
+ * cards rather than being thinned for no gain.
+ *
+ * That is the second time on this slide family that a change which looked like it must reduce height
+ * reduced nothing — the first was removing a chart that shared a row with another. The fitScale
+ * reading is the authority; the reasoning about it is not.
+ */
+
 export function ReportAdsSection({
   ads,
   groups,
@@ -140,6 +163,7 @@ export function ReportAdsSection({
   title,
   limit = 6,
   reading,
+  paged = false,
   onOpen,
 }: {
   ads: ReportAd[] | undefined
@@ -159,6 +183,25 @@ export function ReportAdsSection({
   locale: Locale
   title?: string
   limit?: number
+  /**
+   * A PAGINATED surface — a deck slide — which cannot grow to fit its content.
+   *
+   * This section renders one block per objective group, each with up to `limit` cards. On an
+   * account that actually has creatives that is five groups of three, and on one fixed landscape
+   * page the renderer's auto-fit measured 0.355 with 108 elements clipped — which fails its own
+   * readable floor and blocks the PDF export for BOTH forms.
+   *
+   * It was invisible until now because the demo estate's creatives carry no figures, so the section
+   * rendered its absent-state and the slide was nearly empty. The first fix for this export was
+   * therefore verified against data where this block did not exist — which is exactly why the deck
+   * needed auditing at more than one data shape.
+   *
+   * The grouping itself is NOT flattened to make room. One list across objectives can only be
+   * ordered by something they all share, and that is spend — REPORT-OBJECTIVE-001, and the defect
+   * that put «الإعلانات التي عملت … أعلى الإنفاق» on a client's report. So whole groups are kept and
+   * the number of them is bounded, with the remainder stated rather than dropped in silence.
+   */
+  paged?: boolean
   /** The five-step reading of the grid, where the server could produce one. */
   reading?: AdsReading
   /** Opens this ad's own detail. Absent on surfaces that cannot open one, e.g. the printed page. */
@@ -221,16 +264,32 @@ export function ReportAdsSection({
         group whose objective reported none of its metrics shows its ads and claims no order.
       */}
       {(groups ?? []).length > 0
-        ? (groups ?? []).map((group) => (
-          <AdGroupBlock
-            key={group.family}
-            group={group}
-            locale={locale}
-            currency={currency ?? null}
-            limit={limit}
-            onOpen={onOpen}
-          />
-        ))
+        ? (
+          <>
+            {(paged ? (groups ?? []).slice(0, PAGED_GROUPS) : (groups ?? [])).map((group) => (
+              <AdGroupBlock
+                key={group.family}
+                group={group}
+                locale={locale}
+                currency={currency ?? null}
+                limit={limit}
+                onOpen={onOpen}
+              />
+            ))}
+            {/*
+              What a slide could not hold is STATED. A bound that goes quiet turns «the objectives
+              this page had room for» into «the objectives that performed», which is a claim about
+              the client's advertising made by our page size.
+            */}
+            {paged && (groups ?? []).length > PAGED_GROUPS && (
+              <p data-testid="report-ads-groups-withheld" className="text-xs text-text-secondary">
+                {locale === 'ar'
+                  ? `${(groups ?? []).length - PAGED_GROUPS} هدف إضافي معروض في التقرير التفاعلي وفي ملفات التصدير.`
+                  : `${(groups ?? []).length - PAGED_GROUPS} more objective(s) are shown in the interactive report and the exported files.`}
+              </p>
+            )}
+          </>
+        )
         : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {rows.map((ad, i) => (

@@ -942,6 +942,8 @@ function AdsSlide({ data, paged = false }: { data: ReportData; paged?: boolean }
         level={data.ads_level}
         reading={data.ads_reading}
         locale={ar ? 'ar' : 'en'}
+        /* A deck slide cannot grow; see the prop's note for the measurement. */
+        paged={paged}
         onOpen={setOpen}
       />
 
