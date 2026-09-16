@@ -35,6 +35,7 @@ export function useLivePayload({
   providers,
   enabled = true,
   failedMessage,
+  refreshEveryMs,
 }: {
   token: string
   secret?: string
@@ -42,6 +43,12 @@ export function useLivePayload({
   providers: string[]
   enabled?: boolean
   failedMessage: string
+  /**
+   * Recompute on a clock while the page is VISIBLE — «live» for a client who leaves the link open.
+   * A hidden tab asks nothing (a rationed public endpoint, and nobody is looking), and becoming
+   * visible again after a long absence recomputes at once rather than showing hours-old figures.
+   */
+  refreshEveryMs?: number
 }): { load: LiveLoad; reload: () => void } {
   const [load, setLoad] = useState<LiveLoad>({ state: 'pending' })
   const latest = useRef(0)
@@ -82,6 +89,25 @@ export function useLivePayload({
   useEffect(() => {
     if (enabled) void run()
   }, [run, enabled])
+
+  const lastRun = useRef(0)
+  useEffect(() => {
+    lastRun.current = Date.now()
+  }, [load])
+
+  useEffect(() => {
+    if (!enabled || !refreshEveryMs) return undefined
+
+    const due = () => document.visibilityState === 'visible' && Date.now() - lastRun.current >= refreshEveryMs
+    const tick = window.setInterval(() => { if (due()) void run() }, Math.min(refreshEveryMs, 60_000))
+    const onVisible = () => { if (due()) void run() }
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => {
+      window.clearInterval(tick)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [enabled, refreshEveryMs, run])
 
   return { load, reload: () => void run() }
 }

@@ -105,6 +105,7 @@ export function LiveSharedReport({
     days,
     providers: ownsPlatformChoice(mode) ? [] : providers,
     failedMessage,
+    refreshEveryMs: 5 * 60_000,
   })
 
   const whole = main.load.state === 'ready' ? main.load.payload : null
