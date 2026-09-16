@@ -64,6 +64,7 @@ final class ReconcileContentMetricsCommand extends Command
         {--from= : Window start (YYYY-MM-DD). Default: 29 days before --to}
         {--to= : Window end (YYYY-MM-DD). Default: today}
         {--project= : Narrow the automatic subject to one project}
+        {--scope : Reconcile a whole project\'s library instead of one creative}
         {--strict : Exit non-zero when a divergence is found}';
 
     protected $description = 'Read-only: walk one creative from the provider rows to every Content surface and name the divergences.';
@@ -74,6 +75,10 @@ final class ReconcileContentMetricsCommand extends Command
     public function handle(): int
     {
         [$from, $to] = $this->window();
+
+        if ($this->option('scope')) {
+            return $this->reconcileScope($from, $to);
+        }
 
         $creative = $this->subject();
 
@@ -448,6 +453,146 @@ final class ReconcileContentMetricsCommand extends Command
         }
 
         return 'not reported';
+    }
+
+    /**
+     * The same question asked of a whole LIBRARY — what the headline strip states against what the
+     * cards beneath it state.
+     *
+     * ## Why a scope mode as well as a creative one
+     *
+     * The per-creative walk answers «which rung does this subject fall off». It cannot answer «how
+     * much is the strip short by», and that is the number the owner's screen actually shows: the
+     * library's headline is one figure over hundreds of cards, and a strip that consults fewer
+     * sources than they do is wrong by whatever the creatives it cannot see spent.
+     *
+     * The split is read from the rows rather than assumed: a creative whose figures come from the AD
+     * grain is one `creative_daily_metrics` never held, and on five of six providers that is all of
+     * them. Reporting the two pools separately is what makes «the strip was short» a measured
+     * quantity instead of an argument about a code path.
+     *
+     * Still read-only, and still the product's own services — the creative-grain-only pool is built
+     * by filtering `forCreatives()`'s answer on the `grain` it already states, never by a second
+     * query that could disagree with it.
+     */
+    private function reconcileScope(Carbon $from, Carbon $to): int
+    {
+        $projectId = is_string($this->option('project')) && $this->option('project') !== ''
+            ? (string) $this->option('project')
+            : (string) DB::table('external_creatives')
+                ->select('project_id')
+                ->groupBy('project_id')
+                ->orderByRaw('COUNT(*) DESC')
+                ->limit(1)
+                ->value('project_id');
+
+        if ($projectId === '') {
+            $this->warn('No project holds any creative. Nothing to reconcile.');
+
+            return self::SUCCESS;
+        }
+
+        $tenantId = (string) DB::table('external_creatives')->where('project_id', $projectId)->value('tenant_id');
+
+        app(TenantContext::class)->setTenantId($tenantId);
+        app(ProjectContext::class)->setProjectId($projectId);
+
+        $ids = DB::table('external_creatives')
+            ->where('project_id', $projectId)
+            ->pluck('id')
+            ->map(static fn (mixed $v): string => (string) $v)
+            ->all();
+
+        $metrics = app(CreativeMetrics::class);
+        $figures = $metrics->forCreatives($ids, $from, $to);
+
+        $native = array_filter($figures, static fn (array $f): bool => ($f['grain'] ?? null) === 'creative');
+        $fromAds = array_filter($figures, static fn (array $f): bool => ($f['grain'] ?? null) === 'ad');
+
+        $strip = $metrics->totalsFor($ids, $from, $to);
+        $cards = $metrics->aggregate(array_values($figures));
+        $nativeOnly = $native === [] ? null : $metrics->aggregate(array_values($native));
+
+        $this->line('');
+        $this->line('CONTENT TRUTH CHAIN — a whole library, strip against cards');
+        $this->line('  project   : '.$projectId);
+        $this->line('  window    : '.$from->toDateString().' → '.$to->toDateString());
+        $this->line('  creatives : '.count($ids).' in the project, '.count($figures).' with figures in this window');
+        $this->line('    of those, reported at CREATIVE grain : '.count($native));
+        $this->line('    of those, summed from their ADS      : '.count($fromAds).'  ← the rows a creative-grain-only reader cannot see');
+
+        $this->line('');
+        $this->line('THE HEADLINE STRIP  (CreativeMetrics::totalsFor)');
+        $this->line($strip === null ? '    null — «nothing reported»' : '    spend '.$this->money($strip, 'spend').'   answered: '.$this->answered($strip));
+
+        $this->line('');
+        $this->line('THE CARDS, POOLED  (aggregate over every card\'s own figures)');
+        $this->line($cards === null ? '    null' : '    spend '.$this->money($cards, 'spend').'   answered: '.$this->answered($cards));
+
+        $this->line('');
+        $this->line('WHAT A CREATIVE-GRAIN-ONLY STRIP WOULD HAVE STATED  (the behaviour before this fix)');
+        $this->line($nativeOnly === null
+            ? '    null — it would have reported NOTHING for this library'
+            : '    spend '.$this->money($nativeOnly, 'spend').'   answered: '.$this->answered($nativeOnly));
+
+        /*
+         * The gap, in money, and only where both figures are statable.
+         *
+         * A withheld total cannot be subtracted from a converted one — that is the money contract's
+         * whole point — so the difference is reported only when the two are comparable, and named as
+         * unstatable otherwise rather than printed as a number nobody can stand behind.
+         */
+        $now = $strip === null ? null : ($strip['spend'] ?? null);
+        $before = $nativeOnly === null ? null : ($nativeOnly['spend'] ?? null);
+
+        $this->line('');
+
+        if (is_numeric($now) && is_numeric($before)) {
+            $short = (float) $now - (float) $before;
+            $this->line(sprintf(
+                '  THE STRIP WAS SHORT BY %s — %s%% of what the library actually spent.',
+                number_format($short, 2),
+                (float) $now === 0.0 ? '0' : number_format($short / (float) $now * 100, 1),
+            ));
+        } elseif (is_numeric($now) && $before === null) {
+            $this->line('  THE STRIP STATED NOTHING AT ALL, over a library whose cards state '
+                .number_format((float) $now, 2).'.');
+        } else {
+            $this->line('  The two are not both statable in one currency, so no difference is claimed.');
+        }
+
+        if (count($fromAds) > 0) {
+            $this->line('  '.count($fromAds).' creative(s) carry figures ONLY at the ad grain. A strip that read '
+                .'`creative_daily_metrics` alone could not see any of them.');
+        }
+
+        if ($strip !== null && $cards !== null) {
+            $missing = array_values(array_diff($this->answeredKeys($cards), $this->answeredKeys($strip)));
+
+            if ($missing !== []) {
+                $this->divergences[] = 'The strip cannot answer, for this whole library, figures the cards '
+                    .'answer: '.implode(', ', $missing).'.';
+            }
+        }
+
+        if ($strip === null && $cards !== null) {
+            $this->divergences[] = 'The strip states nothing for a library whose cards state figures.';
+        }
+
+        $this->line('');
+
+        if ($this->divergences === []) {
+            $this->info('RECONCILED — the strip and the cards answer the same set for this library.');
+
+            return self::SUCCESS;
+        }
+
+        $this->error('DIVERGENCES — '.count($this->divergences).':');
+        foreach ($this->divergences as $i => $divergence) {
+            $this->line('  '.($i + 1).'. '.$divergence);
+        }
+
+        return $this->option('strict') ? self::FAILURE : self::SUCCESS;
     }
 
     /** @param array<string, mixed> $card */
