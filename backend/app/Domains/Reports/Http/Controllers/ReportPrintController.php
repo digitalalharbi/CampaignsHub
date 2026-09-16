@@ -43,6 +43,7 @@ final class ReportPrintController extends Controller
             'type' => $opts['type'] ?? 'presentation',
             'theme' => $opts['theme'] ?? 'light',
             'audience' => $model->audience ?? 'client',
+            'watermark' => (bool) ($model->config['watermark'] ?? false),
         ], self::TTL);
 
         return ApiResponse::success(['token' => $token, 'expires_in' => self::TTL], 'Print token issued.');
@@ -74,6 +75,8 @@ final class ReportPrintController extends Controller
             'type' => $ctx['type'],
             'theme' => $ctx['theme'],
             'audience' => $audience,
+            // Read from the minted context, not from the request — see ChromiumPdfRenderer::issueToken.
+            'watermark' => (bool) ($ctx['watermark'] ?? false),
             'currency' => $report->currency,
             'is_demo' => (bool) $report->is_demo,
             'checksum' => $report->data['checksum'] ?? null,
