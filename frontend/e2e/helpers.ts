@@ -718,12 +718,22 @@ export async function walkRail(page: Page, hrefs: string[]): Promise<void> {
       const body = (await page.locator('body').innerText().catch(() => '')).trim()
 
       /*
-       * Did the module graph run at all?
+       * Did the module graph run, and if it did, what is the app waiting for?
        *
-       * «The app never mounted» and «the app mounted and rendered nothing» are different bugs with
-       * different owners, and a blank body cannot tell them apart. The mount point and its child
-       * count can: an empty `#root` under a 200 document means the entry module never executed,
-       * which points at the dev server rather than at the route.
+       * «The app never mounted», «the app mounted and rendered nothing» and «the app is still waiting
+       * for its session» are three bugs with three different owners, and a blank body cannot tell any
+       * of them apart — it reports all three as nothing.
+       *
+       * This was worth measuring rather than assuming. Hanging `/auth/me` alone reproduces the exact
+       * shape this helper has been reporting as «the app never mounted»: 200, no `<main>`, no `<nav>`,
+       * an empty body and NOTHING in the console. What it does not reproduce is an absent app —
+       * `#root` has a child, because `RequireAuth` renders a full-screen spinner while the session
+       * probe is in flight, and a spinner has no text. So the sentence was itself a wrong diagnosis,
+       * printed with confidence, in the place everyone looked first.
+       *
+       * An empty `#root` means the entry module never executed, which points at the dev server. A
+       * `#root` holding the spinner means the shell is alive and one request has not come back, which
+       * points at the backend. The next occurrence says which.
        */
       const mount = await page.evaluate(() => {
         const root = document.getElementById('root')
@@ -732,6 +742,8 @@ export async function walkRail(page: Page, hrefs: string[]): Promise<void> {
           readyState: document.readyState,
           rootPresent: root !== null,
           rootChildren: root?.childElementCount ?? 0,
+          /* `RequireAuth`'s session-probe spinner, by the label it already carries for screen readers. */
+          waitingOnSession: document.querySelector('[aria-label="Loading"]') !== null,
           scripts: [...document.querySelectorAll('script[src]')].map((s) => s.getAttribute('src') ?? '').slice(0, 3),
         }
       }).catch(() => null)
@@ -748,7 +760,9 @@ export async function walkRail(page: Page, hrefs: string[]): Promise<void> {
           `  <main> present  : ${(await page.locator('main').count()) > 0}`,
           `  <nav> present   : ${(await page.locator('nav').count()) > 0}`,
           `  mount point     : ${mount === null ? '(the page could not be evaluated)' : `#root ${mount.rootPresent ? 'present' : 'ABSENT'}, ${mount.rootChildren} children, document ${mount.readyState}, scripts ${mount.scripts.join(', ') || '(none)'}`}`,
-          `  body text       : ${body === '' ? '(the document is blank — the app never mounted)' : body.slice(0, 200)}`,
+          `  waiting on      : ${mount === null ? '(unknown)' : mount.waitingOnSession ? 'the session probe — RequireAuth is still showing its spinner' : '(not the session probe)'}`,
+          /* Says what it saw, not what it concluded — see the mount-point note above. */
+          `  body text       : ${body === '' ? '(no text — which is also what a spinner looks like)' : body.slice(0, 200)}`,
           `  browser said    : ${ordered.length === 0 ? '(nothing on this page)' : ordered.slice(0, 12).map((p) => p.text).join(' | ')}`,
           `  carried over    : ${carried} event(s) from the page before this one, not counted above`,
           '',
