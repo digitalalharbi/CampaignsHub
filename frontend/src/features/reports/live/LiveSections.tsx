@@ -5,6 +5,8 @@ import { canonicalPlatform } from '@/lib/platforms'
 import { ChartCard, ConversionFunnelChart, MetricLineChart, PlatformDonutChart } from '@/features/analytics/charts'
 import { moneyState, rankableMoney, type MoneyTotals } from '@/lib/money/contract'
 import { Num } from '@/components/ui/Num'
+import { platformColor } from '@/features/analytics/components'
+import { ratio } from '@/features/analytics/format'
 import type { LivePayload } from '../api'
 import type { useLiveMetricReader } from './liveMetrics'
 
@@ -16,32 +18,64 @@ import type { useLiveMetricReader } from './liveMetrics'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
 
-export function ObjectiveLeaders({ payload, ar }: { payload: LivePayload; ar: boolean }) {
-  return (
-    <>
-        {(payload.objective_leaders?.paths ?? []).some((p) => p.comparable) && (
-          <div data-testid="live-objective-leaders" className="mt-6 rounded-2xl border border-border bg-surface p-4">
-            <h3 className="text-base font-bold text-text-primary">
-              {ar ? 'الأقوى والأضعف داخل كل مسار' : 'Strongest and weakest, inside each path'}
-            </h3>
+const MONEY_METRICS = new Set(['cpa', 'cpc', 'cpm', 'cpl', 'cpi', 'cpe', 'cost_per_lpv'])
 
-            <div className="mt-2 flex flex-col gap-2">
-              {(payload.objective_leaders?.paths ?? []).filter((p) => p.comparable && p.strongest && p.weakest).map((path) => (
-                <div key={path.path} data-testid={`live-leaders-${path.path}`} className="rounded-xl border border-border p-3 text-sm">
-                  <div className="font-semibold text-text-primary">{ar ? path.label_ar : path.label_en}</div>
-                  <div className="mt-0.5 text-text-secondary">
-                    {ar ? 'الأقوى ' : 'Strongest '}
-                    <span className="font-bold text-text-primary">{providerLabel(canonicalPlatform(path.strongest?.name ?? ''), ar ? 'ar' : 'en')}</span>
-                    {' · '}
-                    {ar ? 'الأضعف ' : 'weakest '}
-                    <span className="font-bold text-text-primary">{providerLabel(canonicalPlatform(path.weakest?.name ?? ''), ar ? 'ar' : 'en')}</span>
+/**
+ * The strongest and weakest PLATFORM inside each objective path — as two figures, not a sentence.
+ *
+ * Ranked inside a path, never across paths (a brand path is not weak for producing no revenue). The
+ * figure is the path's own ranking metric in the same notation every other card uses: a cost per
+ * result exact, a return as a multiplier, a rate as a percentage.
+ */
+export function ObjectiveLeaders({ payload, ar, reader }: { payload: LivePayload; ar: boolean; reader: Reader }) {
+  const paths = (payload.objective_leaders?.paths ?? []).filter((p) => p.comparable && p.strongest && p.weakest)
+  if (paths.length === 0) return null
+
+  const value = (metric: string, v: number | null | undefined): string => {
+    if (v === null || v === undefined) return '—'
+    if (MONEY_METRICS.has(metric)) return reader.asExactMoney(v)
+    if (metric === 'roas') return ratio(v)
+    if (metric === 'ctr' || metric.endsWith('_rate')) return `${(v * 100).toFixed(2)}%`
+    return reader.count(v).text
+  }
+  const label = (metric: string) => (reader.meta[metric] ? (ar ? reader.meta[metric].ar : reader.meta[metric].en) : metric)
+
+  return (
+    <section data-testid="live-objective-leaders">
+      <h3 className="mb-3 text-base font-bold tracking-tight text-text-primary">
+        {ar ? 'الأقوى والأضعف لكل هدف' : 'Strongest and weakest, per objective'}
+      </h3>
+      <div className={`grid gap-3 ${paths.length > 1 ? 'md:grid-cols-2' : ''}`}>
+        {paths.map((path) => (
+          <div key={path.path} data-testid={`live-leaders-${path.path}`} className="rounded-2xl border border-border bg-surface p-4">
+            <div className="mb-3 flex items-baseline justify-between gap-2">
+              <span className="font-semibold text-text-primary">{ar ? path.label_ar : path.label_en}</span>
+              <span className="text-xs text-text-muted">{label(path.strongest?.metric ?? path.metric)}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {([['strongest', path.strongest, 'text-success', '▲'], ['weakest', path.weakest, 'text-danger', '▼']] as const).map(([kind, leader, tone, mark]) => {
+                const key = canonicalPlatform(leader?.name ?? '')
+
+                return (
+                  <div key={kind} data-testid={`live-leaders-${path.path}-${kind}`} className="min-w-0 rounded-xl bg-surface-secondary p-3">
+                    <div className={`text-[11px] font-semibold ${tone}`}>
+                      <span aria-hidden>{mark} </span>{kind === 'strongest' ? (ar ? 'الأقوى' : 'Strongest') : (ar ? 'الأضعف' : 'Weakest')}
+                    </div>
+                    <div className="mt-1 flex items-center gap-1.5 truncate text-sm font-bold text-text-primary">
+                      <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: platformColor(key) }} aria-hidden />
+                      {providerLabel(key, ar ? 'ar' : 'en')}
+                    </div>
+                    <div className="tnum mt-1 text-lg font-extrabold text-text-primary">
+                      <Num>{value(leader?.metric ?? path.metric, leader?.value)}</Num>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
-        )}
-    </>
+        ))}
+      </div>
+    </section>
   )
 }
 

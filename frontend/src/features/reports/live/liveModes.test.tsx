@@ -48,6 +48,11 @@ function payloadFor(providers: string[]) {
     ads_roster: rows.map((r) => roster(`Roster ${r.provider}`, r.provider, `key-roster-${r.provider}`, r.spend)),
     creatives_in_scope: rows.length,
     budget: [{ provider: 'meta', budget: 2000, budget_currency: 'SAR', spent: 700, spent_currency: 'SAR', remaining: 1300, consumed_pct: 35, pace: 1, pacing_basis: 'comparable' }],
+    objective_leaders: { paths: [{
+      path: 'conversion', label_ar: 'التحويل', label_en: 'Conversion & sales', metric: 'orders', comparable: true, comparable_reason: '', campaigns: 2,
+      strongest: { id: 'meta', name: 'meta', objective: 'sales', metric: 'cpa', value: 17.5 },
+      weakest: { id: 'snapchat', name: 'snapchat', objective: 'sales', metric: 'cpa', value: 30 },
+    }] },
     sections: { attribution: false },
     store_funnel: null,
     freshness: [],
@@ -101,6 +106,15 @@ describe('a detailed link', () => {
     const tabs = within(screen.getByTestId('live-modes')).getAllByRole('tab').map((t) => t.getAttribute('data-testid'))
     expect(tabs).toEqual(['live-mode-tab-summary', 'live-mode-tab-dashboard', 'live-mode-tab-platforms', 'live-mode-tab-content'])
     expect(screen.getByTestId('live-weakest-content')).toBeInTheDocument()
+  })
+
+  it('states the strongest and weakest platform per objective as figures, not a sentence', async () => {
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+
+    const strongest = await screen.findByTestId('live-leaders-conversion-strongest')
+    expect(strongest).toHaveTextContent('Meta')
+    expect(strongest).toHaveTextContent('17.50 SAR')
+    expect(screen.getByTestId('live-leaders-conversion-weakest')).toHaveTextContent('30 SAR')
   })
 
   it('reads one platform through the same endpoint, narrowed, and the view agrees with the whole link', async () => {
