@@ -105,7 +105,7 @@ final class CreativeSharedIdAcrossAccountsTest extends TestCase
 
         $stored = DB::table('creative_daily_metrics')->get();
         $this->assertCount(1, $stored);
-        $this->assertEqualsWithDelta(999.0, (float) $stored[0]->spend, 0.001, 'the stored figure is not the owning account\'s');
+        $this->assertEqualsWithDelta(999.0, (float) ($stored[0]->spend ?? $stored[0]->spend_original), 0.001, 'the stored figure is not the owning account\'s');
     }
 
     private function account(ProviderConnection $connection, string $externalId): ExternalAccount
