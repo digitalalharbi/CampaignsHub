@@ -367,6 +367,14 @@ open PRs    = none at the time of writing
 Reference share used for browser acceptance: the live client report the owner opened. **Do not
 hard-code its token into product logic or fixtures** — read it in a browser, then discard it.
 
+**That share is GONE, checked on 2026-09-16.** `5mte9VfXx32FB8VmQIrTzm` answers **404 on both**
+`/api/v1/reports/shared/{token}` and `.../live`, so it is expired or revoked rather than merely
+unreadable. It is recorded here because the next session should not plan a Production acceptance
+around it: there is **no unauthenticated path to a live link**, so any browser verification of a
+client report now needs the Owner to issue a fresh share. Guessing a token is enumeration against a
+client surface and is not an acceptable substitute — a row left `BLOCKED_OPERATIONAL_EVIDENCE` is
+worth more than a row closed that way.
+
 ## 2. The active unit
 
 `fix/content-is-written-in-contents-words` — the tab was renamed «أداء المحتويات» / «Content
