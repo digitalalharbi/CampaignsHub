@@ -171,14 +171,24 @@ function BudgetRing({ payload, ar }: { payload: LivePayload; ar: boolean }) {
   )
 }
 
+/**
+ * Direct against blended is worth a card only where the two DIFFER — where no spend sits outside the
+ * sales path they are one figure, and printing it twice under two names is padding. One rule for the
+ * summary and the dashboard, so the two modes cannot disagree about when it appears.
+ */
+function splitDiffers(payload: LivePayload): boolean {
+  const split = payload.objective_performance
+
+  return sectionOn(payload, 'objective_breakdown') && !!split
+    && (Number(split.blended?.spend ?? 0) !== Number(split.direct?.spend ?? 0) || (split.blended?.blended_cpa ?? null) !== (split.direct?.cpa ?? null))
+}
+
 /* ─────────────────────────────── A — Executive summary ─────────────────────────────── */
 
 export function SummaryView({ payload, reader, currency, locale, onOpenContent }: Common) {
   const ar = locale === 'ar'
   const top = (payload.ads ?? []).slice(0, 3)
-  const split = payload.objective_performance
-  const showSplit = sectionOn(payload, 'objective_breakdown') && !!split
-    && (Number(split.blended?.spend ?? 0) !== Number(split.direct?.spend ?? 0) || (split.blended?.blended_cpa ?? null) !== (split.direct?.cpa ?? null))
+  const showSplit = splitDiffers(payload)
 
   return (
     <div data-testid="live-mode-summary" className="flex flex-col gap-5">
@@ -219,8 +229,10 @@ export function DashboardView({ payload, reader, currency, locale, onOpenContent
     <div data-testid="live-mode-dashboard" className="flex flex-col gap-5">
       <LiveKpiBoard payload={payload} reader={reader} ar={ar} keys={kpiKeysFor(payload, reader)} />
       <LiveScopeCounts payload={payload} ar={ar} />
-      {/* CLIENT-FACING-PRESENTATION-001 — «at what cost» before «where». */}
-      <ObjectiveSplit payload={payload} ar={ar} reader={reader} />
+      {/* CLIENT-FACING-PRESENTATION-001 — «at what cost» before «where»; shown only where it says something. */}
+      {splitDiffers(payload) && <ObjectiveSplit payload={payload} ar={ar} reader={reader} />}
+      {/* The charts come before the tables: the reader sees the shape of the period first, then the rows. */}
+      <TrendAndDistribution payload={payload} ar={ar} currency={currency} />
       {sectionOn(payload, 'platform_comparison') && (
         <div>
           <LivePlatformComparison payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />
@@ -230,7 +242,6 @@ export function DashboardView({ payload, reader, currency, locale, onOpenContent
         </div>
       )}
       <ObjectiveLeaders payload={payload} ar={ar} reader={reader} />
-      <TrendAndDistribution payload={payload} ar={ar} currency={currency} />
       {sectionOn(payload, 'creatives') && (
         <section className="flex flex-col gap-5">
           <div>

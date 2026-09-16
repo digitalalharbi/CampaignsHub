@@ -134,17 +134,23 @@ test.describe('a client opens their live report', () => {
    * did this programme cost» and the wrong one to «what does an order cost» — and this is the page
    * where the second question is asked, by the person paying for it.
    */
-  test('the client’s link separates direct cost from blended', async ({ page }) => {
+  test('the client’s link separates direct cost from blended wherever the two differ', async ({ page }) => {
+    const live = page.waitForResponse((r) => /\/reports\/shared\/[^/]+\/live(\?|$)/.test(r.url()) && r.ok())
     await page.goto(URL)
+    const payload = (await (await live).json()).data
+    await expect(page.getByTestId('live-kpis')).toBeVisible({ timeout: 20000 })
 
-    await expect(page.getByTestId('live-objective-split')).toBeVisible({ timeout: 20000 })
-    await expect(page.getByTestId('live-objective-direct')).toBeVisible()
-    await expect(page.getByTestId('live-objective-blended')).toBeVisible()
+    const direct = payload.objective_performance?.direct
+    const blended = payload.objective_performance?.blended
+    const differ = Number(direct?.spend ?? 0) !== Number(blended?.spend ?? 0) || (direct?.cpa ?? null) !== (blended?.blended_cpa ?? null)
 
-    // The two blocks are not the same figure under two names.
-    const direct = await page.getByTestId('live-objective-direct').innerText()
-    const blended = await page.getByTestId('live-objective-blended').innerText()
-    expect(direct).not.toBe(blended)
+    if (differ) {
+      await expect(page.getByTestId('live-objective-direct')).toBeVisible()
+      await expect(page.getByTestId('live-objective-blended')).toBeVisible()
+    } else {
+      // No spend outside the sales path: the two are one figure, and a card printing it twice is padding.
+      await expect(page.getByTestId('live-objective-split')).toHaveCount(0)
+    }
   })
 
   test('the link is marked as demo data rather than passing seeded figures off as real', async ({ page }) => {
