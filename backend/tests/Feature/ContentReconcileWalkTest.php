@@ -144,6 +144,76 @@ final class ContentReconcileWalkTest extends TestCase
             ->assertExitCode(0);
     }
 
+    /**
+     * An EMPTY window option is ABSENT, not a value — found by running this on production.
+     *
+     * `production-diagnostics.yml` passes every value unconditionally, because a shell that assembles
+     * flags conditionally is a shell that eventually assembles a command. So a caller who names no
+     * window sends `--from="" --to=""`, and the command compared those against `null`, which an empty
+     * string is not: `Carbon::parse('')` is today, so the thirty-day default collapsed to one day.
+     *
+     * It did not error. The first production reading came back «window 2026-09-16 → 2026-09-16 … THE
+     * STRIP WAS SHORT BY 0.00» — a true answer about a one-day window, indistinguishable from the
+     * thirty-day answer that was asked for, and it understated the very finding the walk exists to
+     * measure. An instrument that quietly answers a different question is worse than one that fails.
+     *
+     * Asserted on the window the walk PRINTS, because that is the only place the reader can see which
+     * question was answered.
+     */
+    public function test_an_empty_window_option_falls_back_to_the_default_rather_than_to_today(): void
+    {
+        $this->creativeWithAdGrain();
+
+        $to = Carbon::today();
+        $from = $to->copy()->subDays(29);
+
+        $this->artisan('content:reconcile', ['--scope' => true, '--project' => '', '--from' => '', '--to' => ''])
+            ->expectsOutputToContain($from->toDateString().' → '.$to->toDateString())
+            ->assertExitCode(0);
+    }
+
+    /** And a window the caller DID name is honoured exactly — the fix must not swallow a real value. */
+    public function test_a_named_window_is_honoured(): void
+    {
+        $this->creativeWithAdGrain();
+
+        $this->artisan('content:reconcile', [
+            '--scope' => true,
+            '--from' => '2026-08-01',
+            '--to' => '2026-08-31',
+        ])
+            ->expectsOutputToContain('2026-08-01 → 2026-08-31')
+            ->assertExitCode(0);
+    }
+
+    /**
+     * And the gap is named in FIGURES, not only in money — the production reading's larger half.
+     *
+     * It came back «SHORT BY 0.00» over a library where the old strip could state sixteen figures and
+     * the new one states thirty-five: the ad-grain rows carried the RESULT columns and no spend, so
+     * the money was genuinely not short and the ANSWER was. `leads` and everything derived from it
+     * were absent from the headline strip entirely, which is «the other KPIs disappear» exactly — and
+     * it was visible only by diffing two long printed lists by eye.
+     */
+    public function test_the_scope_walk_names_the_figures_a_creative_grain_only_strip_could_not_state(): void
+    {
+        /*
+         * A MIXED library, because that is what production is and what the comparison needs.
+         *
+         * 160 creatives reporting at creative grain beside 39 summed from their ads. With only the
+         * ad-grain half there is no old answer to diff against — the creative-grain-only strip would
+         * have stated NOTHING, which the walk reports as its own, louder line — and the first draft of
+         * this case failed for exactly that reason.
+         */
+        $this->creativeWithAdGrain();
+        $this->creativeWithOwnRows();
+
+        $this->artisan('content:reconcile', ['--scope' => true, '--project' => (string) $this->project->getKey()])
+            ->expectsOutputToContain('COULD NOT STATE')
+            ->expectsOutputToContain('leads')
+            ->assertExitCode(0);
+    }
+
     /** @return array<string, int> */
     private function rowCounts(): array
     {
@@ -157,6 +227,36 @@ final class ContentReconcileWalkTest extends TestCase
         }
 
         return $counts;
+    }
+
+    /** A creative the platform reports directly — the 160-of-199 half of the production library. */
+    private function creativeWithOwnRows(): ExternalCreative
+    {
+        $creative = ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'provider' => 'snapchat',
+            'external_creative_id' => 'cr-native',
+            'name' => 'Reported at creative grain',
+            'format' => 'video',
+            'status' => 'active',
+            'source_type' => 'api',
+        ]);
+
+        DB::table('creative_daily_metrics')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'creative_id' => $creative->getKey(),
+            'metric_date' => Carbon::today()->subDay()->toDateString(),
+            'spend' => 90.0,
+            'impressions' => 8_000,
+            'clicks' => 160,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return $creative;
     }
 
     private function creativeWithAdGrain(): ExternalCreative
