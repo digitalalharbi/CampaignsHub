@@ -15,6 +15,7 @@ use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
+use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\ContentKey;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportScope;
@@ -144,7 +145,7 @@ final class LiveReportService
         return [
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => $days],
             'granularity' => $step === 1 ? 'day' : 'week',
-            'content' => ClientEntityBoundary::roster(ContentKey::attach([$row], $share))[0],
+            'content' => ClientEntityBoundary::roster(ContentCopy::rows(ContentKey::attach([$row], $share), $share->creativeVisibility()))[0],
             'trend' => $trend,
         ];
     }
@@ -203,7 +204,7 @@ final class LiveReportService
 
         // Each content row gets its share-bound handle before the boundary removes the ids.
         foreach (['ads', 'worst', 'groups', 'platform_groups', 'roster'] as $list) {
-            $built[$list] = ContentKey::attach($built[$list] ?? [], $share);
+            $built[$list] = ContentCopy::rows(ContentKey::attach($built[$list] ?? [], $share), $share->creativeVisibility());
         }
 
         return [

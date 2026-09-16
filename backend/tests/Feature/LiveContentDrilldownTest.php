@@ -154,6 +154,45 @@ final class LiveContentDrilldownTest extends TestCase
         $this->getJson("/api/v1/reports/shared/{$raw}/live/content/".ContentKey::for($narrow, $id))->assertNotFound();
     }
 
+    /**
+     * Carousel card copy — headline, body, call to action, destination — follows the link's own copy
+     * switches, which fail closed.
+     *
+     * The shared-creatives endpoint removes each field unless the operator published it; the live
+     * payload carried every card's copy inside its preview envelopes whatever the switches said.
+     */
+    public function test_card_copy_on_a_live_link_follows_the_links_copy_switches(): void
+    {
+        ExternalCreative::withoutGlobalScopes()->where('name', 'meta creative')->update(['cards' => [
+            ['image_url' => 'https://cdn.example.com/a.jpg', 'headline' => 'SECRET HEADLINE', 'body' => 'SECRET BODY', 'cta' => 'SHOP_NOW', 'destination_url' => 'https://brand.example.com/secret'],
+            ['image_url' => 'https://cdn.example.com/b.jpg', 'headline' => 'SECOND', 'body' => 'SECOND BODY'],
+        ]]);
+
+        $cardsIn = function (array $data): array {
+            $out = [];
+            array_walk_recursive($data, function ($v, $k) use (&$out) {
+                if (in_array($k, ['headline', 'body', 'cta', 'destination_url'], true) && $v !== null) {
+                    $out[] = (string) $v;
+                }
+            });
+
+            return $out;
+        };
+
+        [$open, $openRaw] = $this->share();
+        $open->settings = ['creatives' => ['creatives' => true, 'ad_copy' => true, 'headline' => true, 'cta' => true, 'destination_url' => true]];
+        $open->save();
+        $this->assertContains('SECRET HEADLINE', $cardsIn($this->live($openRaw)), 'no card copy reached even a link that publishes it, so this proves nothing');
+
+        [, $closedRaw] = $this->share();
+        $closed = $this->live($closedRaw);
+        $this->assertSame([], $cardsIn($closed), 'a live link published card copy its operator never switched on');
+
+        $key = collect($closed['ads_roster'])->firstWhere('name', 'meta creative')['content_key'];
+        $detail = $this->getJson("/api/v1/reports/shared/{$closedRaw}/live/content/{$key}?from=2026-07-01&to=2026-07-31")->assertOk()->json('data');
+        $this->assertSame([], $cardsIn($detail), 'the drilldown published card copy the list withheld');
+    }
+
     public function test_every_content_row_carries_a_key_and_no_internal_id(): void
     {
         [, $raw] = $this->share();
