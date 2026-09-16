@@ -64,8 +64,18 @@ describe('the order a client reads a live report in', () => {
   })
   afterEach(() => vi.clearAllMocks())
 
+  /*
+   * Asserted on the DETAILED form, because that is the document that contains all four blocks.
+   *
+   * This used to render the summary, and the funnel's presence there was incidental to what it is
+   * testing: the ORDER of a client's six questions, which is CLIENT-FACING-PRESENTATION-001 and is
+   * not form-specific. Owner defect row 96 made the funnel the detailed product's — handoff §10
+   * lists it under Detailed and not under Executive — so asking the summary for a funnel now pins
+   * the wrong thing. The order contract is unchanged and is asserted here in full; the summary's own
+   * order is asserted separately below, over the blocks the summary actually has.
+   */
   it('answers «at what cost» before «where»', async () => {
-    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="executive_summary" />, { locale: 'en' })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
     await screen.findByTestId('live-report')
 
     const kpis = await screen.findByTestId('live-kpis')
@@ -82,6 +92,25 @@ describe('the order a client reads a live report in', () => {
     expect(positionOf(kpis, objective) & 4, 'the objective split must follow the KPI cards').toBeTruthy()
     expect(positionOf(objective, platforms) & 4, 'platforms must follow the objective split').toBeTruthy()
     expect(positionOf(platforms, funnel) & 4, 'the funnel must follow platforms').toBeTruthy()
+  })
+
+  /**
+   * The summary reads in the same order, over the blocks it has.
+   *
+   * Written when the case above moved to the detailed form, so that the summary keeps an order
+   * contract of its own rather than inheriting one by assumption: a shorter document is still read
+   * «what did it cost» before «where did it go».
+   */
+  it('reads in the same order on the summary form', async () => {
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="executive_summary" />, { locale: 'en' })
+    await screen.findByTestId('live-report')
+
+    const kpis = await screen.findByTestId('live-kpis')
+    const objective = await screen.findByTestId('live-objective-split')
+    const platforms = await screen.findByTestId('live-platforms')
+
+    expect(positionOf(kpis, objective) & 4, 'the objective split must follow the KPI cards').toBeTruthy()
+    expect(positionOf(objective, platforms) & 4, 'platforms must follow the objective split').toBeTruthy()
   })
 
   /**
