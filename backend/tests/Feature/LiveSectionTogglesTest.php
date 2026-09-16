@@ -110,6 +110,50 @@ final class LiveSectionTogglesTest extends TestCase
         return $this->getJson("/api/v1/reports/shared/{$raw}/live")->assertOk()->json('data');
     }
 
+    /**
+     * The METRICS an operator chose travel to the payload — the settings audit's last unproven step.
+     *
+     * `clientKpiKeys` returns the operator's list verbatim when it is non-empty, and
+     * `clientKpis.test.ts` proves that half («shows exactly what the operator selected»). What was
+     * unproven is the step between: that the selection stored on the share reaches the payload the
+     * page reads. A control whose value is saved and never served is the placebo the closure brief
+     * rules out, and it would look identical to a working one in the builder.
+     *
+     * Asserted as an ordered list rather than a set, because the client's page renders THIS list in
+     * THIS order — «the metrics the operator chose, in the order they chose to show them».
+     */
+    public function test_the_metrics_an_operator_chose_reach_the_payload(): void
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, [
+            'mode' => 'live',
+            'scope' => [
+                'project_id' => (string) $this->project->getKey(),
+                'campaign_ids' => [(string) $this->campaign->getKey()],
+                'providers' => ['meta'],
+                'metrics' => ['spend', 'roas', 'conversions'],
+                'earliest' => now()->subDays(30)->toDateString(),
+                'latest' => now()->toDateString(),
+            ],
+        ], null);
+        unset($share);
+
+        $payload = $this->getJson("/api/v1/reports/shared/{$raw}/live")->assertOk()->json('data');
+
+        $this->assertSame(['spend', 'roas', 'conversions'], $payload['metrics']);
+    }
+
+    /**
+     * And choosing NOTHING means «all of them», not «none».
+     *
+     * The empty list is what a link built before metric selection existed carries, and what an
+     * operator who skipped the step means. Reading it as an explicit empty selection would render a
+     * client a report with no KPI cards at all.
+     */
+    public function test_choosing_no_metric_is_not_the_same_as_choosing_none(): void
+    {
+        $this->assertSame([], $this->payloadWith([])['metrics']);
+    }
+
     public function test_a_link_that_chose_nothing_still_carries_every_display_section(): void
     {
         $payload = $this->payloadWith([]);
