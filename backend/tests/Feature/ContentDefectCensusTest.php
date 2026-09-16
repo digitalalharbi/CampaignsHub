@@ -239,6 +239,9 @@ final class ContentDefectCensusTest extends TestCase
             'cdn.test/ok-signature.png' => Http::response($png, 200, ['Content-Type' => 'image/png']),
             'cdn.test/forbidden-signature.jpg' => Http::response('denied', 403, ['Content-Type' => 'text/plain']),
             'cdn.test/page-signature.jpg' => Http::response('<html></html>', 200, ['Content-Type' => 'text/html; charset=utf-8']),
+            // Production: a Snapchat collection still declared `multipart/form-data`. The bytes decide.
+            'cdn.test/mislabelled-signature.png' => Http::response($png, 200, ['Content-Type' => 'multipart/form-data']),
+            'cdn.test/envelope-signature.jpg' => Http::response("--b1\r\nContent-Type: text/plain\r\n\r\nhello\r\n--b1--\r\n", 200, ['Content-Type' => 'multipart/form-data; boundary=b1']),
             'cdn.test/film-signature.mp4' => Http::response('....', 206, ['Content-Type' => 'video/mp4']),
             '*' => Http::response('unexpected', 500),
         ]);
@@ -252,6 +255,12 @@ final class ContentDefectCensusTest extends TestCase
         $page = $this->spendOnlyCreative();
         $page->forceFill(['asset_url' => 'https://cdn.test/page-signature.jpg'])->save();
 
+        $mislabelled = $this->spendOnlyCreative();
+        $mislabelled->forceFill(['asset_url' => 'https://cdn.test/mislabelled-signature.png'])->save();
+
+        $envelope = $this->spendOnlyCreative();
+        $envelope->forceFill(['asset_url' => 'https://cdn.test/envelope-signature.jpg'])->save();
+
         // Never delivered in the window: not what a reader is looking at, so not loaded at all.
         $idle = $this->creative(['asset_url' => 'https://cdn.test/idle-signature.jpg']);
 
@@ -261,11 +270,13 @@ final class ContentDefectCensusTest extends TestCase
 
         $this->assertStringContainsString('still  http 403', $section);
         $this->assertStringContainsString((string) $forbidden->getKey(), $section);
-        $this->assertStringContainsString('not an image (content type text/html)', $section);
+        $this->assertStringContainsString('not an image (content type text/html; bytes: unrecognised, first bytes ', $section);
         $this->assertStringContainsString((string) $page->getKey(), $section);
         $this->assertStringNotContainsString((string) $ok->getKey(), $section, 'a loaded image and a playable film were reported as broken');
-        // Four assets: the working creative's still AND its film, and one still each for the two broken ones.
-        $this->assertStringContainsString('4 asset(s), 2 loaded', $output);
+        // Six assets: the working creative's still AND its film, and one still each for the four broken ones.
+        $this->assertStringContainsString('not an image (content type multipart/form-data; bytes: png image that decodes)', $section);
+        $this->assertStringContainsString('not an image (content type multipart/form-data; bytes: multipart envelope, parts in prefix: text/plain=not an image)', $section);
+        $this->assertStringContainsString('6 asset(s), 2 loaded', $output);
 
         Http::assertNotSent(static fn ($request): bool => str_contains((string) $request->url(), 'idle-signature'));
         $this->assertStringNotContainsString('signature', $output);
