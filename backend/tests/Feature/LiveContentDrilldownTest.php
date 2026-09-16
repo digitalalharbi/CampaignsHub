@@ -105,6 +105,27 @@ final class LiveContentDrilldownTest extends TestCase
         return collect($data['ads_roster'])->firstWhere('name', $name);
     }
 
+    /**
+     * The summary product carries neither per-platform rankings nor the weakest content.
+     *
+     * `LiveReportFormCompositionTest` asserts `ads_platform_groups === []` for a summary on a fixture
+     * with no creatives, where it is empty in BOTH forms and the assertion cannot fail. Here the detailed
+     * form is asserted to carry both first, so the summary's emptiness is the composition and not the data.
+     */
+    public function test_a_summary_link_does_not_carry_the_detailed_content_lists(): void
+    {
+        [, $detailed] = $this->share(['mode' => 'live', 'form' => 'detailed']);
+        [, $summary] = $this->share(['mode' => 'live', 'form' => 'executive_summary']);
+
+        $full = $this->live($detailed);
+        $this->assertNotEmpty($full['ads_platform_groups'], 'the detailed link has no platform rankings, so this proves nothing');
+        $this->assertNotEmpty($full['ads_weakest'], 'the detailed link has no weakest content, so this proves nothing');
+
+        $short = $this->live($summary);
+        $this->assertSame([], $short['ads_platform_groups']);
+        $this->assertSame([], $short['ads_weakest']);
+    }
+
     public function test_every_content_row_carries_a_key_and_no_internal_id(): void
     {
         [, $raw] = $this->share();
