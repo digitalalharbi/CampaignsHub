@@ -126,6 +126,34 @@ final class LiveContentDrilldownTest extends TestCase
         $this->assertSame([], $short['ads_weakest']);
     }
 
+    /**
+     * A creative the operator EXCLUDED from the link is absent from the live content lists and cannot
+     * be opened by its key.
+     *
+     * The share's scope carries `creative_ids` / `excluded_creative_ids` and the creatives endpoint
+     * honoured them; the live payload built its lists without them, so the Content mode listed exactly
+     * what the operator had taken out.
+     */
+    public function test_an_excluded_creative_is_absent_from_the_live_link(): void
+    {
+        [$wide, $wideRaw] = $this->share();
+        $key = $this->rosterRow($this->live($wideRaw), 'tiktok creative')['content_key'];
+        $id = (string) ExternalCreative::withoutGlobalScopes()->where('name', 'tiktok creative')->value('id');
+
+        [$narrow, $raw] = $this->share();
+        $narrow->scope = ['excluded_creative_ids' => [$id]] + $narrow->scope;
+        $narrow->save();
+
+        $data = $this->live($raw);
+        $names = collect($data['ads_roster'])->merge($data['ads'] ?? [])->merge($data['ads_weakest'] ?? [])->pluck('name')->unique()->values()->all();
+
+        $this->assertContains('meta creative', $names, 'the link shows no content at all, so this proves nothing');
+        $this->assertNotContains('tiktok creative', $names, 'the live link lists a creative the operator excluded');
+        $this->assertSame(1, $data['creatives_in_scope']);
+
+        $this->getJson("/api/v1/reports/shared/{$raw}/live/content/".ContentKey::for($narrow, $id))->assertNotFound();
+    }
+
     public function test_every_content_row_carries_a_key_and_no_internal_id(): void
     {
         [, $raw] = $this->share();
