@@ -65,6 +65,36 @@ final class CreativeMetrics
     private const AD_GRAIN_DERIVED = ['cpl', 'cpi'];
 
     /**
+     * Each ratio's inputs, in the terms `derive()` divides them — for pooling a set without crossing grains.
+     *
+     * `derive()` stays the only place a ratio's arithmetic is written for a row. This map exists so an
+     * aggregate over creatives whose figures were partly filled from their ads (see `fillFromAds()`)
+     * can pool each ratio's numerator and denominator from the SAME grain per creative, instead of
+     * dividing one grain's spend by another grain's clicks. Numerator keys are tried in order, exactly
+     * as `derive()` falls back from `video_p100` to `video_completions`.
+     *
+     * @var array<string, array{0: list<string>, 1: string, 2: float}>
+     */
+    private const RATIO_INPUTS = [
+        'ctr' => [['clicks'], 'impressions', 1.0],
+        'cpc' => [['spend'], 'clicks', 1.0],
+        'cpm' => [['spend'], 'impressions', 1000.0],
+        'cpa' => [['spend'], 'conversions', 1.0],
+        'cpl' => [['spend'], 'leads', 1.0],
+        'cpi' => [['spend'], 'installs', 1.0],
+        'roas' => [['revenue'], 'spend', 1.0],
+        'conversion_rate' => [['conversions'], 'clicks', 1.0],
+        'aov' => [['revenue'], 'conversions', 1.0],
+        'cost_per_view' => [['spend'], 'video_views', 1.0],
+        'view_rate' => [['video_views'], 'impressions', 1.0],
+        'completion_rate' => [['video_p100', 'video_completions'], 'video_views', 1.0],
+        'hook_rate' => [['video_views_3s'], 'impressions', 1.0],
+        'cost_per_lpv' => [['spend'], 'landing_page_views', 1.0],
+        'engagement_rate' => [['engagements'], 'impressions', 1.0],
+        'cpe' => [['spend'], 'engagements', 1.0],
+    ];
+
+    /**
      * Averaged COLUMNS, which are not derived — carried over from CONTENT-KPI-COLLAPSE-001.
      *
      * `frequency` and `video_avg_watch_seconds` sat in {@see self::DERIVED}, and nothing in
@@ -224,13 +254,160 @@ final class CreativeMetrics
          * attribute it to, and a creative whose ads reported nothing still reaches the reader as an
          * absence rather than as a zero.
          */
-        $missing = array_values(array_diff($creativeIds, array_keys($out)));
+        /*
+         * Content Production Recovery — a creative with BOTH grains keeps its own rows and gains, metric
+         * by metric, only what its own rows do not report.
+         *
+         * ## What Production showed
+         *
+         * `content:census` (run 35117219746) on the live Snapchat account: 199 creatives with figures,
+         * 160 at creative grain, 129 at ad grain, and 90 at BOTH. Letting the creative's own rows «win
+         * outright» made the ads invisible for those 90, so 22 cards showed indicators and no Spend
+         * (the ads carried it) and 79 lost the metric their objective is judged by — revenue, CPA and
+         * AOV on sales, landing-page views on traffic — all of which the same creative's ads reported.
+         *
+         * ## The three rules, because each is how this could make a number wrong in a new way
+         *
+         *   1. NEVER SUM THE GRAINS. Both can describe the same delivery; adding them double-counts.
+         *      A metric the creative grain reports is taken from the creative grain, full stop — the
+         *      existing «not blended» guarantee is unchanged. Only a metric it does NOT report is taken
+         *      from the ads.
+         *   2. A RATIO COMES WHOLLY FROM ONE GRAIN. CPA over the ads' spend and the creative's orders
+         *      would divide two different measurements. Each derived figure is the creative grain's own
+         *      when it could compute it, else the ad grain's own, else absent — never recomputed across.
+         *   3. ONLY FROM A GRAIN THAT COVERS THE SAME DAYS. An ad grain active on fewer days than the
+         *      creative grain would state a partial figure as the creative's whole one, so it fills
+         *      nothing.
+         *
+         * Every filled key is named in `from_ads`, so a surface can say which figures were summed
+         * from the ads rather than reported for the creative.
+         */
+        $ad = $this->fromAdGrain($creativeIds, $from, $to);
 
-        foreach ($this->fromAdGrain($missing, $from, $to) as $creativeId => $figures) {
-            $out[$creativeId] = $figures;
+        foreach ($ad as $creativeId => $figures) {
+            $out[$creativeId] = isset($out[$creativeId])
+                ? $this->fillFromAds($out[$creativeId], $figures)
+                : $figures;
         }
 
         return $out;
+    }
+
+    /**
+     * One creative's own figures, with the metrics they do not report taken from its ads — see the
+     * three rules in {@see self::forCreatives()}.
+     *
+     * @param  array<string, mixed>  $native  shaped creative-grain figures
+     * @param  array<string, mixed>  $ads  shaped ad-grain figures for the same creative and window
+     * @return array<string, mixed>
+     */
+    private function fillFromAds(array $native, array $ads): array
+    {
+        $native['from_ads'] = [];
+
+        if ((int) ($ads['active_days'] ?? 0) < (int) ($native['active_days'] ?? 0)) {
+            return $native;
+        }
+
+        $merged = $native;
+        $filled = [];
+
+        // Raw columns and averaged columns: taken only where the creative grain reported nothing.
+        foreach ([...array_keys(self::SUMS), ...array_keys(self::AD_GRAIN_SUMS), ...self::AVERAGED] as $key) {
+            if (in_array($key, self::MONEY, true)) {
+                continue;
+            }
+
+            if (($native[$key] ?? null) === null && ($ads[$key] ?? null) !== null) {
+                $merged[$key] = $ads[$key];
+                $merged['reported'][$key] = true;
+                $filled[] = $key;
+            }
+        }
+
+        // Money: taken with its whole provenance, and only where the creative grain cannot state it.
+        $moneyFrom = [];
+        foreach (self::MONEY as $key) {
+            $moneyFrom[$key] = 'native';
+
+            if (! $this->answerable($native, $key) && $this->answerable($ads, $key)) {
+                $merged[$key] = $ads[$key] ?? null;
+                $merged[$key.'_withheld_rows'] = (int) ($ads[$key.'_withheld_rows'] ?? 0);
+                $merged[$key.'_original'] = $ads[$key.'_original'] ?? null;
+                $merged['reported'][$key] = ($ads[$key] ?? null) !== null;
+                $moneyFrom[$key] = 'ads';
+                $filled[] = $key;
+            }
+        }
+
+        // The original currency now describes whichever grain each withheld money figure came from.
+        $currencies = [];
+        $several = false;
+        foreach (self::MONEY as $key) {
+            $source = $moneyFrom[$key] === 'ads' ? $ads : $native;
+
+            if ((int) ($source[$key.'_withheld_rows'] ?? 0) === 0) {
+                continue;
+            }
+
+            $several = $several || (int) ($source['money_original_currencies'] ?? 0) > 1;
+
+            if (is_string($source['money_original_currency'] ?? null)) {
+                $currencies[$source['money_original_currency']] = true;
+            }
+        }
+        $merged['money_original_currency'] = count($currencies) === 1 && ! $several ? (string) array_key_first($currencies) : null;
+        $merged['money_original_currencies'] = $several ? max(2, count($currencies)) : count($currencies);
+
+        // Ratios: the creative grain's own, else the ad grain's own — never recomputed across grains.
+        // The inputs travel with the choice, so an aggregate over this creative pools the same grain.
+        $merged['ratio_inputs'] = [];
+        foreach ([...self::DERIVED, ...self::AD_GRAIN_DERIVED] as $key) {
+            $source = null;
+
+            if (($native[$key] ?? null) !== null) {
+                $source = $native;
+            } elseif (($ads[$key] ?? null) !== null) {
+                $merged[$key] = $ads[$key];
+                $filled[] = $key;
+                $source = $ads;
+            } else {
+                $merged[$key] = null;
+            }
+
+            if (isset(self::RATIO_INPUTS[$key])) {
+                $merged['ratio_inputs'][$key] = $source === null ? [null, null] : $this->ratioInputs($source, $key);
+            }
+        }
+
+        $merged['reported']['orders'] = ($merged['conversions'] ?? null) !== null;
+        $merged['active_days'] = max((int) ($native['active_days'] ?? 0), (int) ($ads['active_days'] ?? 0));
+        $merged['from_ads'] = array_values(array_unique($filled));
+
+        return $merged;
+    }
+
+    /**
+     * One row's numerator and denominator for a ratio, or nulls when either is missing.
+     *
+     * @param  array<string, mixed>  $figures
+     * @return array{0: float|null, 1: float|null}
+     */
+    private function ratioInputs(array $figures, string $key): array
+    {
+        [$numerators, $denominator, $divisor] = self::RATIO_INPUTS[$key];
+
+        $numerator = null;
+        foreach ($numerators as $candidate) {
+            if (is_numeric($figures[$candidate] ?? null)) {
+                $numerator = (float) $figures[$candidate];
+                break;
+            }
+        }
+
+        $below = is_numeric($figures[$denominator] ?? null) ? (float) $figures[$denominator] / $divisor : null;
+
+        return $numerator === null || $below === null ? [null, null] : [$numerator, $below];
     }
 
     /**
@@ -769,6 +946,39 @@ final class CreativeMetrics
         }
 
         $figures = $this->derive($figures);
+
+        /*
+         * Content Production Recovery — a ratio pooled over a set never divides across grains.
+         *
+         * A creative filled from its ads can carry the ads' spend beside its own clicks. Pooling the
+         * columns and dividing, as above, would state spend(ads) / clicks(creative) — a CPC nobody
+         * measured, and one the card for that same creative does not show (it shows the ads' own).
+         * Where any contributing row carries its ratio inputs, every ratio is pooled pair by pair
+         * instead: each row contributes a numerator and a denominator from ONE grain, or nothing.
+         * Rows that were never filled contribute their own columns, exactly as before.
+         */
+        if (array_filter($sets, static fn (array $s): bool => is_array($s['ratio_inputs'] ?? null)) !== []) {
+            foreach (array_keys(self::RATIO_INPUTS) as $key) {
+                $numerator = null;
+                $denominator = null;
+
+                foreach ($sets as $set) {
+                    [$n, $d] = is_array($set['ratio_inputs'][$key] ?? null)
+                        ? $set['ratio_inputs'][$key]
+                        : $this->ratioInputs($set, $key);
+
+                    if ($n === null || $d === null) {
+                        continue;
+                    }
+
+                    $numerator = ($numerator ?? 0.0) + (float) $n;
+                    $denominator = ($denominator ?? 0.0) + (float) $d;
+                }
+
+                $figures[$key] = $this->ratio($numerator, $denominator);
+            }
+        }
+
         $reported['orders'] = $reported['conversions'];
         $figures['reported'] = $reported;
         $figures['creatives'] = count($sets);
