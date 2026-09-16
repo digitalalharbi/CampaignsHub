@@ -52,7 +52,7 @@ connection is where the remaining defects will surface.
 |---|---|---|
 | Ad provider contract | `Integrations/Contracts/AdvertisingConnector.php` | `VERIFIED` — `authorizationUrl`, `handleCallback`, `healthCheck`, `listAdAccounts`, `syncCampaigns`, `syncAdSets`, `syncAds`, `syncInsights` |
 | Store provider contract | `Commerce/Contracts/CommerceConnector.php` | `VERIFIED` — `fetchStores`, `syncProducts`, `syncOrders`, `syncCustomers`, `syncAbandonedCarts`, `healthCheck` |
-| OAuth + **PKCE** | `Integrations/OAuth/PlatformOAuth.php` | `VERIFIED` — `codeVerifier`/`codeChallenge`, per-provider callback code parameter |
+| OAuth 2.0 + **OAuth 1.0a** | `Integrations/OAuth/PlatformOAuth.php`, `OAuth/OAuth1Signer.php` | `IMPLEMENTED_NOT_VERIFIED` — authorization code for seven providers with a per-provider callback code parameter; X Ads is OAuth 1.0a (three-legged, every request signed via `guzzlehttp/oauth-subscriber`, X-OAUTH1-001). The former PKCE machinery was removed: X Ads, the only provider that used it, never accepted OAuth 2.0 |
 | Token refresh | `PlatformOAuth::refresh`, `RefreshAdPlatformTokensCommand` | `VERIFIED` — refresh with a configurable skew (`refresh_skew_minutes`) |
 | Encrypted credential storage | `Models/IntegrationCredential`, `OAuth/TokenVault` | `VERIFIED` — encrypted payload, never logged, never returned by an API |
 | OAuth state | `OAuth/AuthorizationState` | `VERIFIED` — TTL 15 min (`state_ttl_minutes`) |
@@ -151,8 +151,8 @@ implementation.
 
 For each provider the sequence is intended to be, with no code written:
 
-1. Enter client id / secret (and Google's developer token) into the Integration Center.
-2. `Connect` → OAuth, with PKCE where the provider supports it.
+1. Enter client id / secret (and Google's developer token) into the Integration Center — for X Ads, the four OAuth 1.0a values: API Key, API Key Secret, Access Token, Access Token Secret.
+2. `Connect` → OAuth 2.0 authorization code, or X's three-legged OAuth 1.0a.
 3. Choose account or store, choose project.
 4. Confirm currency and attribution window.
 5. Choose sync range; backfill runs.
