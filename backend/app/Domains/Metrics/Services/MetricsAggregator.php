@@ -12,6 +12,7 @@ use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Services\CampaignOutcomeResolver;
 use App\Domains\Campaigns\Services\CreativeFunnel;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Coverage\AggregateCoverage;
 use App\Domains\Metrics\Coverage\ContributorCoverage;
 use App\Domains\Metrics\Enums\MoneyState;
@@ -410,6 +411,13 @@ final class MetricsAggregator
     private function scoped(mixed $query): mixed
     {
         $query->when($this->acrossProjects, fn ($q) => $q->withoutGlobalScope(ProjectScope::class));
+
+        /*
+         * ACCOUNT-SCOPE-ISOLATION-001 — a row is this project's figure only while its account is
+         * selected for this project. The rule lives in one class and is applied per row, so it holds
+         * here for the single-project dashboard and for the multi-project reads alike.
+         */
+        BoundAccountVisibility::apply($query, 'daily_metrics');
 
         if ($this->campaignId !== null) {
             $query->where('unified_campaign_id', $this->campaignId);

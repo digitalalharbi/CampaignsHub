@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Coverage;
 
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -267,6 +268,7 @@ final class ContributorCoverage
     {
         $q = DB::table('daily_metrics')
             ->where('tenant_id', $tenantId)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
 
         if ($projectId !== null) {

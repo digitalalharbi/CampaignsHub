@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Commerce\Services\ProjectOrders;
 use App\Domains\Commerce\Services\ProjectStores;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
@@ -409,6 +410,7 @@ final class AttributionTransparency
         $campaignIds = DailyMetric::withoutGlobalScopes()
             ->where('project_id', $projectId)
             ->whereBetween('metric_date', [$fromDate, $toDate])
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->whereNotNull('unified_campaign_id')
             ->distinct()
             ->pluck('unified_campaign_id')
@@ -490,6 +492,7 @@ final class AttributionTransparency
         $rows = DailyMetric::withoutGlobalScopes()
             ->where('project_id', $projectId)
             ->whereBetween('metric_date', [$fromDate, $toDate])
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->whereIn('metric_key', [self::ORDERS_KEY, self::REVENUE_KEY])
             ->when($providers !== [], fn ($q) => $q->whereIn('provider', $providers))
             ->groupBy('provider', 'metric_key', 'attribution_window', 'project_currency')
