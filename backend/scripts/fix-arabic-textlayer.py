@@ -46,10 +46,29 @@ def _foldable_pf(s: str) -> bool:
 
 
 def _fold_hex(h: str) -> str:
-    """UTF-16BE hex -> NFKC -> UTF-16BE hex. Returns original on any failure."""
+    """UTF-16BE hex -> NFKC -> UTF-16BE hex, for ARABIC PRESENTATION FORMS ONLY.
+
+    The gate on the PF ranges is load-bearing and was missing. NFKC is a COMPATIBILITY fold, so
+    applied to every destination it also rewrites characters this normaliser has no business
+    touching — U+2026 HORIZONTAL ELLIPSIS becomes three full stops, the ligature U+FB01 becomes
+    "fi", full-width and superscript forms collapse. That contradicts this module's own stated
+    invariant, «ASCII / Latin / digit mappings untouched (we only fold the Arabic PF ranges)»,
+    which is written three times above and was true of the intent and not of the code.
+
+    It was not hypothetical and it was not cosmetic: `truncate` on a creative name renders a real
+    U+2026 glyph, so a detailed Arabic report over an estate with long creative names produced one
+    ASCII destination that did not exist before the sweep, `ascii_mappings_preserved` went false,
+    and the export was BLOCKED. Fail-closed worked exactly as designed — the validator caught the
+    normaliser — and the consequence was that such a report could not be exported at all.
+
+    Returns the original on any failure, and on any string carrying no presentation form.
+    """
     try:
         s = bytes.fromhex(h if len(h) % 2 == 0 else "0" + h).decode("utf-16-be")
     except Exception:
+        return h
+    # Not ours to fold. A destination with no presentation form is left byte-identical.
+    if not any(_in_pf(ord(c)) for c in s):
         return h
     n = unicodedata.normalize("NFKC", s)
     return n.encode("utf-16-be").hex().upper() if n != s else h
