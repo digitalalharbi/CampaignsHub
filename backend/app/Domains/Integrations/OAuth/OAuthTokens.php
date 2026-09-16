@@ -21,13 +21,20 @@ use Illuminate\Support\Carbon;
  */
 final class OAuthTokens
 {
-    /** @param array<string,mixed> $raw */
+    /**
+     * @param  array<string,mixed>  $raw
+     * @param  string|null  $tokenSecret  X-OAUTH1-001 — the OAuth 1.0a token secret. Null for every OAuth 2.0
+     *                                    provider. For X it is half of the credential: every request is signed
+     *                                    with it, so it is stored inside the same encrypted payload as the token
+     *                                    and never in `raw`, which is kept for non-secret facts.
+     */
     public function __construct(
         public readonly string $accessToken,
         public readonly ?string $refreshToken = null,
         public readonly ?Carbon $expiresAt = null,
         public readonly ?string $scope = null,
         public readonly array $raw = [],
+        public readonly ?string $tokenSecret = null,
     ) {}
 
     /** True when the token is gone, or close enough that starting a sync with it is a bad bet. */
@@ -76,6 +83,7 @@ final class OAuthTokens
             'expires_at' => $this->expiresAt?->toIso8601String(),
             'scope' => $this->scope,
             'raw' => $this->raw,
+            'token_secret' => $this->tokenSecret,
         ];
     }
 
@@ -92,6 +100,9 @@ final class OAuthTokens
             expiresAt: is_string($expiresAt) && $expiresAt !== '' ? Carbon::parse($expiresAt) : null,
             scope: isset($stored['scope']) && $stored['scope'] !== null ? (string) $stored['scope'] : null,
             raw: is_array($stored['raw'] ?? null) ? $stored['raw'] : [],
+            tokenSecret: isset($stored['token_secret']) && is_string($stored['token_secret']) && $stored['token_secret'] !== ''
+                ? $stored['token_secret']
+                : null,
         );
     }
 }

@@ -43,7 +43,7 @@ final class ProviderDefinition
         public readonly string $labelAr,
         public readonly array $fields,
         public readonly array $scopes,
-        public readonly bool $usesPkce,
+        public readonly AuthScheme $authScheme,
         public readonly bool $supportsRefresh,
         public readonly string $tokenNote,
         public readonly string $tokenNoteAr,
@@ -83,6 +83,12 @@ final class ProviderDefinition
         }
 
         return null;
+    }
+
+    /** X-OAUTH1-001 — true for a provider whose API calls are signed rather than carrying a bearer token. */
+    public function usesOAuth1(): bool
+    {
+        return $this->authScheme === AuthScheme::OAuth1a;
     }
 
     public function isAdvertising(): bool
@@ -127,7 +133,7 @@ final class ProviderDefinition
             'label_ar' => $this->labelAr,
             'fields' => array_map(static fn (ProviderField $f) => $f->toArray(), $this->fields),
             'scopes' => $this->scopes,
-            'uses_pkce' => $this->usesPkce,
+            'auth_scheme' => $this->authScheme->value,
             'supports_refresh' => $this->supportsRefresh,
             'token_note' => $this->tokenNote,
             'token_note_ar' => $this->tokenNoteAr,

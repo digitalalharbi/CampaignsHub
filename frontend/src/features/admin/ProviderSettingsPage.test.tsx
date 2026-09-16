@@ -32,7 +32,7 @@ const provider = (over: Partial<IntegrationProvider> = {}): IntegrationProvider 
   ],
   scopes: ['https://www.googleapis.com/auth/adwords'],
   effective_scopes: ['https://www.googleapis.com/auth/adwords'],
-  uses_pkce: false,
+  auth_scheme: 'oauth2',
   supports_refresh: true,
   token_note: 'A refresh token is issued only on first consent.',
   token_note_ar: 'لا يُصدر رمز التجديد إلا في أول موافقة.',
@@ -226,5 +226,59 @@ describe('ProviderSettingsPage', () => {
     fireEvent.click(await screen.findByTestId('provider-configure-google'))
 
     expect(screen.getByText('A developer token approved for Basic Access.')).toBeInTheDocument()
+  })
+
+  /**
+   * X-OAUTH1-001 — the X Ads API takes OAuth 1.0a signed requests only. The form asks for the four values
+   * X issues for that, every one write-only, and nothing an OAuth 2.0 app or a bearer call would need.
+   */
+  it('asks X for exactly the four OAuth 1.0a credentials, write-only, and never a bearer token', async () => {
+    const x = provider({
+      key: 'x',
+      label: 'X Ads API',
+      label_ar: 'واجهة إكس الإعلانية',
+      auth_scheme: 'oauth1a',
+      supports_refresh: false,
+      scopes: [],
+      effective_scopes: [],
+      fields: [
+        { key: 'consumer_key', label: 'API Key (Consumer Key)', label_ar: 'مفتاح API (Consumer Key)', secret: true, required: true, where: 'Keys and tokens → Consumer Keys', where_ar: 'Consumer Keys' },
+        { key: 'consumer_secret', label: 'API Key Secret (Consumer Secret)', label_ar: 'سر مفتاح API', secret: true, required: true, where: 'Same section', where_ar: 'القسم نفسه' },
+        { key: 'access_token', label: 'Access Token', label_ar: 'رمز الوصول', secret: true, required: true, where: 'Authentication Tokens', where_ar: 'Authentication Tokens' },
+        { key: 'access_token_secret', label: 'Access Token Secret', label_ar: 'سر رمز الوصول', secret: true, required: true, where: 'Shown with the token', where_ar: 'يُعرض مع الرمز' },
+      ],
+      values: [
+        { key: 'consumer_key', present: true, source: 'stored', hint: 'aaaa' },
+        { key: 'consumer_secret', present: false, source: null, hint: null },
+        { key: 'access_token', present: false, source: null, hint: null },
+        { key: 'access_token_secret', present: false, source: null, hint: null },
+      ],
+      missing: ['consumer_secret', 'access_token', 'access_token_secret'],
+      redirect_uri: 'https://example.test/api/v1/oauth/ads/x/callback',
+    })
+    vi.mocked(fetchIntegrationProviders).mockResolvedValue(listing([x]))
+
+    renderWithProviders(<ProviderSettingsPage />)
+    fireEvent.click(await screen.findByTestId('provider-configure-x'))
+    const dialog = await screen.findByTestId('provider-dialog-x')
+
+    const inputs = Array.from(dialog.querySelectorAll('input[data-testid^="provider-input-x-"]'))
+    expect(inputs.map((i) => i.getAttribute('data-testid'))).toEqual([
+      'provider-input-x-consumer_key',
+      'provider-input-x-consumer_secret',
+      'provider-input-x-access_token',
+      'provider-input-x-access_token_secret',
+    ])
+    for (const input of inputs) {
+      expect(input).toHaveAttribute('type', 'password')
+      expect(input).toHaveValue('')
+    }
+
+    expect(screen.getByTestId('provider-auth-scheme-x').textContent).toContain('OAuth 1.0a')
+    expect(dialog.textContent).not.toMatch(/bearer token\b(?! is sent)/i)
+    expect(dialog.textContent).not.toContain('PKCE')
+    expect(dialog.textContent).not.toContain('OAuth 2.0 Client')
+    // Saving or testing is not connecting, and the dialog says so.
+    expect(screen.getByTestId('provider-boundary-x').textContent).toContain('connects no workspace')
   })
 })

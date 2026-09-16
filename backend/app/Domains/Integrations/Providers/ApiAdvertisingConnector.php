@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\Contracts\AdvertisingConnector;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\OAuth\OAuth1Signer;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\PlatformOAuth;
@@ -378,8 +379,41 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
                 'X-Restli-Protocol-Version' => '2.0.0',
             ]),
 
+            /*
+             * X-OAUTH1-001 — X Ads takes OAuth 1.0a signed requests and nothing else.
+             *
+             * This fell to the `default` arm below and sent `Authorization: Bearer <token>`, which
+             * `ads-api.x.com` refuses whatever the token is. Every request is now signed with the
+             * app's consumer pair and the connected user's token pair; no bearer header is set.
+             */
+            'x' => $request->withMiddleware($this->oauth1Signer($creds, $tokens)),
+
             default => $request->withToken($tokens->accessToken),
         };
+    }
+
+    /**
+     * The signer for a connection authorised under OAuth 1.0a.
+     *
+     * A connection with no token secret was authorised under the OAuth 2.0 model X Ads never accepted.
+     * It is refused here, loudly, rather than signed with a missing half — a signature built on an
+     * empty secret is refused by X as «Could not authenticate you», which reads as a revoked account
+     * instead of the truth: the customer must connect X again.
+     */
+    private function oauth1Signer(PlatformCredentials $creds, OAuthTokens $tokens): OAuth1Signer
+    {
+        if ($tokens->tokenSecret === null) {
+            throw new RuntimeException(
+                $this->label().' was connected under OAuth 2.0, which the X Ads API does not accept. Connect X again.',
+            );
+        }
+
+        return new OAuth1Signer(
+            consumerKey: (string) $creds->get('consumer_key'),
+            consumerSecret: (string) $creds->get('consumer_secret'),
+            token: $tokens->accessToken,
+            tokenSecret: $tokens->tokenSecret,
+        );
     }
 
     /**

@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Integrations\Catalogue\AuthScheme;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
@@ -259,7 +260,7 @@ final class TikTokAuthorizationCodeTest extends TestCase
         $definition = ProviderCatalogue::get('tiktok');
 
         $this->assertFalse($definition->supportsRefresh);
-        $this->assertFalse($definition->usesPkce, 'TikTok publishes no code challenge or verifier');
+        $this->assertSame(AuthScheme::OAuth2, $definition->authScheme, 'TikTok uses an authorization code, not OAuth 1.0a signing');
         $this->assertStringContainsString('does not expire', strtolower((string) $definition->tokenNote));
         $this->assertStringNotContainsString('refresh token', strtolower((string) $definition->tokenNoteAr));
     }

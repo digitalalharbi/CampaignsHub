@@ -1075,7 +1075,8 @@ final class AdPlatformConnectorTest extends TestCase
         return app(TokenVault::class)->open(
             tenantId: $this->tenant->id,
             provider: $provider,
-            tokens: new OAuthTokens('AT-secret', 'RT', $expiresAt ?? Carbon::now()->addDay()),
+            // X signs every request with a token SECRET as well (X-OAUTH1-001); the others ignore it.
+            tokens: new OAuthTokens('AT-secret', 'RT', $expiresAt ?? Carbon::now()->addDay(), tokenSecret: $provider === 'x' ? 'TS' : null),
             connectionName: $provider,
         );
     }

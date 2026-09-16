@@ -57,10 +57,11 @@ const COPY = {
     copy: 'نسخ', copied: 'تم النسخ',
     prerequisites: 'متطلبات خارج المنصة', tokens: 'الرموز والتجديد', limits: 'الحدود والصفحات',
     docs: 'التوثيق الرسمي', scopes: 'الصلاحيات المطلوبة',
-    pkce: 'يستخدم PKCE إلزاميًا', noRefresh: 'لا يوجد تجديد تلقائي',
+    oauth1a: 'OAuth 1.0a — كل طلب موقَّع، ولا يُرسل رمز Bearer', noRefresh: 'لا يوجد تجديد تلقائي',
     webhookSupported: 'يدعم استقبال الأحداث', webhookPolling: 'لا يدعم الأحداث — نعتمد المزامنة الدورية',
     webhookUnconfirmed: 'المزامنة الدورية هي المرجع حتى تأكيد آلية الأحداث لدى المزوّد',
     lastTested: 'آخر اختبار', neverTested: 'لم يُختبر بعد',
+    boundary: 'هذه الصفحة تُعدّ تطبيق المنصة فقط. حفظ المفاتيح أو نجاح الاختبار لا يربط أي مساحة عمل ولا يزامن أي بيانات — الربط يحدث عندما يفوّض العميل حسابه من صفحة التكاملات، والمزامنة بعد اختياره حساباته.',
     missing: 'ينقص',
     states: {
       not_configured: 'غير مهيأ',
@@ -90,10 +91,11 @@ const COPY = {
     copy: 'Copy', copied: 'Copied',
     prerequisites: 'Required outside this product', tokens: 'Tokens and refresh', limits: 'Limits and pagination',
     docs: 'Official documentation', scopes: 'Scopes requested',
-    pkce: 'PKCE is mandatory', noRefresh: 'No automatic refresh',
+    oauth1a: 'OAuth 1.0a — every request is signed; no Bearer token is sent', noRefresh: 'No automatic refresh',
     webhookSupported: 'Receives events', webhookPolling: 'No events — the scheduled sync is the source',
     webhookUnconfirmed: 'The scheduled sync stays authoritative until the delivery scheme is confirmed',
     lastTested: 'Last tested', neverTested: 'Never tested',
+    boundary: 'This page configures the platform\'s app only. Saving keys or passing the test connects no workspace and syncs no data — a connection exists when a customer authorises their own account from their integrations page, and data arrives after they choose their accounts.',
     missing: 'Missing',
     states: {
       not_configured: 'Not configured',
@@ -398,7 +400,9 @@ function ProviderDialog({ provider, ar, copy, onClose }: {
           <p className="font-bold text-text-primary">{copy.tokens}</p>
           <p className="mt-1">{ar ? provider.token_note_ar : provider.token_note}</p>
           <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-text-muted">
-            {provider.uses_pkce && <span>{copy.pkce}</span>}
+            {provider.auth_scheme === 'oauth1a' && (
+              <span data-testid={`provider-auth-scheme-${provider.key}`}>{copy.oauth1a}</span>
+            )}
             {!provider.supports_refresh && <span>{copy.noRefresh}</span>}
             {provider.effective_scopes.length > 0 && (
               <span dir="ltr">{copy.scopes}: {provider.effective_scopes.join(' ')}</span>
@@ -408,6 +412,12 @@ function ProviderDialog({ provider, ar, copy, onClose }: {
           <p className="mt-1" dir="ltr">{provider.rate_limit_note}</p>
           <p dir="ltr">{provider.pagination_note}</p>
         </section>
+
+        {/*
+          * X-OAUTH1-001 — three states an operator must never read as one: credentials saved, a workspace
+          * connected, data synced. This page can only ever produce the first, and says so beside the verdict.
+          */}
+        <p data-testid={`provider-boundary-${provider.key}`} className="text-xs text-text-muted">{copy.boundary}</p>
 
         {/* The verdict, with the provider's own words. A pass says what it proves and no more. */}
         <section data-testid={`provider-test-${provider.key}`} data-status={provider.last_test_status ?? 'none'}>

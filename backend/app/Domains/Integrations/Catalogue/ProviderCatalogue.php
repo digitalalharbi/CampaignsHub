@@ -20,7 +20,7 @@ use InvalidArgumentException;
  * | TikTok    | `app_id`/`secret`/`auth_code`, and HTTP 200 with `code != 0` is a refusal           |
  * | Meta      | no refresh token — a long-lived EXCHANGE; and webhooks with `X-Hub-Signature-256`   |
  * | Google    | a developer token approved on a separate track; refresh only with offline+consent   |
- * | X         | PKCE is mandatory, so `code_verifier` must survive the whole round trip             |
+ * | X         | OAuth 1.0a — every Ads API request is SIGNED; a bearer token is refused outright    |
  * | LinkedIn  | every REST call is pinned to a monthly `LinkedIn-Version`; unpinned calls are 426   |
  * | Salla     | a store, not an ad account; webhooks signed with `x-salla-signature`                |
  * | Zid       | TWO tokens — `Authorization: Bearer` AND `X-Manager-Token` on every call            |
@@ -113,7 +113,7 @@ final class ProviderCatalogue
                     'يُعرض مرة واحدة عند إنشاء التطبيق ولا يمكن قراءته لاحقًا'),
             ],
             scopes: ['snapchat-marketing-api'],
-            usesPkce: false,
+            authScheme: AuthScheme::OAuth2,
             supportsRefresh: true,
             // 3600 seconds, read from the current authentication documentation rather than from
             // memory — the previous «around 30 minutes» was half the real figure, and an operator
@@ -161,7 +161,7 @@ final class ProviderCatalogue
             ],
             // TikTok assigns scopes to the app at creation; they are not sent on the authorise URL.
             scopes: [],
-            usesPkce: false,
+            authScheme: AuthScheme::OAuth2,
             supportsRefresh: false,
             tokenNote: 'The business access token does not expire and has no refresh grant. It stops working '
                 .'only when the advertiser revokes it, which is a re-authorisation, not a refresh.',
@@ -210,7 +210,7 @@ final class ProviderCatalogue
                     required: false),
             ],
             scopes: ['ads_read', 'ads_management', 'business_management'],
-            usesPkce: false,
+            authScheme: AuthScheme::OAuth2,
             supportsRefresh: false,
             tokenNote: 'Meta issues no refresh token. A short-lived token is EXCHANGED for a long-lived one '
                 .'(`grant_type=fb_exchange_token`) against the same endpoint; treating that as a failed '
@@ -292,7 +292,7 @@ final class ProviderCatalogue
                  */
             ],
             scopes: ['https://www.googleapis.com/auth/adwords'],
-            usesPkce: false,
+            authScheme: AuthScheme::OAuth2,
             supportsRefresh: true,
             tokenNote: 'A refresh token is issued only when the authorise URL asks for `access_type=offline` '
                 .'AND `prompt=consent`, and only on the FIRST consent. Google then omits the refresh token '
@@ -318,6 +318,31 @@ final class ProviderCatalogue
         );
     }
 
+    /**
+     * X-OAUTH1-001 — the X Ads API authenticates with OAuth 1.0a, and only with OAuth 1.0a.
+     *
+     * This definition used to ask for an «OAuth 2.0 Client ID» and «Client Secret», set PKCE, and
+     * requested `tweet.read users.read offline.access`. The owner tested the real X Developer Console
+     * against it and it was wrong in the way that matters most: every call to `ads-api.x.com` must be
+     * an OAuth 1.0a signed request, so an app configured the way this form described could never have
+     * listed a single ad account, whatever approval it held. OAuth 2.0 scopes do not exist here — what
+     * the user granted is fixed by the app's permission level at the moment the token was issued.
+     *
+     * ## The four values, and what each one is for
+     *
+     * The API Key and API Key Secret identify the APP and sign every request. The Access Token and
+     * Access Token Secret belong to the app OWNER's own X account and are used for one thing: «Test
+     * configuration» signs a real `GET /12/accounts` with all four, which proves the signature, the
+     * keys and the app's Ads API access in one round trip.
+     *
+     * They are NOT used to read any customer's data. A workspace connects its own X account through
+     * X's three-legged OAuth 1.0a flow and receives its own token pair. Discovering accounts with the
+     * owner's token instead would hand every tenant whatever ad accounts the owner's account can reach
+     * — the cross-tenant disclosure this product is built never to make.
+     *
+     * No Bearer Token is asked for. X issues one for app-only OAuth 2.0 endpoints, and the Ads API
+     * accepts none of them.
+     */
     private static function x(): ProviderDefinition
     {
         return new ProviderDefinition(
@@ -326,33 +351,46 @@ final class ProviderCatalogue
             label: 'X Ads API',
             labelAr: 'واجهة إكس الإعلانية',
             fields: [
-                ProviderField::plain('client_id', 'OAuth 2.0 Client ID', 'معرّف عميل OAuth 2.0',
-                    'X developer portal → your project → app → Keys and tokens',
-                    'بوابة مطوّري إكس ← مشروعك ← التطبيق ← المفاتيح والرموز'),
-                ProviderField::secret('client_secret', 'OAuth 2.0 Client Secret', 'سر عميل OAuth 2.0',
-                    'Same page, shown once at creation',
-                    'الصفحة نفسها، ويُعرض مرة واحدة عند الإنشاء'),
+                ProviderField::secret('consumer_key', 'API Key (Consumer Key)', 'مفتاح API (Consumer Key)',
+                    'X Developer Console → your app → Keys and tokens → Consumer Keys → API Key',
+                    'منصة مطوّري إكس ← تطبيقك ← المفاتيح والرموز (Keys and tokens) ← Consumer Keys ← API Key'),
+                ProviderField::secret('consumer_secret', 'API Key Secret (Consumer Secret)', 'سر مفتاح API (Consumer Secret)',
+                    'Same section, shown once when generated. Regenerating it invalidates the previous one',
+                    'القسم نفسه، ويُعرض مرة واحدة عند التوليد. إعادة توليده تُبطل السابق'),
+                ProviderField::secret('access_token', 'Access Token', 'رمز الوصول (Access Token)',
+                    'Keys and tokens → Authentication Tokens → Access Token and Secret. Generated for the app owner\'s own X account; '
+                        .'regenerate it after the app\'s permissions change or Ads API access is approved',
+                    'المفاتيح والرموز ← Authentication Tokens ← Access Token and Secret. يُولَّد لحساب مالك التطبيق نفسه؛ '
+                        .'أعد توليده بعد تغيير صلاحيات التطبيق أو اعتماد الوصول إلى Ads API'),
+                ProviderField::secret('access_token_secret', 'Access Token Secret', 'سر رمز الوصول (Access Token Secret)',
+                    'Shown together with the Access Token, once',
+                    'يُعرض مع رمز الوصول مرة واحدة'),
             ],
-            scopes: ['tweet.read', 'users.read', 'offline.access'],
-            // The one provider here whose authorisation is refused outright without a code challenge.
-            usesPkce: true,
-            supportsRefresh: true,
-            tokenNote: 'PKCE is mandatory: the authorise call carries a `code_challenge` and the token call '
-                .'must present the matching `code_verifier`, so the verifier has to survive the whole '
-                .'round trip. `offline.access` is what makes a refresh token available at all.',
-            tokenNoteAr: 'استخدام PKCE إلزامي: يحمل رابط الموافقة `code_challenge` ويجب أن يقدّم طلب الرمز '
-                .'قيمة `code_verifier` المطابقة، لذا يجب أن تبقى محفوظة طوال الرحلة. و`offline.access` هو ما يتيح رمز التجديد أصلًا.',
+            // OAuth 1.0a has no scopes. What a token may do is the app's permission level when it was issued.
+            scopes: [],
+            authScheme: AuthScheme::OAuth1a,
+            // An OAuth 1.0a access token does not expire; it lasts until the user or X revokes it.
+            supportsRefresh: false,
+            tokenNote: 'OAuth 1.0a: every Ads API request is signed (HMAC-SHA1) with the API Key Secret and the '
+                .'user\'s Access Token Secret — no Bearer token is ever sent. Tokens do not expire and have no refresh; '
+                .'a revoked token needs the customer to connect again. The Access Token pair stored here belongs to the app '
+                .'owner and is used only by «Test configuration»; each workspace receives its own pair when it connects.',
+            tokenNoteAr: 'OAuth 1.0a: كل طلب إلى Ads API موقَّع (HMAC-SHA1) بسر مفتاح API وسر رمز وصول المستخدم — '
+                .'ولا يُرسل رمز Bearer أبدًا. الرموز لا تنتهي ولا تُجدَّد؛ الرمز الملغى يتطلب من العميل إعادة الربط. '
+                .'زوج رمز الوصول المحفوظ هنا يخص مالك التطبيق ويُستخدم فقط في «اختبار الإعداد»؛ وكل مساحة عمل تحصل على زوجها الخاص عند الربط.',
             webhooks: WebhookSupport::PollingOnly,
             webhookSignatureHeader: null,
             prerequisites: [
-                'An X developer account with Ads API access approved — a separate application from the standard developer account.',
-                'An app with OAuth 2.0 enabled (type: Web App) and the callback URI below registered.',
-                'The authorising user must hold access to the ads account in X Ads Manager.',
+                'X Ads API access approved for the app — a separate application from ordinary developer access. Until X approves it, every Ads API call is refused.',
+                'The app\'s User authentication settings with OAuth 1.0a enabled, and the callback URI below registered exactly.',
+                'After approval, regenerate the Access Token and Secret so they carry the app\'s current permissions.',
+                'The X account that authorises must hold access to the ad account in X Ads Manager.',
             ],
             prerequisitesAr: [
-                'حساب مطوّر في إكس مع اعتماد الوصول إلى Ads API — وهو طلب منفصل عن حساب المطوّر العادي.',
-                'تطبيق مع تفعيل OAuth 2.0 (نوع: تطبيق ويب) وتسجيل رابط العودة أدناه.',
-                'المستخدم الذي يمنح الموافقة يجب أن يملك صلاحية على الحساب الإعلاني في مدير إعلانات إكس.',
+                'اعتماد الوصول إلى X Ads API للتطبيق — وهو طلب منفصل عن وصول المطوّر العادي. وقبل الاعتماد ترفض إكس كل طلب إلى Ads API.',
+                'إعدادات مصادقة المستخدم (User authentication settings) في التطبيق مع تفعيل OAuth 1.0a وتسجيل رابط العودة أدناه حرفيًا.',
+                'بعد الاعتماد، أعد توليد Access Token وسره ليحملا صلاحيات التطبيق الحالية.',
+                'حساب إكس الذي يمنح الموافقة يجب أن يملك صلاحية على الحساب الإعلاني في مدير إعلانات إكس.',
             ],
             docsUrl: 'https://developer.x.com/en/docs/x-ads-api',
             rateLimitNote: 'Fixed windows (commonly 15 minutes) per endpoint; a 429 carries the reset time.',
@@ -380,7 +418,7 @@ final class ProviderCatalogue
                     'شهر مدعوم بصيغة YYYYMM يُرسل في ترويسة `LinkedIn-Version`. الاستدعاء بلا إصدار مُثبّت يُرفض مباشرة'),
             ],
             scopes: ['r_ads', 'r_ads_reporting'],
-            usesPkce: false,
+            authScheme: AuthScheme::OAuth2,
             supportsRefresh: true,
             tokenNote: 'Refresh tokens are available only to apps approved for them; otherwise the access '
                 .'token simply expires (around 60 days) and the advertiser must authorise again.',
@@ -423,7 +461,7 @@ final class ProviderCatalogue
                     'شركاء سلة ← تطبيقك ← Webhooks. كل إشعار يُوقَّع بهذا السر', required: false),
             ],
             scopes: ['offline_access'],
-            usesPkce: false,
+            authScheme: AuthScheme::OAuth2,
             supportsRefresh: true,
             tokenNote: 'The app must be created in OAuth 2.0 mode, not Easy Mode: Easy Mode issues a token '
                 .'per store with no authorisation round trip, which cannot express "this merchant '
@@ -477,7 +515,7 @@ final class ProviderCatalogue
                     'كلمة المرور المقابلة. لا تنشر زد أي آلية توقيع؛ هذا الزوج هو الطريقة الوحيدة التي تُعرّف بها نفسها', required: false),
             ],
             scopes: [],
-            usesPkce: false,
+            authScheme: AuthScheme::OAuth2,
             supportsRefresh: true,
             tokenNote: 'Zid returns TWO values from the token exchange: an `access_token` for the '
                 .'`Authorization: Bearer` header AND an `authorization` manager token for the '
