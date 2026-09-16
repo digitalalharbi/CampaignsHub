@@ -85,13 +85,31 @@ test.describe('the campaigns workspace', () => {
   /**
    * NEEDS-ATTENTION-ONE-DEFINITION-001 — the screen says the number once.
    *
-   * The KPI card, the band chip and the landing strip all print «needs attention» within one
-   * viewport of each other. They used to come from two engines — operational flags for the card and
-   * the list, a metrics weakness for the strip — so a reader could see two different counts under
-   * the same words and had no way to tell which was wrong.
+   * The KPI card, the band chip and the landing strip all print «needs attention». They used to come
+   * from two engines — operational flags for the card and the list, a metrics weakness for the strip
+   * — so a reader could see two different counts under the same words and had no way to tell which
+   * was wrong.
    *
    * Asserted in a real browser against the real API, because that disagreement only ever appeared
    * where both numbers were rendered from the same data at the same moment.
+   *
+   * ## Two defects this test had, and why the shape below is the fix
+   *
+   * It read all three on the OVERVIEW view, and `landing-attention` is not on that view: the strip
+   * lives inside `LandingAnswer`, which `CampaignsPage` renders in the branch for every mode EXCEPT
+   * overview and compare — the product's own unit test has to click into the card list before it can
+   * see it. So the branch that asserted the strip was VISIBLE could never pass from here. It survived
+   * because the count is normally zero and the other branch, `toBeHidden()`, is trivially true of an
+   * element that does not exist. The three are still compared; the strip is now read where it is
+   * rendered.
+   *
+   * And the settle condition was `card === band`, which both read the same `attentionIds` — so they
+   * agreed at the wrong number while the per-campaign metrics were still in flight, the poll passed
+   * on the first look, and the dead branch ran against a transient. That transient was itself a
+   * defect (ATTENTION-REQUEST-STATE-001) and is fixed in the page: no verdict is produced until the
+   * figures are in, and the card reads «—» until then. Waiting for the card to be a NUMBER is
+   * therefore waiting for the page to have judged, which is the fact this test needs and could not
+   * previously express. It is not a longer timeout: a page that never judges still fails here.
    */
   test('the attention count is the same number wherever it appears', async ({ page, request }) => {
     test.setTimeout(180_000)
@@ -99,43 +117,71 @@ test.describe('the campaigns workspace', () => {
     await openCampaigns(page, request)
 
     /*
-     * Sampled in ONE evaluate, and polled until the page settles.
+     * Sampled in ONE evaluate, so two readings are never taken from two paints.
      *
-     * The first version read the card and then the band in two separate round trips, and failed on
-     * webkit under CI load: the page re-rendered between them — a metrics query resolving — so it
-     * compared a number from one paint against a number from the next. That is a flaw in the
-     * measurement, not a disagreement in the product.
-     *
-     * The claim being tested is «once settled, the three agree», so the poll is the honest shape of
-     * it: if they never agree it still fails, and it cannot fail for having looked twice.
+     * The first version read the card and then the band in two separate round trips and failed on
+     * webkit under CI load, comparing a number from one render against a number from the next. That
+     * is a flaw in the measurement, not a disagreement in the product.
      */
     const readAll = () => page.evaluate(() => {
-      const digits = (id: string): string | null => {
+      const text = (id: string): string | null => {
         const el = document.querySelector(`[data-testid="${id}"]`)
 
-        return el === null ? null : (el.textContent ?? '').match(/\d+/)?.[0] ?? null
+        return el === null ? null : (el.textContent ?? '')
       }
+      const digits = (id: string): string | null => text(id)?.match(/\d+/)?.[0] ?? null
 
-      return { card: digits('campaigns-attention'), band: digits('campaigns-band-attention'), strip: digits('landing-attention') }
+      return {
+        card: digits('campaigns-attention'),
+        cardText: text('campaigns-attention'),
+        band: digits('campaigns-band-attention'),
+        strip: digits('landing-attention'),
+        stripPresent: document.querySelector('[data-testid="landing-attention"]') !== null,
+      }
     })
 
-    await expect.poll(async () => {
-      const { card, band } = await readAll()
+    /*
+     * Wait for the page to have JUDGED, not merely to have rendered.
+     *
+     * `campaigns-attention` reads «—» while the per-campaign metrics are pending or failed, because a
+     * verdict cannot be made out of a request that has not answered. A digit in that card is the page
+     * stating that it now has an answer — the precondition every assertion below depends on.
+     */
+    await expect.poll(
+      async () => (await readAll()).card !== null,
+      { message: 'the workspace never produced an attention verdict — the card stayed «—»' },
+    ).toBe(true)
 
-      return card !== null && card === band
-    }, { message: 'the KPI card and the band chip never agreed about the attention count' }).toBe(true)
+    const onOverview = await readAll()
+
+    /* The card counts the project's campaigns; the band counts the same rows, one classification down. */
+    expect(onOverview.band, 'the KPI card and the band chip disagree about the attention count').toBe(onOverview.card)
 
     /*
-     * The strip renders its chip only when the count is above zero, which is itself the contract —
-     * so «nothing needs attention» is proven by the chip's absence rather than by a zero.
+     * The strip is on the LIST, so the comparison is made there.
+     *
+     * `view-table` rather than `view-cards`: both render the strip, and the table does not have to
+     * paint a card per campaign to do it.
      */
-    const { card, strip } = await readAll()
+    await page.getByTestId('view-table').click()
+    await expect(page.getByTestId('campaigns-landing-answer').or(page.getByTestId('landing-unexamined'))).toBeVisible({ timeout: 30000 })
 
-    if (card === '0') {
-      await expect(page.getByTestId('landing-attention')).toBeHidden()
-    } else {
-      await expect(page.getByTestId('landing-attention')).toBeVisible()
-      expect(strip).toBe(card)
-    }
+    /*
+     * Polled, because switching view remounts the branch and its queries settle again — and the claim
+     * is «once settled, the three agree», which a poll states honestly. A page that never agrees still
+     * fails here; it simply cannot fail for having looked during a repaint.
+     *
+     * The strip renders its chip only above zero, which is itself the contract — so «nothing needs
+     * attention» is proven by the chip's ABSENCE rather than by a zero, and the card is re-read on the
+     * list view so the two readings describe one paint.
+     */
+    await expect.poll(async () => {
+      const { card, strip, stripPresent } = await readAll()
+
+      if (card === null) return 'the card stopped stating a verdict'
+      if (card === '0') return stripPresent ? 'the strip named an attention count where the card said none' : 'agreed'
+
+      return strip === card ? 'agreed' : `card ${card} vs strip ${stripPresent ? strip : '(absent)'}`
+    }, { message: 'the KPI card and the landing strip never agreed about the attention count' }).toBe('agreed')
   })
 })
