@@ -8,7 +8,6 @@ use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativeRows;
-use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Console\Command;
@@ -70,6 +69,12 @@ final class ContentDefectCensusCommand extends Command
         {--fetch : Also LOAD each promoted creative\'s preview asset on the server and report what came back — by id, never the url}';
 
     protected $description = 'Read-only: list the creatives whose preview, spend or objective metrics are missing, and the rung each breaks at.';
+
+    /** Retained bodies decoded per query — a Snapchat insights body can be large, and the command runs at 128MB. */
+    private const RAW_CHUNK = 5;
+
+    /** A hard ceiling on bodies read in one run, whatever the stored rows point at. */
+    private const RAW_MAX_BODIES = 5000;
 
     /** States that draw nothing by design — truthful, but still a creative with no picture. */
     private const ABSENCE_STATES = ['withheld', 'expired', 'never_fetched', 'shape_not_fetched', 'unavailable'];
@@ -270,10 +275,6 @@ final class ContentDefectCensusCommand extends Command
             $findings['E'][$item['what'].'  '.$verdict][] = $item['tag'];
         }
 
-        $evidence = (bool) $this->option('raw') && $zeroOriginal !== []
-            ? $this->rawSpendEvidence($zeroOriginal, $from, $to)
-            : [];
-
         $titles = [
             'A' => 'A — NO PREVIEW / MEDIA (envelope draws nothing)',
             'B' => 'B — SPEND SHOWN, NO PERFORMANCE INDICATORS BESIDE IT',
@@ -328,7 +329,19 @@ final class ContentDefectCensusCommand extends Command
             $this->line('');
             $this->line('C EVIDENCE — how the provider sent spend for the zero-original creatives (retained bodies, window only)');
 
-            if ($evidence === []) {
+            /*
+             * Read AFTER every section is printed: on Production the previous lookup timed out and took
+             * the E list down with it. A failed read is said in one line — never the SQL, which carries
+             * ids into a public log.
+             */
+            try {
+                $evidence = $zeroOriginal === [] ? [] : $this->rawSpendEvidence($zeroOriginal, $from, $to);
+            } catch (Throwable $e) {
+                $evidence = [];
+                $this->line('    the lookup failed ('.class_basename($e).' '.$e->getCode().') — no evidence read');
+            }
+
+            if ($evidence === [] && $zeroOriginal === []) {
                 $this->line('    none to read');
             }
 
@@ -339,14 +352,15 @@ final class ContentDefectCensusCommand extends Command
     }
 
     /**
-     * What the provider's OWN body said about spend for these creatives' ads — the question a stored
+     * What the provider's OWN body said about spend for the stored zero rows — the question a stored
      * zero cannot answer by itself.
      *
      * `spend_original = 0` is either the platform reporting zero or ingestion turning a JSON null into
-     * 0 (`(float) null`). The retained insights bodies hold the difference, so they are walked for any
-     * object naming one of these ads with a `timeseries`, and each point in the window is counted by
-     * how `stats.spend` arrived and whether it delivered impressions. The latest body wins for an
-     * ad and day. Counts only — never an amount.
+     * 0 (`(float) null`). Each stored ad-grain row names the sync run that last wrote it, and that
+     * run's bodies are retained under the same id — so the reader follows the row to the exact body
+     * that produced it, by two indexed columns, and reads nothing else. (Found on Production: a text
+     * match over every retained insights body in the window hit the 60s statement timeout.) Counts
+     * only — never an amount.
      *
      * @param  list<string>  $creativeIds
      * @return array<string, string>
@@ -355,7 +369,7 @@ final class ContentDefectCensusCommand extends Command
     {
         $ads = DB::table('external_ads')
             ->whereIn('creative_id', $creativeIds)
-            ->get(['creative_id', 'external_id', 'provider']);
+            ->get(['creative_id', 'external_id']);
 
         /** @var array<string, string> $creativeByAd */
         $creativeByAd = [];
@@ -367,76 +381,111 @@ final class ContentDefectCensusCommand extends Command
             return array_fill_keys($creativeIds, 'no ads recorded for this creative');
         }
 
-        /** @var array<string, array<string, array{spend: string, delivered: bool}>> $points ad => date => state */
-        $points = [];
+        /** @var array<string, array<string, list<string>>> $wanted run => ad => dates */
+        $wanted = [];
+        /** @var array<string, array{rows: int, no_run: int}> $stored */
+        $stored = [];
 
-        /*
-         * Bounded before any text match, on a live database: the provider, the accounts bound to this
-         * project, the insights resource and the window narrow the rows first; a statement timeout and
-         * a hard limit cap the rest. A scan of the whole raw-payload table is the wrong load to put on
-         * Production for a diagnostic.
-         */
-        DB::statement("SET statement_timeout = '60s'");
-
-        $accounts = DB::table('project_integration_bindings')
+        foreach (DB::table('entity_daily_metrics')
             ->where('project_id', (string) app(ProjectContext::class)->projectId())
-            ->pluck('external_account_id')
-            ->filter()
-            ->map(static fn (mixed $v): string => (string) $v)
-            ->all();
+            ->where('entity_type', 'ad')
+            ->whereIn('external_entity_id', array_keys($creativeByAd))
+            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->whereNull('spend')
+            ->whereNotNull('spend_original')
+            ->get(['external_entity_id', 'metric_date', 'sync_run_id']) as $row) {
+            $adId = (string) $row->external_entity_id;
+            $creativeId = $creativeByAd[$adId];
+            $stored[$creativeId] ??= ['rows' => 0, 'no_run' => 0];
+            $stored[$creativeId]['rows']++;
 
-        IntegrationRawPayload::withoutGlobalScopes()
-            ->whereIn('provider', $ads->pluck('provider')->unique()->values()->all())
-            ->whereIn('external_account_id', $accounts === [] ? ['00000000-0000-0000-0000-000000000000'] : $accounts)
-            ->where('resource', 'insights')
-            ->where('window_end', '>=', $from->toDateString())
-            ->where('window_start', '<=', $to->toDateString())
-            /*
-             * Selected by the ADS it names, not by recency — found on Production. The walk read the
-             * newest 2,000 bodies, which with a per-campaign ad-stats call every thirty minutes is
-             * about a day, and answered «no retained body carries these ads» for all twelve creatives
-             * whose zero rows were older. A text match on the ads' own ids reaches every body that
-             * can say anything about them, and nothing else is decoded.
-             */
-            ->where(function ($query) use ($creativeByAd): void {
-                foreach (array_keys($creativeByAd) as $adId) {
-                    $query->orWhereRaw('payload::text LIKE ?', ['%'.addcslashes($adId, '%_\\').'%']);
+            if ($row->sync_run_id === null) {
+                $stored[$creativeId]['no_run']++;
+
+                continue;
+            }
+
+            $wanted[(string) $row->sync_run_id][$adId][] = substr((string) $row->metric_date, 0, 10);
+        }
+
+        /** @var array<string, array{absent: int, null: int, zero: int, positive: int, delivered: int, missing: int, unread: int}> $tally */
+        $tally = [];
+        $blank = ['absent' => 0, 'null' => 0, 'zero' => 0, 'positive' => 0, 'delivered' => 0, 'missing' => 0, 'unread' => 0];
+        $bodiesRead = 0;
+
+        DB::statement("SET statement_timeout = '20s'");
+
+        try {
+            foreach ($wanted as $runId => $datesByAd) {
+                $runAds = array_intersect_key($creativeByAd, $datesByAd);
+                /** @var array<string, array<string, array{spend: string, delivered: bool}>> $points */
+                $points = [];
+                $readable = true;
+
+                try {
+                    $lastId = '00000000-0000-0000-0000-000000000000';
+                    do {
+                        $chunk = DB::table('integration_raw_payloads')
+                            ->where('sync_run_id', $runId)
+                            ->where('resource', 'insights')
+                            ->where('id', '>', $lastId)
+                            ->orderBy('id')
+                            ->limit(self::RAW_CHUNK)
+                            ->get(['id', 'payload']);
+
+                        foreach ($chunk as $body) {
+                            $lastId = (string) $body->id;
+                            $bodiesRead++;
+                            $decoded = json_decode((string) $body->payload, true);
+
+                            if (is_array($decoded)) {
+                                $this->walkForAds($decoded, $runAds, $points, $from, $to);
+                            }
+                        }
+                    } while ($chunk->count() === self::RAW_CHUNK && $bodiesRead < self::RAW_MAX_BODIES);
+                } catch (Throwable) {
+                    $readable = false;
                 }
-            })
-            ->orderByDesc('fetched_at')
-            ->limit(3000)
-            ->cursor()
-            ->each(function (IntegrationRawPayload $raw) use (&$points, $creativeByAd, $from, $to): void {
-                $this->walkForAds((array) $raw->payload, $creativeByAd, $points, $from, $to);
-            });
 
-        DB::statement('RESET statement_timeout');
+                foreach ($datesByAd as $adId => $dates) {
+                    $t = &$tally[$creativeByAd[$adId]];
+                    $t ??= $blank;
+
+                    foreach ($dates as $date) {
+                        $point = $points[$adId][$date] ?? null;
+
+                        if (! $readable) {
+                            $t['unread']++;
+                        } elseif ($point === null) {
+                            $t['missing']++;
+                        } else {
+                            $t[$point['spend']]++;
+                            $t['delivered'] += $point['delivered'] ? 1 : 0;
+                        }
+                    }
+
+                    unset($t);
+                }
+            }
+        } finally {
+            DB::statement('RESET statement_timeout');
+        }
 
         $out = [];
         foreach ($creativeIds as $creativeId) {
-            $tally = ['absent' => 0, 'null' => 0, 'zero' => 0, 'positive' => 0];
-            $delivered = 0;
-            $adsSeen = 0;
+            $s = $stored[$creativeId] ?? null;
 
-            foreach ($creativeByAd as $adId => $owner) {
-                if ($owner !== $creativeId || ! isset($points[$adId])) {
-                    continue;
-                }
+            if ($s === null) {
+                $out[$creativeId] = 'no stored ad-grain row withholds spend in the window';
 
-                $adsSeen++;
-                foreach ($points[$adId] as $state) {
-                    $tally[$state['spend']]++;
-                    $delivered += $state['delivered'] ? 1 : 0;
-                }
+                continue;
             }
 
-            $total = array_sum($tally);
-            $out[$creativeId] = $total === 0
-                ? 'no retained provider body carries these ads in the window'
-                : sprintf(
-                    'ads in bodies %d, day-points %d — spend: key absent %d, JSON null %d, zero %d, positive %d; delivered impressions on %d',
-                    $adsSeen, $total, $tally['absent'], $tally['null'], $tally['zero'], $tally['positive'], $delivered,
-                );
+            $t = $tally[$creativeId] ?? $blank;
+            $out[$creativeId] = sprintf(
+                'stored withheld rows %d — in the body of the run that wrote them: spend key absent %d, JSON null %d, zero %d, positive %d; delivered impressions on %d; not in that run\'s bodies %d; run unrecorded %d; bodies unreadable %d',
+                $s['rows'], $t['absent'], $t['null'], $t['zero'], $t['positive'], $t['delivered'], $t['missing'], $s['no_run'], $t['unread'],
+            );
         }
 
         return $out;
