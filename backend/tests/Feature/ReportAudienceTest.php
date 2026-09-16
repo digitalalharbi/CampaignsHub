@@ -77,6 +77,53 @@ final class ReportAudienceTest extends TestCase
             ->assertStatus(201);
     }
 
+    /**
+     * A LIVE link is client-facing by construction, and that is a decision rather than an oversight.
+     *
+     * Owner defect row 96 says «Client and Internal do not differ where configured». For a generated
+     * snapshot they differ and the cases around this one prove it. For a LIVE link there is nothing
+     * to configure: `LiveReportBuilderController` pins the audience to `client`, and the product was
+     * read before that was called a bug.
+     *
+     * Three things already say a live link is an outward document. `ReportShareController` refuses
+     * 422 to share an INTERNAL report at all — asserted directly above. `LiveReportService` applies
+     * `ClientEntityBoundary` unconditionally, so campaign names and our primary keys are stripped
+     * from every live payload whatever audience it claims. And the Owner removed campaign identity
+     * from client-facing reports and asked that it never come back.
+     *
+     * So an «internal live link» is a contradiction the product forbids one layer up. Building one
+     * would mean either bypassing the entity boundary — restoring exactly what the Owner removed —
+     * or shipping an «internal» form that renders identically to the client one, which is the
+     * placebo control this closure exists to remove. The axis stays absent, deliberately, and this
+     * pins it so that adding one is a decision somebody takes on purpose rather than by filling in
+     * a form field that looks unfinished.
+     */
+    public function test_a_live_link_is_client_facing_and_has_no_internal_form(): void
+    {
+        Sanctum::actingAs($this->owner);
+
+        $response = $this->postJson("/api/v1/projects/{$this->project->id}/reports/live", [
+            'name' => 'Live', 'from' => now()->subDays(7)->toDateString(), 'to' => now()->toDateString(),
+            'audience' => 'internal',
+        ]);
+
+        $report = Report::withoutGlobalScopes()->where('name', 'Live')->first();
+
+        if ($response->status() === 201) {
+            $this->assertSame(
+                'client',
+                $report?->audience,
+                'a live link was created for an internal audience — its payload is stripped by '.
+                'ClientEntityBoundary regardless, so it would be an internal label over a client document',
+            );
+        }
+
+        // And the rule this is consistent with: an internal report cannot be shared at all.
+        $internal = $this->report('internal');
+        $this->postJson("/api/v1/projects/{$this->project->id}/reports/{$internal->id}/shares", [])
+            ->assertStatus(422);
+    }
+
     public function test_authenticated_client_export_is_filtered_but_internal_is_full(): void
     {
         $exporter = app(ReportExporter::class);

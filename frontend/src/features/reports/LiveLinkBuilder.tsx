@@ -52,6 +52,22 @@ const SECTION_CHOICES = [
   { key: 'previous_comparison', ar: 'المقارنة بالفترة السابقة', en: 'Comparison with the previous period' },
 ] as const
 
+/**
+ * The sections an EXECUTIVE SUMMARY does not contain — the mirror of `ReportComposition`.
+ *
+ * Owner defect row 96 made the funnel, the store reconciliation and the per-platform creative
+ * rankings the detailed product's, from the Owner's own handoff §10 split. A summary therefore
+ * cannot honour those toggles, and the Owner's rule about settings is explicit: a control that
+ * changes nothing must be fixed, removed or disabled. Leaving them tickable would be the third
+ * thing this closure is meant to remove — a placebo — and it would be a particularly bad one,
+ * because the operator would be ticking a section into a client's document that never arrives.
+ *
+ * Disabled with the reason stated rather than hidden: an operator who cannot find «Funnel & store»
+ * on the summary form would reasonably conclude the control was lost, where a disabled row with a
+ * sentence tells them what to change to get it.
+ */
+const SUMMARY_WITHHOLDS: readonly string[] = ['funnel_store']
+
 export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const ar = useUi((s) => s.locale) === 'ar'
 
@@ -367,18 +383,36 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
           <div className="rounded-xl border border-border p-3">
             <p className="mb-2 text-xs font-bold text-text-muted">{ar ? 'أقسام التقرير' : 'Report sections'}</p>
             <div className="grid gap-1.5 sm:grid-cols-2">
-              {SECTION_CHOICES.map((choice) => (
-                <label key={choice.key} className="flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-surface-hover">
-                  <span>{ar ? choice.ar : choice.en}</span>
-                  <input
-                    type="checkbox"
-                    data-testid={`live-link-section-${choice.key}`}
-                    checked={sections[choice.key] ?? true}
-                    onChange={(e) => setSections((prev) => ({ ...prev, [choice.key]: e.target.checked }))}
-                    className="h-4 w-4 accent-brand-600"
-                  />
-                </label>
-              ))}
+              {SECTION_CHOICES.map((choice) => {
+                /* A summary does not contain this section, so the toggle cannot honour it. */
+                const withheld = form === 'executive_summary' && SUMMARY_WITHHOLDS.includes(choice.key)
+
+                return (
+                  <label
+                    key={choice.key}
+                    data-testid={`live-link-section-row-${choice.key}`}
+                    data-withheld={withheld ? 'by-form' : undefined}
+                    className={`flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm ${withheld ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-surface-hover'}`}
+                  >
+                    <span>
+                      {ar ? choice.ar : choice.en}
+                      {withheld && (
+                        <span className="block text-[11px] text-text-muted">
+                          {ar ? 'في التقرير التفصيلي فقط' : 'In the detailed report only'}
+                        </span>
+                      )}
+                    </span>
+                    <input
+                      type="checkbox"
+                      data-testid={`live-link-section-${choice.key}`}
+                      disabled={withheld}
+                      checked={withheld ? false : (sections[choice.key] ?? true)}
+                      onChange={(e) => setSections((prev) => ({ ...prev, [choice.key]: e.target.checked }))}
+                      className="h-4 w-4 accent-brand-600"
+                    />
+                  </label>
+                )
+              })}
             </div>
           </div>
 
