@@ -33,6 +33,15 @@ ENTRIES = [
     ("0050", "FEFB"),  # LAM-ALEF ligature -> 0644 0627 (two chars)
     ("0060", "0041"),  # ASCII 'A' (must stay)
     ("0061", "0030"),  # digit '0' (must stay)
+    # An NFKC-FOLDABLE non-Arabic character, and the reason this entry exists.
+    #
+    # 'A' and '0' are fixed points of NFKC, so a normaliser that folded EVERYTHING
+    # unconditionally left them alone and this file's «ASCII mappings untouched» assertion passed
+    # while the invariant was broken. It was a fixture that could not fail. U+2026 HORIZONTAL
+    # ELLIPSIS decomposes to three full stops under NFKC, and it is what Chromium writes for
+    # `text-overflow: ellipsis` — so this is the character production actually produced, not a
+    # contrived one.
+    ("0062", "2026"),  # '…' — NOT a presentation form, must survive the sweep unchanged
 ]
 
 
@@ -84,7 +93,12 @@ def test_folds_and_passes():
         pdf.close()
         assert b"0627" in cmap and b"0644" in cmap, "expected base letters in CMap"
         assert b"FE8E" not in cmap and b"FEFB" not in cmap, "presentation forms should be gone"
-    print("  ok: folds presentation forms, ASCII/digits preserved, status passed")
+        # The ellipsis is NOT a presentation form, so the sweep must leave it exactly as it was.
+        # Asserted on the CMap rather than through `ascii_mappings_preserved`, because U+2026 is
+        # not ASCII and that counter cannot see it — which is precisely how an unconditional NFKC
+        # fold shipped under an invariant claiming the opposite.
+        assert b"2026" in cmap, "U+2026 was folded; only Arabic presentation forms may be touched"
+    print("  ok: folds presentation forms, ASCII/digits/ellipsis preserved, status passed")
 
 
 def test_idempotent_and_deterministic():

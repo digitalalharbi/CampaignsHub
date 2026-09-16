@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { screen } from '@testing-library/react'
-import { ReportAdsSection, type ReportAd } from './ReportAdsSection'
+import { ReportAdsSection, type AdGroup, type ReportAd } from './ReportAdsSection'
 import { renderWithProviders } from '@/test/utils'
 
 /**
@@ -216,4 +216,67 @@ describe('the reading of the ads grid', () => {
     expect(screen.getByTestId('report-ad-card')).toHaveAttribute('data-openable', 'true')
   })
 
+})
+
+/**
+ * Owner row 97 — a deck SLIDE cannot grow, and what it could not hold must be stated.
+ *
+ * The continuous report scrolls; a slide is a fixed A4 landscape page, and the layout gate refuses
+ * to ship one whose content had to be shrunk below 0.85 to fit. On an estate with five objective
+ * groups the ads slide measured 0.355 with 108 clipped elements — unreadable, and it BLOCKED the
+ * export of the client PDF entirely, on both forms identically.
+ *
+ * The bound is on GROUPS rather than on cards, and that was settled by measurement rather than by
+ * argument: two groups of three and two groups of two both measured 0.80, because three cards and
+ * two occupy the same single row of a three-column grid. Height comes from the group blocks.
+ */
+describe('the ads slide of a paged deck', () => {
+  const group = (family: string): AdGroup => ({
+    family,
+    label_ar: family,
+    label_en: family,
+    metric: 'roas',
+    metric_label_ar: 'العائد',
+    metric_label_en: 'ROAS',
+    ads: [ad(), ad()],
+    ranked: true,
+    candidates: 2,
+    shown: 2,
+  })
+
+  const five = ['sales', 'leads', 'awareness', 'traffic', 'app'].map(group)
+
+  it('renders every objective group in the continuous report', () => {
+    renderWithProviders(<ReportAdsSection ads={[ad()]} groups={five} locale="en" />, { locale: 'en' })
+
+    for (const g of five) expect(screen.getByTestId(`report-ads-group-${g.family}`)).toBeInTheDocument()
+    expect(screen.queryByTestId('report-ads-groups-withheld')).not.toBeInTheDocument()
+  })
+
+  it('bounds the groups on a slide, because the page cannot grow to hold them', () => {
+    renderWithProviders(<ReportAdsSection ads={[ad()]} groups={five} locale="en" paged />, { locale: 'en' })
+
+    expect(screen.getByTestId('report-ads-group-sales')).toBeInTheDocument()
+    expect(screen.queryByTestId('report-ads-group-app')).not.toBeInTheDocument()
+  })
+
+  /*
+   * The count is the whole point of the bound. «The objectives this page had room for» read as
+   * «the objectives that performed» is a claim about the client's advertising made by our page
+   * size — the same defect REPORT-CREATIVE-TRUTH-001 was opened for, one element along.
+   */
+  it('states how many objectives the slide could not hold, and where they are', () => {
+    renderWithProviders(<ReportAdsSection ads={[ad()]} groups={five} locale="en" paged />, { locale: 'en' })
+
+    const note = screen.getByTestId('report-ads-groups-withheld')
+    expect(note).toHaveTextContent('4')
+    expect(note).toHaveTextContent(/interactive report/i)
+  })
+
+  /** A deck that fits says nothing, because a notice printed every time is one nobody reads. */
+  it('says nothing when every group fitted', () => {
+    renderWithProviders(<ReportAdsSection ads={[ad()]} groups={[group('sales')]} locale="en" paged />, { locale: 'en' })
+
+    expect(screen.queryByTestId('report-ads-groups-withheld')).not.toBeInTheDocument()
+  })
 })
