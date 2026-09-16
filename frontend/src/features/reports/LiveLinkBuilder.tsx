@@ -355,8 +355,13 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             <span className="text-xs font-bold text-text-muted">{ar ? 'شكل التقرير' : 'What the link shows'}</span>
             <div className="flex flex-wrap gap-1.5">
               {([
-                ['executive_summary', ar ? 'ملخّص تنفيذي' : 'Executive summary', ar ? 'اللوحة وحدها' : 'the dashboard alone'],
-                ['detailed', ar ? 'تفصيلي' : 'Detailed', ar ? 'اللوحة ومعها كل حملة ومنصة' : 'the dashboard, and every campaign and platform'],
+                /*
+                 * What the CLIENT will be able to open (`live/modes.ts`). The detailed note used to say
+                 * «the dashboard, and every campaign and platform» — a promise of the campaign roster the
+                 * client report rule removed, made to the operator deciding what to send.
+                 */
+                ['executive_summary', ar ? 'ملخّص تنفيذي' : 'Executive summary', ar ? 'ملخص قصير: المؤشرات الرئيسية وأهم الرسوم' : 'A short summary: headline KPIs and the key charts'],
+                ['detailed', ar ? 'تفصيلي' : 'Detailed', ar ? 'لوحة كاملة: ملخص، أداء، كل منصة، والمحتوى' : 'The full dashboard: summary, performance, each platform and content'],
               ] as const).map(([key, label, note]) => (
                 <button
                   key={key}
@@ -370,6 +375,11 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                 </button>
               ))}
             </div>
+            <p data-testid="live-link-form-note" className="text-xs text-text-secondary">
+              {form === 'detailed'
+                ? (ar ? 'لوحة كاملة: ملخص، أداء، كل منصة، والمحتوى' : 'The full dashboard: summary, performance, each platform and content')
+                : (ar ? 'ملخص قصير: المؤشرات الرئيسية وأهم الرسوم' : 'A short summary: headline KPIs and the key charts')}
+            </p>
           </div>
 
           {/*
