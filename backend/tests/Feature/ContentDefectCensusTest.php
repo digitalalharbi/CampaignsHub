@@ -384,6 +384,53 @@ final class ContentDefectCensusTest extends TestCase
         $this->assertLessThan(strpos($output, 'C EVIDENCE'), strpos($output, 'D — '), 'the sections must be printed before the raw read, so a failed read cannot take them down');
     }
 
+    /**
+     * The Owner saw data from accounts the project was not bound to in its results. The census counts
+     * such rows per table so every section above can say whether it may be inflated — never an id.
+     */
+    public function test_it_counts_rows_whose_account_is_outside_the_projects_bound_set(): void
+    {
+        DB::table('project_integration_bindings')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
+            'external_account_id' => $this->account->getKey(), 'provider' => 'snapchat', 'purpose' => 'ads',
+            'is_active' => true, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $other = ExternalAccount::withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->getKey(),
+            'provider_connection_id' => $this->account->provider_connection_id, 'provider' => 'snapchat',
+            'account_type' => 'ad_account', 'external_id' => 'act-2', 'name' => 'Other', 'status' => 'active',
+        ]);
+        $otherCampaign = ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
+            'external_account_id' => $other->getKey(), 'provider' => 'snapchat', 'external_id' => 'cmp-2', 'name' => 'C2', 'status' => 'active',
+        ]);
+
+        $creative = $this->creative(['provider' => 'snapchat']);
+        $creative->forceFill(['external_campaign_id' => $otherCampaign->getKey()])->save();
+        $this->creativeRow($creative, ['spend' => 5.0, 'impressions' => 100, 'clicks' => 2]);
+
+        $this->adRow($this->creative(['provider' => 'snapchat']), ['spend' => 1.0, 'impressions' => 10]); // no account on the row
+        foreach ([$this->account, $other] as $account) {
+            DB::table('entity_daily_metrics')->insert([
+                'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
+                'provider' => 'snapchat', 'entity_type' => 'ad', 'entity_id' => (string) Str::uuid(),
+                'external_entity_id' => 'ad-x-'.$account->external_id, 'external_account_id' => $account->getKey(),
+                'metric_date' => Carbon::today()->subDay()->toDateString(), 'attribution_window' => 'default',
+                'spend' => 1.0, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        $output = $this->census();
+
+        $this->assertStringContainsString('accounts  : bound active 1, bound inactive 0', $output);
+        $this->assertMatchesRegularExpression('/entity_daily_metrics\s+snapchat\s+rows 3 — account outside the bound set 1, no account 1/', $output);
+        $this->assertMatchesRegularExpression('/external_campaigns\s+snapchat\s+rows 2 — account outside the bound set 1, no account 0/', $output);
+        $this->assertMatchesRegularExpression('/creative_daily_metrics\s+snapchat\s+rows 1 — account outside the bound set 1, no account 0/', $output);
+        $this->assertStringNotContainsString((string) $other->getKey(), $output);
+        $this->assertStringNotContainsString('act-2', $output);
+    }
+
     // ── fixtures ─────────────────────────────────────────────────────────────────────────────────
 
     private function census(): string
