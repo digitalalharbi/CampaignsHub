@@ -77,6 +77,53 @@ final class ReportAudienceTest extends TestCase
             ->assertStatus(201);
     }
 
+    /**
+     * A LIVE link is client-facing by construction, and that is a decision rather than an oversight.
+     *
+     * Owner defect row 96 says «Client and Internal do not differ where configured». For a generated
+     * snapshot they differ and the cases around this one prove it. For a LIVE link there is nothing
+     * to configure: `LiveReportBuilderController` pins the audience to `client`, and the product was
+     * read before that was called a bug.
+     *
+     * Three things already say a live link is an outward document. `ReportShareController` refuses
+     * 422 to share an INTERNAL report at all — asserted directly above. `LiveReportService` applies
+     * `ClientEntityBoundary` unconditionally, so campaign names and our primary keys are stripped
+     * from every live payload whatever audience it claims. And the Owner removed campaign identity
+     * from client-facing reports and asked that it never come back.
+     *
+     * So an «internal live link» is a contradiction the product forbids one layer up. Building one
+     * would mean either bypassing the entity boundary — restoring exactly what the Owner removed —
+     * or shipping an «internal» form that renders identically to the client one, which is the
+     * placebo control this closure exists to remove. The axis stays absent, deliberately, and this
+     * pins it so that adding one is a decision somebody takes on purpose rather than by filling in
+     * a form field that looks unfinished.
+     */
+    public function test_a_live_link_is_client_facing_and_has_no_internal_form(): void
+    {
+        Sanctum::actingAs($this->owner);
+
+        $response = $this->postJson("/api/v1/projects/{$this->project->id}/reports/live", [
+            'name' => 'Live', 'from' => now()->subDays(7)->toDateString(), 'to' => now()->toDateString(),
+            'audience' => 'internal',
+        ]);
+
+        $report = Report::withoutGlobalScopes()->where('name', 'Live')->first();
+
+        if ($response->status() === 201) {
+            $this->assertSame(
+                'client',
+                $report?->audience,
+                'a live link was created for an internal audience — its payload is stripped by '.
+                'ClientEntityBoundary regardless, so it would be an internal label over a client document',
+            );
+        }
+
+        // And the rule this is consistent with: an internal report cannot be shared at all.
+        $internal = $this->report('internal');
+        $this->postJson("/api/v1/projects/{$this->project->id}/reports/{$internal->id}/shares", [])
+            ->assertStatus(422);
+    }
+
     public function test_authenticated_client_export_is_filtered_but_internal_is_full(): void
     {
         $exporter = app(ReportExporter::class);
@@ -88,6 +135,82 @@ final class ReportAudienceTest extends TestCase
         // Internal CSV: full snapshot, internal campaign name retained for the team.
         $internalCsv = $exporter->render($this->report('internal'), 'csv');
         $this->assertStringContainsStringIgnoringCase('burner', $internalCsv);
+    }
+
+    /**
+     * The FORM reaches the exported file, not just the slide list — Owner defect row 96.
+     *
+     * A report's composition is decided when it is generated: `ReportTemplateEngine::defaultConfig`
+     * omits the per-platform, funnel, campaign and data-quality slides for a summary. The exporter
+     * dropped a section's data only when its slide was present and explicitly `visible => false`,
+     * and a summary does not mark those slides invisible — it simply does not have them. So nothing
+     * was dropped and both forms exported the same document.
+     *
+     * Measured before the fix on a generated report with real figures (38 KPIs, 4 platforms, 6 funnel
+     * stages): the executive-summary CSV and the detailed CSV were byte-identical apart from a
+     * one-second difference in their own «generated at» stamp — 3411 bytes and 61 lines each. The
+     * operator's choice reached the slide list and stopped there, so the file a client receives was
+     * the same document under two names.
+     *
+     * Asserted on a section that only the detailed form carries, rather than on a byte count: a size
+     * comparison would pass for any change that made one file longer, including a worse one.
+     */
+    public function test_a_summary_and_a_detailed_report_do_not_export_the_same_file(): void
+    {
+        $exporter = app(ReportExporter::class);
+
+        $detailed = $this->report('internal');
+        $detailed->forceFill(['form' => 'detailed', 'config' => ['slides' => [
+            ['type' => 'cover', 'visible' => true],
+            ['type' => 'campaigns', 'visible' => true],
+        ]]])->saveQuietly();
+
+        $summary = $this->report('internal');
+        $summary->forceFill(['form' => 'executive_summary', 'config' => ['slides' => [
+            // A summary OMITS the campaigns slide — it does not mark it invisible.
+            ['type' => 'cover', 'visible' => true],
+        ]]])->saveQuietly();
+
+        $this->assertStringContainsString(
+            'Campaigns',
+            $exporter->render($detailed, 'csv'),
+            'the detailed export lost a section its own composition contains',
+        );
+
+        $this->assertStringNotContainsString(
+            'Campaigns',
+            $exporter->render($summary, 'csv'),
+            'the summary exported a section its own composition does not contain — '.
+            'the operator chose a summary and the client received the detailed document',
+        );
+    }
+
+    /**
+     * And a client's file carries nothing about our plumbing.
+     *
+     * The manifest appended to every export wrote «Data source: daily_metrics» — the name of one of
+     * our database tables — into the file a client downloads and keeps. Handoff §13: do not expose
+     * implementation internals. It stays for an INTERNAL export, where an operator reconciling a
+     * figure needs to know which table and which window produced it.
+     */
+    public function test_a_client_export_carries_no_database_table_name(): void
+    {
+        $exporter = app(ReportExporter::class);
+
+        /*
+         * Stamped explicitly so the AUDIENCE is the only thing that differs between the two files.
+         *
+         * `reports.data_source` is `NOT NULL DEFAULT 'daily_metrics'`, and a model just created in
+         * memory has not read that default back — so without this both exports would omit the row
+         * and the case would pass for having nothing to leak rather than for withholding it.
+         */
+        $client = $this->report('client');
+        $client->forceFill(['data_source' => 'daily_metrics'])->saveQuietly();
+        $internal = $this->report('internal');
+        $internal->forceFill(['data_source' => 'daily_metrics'])->saveQuietly();
+
+        $this->assertStringNotContainsString('daily_metrics', $exporter->render($client, 'csv'));
+        $this->assertStringContainsString('daily_metrics', $exporter->render($internal, 'csv'));
     }
 
     public function test_xlsx_sheets_differ_by_audience(): void

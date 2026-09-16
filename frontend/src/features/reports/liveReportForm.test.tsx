@@ -85,8 +85,23 @@ const PAYLOAD = {
   platforms: PLATFORMS,
   campaigns: [],
   objective_performance: OBJECTIVE_PERFORMANCE,
-  funnel: [],
-  store_funnel: null,
+  /*
+   * The detailed-only blocks are PRESENT in this fixture on purpose.
+   *
+   * They used to be `[]` and `null`, which made every «the summary does not render X» assertion
+   * vacuous: it passed because the data was absent, not because the form gate worked. Proved by
+   * injection — removing the gate from the funnel left the suite green. A fixture more generous
+   * than the product is a test that cannot fail for the reason the product breaks, and that is the
+   * shape of guard Owner defect row 96 slipped through.
+   */
+  funnel: [
+    { stage: 'impressions', label: 'Impressions', count: 500_000, reported: true },
+    { stage: 'clicks', label: 'Clicks', count: 9000, reported: true },
+  ],
+  store_funnel: {
+    stages: [{ key: 'orders', label_ar: 'الطلبات', label_en: 'Orders', value: 120, source: { kind: 'stores' } }],
+    coverage: { orders_in_window: 120, orders_with_money_withheld: 0, money_withheld_currencies: [], reporting_timezone: 'Asia/Riyadh' },
+  },
   freshness: [],
   available: { providers: ['snapchat', 'meta'], campaigns: [], earliest: '2026-08-01', latest: '2026-08-26' },
   metrics: [],
@@ -132,11 +147,43 @@ describe('a live link and the form it was shared as', () => {
   })
   afterEach(() => vi.clearAllMocks())
 
-  it('renders the dashboard alone for the summary form', async () => {
+  /**
+   * The summary is a SHORTER DOCUMENT, not the detailed report with one block withheld.
+   *
+   * This case used to assert a single absence — `live-detail-tables` — and that is precisely how
+   * Owner defect row 96 shipped: the page could drop one block, satisfy this, and still render the
+   * whole detailed composition under a summary's label. Measured on the running product, the two
+   * documents were eleven words apart.
+   *
+   * The payload here deliberately still CARRIES the detailed-only blocks. The server trims them for
+   * a summary (`ReportComposition`, asserted in `LiveReportFormCompositionTest`); this asserts the
+   * page does not render them even when they arrive, so the two halves of the contract are pinned
+   * independently rather than each assuming the other.
+   */
+  it('renders none of the detailed-only sections for the summary form', async () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="executive_summary" />, { locale: 'en' })
     await screen.findByTestId('live-report')
 
     expect(screen.queryByTestId('live-detail-tables')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('live-funnel')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('shared-store-funnel')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('report-platform-creatives')).not.toBeInTheDocument()
+  })
+
+  /**
+   * And it still carries what an executive summary is FOR — the Owner's own list, handoff §10.
+   *
+   * Written beside the absences on purpose. A composition test that only asserts what is missing is
+   * satisfied by a blank page, and the failure mode of «make the summary shorter» is trimming past
+   * the decisions the document exists to deliver.
+   */
+  it('still carries the headline figures, the platform summary and the objective split', async () => {
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="executive_summary" />, { locale: 'en' })
+    await screen.findByTestId('live-report')
+
+    expect(screen.getByTestId('live-kpis')).toBeInTheDocument()
+    expect(screen.getByTestId('live-platform-comparison')).toBeInTheDocument()
+    expect(screen.getByTestId('live-objective-split')).toBeInTheDocument()
   })
 
   /**

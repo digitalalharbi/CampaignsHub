@@ -11,6 +11,7 @@ use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\ReportComposition;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -235,7 +236,25 @@ final class LiveReportBuilderController extends Controller
             'project_id' => $project,
             'name' => $data['name'],
             'type' => 'live',
+            /*
+             * A live SHARE LINK is an outward-facing document by construction, so its audience is a
+             * property of the product rather than a choice — see the note on `audience` below.
+             */
             'audience' => 'client',
+            /*
+             * The operator's choice, written to the REPORT as well as to the share — Owner row 96.
+             *
+             * `reports.form` is `NOT NULL DEFAULT 'detailed'`, and this row was created without one,
+             * so every link the builder made carried a report saying «detailed» whatever the operator
+             * had picked. `LiveReportService` read that column, so the payload was composed as a
+             * detailed report while `PublicReportController` told the page it was a summary. The
+             * service now resolves the form through the SHARE, which is the authoritative record of
+             * the choice; this keeps the report row honest too, so the two cannot disagree for any
+             * later reader of either.
+             */
+            'form' => in_array($data['form'] ?? null, ReportComposition::FORMS, true)
+                ? $data['form']
+                : 'detailed',
             'status' => 'completed',
             'period_start' => $data['from'],
             'period_end' => $data['to'],

@@ -303,7 +303,20 @@ export function isClientAudience(audience: string | undefined): boolean {
 }
 
 /** Single slide renderer shared by the interactive deck AND the print/PDF route — identical output. */
-export function SlideBody({ slide, data, meta }: { slide: Slide; data: ReportData; meta: Meta }) {
+export function SlideBody({ slide, data, meta, paged = false }: {
+  slide: Slide
+  data: ReportData
+  meta: Meta
+  /**
+   * Rendered onto a FIXED page — a deck slide — rather than a scrolling document.
+   *
+   * The printed deck reuses this switch, so a section that is merely long on screen becomes a
+   * section that cannot fit in print. The ads slide is the one where that bites: with the full
+   * roster on it the renderer's auto-fit came out at 16.6% with 406 elements clipped, which fails
+   * its own readable-limit gate and blocks the PDF export outright.
+   */
+  paged?: boolean
+}) {
   switch (slide.type) {
     case 'cover': return <CoverSlide data={data} meta={meta} />
     case 'recommendations': return <RecommendationsSlide data={data} />
@@ -311,7 +324,7 @@ export function SlideBody({ slide, data, meta }: { slide: Slide; data: ReportDat
     case 'platform_performance': return <PlatformSlide data={data} platform={slide.platform!} />
     case 'platform_screenshot': return <ScreenshotSlide platform={slide.platform!} />
     case 'top_creatives': return <CreativesSlide data={data} platform={slide.platform!} />
-    case 'ads': return <AdsSlide data={data} />
+    case 'ads': return <AdsSlide data={data} paged={paged} />
     case 'platform_notes': return <NotesSlide data={data} platform={slide.platform!} />
     case 'platform_comparison': return <ComparisonSlide data={data} />
     case 'objective_performance': return <ObjectiveSplitSlide data={data} />
@@ -915,7 +928,7 @@ function ScreenshotSlide({ platform }: { platform: string }) {
  * The section itself is shared with the live link and the printed document, so the three cannot
  * drift into showing different ads — or the same ad with different figures — for one scope.
  */
-function AdsSlide({ data }: { data: ReportData }) {
+function AdsSlide({ data, paged = false }: { data: ReportData; paged?: boolean }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const [open, setOpen] = useState<ReportAd | null>(null)
 
@@ -946,6 +959,11 @@ function AdsSlide({ data }: { data: ReportData }) {
         currency={data.currency ?? null}
         locale={ar ? 'ar' : 'en'}
         form={data.form}
+        /*
+         * A deck slide states the count; the list lives where it can scroll.
+         * See the prop's own note for the measurement that made this necessary.
+         */
+        countOnly={paged}
         onOpen={setOpen}
       />
 
@@ -1066,15 +1084,33 @@ function NotesSlide({ data, platform }: { data: ReportData; platform: string }) 
 }
 
 function ComparisonSlide({ data }: { data: ReportData }) {
-  const bars = data.platforms.map((p) => ({ label: String(p.provider), platform: String(p.provider), spend: Number(p.spend ?? 0) }))
   const donut = data.platforms.map((p) => ({ name: plat(String(p.provider)), value: Number(p.spend ?? 0) }))
   return (
     <div>
       <Title sub="الإنفاق والعائد والمساهمة عبر المنصات">مقارنة المنصات</Title>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard title="الإنفاق حسب المنصة"><RankingBarChart data={bars} bars={[{ key: 'spend', name: 'الإنفاق', kind: 'money' }]} colorByPlatform height={240} currency={data.currency} /></ChartCard>
-        <ChartCard title="مساهمة الإنفاق"><PlatformDonutChart data={donut} centerLabel="الإجمالي" centerValue={compact(donut.reduce((a, b) => a + b.value, 0))} currency={data.currency} /></ChartCard>
-      </div>
+      {/*
+        One statement of spend-by-platform, not three — handoff §10 «too much card/box repetition»
+        and §11 «when comparison is the job, prefer a clean table».
+
+        This slide drew a RANKING BAR CHART of spend per platform beside a DONUT of the same spend,
+        above a table carrying that spend as a column and its share as another. The same quantity,
+        four times, on one slide. The table is the comparison; the donut is the one thing a table
+        cannot show at a glance, which is part-to-whole. The bar chart added a third rendering of a
+        figure the reader already had twice.
+        
+        It is also what made the slide unprintable. The deck's renderer auto-fits a slide and fails
+        it below 0.85; this one measured 0.847 — three thousandths under — and that single page
+        blocked the whole client PDF export. Removing a redundant chart is the honest way past that:
+        the gate was right, the slide was overfull, and nothing true was taken off it.
+      */}
+      {/*
+        Side by side, and the TABLE gets the room — handoff §11, «when comparison is the job, prefer
+        a clean table». Stacked, this slide stood 18% taller than a landscape page, which the deck's
+        auto-fit answered by shrinking it to 0.847 — under the 0.85 readable floor, so the layout
+        gate failed it and that one page blocked the entire client PDF export.
+      */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <ChartCard title="مساهمة الإنفاق"><PlatformDonutChart data={donut} height={200} centerLabel="الإجمالي" centerValue={compact(donut.reduce((a, b) => a + b.value, 0))} currency={data.currency} /></ChartCard>
       {/*
         TABLE-NUMERIC-ALIGNMENT-001 — through the primitive, in a document a client reads.
 
@@ -1085,7 +1121,7 @@ function ComparisonSlide({ data }: { data: ReportData }) {
         abbreviation, the currency and what a missing figure looks like, so this slide can no longer
         answer any of those differently from the slide beside it.
       */}
-      <ChartCard title="ترتيب المنصات" className="mt-4">
+      <ChartCard title="ترتيب المنصات" className="lg:col-span-2">
         <DataMetricTable
           columns={[
             { key: 'platform', label: 'المنصة', kind: 'text' },
@@ -1099,7 +1135,13 @@ function ComparisonSlide({ data }: { data: ReportData }) {
             platform: (
               <span className="inline-flex items-center gap-1.5 font-semibold">
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: platformColor(String(p.provider)) }} />
-                {String(p.provider)}
+                {/*
+                  The platform's NAME, not its key. This printed «google», «snapchat», «tiktok» —
+                  our stored provider values — down the first column of a table in the client's own
+                  PDF, while the donut directly above it said «جوجل». One slide, two vocabularies,
+                  and one of them is a database value. `plat()` is the same resolver the donut uses.
+                */}
+                {plat(String(p.provider))}
               </span>
             ),
             spend: p.spend as number,
@@ -1111,6 +1153,7 @@ function ComparisonSlide({ data }: { data: ReportData }) {
           initialSort={{ column: 1, dir: 'desc' }}
         />
       </ChartCard>
+      </div>
     </div>
   )
 }
