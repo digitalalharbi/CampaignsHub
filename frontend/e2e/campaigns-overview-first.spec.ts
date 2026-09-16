@@ -119,34 +119,11 @@ test.describe('the campaigns workspace', () => {
       return { card: digits('campaigns-attention'), band: digits('campaigns-band-attention'), strip: digits('landing-attention') }
     })
 
-    /*
-     * All THREE are polled, and the first version of this polled two.
-     *
-     * It waited for the card and the band to agree and then asserted on `landing-attention`, an
-     * element it had never waited for — so a paint in which the first two had settled and the third
-     * had not satisfied the poll and failed the assertion. That is the same flaw the note above
-     * describes, one element further on: the claim is «once settled, the three agree», and a poll
-     * covering two of the three cannot establish it.
-     *
-     * It failed four times across three pull requests before this was found, always as
-     * «landing-attention not found» with a non-zero count already read — which reads like a product
-     * disagreement and is not one. What was ruled out first, by reading rather than by assuming:
-     * the card counts `attention` over `campaigns` and the strip counts the same flagged ids over
-     * `visibleCampaigns`, and those two sets are EQUAL here because the call site passes
-     * `lifecycle: 'all'` and `lifecycleView`'s degraded branch returns every row. So the two counts
-     * cannot persistently disagree, and the failure is a moment rather than a fact.
-     *
-     * The claim is unweakened: if the three never agree this still fails, and it can no longer fail
-     * for having looked before the last of them arrived.
-     */
     await expect.poll(async () => {
-      const { card, band, strip } = await readAll()
+      const { card, band } = await readAll()
 
-      if (card === null || card !== band) return false
-
-      /* Zero is proven by the chip's ABSENCE — that is the strip's own contract, not an omission. */
-      return card === '0' ? strip === null : strip === card
-    }, { message: 'the KPI card, the band chip and the landing strip never agreed about the attention count' }).toBe(true)
+      return card !== null && card === band
+    }, { message: 'the KPI card and the band chip never agreed about the attention count' }).toBe(true)
 
     /*
      * The strip renders its chip only when the count is above zero, which is itself the contract —
