@@ -8,11 +8,16 @@ use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativeRows;
+use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Console\Command;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Throwable;
 
 /**
  * Content Production Recovery — WHICH creatives are broken on Production, and where.
@@ -60,7 +65,9 @@ final class ContentDefectCensusCommand extends Command
         {--from= : Window start (YYYY-MM-DD). Default: 29 days before --to}
         {--to= : Window end (YYYY-MM-DD). Default: today}
         {--project= : One project. Omitted: every project that holds a creative}
-        {--list=40 : How many creative ids to print per finding before summarising the rest}';
+        {--list=40 : How many creative ids to print per finding before summarising the rest}
+        {--raw : For creatives whose spend is refused as a zero original, read the RETAINED provider bodies and say how spend arrived — absent, null, zero or positive — never the amount}
+        {--fetch : Also LOAD each promoted creative\'s preview asset on the server and report what came back — by id, never the url}';
 
     protected $description = 'Read-only: list the creatives whose preview, spend or objective metrics are missing, and the rung each breaks at.';
 
@@ -125,7 +132,11 @@ final class ContentDefectCensusCommand extends Command
         $grains = $metrics->byGrain($ids, $from, $to);
 
         /** @var array<string, array<string, list<string>>> $findings category => rung => ids */
-        $findings = ['A' => [], 'B' => [], 'C' => [], 'D' => []];
+        $findings = ['A' => [], 'B' => [], 'C' => [], 'D' => [], 'E' => []];
+        /** @var list<array{tag: string, what: string, url: string}> $toFetch */
+        $toFetch = [];
+        /** @var list<string> $zeroOriginal */
+        $zeroOriginal = [];
         $promoted = 0;
         $judgedPreview = 0;
 
@@ -166,6 +177,12 @@ final class ContentDefectCensusCommand extends Command
                 $findings['A']["kind={$kind}  state={$state} (unrecognised)"][] = $tag;
             }
 
+            if ((bool) $this->option('fetch') && $delivered && $state === 'available') {
+                foreach ($this->assetsTheCardLoads($preview) as $what => $url) {
+                    $toFetch[] = ['tag' => $tag, 'what' => $what, 'url' => $url];
+                }
+            }
+
             if ($figures === null) {
                 continue;
             }
@@ -181,7 +198,12 @@ final class ContentDefectCensusCommand extends Command
 
             // ── C — indicators with no Spend ──────────────────────────────────────────────────
             if (! $spendStatable && $beside !== []) {
-                $findings['C'][$this->spendRung($id, $figures, $grains)][] = $tag;
+                $rung = $this->spendRung($id, $figures, $grains);
+                $findings['C'][$rung][] = $tag;
+
+                if (str_contains($rung, 'original of ZERO')) {
+                    $zeroOriginal[] = $id;
+                }
             }
 
             // ── D — the objective's own verdict, missing here and answered at the other grain ─
@@ -204,7 +226,8 @@ final class ContentDefectCensusCommand extends Command
 
                     if ($lost !== []) {
                         $findings['D']['family='.$metrics->familyFor($objective)->value.'  card read grain='.$grain
-                            .'  answered only at the other grain: '.implode(', ', $lost)][] = $tag;
+                            .'  answered only at the other grain: '.implode(', ', $lost)
+                            .$this->whyNotFilled($figures, $other)][] = $tag;
                     }
                 }
             }
@@ -219,12 +242,31 @@ final class ContentDefectCensusCommand extends Command
             .'   at ad grain: '.count($grains['ad'])
             .'   BOTH grains: '.count(array_intersect_key($grains['creative'], $grains['ad'])));
 
+        $loaded = 0;
+        foreach ($this->fetch($toFetch) as [$item, $verdict]) {
+            if ($verdict === null) {
+                $loaded++;
+
+                continue;
+            }
+
+            $findings['E'][$item['what'].'  '.$verdict][] = $item['tag'];
+        }
+
+        $evidence = (bool) $this->option('raw') && $zeroOriginal !== []
+            ? $this->rawSpendEvidence($zeroOriginal, $from, $to)
+            : [];
+
         $titles = [
             'A' => 'A — NO PREVIEW / MEDIA (envelope draws nothing)',
             'B' => 'B — SPEND SHOWN, NO PERFORMANCE INDICATORS BESIDE IT',
             'C' => 'C — PERFORMANCE INDICATORS SHOWN, NO SPEND',
             'D' => 'D — OBJECTIVE METRIC MISSING ON THE CARD THOUGH THE CREATIVE ANSWERS IT',
         ];
+
+        if ((bool) $this->option('fetch')) {
+            $titles['E'] = 'E — PREVIEW ASSET DOES NOT LOAD (fetched on the server: '.count($toFetch).' asset(s), '.$loaded.' loaded)';
+        }
 
         foreach ($titles as $category => $title) {
             $total = array_sum(array_map('count', $findings[$category]));
@@ -255,6 +297,288 @@ final class ContentDefectCensusCommand extends Command
                 }
             }
         }
+
+        if ((bool) $this->option('raw')) {
+            $this->line('');
+            $this->line('C EVIDENCE — how the provider sent spend for the zero-original creatives (retained bodies, window only)');
+
+            if ($evidence === []) {
+                $this->line('    none to read');
+            }
+
+            foreach ($evidence as $creativeId => $line) {
+                $this->line('      '.$creativeId.'  '.$line);
+            }
+        }
+    }
+
+    /**
+     * What the provider's OWN body said about spend for these creatives' ads — the question a stored
+     * zero cannot answer by itself.
+     *
+     * `spend_original = 0` is either the platform reporting zero or ingestion turning a JSON null into
+     * 0 (`(float) null`). The retained insights bodies hold the difference, so they are walked for any
+     * object naming one of these ads with a `timeseries`, and each point in the window is counted by
+     * how `stats.spend` arrived and whether it delivered impressions. The latest body wins for an
+     * ad and day. Counts only — never an amount.
+     *
+     * @param  list<string>  $creativeIds
+     * @return array<string, string>
+     */
+    private function rawSpendEvidence(array $creativeIds, Carbon $from, Carbon $to): array
+    {
+        $ads = DB::table('external_ads')
+            ->whereIn('creative_id', $creativeIds)
+            ->get(['creative_id', 'external_id', 'provider']);
+
+        /** @var array<string, string> $creativeByAd */
+        $creativeByAd = [];
+        foreach ($ads as $ad) {
+            $creativeByAd[(string) $ad->external_id] = (string) $ad->creative_id;
+        }
+
+        if ($creativeByAd === []) {
+            return array_fill_keys($creativeIds, 'no ads recorded for this creative');
+        }
+
+        /** @var array<string, array<string, array{spend: string, delivered: bool}>> $points ad => date => state */
+        $points = [];
+
+        IntegrationRawPayload::withoutGlobalScopes()
+            ->whereIn('provider', $ads->pluck('provider')->unique()->values()->all())
+            ->where('resource', 'insights')
+            ->where('window_end', '>=', $from->toDateString())
+            ->where('window_start', '<=', $to->toDateString())
+            ->orderByDesc('fetched_at')
+            ->limit(2000)
+            ->cursor()
+            ->each(function (IntegrationRawPayload $raw) use (&$points, $creativeByAd, $from, $to): void {
+                $this->walkForAds((array) $raw->payload, $creativeByAd, $points, $from, $to);
+            });
+
+        $out = [];
+        foreach ($creativeIds as $creativeId) {
+            $tally = ['absent' => 0, 'null' => 0, 'zero' => 0, 'positive' => 0];
+            $delivered = 0;
+            $adsSeen = 0;
+
+            foreach ($creativeByAd as $adId => $owner) {
+                if ($owner !== $creativeId || ! isset($points[$adId])) {
+                    continue;
+                }
+
+                $adsSeen++;
+                foreach ($points[$adId] as $state) {
+                    $tally[$state['spend']]++;
+                    $delivered += $state['delivered'] ? 1 : 0;
+                }
+            }
+
+            $total = array_sum($tally);
+            $out[$creativeId] = $total === 0
+                ? 'no retained provider body carries these ads in the window'
+                : sprintf(
+                    'ads in bodies %d, day-points %d — spend: key absent %d, JSON null %d, zero %d, positive %d; delivered impressions on %d',
+                    $adsSeen, $total, $tally['absent'], $tally['null'], $tally['zero'], $tally['positive'], $delivered,
+                );
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<mixed>  $node
+     * @param  array<string, string>  $creativeByAd
+     * @param  array<string, array<string, array{spend: string, delivered: bool}>>  $points
+     */
+    private function walkForAds(array $node, array $creativeByAd, array &$points, Carbon $from, Carbon $to): void
+    {
+        $id = $node['id'] ?? null;
+
+        if (is_string($id) && isset($creativeByAd[$id]) && is_array($node['timeseries'] ?? null)) {
+            foreach ($node['timeseries'] as $point) {
+                if (! is_array($point)) {
+                    continue;
+                }
+
+                $date = substr((string) ($point['start_time'] ?? ''), 0, 10);
+
+                if ($date === '' || $date < $from->toDateString() || $date > $to->toDateString() || isset($points[$id][$date])) {
+                    continue;
+                }
+
+                $stats = is_array($point['stats'] ?? null) ? $point['stats'] : [];
+
+                $points[$id][$date] = [
+                    'spend' => match (true) {
+                        ! array_key_exists('spend', $stats) => 'absent',
+                        $stats['spend'] === null => 'null',
+                        (float) $stats['spend'] === 0.0 => 'zero',
+                        default => 'positive',
+                    },
+                    'delivered' => is_numeric($stats['impressions'] ?? null) && (float) $stats['impressions'] > 0,
+                ];
+            }
+
+            return;
+        }
+
+        foreach ($node as $child) {
+            if (is_array($child)) {
+                $this->walkForAds($child, $creativeByAd, $points, $from, $to);
+            }
+        }
+    }
+
+    /**
+     * Why `forCreatives()` did not take a metric the other grain answers — so the next fix is chosen by
+     * the data, not guessed. Days covered by each grain (the coverage rule), whether the card's own
+     * spend is converted, withheld or absent (a cost-per needs converted spend), and whether its own
+     * conversions were reported. States only, never amounts.
+     *
+     * @param  array<string, mixed>  $figures
+     * @param  array<string, mixed>  $other
+     */
+    private function whyNotFilled(array $figures, array $other): string
+    {
+        $mine = (int) ($figures['active_days'] ?? 0);
+        $theirs = (int) ($other['active_days'] ?? 0);
+
+        $spend = match (true) {
+            ($figures['spend'] ?? null) !== null => 'converted',
+            (int) ($figures['spend_withheld_rows'] ?? 0) > 0 => 'withheld',
+            default => 'absent',
+        };
+
+        return '  [days: card '.$mine.', other '.$theirs.($theirs < $mine ? ' — fewer, so not filled' : '')
+            .'; card spend '.$spend
+            .'; card conversions '.(($figures['conversions'] ?? null) !== null ? 'reported' : 'absent').']';
+    }
+
+    /**
+     * The assets a card LOADS for an available preview, keyed by what they are for.
+     *
+     * Mirrors `adPreview.ts`: a still (the image, else the thumbnail) drawn as an `<img>`, and for a
+     * film the video the player streams — a film with no still is played rather than blanked, so the
+     * video itself is what must load. A catalog ad has no fixed asset by design and loads nothing.
+     *
+     * @param  array<string, mixed>  $preview
+     * @return array<string, string>
+     */
+    private function assetsTheCardLoads(array $preview): array
+    {
+        if ((string) ($preview['kind'] ?? '') === 'catalog') {
+            return [];
+        }
+
+        $out = [];
+        $still = $preview['image_url'] ?? $preview['thumbnail_url'] ?? null;
+
+        if (is_string($still) && $still !== '') {
+            $out['still'] = $still;
+        }
+
+        if (is_string($preview['video_url'] ?? null) && $preview['video_url'] !== '') {
+            $out['video'] = (string) $preview['video_url'];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Load every asset, a few at a time, and say what is wrong with each one that does not load.
+     *
+     * A verdict of null is «loaded and usable». Anything else names the failure — the HTTP status,
+     * a content type that is not the medium the card asked for, or a still the browser could not
+     * decode — and never the address, which carries the signature that makes it work.
+     *
+     * @param  list<array{tag: string, what: string, url: string}>  $items
+     * @return list<array{0: array{tag: string, what: string, url: string}, 1: string|null}>
+     */
+    private function fetch(array $items): array
+    {
+        $out = [];
+
+        foreach (array_chunk($items, 8) as $chunk) {
+            $remote = [];
+
+            foreach ($chunk as $i => $item) {
+                if (str_starts_with($item['url'], 'data:')) {
+                    $out[] = [$item, $this->judgeInline($item)];
+
+                    continue;
+                }
+
+                $remote[$i] = $item;
+            }
+
+            if ($remote === []) {
+                continue;
+            }
+
+            try {
+                $responses = Http::pool(function (Pool $pool) use ($remote): array {
+                    $requests = [];
+
+                    foreach ($remote as $i => $item) {
+                        $request = $pool->as((string) $i)->timeout(20)->withOptions(['allow_redirects' => true]);
+
+                        $requests[] = $item['what'] === 'video'
+                            ? $request->withHeaders(['Range' => 'bytes=0-1023'])->get($item['url'])
+                            : $request->get($item['url']);
+                    }
+
+                    return $requests;
+                });
+            } catch (Throwable) {
+                foreach ($remote as $item) {
+                    $out[] = [$item, 'request failed'];
+                }
+
+                continue;
+            }
+
+            foreach ($remote as $i => $item) {
+                $response = $responses[(string) $i] ?? null;
+                $out[] = [$item, $response instanceof Response ? $this->judge($item, $response) : 'request failed (no response)'];
+            }
+        }
+
+        return $out;
+    }
+
+    /** @param array{tag: string, what: string, url: string} $item */
+    private function judge(array $item, Response $response): ?string
+    {
+        if (! $response->successful()) {
+            return 'http '.$response->status();
+        }
+
+        $type = strtolower(trim(explode(';', (string) $response->header('Content-Type'))[0]));
+
+        if ($item['what'] === 'video') {
+            return str_starts_with($type, 'video/') || $type === 'application/octet-stream' || $type === 'binary/octet-stream'
+                ? null
+                : 'not a video (content type '.($type === '' ? 'none' : $type).')';
+        }
+
+        if (! str_starts_with($type, 'image/')) {
+            return 'not an image (content type '.($type === '' ? 'none' : $type).')';
+        }
+
+        return @getimagesizefromstring($response->body()) === false ? 'an image that does not decode' : null;
+    }
+
+    /** @param array{tag: string, what: string, url: string} $item */
+    private function judgeInline(array $item): ?string
+    {
+        if (preg_match('#^data:(image/[a-z0-9.+-]+);base64,(.*)$#is', $item['url'], $m) !== 1) {
+            return 'inline data that is not a base64 image';
+        }
+
+        $bytes = base64_decode($m[2], true);
+
+        return $bytes === false || @getimagesizefromstring($bytes) === false ? 'an inline image that does not decode' : null;
     }
 
     /**
