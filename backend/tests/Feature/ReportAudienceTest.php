@@ -137,6 +137,82 @@ final class ReportAudienceTest extends TestCase
         $this->assertStringContainsStringIgnoringCase('burner', $internalCsv);
     }
 
+    /**
+     * The FORM reaches the exported file, not just the slide list — Owner defect row 96.
+     *
+     * A report's composition is decided when it is generated: `ReportTemplateEngine::defaultConfig`
+     * omits the per-platform, funnel, campaign and data-quality slides for a summary. The exporter
+     * dropped a section's data only when its slide was present and explicitly `visible => false`,
+     * and a summary does not mark those slides invisible — it simply does not have them. So nothing
+     * was dropped and both forms exported the same document.
+     *
+     * Measured before the fix on a generated report with real figures (38 KPIs, 4 platforms, 6 funnel
+     * stages): the executive-summary CSV and the detailed CSV were byte-identical apart from a
+     * one-second difference in their own «generated at» stamp — 3411 bytes and 61 lines each. The
+     * operator's choice reached the slide list and stopped there, so the file a client receives was
+     * the same document under two names.
+     *
+     * Asserted on a section that only the detailed form carries, rather than on a byte count: a size
+     * comparison would pass for any change that made one file longer, including a worse one.
+     */
+    public function test_a_summary_and_a_detailed_report_do_not_export_the_same_file(): void
+    {
+        $exporter = app(ReportExporter::class);
+
+        $detailed = $this->report('internal');
+        $detailed->forceFill(['form' => 'detailed', 'config' => ['slides' => [
+            ['type' => 'cover', 'visible' => true],
+            ['type' => 'campaigns', 'visible' => true],
+        ]]])->saveQuietly();
+
+        $summary = $this->report('internal');
+        $summary->forceFill(['form' => 'executive_summary', 'config' => ['slides' => [
+            // A summary OMITS the campaigns slide — it does not mark it invisible.
+            ['type' => 'cover', 'visible' => true],
+        ]]])->saveQuietly();
+
+        $this->assertStringContainsString(
+            'Campaigns',
+            $exporter->render($detailed, 'csv'),
+            'the detailed export lost a section its own composition contains',
+        );
+
+        $this->assertStringNotContainsString(
+            'Campaigns',
+            $exporter->render($summary, 'csv'),
+            'the summary exported a section its own composition does not contain — '.
+            'the operator chose a summary and the client received the detailed document',
+        );
+    }
+
+    /**
+     * And a client's file carries nothing about our plumbing.
+     *
+     * The manifest appended to every export wrote «Data source: daily_metrics» — the name of one of
+     * our database tables — into the file a client downloads and keeps. Handoff §13: do not expose
+     * implementation internals. It stays for an INTERNAL export, where an operator reconciling a
+     * figure needs to know which table and which window produced it.
+     */
+    public function test_a_client_export_carries_no_database_table_name(): void
+    {
+        $exporter = app(ReportExporter::class);
+
+        /*
+         * Stamped explicitly so the AUDIENCE is the only thing that differs between the two files.
+         *
+         * `reports.data_source` is `NOT NULL DEFAULT 'daily_metrics'`, and a model just created in
+         * memory has not read that default back — so without this both exports would omit the row
+         * and the case would pass for having nothing to leak rather than for withholding it.
+         */
+        $client = $this->report('client');
+        $client->forceFill(['data_source' => 'daily_metrics'])->saveQuietly();
+        $internal = $this->report('internal');
+        $internal->forceFill(['data_source' => 'daily_metrics'])->saveQuietly();
+
+        $this->assertStringNotContainsString('daily_metrics', $exporter->render($client, 'csv'));
+        $this->assertStringContainsString('daily_metrics', $exporter->render($internal, 'csv'));
+    }
+
     public function test_xlsx_sheets_differ_by_audience(): void
     {
         $exporter = app(ReportExporter::class);
