@@ -105,7 +105,7 @@ final class ReportComposition
          * The ranked gallery above answers «what worked»; this answers «what works HERE», which is
          * the question an agency takes into next month's plan. It is depth, not a headline.
          */
-        'platform_creatives' => ['ads_platform_groups' => []],
+        'platform_creatives' => ['ads_platform_groups' => [], 'ads_weakest' => []],
     ];
 
     private function __construct(public readonly string $form) {}
