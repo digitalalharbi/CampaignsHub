@@ -232,6 +232,7 @@ function line(row: RosterRow, index: number, locale: Locale, onOpen?: (ad: Repor
         name={row.name ?? ''}
         className="h-9 w-12 shrink-0"
         testid={`report-roster-poster-${index}`}
+        forClient
       />
       <span className="truncate font-medium text-text-primary" title={row.name ?? undefined}>
         {row.name ?? '—'}
