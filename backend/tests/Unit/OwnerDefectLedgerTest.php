@@ -117,6 +117,62 @@ final class OwnerDefectLedgerTest extends TestCase
         return $ids;
     }
 
+    /**
+     * Owner defect 95 — a malformed row may not hide from the reader that checks the rows.
+     *
+     * `rows()` below skips any line whose cell count is not sixteen, with a `continue`. That is the
+     * right way to ignore a heading or a separator and the wrong way to meet a genuine row that is one
+     * column short: it vanishes from every invariant this file asserts — the cited-requirement check,
+     * the verified-while-naming-a-gap check, all of it — and the ledger reports no problem.
+     *
+     * It had happened. Rows 95 and 96 arrived one cell short, missing «Prod verified», so every column
+     * after «Deployed» was read one place to the left: a reader looking for whether Production had
+     * confirmed anything found the acceptance gap instead. Both were invisible here.
+     *
+     * `GOVERNANCE-ANTILOSS-001` states this rule for the MATRIX in as many words — «every table row
+     * exactly as wide as its own header, so a malformed row cannot hide from the reader» — and the
+     * register never had it. So the width is asserted against the HEADER's own count rather than
+     * against a literal sixteen: a column added to the ledger later moves both at once.
+     */
+    public function test_every_numbered_row_is_as_wide_as_the_ledgers_own_header(): void
+    {
+        $lines = file(self::LEDGER) ?: [];
+        $expected = null;
+        $malformed = [];
+
+        foreach ($lines as $n => $line) {
+            $cells = preg_split('/(?<!\\\\)\|/', $line) ?: [];
+
+            if ($expected === null && str_starts_with(trim($line), '| # | Sev |')) {
+                $expected = count($cells);
+
+                continue;
+            }
+
+            /*
+             * Anything the ledger presents AS a row — `95`, and `94a` too, which the reader below also
+             * skips because it demands digits only. A sub-row is a row and carries the same columns.
+             */
+            if (preg_match('/^\|\s*\d+[a-z]?\s*\|/', trim($line)) !== 1) {
+                continue;
+            }
+
+            if ($expected !== null && count($cells) !== $expected) {
+                $malformed[] = 'line '.($n + 1).' (row '.trim((string) ($cells[1] ?? '?')).'): '
+                    .count($cells).' cells, header has '.$expected;
+            }
+        }
+
+        $this->assertNotNull($expected, 'the ledger has no header row to measure against');
+        $this->assertSame(
+            [],
+            $malformed,
+            'these rows are not as wide as the header, so every column after the missing one is read '
+            .'one place to the left — and `rows()` skips them, which means no other invariant in this '
+            ."file can see them: \n".implode("\n", $malformed),
+        );
+    }
+
     /** @return list<array{no:string,ids:string,verified:string,gap:string}> */
     private function rows(): array
     {
