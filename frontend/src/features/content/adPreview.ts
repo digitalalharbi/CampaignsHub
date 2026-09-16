@@ -87,12 +87,21 @@ export function readPreview(preview: CreativePreview | null | undefined, ar: boo
   }
 
   /*
-   * A video is a video even when only its poster arrived.
+   * A video with no playable source falls to its POSTER, and the card badges the film separately.
    *
-   * `video_url` is frequently absent — resolving a playable source is a per-asset call several
-   * connectors decline — and the poster is a real frame the platform chose. Rendering it as an
-   * IMAGE would be the honest fallback for the picture and a lie about the ad: a reader deciding
-   * between a still and a film needs to know which one ran.
+   * This paragraph used to say the opposite — «rendering it as an IMAGE would be a lie about the
+   * ad» — and the code below has always returned an image reading in that case. A comment that
+   * describes an intention the code does not implement is worse than none, because it is what a
+   * reviewer checks instead of the behaviour, so it is corrected rather than the code.
+   *
+   * The behaviour is right. `video_url` is frequently absent — resolving a playable source is a
+   * per-asset call several connectors decline — and the poster is a real frame the platform chose,
+   * so drawing it shows the reader the ad. A `video` reading with a null source would hand every
+   * player an element with nothing to play, which is the blank box this module exists to prevent.
+   *
+   * What the reading must not do is LOSE the distinction, and it does not: the film is named where
+   * the reader can act on it — the library card badges `preview.kind === 'video'` from the envelope
+   * rather than from this reading, so «a still or a film» is still answered.
    */
   /*
    * The two shapes without one asset, decided BEFORE the image path.
