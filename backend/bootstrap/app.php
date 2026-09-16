@@ -7,6 +7,7 @@ use App\Domains\Accounts\Middleware\EnsureEntitlement;
 use App\Domains\Alerts\Console\EvaluateAlerts;
 use App\Domains\Campaigns\Console\ContentDefectCensusCommand;
 use App\Domains\Campaigns\Console\ReconcileContentMetricsCommand;
+use App\Domains\Campaigns\Console\SnapchatLpvProvenanceCommand;
 use App\Domains\Commerce\Console\SyncStoresCommand;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
 use App\Domains\Identity\Middleware\RejectRevokedSessions;
@@ -103,6 +104,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // surface, with the divergences named. Calls no provider and writes nothing.
         ReconcileContentMetricsCommand::class,
         ContentDefectCensusCommand::class,
+        SnapchatLpvProvenanceCommand::class,
         GoogleAdsAccessCommand::class,
         MetaSyncProbeCommand::class,
         RenormaliseReportingCurrency::class,
