@@ -1,6 +1,6 @@
 import { useUi } from '@/stores/ui'
 import { ImageOff } from 'lucide-react'
-import { absenceLabel, absenceShort, posterSource, previewShape, readPreview } from './adPreview'
+import { absenceLabel, absenceShort, clientAbsence, posterSource, previewShape, readPreview } from './adPreview'
 import type { CreativePreview } from './api'
 import { PosterImage } from './PosterImage'
 
@@ -20,6 +20,7 @@ export function AdPoster({
   height,
   aspectRatio,
   fit,
+  forClient = false,
 }: {
   preview: CreativePreview | null | undefined
   name: string
@@ -54,6 +55,11 @@ export function AdPoster({
   width?: number | null
   height?: number | null
   aspectRatio?: string | null
+  /**
+   * On a client's own surface: a missing picture is said in the reader's words and never
+   * names our pipeline (CLIENT-DIAGNOSTIC-SEPARATION-001). The operator surfaces keep the four states.
+   */
+  forClient?: boolean
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const reading = readPreview(preview, ar)
@@ -73,6 +79,25 @@ export function AdPoster({
      * moves to the `title` rather than being cut down. Both come from the same reading, so the label
      * and the sentence cannot describe different absences.
      */
+    if (forClient) {
+      const said = reason === 'fetch_failed'
+        ? clientAbsence({ kind: 'none', reason: 'expired', note: null }, ar)
+        : clientAbsence(reading, ar)
+
+      return (
+        <span
+          data-testid={testid ? `${testid}-absent` : undefined}
+          data-absence={reason}
+          title={said.sentence}
+          className={`flex flex-col items-center justify-center gap-1 rounded-lg bg-surface-secondary p-2 text-center text-[11px] leading-tight text-text-muted ${className}`}
+        >
+          <ImageOff size={16} aria-hidden className="shrink-0 opacity-60" />
+          <span data-testid={testid ? `${testid}-absent-label` : undefined} className="font-semibold">{said.short}</span>
+          <span className="sr-only">{said.sentence}</span>
+        </span>
+      )
+    }
+
     const sentence = reason === 'fetch_failed'
       ? ar
         ? 'تعذّر تحميل أصل هذا الإعلان من المنصة — قد يكون الرابط انتهت صلاحيته. يحتاج مزامنة جديدة.'
