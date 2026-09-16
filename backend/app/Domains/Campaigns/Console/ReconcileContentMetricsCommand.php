@@ -282,13 +282,36 @@ final class ReconcileContentMetricsCommand extends Command
      */
     private function window(): array
     {
-        $to = $this->option('to') === null
-            ? Carbon::now()->endOfDay()
-            : Carbon::parse((string) $this->option('to'))->endOfDay();
+        /*
+         * An EMPTY option is absent — found by running this on production.
+         *
+         * `production-diagnostics.yml` passes every value unconditionally, because a shell that
+         * assembles flags conditionally is a shell that eventually assembles a command. So a caller
+         * who names no window sends `--from="" --to=""`, and these read `=== null`, which an empty
+         * string is not: `Carbon::parse('')` is TODAY, so the thirty-day default became a single day.
+         *
+         * The consequence was not an error. The first production reading came back «window 2026-09-16
+         * → 2026-09-16 … 39 with figures … THE STRIP WAS SHORT BY 0.00» — a real answer about a
+         * one-day window, indistinguishable from the thirty-day answer it was asked for, and it
+         * understated the finding it was built to measure. An instrument that quietly answers a
+         * different question than the one asked is worse than one that fails.
+         */
+        $option = static function (mixed $value): ?string {
+            $value = is_string($value) ? trim($value) : null;
 
-        $from = $this->option('from') === null
+            return ($value ?? '') === '' ? null : $value;
+        };
+
+        $toOption = $option($this->option('to'));
+        $fromOption = $option($this->option('from'));
+
+        $to = $toOption === null
+            ? Carbon::now()->endOfDay()
+            : Carbon::parse($toOption)->endOfDay();
+
+        $from = $fromOption === null
             ? $to->copy()->subDays(29)->startOfDay()
-            : Carbon::parse((string) $this->option('from'))->startOfDay();
+            : Carbon::parse($fromOption)->startOfDay();
 
         return [$from, $to];
     }
@@ -302,8 +325,9 @@ final class ReconcileContentMetricsCommand extends Command
     private function subject(): ?ExternalCreative
     {
         $reference = $this->argument('creative');
+        $reference = is_string($reference) ? trim($reference) : null;
 
-        if (is_string($reference) && $reference !== '') {
+        if ($reference !== null && $reference !== '') {
             $query = ExternalCreative::withoutGlobalScopes();
 
             /* A uuid is ours; anything else is the provider's own id, which is what a human reads. */
@@ -564,6 +588,29 @@ final class ReconcileContentMetricsCommand extends Command
         if (count($fromAds) > 0) {
             $this->line('  '.count($fromAds).' creative(s) carry figures ONLY at the ad grain. A strip that read '
                 .'`creative_daily_metrics` alone could not see any of them.');
+        }
+
+        /*
+         * The gap in METRICS, not only in money — and on production it was the larger half.
+         *
+         * The first real reading came back «SHORT BY 0.00» over a library where the old strip could
+         * state sixteen figures and the new one states thirty-five. The money genuinely was not short
+         * in that window: the ad-grain rows for those creatives carry the RESULT columns and no spend.
+         * What was short was the ANSWER — `leads`, `installs`, `sign_ups`, `app_opens`, `page_views`,
+         * `reach`, `purchases`, `add_to_cart`, `checkout` and the figures derived from them were absent
+         * from the headline strip entirely.
+         *
+         * That is «the other KPIs disappear» exactly, and it was visible only by diffing two long
+         * printed lists by eye. A diagnostic that makes its reader do that has buried its own finding,
+         * so the difference is named.
+         */
+        if ($nativeOnly !== null && $strip !== null) {
+            $gained = array_values(array_diff($this->answeredKeys($strip), $this->answeredKeys($nativeOnly)));
+
+            if ($gained !== []) {
+                $this->line('  THE STRIP COULD NOT STATE '.count($gained).' FIGURE(S) IT NOW STATES — '
+                    .implode(', ', $gained).'.');
+            }
         }
 
         if ($strip !== null && $cards !== null) {
