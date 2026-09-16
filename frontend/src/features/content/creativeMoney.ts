@@ -1,5 +1,5 @@
 import { formatMoneyReading, readMoney } from '@/lib/money/contract'
-import { formatMetric } from './metrics'
+import { formatMetric, metricState } from './metrics'
 import type { CreativeMetrics } from './api'
 import type { Locale } from '@/stores/ui'
 
@@ -51,4 +51,34 @@ export function creativeMoney(
       formatMetric({ kind: 'value', value: n ?? 0 }, key, locale, c ?? currency)),
     note: reading.note,
   }
+}
+
+/**
+ * Owner defect 95 — ONE reader for a creative figure, whatever kind of figure it is.
+ *
+ * ## Why this exists rather than a ternary per call site
+ *
+ * `creativeMoney` was added for money and `metricState` kept everything else, which is the right
+ * split — and it left every surface to remember which was which. Some remembered and some did not,
+ * so the same creative's spend read «412.50 USD» on its card and «Not provided» on Content Analytics,
+ * in the compare table, and wherever else a key list happened to contain `spend` or `revenue`.
+ *
+ * Two of those sites had the ternary written inline and correct; the others simply did not have it.
+ * A rule enforced by remembering is a rule that holds until the next key list changes, and
+ * `headline_metrics` is a key list the SERVER chooses per objective — so which surfaces are exposed
+ * changes with the objective, which is the worst possible way for a bug to be distributed.
+ *
+ * So the question «what does this figure say» has one answer. Money goes through the contract, which
+ * knows the four states FX-001 produces; a count or a ratio goes through `metricState`, which is
+ * right for it and already tells a measured zero from «not sent».
+ */
+export function creativeFigureText(
+  metrics: CreativeMetrics | null,
+  key: string,
+  currency: string | null,
+  locale: Locale,
+): string {
+  return key === 'spend' || key === 'revenue'
+    ? creativeMoney(metrics, key, currency, locale).text
+    : formatMetric(metricState(metrics, key), key, locale, currency)
 }

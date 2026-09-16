@@ -367,46 +367,55 @@ final class CreativeMetrics
         }
 
         /*
-         * The SAME projection `forCreatives()` builds, minus the grouping key.
+         * Owner defect 95 — the strip reads exactly what the cards read, because it IS what they read.
          *
-         * `shape()` reads more than `SUMS` — the averaged video seconds, the active-day count and the
-         * money-provenance expressions — and a select that carried only the sums produced a row
-         * `shape()` indexed straight into an undefined key. The columns are listed once, here, for
-         * exactly that reason.
+         * ## What this used to be, and why it was the owner's sentence
+         *
+         * A second SQL projection over `creative_daily_metrics`. Two consequences, and both are
+         * «sometimes Spend appears and the other KPIs disappear» said mechanically:
+         *
+         *   · NO AD-GRAIN FALLBACK. `forCreatives()` reads a creative's own rows and falls back to
+         *     the ads that ran it, because `AccountMetricsSyncer` asks for creative-level insights
+         *     behind `instanceof ReportsCreativeInsights` and Snapchat is the only implementor. So on
+         *     a Meta, Google, TikTok, LinkedIn or X account the cards carried spend and the strip
+         *     directly above them returned null — the figures appearing and vanishing in one
+         *     viewport, which is what the owner was looking at.
+         *   · NO DEMO POLICY. `forCreatives()` applies `CreativeDemoPolicy` and this did not, so on a
+         *     project holding seeded rows beside real ones the strip and the cards summed different
+         *     sets. `ANALYTICS-PROVENANCE-001` calls that «invented money inside a real total», and
+         *     the strip was the element carrying it.
+         *
+         * ## Why delegation rather than a wider query
+         *
+         * Adding a UNION and a policy clause here would have fixed today's two divergences and left
+         * the mechanism that produced them: two readers of one subject, free to drift again the next
+         * time either learns something. The Unified Data Pipeline requirement is explicit that one
+         * number may not be derived in more than one place, so the strip now pools the very rows the
+         * cards render — and `aggregate()` recomputes every ratio from the pooled sums, which is the
+         * rule that keeps a scope's CTR from being the mean of per-creative CTRs.
+         *
+         * The cost is two grouped queries over the scope instead of one, and N shaped rows summed in
+         * PHP rather than by the database. That is the price `idsWithFatigueStatus()` already pays
+         * over the same candidate set for the health filter, and it buys the one property this
+         * endpoint exists to have: the strip cannot say something the cards under it contradict.
          */
-        $select = [];
-        foreach (self::SUMS as $alias => $column) {
-            $select[] = "SUM({$column}) AS {$alias}";
-        }
-        $select[] = 'AVG(frequency) AS frequency';
-        $select[] = 'AVG(video_avg_watch_seconds) AS video_avg_watch_seconds';
-        $select[] = 'COUNT(DISTINCT metric_date) AS active_days';
+        $figures = $this->forCreatives($creativeIds, $from, $to);
 
-        foreach (self::MONEY_TRUTH as $alias => $expression) {
-            $select[] = "{$expression} AS {$alias}";
-        }
-
-        $row = DB::table('creative_daily_metrics')
-            ->whereIn('creative_id', $creativeIds)
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
-            ->selectRaw(implode(', ', $select))
-            ->first();
-
-        if ($row === null) {
+        if ($figures === []) {
             return null;
         }
 
-        $shaped = $this->shape((array) $row);
+        $totals = $this->aggregate(array_values($figures));
 
         /*
          * A scope where the provider reported NOTHING is «no figures», not a row of zeros.
          *
-         * `SUM()` over no rows returns null per column, which `shape()` carries through honestly —
-         * but a strip drawn from it would still read as an answer. The caller gets null and says so.
+         * `aggregate()` keeps a null null, so a set of silent creatives comes back with every figure
+         * absent — honest, and still an answer a strip would draw. The caller gets null and says so.
          */
-        return ($shaped['reported'] ?? []) === [] || ! in_array(true, (array) ($shaped['reported'] ?? []), true)
+        return $totals === null || ! in_array(true, (array) ($totals['reported'] ?? []), true)
             ? null
-            : $shaped;
+            : $totals;
     }
 
     /**
@@ -557,6 +566,32 @@ final class CreativeMetrics
         $figures['orders'] = $conversions;
         $figures['cost_per_lpv'] = $this->ratio($spend, $num('landing_page_views'));
 
+        /*
+         * Owner defect 95 — the two figures the Engagement family is JUDGED by, and never computed.
+         *
+         * The third instance of one shape in this file, and the other two are recorded a few lines
+         * above: `cpl` and `cpi` were «named as the verdict and never computed», so `supportable()`
+         * struck them and the card «led with whatever came next»; and `ObjectiveFamily::App` named
+         * `registrations` and `in_app_events`, «two figures that could never arrive».
+         *
+         * `engagement_rate` and `cpe` were listed in `DERIVED` — this service's own claim that it can
+         * produce them — and nothing here produced either. So an engagement creative lost BOTH of its
+         * verdict metrics silently and led with spend, engagements and impressions: figures true of any
+         * campaign whatever it was bought for, on the card that is supposed to say whether this one
+         * worked.
+         *
+         * `engagements` has been a summed column all along, so both are arithmetic the service already
+         * had the inputs for. An engagement is deliberately NOT a click — the family's own comment says
+         * so — which is why the rate is engagements over impressions rather than over clicks.
+         *
+         * `ratio()` returns null when the denominator is missing or zero, so a creative whose platform
+         * reported no engagement gets «nothing to divide» rather than a rate of nothing.
+         */
+        $engagements = $num('engagements');
+
+        $figures['engagement_rate'] = $this->ratio($engagements, $impressions);
+        $figures['cpe'] = $this->ratio($spend, $engagements);
+
         return $figures;
     }
 
@@ -587,7 +622,17 @@ final class CreativeMetrics
         $figures = [];
         $reported = [];
 
-        foreach (array_keys(self::SUMS) as $key) {
+        /*
+         * Owner defect 95 — the AD grain's results are summed too, or an aggregate loses them.
+         *
+         * This iterated `SUMS` alone, which is the CREATIVE table's column list. `leads`, `sign_ups`,
+         * `installs`, `app_opens` and `page_views` live only on `entity_daily_metrics`, and since the
+         * ad-grain fallback a creative's figures routinely come from there — so a card showed twenty
+         * leads and the group containing that one creative showed none, as did the format comparison
+         * and Content Analytics above it. Exactly the loss `shape()` already avoids by reading both
+         * key lists; this is the same correction one surface further on.
+         */
+        foreach ([...array_keys(self::SUMS), ...array_keys(self::AD_GRAIN_SUMS)] as $key) {
             $total = null;
             foreach ($sets as $set) {
                 if (is_numeric($set[$key] ?? null)) {
@@ -614,6 +659,60 @@ final class CreativeMetrics
             static fn (array $s): int => (int) ($s['active_days'] ?? 0),
             $sets,
         ));
+
+        /*
+         * The money's PROVENANCE, pooled — so a withheld total is withheld rather than absent.
+         *
+         * FX-001 leaves `spend` null and preserves the original beside it, which is the state of every
+         * Snapchat row on the owner's account: a USD account with no USD→SAR rate. An aggregate that
+         * summed only the converted column would report «nothing was spent» over money the platform
+         * did report — the same defect `creativeMoney` exists to prevent one element away, and the
+         * reason the reader keys off exactly these field names.
+         *
+         * The currency is named only when every contributing row agrees on one. Two unconvertible
+         * currencies cannot be added, and a label over their sum would be a wrong label: that is the
+         * rule `money_original_currencies` already enforces for one creative, held here for a set.
+         */
+        foreach (['spend', 'revenue'] as $key) {
+            $figures[$key.'_withheld_rows'] = (int) array_sum(array_map(
+                static fn (array $s): int => (int) ($s[$key.'_withheld_rows'] ?? 0),
+                $sets,
+            ));
+
+            $original = null;
+            foreach ($sets as $set) {
+                if (is_numeric($set[$key.'_original'] ?? null)) {
+                    $original = ($original ?? 0.0) + (float) $set[$key.'_original'];
+                }
+            }
+            $figures[$key.'_original'] = $original;
+        }
+
+        $currencies = array_values(array_unique(array_filter(array_map(
+            static fn (array $s): ?string => is_string($s['money_original_currency'] ?? null)
+                && trim((string) $s['money_original_currency']) !== ''
+                    ? (string) $s['money_original_currency']
+                    : null,
+            $sets,
+        ))));
+
+        $figures['money_original_currency'] = count($currencies) === 1 ? $currencies[0] : null;
+        $figures['money_original_currencies'] = count($currencies);
+
+        /*
+         * The grain, only where every contributing row agrees on it.
+         *
+         * A mixed scope has no single provenance, and claiming one would put «summed from this
+         * creative's ads» over a set where half the figures are the platform's own creative-level
+         * report. Null is «no claim», which is how a payload predating the field already reads.
+         */
+        $grains = array_values(array_unique(array_filter(array_map(
+            static fn (array $s): ?string => is_string($s['grain'] ?? null) ? (string) $s['grain'] : null,
+            $sets,
+        ))));
+        if (count($grains) === 1) {
+            $figures['grain'] = $grains[0];
+        }
 
         $figures = $this->derive($figures);
         $reported['orders'] = $reported['conversions'];
@@ -852,7 +951,16 @@ final class CreativeMetrics
 
         $producible = fn (string $key): bool => array_key_exists($key, self::SUMS)
             || in_array($key, self::DERIVED, true)
-            || ($fromAdGrain && (array_key_exists($key, self::AD_GRAIN_SUMS) || in_array($key, self::AD_GRAIN_DERIVED, true)));
+            || ($fromAdGrain && (array_key_exists($key, self::AD_GRAIN_SUMS) || in_array($key, self::AD_GRAIN_DERIVED, true)))
+            /*
+             * Owner defect 95 — a figure the row demonstrably HOLDS is producible, whatever the grain
+             * says. `grain` is one string, and an aggregate over a mixed scope legitimately carries
+             * none: a group of Meta creatives pooled with a Snapchat one has no single provenance, so
+             * the flag above went null and struck `leads` and `cpl` off the family's own list while
+             * the pooled figures sat in the array being filtered. A present, non-null value is not a
+             * promise of an empty cell — it is the cell.
+             */
+            || ($figures !== null && ($figures[$key] ?? null) !== null);
 
         $kept = array_values(array_filter($metrics, $producible));
 

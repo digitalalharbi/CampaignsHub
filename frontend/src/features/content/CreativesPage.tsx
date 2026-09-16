@@ -7,11 +7,11 @@ import { AdPreviewDialog } from './AdPreviewDialog'
 import { creativeDialogFigures } from './creativeDialogFigures'
 import { CreativeTrend } from './CreativeTrend'
 import { CreativeCompare } from './CreativeCompare'
-import { formatMetric, metricLabel, metricState } from './metrics'
+import { besideSpend, metricLabel } from './metrics'
 import { creativeGrainMissing, emptyReason, noDisplayableMetrics, type EmptyReason, type MetricsAvailability } from './availability'
 import { absenceLabel, aspectClass, previewShape, readPreview } from './adPreview'
 import { imageLoading } from './format'
-import { creativeMoney } from './creativeMoney'
+import { creativeFigureText, creativeMoney } from './creativeMoney'
 import { VideoPoster } from './VideoPoster'
 import { anyDisplayablePreview } from './previewPresence'
 import {
@@ -1177,7 +1177,7 @@ export function CreativesPage() {
                         <span className="text-text-muted">—</span>
                       ) : (
                         <span className="tabular-nums" dir="ltr">
-                          {formatMetric(metricState(creative.metrics, resultKey), resultKey, locale, data?.currency ?? null)}
+                          {creativeFigureText(creative.metrics, resultKey, data?.currency ?? null, locale)}
                           <span className="ms-1 text-[11px] text-text-muted">{metricLabel(resultKey, locale)}</span>
                         </span>
                       )}
@@ -1187,7 +1187,7 @@ export function CreativesPage() {
                         <span className="text-text-muted">—</span>
                       ) : (
                         <span className="tabular-nums" dir="ltr">
-                          {formatMetric(metricState(creative.metrics, efficiencyKey), efficiencyKey, locale, data?.currency ?? null)}
+                          {creativeFigureText(creative.metrics, efficiencyKey, data?.currency ?? null, locale)}
                           <span className="ms-1 text-[11px] text-text-muted">{metricLabel(efficiencyKey, locale)}</span>
                         </span>
                       )}
@@ -1568,9 +1568,7 @@ function CreativeGridCard({
                 </dd>
               </div>
 
-              {creative.headline_metrics
-                .filter((key) => key !== 'spend')
-                .slice(0, 3)
+              {besideSpend(creative.headline_metrics)
                 .map((key) => (
                   <div key={key} className="flex flex-col">
                     <dt className="text-text-secondary">{metricLabel(key, locale)}</dt>
@@ -1579,16 +1577,31 @@ function CreativeGridCard({
                         * CONTENT-MONEY-VISIBLE-001 — money through the canonical reader, everything
                         * else through `metricState`. Counts and ratios keep that path, which is
                         * right for them: it already tells a measured zero from «not sent».
+                        *
+                        * Owner defect 95 — asked of ONE reader rather than by a ternary here. This
+                        * named `revenue` and not `spend`, which was safe only because the fixed cell
+                        * above already carries spend; a key list that changes with the objective is
+                        * the wrong thing to guard by remembering.
                         */}
-                      {key === 'revenue'
-                        ? creativeMoney(creative.metrics, key, currency, locale).text
-                        : formatMetric(metricState(creative.metrics, key), key, locale, currency)}</Num>
+                      {creativeFigureText(creative.metrics, key, currency, locale)}</Num>
                     </dd>
                   </div>
                 ))}
             </dl>
 
-            {creative.headline_metrics.length === 0 && (
+            {/*
+                Owner defect 95 — the gap beside the price is EXPLAINED, or the card reads as broken.
+
+                This was gated on `headline_metrics.length === 0`, and that length is 1 in the one
+                state the sentence was written for: `supportable()` falls back to `['spend']` when
+                nothing else about the creative can be headlined — its stated last resort, «the one
+                question asked of every campaign» — and the grid above filters `spend` out because
+                the fixed cell already carries it. So the reader got a price, three empty columns and
+                no reason, which is the owner's «Spend appears and the other KPIs disappear» rendered
+                literally. Measured after the list the grid actually draws, which is the only number
+                that can answer «is there anything beside the price».
+            */}
+            {besideSpend(creative.headline_metrics).length === 0 && (
               <EmptyReasonPanel reason={noDisplayableMetrics(locale)} />
             )}
           </div>

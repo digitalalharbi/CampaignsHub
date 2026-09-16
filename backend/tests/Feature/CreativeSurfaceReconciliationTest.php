@@ -144,14 +144,29 @@ final class CreativeSurfaceReconciliationTest extends TestCase
     /** The Content library listing — the card, and the row the list view draws. */
     private function library(): array
     {
-        $query = http_build_query(['from' => $this->from, 'to' => $this->to, 'per_page' => 10]);
-
-        $rows = $this->actingAs($this->user, 'sanctum')
-            ->getJson("/api/v1/projects/{$this->project->id}/creatives?{$query}")
-            ->assertOk()
-            ->json('data.creatives');
+        $rows = $this->libraryEnvelope()['creatives'] ?? [];
 
         return collect($rows)->firstWhere('id', (string) $this->creative->id) ?? [];
+    }
+
+    /**
+     * The whole library response, because the HEADLINE STRIP is part of it — Owner defect 95.
+     *
+     * `totals` sits directly above the cards and is the only figure on that screen describing more
+     * than one creative. It was a second SQL projection over `creative_daily_metrics` with no
+     * ad-grain fallback and no demo policy, so it could state something the cards under it
+     * contradicted — «sometimes Spend appears and the other KPIs disappear», in one viewport.
+     *
+     * @return array<string, mixed>
+     */
+    private function libraryEnvelope(): array
+    {
+        $query = http_build_query(['from' => $this->from, 'to' => $this->to, 'per_page' => 10]);
+
+        return (array) $this->actingAs($this->user, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->project->id}/creatives?{$query}")
+            ->assertOk()
+            ->json('data');
     }
 
     /** The Content Analytics page — what the quick popup's trend also reads. */
@@ -228,11 +243,27 @@ final class CreativeSurfaceReconciliationTest extends TestCase
         $this->assertIsArray($library, 'the library carried no figures');
         $this->assertIsArray($detail, 'the analytics page carried no figures');
 
+        /*
+         * Owner defect 95 — the HEADLINE STRIP is a fifth surface, and it was the one that disagreed.
+         *
+         * The scope here is this one creative, so the strip over it must state that creative's own
+         * figures. Before this it was a second SQL projection over `creative_daily_metrics` — no
+         * ad-grain fallback, no demo policy — and on five of six providers the creative table is empty
+         * by design, so the cards carried spend and the strip above them reported nothing at all.
+         *
+         * Included in this list rather than tested apart, because this is the guard that answers «do
+         * the surfaces agree» and a surface missing from it is a surface free to differ.
+         */
+        $strip = $this->libraryEnvelope()['totals'] ?? null;
+
+        $this->assertIsArray($strip, 'the headline strip reported nothing for a library whose card reports figures');
+
         $surfaces = [
             'content library' => $library,
             'content analytics' => $detail,
             'report roster' => $roster['metrics'] ?? null,
             'report ranked' => $ranked['metrics'] ?? $ranked,
+            'library headline strip' => $strip,
         ];
 
         /*

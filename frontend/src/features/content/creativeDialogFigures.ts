@@ -1,4 +1,5 @@
 import { percent, rowCostPer, rowRoas } from '@/features/analytics/format'
+import { readMoney } from '@/lib/money/contract'
 import { metricKind, metricLabel } from './metrics'
 import { creativeMoney } from './creativeMoney'
 import { readMetricValue } from '@/lib/metricValue'
@@ -102,7 +103,22 @@ export function creativeDialogFigures(
    * A tile reading «الإيرادات —» on every awareness creative in an account teaches a reader to skip
    * the row, and the row is where the sales creatives state theirs.
    */
-  if (typeof bag.revenue === 'number') {
+  /*
+   * Owner defect 95 — «did the provider report revenue», asked of the money CONTRACT.
+   *
+   * This asked `typeof bag.revenue === 'number'`, which is the converted column and nothing else.
+   * FX-001 withholds an unconvertible figure by design — `revenue` null, `revenue_original` holding
+   * the real amount, `money_original_currency` naming it — and that is the state of every Snapchat
+   * row on the owner's own account, a USD account with no USD→SAR rate. So the CARD printed
+   * «1,980.25 USD» through `creativeMoney` and this panel, one click away, dropped the figure
+   * entirely: the same creative with revenue on one surface and none on the next.
+   *
+   * `readMoney` is the reader that knows the four states, and only two of them are «there is nothing
+   * to show». A measured zero stays — it is a fact about the campaign — and a revenue nobody reported
+   * is still left out, for the reason the paragraph above gives: a tile reading «Revenue —» on every
+   * awareness creative teaches a reader to skip the row where the sales creatives state theirs.
+   */
+  if (moneyIsStatable(metrics, 'revenue', currency, ar)) {
     figures.push({
       label: ar ? 'الإيرادات' : 'Revenue',
       value: creativeMoney(metrics as CreativeMetrics | null, 'revenue', currency, locale).text,
@@ -139,6 +155,19 @@ export function creativeDialogFigures(
   }
 
   return figures
+}
+
+/**
+ * Whether the money contract holds something to state for this key.
+ *
+ * `converted`, `withheld` and `zero` are all real answers a reader can act on; `absent` and
+ * `unavailable` are not. Asked here rather than re-derived from the fields, because the contract is
+ * the one place those five states are decided and the card already asks it the same way.
+ */
+function moneyIsStatable(metrics: MoneyTotals, key: 'spend' | 'revenue', currency: string | null, ar: boolean): boolean {
+  const { kind } = readMoney(metrics, key, currency, ar)
+
+  return kind === 'converted' || kind === 'withheld' || kind === 'zero'
 }
 
 /**

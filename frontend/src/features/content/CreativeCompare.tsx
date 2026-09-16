@@ -2,7 +2,8 @@ import { TransposedMetricTable } from '@/components/ui/MetricTable'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, X } from 'lucide-react'
 import { compareCreatives, type CreativeCard } from './api'
-import { formatMetric, metricKind, metricLabel, metricState } from './metrics'
+import { metricKind, metricLabel, metricState } from './metrics'
+import { creativeFigureText } from './creativeMoney'
 import { imageLoading } from './format'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
@@ -145,9 +146,22 @@ export function CreativeCompare({
             values: rows.map((creative) => {
               const state = metricState(creative.metrics, key)
 
+              /*
+               * Owner defect 95 — a withheld amount is a SENTENCE here, and it says the amount.
+               *
+               * `metricKeys` is the union of every row's `headline_metrics`, so it contains `spend`
+               * and `revenue` whenever any creative in the comparison is judged on them. Read through
+               * `metricState` alone, a withheld figure — FX-001's design, and the state of every row
+               * on an account with no rate — printed «Not provided» in the table beside cards that
+               * printed «412.50 USD».
+               *
+               * The numeric branch is untouched: a converted figure is a number and the primitive
+               * formats and aligns it. What changes is that the non-numeric branch asks the contract
+               * rather than assuming the absence is real.
+               */
               return state.kind === 'value'
                 ? state.value
-                : <span>{formatMetric(state, key, locale, comparison.data?.currency ?? null)}</span>
+                : <span>{creativeFigureText(creative.metrics, key, comparison.data?.currency ?? null, locale)}</span>
             }),
             notes: rows.map((creative) =>
               winners[key] === creative.id ? <span className="sr-only">{t.winner}</span> : null,
