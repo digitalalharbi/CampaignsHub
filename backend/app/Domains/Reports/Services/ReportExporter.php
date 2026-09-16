@@ -101,12 +101,42 @@ final class ReportExporter
             'comparison' => ['comparison'],
         ];
 
+        /*
+         * A section this document does not CONTAIN is not in its file — Owner defect row 96.
+         *
+         * This dropped a section's data only when its slide was present and explicitly
+         * `visible => false`. An executive summary does not mark those slides invisible: the
+         * template OMITS them, which is what makes it a shorter document. So nothing was dropped,
+         * and the two forms exported the same file.
+         *
+         * Measured on a generated report with real figures — 38 KPIs, 4 platforms, 6 funnel stages —
+         * the executive-summary CSV and the detailed CSV came out byte-identical apart from a
+         * one-second difference in their own «generated at» stamp. 3411 bytes each, 61 lines each.
+         * The operator's choice reached the slide list and stopped there, so the file a client
+         * receives was the same document under two names. That is the placebo control the closure
+         * brief rules out, on the copy the client keeps.
+         *
+         * An absent slide is therefore read the same way as a hidden one. The two states mean the
+         * same thing about the finished document — this report has no funnel section — and only
+         * differ in whether the composition never had it or an operator switched it off.
+         *
+         * Fail-safe is already above: a config with no slides at all returns untouched, so a report
+         * generated before slide configs existed keeps every section rather than being emptied by a
+         * rule it predates.
+         */
+        $present = [];
         foreach ($slides as $slide) {
-            if (! is_array($slide) || ($slide['visible'] ?? true) !== false) {
+            if (is_array($slide) && ($slide['visible'] ?? true) !== false) {
+                $present[(string) ($slide['type'] ?? '')] = true;
+            }
+        }
+
+        foreach ($keysOf as $type => $keys) {
+            if (isset($present[$type])) {
                 continue;
             }
 
-            foreach ($keysOf[$slide['type'] ?? ''] ?? [] as $key) {
+            foreach ($keys as $key) {
                 unset($data[$key]);
             }
         }
@@ -260,6 +290,65 @@ final class ReportExporter
          * and a client's sheet does not print a heading over nothing, which reads as data that
          * failed to load rather than as a boundary being kept.
          */
+        /*
+         * The funnel and the budget — sections the Owner's Detailed list names and the file had not
+         * carried at all.
+         *
+         * The CSV wrote KPIs, Platforms, Objectives, Campaigns and Creatives, so «funnel,
+         * budget/pacing, detailed tables» reached the deck and never the spreadsheet. That is a gap
+         * in the detailed product on its own, and it is also why the two forms could not differ on a
+         * CLIENT file: the only form-sensitive section the writer had was Campaigns, which the client
+         * boundary removes for that audience anyway. So an executive summary and a detailed report
+         * exported byte-identical CSVs to a client — measured, 3411 bytes and 61 lines each.
+         *
+         * Both are written from the document's own data, which `withoutHiddenSections` has already
+         * trimmed to the sections this form contains. A summary therefore has no funnel and no budget
+         * to write, and the difference is a consequence of the composition rather than a second rule
+         * about forms kept here.
+         *
+         * A stage nobody reported prints an EMPTY cell, never a zero — the same rule the creative
+         * columns follow below, and for the same reason: a spreadsheet zero is a measurement, and
+         * this one would be a measurement no platform made.
+         */
+        if (! empty($data['funnel'])) {
+            $put([]);
+            $put(['Funnel', 'count', 'step rate', 'cost per', 'exceeds previous']);
+            foreach ($data['funnel'] as $stage) {
+                $put([
+                    $stage['label'] ?? $stage['stage'] ?? '',
+                    ($stage['reported'] ?? false) ? ($stage['count'] ?? '') : '',
+                    $stage['step_rate'] ?? '',
+                    $stage['cost_per'] ?? '',
+                    ($stage['exceeds_previous'] ?? false) ? 'yes' : '',
+                ]);
+            }
+        }
+
+        if (! empty($data['budget'])) {
+            $put([]);
+            $put(['Budget', 'budget', 'spent', 'remaining', 'consumed %', 'pace', 'expected to date', 'projected']);
+            foreach ($data['budget'] as $line) {
+                /*
+                 * A line the money contract could not compare states its figures and NOT its
+                 * verdicts. `pacing_basis` is the aggregator's own word for whether the spend and
+                 * the budget are in one currency; where it is not `comparable`, a consumed
+                 * percentage or a pace would be a ratio of two amounts that are not the same kind
+                 * of thing.
+                 */
+                $comparable = ($line['pacing_basis'] ?? null) === 'comparable';
+                $put([
+                    $line['provider'] ?? '',
+                    $line['budget'] ?? '',
+                    $line['spent'] ?? '',
+                    $comparable ? ($line['remaining'] ?? '') : '',
+                    $comparable ? ($line['consumed_pct'] ?? '') : '',
+                    $comparable ? ($line['pace'] ?? '') : '',
+                    $comparable ? ($line['expected_to_date'] ?? '') : '',
+                    $comparable ? ($line['projected_spend'] ?? '') : '',
+                ]);
+            }
+        }
+
         if (! empty($data['campaigns'])) {
             $put([]);
             $put(['Campaigns', 'platform', 'spend', 'revenue', 'conversions', 'roas', 'cpa']);
@@ -547,8 +636,26 @@ final class ReportExporter
         if ($enabled('freshness') && $txt('freshness')) {
             $rows[] = ['Data freshness / تحديث البيانات', (string) $txt('freshness')];
         }
-        $rows[] = ['Data source / مصدر البيانات', (string) $report->data_source];
-        $rows[] = ['Attribution window / نافذة الإسناد', (string) ($report->attribution_window ?? '—')];
+        /*
+         * CLIENT-DIAGNOSTIC-SEPARATION-001 — the manifest says what covers THEIR period, not ours.
+         *
+         * «Data source: daily_metrics» is the name of one of our database tables, and it was written
+         * into the manifest of every exported file including the client's own. A reader cannot act on
+         * it, cannot ask anyone to change it, and `daily_metrics` is not a sentence in any language
+         * they were sold. The same line was removed from the shared report page in this closure; this
+         * is the copy they download and keep, which is the version that gets forwarded.
+         *
+         * The attribution window goes with it for the client: ATTRIBUTION-WINDOW-001 records that no
+         * connector has ever set one, so the column carries the literal `default` and this row
+         * printed «—» or a word that discloses nothing while looking authoritative.
+         *
+         * Both stay for an INTERNAL export, where they are exactly the point — an operator
+         * reconciling a figure needs to know which table and which window produced it.
+         */
+        if (($report->audience ?? 'client') === 'internal') {
+            $rows[] = ['Data source / مصدر البيانات', (string) $report->data_source];
+            $rows[] = ['Attribution window / نافذة الإسناد', (string) ($report->attribution_window ?? '—')];
+        }
         $rows[] = ['Currency / العملة', (string) $report->currency];
         $rows[] = ['Timezone / المنطقة الزمنية', (string) $report->timezone];
         $rows[] = ['Report mode / وضع التقرير', ($report->config['mode'] ?? 'snapshot') === 'live' ? 'Live' : 'Snapshot'];
