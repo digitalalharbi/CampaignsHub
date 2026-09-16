@@ -82,6 +82,9 @@ final class ContentDefectCensusCommand extends Command
     /** How much of an asset is read to judge it: enough for a still's header, never the file. */
     private const PREFIX_BYTES = 262_144;
 
+    /** @var list<string> stills that load in a browser although their declared type is wrong */
+    private array $mislabelled = [];
+
     public function handle(): int
     {
         [$from, $to] = $this->window();
@@ -315,6 +318,17 @@ final class ContentDefectCensusCommand extends Command
                 }
             }
         }
+
+        if ($this->mislabelled !== []) {
+            $this->line('');
+            $this->line('NOT A DEFECT — a still that LOADS although its declared content type is wrong (browsers draw by bytes) — '.count($this->mislabelled));
+
+            foreach ($this->mislabelled as $line) {
+                $this->line('      '.$line);
+            }
+        }
+
+        $this->mislabelled = [];
 
         if ($overZero !== []) {
             $this->line('');
@@ -688,15 +702,21 @@ final class ContentDefectCensusCommand extends Command
      * What a body IS, from its leading bytes — never its content. A multipart envelope is described by
      * the content types its parts declare within the prefix, each re-sniffed.
      */
-    private function signature(string $bytes): string
+    /** The allow-list: JPEG, PNG, GIF, WebP — by leading bytes only. */
+    private function sniffImage(string $b): ?string
     {
-        $sniff = static fn (string $b): ?string => match (true) {
+        return match (true) {
             str_starts_with($b, "\xFF\xD8\xFF") => 'jpeg',
             str_starts_with($b, "\x89PNG\r\n\x1A\n") => 'png',
             str_starts_with($b, 'GIF87a') || str_starts_with($b, 'GIF89a') => 'gif',
             str_starts_with($b, 'RIFF') && substr($b, 8, 4) === 'WEBP' => 'webp',
             default => null,
         };
+    }
+
+    private function signature(string $bytes): string
+    {
+        $sniff = fn (string $b): ?string => $this->sniffImage($b);
 
         if ($bytes === '') {
             return 'empty';
@@ -738,8 +758,21 @@ final class ContentDefectCensusCommand extends Command
         }
 
         if (! str_starts_with($type, 'image/')) {
+            $bytes = $this->prefix($response);
+
+            /*
+             * Browsers draw an <img> by its bytes, not its declared type — measured on chromium, firefox
+             * and webkit, with and without `nosniff`. An allow-listed image that decodes therefore LOADS
+             * on the card; it is recorded as mislabelled, not as a blank. Anything else is still a blank.
+             */
+            if (($kind = $this->sniffImage($bytes)) !== null && @getimagesizefromstring($bytes) !== false) {
+                $this->mislabelled[] = $item['tag'].'  declared '.($type === '' ? 'none' : $type).', bytes '.$kind;
+
+                return null;
+            }
+
             // The declared type is not the evidence — the bytes are. Say what they actually are.
-            return 'not an image (content type '.($type === '' ? 'none' : $type).'; bytes: '.$this->signature($this->prefix($response)).')';
+            return 'not an image (content type '.($type === '' ? 'none' : $type).'; bytes: '.$this->signature($bytes).')';
         }
 
         return @getimagesizefromstring($this->prefix($response)) === false ? 'an image that does not decode' : null;
