@@ -161,6 +161,11 @@ final class LiveReportService
      */
     private function contentFilters(ReportShare $share, array $applied, array $scope): array
     {
+        $shareList = static fn (string $key): array => array_values(array_filter(
+            (array) ($share->scope[$key] ?? []),
+            static fn ($v): bool => is_scalar($v) && trim((string) $v) !== '',
+        ));
+
         return [
             'project_ids' => $scope['project_id'] === '' ? [ReportScope::IMPOSSIBLE] : [$scope['project_id']],
             'providers' => $applied['providers'] !== [] ? $applied['providers'] : $scope['providers'],
@@ -169,6 +174,17 @@ final class LiveReportService
                 $applied['campaigns'] !== [] ? $applied['campaigns'] : $scope['campaign_ids'],
                 array_values(array_filter((array) ($share->scope['account_ids'] ?? []))),
             ),
+            /*
+             * The operator's content choices on the link — which creatives or groups it names, which it
+             * excludes, and the objective/path axes the metrics are already bound by. `SharedCreativeView`
+             * honoured these and the live lists did not, so the Content mode listed exactly the creative
+             * an operator had taken out. Read from the share only: no reader control sets them.
+             */
+            'creative_ids' => $shareList('creative_ids'),
+            'creative_group_ids' => $shareList('creative_group_ids'),
+            'excluded_creative_ids' => $shareList('excluded_creative_ids'),
+            'objectives' => $shareList('objectives'),
+            'paths' => $shareList('paths'),
         ];
     }
 
