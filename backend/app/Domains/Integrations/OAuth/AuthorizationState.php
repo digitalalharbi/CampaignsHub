@@ -43,7 +43,27 @@ final class AuthorizationState
         ?string $clientWorkspaceId = null,
         array $extra = [],
     ): string {
-        $state = Str::random(48);
+        return self::issueUnder(Str::random(48), $tenantId, $provider, $userId, $clientWorkspaceId, $extra);
+    }
+
+    /**
+     * Record an attempt under a key the PROVIDER chose rather than one we minted.
+     *
+     * X-OAUTH1-001 — OAuth 1.0a has no `state` parameter. What returns on X's callback is the request
+     * token X issued at leg one, so that is the key. Everything else about the record is identical:
+     * single use, short lived, and the tenant read from here and never from the callback's query.
+     *
+     * @param  array<string,mixed>  $extra
+     */
+    public static function issueUnder(
+        string $key,
+        string $tenantId,
+        string $provider,
+        ?int $userId = null,
+        ?string $clientWorkspaceId = null,
+        array $extra = [],
+    ): string {
+        $state = $key;
 
         Cache::put(self::PREFIX.$state, [
             'tenant_id' => $tenantId,

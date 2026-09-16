@@ -113,10 +113,11 @@ final class PlatformProviderSettingsTest extends TestCase
             'nothing belonging to a customer may be asked for as a platform credential',
         );
 
-        // X is the only one of the eight whose authorisation is refused outright without PKCE.
+        // X Ads is the only one of the eight that authenticates with OAuth 1.0a signed requests (X-OAUTH1-001).
         $x = collect($response->json('data.providers'))->firstWhere('key', 'x');
-        $this->assertTrue($x['uses_pkce']);
-        $this->assertFalse($google['uses_pkce']);
+        $this->assertSame('oauth1a', $x['auth_scheme']);
+        $this->assertSame('oauth2', $google['auth_scheme']);
+        $this->assertSame(['consumer_key', 'consumer_secret', 'access_token', 'access_token_secret'], array_column($x['fields'], 'key'));
 
         // Commerce providers are not advertising platforms and are not described as though they were.
         $salla = collect($response->json('data.providers'))->firstWhere('key', 'salla');

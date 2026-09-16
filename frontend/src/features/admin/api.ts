@@ -644,7 +644,11 @@ export interface IntegrationProvider {
   fields: ProviderFieldSpec[]
   scopes: string[]
   effective_scopes: string[]
-  uses_pkce: boolean
+  /**
+   * X-OAUTH1-001 — `oauth2` for seven providers; `oauth1a` for X Ads, whose every API request is
+   * signed with the app's consumer pair and the connected user's token pair. Never a bearer token.
+   */
+  auth_scheme: 'oauth2' | 'oauth1a'
   supports_refresh: boolean
   token_note: string
   token_note_ar: string

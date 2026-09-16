@@ -6,8 +6,8 @@ namespace App\Domains\Integrations\OAuth;
 
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Support\PlatformHttp;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
@@ -23,7 +23,10 @@ use RuntimeException;
  *   is a FAILURE, and reading only the HTTP status would store an empty token as a success.
  * - **Meta** returns a short-lived token from the code exchange and has no refresh token; the long-lived
  *   exchange is a second call against the same endpoint with `grant_type=fb_exchange_token`.
- * - **X** and **LinkedIn** want the client credentials in a Basic header rather than the body.
+ * - **X** is not OAuth 2.0 at all (X-OAUTH1-001). Its Ads API takes OAuth 1.0a only: a request token,
+ *   the user's authorisation, then an access token AND a token secret, with every call signed. That
+ *   flow lives in the second half of this class and shares nothing with the first but the refusal to
+ *   run unconfigured.
  *
  * Nothing here runs without a configured platform: `PlatformCredentials::isConfigured()` is checked
  * first and the call refuses rather than sending a request that is certain to be rejected.
@@ -31,36 +34,19 @@ use RuntimeException;
 final class PlatformOAuth
 {
     /**
-     * The URL to send somebody to in order to authorise us.
+     * The URL to send somebody to in order to authorise us — for the OAuth 2.0 providers.
      *
      * `$state` is minted and recorded by the caller; it comes back on the callback and is the only
      * thing tying a returning browser to the request that started the flow.
-     */
-    /**
-     * X-PKCE-001 — a fresh code verifier, for the providers that need one.
      *
-     * Null for everybody else, and driven by the CATALOGUE's `usesPkce` rather than a literal list.
-     * That field used to be a declaration nothing read: the catalogue said X requires PKCE, the header
-     * comment said the verifier «must survive the whole round trip», and no line of code anywhere
-     * produced a challenge. Reading the declaration is what stops the two drifting apart again.
-     *
-     * 96 characters of `[A-Za-z0-9]`, the same shape `Identity/Services/OAuthFlow` already uses for
-     * staff sign-in — comfortably inside RFC 7636's 43–128 unreserved characters.
+     * X is refused here rather than handed a URL. Its authorise step needs a request token that only
+     * exists after a signed call to X, so there is no URL to build from a state alone — see
+     * `requestToken()` and `oauth1AuthorizeUrl()`.
      */
-    public function codeVerifier(PlatformCredentials $creds): ?string
-    {
-        return ProviderCatalogue::get($creds->platform)->usesPkce ? Str::random(96) : null;
-    }
-
-    /** The S256 challenge for a verifier: base64url of its raw SHA-256, per RFC 7636. */
-    public function codeChallenge(string $verifier): string
-    {
-        return rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=');
-    }
-
-    public function authorizationUrl(PlatformCredentials $creds, string $state, ?string $verifier = null): string
+    public function authorizationUrl(PlatformCredentials $creds, string $state): string
     {
         $this->assertConfigured($creds);
+        $this->assertOAuth2($creds);
 
         $query = match ($creds->platform) {
             // TikTok: app_id/state/redirect_uri, and no response_type or scope.
@@ -84,16 +70,6 @@ final class PlatformOAuth
                 'prompt' => $creds->platform === 'google' ? 'consent' : null,
             ], static fn ($v) => $v !== null),
         };
-
-        /*
-         * The challenge rides on the authorise URL when — and only when — a verifier was minted for
-         * this flow. Sending one to a provider that does not publish PKCE would be an unrequested
-         * change to five working integrations, so it is gated on the verifier and not added by hand.
-         */
-        if ($verifier !== null) {
-            $query['code_challenge'] = $this->codeChallenge($verifier);
-            $query['code_challenge_method'] = 'S256';
-        }
 
         return $creds->authorizeUrl().'?'.http_build_query($query);
     }
@@ -122,9 +98,10 @@ final class PlatformOAuth
     }
 
     /** Exchange the code a platform sent back for tokens. */
-    public function exchangeCode(PlatformCredentials $creds, string $code, ?string $verifier = null): OAuthTokens
+    public function exchangeCode(PlatformCredentials $creds, string $code): OAuthTokens
     {
         $this->assertConfigured($creds);
+        $this->assertOAuth2($creds);
 
         // The documented body is exactly {app_id, secret, auth_code}. `grant_type` was OAuth
         // vocabulary TikTok never asked for, and an undocumented field is not worth discovering on a
@@ -133,30 +110,11 @@ final class PlatformOAuth
             return $this->tikTokToken($creds, ['auth_code' => $code]);
         }
 
-        /*
-         * X-PKCE-001 — fail CLOSED when a PKCE provider has no verifier to present.
-         *
-         * The alternative is to exchange anyway, which sends X a request it is obliged to reject, and
-         * the customer is then shown X's refusal as though the PLATFORM were broken. That is the exact
-         * failure mode this audit exists to remove: an error message that names the wrong culprit.
-         *
-         * It should be unreachable — `start` mints the verifier and the state carries it — so reaching
-         * it means a state was minted by code that predates this, or by something that is not `start`.
-         * Both are worth saying out loud rather than laundering into a platform error.
-         */
-        if (ProviderCatalogue::get($creds->platform)->usesPkce && $verifier === null) {
-            throw new RuntimeException(
-                $creds->label().' requires PKCE, and this authorisation carried no code verifier. '
-                    .'Start the connection again.',
-            );
-        }
-
-        return $this->standardToken($creds, array_filter([
+        return $this->standardToken($creds, [
             'grant_type' => 'authorization_code',
             'code' => $code,
             'redirect_uri' => $creds->redirectUri(),
-            'code_verifier' => $verifier,
-        ], static fn ($v) => $v !== null));
+        ]);
     }
 
     /**
@@ -171,8 +129,10 @@ final class PlatformOAuth
     {
         $this->assertConfigured($creds);
 
-        if ($creds->platform === 'tiktok') {
-            return $current; // no refresh grant exists; the token is valid until revoked
+        // TikTok's business tokens have no refresh grant, and an OAuth 1.0a token (X) does not expire:
+        // both are valid until revoked.
+        if ($creds->platform === 'tiktok' || ProviderCatalogue::get($creds->platform)->usesOAuth1()) {
+            return $current;
         }
 
         if ($creds->platform === 'meta') {
@@ -199,17 +159,10 @@ final class PlatformOAuth
      */
     private function standardToken(PlatformCredentials $creds, array $grant, ?OAuthTokens $previous = null): OAuthTokens
     {
-        // X and LinkedIn authenticate the token call itself; the others take the pair in the body.
-        $usesBasicAuth = in_array($creds->platform, ['x'], true);
-
         $request = PlatformHttp::client($creds->platform)->asForm();
 
-        if ($usesBasicAuth) {
-            $request = $request->withBasicAuth((string) $creds->get('client_id'), (string) $creds->get('client_secret'));
-        } else {
-            $grant['client_id'] = $creds->get('client_id');
-            $grant['client_secret'] = $creds->get('client_secret');
-        }
+        $grant['client_id'] = $creds->get('client_id');
+        $grant['client_secret'] = $creds->get('client_secret');
 
         $response = $request->post($creds->tokenUrl(), $grant);
 
@@ -325,6 +278,125 @@ final class PlatformOAuth
         }
 
         return is_scalar($scope) && (string) $scope !== '' ? (string) $scope : null;
+    }
+
+    // ── OAuth 1.0a (X Ads) ────────────────────────────────────────────────────────────────────
+
+    /**
+     * X-OAUTH1-001 — leg one: ask X for a request token bound to our callback.
+     *
+     * Signed with the app's consumer pair alone; there is no user yet. X answers form-encoded, and
+     * `oauth_callback_confirmed=true` is the only proof it accepted the callback we named — a request
+     * token issued without it would send the customer to an authorise page whose «Allow» leads nowhere,
+     * so it is refused here rather than discovered there.
+     *
+     * @return array{token:string, secret:string}
+     */
+    public function requestToken(PlatformCredentials $creds): array
+    {
+        $this->assertConfigured($creds);
+        $this->assertOAuth1($creds);
+
+        $response = PlatformHttp::client($creds->platform)
+            ->withMiddleware(new OAuth1Signer(
+                consumerKey: (string) $creds->get('consumer_key'),
+                consumerSecret: (string) $creds->get('consumer_secret'),
+                callback: $creds->redirectUri(),
+            ))
+            ->post((string) $creds->get('request_token_url'));
+
+        $body = $this->formBody($creds, $response, 'request token');
+
+        if (($body['oauth_callback_confirmed'] ?? null) !== 'true') {
+            throw new RuntimeException($creds->label().' issued a request token without confirming the callback URI; '
+                .'register the callback URI exactly in the app\'s User authentication settings.');
+        }
+
+        return ['token' => $body['oauth_token'], 'secret' => $body['oauth_token_secret']];
+    }
+
+    /** Leg two: where the customer authorises. The request token is the only parameter X reads. */
+    public function oauth1AuthorizeUrl(PlatformCredentials $creds, string $requestToken): string
+    {
+        $this->assertOAuth1($creds);
+
+        return $creds->authorizeUrl().'?'.http_build_query(['oauth_token' => $requestToken]);
+    }
+
+    /**
+     * Leg three: trade the authorised request token and its verifier for the user's access token.
+     *
+     * Signed with the consumer pair AND the request token's secret, which never left this server —
+     * that is what makes a callback carrying somebody else's `oauth_token` worthless on its own.
+     * The token pair comes back with the X user id and handle, which are kept as non-secret facts.
+     */
+    public function exchangeVerifier(PlatformCredentials $creds, string $requestToken, string $requestTokenSecret, string $verifier): OAuthTokens
+    {
+        $this->assertConfigured($creds);
+        $this->assertOAuth1($creds);
+
+        $response = PlatformHttp::client($creds->platform)
+            ->withMiddleware(new OAuth1Signer(
+                consumerKey: (string) $creds->get('consumer_key'),
+                consumerSecret: (string) $creds->get('consumer_secret'),
+                token: $requestToken,
+                tokenSecret: $requestTokenSecret,
+                verifier: $verifier,
+            ))
+            ->post($creds->tokenUrl());
+
+        $body = $this->formBody($creds, $response, 'access token');
+
+        return new OAuthTokens(
+            accessToken: $body['oauth_token'],
+            // No refresh token and no expiry: an OAuth 1.0a token is valid until it is revoked.
+            raw: array_filter([
+                'user_id' => $body['user_id'] ?? null,
+                'screen_name' => $body['screen_name'] ?? null,
+            ], static fn ($v) => $v !== null && $v !== ''),
+            tokenSecret: $body['oauth_token_secret'],
+        );
+    }
+
+    /**
+     * A form-encoded OAuth 1.0a answer that carries a token pair, or the provider's own refusal.
+     *
+     * @return array<string,string>
+     */
+    private function formBody(PlatformCredentials $creds, Response $response, string $what): array
+    {
+        if ($response->failed()) {
+            throw new RuntimeException(
+                $creds->label()." refused the {$what} request (".$response->status().'): '.$this->briefly($response->body()),
+            );
+        }
+
+        parse_str($response->body(), $parsed);
+
+        $body = array_filter($parsed, static fn ($v, $k) => is_string($k) && is_string($v), ARRAY_FILTER_USE_BOTH);
+
+        if (($body['oauth_token'] ?? '') === '' || ($body['oauth_token_secret'] ?? '') === '') {
+            throw new RuntimeException($creds->label()." returned no {$what}.");
+        }
+
+        /** @var array<string,string> $body */
+        return $body;
+    }
+
+    private function assertOAuth1(PlatformCredentials $creds): void
+    {
+        if (! ProviderCatalogue::get($creds->platform)->usesOAuth1()) {
+            throw new RuntimeException($creds->label().' does not use OAuth 1.0a.');
+        }
+    }
+
+    private function assertOAuth2(PlatformCredentials $creds): void
+    {
+        if (ProviderCatalogue::get($creds->platform)->usesOAuth1()) {
+            throw new RuntimeException(
+                $creds->label().' uses OAuth 1.0a: its authorisation starts with a signed request token, not an authorisation code.',
+            );
+        }
     }
 
     private function assertConfigured(PlatformCredentials $creds): void

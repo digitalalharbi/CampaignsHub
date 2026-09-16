@@ -162,14 +162,27 @@ return [
              */
         ],
 
+        /*
+         * X-OAUTH1-001 — OAuth 1.0a, three legs, and every Ads API request signed.
+         *
+         * This entry used to point at `x.com/i/oauth2/authorize` and `api.x.com/2/oauth2/token` with
+         * OAuth 2.0 scopes. The X Ads API accepts no OAuth 2.0 token of any kind, so those endpoints
+         * could only ever have produced a credential `ads-api.x.com` refuses.
+         *
+         * `token_url` is the access-token leg, kept under the shared name because it is the endpoint
+         * that turns a completed authorisation into the credential a connection stores.
+         */
         'x' => [
             'label' => 'X Ads API',
-            'authorize_url' => 'https://x.com/i/oauth2/authorize',
-            'token_url' => 'https://api.x.com/2/oauth2/token',
+            'request_token_url' => 'https://api.x.com/oauth/request_token',
+            'authorize_url' => 'https://api.x.com/oauth/authorize',
+            'token_url' => 'https://api.x.com/oauth/access_token',
             'api_base' => 'https://ads-api.x.com/12',
-            'scopes' => ['tweet.read', 'users.read', 'offline.access'],
-            'client_id' => env('X_ADS_CLIENT_ID'),
-            'client_secret' => env('X_ADS_CLIENT_SECRET'),
+            'scopes' => [],
+            'consumer_key' => env('X_ADS_CONSUMER_KEY'),
+            'consumer_secret' => env('X_ADS_CONSUMER_SECRET'),
+            'access_token' => env('X_ADS_ACCESS_TOKEN'),
+            'access_token_secret' => env('X_ADS_ACCESS_TOKEN_SECRET'),
         ],
 
         'linkedin' => [

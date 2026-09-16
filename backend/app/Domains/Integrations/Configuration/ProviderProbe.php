@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Configuration;
 
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Catalogue\ProviderKind;
+use App\Domains\Integrations\OAuth\OAuth1Signer;
 use App\Domains\Integrations\Support\PlatformHttp;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
@@ -118,6 +119,29 @@ final class ProviderProbe
             ]);
         }
 
+        if ($provider === 'x') {
+            /*
+             * X-OAUTH1-001 — X gets the one probe that proves anything about an OAuth 1.0a app.
+             *
+             * The generic probe posts client credentials to an OAuth 2.0 token endpoint with an
+             * impossible code. X Ads has no such endpoint for this purpose: its API accepts only signed
+             * requests, so the question worth asking is whether X accepts OUR SIGNATURE on a real Ads
+             * API call. `GET /12/accounts`, signed with all four values, answers four things at once —
+             * the consumer pair, the owner's token pair, our signing, and whether the app has been
+             * granted Ads API access at all.
+             *
+             * It reads nothing belonging to a customer: the token is the app owner's own.
+             */
+            return $client
+                ->withMiddleware(new OAuth1Signer(
+                    consumerKey: (string) $values['consumer_key'],
+                    consumerSecret: (string) $values['consumer_secret'],
+                    token: (string) $values['access_token'],
+                    tokenSecret: (string) $values['access_token_secret'],
+                ))
+                ->get(rtrim((string) config('ad_platforms.platforms.x.api_base'), '/').'/accounts');
+        }
+
         if ($provider === 'tiktok') {
             /*
              * TikTok does not use the OAuth parameter names anywhere, including here — and its
@@ -139,14 +163,6 @@ final class ProviderProbe
             'redirect_uri' => ProviderCatalogue::get($provider)->redirectUri(),
         ];
 
-        // X authenticates the token call itself rather than taking the pair in the body — which is
-        // precisely why it gives the cleanest answer to this question of any of them.
-        if ($provider === 'x') {
-            return $client->asForm()
-                ->withBasicAuth((string) $values['client_id'], (string) $values['client_secret'])
-                ->post($tokenUrl, $grant);
-        }
-
         return $client->asForm()->post($tokenUrl, [
             ...$grant,
             'client_id' => $values['client_id'],
@@ -161,6 +177,10 @@ final class ProviderProbe
     {
         if ($provider === 'meta') {
             return $this->interpretMeta($response);
+        }
+
+        if ($provider === 'x') {
+            return $this->interpretX($response);
         }
 
         $body = strtolower($response->body());
@@ -257,6 +277,59 @@ final class ProviderProbe
             'passed' => false,
             'message' => 'Meta did not answer with an app access token and did not name a credential error, so this is '
                 .'not recorded as a pass: '.$reason,
+        ];
+    }
+
+    /**
+     * X-OAUTH1-001 — what a signed `GET /12/accounts` did and did not prove.
+     *
+     * A 200 means X verified our OAuth 1.0a signature over all four values AND served the Ads API to
+     * this app. It says nothing about any customer: no workspace is connected by it, no account is
+     * discovered for anyone, and nothing is synced. The message says so, because «X accepted the
+     * credentials» sitting beside a provider row is exactly how «configured» gets read as «connected».
+     *
+     * The account list itself is not echoed — not a name, not an id. It is the owner's, and this
+     * message is rendered in a browser.
+     *
+     * X's refusals are told apart by the codes X documents rather than by prose: an authentication
+     * failure (HTTP 401) is a wrong key, secret or token; a 403 is an app X has not granted Ads API
+     * access — the state an app sits in until X approves the application. Both are failures, and
+     * neither is read as a pass.
+     *
+     * @return array{passed: bool, message: string}
+     */
+    private function interpretX(Response $response): array
+    {
+        $reason = $this->scrub('x', PlatformHttp::reason($response));
+
+        if ($response->successful() && is_array($response->json('data'))) {
+            return [
+                'passed' => true,
+                'message' => 'X accepted a request signed with OAuth 1.0a using these four credentials and served GET /12/accounts, '
+                    .'so the keys, the owner\'s access token and the app\'s Ads API access are all in place. That is all this proves: '
+                    .'no workspace is connected by it, no customer ad account has been discovered, and nothing has been synced.',
+            ];
+        }
+
+        if ($response->status() === 401) {
+            return [
+                'passed' => false,
+                'message' => 'X could not authenticate this signed request — the API Key, API Key Secret, Access Token or Access Token '
+                    .'Secret is wrong, revoked, or was regenerated after it was saved here: '.$reason,
+            ];
+        }
+
+        if ($response->status() === 403) {
+            return [
+                'passed' => false,
+                'message' => 'X authenticated the request but refused the Ads API to this app. Until X approves Ads API access for the app, '
+                    .'every Ads API call is refused; after approval, regenerate the Access Token and Secret and test again: '.$reason,
+            ];
+        }
+
+        return [
+            'passed' => false,
+            'message' => 'X did not answer with an account list and did not name a credential error, so this is not recorded as a pass: '.$reason,
         ];
     }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
@@ -13,6 +14,7 @@ use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\PlatformOAuth;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Services\AccountDiscovery;
+use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\AdPlatforms;
@@ -121,29 +123,22 @@ final class AdPlatformOAuthController extends Controller
                 ->whereNull('deleted_at')],
         ]);
 
-        /*
-         * X-PKCE-001 — the code verifier, minted here and carried by the state.
-         *
-         * Deliberately NOT the session. This callback is a public route with nothing of the session
-         * left by the time the browser returns, which is the whole reason `AuthorizationState` exists;
-         * putting the verifier there gives it the same properties for free — single use, short lived,
-         * and bound to the tenant, user and provider that started the flow.
-         *
-         * Null for every provider that does not publish PKCE, so nothing changes for the other five.
-         */
-        $verifier = $this->oauth->codeVerifier($creds);
+        $workspaceId = $validated['client_workspace_id'] ?? null;
+
+        if (ProviderCatalogue::get($creds->platform)->usesOAuth1()) {
+            return $this->startOAuth1($request, $creds, $tenant, $workspaceId);
+        }
 
         $state = AuthorizationState::issue(
             tenantId: (string) $tenant->tenantId(),
             provider: $creds->platform,
             userId: $request->user()->getKey(),
-            clientWorkspaceId: $validated['client_workspace_id'] ?? null,
-            extra: $verifier === null ? [] : ['code_verifier' => $verifier],
+            clientWorkspaceId: $workspaceId,
         );
 
         return ApiResponse::success([
             'provider' => $creds->platform,
-            'authorization_url' => $this->oauth->authorizationUrl($creds, $state, $verifier),
+            'authorization_url' => $this->oauth->authorizationUrl($creds, $state),
             'expires_in_minutes' => (int) config('ad_platforms.state_ttl_minutes', 15),
         ], 'Authorization URL issued.');
     }
@@ -161,6 +156,10 @@ final class AdPlatformOAuthController extends Controller
         // The platform's own refusal — the customer pressed "cancel", or the app is not approved.
         if ($request->has('error')) {
             return $this->back($creds->platform, 'denied', (string) $request->query('error_description', (string) $request->query('error')));
+        }
+
+        if (ProviderCatalogue::get($creds->platform)->usesOAuth1()) {
+            return $this->callbackOAuth1($request, $creds, $tenant, $audit);
         }
 
         $record = AuthorizationState::claim((string) $request->query('state', ''), $creds->platform);
@@ -187,13 +186,7 @@ final class AdPlatformOAuthController extends Controller
         $tenant->setTenantId($tenantId);
 
         try {
-            // The verifier comes out of the RECORD, never the query string — the same rule as the
-            // tenant and the workspace, and for the same reason: nothing in this request is trusted.
-            $tokens = $this->oauth->exchangeCode(
-                $creds,
-                $code,
-                isset($record['code_verifier']) ? (string) $record['code_verifier'] : null,
-            );
+            $tokens = $this->oauth->exchangeCode($creds, $code);
 
             $connection = $this->vault->open(
                 tenantId: $tenantId,
@@ -218,6 +211,115 @@ final class AdPlatformOAuthController extends Controller
         );
 
         return $this->back($creds->platform, 'connected', null, $discovered);
+    }
+
+    /**
+     * X-OAUTH1-001 — leg one of X's three-legged OAuth 1.0a, inside the authenticated session.
+     *
+     * X has no `state` parameter: the value that comes back on the callback is the request token X
+     * issued here. So the pending authorisation is recorded under THAT token, carrying the tenant, the
+     * user, the workspace and the request token's secret. The secret never leaves this server, and
+     * leg three cannot be signed without it, so a callback naming a token we did not record — or one
+     * already used — opens nothing.
+     *
+     * The consumer pair signs this call. The app owner's own Access Token pair, also held in the
+     * provider configuration, is deliberately NOT used: a workspace connects its OWN X account, and
+     * the owner's token would reach the owner's ad accounts instead.
+     */
+    private function startOAuth1(Request $request, PlatformCredentials $creds, TenantContext $tenant, ?string $workspaceId): JsonResponse
+    {
+        try {
+            $requestToken = $this->oauth->requestToken($creds);
+        } catch (Throwable $e) {
+            return ApiResponse::error(
+                message: 'X refused to start the authorisation.',
+                errors: ['provider' => [ProviderErrorText::forStorage($e->getMessage())]],
+                meta: ['status' => 'provider_refused', 'provider' => $creds->platform],
+                status: 502,
+            );
+        }
+
+        AuthorizationState::issueUnder(
+            key: self::oauth1StateKey($requestToken['token']),
+            tenantId: (string) $tenant->tenantId(),
+            provider: $creds->platform,
+            userId: $request->user()->getKey(),
+            clientWorkspaceId: $workspaceId,
+            extra: ['request_token_secret' => $requestToken['secret']],
+        );
+
+        return ApiResponse::success([
+            'provider' => $creds->platform,
+            'authorization_url' => $this->oauth->oauth1AuthorizeUrl($creds, $requestToken['token']),
+            'expires_in_minutes' => (int) config('ad_platforms.state_ttl_minutes', 15),
+        ], 'Authorization URL issued.');
+    }
+
+    /**
+     * X-OAUTH1-001 — legs two and three: the customer came back from X.
+     *
+     * A cancellation arrives as `denied=<request token>`; the pending record is consumed so it cannot
+     * be completed later. Otherwise `oauth_token` names the pending authorisation and `oauth_verifier`
+     * proves the customer approved it.
+     */
+    private function callbackOAuth1(Request $request, PlatformCredentials $creds, TenantContext $tenant, AuditLogger $audit): RedirectResponse
+    {
+        if ($request->has('denied')) {
+            AuthorizationState::claim(self::oauth1StateKey((string) $request->query('denied', '')), $creds->platform);
+
+            return $this->back($creds->platform, 'denied', 'The authorisation was cancelled on X.');
+        }
+
+        $requestToken = (string) $request->query('oauth_token', '');
+        $verifier = (string) $request->query('oauth_verifier', '');
+
+        $record = $requestToken === ''
+            ? null
+            : AuthorizationState::claim(self::oauth1StateKey($requestToken), $creds->platform);
+
+        if ($record === null || ! is_string($record['request_token_secret'] ?? null)) {
+            return $this->back($creds->platform, 'invalid_state', 'This authorisation link has expired or was already used.');
+        }
+
+        if ($verifier === '') {
+            return $this->back($creds->platform, 'failed', 'X returned no verifier.');
+        }
+
+        $tenantId = (string) $record['tenant_id'];
+        $tenant->setTenantId($tenantId);
+
+        try {
+            $tokens = $this->oauth->exchangeVerifier($creds, $requestToken, $record['request_token_secret'], $verifier);
+
+            $connection = $this->vault->open(
+                tenantId: $tenantId,
+                provider: $creds->platform,
+                tokens: $tokens,
+                connectionName: $creds->label(),
+                clientWorkspaceId: isset($record['client_workspace_id']) ? (string) $record['client_workspace_id'] : null,
+                createdBy: isset($record['user_id']) ? (int) $record['user_id'] : null,
+                externalOwnerId: isset($tokens->raw['user_id']) ? (string) $tokens->raw['user_id'] : null,
+            );
+
+            $discovered = $this->discoverAccounts($connection);
+        } catch (Throwable $e) {
+            return $this->back($creds->platform, 'failed', $e->getMessage());
+        }
+
+        $audit->log(
+            action: 'integration.connection.opened',
+            entityType: ProviderConnection::class,
+            entityId: (string) $connection->getKey(),
+            after: ['provider' => $creds->platform, 'ad_accounts' => $discovered],
+        );
+
+        return $this->back($creds->platform, 'connected', null, $discovered);
+    }
+
+    /** The cache key a pending OAuth 1.0a authorisation lives under: the request token X issued. */
+    private static function oauth1StateKey(string $requestToken): string
+    {
+        return 'oauth1:'.hash('sha256', $requestToken);
     }
 
     /**

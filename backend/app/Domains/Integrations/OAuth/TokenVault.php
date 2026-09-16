@@ -94,6 +94,9 @@ final class TokenVault
 
         $credential->forceFill([
             'encrypted_payload' => json_encode($tokens->toStorage(), JSON_THROW_ON_ERROR),
+            // Kept true on a re-authorisation: an X connection opened under OAuth 2.0 and reconnected
+            // under OAuth 1.0a must stop describing itself as the scheme X refused (X-OAUTH1-001).
+            'credential_type' => $tokens->tokenSecret === null ? 'oauth2' : 'oauth1',
             'status' => 'active',
             'expires_at' => $tokens->expiresAt,
             'last_rotated_at' => Carbon::now(),
@@ -168,7 +171,8 @@ final class TokenVault
             'client_workspace_id' => $clientWorkspaceId,
             'provider' => $creds->platform,
             'credential_scope' => $clientWorkspaceId === null ? 'tenant_shared' : 'workspace_shared',
-            'credential_type' => 'oauth2',
+            // X-OAUTH1-001 — an X credential is a signed-request token pair, not a bearer token.
+            'credential_type' => $tokens->tokenSecret === null ? 'oauth2' : 'oauth1',
             'encrypted_payload' => json_encode($tokens->toStorage(), JSON_THROW_ON_ERROR),
             'status' => 'active',
             'expires_at' => $tokens->expiresAt,
