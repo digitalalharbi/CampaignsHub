@@ -92,12 +92,40 @@ final class ContentReconcileWalkTest extends TestCase
         ]);
     }
 
-    /** A diagnosis that changes the thing it diagnoses is not one. */
+    /**
+     * A diagnosis that changes the thing it diagnoses is not one.
+     *
+     * ## This guard was VACUOUS for the write that matters, and an injection proved it
+     *
+     * It compared ROW COUNTS before and after, so it only ever asserted that nothing was inserted or
+     * deleted. Injecting an UPDATE into the walk left it passing — and an update is the dangerous
+     * case, not the insert: a diagnostic that silently touched a column on 1,539 production creatives,
+     * or mutated a metric in place, satisfied this test completely.
+     *
+     * That matters more here than almost anywhere, because this property is the whole reason the
+     * command may be pointed at a live account while a customer is looking at the same screen. A
+     * safety guard that cannot see the unsafe case is worse than none: it is a reason not to look.
+     *
+     * So the comparison is a DIGEST of every column of every row. `md5(string_agg(t::text ORDER BY
+     * t::text))` catches an update, a reorder and a single changed character alike; the ordering is
+     * inside the aggregate because `string_agg` is otherwise unordered and two identical tables would
+     * digest differently. The row count is kept beside it so a failure says which KIND of change it
+     * was — a differing count is an insert or a delete, an equal count with a differing digest is an
+     * update.
+     *
+     * ## And my first injection was too weak to prove anything
+     *
+     * It set `updated_at` to `now()`. That column truncates to whole seconds and the fixture row was
+     * created in the same second, so the value did not change and BOTH forms passed — which reads
+     * exactly like a guard that works. The injection that settles it mutates `name`: the digest form
+     * fails with «the walk changed a table it was only meant to read» and the count form still passes.
+     * An injection that cannot express the defect proves as little as a fixture that cannot.
+     */
     public function test_the_walk_writes_nothing(): void
     {
         $creative = $this->creativeWithAdGrain();
 
-        $before = $this->rowCounts();
+        $before = $this->tableDigests();
 
         $this->artisan('content:reconcile', ['creative' => (string) $creative->getKey()])
             ->assertExitCode(0);
@@ -105,7 +133,7 @@ final class ContentReconcileWalkTest extends TestCase
         $this->artisan('content:reconcile', ['--scope' => true, '--project' => (string) $this->project->getKey()])
             ->assertExitCode(0);
 
-        $this->assertSame($before, $this->rowCounts(), 'the walk wrote to a table it was only meant to read');
+        $this->assertSame($before, $this->tableDigests(), 'the walk changed a table it was only meant to read');
     }
 
     /**
@@ -144,19 +172,130 @@ final class ContentReconcileWalkTest extends TestCase
             ->assertExitCode(0);
     }
 
-    /** @return array<string, int> */
-    private function rowCounts(): array
+    /**
+     * An EMPTY window option is ABSENT, not a value — found by running this on production.
+     *
+     * `production-diagnostics.yml` passes every value unconditionally, because a shell that assembles
+     * flags conditionally is a shell that eventually assembles a command. So a caller who names no
+     * window sends `--from="" --to=""`, and the command compared those against `null`, which an empty
+     * string is not: `Carbon::parse('')` is today, so the thirty-day default collapsed to one day.
+     *
+     * It did not error. The first production reading came back «window 2026-09-16 → 2026-09-16 … THE
+     * STRIP WAS SHORT BY 0.00» — a true answer about a one-day window, indistinguishable from the
+     * thirty-day answer that was asked for, and it understated the very finding the walk exists to
+     * measure. An instrument that quietly answers a different question is worse than one that fails.
+     *
+     * Asserted on the window the walk PRINTS, because that is the only place the reader can see which
+     * question was answered.
+     */
+    public function test_an_empty_window_option_falls_back_to_the_default_rather_than_to_today(): void
     {
-        $counts = [];
+        $this->creativeWithAdGrain();
+
+        $to = Carbon::today();
+        $from = $to->copy()->subDays(29);
+
+        $this->artisan('content:reconcile', ['--scope' => true, '--project' => '', '--from' => '', '--to' => ''])
+            ->expectsOutputToContain($from->toDateString().' → '.$to->toDateString())
+            ->assertExitCode(0);
+    }
+
+    /** And a window the caller DID name is honoured exactly — the fix must not swallow a real value. */
+    public function test_a_named_window_is_honoured(): void
+    {
+        $this->creativeWithAdGrain();
+
+        $this->artisan('content:reconcile', [
+            '--scope' => true,
+            '--from' => '2026-08-01',
+            '--to' => '2026-08-31',
+        ])
+            ->expectsOutputToContain('2026-08-01 → 2026-08-31')
+            ->assertExitCode(0);
+    }
+
+    /**
+     * And the gap is named in FIGURES, not only in money — the production reading's larger half.
+     *
+     * It came back «SHORT BY 0.00» over a library where the old strip could state sixteen figures and
+     * the new one states thirty-five: the ad-grain rows carried the RESULT columns and no spend, so
+     * the money was genuinely not short and the ANSWER was. `leads` and everything derived from it
+     * were absent from the headline strip entirely, which is «the other KPIs disappear» exactly — and
+     * it was visible only by diffing two long printed lists by eye.
+     */
+    public function test_the_scope_walk_names_the_figures_a_creative_grain_only_strip_could_not_state(): void
+    {
+        /*
+         * A MIXED library, because that is what production is and what the comparison needs.
+         *
+         * 160 creatives reporting at creative grain beside 39 summed from their ads. With only the
+         * ad-grain half there is no old answer to diff against — the creative-grain-only strip would
+         * have stated NOTHING, which the walk reports as its own, louder line — and the first draft of
+         * this case failed for exactly that reason.
+         */
+        $this->creativeWithAdGrain();
+        $this->creativeWithOwnRows();
+
+        $this->artisan('content:reconcile', ['--scope' => true, '--project' => (string) $this->project->getKey()])
+            ->expectsOutputToContain('COULD NOT STATE')
+            ->expectsOutputToContain('leads')
+            ->assertExitCode(0);
+    }
+
+    /**
+     * Every column of every row, digested per table — not counted.
+     *
+     * See the note on `test_the_walk_writes_nothing` for why a count was not enough.
+     *
+     * @return array<string, string>
+     */
+    private function tableDigests(): array
+    {
+        $digests = [];
 
         foreach ([
             'external_creatives', 'external_ads', 'creative_daily_metrics', 'entity_daily_metrics',
             'daily_metrics', 'metric_sync_runs', 'integration_sync_runs', 'audit_logs',
         ] as $table) {
-            $counts[$table] = (int) DB::table($table)->count();
+            $row = DB::table($table)
+                ->selectRaw("COUNT(*) AS rows_found, MD5(COALESCE(string_agg(t::text, '' ORDER BY t::text), '')) AS digest")
+                ->fromRaw("\"{$table}\" AS t")
+                ->first();
+
+            $digests[$table] = ((int) ($row->rows_found ?? 0)).':'.((string) ($row->digest ?? ''));
         }
 
-        return $counts;
+        return $digests;
+    }
+
+    /** A creative the platform reports directly — the 160-of-199 half of the production library. */
+    private function creativeWithOwnRows(): ExternalCreative
+    {
+        $creative = ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'provider' => 'snapchat',
+            'external_creative_id' => 'cr-native',
+            'name' => 'Reported at creative grain',
+            'format' => 'video',
+            'status' => 'active',
+            'source_type' => 'api',
+        ]);
+
+        DB::table('creative_daily_metrics')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'creative_id' => $creative->getKey(),
+            'metric_date' => Carbon::today()->subDay()->toDateString(),
+            'spend' => 90.0,
+            'impressions' => 8_000,
+            'clicks' => 160,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return $creative;
     }
 
     private function creativeWithAdGrain(): ExternalCreative
