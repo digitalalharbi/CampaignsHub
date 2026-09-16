@@ -307,20 +307,33 @@ function reportYear(generatedAt?: string | null): number {
   return Number.isFinite(parsed) && parsed > 2000 ? parsed : new Date().getFullYear()
 }
 
-/** Truthful data-lineage strip for the client link: what the numbers are, and how fresh. */
+/**
+ * What this document covers — the period, the currency, the clock. Nothing about our plumbing.
+ *
+ * CLIENT-DIAGNOSTIC-SEPARATION-001, and handoff §13 «do not expose implementation internals».
+ *
+ * This strip printed «مصدر البيانات: daily_metrics» — the name of a database table — and
+ * «نموذج/نافذة الإسناد», on the document a client keeps. A reader cannot act on either, cannot ask
+ * anyone to change either, and `daily_metrics` is not a sentence in any language they were sold. The
+ * same rule removed a per-platform sync clock from the live page and the store's last-sync line;
+ * this was the last surface still carrying it, and it is the snapshot — the version that gets
+ * forwarded.
+ *
+ * What stays is what is true ABOUT THEIR PERIOD: when the document was produced, what it covers,
+ * what currency the money is in, which clock the days were counted on, and — where the report names
+ * one — what the campaigns were bought to do. `حالة التقرير` also goes: «Snapshot» is our word for
+ * how we store it, and the label directly above this strip already tells the reader which product
+ * they are holding, in a full sentence.
+ */
 function ReportMetaStrip({ report }: { report: Shared }) {
   const d = report.data as Record<string, unknown>
   const period = d.period as { from?: string; to?: string } | undefined
   const objective = typeof d.objective === 'string' ? d.objective : undefined
-  const mode = (d.mode as string) === 'live' ? 'Live' : 'Snapshot'
   const items: Array<[string, string]> = [
     ['آخر تحديث', report.generated_at ? fmtDateTime(report.generated_at) : '—'],
     ['الفترة', period?.from && period?.to ? `${period.from} → ${period.to}` : '—'],
     ['العملة', report.currency],
-    ['مصدر البيانات', String((d.data_source as string) ?? 'daily_metrics')],
-    ['نموذج/نافذة الإسناد', String((d.attribution_window as string) ?? '—')],
     ['المنطقة الزمنية', String((d.timezone as string) ?? 'Asia/Riyadh')],
-    ['حالة التقرير', mode],
   ]
   if (objective) items.push(['هدف الحملة', objective])
   return (
