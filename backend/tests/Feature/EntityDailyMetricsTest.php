@@ -246,6 +246,52 @@ final class EntityDailyMetricsTest extends TestCase
     }
 
     /**
+     * Landing-page views are the DELIVERY metric, not pixel page views.
+     *
+     * Snapchat's Marketing API measurement reference publishes both: `landing_page_views` — «# of times
+     * a Snapchatter has loaded the ad's landing page after a click» (available from 10 December 2024) —
+     * and `conversion_page_views` — «# of attributed "PAGE_VIEW" conversion events», a pixel count. The
+     * campaign and creative grains already read the delivery field; the ad and ad-squad grain stored
+     * the pixel count under `landing_page_views`, so a traffic creative's LPV and cost per LPV were
+     * pixel page views wearing the delivery metric's name.
+     */
+    public function test_landing_page_views_are_the_delivery_metric_and_pixel_page_views_stay_page_views(): void
+    {
+        Http::fake([
+            '*/campaigns/cmp-1/stats*' => Http::response(['timeseries_stats' => [
+                ['timeseries_stat' => ['breakdown_stats' => ['ad' => [
+                    ['id' => 'ad-1', 'timeseries' => [
+                        ['start_time' => '2026-08-01T00:00:00.000-07:00', 'stats' => [
+                            'spend' => 10_000_000,
+                            'swipes' => 120,
+                            'landing_page_views' => 40,
+                            'conversion_page_views' => 90,
+                        ]],
+                    ]],
+                ]]]],
+            ]], 200),
+            '*' => Http::response([], 200),
+        ]);
+
+        $rows = $this->connector()->fetchEntityInsights(
+            new OAuthTokens('AT', 'RT', Carbon::now()->addDay()),
+            'act-1',
+            'campaigns',
+            'ad',
+            ['cmp-1'],
+            '2026-08-01',
+            '2026-08-01',
+        );
+
+        $this->assertSame(40.0, $rows[0]['landing_page_views'], 'LPV read the pixel page-view count instead of the delivery metric');
+        $this->assertSame(90.0, $rows[0]['page_views']);
+
+        $sent = collect(Http::recorded())->map(fn ($pair) => (string) $pair[0]->url())->first(fn (string $u) => str_contains($u, '/stats'));
+        parse_str((string) parse_url((string) $sent, PHP_URL_QUERY), $query);
+        $this->assertContains('landing_page_views', explode(',', (string) ($query['fields'] ?? '')), 'the delivery field was never asked for');
+    }
+
+    /**
      * SNAP-AD-STATS-ROUTE-001 — the exact URL that leaves the connector for the ad grain.
      *
      * Production recorded `Snapchat Marketing API could not return ad stats: Request URL can not be

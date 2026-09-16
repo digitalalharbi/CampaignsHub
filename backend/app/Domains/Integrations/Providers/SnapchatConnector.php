@@ -673,7 +673,14 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         'frequency' => 'frequency',
         // traffic — Snapchat calls a click a swipe
         'clicks' => 'swipes',
-        'landing_page_views' => 'conversion_page_views',
+        /*
+         * The DELIVERY metric — «# of times a Snapchatter has loaded the ad's landing page after a
+         * click», published since 10 December 2024 — exactly as the campaign and creative grains read
+         * it. This mapped `conversion_page_views`, the attributed PAGE_VIEW pixel count, which
+         * `page_views` below already carries: a traffic creative's LPV and cost per LPV were pixel
+         * page views under the delivery metric's name.
+         */
+        'landing_page_views' => 'landing_page_views',
         // video. `screen_time_millis` is MILLISECONDS and is converted at this edge, once.
         'video_views' => 'video_views',
         'video_views_2s' => 'video_views_time_based',
