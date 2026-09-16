@@ -137,20 +137,43 @@ test.describe('the campaigns workspace', () => {
         band: digits('campaigns-band-attention'),
         strip: digits('landing-attention'),
         stripPresent: document.querySelector('[data-testid="landing-attention"]') !== null,
+        /*
+         * The rows the page is classifying — two readings, because the two views say it differently.
+         * The bands exist on the overview only; the landing answer exists on the list only, and is
+         * absent exactly when there is no campaign to describe.
+         */
+        classified: [...document.querySelectorAll('[data-testid^="campaigns-band-"]')]
+          .reduce((n, el) => n + Number(el.getAttribute('data-count') ?? 0), 0),
+        answered: document.querySelector('[data-testid="campaigns-landing-answer"]') !== null,
       }
     })
 
     /*
-     * Wait for the page to have JUDGED, not merely to have rendered.
+     * Wait for the page to have JUDGED A LIST, not merely to have rendered.
      *
-     * `campaigns-attention` reads «—» while the per-campaign metrics are pending or failed, because a
-     * verdict cannot be made out of a request that has not answered. A digit in that card is the page
-     * stating that it now has an answer — the precondition every assertion below depends on.
+     * BOTH halves are load-bearing and each one alone is satisfied by a loading state — which is how
+     * the previous settle condition let a transient through, and then how its first replacement did.
+     *
+     *   - `card !== null`: the card reads «—» while the per-campaign metrics are pending or failed,
+     *     because no verdict can be made out of a request that has not answered. A digit is the page
+     *     saying it now has an answer.
+     *   - `classified > 0`: the figures can land BEFORE the campaign list does, and an attention count
+     *     over an empty list is «0» — the branch below would then prove the strip is absent, which is
+     *     true of a page holding no campaigns and says nothing about this one. Measured locally: the
+     *     card reads «0» for about four seconds on webkit before the rows arrive and it becomes «1».
+     *
+     * Not a longer timeout. A page that never judges, or never classifies a row, still fails here.
      */
     await expect.poll(
-      async () => (await readAll()).card !== null,
-      { message: 'the workspace never produced an attention verdict — the card stayed «—»' },
-    ).toBe(true)
+      async () => {
+        const { card, classified } = await readAll()
+
+        if (card === null) return 'no verdict yet — the card is still «—»'
+
+        return classified > 0 ? 'judged' : 'no campaign classified yet — the list has not arrived'
+      },
+      { message: 'the workspace never judged a campaign list' },
+    ).toBe('judged')
 
     const onOverview = await readAll()
 
@@ -176,9 +199,10 @@ test.describe('the campaigns workspace', () => {
      * list view so the two readings describe one paint.
      */
     await expect.poll(async () => {
-      const { card, strip, stripPresent } = await readAll()
+      const { card, strip, stripPresent, answered } = await readAll()
 
       if (card === null) return 'the card stopped stating a verdict'
+      if (!answered) return 'the landing answer has not described a list yet'
       if (card === '0') return stripPresent ? 'the strip named an attention count where the card said none' : 'agreed'
 
       return strip === card ? 'agreed' : `card ${card} vs strip ${stripPresent ? strip : '(absent)'}`
