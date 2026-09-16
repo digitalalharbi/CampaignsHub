@@ -7,6 +7,7 @@ import { providerLabel, objectiveLabel } from '@/features/campaigns/labels'
 import type { ReportAd } from './ReportAdsSection'
 import type { Locale } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
+import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
 
 /**
  * REPORT-AD-PREVIEW-001 §C — an ad in a client's report opens its own detail.
@@ -83,7 +84,19 @@ export function ReportAdDetail({
     if (value !== null) figures.push({ label, value })
   }
 
-  add(ar ? 'الإنفاق' : 'Spend', cash(ad.spend))
+  /*
+   * Spend through the money contract, as the card that opens this dialog reads it. `cash(ad.spend)`
+   * is null for a figure withheld for want of a rate, so the card said «412 USD» and this view one
+   * click deeper dropped Spend altogether.
+   */
+  const spendReading = readMoney(ad as MoneyTotals, 'spend', currency ?? null, ar)
+  if (spendReading.kind !== 'absent') {
+    add(ar ? 'الإنفاق' : 'Spend', formatMoneyReading(spendReading, (value, unit) => {
+      const text = n(value, 0)
+
+      return text === null ? '—' : (unit ? `${text} ${unit}` : text)
+    }))
+  }
   add(ar ? 'الظهور' : 'Impressions', n(ad.impressions))
   add(ar ? 'النقرات' : 'Clicks', n(ad.clicks))
   add(

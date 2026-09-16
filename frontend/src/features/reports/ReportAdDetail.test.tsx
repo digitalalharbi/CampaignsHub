@@ -220,3 +220,26 @@ describe('opening an ad from a report', () => {
   })
 
 })
+
+describe('the detail states a withheld spend the card already states', () => {
+  /*
+   * The card reads spend through the money contract; the dialog one click deeper read `cash(ad.spend)`,
+   * which is null for a figure withheld for want of a rate — so the card said «412 USD» and the
+   * dialog the client opened from it dropped Spend altogether.
+   */
+  const withheld = ad({
+    spend: null,
+    spend_original: 412.5,
+    spend_withheld_rows: 3,
+    money_original_currency: 'USD',
+    money_original_currencies: 1,
+  })
+
+  it('prints the amount in the currency it was recorded in', () => {
+    renderWithProviders(<ReportAdDetail ad={withheld} currency="SAR" locale="en" onClose={() => {}} />, { locale: 'en' })
+
+    const figures = screen.getByTestId('report-ad-detail-figures')
+    expect(figures).toHaveTextContent('Spend')
+    expect(figures).toHaveTextContent(/412(\.50?)?\s*USD/)
+  })
+})
