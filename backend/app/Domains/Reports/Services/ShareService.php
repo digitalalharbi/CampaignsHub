@@ -178,7 +178,7 @@ final class ShareService
      *
      * @var list<string>
      */
-    private const CREATIVE_SECTIONS = ['ads', 'ads_roster', 'worst_creatives', 'top_creatives'];
+    private const CREATIVE_SECTIONS = ['ads', 'ads_roster', 'ads_weakest', 'worst_creatives', 'top_creatives'];
 
     /** Removes figures the share hides so the client payload never contains them. */
     /**
