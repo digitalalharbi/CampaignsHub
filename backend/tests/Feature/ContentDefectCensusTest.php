@@ -316,27 +316,30 @@ final class ContentDefectCensusTest extends TestCase
      */
     public function test_raw_evidence_says_how_the_provider_sent_a_zero_original_spend(): void
     {
+        $run = (string) Str::uuid();
+        $emptyRun = (string) Str::uuid();
+
         $creative = $this->creative(['provider' => 'snapchat', 'campaign_id' => $this->unified('sales')->getKey()]);
         $this->adRow($creative, [
             'spend' => null, 'spend_original' => 0.0, 'original_currency' => 'USD',
-            'impressions' => 500, 'clicks' => 9, 'conversions' => 3,
+            'impressions' => 500, 'clicks' => 9, 'conversions' => 3, 'sync_run_id' => $run,
         ]);
-        $adId = (string) ExternalAd::withoutGlobalScopes()->where('creative_id', $creative->getKey())->value('external_id');
+        $ad = ExternalAd::withoutGlobalScopes()->where('creative_id', $creative->getKey())->firstOrFail();
+        $adId = (string) $ad->external_id;
 
-        DB::table('project_integration_bindings')->insert([
-            'id' => (string) Str::uuid(),
-            'tenant_id' => $this->tenant->getKey(),
-            'project_id' => $this->project->getKey(),
-            'external_account_id' => $this->account->getKey(),
-            'provider' => 'snapchat',
-            'purpose' => 'ads',
-            'created_at' => now(),
-            'updated_at' => now(),
+        // A second stored zero for the same ad, written by a run that retained no body for it.
+        DB::table('entity_daily_metrics')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
+            'provider' => 'snapchat', 'entity_type' => 'ad', 'entity_id' => $ad->getKey(), 'external_entity_id' => $adId,
+            'external_campaign_id' => $this->campaign->getKey(), 'metric_date' => Carbon::today()->subDays(3)->toDateString(),
+            'attribution_window' => 'default', 'spend' => null, 'spend_original' => 0.0, 'original_currency' => 'USD',
+            'impressions' => 0, 'sync_run_id' => $emptyRun, 'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        IntegrationRawPayload::withoutGlobalScopes()->create([
+        $body = fn (string $runId, mixed $spend): IntegrationRawPayload => IntegrationRawPayload::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->getKey(),
             'external_account_id' => $this->account->getKey(),
+            'sync_run_id' => $runId,
             'provider' => 'snapchat',
             'resource' => 'insights',
             'window_start' => Carbon::today()->subDays(7)->toDateString(),
@@ -346,11 +349,16 @@ final class ContentDefectCensusTest extends TestCase
             'payload' => ['timeseries_stats' => [['timeseries_stat' => [
                 'id' => $adId, 'type' => 'AD',
                 'timeseries' => [
-                    ['start_time' => Carbon::today()->subDay()->toDateString().'T00:00:00.000+03:00', 'stats' => ['spend' => null, 'impressions' => 500]],
+                    ['start_time' => Carbon::today()->subDay()->toDateString().'T00:00:00.000+03:00', 'stats' => ['spend' => $spend, 'impressions' => 500]],
+                    // A day with no stored zero row: not part of the question, never counted.
                     ['start_time' => Carbon::today()->subDays(2)->toDateString().'T00:00:00.000+03:00', 'stats' => ['spend' => 0, 'impressions' => 0]],
                 ],
             ]]]],
         ]);
+
+        $body($run, null);
+        // The same ad named by a DIFFERENT run's body: not what wrote the stored row, so not read.
+        $body((string) Str::uuid(), 4_200_000);
 
         $this->assertStringContainsString('original of ZERO', $this->section('C'));
 
@@ -358,7 +366,11 @@ final class ContentDefectCensusTest extends TestCase
         $output = Artisan::output();
 
         $this->assertStringContainsString('C EVIDENCE', $output);
-        $this->assertStringContainsString((string) $creative->getKey().'  ads in bodies 1, day-points 2 — spend: key absent 0, JSON null 1, zero 1, positive 0; delivered impressions on 1', $output);
+        $this->assertStringContainsString(
+            (string) $creative->getKey()."  stored withheld rows 2 — in the body of the run that wrote them: spend key absent 0, JSON null 1, zero 0, positive 0; delivered impressions on 1; not in that run's bodies 1; run unrecorded 0; bodies unreadable 0",
+            $output,
+        );
+        $this->assertLessThan(strpos($output, 'C EVIDENCE'), strpos($output, 'D — '), 'the sections must be printed before the raw read, so a failed read cannot take them down');
     }
 
     // ── fixtures ─────────────────────────────────────────────────────────────────────────────────
