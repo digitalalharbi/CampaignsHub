@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Console\Commands\ProvisionPlatformCommand;
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
 use App\Domains\Alerts\Console\EvaluateAlerts;
+use App\Domains\Campaigns\Console\ReconcileContentMetricsCommand;
 use App\Domains\Commerce\Console\SyncStoresCommand;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
 use App\Domains\Identity\Middleware\RejectRevokedSessions;
@@ -97,6 +98,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // INTEG-RUNTIME §7 — read-only: where a sync's rows stopped, with the four counts. Calls no
         // provider and writes nothing, which is what makes it safe to point at production.
         DiagnoseSyncCommand::class,
+        // Owner defect 95 — read-only: one creative walked from the provider rows to every Content
+        // surface, with the divergences named. Calls no provider and writes nothing.
+        ReconcileContentMetricsCommand::class,
         GoogleAdsAccessCommand::class,
         MetaSyncProbeCommand::class,
         RenormaliseReportingCurrency::class,
