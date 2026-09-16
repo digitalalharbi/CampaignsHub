@@ -430,7 +430,7 @@ final class ReconcileContentMetricsCommand extends Command
         $keys = [];
 
         foreach ($figures as $key => $value) {
-            if (in_array($key, ['reported', 'grain', 'active_days', 'creatives'], true)) {
+            if (in_array($key, ['reported', 'grain', 'active_days', 'creatives', 'from_ads'], true)) {
                 continue;
             }
 

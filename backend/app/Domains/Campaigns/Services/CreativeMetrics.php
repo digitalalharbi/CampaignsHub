@@ -224,13 +224,129 @@ final class CreativeMetrics
          * attribute it to, and a creative whose ads reported nothing still reaches the reader as an
          * absence rather than as a zero.
          */
-        $missing = array_values(array_diff($creativeIds, array_keys($out)));
+        /*
+         * Content Production Recovery — a creative with BOTH grains keeps its own rows and gains, metric
+         * by metric, only what its own rows do not report.
+         *
+         * ## What Production showed
+         *
+         * `content:census` (run 35117219746) on the live Snapchat account: 199 creatives with figures,
+         * 160 at creative grain, 129 at ad grain, and 90 at BOTH. Letting the creative's own rows «win
+         * outright» made the ads invisible for those 90, so 22 cards showed indicators and no Spend
+         * (the ads carried it) and 79 lost the metric their objective is judged by — revenue, CPA and
+         * AOV on sales, landing-page views on traffic — all of which the same creative's ads reported.
+         *
+         * ## The three rules, because each is how this could make a number wrong in a new way
+         *
+         *   1. NEVER SUM THE GRAINS. Both can describe the same delivery; adding them double-counts.
+         *      A metric the creative grain reports is taken from the creative grain, full stop — the
+         *      existing «not blended» guarantee is unchanged. Only a metric it does NOT report is taken
+         *      from the ads.
+         *   2. A RATIO COMES WHOLLY FROM ONE GRAIN. CPA over the ads' spend and the creative's orders
+         *      would divide two different measurements. Each derived figure is the creative grain's own
+         *      when it could compute it, else the ad grain's own, else absent — never recomputed across.
+         *   3. ONLY FROM A GRAIN THAT COVERS THE SAME DAYS. An ad grain active on fewer days than the
+         *      creative grain would state a partial figure as the creative's whole one, so it fills
+         *      nothing.
+         *
+         * Every filled key is named in `from_ads`, so a surface can say which figures were summed
+         * from the ads rather than reported for the creative.
+         */
+        $ad = $this->fromAdGrain($creativeIds, $from, $to);
 
-        foreach ($this->fromAdGrain($missing, $from, $to) as $creativeId => $figures) {
-            $out[$creativeId] = $figures;
+        foreach ($ad as $creativeId => $figures) {
+            $out[$creativeId] = isset($out[$creativeId])
+                ? $this->fillFromAds($out[$creativeId], $figures)
+                : $figures;
         }
 
         return $out;
+    }
+
+    /**
+     * One creative's own figures, with the metrics they do not report taken from its ads — see the
+     * three rules in {@see self::forCreatives()}.
+     *
+     * @param  array<string, mixed>  $native  shaped creative-grain figures
+     * @param  array<string, mixed>  $ads  shaped ad-grain figures for the same creative and window
+     * @return array<string, mixed>
+     */
+    private function fillFromAds(array $native, array $ads): array
+    {
+        $native['from_ads'] = [];
+
+        if ((int) ($ads['active_days'] ?? 0) < (int) ($native['active_days'] ?? 0)) {
+            return $native;
+        }
+
+        $merged = $native;
+        $filled = [];
+
+        // Raw columns and averaged columns: taken only where the creative grain reported nothing.
+        foreach ([...array_keys(self::SUMS), ...array_keys(self::AD_GRAIN_SUMS), ...self::AVERAGED] as $key) {
+            if (in_array($key, self::MONEY, true)) {
+                continue;
+            }
+
+            if (($native[$key] ?? null) === null && ($ads[$key] ?? null) !== null) {
+                $merged[$key] = $ads[$key];
+                $merged['reported'][$key] = true;
+                $filled[] = $key;
+            }
+        }
+
+        // Money: taken with its whole provenance, and only where the creative grain cannot state it.
+        $moneyFrom = [];
+        foreach (self::MONEY as $key) {
+            $moneyFrom[$key] = 'native';
+
+            if (! $this->answerable($native, $key) && $this->answerable($ads, $key)) {
+                $merged[$key] = $ads[$key] ?? null;
+                $merged[$key.'_withheld_rows'] = (int) ($ads[$key.'_withheld_rows'] ?? 0);
+                $merged[$key.'_original'] = $ads[$key.'_original'] ?? null;
+                $merged['reported'][$key] = ($ads[$key] ?? null) !== null;
+                $moneyFrom[$key] = 'ads';
+                $filled[] = $key;
+            }
+        }
+
+        // The original currency now describes whichever grain each withheld money figure came from.
+        $currencies = [];
+        $several = false;
+        foreach (self::MONEY as $key) {
+            $source = $moneyFrom[$key] === 'ads' ? $ads : $native;
+
+            if ((int) ($source[$key.'_withheld_rows'] ?? 0) === 0) {
+                continue;
+            }
+
+            $several = $several || (int) ($source['money_original_currencies'] ?? 0) > 1;
+
+            if (is_string($source['money_original_currency'] ?? null)) {
+                $currencies[$source['money_original_currency']] = true;
+            }
+        }
+        $merged['money_original_currency'] = count($currencies) === 1 && ! $several ? (string) array_key_first($currencies) : null;
+        $merged['money_original_currencies'] = $several ? max(2, count($currencies)) : count($currencies);
+
+        // Ratios: the creative grain's own, else the ad grain's own — never recomputed across grains.
+        foreach ([...self::DERIVED, ...self::AD_GRAIN_DERIVED] as $key) {
+            if (($native[$key] ?? null) !== null) {
+                continue;
+            }
+
+            $merged[$key] = $ads[$key] ?? null;
+
+            if ($merged[$key] !== null) {
+                $filled[] = $key;
+            }
+        }
+
+        $merged['reported']['orders'] = ($merged['conversions'] ?? null) !== null;
+        $merged['active_days'] = max((int) ($native['active_days'] ?? 0), (int) ($ads['active_days'] ?? 0));
+        $merged['from_ads'] = array_values(array_unique($filled));
+
+        return $merged;
     }
 
     /**
