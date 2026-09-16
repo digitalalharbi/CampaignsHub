@@ -172,8 +172,8 @@ final class ScopeAuditCommand extends Command
         $this->line(str_repeat('-', 78));
         $this->line(sprintf('  PROJECT %s', $projectId));
         $this->line(sprintf('    tenant %s · client workspace %s',
-            $project?->tenant_id ?? '(project row missing)',
-            $project?->client_workspace_id ?? '—',
+            $project->tenant_id ?? '(project row missing)',
+            $project->client_workspace_id ?? '—',
         ));
 
         $active = array_keys(array_filter($this->activeOn, fn (array $p): bool => in_array($projectId, $p, true)));
@@ -369,14 +369,15 @@ final class ScopeAuditCommand extends Command
         $this->line(sprintf('      sandbox campaigns filed under a live provider       : %d', $sandbox));
 
         // A creative referenced by ads of more than one account — the account-blind creative key.
-        $shared = DB::table('external_ads as a')
-            ->join('external_campaigns as c', 'c.id', '=', 'a.external_campaign_id')
-            ->where('a.project_id', $projectId)
-            ->whereNotNull('a.creative_id')
-            ->groupBy('a.creative_id')
-            ->havingRaw('COUNT(DISTINCT c.external_account_id) > 1')
-            ->get(['a.creative_id'])
-            ->count();
+        $shared = $this->groups(
+            DB::table('external_ads as a')
+                ->join('external_campaigns as c', 'c.id', '=', 'a.external_campaign_id')
+                ->where('a.project_id', $projectId)
+                ->whereNotNull('a.creative_id')
+                ->select('a.creative_id')
+                ->groupBy('a.creative_id')
+                ->havingRaw('COUNT(DISTINCT c.external_account_id) > 1'),
+        );
         $this->line(sprintf('      creatives carried by ads of two or more accounts     : %d', $shared));
 
         // A creative whose campaign is filed in another project — a link that crossed a project.
@@ -433,24 +434,24 @@ final class ScopeAuditCommand extends Command
         $this->line(sprintf('    accounts with an ACTIVE binding to more than one project : %d', $twice));
 
         // The same provider account discovered under more than one tenant.
-        $crossTenant = DB::table('external_accounts')
-            ->when($this->providerFilter(), fn ($q, $p) => $q->where('provider', $p))
-            ->select('provider', 'external_id')
-            ->groupBy('provider', 'external_id')
-            ->havingRaw('COUNT(DISTINCT tenant_id) > 1')
-            ->get()
-            ->count();
+        $crossTenant = $this->groups(
+            DB::table('external_accounts')
+                ->when($this->providerFilter(), fn ($q, $p) => $q->where('provider', $p))
+                ->select('provider', 'external_id')
+                ->groupBy('provider', 'external_id')
+                ->havingRaw('COUNT(DISTINCT tenant_id) > 1'),
+        );
         $this->line(sprintf('    provider accounts discovered under more than one tenant    : %d', $crossTenant));
 
         // A commerce connection carrying more than one store — the token is replaced per consent.
-        $multiStore = DB::table('external_accounts')
-            ->where('account_type', 'store')
-            ->when($this->providerFilter(), fn ($q, $p) => $q->where('provider', $p))
-            ->select('provider_connection_id')
-            ->groupBy('provider_connection_id')
-            ->havingRaw('COUNT(*) > 1')
-            ->get()
-            ->count();
+        $multiStore = $this->groups(
+            DB::table('external_accounts')
+                ->where('account_type', 'store')
+                ->when($this->providerFilter(), fn ($q, $p) => $q->where('provider', $p))
+                ->select('provider_connection_id')
+                ->groupBy('provider_connection_id')
+                ->havingRaw('COUNT(*) > 1'),
+        );
         $this->line(sprintf('    commerce connections carrying more than one store         : %d', $multiStore));
 
         // Retained provider bodies have no project column; attributed by whether the account is bound anywhere.
@@ -513,6 +514,12 @@ final class ScopeAuditCommand extends Command
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────────────────────────
+
+    /** How many groups a GROUP BY … HAVING query produces — counted in SQL, not by fetching them. */
+    private function groups(Builder $grouped): int
+    {
+        return DB::query()->fromSub($grouped, 'g')->count();
+    }
 
     private function monthWindow(Builder $q, string $column): void
     {
