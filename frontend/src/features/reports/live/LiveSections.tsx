@@ -59,7 +59,15 @@ export function ObjectiveSplit({ payload, ar, reader }: { payload: LivePayload; 
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               {([['direct', payload.objective_performance.direct], ['blended', payload.objective_performance.blended]] as const).map(([kind, block]) => (
                 <div key={kind} data-testid={`live-objective-${kind}`} className="rounded-xl border border-border p-3">
-                  <div className="text-sm font-semibold text-text-primary">{ar ? block.label_ar : block.label_en}</div>
+                  {/* The definition is a hover away rather than a paragraph under every figure — the client came for the figures. */}
+                  <div
+                    className="text-sm font-semibold text-text-primary"
+                    title={kind === 'direct'
+                      ? (ar ? 'إنفاق مسار المبيعات وحده، مقسومًا على طلباته.' : 'The sales path’s spend alone, over the orders it produced.')
+                      : (ar ? 'كل الإنفاق في الفترة، بما فيه ما لم يكن يشتري طلبًا.' : 'All the spend in the window, including what was not buying an order.')}
+                  >
+                    {ar ? block.label_ar : block.label_en}
+                  </div>
                   <dl className="mt-1 grid grid-cols-2 gap-1.5 text-xs">
                     <div>
                       <dt className="text-text-muted">{ar ? 'الإنفاق' : 'Spend'}</dt>
@@ -109,15 +117,6 @@ export function ObjectiveSplit({ payload, ar, reader }: { payload: LivePayload; 
                       </dd>
                     </div>
                   </dl>
-                  <p className="mt-1 text-[11px] leading-relaxed text-text-muted">
-                    {kind === 'direct'
-                      ? (ar
-                          ? 'إنفاق الحملات البيعية وحدها، مقسومًا على طلباتها.'
-                          : 'The spend of the sales campaigns alone, over the orders they produced.')
-                      : (ar
-                          ? 'كل الإنفاق في الفترة، بما فيه ما لم يكن يشتري طلبًا.'
-                          : 'All the spend in the window, including what was not buying an order.')}
-                  </p>
                 </div>
               ))}
             </div>
