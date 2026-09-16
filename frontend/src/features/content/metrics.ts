@@ -48,6 +48,30 @@ export function metricState(metrics: CreativeMetrics | null, key: string): Metri
   return metrics.reported?.[key] === false ? { kind: 'not_provided' } : { kind: 'no_data' }
 }
 
+/**
+ * How many objective metrics stand beside the card's fixed Spend cell.
+ *
+ * Not a preference: the grid is two columns and the card has to stay compact, so one fixed figure and
+ * three chosen ones is what fits. `CreativeMetrics::HEADLINE_MINIMUM` is the server's matching number.
+ */
+const BESIDE_SPEND = 3
+
+/**
+ * The metrics a card draws BESIDE its fixed Spend cell — Owner defect 95.
+ *
+ * One function because two things need the same answer and had two: the grid filtered `spend` out of
+ * `headline_metrics` and sliced, while the «no displayable metrics» sentence was gated on the length
+ * of the UNFILTERED list. `CreativeMetrics::supportable()` returns exactly `['spend']` when nothing
+ * else about a creative can be headlined — its deliberate last resort, «the one question asked of
+ * every campaign» — so that length was 1 in the one state the sentence exists for, the panel never
+ * fired, and the reader got a price with three empty columns and no explanation.
+ *
+ * Spend is removed rather than kept because the fixed cell already carries it, through the money
+ * contract, which is the only reader that can state a withheld amount.
+ */
+export const besideSpend = (headline: readonly string[]): string[] =>
+  headline.filter((key) => key !== 'spend').slice(0, BESIDE_SPEND)
+
 const LABELS: Record<string, { ar: string; en: string }> = {
   spend: { ar: 'الإنفاق', en: 'Spend' },
   impressions: { ar: 'الظهور', en: 'Impressions' },

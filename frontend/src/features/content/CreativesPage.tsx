@@ -7,7 +7,7 @@ import { AdPreviewDialog } from './AdPreviewDialog'
 import { creativeDialogFigures } from './creativeDialogFigures'
 import { CreativeTrend } from './CreativeTrend'
 import { CreativeCompare } from './CreativeCompare'
-import { formatMetric, metricLabel, metricState } from './metrics'
+import { besideSpend, formatMetric, metricLabel, metricState } from './metrics'
 import { creativeGrainMissing, emptyReason, noDisplayableMetrics, type EmptyReason, type MetricsAvailability } from './availability'
 import { absenceLabel, aspectClass, previewShape, readPreview } from './adPreview'
 import { imageLoading } from './format'
@@ -1568,9 +1568,7 @@ function CreativeGridCard({
                 </dd>
               </div>
 
-              {creative.headline_metrics
-                .filter((key) => key !== 'spend')
-                .slice(0, 3)
+              {besideSpend(creative.headline_metrics)
                 .map((key) => (
                   <div key={key} className="flex flex-col">
                     <dt className="text-text-secondary">{metricLabel(key, locale)}</dt>
@@ -1588,7 +1586,19 @@ function CreativeGridCard({
                 ))}
             </dl>
 
-            {creative.headline_metrics.length === 0 && (
+            {/*
+                Owner defect 95 — the gap beside the price is EXPLAINED, or the card reads as broken.
+
+                This was gated on `headline_metrics.length === 0`, and that length is 1 in the one
+                state the sentence was written for: `supportable()` falls back to `['spend']` when
+                nothing else about the creative can be headlined — its stated last resort, «the one
+                question asked of every campaign» — and the grid above filters `spend` out because
+                the fixed cell already carries it. So the reader got a price, three empty columns and
+                no reason, which is the owner's «Spend appears and the other KPIs disappear» rendered
+                literally. Measured after the list the grid actually draws, which is the only number
+                that can answer «is there anything beside the price».
+            */}
+            {besideSpend(creative.headline_metrics).length === 0 && (
               <EmptyReasonPanel reason={noDisplayableMetrics(locale)} />
             )}
           </div>
