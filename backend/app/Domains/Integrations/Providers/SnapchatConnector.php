@@ -9,6 +9,9 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Reporting\ReportingWindow;
 use App\Domains\Integrations\Support\AssetExpiry;
 use App\Domains\Integrations\ValueObjects\SyncResult;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Http;
 
 /**
  * Snapchat Marketing API (`adsapi.snapchat.com/v1`).
@@ -547,7 +550,64 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             ], static fn ($v) => $v !== null);
         }
 
+        return $this->withoutUndrawableCollectionStills($creatives);
+    }
+
+    /**
+     * E=3 on Production: a promoted collection's still arrived as `multipart/form-data`, so the card
+     * drew nothing and said nothing. A browser draws an `<img>` by its BYTES, whatever the declared
+     * type (measured on chromium, firefox and webkit), so the declared type decides nothing here —
+     * the first bytes do. Each collection still is asked for its first 16 bytes; one whose bytes are
+     * not an allow-listed image (JPEG, PNG, GIF, WebP) is not stored as the still, and the presenter
+     * shows the collection's tiles or its truthful absence instead of a blank. A request that fails
+     * decides nothing either way: a network blip must not unset a working picture. Never logged.
+     *
+     * @param  array<string, array<string, mixed>>  $creatives
+     * @return array<string, array<string, mixed>>
+     */
+    private function withoutUndrawableCollectionStills(array $creatives): array
+    {
+        $check = array_filter(
+            $creatives,
+            static fn (array $c): bool => ($c['format'] ?? null) === 'collection' && is_string($c['asset_url'] ?? null),
+        );
+
+        foreach (array_chunk($check, 8, true) as $chunk) {
+            try {
+                $responses = Http::pool(static fn (Pool $pool): array => array_map(
+                    static fn (array $c): mixed => $pool->withHeaders(['Range' => 'bytes=0-15'])->timeout(10)->get((string) $c['asset_url']),
+                    $chunk,
+                ));
+            } catch (\Throwable) {
+                continue;
+            }
+
+            foreach (array_keys($chunk) as $index => $id) {
+                $response = $responses[$index] ?? $responses[$id] ?? null;
+
+                if (! $response instanceof Response || ! $response->successful()) {
+                    continue;
+                }
+
+                if (self::isDrawableImage($response->body())) {
+                    continue;
+                }
+
+                unset($creatives[$id]['asset_url'], $creatives[$id]['asset_expires_at']);
+                $this->mediaResolved = max(0, $this->mediaResolved - 1);
+            }
+        }
+
         return $creatives;
+    }
+
+    /** An allow-listed image signature in the leading bytes: JPEG, PNG, GIF, WebP. */
+    private static function isDrawableImage(string $bytes): bool
+    {
+        return str_starts_with($bytes, "\xFF\xD8\xFF")
+            || str_starts_with($bytes, "\x89PNG\r\n\x1A\n")
+            || str_starts_with($bytes, 'GIF87a') || str_starts_with($bytes, 'GIF89a')
+            || (str_starts_with($bytes, 'RIFF') && substr($bytes, 8, 4) === 'WEBP');
     }
 
     /**

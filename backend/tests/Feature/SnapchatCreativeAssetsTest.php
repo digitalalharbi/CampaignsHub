@@ -313,6 +313,43 @@ final class SnapchatCreativeAssetsTest extends TestCase
         $this->assertArrayNotHasKey('asset_expires_at', $this->creatives()['cr-1']);
     }
 
+    /**
+     * E=3 on Production: a collection's still served as `multipart/form-data`. The BYTES decide. A real
+     * PNG under that type draws in every browser and stays; a genuine multipart envelope does not draw
+     * and is not stored as the still; a failed check changes nothing.
+     */
+    public function test_a_collection_still_is_kept_only_when_its_bytes_are_a_drawable_image(): void
+    {
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+
+        Http::fake([
+            '*get_media_by_ids*' => Http::response(['media' => [
+                ['media' => ['id' => 'me-1', 'type' => 'IMAGE', 'download_link' => 'https://cf.snapchat.com/mislabelled.jpg']],
+                ['media' => ['id' => 'me-2', 'type' => 'IMAGE', 'download_link' => 'https://cf.snapchat.com/envelope.jpg']],
+                ['media' => ['id' => 'me-3', 'type' => 'IMAGE', 'download_link' => 'https://cf.snapchat.com/unreachable.jpg']],
+                ['media' => ['id' => 'me-4', 'type' => 'IMAGE', 'download_link' => 'https://cf.snapchat.com/plain-still.jpg']],
+            ]], 200),
+            '*/creatives*' => Http::response(['creatives' => [
+                ['creative' => ['id' => 'cr-1', 'name' => 'A', 'type' => 'COLLECTION', 'top_snap_media_id' => 'me-1']],
+                ['creative' => ['id' => 'cr-2', 'name' => 'B', 'type' => 'COLLECTION', 'top_snap_media_id' => 'me-2']],
+                ['creative' => ['id' => 'cr-3', 'name' => 'C', 'type' => 'COLLECTION', 'top_snap_media_id' => 'me-3']],
+                ['creative' => ['id' => 'cr-4', 'name' => 'D', 'type' => 'WEB_VIEW', 'top_snap_media_id' => 'me-4']],
+            ]], 200),
+            'cf.snapchat.com/mislabelled.jpg' => Http::response(substr($png, 0, 16), 206, ['Content-Type' => 'multipart/form-data']),
+            'cf.snapchat.com/envelope.jpg' => Http::response("--b1\r\nContent-Type: image/png\r\n", 206, ['Content-Type' => 'multipart/form-data; boundary=b1']),
+            'cf.snapchat.com/unreachable.jpg' => Http::response('', 503),
+            '*' => Http::response([], 200),
+        ]);
+
+        $creatives = $this->creatives();
+
+        $this->assertSame('https://cf.snapchat.com/mislabelled.jpg', $creatives['cr-1']['asset_url'] ?? null, 'a real image under a wrong type draws, and was dropped');
+        $this->assertArrayNotHasKey('asset_url', $creatives['cr-2'], 'a multipart envelope draws nothing, and was stored as the still');
+        $this->assertSame('https://cf.snapchat.com/unreachable.jpg', $creatives['cr-3']['asset_url'] ?? null, 'a failed check unset a picture');
+        $this->assertSame('https://cf.snapchat.com/plain-still.jpg', $creatives['cr-4']['asset_url'] ?? null, 'only collections are checked');
+        Http::assertNotSent(static fn ($r): bool => str_contains((string) $r->url(), 'plain-still'));
+    }
+
     /** @return array<string, array<string, mixed>> */
     private function creatives(): array
     {
