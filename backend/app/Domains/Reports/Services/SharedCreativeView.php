@@ -189,7 +189,21 @@ final class SharedCreativeView
         $detail = $this->presenter->detail($model, $campaign);
         $detail['objective'] = $objective;
         $detail['path'] = $this->metrics->pathFor($objective)->value;
-        $detail['headline_metrics'] = $this->metrics->headline($objective);
+        /*
+         * The creative's OWN figures decide which metrics headline it — not the family alone.
+         *
+         * `headline()` takes the figures as a second argument and every Content-side caller passes
+         * them (`CreativeRows`, `CreativeAnalysisController`); this one did not. With no figures the
+         * service answers a different question in BOTH directions: it strikes the ad-grain results a
+         * creative may legitimately have — `leads`, `installs`, `sign_ups` and the costs derived from
+         * them — and it keeps metrics this creative never reported, because the answerability filter
+         * is skipped. So the client's report and the operator's content card, looking at one creative
+         * over one window, disagreed about what it should be judged on: the report headlined figures
+         * that were blank and omitted the ones that were real.
+         *
+         * `$current` is this creative's figures for exactly this window, resolved two lines above.
+         */
+        $detail['headline_metrics'] = $this->metrics->headline($objective, $current);
         $detail['metrics'] = $current;
         $detail['previous'] = $previous;
         $detail['fatigue'] = $this->fatigue->assess($current ?? ['active_days' => 0], $previous);
