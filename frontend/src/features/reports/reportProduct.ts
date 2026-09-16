@@ -20,13 +20,17 @@ export type ReportMode = 'live' | 'snapshot'
 export type ReportForm = 'executive_summary' | 'detailed'
 
 const PRODUCTS: Record<`${ReportMode}:${ReportForm}`, { ar: string; en: string }> = {
+  /*
+   * A live link is a product with modes now (`live/modes.ts`), so its sentence names what the reader
+   * can do rather than listing contents — and it stays one line: the client came for figures.
+   */
   'live:executive_summary': {
-    ar: 'لوحة مباشرة — الأرقام تُحسب عند فتح الصفحة، ويمكنك تغيير الفترة والمنصات.',
-    en: 'Live dashboard — the figures are computed when you open the page, and you can change the period and platforms.',
+    ar: 'ملخص مباشر — يُحدَّث عند كل فتح.',
+    en: 'Live summary — recomputed every time it is opened.',
   },
   'live:detailed': {
-    ar: 'تقرير مباشر تفصيلي — اللوحة نفسها، ومعها كل منصة وهدف في الفترة المختارة.',
-    en: 'Live detailed report — the dashboard, and with it every platform and objective in the chosen period.',
+    ar: 'لوحة أداء مباشرة — ملخص، أداء، منصات، ومحتوى.',
+    en: 'Live performance dashboard — summary, performance, platforms and content.',
   },
   'snapshot:executive_summary': {
     ar: 'ملخص تنفيذي — أبرز النتائج والقرارات. التفاصيل الكاملة في التقرير التفصيلي.',
@@ -51,8 +55,8 @@ export function productName(mode: string, form: string, locale: Locale): string 
 
   if (mode === 'live') {
     return form === 'executive_summary'
-      ? (ar ? 'لوحة مباشرة' : 'Live dashboard')
-      : (ar ? 'تقرير مباشر تفصيلي' : 'Live detailed report')
+      ? (ar ? 'ملخص مباشر' : 'Live summary')
+      : (ar ? 'لوحة أداء مباشرة' : 'Live performance dashboard')
   }
 
   return form === 'executive_summary'

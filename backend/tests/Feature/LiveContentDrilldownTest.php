@@ -1,0 +1,315 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Feature;
+
+use App\Domains\Campaigns\Models\ExternalCreative;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\ContentKey;
+use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Models\Tenant;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Tests\TestCase;
+
+/**
+ * The platform → content drilldown of a live client link.
+ *
+ * What is asserted is the contract a client relies on, and each case compares SURFACES rather than a
+ * literal: the drilldown's total against the card it was opened from, and the trend's points against
+ * that total. A test pinned to «1000» passes while both drift together.
+ */
+final class LiveContentDrilldownTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private Report $report;
+
+    private Project $project;
+
+    /** @var list<string> */
+    private array $campaigns = [];
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $tenant = Tenant::create(['name' => 'A', 'slug' => 'drill-'.uniqid(), 'status' => 'active']);
+        app(TenantContext::class)->setTenantId($tenant->id);
+        $ws = ClientWorkspace::create(['name' => 'C', 'slug' => 'c-'.uniqid(), 'mode' => 'managed']);
+        $this->project = Project::create(['client_workspace_id' => $ws->id, 'name' => 'P', 'status' => 'active']);
+        app(ProjectContext::class)->setProjectId($this->project->id);
+
+        foreach (['meta' => [13.5, 7.25, 101.75], 'tiktok' => [40.0, 2.5]] as $provider => $daily) {
+            $campaign = UnifiedCampaign::create(['project_id' => $this->project->id, 'name' => "C {$provider}", 'status' => 'active', 'objective' => 'sales']);
+            $this->campaigns[] = $campaign->id;
+            $creative = ExternalCreative::create([
+                'tenant_id' => $tenant->id, 'project_id' => $this->project->id, 'campaign_id' => $campaign->id,
+                'provider' => $provider, 'external_creative_id' => 'cr-'.Str::random(8),
+                'name' => "{$provider} creative", 'format' => 'image', 'status' => 'active',
+            ]);
+            foreach ($daily as $i => $spend) {
+                $date = sprintf('2026-07-%02d', 10 + $i);
+                DB::table('creative_daily_metrics')->insert([
+                    'id' => (string) Str::uuid(), 'tenant_id' => $tenant->id, 'project_id' => $this->project->id,
+                    'creative_id' => $creative->id, 'metric_date' => $date, 'spend' => $spend,
+                    'impressions' => 1000 + $i * 7, 'clicks' => 30 + $i, 'conversions' => 1 + $i, 'revenue' => $spend * 3,
+                    'created_at' => now(), 'updated_at' => now(),
+                ]);
+                DailyMetric::create([
+                    'id' => (string) Str::uuid(), 'project_id' => $this->project->id, 'external_account_id' => (string) Str::uuid(),
+                    'external_campaign_id' => (string) Str::uuid(), 'unified_campaign_id' => $campaign->id,
+                    'provider' => $provider, 'metric_key' => 'spend', 'metric_date' => $date, 'value' => $spend,
+                ]);
+            }
+        }
+
+        $this->report = Report::create([
+            'project_id' => $this->project->id, 'name' => 'R', 'type' => 'executive', 'status' => 'completed',
+            'currency' => 'SAR', 'period_start' => '2026-07-01', 'period_end' => '2026-07-31', 'data' => [],
+        ]);
+
+        app(ProjectContext::class)->forget();
+        app(TenantContext::class)->forget();
+    }
+
+    /** @param array<string, mixed> $overrides @return array{0: ReportShare, 1: string} */
+    private function share(array $overrides = []): array
+    {
+        return app(ShareService::class)->create($this->report, [
+            'scope' => [
+                'project_id' => $this->project->id, 'campaign_ids' => $this->campaigns,
+                'providers' => ['meta', 'tiktok'], 'earliest' => '2026-07-01', 'latest' => '2026-07-31',
+            ],
+        ] + $overrides, null);
+    }
+
+    /** @return array<string, mixed> */
+    private function live(string $raw, string $query = ''): array
+    {
+        return $this->getJson("/api/v1/reports/shared/{$raw}/live?from=2026-07-01&to=2026-07-31{$query}")->assertOk()->json('data');
+    }
+
+    /** @param array<string, mixed> $data @return array<string, mixed> */
+    private function rosterRow(array $data, string $name): array
+    {
+        return collect($data['ads_roster'])->firstWhere('name', $name);
+    }
+
+    /**
+     * The summary product carries neither per-platform rankings nor the weakest content.
+     *
+     * `LiveReportFormCompositionTest` asserts `ads_platform_groups === []` for a summary on a fixture
+     * with no creatives, where it is empty in BOTH forms and the assertion cannot fail. Here the detailed
+     * form is asserted to carry both first, so the summary's emptiness is the composition and not the data.
+     */
+    public function test_a_summary_link_does_not_carry_the_detailed_content_lists(): void
+    {
+        [, $detailed] = $this->share(['mode' => 'live', 'form' => 'detailed']);
+        [, $summary] = $this->share(['mode' => 'live', 'form' => 'executive_summary']);
+
+        $full = $this->live($detailed);
+        $this->assertNotEmpty($full['ads_platform_groups'], 'the detailed link has no platform rankings, so this proves nothing');
+        $this->assertNotEmpty($full['ads_weakest'], 'the detailed link has no weakest content, so this proves nothing');
+
+        $short = $this->live($summary);
+        $this->assertSame([], $short['ads_platform_groups']);
+        $this->assertSame([], $short['ads_weakest']);
+    }
+
+    /**
+     * A creative the operator EXCLUDED from the link is absent from the live content lists and cannot
+     * be opened by its key.
+     *
+     * The share's scope carries `creative_ids` / `excluded_creative_ids` and the creatives endpoint
+     * honoured them; the live payload built its lists without them, so the Content mode listed exactly
+     * what the operator had taken out.
+     */
+    public function test_an_excluded_creative_is_absent_from_the_live_link(): void
+    {
+        [$wide, $wideRaw] = $this->share();
+        $key = $this->rosterRow($this->live($wideRaw), 'tiktok creative')['content_key'];
+        $id = (string) ExternalCreative::withoutGlobalScopes()->where('name', 'tiktok creative')->value('id');
+
+        [$narrow, $raw] = $this->share();
+        $narrow->scope = ['excluded_creative_ids' => [$id]] + $narrow->scope;
+        $narrow->save();
+
+        $data = $this->live($raw);
+        $names = collect($data['ads_roster'])->merge($data['ads'] ?? [])->merge($data['ads_weakest'] ?? [])->pluck('name')->unique()->values()->all();
+
+        $this->assertContains('meta creative', $names, 'the link shows no content at all, so this proves nothing');
+        $this->assertNotContains('tiktok creative', $names, 'the live link lists a creative the operator excluded');
+        $this->assertSame(1, $data['creatives_in_scope']);
+
+        $this->getJson("/api/v1/reports/shared/{$raw}/live/content/".ContentKey::for($narrow, $id))->assertNotFound();
+    }
+
+    /**
+     * Carousel card copy — headline, body, call to action, destination — follows the link's own copy
+     * switches, which fail closed.
+     *
+     * The shared-creatives endpoint removes each field unless the operator published it; the live
+     * payload carried every card's copy inside its preview envelopes whatever the switches said.
+     */
+    public function test_card_copy_on_a_live_link_follows_the_links_copy_switches(): void
+    {
+        ExternalCreative::withoutGlobalScopes()->where('name', 'meta creative')->update(['cards' => [
+            ['image_url' => 'https://cdn.example.com/a.jpg', 'headline' => 'SECRET HEADLINE', 'body' => 'SECRET BODY', 'cta' => 'SHOP_NOW', 'destination_url' => 'https://brand.example.com/secret'],
+            ['image_url' => 'https://cdn.example.com/b.jpg', 'headline' => 'SECOND', 'body' => 'SECOND BODY'],
+        ]]);
+
+        $cardsIn = function (array $data): array {
+            $out = [];
+            array_walk_recursive($data, function ($v, $k) use (&$out) {
+                if (in_array($k, ['headline', 'body', 'cta', 'destination_url'], true) && $v !== null) {
+                    $out[] = (string) $v;
+                }
+            });
+
+            return $out;
+        };
+
+        [$open, $openRaw] = $this->share();
+        $open->settings = ['creatives' => ['creatives' => true, 'ad_copy' => true, 'headline' => true, 'cta' => true, 'destination_url' => true]];
+        $open->save();
+        $this->assertContains('SECRET HEADLINE', $cardsIn($this->live($openRaw)), 'no card copy reached even a link that publishes it, so this proves nothing');
+
+        [, $closedRaw] = $this->share();
+        $closed = $this->live($closedRaw);
+        $this->assertSame([], $cardsIn($closed), 'a live link published card copy its operator never switched on');
+
+        $key = collect($closed['ads_roster'])->firstWhere('name', 'meta creative')['content_key'];
+        $detail = $this->getJson("/api/v1/reports/shared/{$closedRaw}/live/content/{$key}?from=2026-07-01&to=2026-07-31")->assertOk()->json('data');
+        $this->assertSame([], $cardsIn($detail), 'the drilldown published card copy the list withheld');
+    }
+
+    public function test_every_content_row_carries_a_key_and_no_internal_id(): void
+    {
+        [, $raw] = $this->share();
+        $data = $this->live($raw);
+
+        $rows = collect($data['ads_roster'])->merge($data['ads'] ?? [])->merge($data['ads_weakest'] ?? []);
+        $this->assertGreaterThan(0, $rows->count(), 'No content in the payload, so this asserts nothing.');
+        foreach ($rows as $row) {
+            $this->assertMatchesRegularExpression('/^[0-9a-f]{24}$/', (string) ($row['content_key'] ?? ''));
+            $this->assertArrayNotHasKey('id', $row);
+            $this->assertArrayNotHasKey('campaign_id', $row);
+        }
+    }
+
+    public function test_the_drilldown_reconciles_with_the_card_it_was_opened_from(): void
+    {
+        [, $raw] = $this->share();
+        $card = $this->rosterRow($this->live($raw), 'meta creative');
+
+        $res = $this->getJson("/api/v1/reports/shared/{$raw}/live/content/{$card['content_key']}?from=2026-07-01&to=2026-07-31")->assertOk()->json('data');
+
+        $this->assertSame('meta creative', $res['content']['name']);
+        $this->assertEqualsWithDelta($card['metrics']['spend'], $res['content']['metrics']['spend'], 0.0001, 'The drilldown disagrees with the card about one creative.');
+
+        $reported = collect($res['trend'])->where('reported', true);
+        $this->assertCount(3, $reported, 'Three delivering days were seeded.');
+        $this->assertEqualsWithDelta($res['content']['metrics']['spend'], $reported->sum('spend'), 0.0001, 'The trend does not add back to the total it explains.');
+        $this->assertEqualsWithDelta($res['content']['metrics']['clicks'], $reported->sum('clicks'), 0.0001);
+
+        $silent = collect($res['trend'])->where('reported', false)->first();
+        $this->assertNotNull($silent);
+        $this->assertArrayNotHasKey('spend', $silent, 'A day with no delivery must carry no figures, not zeros.');
+    }
+
+    public function test_a_platform_narrowed_payload_reconciles_with_the_whole_link(): void
+    {
+        [, $raw] = $this->share();
+        $whole = collect($this->live($raw)['platforms'])->keyBy('provider');
+        $meta = $this->live($raw, '&providers[]=meta');
+
+        $this->assertEqualsWithDelta($whole['meta']['spend'], $meta['totals']['spend'], 0.0001, 'A platform view disagrees with the comparison row for the same platform.');
+        $this->assertSame(['meta'], collect($meta['ads_roster'])->pluck('provider')->unique()->values()->all());
+    }
+
+    public function test_a_key_from_another_link_opens_nothing(): void
+    {
+        [, $first] = $this->share();
+        [, $second] = $this->share();
+        $key = $this->rosterRow($this->live($first), 'meta creative')['content_key'];
+
+        $this->getJson("/api/v1/reports/shared/{$second}/live/content/{$key}")->assertNotFound();
+        $this->getJson("/api/v1/reports/shared/{$first}/live/content/".str_repeat('a', 24))->assertNotFound();
+    }
+
+    public function test_a_key_outside_the_platform_ceiling_opens_nothing(): void
+    {
+        [, $wide] = $this->share();
+        $tiktokKey = $this->rosterRow($this->live($wide), 'tiktok creative')['content_key'];
+
+        [$narrow, $narrowRaw] = $this->share();
+        $narrow->scope = ['providers' => ['meta']] + $narrow->scope;
+        $narrow->save();
+        // The same creative's key on the narrow link, computed the way the payload would have.
+        $id = ExternalCreative::withoutGlobalScopes()->where('name', 'tiktok creative')->value('id');
+        $key = ContentKey::for($narrow, (string) $id);
+
+        $this->assertNotSame($tiktokKey, $key, 'A key must be bound to its share.');
+        $this->getJson("/api/v1/reports/shared/{$narrowRaw}/live/content/{$key}")->assertNotFound();
+    }
+
+    public function test_hidden_spend_is_absent_from_the_drilldown_too(): void
+    {
+        [$share, $raw] = $this->share();
+        $share->hide_spend = true;
+        $share->save();
+        $key = $this->rosterRow($this->live($raw), 'meta creative')['content_key'];
+
+        $res = $this->getJson("/api/v1/reports/shared/{$raw}/live/content/{$key}?from=2026-07-01&to=2026-07-31")->assertOk()->json('data');
+
+        $this->assertNull($res['content']['metrics']['spend'] ?? null);
+        foreach ($res['trend'] as $point) {
+            $this->assertNull($point['spend'] ?? null, 'A link that hides spend published it one click down.');
+            $this->assertNull($point['cpa'] ?? null);
+        }
+    }
+
+    public function test_a_link_that_does_not_show_content_refuses_the_drilldown(): void
+    {
+        [$share, $raw] = $this->share();
+        $key = $this->rosterRow($this->live($raw), 'meta creative')['content_key'];
+        $share->settings = ['sections' => ['creatives' => false]];
+        $share->save();
+
+        $this->getJson("/api/v1/reports/shared/{$raw}/live/content/{$key}")->assertNotFound();
+    }
+
+    /**
+     * A live page renders from `/live`, never from the snapshot the first request carries.
+     *
+     * `show` resolved every creative's media and ran the client view and the hide flags over the
+     * stored document for a live link too, and the page threw all of it away — first-paint cost on
+     * the one surface a client opens, for a payload nothing reads. The link's own facts (form,
+     * mode, branding, settings, sections) still arrive; the document does not.
+     */
+    public function test_a_live_link_does_no_snapshot_work_it_would_discard(): void
+    {
+        $this->report->update(['data' => ['kpis' => ['impressions' => 5000], 'platforms' => [['provider' => 'meta']]]]);
+        [, $snapshot] = app(ShareService::class)->create($this->report, ['mode' => 'snapshot'], null);
+        [, $live] = $this->share();
+
+        $this->assertNotEmpty(
+            $this->getJson("/api/v1/reports/shared/{$snapshot}")->assertOk()->json('data.data'),
+            'the snapshot link lost its document — this guard would pass for the wrong reason',
+        );
+
+        $res = $this->getJson("/api/v1/reports/shared/{$live}")->assertOk();
+        $this->assertSame('live', $res->json('data.mode'));
+        $this->assertSame([], $res->json('data.data'), 'a live link was sent the snapshot document it never renders');
+    }
+}

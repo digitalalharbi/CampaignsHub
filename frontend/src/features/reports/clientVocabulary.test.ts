@@ -37,6 +37,13 @@ const CLIENT_SURFACES = [
   'src/features/reports/LiveDetailTables.tsx',
   'src/features/reports/ReportAdsSection.tsx',
   'src/features/reports/ReportAdDetail.tsx',
+  // The live link's modes, composed from `live/` since the page became four products.
+  'src/features/reports/live/LiveViews.tsx',
+  'src/features/reports/live/LiveContent.tsx',
+  'src/features/reports/live/LiveKpis.tsx',
+  'src/features/reports/live/LiveSections.tsx',
+  'src/features/reports/live/liveMetrics.tsx',
+  'src/features/reports/ClientAttention.tsx',
 ]
 
 /**

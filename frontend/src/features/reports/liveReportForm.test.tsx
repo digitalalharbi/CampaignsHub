@@ -111,8 +111,8 @@ const PAYLOAD = {
 
 describe('the four report products', () => {
   it('names each of the four, and never describes a live page as a snapshot', () => {
-    expect(productName('live', 'executive_summary', 'en')).toBe('Live dashboard')
-    expect(productName('live', 'detailed', 'en')).toBe('Live detailed report')
+    expect(productName('live', 'executive_summary', 'en')).toBe('Live summary')
+    expect(productName('live', 'detailed', 'en')).toBe('Live performance dashboard')
     expect(productName('snapshot', 'executive_summary', 'en')).toBe('Executive summary')
     expect(productName('snapshot', 'detailed', 'en')).toBe('Detailed report')
 
@@ -135,7 +135,7 @@ describe('the four report products', () => {
         expect(productLabel(mode, form, 'ar')).not.toContain('حمل')
       }
     }
-    expect(productLabel('live', 'executive_summary', 'ar')).toContain('لوحة مباشرة')
+    expect(productLabel('live', 'executive_summary', 'ar')).toContain('ملخص مباشر')
     expect(productLabel('snapshot', 'detailed', 'ar')).toContain('تقرير تفصيلي')
   })
 })
@@ -182,7 +182,14 @@ describe('a live link and the form it was shared as', () => {
     await screen.findByTestId('live-report')
 
     expect(screen.getByTestId('live-kpis')).toBeInTheDocument()
-    expect(screen.getByTestId('live-platform-comparison')).toBeInTheDocument()
+    /*
+     * The platform summary is a visual in the summary product — results per platform as bars — and
+     * the sortable comparison TABLE is the dashboard's. A summary that carried the table would be the
+     * dashboard again with fewer blocks, which is row 96.
+     */
+    expect(screen.getByTestId('live-summary-platform-results')).toBeInTheDocument()
+    expect(screen.queryByTestId('live-platform-comparison')).not.toBeInTheDocument()
+    // This fixture spends 1,000 outside the sales path, so direct and blended differ and both are shown.
     expect(screen.getByTestId('live-objective-split')).toBeInTheDocument()
   })
 

@@ -97,12 +97,21 @@ final class PublicReportController extends Controller
          * BEFORE the client view, because the resolution is keyed on the creative id and the client
          * boundary strips exactly that.
          */
-        $fresh = app(ReportCreativeMedia::class)->refresh($report->data ?? []);
+        /*
+         * A LIVE link renders from `/live` and never reads this document, so none of the work below is
+         * done for it: resolving every creative's media and running the client view over a snapshot
+         * the page discards was first-paint cost on the surface a client opens, for nothing. The
+         * link's own facts — form, mode, branding, settings, sections — still arrive.
+         */
+        $data = [];
+        if (! $share->isLive()) {
+            $fresh = app(ReportCreativeMedia::class)->refresh($report->data ?? []);
 
-        $data = $form === 'executive_summary'
-            ? $view->executive($fresh)
-            : $view->filter($fresh);
-        $data = $this->shares->sanitize($data, $share);
+            $data = $form === 'executive_summary'
+                ? $view->executive($fresh)
+                : $view->filter($fresh);
+            $data = $this->shares->sanitize($data, $share);
+        }
 
         return ApiResponse::success([
             'name' => $report->name,
@@ -151,6 +160,48 @@ final class PublicReportController extends Controller
      * A snapshot link calling this gets 409 rather than an empty live payload: the caller asked for
      * something this link is not, and saying so is more useful than returning zeroes it would render.
      */
+    /**
+     * The platform → content drilldown of a live link: one creative, its figures and its trend.
+     *
+     * Same token, same password gate, same live-only rule and same hide flags as `live()`. Refused
+     * with 404 when the link does not show content at all, because a section the operator switched
+     * off is not reachable by knowing its address.
+     */
+    public function liveContent(Request $request, string $token, string $key, LiveReportService $live): JsonResponse
+    {
+        $this->throttle($request);
+        $share = $this->shares->resolveActive($token);
+        if (! $share) {
+            return ApiResponse::error('الرابط غير صالح أو انتهت صلاحيته أو أُلغي.', status: 404);
+        }
+        if ($share->password_hash !== null) {
+            $provided = (string) ($request->header('X-Report-Password') ?? $request->query('password', ''));
+            if (! Hash::check($provided, $share->password_hash)) {
+                $this->shares->log($share, 'denied', $request, 'bad password');
+
+                return ApiResponse::error('كلمة المرور مطلوبة أو غير صحيحة.', status: 401, errors: ['password_required' => [true]]);
+            }
+        }
+        if (! $share->isLive()) {
+            return ApiResponse::error('هذا الرابط يعرض تقريرًا ثابتًا وليس بيانات لحظية.', status: 409);
+        }
+        if (! ($share->visibleSections()['creatives'] ?? false)) {
+            return ApiResponse::error('هذا المحتوى غير متاح في هذا الرابط.', status: 404);
+        }
+
+        $content = $live->content($share, $key, $request->query());
+        if ($content === null) {
+            return ApiResponse::error('هذا المحتوى غير متاح في هذا الرابط.', status: 404);
+        }
+
+        // The same hide flags as the page: the row rides the roster's rules, the points the timeseries'.
+        $sanitised = $this->shares->sanitizeLive(['ads_roster' => [$content['content']], 'timeseries' => $content['trend']], $share);
+        $content['content'] = $sanitised['ads_roster'][0];
+        $content['trend'] = $sanitised['timeseries'];
+
+        return ApiResponse::success($content, 'Live content.');
+    }
+
     public function live(Request $request, string $token, LiveReportService $live): JsonResponse
     {
         $this->throttle($request);

@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest'
  * The failure this prevents is quiet and expensive: three surfaces drifting until a client's link
  * shows one «best ad» and the PDF attached to the same email shows another.
  */
-const TREE: Record<string, string> = import.meta.glob('/src/features/reports/*.tsx', {
+const TREE: Record<string, string> = import.meta.glob(['/src/features/reports/*.tsx', '/src/features/reports/live/*.tsx'], {
   query: '?raw',
   import: 'default',
   eager: true,
@@ -27,11 +27,12 @@ const file = (name: string): string => {
 describe('the ads section, across the three surfaces', () => {
   it('is one component in the deck and in the client’s link', () => {
     expect(file('InteractiveReport.tsx')).toContain('<ReportAdsSection')
-    expect(file('LiveSharedReport.tsx')).toContain('<ReportAdsSection')
+    // The live link composes its modes from `live/`; the dashboard mode is where the ranked ads render.
+    expect(file('live/LiveViews.tsx')).toContain('<ReportAdsSection')
   })
 
   it('reads the same payload key everywhere, including the printed document', () => {
-    for (const name of ['InteractiveReport.tsx', 'LiveSharedReport.tsx', 'PrintDocument.tsx']) {
+    for (const name of ['InteractiveReport.tsx', 'live/LiveViews.tsx', 'PrintDocument.tsx']) {
       expect(file(name), name).toMatch(/ads_absent_reason/)
     }
     expect(file('PrintDocument.tsx')).toMatch(/data\.ads/)
