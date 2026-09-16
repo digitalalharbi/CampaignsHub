@@ -437,6 +437,15 @@ final class PublicReportController extends Controller
         $sanitized = $report->replicate();
         $sanitized->setAttribute('id', $report->id); // replicate() drops the key; the gate needs it
         /*
+         * The watermark the operator asked for, carried into the FILE — see ShareService::renderConfig.
+         *
+         * Every other per-share flag was already applied here: `allow_download` above, and
+         * spend/revenue/names through `sanitize()` below. This one was not, so a link with both
+         * `watermark` and `allow_download` drew the mark on the page, told the client «يحمل علامة
+         * مائية» in their own portal, and handed them a clean PDF — the artefact a watermark is FOR.
+         */
+        $sanitized->setAttribute('config', $this->shares->renderConfig((array) ($report->config ?? []), $share));
+        /*
          * The PDF is the copy a client KEEPS, so it is the last place to print «no cover» over an
          * ad whose picture the product can resolve — REPORT-CREATIVE-MEDIA-001.
          */
