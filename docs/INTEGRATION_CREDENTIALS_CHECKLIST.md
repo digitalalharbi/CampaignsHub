@@ -112,8 +112,17 @@ has ever been made for any of them.**
 | Google Ads | `GOOGLE_ADS_CLIENT_ID` · `GOOGLE_ADS_CLIENT_SECRET` · `GOOGLE_ADS_DEVELOPER_TOKEN` — **no manager (MCC) account id** (GADS-MCC-001) |
 | TikTok Ads | `TIKTOK_ADS_APP_ID` · `TIKTOK_ADS_APP_SECRET` |
 | Snapchat Ads | `SNAPCHAT_ADS_CLIENT_ID` · `SNAPCHAT_ADS_CLIENT_SECRET` — **no organisation id** (SNAP-ORG-001) |
-| X Ads | `X_ADS_CLIENT_ID` · `X_ADS_CLIENT_SECRET` |
+| X Ads | `X_ADS_CONSUMER_KEY` · `X_ADS_CONSUMER_SECRET` · `X_ADS_ACCESS_TOKEN` · `X_ADS_ACCESS_TOKEN_SECRET` — **OAuth 1.0a, no Bearer Token** (X-OAUTH1-001) |
 | LinkedIn Ads | `LINKEDIN_ADS_CLIENT_ID` · `LINKEDIN_ADS_CLIENT_SECRET` · `LINKEDIN_ADS_VERSION` |
+
+**X Ads is different, and the difference is the whole integration (X-OAUTH1-001).** The X Ads API accepts
+only OAuth 1.0a signed requests — never a bearer token from any OAuth 2.0 flow. In the X Developer Console:
+Keys and tokens → **Consumer Keys** (API Key and Secret) and **Authentication Tokens** (Access Token and Secret);
+in the app's User authentication settings, enable **OAuth 1.0a** and register the callback URL below exactly.
+The Access Token pair belongs to the app owner and is used only by «Test configuration» (a signed
+`GET https://ads-api.x.com/12/accounts`); each workspace connects its own X account through X's three-legged
+OAuth 1.0a flow. Regenerate the Access Token and Secret after X approves Ads API access. Until then X stays
+`BLOCKED_EXTERNAL_CREDENTIALS`.
 
 **Redirect URL to register with each platform:**
 `GET {AD_PLATFORM_REDIRECT_BASE or APP_URL}/api/v1/oauth/ads/{provider}/callback`

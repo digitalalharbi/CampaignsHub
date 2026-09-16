@@ -463,6 +463,15 @@ Google Ads remains `BLOCKED_EXTERNAL_CREDENTIALS`. **Nothing here is `LIVE_VERIF
 
 ## §11 — Phase 2, fourth provider: X (2026-08-16)
 
+> **Superseded 2026-09-16 by X-OAUTH1-001.** This section audited the wrong authentication model. The owner
+> tested the real X Developer Console: the X Ads API accepts **only OAuth 1.0a signed requests**. The PKCE
+> implementation below was correct for OAuth 2.0 and irrelevant to X Ads, and the connector's bearer header
+> was refused by `ads-api.x.com` whatever the token. X now uses OAuth 1.0a end to end — four admin values
+> (API Key, API Key Secret, Access Token, Access Token Secret), every Ads API request signed through
+> `guzzlehttp/oauth-subscriber`, and three-legged OAuth 1.0a for workspace connections. The «confirmed»
+> items below about `offline.access` and Basic authentication no longer apply; `ads-api.x.com/12` and
+> polling still do. Kept for the record of how the wrong model was reasoned about.
+
 Audited against X's current *OAuth 2.0 Authorization Code Flow with PKCE* reference and the X Ads API
 *Versions* table. One defect, proven fail-first.
 
