@@ -142,6 +142,34 @@ describe('a detailed link', () => {
   })
 })
 
+describe('a cut list on the live dashboard', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  /*
+   * The ranked group says «3 of 60» and where the rest are. On the saved report that is the roster
+   * below it; on a live link there is no roster on the dashboard — the rest are in Content mode, and
+   * «the rest are in the creative roster below» sent the client looking for a table that is not there.
+   */
+  it('says the rest are under Content, not in a roster the live page does not draw', async () => {
+    vi.mocked(fetchLiveShared).mockImplementation(async (_token, opts) => {
+      const data = payloadFor(opts.providers) as Record<string, unknown>
+      data.ads_groups = [{
+        family: 'sales', label_ar: 'المبيعات', label_en: 'Sales', ranked: true, metric: 'roas',
+        metric_label_ar: 'العائد', metric_label_en: 'ROAS', candidates: 60,
+        ads: (data.ads as unknown[]).slice(0, 2),
+      }]
+
+      return { status: 200, envelope: { data } } as never
+    })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+
+    const note = await screen.findByTestId('report-ads-of-sales')
+    expect(note).toHaveTextContent('2 of 60')
+    expect(note).not.toHaveTextContent(/roster below/)
+    expect(note).toHaveTextContent(/Content/)
+  })
+})
+
 describe('opening one piece of content', () => {
   beforeEach(answerByProvider)
   afterEach(() => vi.clearAllMocks())
