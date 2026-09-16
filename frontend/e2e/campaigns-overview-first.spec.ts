@@ -133,7 +133,6 @@ test.describe('the campaigns workspace', () => {
 
       return {
         card: digits('campaigns-attention'),
-        cardText: text('campaigns-attention'),
         band: digits('campaigns-band-attention'),
         strip: digits('landing-attention'),
         stripPresent: document.querySelector('[data-testid="landing-attention"]') !== null,
@@ -187,12 +186,16 @@ test.describe('the campaigns workspace', () => {
      * paint a card per campaign to do it.
      */
     await page.getByTestId('view-table').click()
-    await expect(page.getByTestId('campaigns-landing-answer').or(page.getByTestId('landing-unexamined'))).toBeVisible({ timeout: 30000 })
 
     /*
-     * Polled, because switching view remounts the branch and its queries settle again — and the claim
-     * is «once settled, the three agree», which a poll states honestly. A page that never agrees still
-     * fails here; it simply cannot fail for having looked during a repaint.
+     * ONE wait, not two — the poll does the waiting and says what it was waiting for.
+     *
+     * Switching view remounts the branch and its queries settle again, so this needs the budget a
+     * view switch takes. It used to be spent on a separate `toBeVisible` for the strip's container,
+     * which failed with «toBeVisible failed» and named neither the number nor the state. Same total
+     * budget, one failure message, and the claim — «once settled, the three agree» — is what is
+     * actually being polled. A page that never agrees still fails here; it simply cannot fail for
+     * having looked during a repaint.
      *
      * The strip renders its chip only above zero, which is itself the contract — so «nothing needs
      * attention» is proven by the chip's ABSENCE rather than by a zero, and the card is re-read on the
@@ -206,6 +209,6 @@ test.describe('the campaigns workspace', () => {
       if (card === '0') return stripPresent ? 'the strip named an attention count where the card said none' : 'agreed'
 
       return strip === card ? 'agreed' : `card ${card} vs strip ${stripPresent ? strip : '(absent)'}`
-    }, { message: 'the KPI card and the landing strip never agreed about the attention count' }).toBe('agreed')
+    }, { message: 'the KPI card and the landing strip never agreed about the attention count', timeout: 30_000 }).toBe('agreed')
   })
 })
