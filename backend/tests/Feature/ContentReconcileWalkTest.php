@@ -92,12 +92,40 @@ final class ContentReconcileWalkTest extends TestCase
         ]);
     }
 
-    /** A diagnosis that changes the thing it diagnoses is not one. */
+    /**
+     * A diagnosis that changes the thing it diagnoses is not one.
+     *
+     * ## This guard was VACUOUS for the write that matters, and an injection proved it
+     *
+     * It compared ROW COUNTS before and after, so it only ever asserted that nothing was inserted or
+     * deleted. Injecting an UPDATE into the walk left it passing — and an update is the dangerous
+     * case, not the insert: a diagnostic that silently touched a column on 1,539 production creatives,
+     * or mutated a metric in place, satisfied this test completely.
+     *
+     * That matters more here than almost anywhere, because this property is the whole reason the
+     * command may be pointed at a live account while a customer is looking at the same screen. A
+     * safety guard that cannot see the unsafe case is worse than none: it is a reason not to look.
+     *
+     * So the comparison is a DIGEST of every column of every row. `md5(string_agg(t::text ORDER BY
+     * t::text))` catches an update, a reorder and a single changed character alike; the ordering is
+     * inside the aggregate because `string_agg` is otherwise unordered and two identical tables would
+     * digest differently. The row count is kept beside it so a failure says which KIND of change it
+     * was — a differing count is an insert or a delete, an equal count with a differing digest is an
+     * update.
+     *
+     * ## And my first injection was too weak to prove anything
+     *
+     * It set `updated_at` to `now()`. That column truncates to whole seconds and the fixture row was
+     * created in the same second, so the value did not change and BOTH forms passed — which reads
+     * exactly like a guard that works. The injection that settles it mutates `name`: the digest form
+     * fails with «the walk changed a table it was only meant to read» and the count form still passes.
+     * An injection that cannot express the defect proves as little as a fixture that cannot.
+     */
     public function test_the_walk_writes_nothing(): void
     {
         $creative = $this->creativeWithAdGrain();
 
-        $before = $this->rowCounts();
+        $before = $this->tableDigests();
 
         $this->artisan('content:reconcile', ['creative' => (string) $creative->getKey()])
             ->assertExitCode(0);
@@ -105,7 +133,7 @@ final class ContentReconcileWalkTest extends TestCase
         $this->artisan('content:reconcile', ['--scope' => true, '--project' => (string) $this->project->getKey()])
             ->assertExitCode(0);
 
-        $this->assertSame($before, $this->rowCounts(), 'the walk wrote to a table it was only meant to read');
+        $this->assertSame($before, $this->tableDigests(), 'the walk changed a table it was only meant to read');
     }
 
     /**
@@ -214,19 +242,30 @@ final class ContentReconcileWalkTest extends TestCase
             ->assertExitCode(0);
     }
 
-    /** @return array<string, int> */
-    private function rowCounts(): array
+    /**
+     * Every column of every row, digested per table — not counted.
+     *
+     * See the note on `test_the_walk_writes_nothing` for why a count was not enough.
+     *
+     * @return array<string, string>
+     */
+    private function tableDigests(): array
     {
-        $counts = [];
+        $digests = [];
 
         foreach ([
             'external_creatives', 'external_ads', 'creative_daily_metrics', 'entity_daily_metrics',
             'daily_metrics', 'metric_sync_runs', 'integration_sync_runs', 'audit_logs',
         ] as $table) {
-            $counts[$table] = (int) DB::table($table)->count();
+            $row = DB::table($table)
+                ->selectRaw("COUNT(*) AS rows_found, MD5(COALESCE(string_agg(t::text, '' ORDER BY t::text), '')) AS digest")
+                ->fromRaw("\"{$table}\" AS t")
+                ->first();
+
+            $digests[$table] = ((int) ($row->rows_found ?? 0)).':'.((string) ($row->digest ?? ''));
         }
 
-        return $counts;
+        return $digests;
     }
 
     /** A creative the platform reports directly — the 160-of-199 half of the production library. */
