@@ -16,6 +16,8 @@ use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Reports\Services\ReportCreativeMedia;
 use App\Domains\Reports\Services\ReportGenerator;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -299,6 +301,7 @@ final class CreativeSurfaceReconciliationTest extends TestCase
             'report roster' => $roster['metrics'] ?? null,
             'report ranked' => $ranked['metrics'] ?? $ranked,
             'library headline strip' => $strip,
+            'live client link roster' => $this->liveRosterRow()['metrics'] ?? null,
         ];
 
         /*
@@ -344,6 +347,44 @@ final class CreativeSurfaceReconciliationTest extends TestCase
                 "the surfaces disagree about «{$metric}»: ".json_encode($seen, JSON_THROW_ON_ERROR),
             );
         }
+    }
+
+    /**
+     * The client's LIVE link, built the way a reader opening it gets it.
+     *
+     * `LiveReportService` builds its roster from the same `CreativeRows` rows the library shows, and
+     * that sentence is a claim until a payload proves it. The client boundary strips internal ids, so
+     * with one creative in scope the roster's single row is ours.
+     *
+     * @return array<string, mixed>
+     */
+    private function liveRosterRow(): array
+    {
+        $campaignId = (string) $this->creative->campaign_id;
+
+        $share = ReportShare::create([
+            'tenant_id' => $this->tenant->id,
+            'report_id' => Report::withoutGlobalScopes()->create([
+                'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+                'name' => 'Live', 'type' => 'performance', 'status' => 'completed', 'form' => 'detailed',
+                'audience' => 'client', 'generated_at' => now(),
+                'period_start' => $this->from, 'period_end' => $this->to, 'currency' => 'SAR', 'scope' => [],
+            ])->getKey(),
+            'token_hash' => hash('sha256', 'live-'.uniqid()),
+            'allow_download' => false,
+            'scope' => [
+                'project_id' => (string) $this->project->id,
+                'campaign_ids' => [$campaignId],
+                'earliest' => $this->from,
+                'latest' => $this->to,
+            ],
+        ]);
+
+        $roster = app(LiveReportService::class)->build($share, ['from' => $this->from, 'to' => $this->to], 'SAR')['ads_roster'] ?? [];
+
+        $this->assertCount(1, $roster, 'the live link roster did not carry exactly the one creative in scope');
+
+        return (array) $roster[0];
     }
 
     private function giveTheCreativeAdsCarryingWhatItsOwnRowsDoNot(): void
