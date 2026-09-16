@@ -229,7 +229,7 @@ export function DashboardView({ payload, reader, currency, locale, onOpenContent
           </div>
         </div>
       )}
-      <ObjectiveLeaders payload={payload} ar={ar} />
+      <ObjectiveLeaders payload={payload} ar={ar} reader={reader} />
       <TrendAndDistribution payload={payload} ar={ar} currency={currency} />
       {sectionOn(payload, 'creatives') && (
         <section className="flex flex-col gap-5">
