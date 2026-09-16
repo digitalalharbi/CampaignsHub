@@ -123,7 +123,9 @@ describe('the ads section of a report', () => {
     renderWithProviders(<ReportAdsSection ads={[withheld]} locale="en" />, { locale: 'en' })
 
     expect(screen.getByText('Eid film')).toBeInTheDocument()
-    expect(screen.getByTestId('report-ad-poster-0-absent')).toHaveTextContent(/credential/i)
+    // Said to the client in their words: the link does not show it — not how our link carries a credential.
+    expect(screen.getByTestId('report-ad-poster-0-absent')).toHaveTextContent('Not shown on this link')
+    expect(screen.getByTestId('report-ad-poster-0-absent')).not.toHaveTextContent(/credential/i)
     // Nothing invented a picture in its place.
     expect(screen.queryByTestId('report-ad-poster-0')).not.toBeInTheDocument()
   })
