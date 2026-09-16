@@ -181,6 +181,33 @@ final class ShareService
     private const CREATIVE_SECTIONS = ['ads', 'ads_roster', 'worst_creatives', 'top_creatives'];
 
     /** Removes figures the share hides so the client payload never contains them. */
+    /**
+     * The RENDER flags a share implies, applied to the report config the exporter reads.
+     *
+     * `sanitize()` above answers the same question for DATA — what this link may say. This answers
+     * it for the page — how the file it produces must be drawn. They are separated because they act
+     * on different things and fail differently: a data flag that goes missing publishes a figure,
+     * and a render flag that goes missing publishes a document that LOOKS like one it is not.
+     *
+     * It exists because `watermark` was the one per-share flag that reached the screen and never the
+     * file. `allow_download` was enforced, and spend, revenue and campaign names were all applied
+     * through `sanitize()` — the watermark was drawn by `PublicReport`, announced to the client in
+     * their own portal as «يحمل علامة مائية», and absent from the PDF. That is the artefact a
+     * watermark is FOR: the copy that is downloaded, kept and forwarded.
+     *
+     * Merged onto the config rather than passed as an argument because `config` is already the
+     * channel `ReportExporter::pdf()` reads its render decisions from (`pdf_type`), and it is applied
+     * to a per-request replica — so the same stored report still exports clean for a link that asked
+     * for no watermark.
+     *
+     * @param  array<string, mixed>  $config
+     * @return array<string, mixed>
+     */
+    public function renderConfig(array $config, ReportShare $share): array
+    {
+        return array_merge($config, ['watermark' => (bool) $share->watermark]);
+    }
+
     public function sanitize(array $data, ReportShare $share): array
     {
         /*

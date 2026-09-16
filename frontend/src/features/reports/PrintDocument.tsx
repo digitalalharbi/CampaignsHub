@@ -3,6 +3,7 @@ import type { ReportData } from './InteractiveReport'
 import { moneyExact } from '@/features/analytics/format'
 import { mixedResultsNote, type ResultPart } from './reportMetrics'
 import { brand, productName } from '@/lib/brand'
+import { ReportWatermark } from './ReportWatermark'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 
 /**
@@ -120,11 +121,14 @@ export function PrintDocument({
   currency,
   clientName,
   identity,
+  watermark = false,
 }: {
   data: ReportData
   reportName: string
   currency: string
   clientName?: string
+  /** Asked for by the share and minted by the server; see `ReportWatermark`. */
+  watermark?: boolean
   /**
    * BRANDING-RENDER-EVIDENCE-001 — whose report this is, resolved by `headerIdentity()`.
    *
@@ -335,6 +339,18 @@ export function PrintDocument({
   return (
     <div className="doc-root">
       <style>{DOC_CSS}</style>
+      {/*
+        `flow`, not `page` — this layout is one continuous document Chromium paginates, so there is
+        no per-page element to anchor to and an absolute overlay would mark sheet one alone.
+
+        `ar` on a document this file sets `dir="ltr"` on is deliberate, not an oversight. This layout
+        is bilingual rather than English — its own caller already passes `headerIdentity(branding,
+        'ar')` for the same reason recorded there: with no locale the identity answers «CampaignsHub»,
+        so the document a client keeps credits the platform in Latin. The watermark follows the
+        identity it sits behind; a mark in one script over a credit in another would read as two
+        products.
+      */}
+      {watermark && <ReportWatermark locale="ar" mode="flow" />}
 
       {/* Title block */}
       <header className="doc-cover">
