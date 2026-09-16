@@ -268,8 +268,19 @@ final class ContentDefectCensusCommand extends Command
         $grain = (string) ($figures['grain'] ?? '?');
         $withheld = (int) ($figures['spend_withheld_rows'] ?? 0);
 
+        /*
+         * WHICH clause of the money contract refuses it — never the amount, only its sign and the
+         * number of currencies. «Several currencies» and «a summed original of zero» are different
+         * defects with different honest outcomes, and the first census run could not tell them apart.
+         */
+        $original = $figures['spend_original'] ?? null;
+        $currencies = (int) ($figures['money_original_currencies'] ?? 0);
+
         $state = match (true) {
-            $withheld > 0 => 'withheld rows='.$withheld.' but not statable (original ≤ 0 or several currencies)',
+            $withheld > 0 && $currencies > 1 => 'withheld rows='.$withheld.' in '.$currencies.' original currencies',
+            $withheld > 0 && is_numeric($original) && (float) $original === 0.0 => 'withheld rows='.$withheld.' summing to an original of ZERO',
+            $withheld > 0 && is_numeric($original) && (float) $original < 0.0 => 'withheld rows='.$withheld.' summing to a NEGATIVE original',
+            $withheld > 0 => 'withheld rows='.$withheld.' with no usable original currency',
             default => 'the platform sent no spend at this grain',
         };
 
@@ -277,7 +288,11 @@ final class ContentDefectCensusCommand extends Command
         $other = $grains[$otherKey][$id] ?? null;
         $otherNote = $other === null
             ? '  other grain: no rows'
-            : '  other grain ('.$otherKey.'): spend '.(app(CreativeMetrics::class)->statable($other, 'spend') ? 'STATABLE — the card read the wrong grain' : 'absent too');
+            : '  other grain ('.$otherKey.'): spend '.(app(CreativeMetrics::class)->statable($other, 'spend')
+                ? ((int) ($other['active_days'] ?? 0) < (int) ($figures['active_days'] ?? 0)
+                    ? 'statable but over fewer days, so it is not used'
+                    : 'STATABLE — the card read the wrong grain')
+                : 'absent too');
 
         return 'card read grain='.$grain.'  '.$state.$otherNote;
     }

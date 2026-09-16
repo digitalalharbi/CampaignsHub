@@ -6,9 +6,14 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Models\ExternalAd;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Services\ReportCreativeMedia;
@@ -236,6 +241,36 @@ final class CreativeSurfaceReconciliationTest extends TestCase
      */
     public function test_every_surface_reports_the_same_figures(): void
     {
+        $this->assertSurfacesAgree();
+    }
+
+    /**
+     * Content Production Recovery — the SAME agreement for a creative with BOTH grains.
+     *
+     * `content:census` on the live Snapchat account found 90 creatives whose own rows lacked Spend,
+     * revenue or landing-page views that their ads reported. The fix fills those, metric by metric,
+     * inside `CreativeMetrics::forCreatives()` — and the only thing that makes it a fix rather than a
+     * card that now disagrees with the report is that EVERY surface reads that one method. So the
+     * owner's list is compared across the card, Content Analytics, the report roster, the ranked
+     * report list and the headline strip again, over the dual-grain shape, and the filled figures are
+     * checked to be present so the case cannot pass by every surface agreeing on null.
+     */
+    public function test_a_creative_with_both_grains_reconciles_on_every_surface(): void
+    {
+        $this->giveTheCreativeAdsCarryingWhatItsOwnRowsDoNot();
+
+        $library = $this->library()['metrics'] ?? [];
+
+        $this->assertEqualsWithDelta(3333.33, (float) ($library['spend'] ?? 0), 0.001, 'spend from the ads never reached the card');
+        $this->assertEqualsWithDelta(7777.77, (float) ($library['revenue'] ?? 0), 0.001, 'revenue from the ads never reached the card');
+        $this->assertSame(41.0, (float) ($library['landing_page_views'] ?? 0), 'landing-page views from the ads never reached the card');
+        $this->assertSame(70000.0, (float) $library['impressions'], 'the creative\'s own impressions were replaced or summed');
+
+        $this->assertSurfacesAgree();
+    }
+
+    private function assertSurfacesAgree(): void
+    {
         $library = $this->library()['metrics'] ?? null;
         $detail = $this->detail()['metrics'] ?? null;
         [$roster, $ranked] = $this->reportRows();
@@ -309,6 +344,52 @@ final class CreativeSurfaceReconciliationTest extends TestCase
                 "the surfaces disagree about «{$metric}»: ".json_encode($seen, JSON_THROW_ON_ERROR),
             );
         }
+    }
+
+    private function giveTheCreativeAdsCarryingWhatItsOwnRowsDoNot(): void
+    {
+        DB::table('creative_daily_metrics')->where('creative_id', $this->creative->id)
+            ->update(['spend' => null, 'revenue' => null]);
+
+        $credential = new IntegrationCredential([
+            'provider' => 'meta', 'credential_scope' => 'project_only',
+            'credential_type' => 'oauth', 'status' => 'active',
+        ]);
+        $credential->setPayload('t');
+        $credential->save();
+
+        $connection = ProviderConnection::create([
+            'credential_id' => $credential->id, 'provider' => 'meta',
+            'connection_name' => 'meta', 'scope' => 'project_only', 'status' => 'connected',
+        ]);
+
+        $account = ExternalAccount::withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id,
+            'provider_connection_id' => $connection->getKey(), 'provider' => 'meta',
+            'account_type' => 'ad_account', 'external_id' => 'act-1', 'name' => 'Meta', 'status' => 'active',
+        ]);
+
+        $external = ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'external_account_id' => $account->getKey(), 'provider' => 'meta',
+            'external_id' => 'cmp-1', 'name' => 'Campaign', 'status' => 'active',
+        ]);
+
+        $ad = ExternalAd::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'external_campaign_id' => $external->getKey(), 'creative_id' => $this->creative->id,
+            'provider' => 'meta', 'external_id' => 'ad-1', 'name' => 'Ad', 'status' => 'active', 'source_type' => 'api',
+        ]);
+
+        DB::table('entity_daily_metrics')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'provider' => 'meta', 'entity_type' => 'ad', 'entity_id' => $ad->getKey(),
+            'external_entity_id' => 'ad-1', 'external_campaign_id' => $external->getKey(),
+            'metric_date' => Carbon::now()->subDays(3)->toDateString(), 'attribution_window' => 'default',
+            'spend' => 3333.33, 'impressions' => 69000, 'clicks' => 290, 'conversions' => 9,
+            'revenue' => 7777.77, 'landing_page_views' => 41,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
     }
 
     /**
