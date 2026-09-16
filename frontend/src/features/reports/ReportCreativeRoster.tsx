@@ -70,6 +70,7 @@ export function ReportCreativeRoster({
   currency,
   locale,
   form,
+  countOnly = false,
   onOpen,
 }: {
   roster: RosterRow[] | undefined
@@ -82,6 +83,20 @@ export function ReportCreativeRoster({
   locale: Locale
   /** `executive_summary` states the count and withholds the list; anything else prints it. */
   form?: string | null
+  /**
+   * A PAGINATED surface — a deck slide — which cannot hold the list whatever the form says.
+   *
+   * The printed deck renders this on one landscape A4 slide through the same `SlideBody` the
+   * on-screen report uses, and the slide auto-fits to whatever it is given. With sixty roster rows
+   * on it the fit came out at 16.6% with 406 elements clipped, which fails the renderer's own
+   * readable-limit gate and BLOCKS the PDF export entirely — measured on a four-platform report.
+   *
+   * The list is not lost: it stays on the interactive report, in the document form, and in the
+   * spreadsheet exports, all of which can scroll or paginate. What a slide gets is the count, which
+   * is the part that must never go missing — REPORT-CREATIVE-TRUTH-001, «a report showed a curated
+   * handful and said nothing about the rest».
+   */
+  countOnly?: boolean
   /** Opens one creative's own detail, where the surface can open one. */
   onOpen?: (ad: ReportAd) => void
 }) {
@@ -105,7 +120,7 @@ export function ReportCreativeRoster({
     return null
   }
 
-  const summary = form === 'executive_summary'
+  const summary = form === 'executive_summary' || countOnly
   const left = Math.max(0, withheld ?? 0)
   const visible = rows.slice(0, shown)
   const remaining = rows.length - visible.length
@@ -138,9 +153,13 @@ export function ReportCreativeRoster({
       {summary
         ? (
           <p data-testid="report-roster-summary-note" className="text-sm text-text-secondary">
-            {ar
-              ? 'هذا ملخّص تنفيذي — يعرض الأعلى أداءً فقط. القائمة الكاملة في التقرير التفصيلي.'
-              : 'This is an executive summary — it shows the top performers only. The full list is in the detailed report.'}
+            {countOnly && form !== 'executive_summary'
+              ? (ar
+                  ? 'القائمة الكاملة في التقرير التفاعلي وفي ملفات التصدير.'
+                  : 'The full list is in the interactive report and in the exported files.')
+              : (ar
+                  ? 'هذا ملخّص تنفيذي — يعرض الأعلى أداءً فقط. القائمة الكاملة في التقرير التفصيلي.'
+                  : 'This is an executive summary — it shows the top performers only. The full list is in the detailed report.')}
           </p>
         )
         : (
