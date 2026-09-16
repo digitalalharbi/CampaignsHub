@@ -76,6 +76,45 @@ describe('the roster of everything that ran', () => {
     expect(screen.queryAllByTestId('report-roster-row')).toHaveLength(0)
   })
 
+  /**
+   * A DECK SLIDE states the count too — whatever the form says — because it cannot hold the list.
+   *
+   * The printed deck renders this through the same `SlideBody` the on-screen report uses, onto one
+   * fixed landscape page that auto-fits to whatever it is given. With sixty roster rows on it the
+   * fit measured 0.166 with 406 elements clipped, which fails the renderer's own readable-limit
+   * gate — and that single page made the client PDF export fail outright for every report.
+   *
+   * Asserted on a DETAILED report, which is the case that was broken: a summary already withheld
+   * the table for its own reason, so testing the summary here would pass without the fix.
+   */
+  it('a deck slide keeps the count and drops the table even for a detailed report', () => {
+    renderWithProviders(
+      <ReportCreativeRoster roster={many(60)} inScope={65} withheld={5} locale="en" form="detailed" countOnly />,
+      { locale: 'en' },
+    )
+
+    expect(screen.getByTestId('report-roster')).toHaveAttribute('data-state', 'counted')
+    expect(screen.getByTestId('report-roster-scope')).toHaveTextContent('65 creatives')
+    expect(screen.queryAllByTestId('report-roster-row')).toHaveLength(0)
+    /*
+     * And it does NOT tell a detailed report to go and read the detailed report. The note is the
+     * summary's sentence; on a deck slide the list is elsewhere for a different reason, and saying
+     * the wrong one sends the reader to the document they are already holding.
+     */
+    expect(screen.getByTestId('report-roster-summary-note')).toHaveTextContent(/interactive report/i)
+  })
+
+  /* And the list is still printed where a surface can scroll — the case the fix must not break. */
+  it('still prints the list on a scrolling surface', () => {
+    renderWithProviders(
+      <ReportCreativeRoster roster={many(60)} inScope={65} withheld={5} locale="en" form="detailed" />,
+      { locale: 'en' },
+    )
+
+    expect(screen.getByTestId('report-roster')).toHaveAttribute('data-state', 'listed')
+    expect(screen.queryAllByTestId('report-roster-row').length).toBeGreaterThan(0)
+  })
+
   /* An empty scope is the ads section's sentence to say; a second empty heading says it twice. */
   it('draws nothing at all when nothing ran', () => {
     const { container } = renderWithProviders(
