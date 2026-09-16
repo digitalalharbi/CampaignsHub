@@ -48,7 +48,7 @@ export function ContentTile({
   const body = (
     <>
       <div className="relative">
-        <AdPoster preview={content.preview ?? null} name={content.name ?? ''} className="h-36 w-full" testid="live-content-poster" />
+        <AdPoster preview={content.preview ?? null} name={content.name ?? ''} className="h-36 w-full" testid="live-content-poster" forClient />
         {rank !== undefined && (
           <span className="tnum absolute start-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-bold text-white">
             <Num>{`#${rank}`}</Num>
