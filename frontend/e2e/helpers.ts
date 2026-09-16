@@ -676,12 +676,34 @@ export async function walkRail(page: Page, hrefs: string[]): Promise<void> {
    */
   test.setTimeout(Math.max(test.info().timeout, railBudget(hrefs.length)))
 
-  const problems: string[] = []
+  /*
+   * Each problem is stamped with the address the main frame was on when it fired — and that is the
+   * whole difference between evidence and noise here.
+   *
+   * The first version cleared this list immediately before `page.goto`, which is precisely when the
+   * PREVIOUS page's in-flight requests are cancelled by the navigation that replaces it. Those
+   * cancellations therefore landed in the NEW iteration's list, and being first they filled its
+   * five-entry cap. That is what produced the most confident-looking line this helper has ever
+   * printed — «requestfailed: …/api/v1/client-workspaces — Load request cancelled | requestfailed:
+   * …/api/v1/projects — Load request cancelled | …fonts…» under a blank `/agency/tasks`, which reads
+   * as «everything this page asked for was cancelled» and is really «the page before it ended
+   * normally». Whatever actually broke was pushed out of the report by its own predecessor's exhaust.
+   *
+   * During a navigation the main frame still reports the OLD url until the new document commits, so
+   * the stamp separates the two without needing to know which request belonged to which document.
+   */
+  const problems: Array<{ at: string; text: string }> = []
+  const note = (text: string) => problems.push({ at: page.url(), text })
+
   page.on('console', (m) => {
-    if (m.type() === 'error') problems.push(`console: ${m.text()}`)
+    if (m.type() === 'error') note(`console: ${m.text()}`)
   })
-  page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`))
-  page.on('requestfailed', (r) => problems.push(`requestfailed: ${r.url()} — ${r.failure()?.errorText ?? '?'}`))
+  page.on('pageerror', (e) => note(`pageerror: ${e.message}`))
+  page.on('requestfailed', (r) => note(`requestfailed: ${r.url()} — ${r.failure()?.errorText ?? '?'}`))
+
+  /* A cancelled font is the least informative thing a torn-down page can say, and there are two of
+     them on every navigation. Reported, never first, so a real failure cannot be crowded out. */
+  const interesting = (text: string) => !/\.(woff2?|ttf|otf)\b/.test(text)
 
   for (const href of hrefs) {
     problems.length = 0
@@ -695,6 +717,29 @@ export async function walkRail(page: Page, hrefs: string[]): Promise<void> {
     } catch (failure) {
       const body = (await page.locator('body').innerText().catch(() => '')).trim()
 
+      /*
+       * Did the module graph run at all?
+       *
+       * «The app never mounted» and «the app mounted and rendered nothing» are different bugs with
+       * different owners, and a blank body cannot tell them apart. The mount point and its child
+       * count can: an empty `#root` under a 200 document means the entry module never executed,
+       * which points at the dev server rather than at the route.
+       */
+      const mount = await page.evaluate(() => {
+        const root = document.getElementById('root')
+
+        return {
+          readyState: document.readyState,
+          rootPresent: root !== null,
+          rootChildren: root?.childElementCount ?? 0,
+          scripts: [...document.querySelectorAll('script[src]')].map((s) => s.getAttribute('src') ?? '').slice(0, 3),
+        }
+      }).catch(() => null)
+
+      const here = problems.filter((p) => p.at === page.url())
+      const carried = problems.length - here.length
+      const ordered = [...here.filter((p) => interesting(p.text)), ...here.filter((p) => !interesting(p.text))]
+
       throw new Error(
         [
           `${href} did not render.`,
@@ -702,8 +747,10 @@ export async function walkRail(page: Page, hrefs: string[]): Promise<void> {
           `  ended on        : ${page.url()}`,
           `  <main> present  : ${(await page.locator('main').count()) > 0}`,
           `  <nav> present   : ${(await page.locator('nav').count()) > 0}`,
+          `  mount point     : ${mount === null ? '(the page could not be evaluated)' : `#root ${mount.rootPresent ? 'present' : 'ABSENT'}, ${mount.rootChildren} children, document ${mount.readyState}, scripts ${mount.scripts.join(', ') || '(none)'}`}`,
           `  body text       : ${body === '' ? '(the document is blank — the app never mounted)' : body.slice(0, 200)}`,
-          `  browser said    : ${problems.length === 0 ? '(nothing)' : problems.slice(0, 5).join(' | ')}`,
+          `  browser said    : ${ordered.length === 0 ? '(nothing on this page)' : ordered.slice(0, 12).map((p) => p.text).join(' | ')}`,
+          `  carried over    : ${carried} event(s) from the page before this one, not counted above`,
           '',
           String(failure),
         ].join('\n'),
