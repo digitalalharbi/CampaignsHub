@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Campaigns\Models\ExternalCreative;
+use App\Domains\Campaigns\Services\CreativeMetrics;
+use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
@@ -12,6 +15,7 @@ use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
+use App\Domains\Reports\Support\ContentKey;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -53,6 +57,8 @@ final class LiveReportService
         private readonly TenantContext $tenants,
         private readonly ProjectContext $projects,
         private readonly ReportAds $ads,
+        private readonly CreativeRows $rows,
+        private readonly CreativeMetrics $creativeMetrics,
     ) {}
 
     /**
@@ -76,6 +82,97 @@ final class LiveReportService
     }
 
     /**
+     * One piece of content, opened from a client link — the platform → content drilldown.
+     *
+     * Resolved by the share-bound `ContentKey`, inside the SAME content bound the payload's lists use
+     * (`contentFilters()`), so a key opens only a creative those lists could have shown. A key that
+     * matches nothing in the bound is `null`, and the caller answers 404 — never «not yours», which
+     * would confirm the creative exists.
+     *
+     * The trend is not a second aggregation. Every point is `CreativeMetrics::forCreatives()` over
+     * that bucket — the reader the content card itself was built from — so the ad-grain fallback, the
+     * demo policy and withheld money all come with it, and the points add back to the card's total
+     * by construction. A bucket with no rows is `reported: false` with no figures: a creative that did
+     * not deliver that day has no numbers, which is not the same as numbers of zero.
+     *
+     * Daily up to 92 days, weekly beyond: a year of daily points is a chart nobody can read.
+     *
+     * @param  array<string, mixed>  $requested
+     * @return array<string, mixed>|null
+     */
+    public function content(ReportShare $share, string $key, array $requested): ?array
+    {
+        $scope = $this->ceiling($share);
+        $applied = $this->intersect($scope, $requested);
+
+        $this->tenants->setTenantId((string) $share->tenant_id);
+        $this->projects->setProjectId($scope['project_id'] === '' ? ReportScope::IMPOSSIBLE : $scope['project_id']);
+
+        $from = Carbon::parse($applied['from']);
+        $to = Carbon::parse($applied['to']);
+
+        $query = ExternalCreative::query();
+        $this->rows->applyFilters($query, $this->contentFilters($share, $applied, $scope) + [
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
+        ]);
+
+        $id = $query->pluck('id')
+            ->map(static fn ($id): string => (string) $id)
+            ->first(static fn (string $id): bool => ContentKey::matches($key, $share, $id));
+
+        if ($id === null) {
+            return null;
+        }
+
+        $creative = ExternalCreative::query()->whereKey($id)->get();
+        $row = $this->rows->lean($creative, $from, $to, withPreview: true)[0] ?? null;
+        if ($row === null) {
+            return null;
+        }
+
+        $days = $from->diffInDays($to) + 1;
+        $step = $days > 92 ? 7 : 1;
+        $trend = [];
+        for ($cursor = $from->copy(); $cursor->lessThanOrEqualTo($to); $cursor->addDays($step)) {
+            $end = $cursor->copy()->addDays($step - 1)->min($to);
+            $figures = $this->creativeMetrics->forCreatives([$id], $cursor->copy(), $end)[$id] ?? null;
+            $trend[] = ['date' => $cursor->toDateString(), 'date_to' => $end->toDateString(), 'reported' => $figures !== null]
+                + ($figures ?? []);
+        }
+
+        return [
+            'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => $days],
+            'granularity' => $step === 1 ? 'day' : 'week',
+            'content' => ClientEntityBoundary::roster(ContentKey::attach([$row], $share))[0],
+            'trend' => $trend,
+        ];
+    }
+
+    /**
+     * The content bound of this link — project, platforms, campaigns and the ad-account ceiling.
+     *
+     * One statement for the lists in the payload AND for resolving a content key, so a key can only
+     * ever open a creative the lists could have shown.
+     *
+     * @param  array<string, mixed>  $applied
+     * @param  array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}  $scope
+     * @return array<string, list<string>>
+     */
+    private function contentFilters(ReportShare $share, array $applied, array $scope): array
+    {
+        return [
+            'project_ids' => $scope['project_id'] === '' ? [ReportScope::IMPOSSIBLE] : [$scope['project_id']],
+            'providers' => $applied['providers'] !== [] ? $applied['providers'] : $scope['providers'],
+            // The account ceiling, through the same rule `SharedCreativeView` applies to the same link.
+            'campaign_ids' => AccountCampaignCeiling::campaigns(
+                $applied['campaigns'] !== [] ? $applied['campaigns'] : $scope['campaign_ids'],
+                array_values(array_filter((array) ($share->scope['account_ids'] ?? []))),
+            ),
+        ];
+    }
+
+    /**
      * The ads section for a live link — the deck's own builder, narrowed to this link's scope.
      *
      * @param  array<string, mixed>  $applied
@@ -86,15 +183,12 @@ final class LiveReportService
     {
         $objective = (string) ($share->report->campaign_objective ?? 'custom');
 
-        $built = $this->ads->for($objective, $from, $to, [
-            'project_ids' => $scope['project_id'] === '' ? [] : [$scope['project_id']],
-            'providers' => $applied['providers'] !== [] ? $applied['providers'] : $scope['providers'],
-            // The account ceiling, through the same rule `SharedCreativeView` applies to the same link.
-            'campaign_ids' => AccountCampaignCeiling::campaigns(
-                $applied['campaigns'] !== [] ? $applied['campaigns'] : $scope['campaign_ids'],
-                array_values(array_filter((array) ($share->scope['account_ids'] ?? []))),
-            ),
-        ], $this->formFor($share), liveMedia: true);
+        $built = $this->ads->for($objective, $from, $to, $this->contentFilters($share, $applied, $scope), $this->formFor($share), liveMedia: true);
+
+        // Each content row gets its share-bound handle before the boundary removes the ids.
+        foreach (['ads', 'worst', 'groups', 'platform_groups', 'roster'] as $list) {
+            $built[$list] = ContentKey::attach($built[$list] ?? [], $share);
+        }
 
         return [
             /*
@@ -153,6 +247,12 @@ final class LiveReportService
              * {@see ClientEntityBoundary::roster()}.
              */
             'ads_roster' => ClientEntityBoundary::roster($built['roster']),
+            /*
+             * The weakest content, ranked by the same objective metric as `ads`. The Owner asks for
+             * «best-performing and weakest content»; `ReportAds` has always computed it and the live
+             * payload threw it away after reading it into one sentence.
+             */
+            'ads_weakest' => ClientEntityBoundary::ads($built['worst']),
             'creatives_in_scope' => $built['creatives_in_scope'],
             'creatives_withheld' => $built['creatives_withheld'],
             'form' => $this->formFor($share),
@@ -547,7 +647,7 @@ final class LiveReportService
             'platform_comparison' => ['platforms' => []],
             'objective_breakdown' => ['objective_performance' => null, 'objective_leaders' => null],
             'creatives' => [
-                'ads' => [], 'ads_groups' => [], 'ads_platform_groups' => [], 'ads_roster' => [], 'top_creatives' => [],
+                'ads' => [], 'ads_groups' => [], 'ads_platform_groups' => [], 'ads_roster' => [], 'ads_weakest' => [], 'top_creatives' => [],
                 'worst_creatives' => [], 'ads_reading' => null, 'ads_level' => null, 'ads_absent_reason' => null,
             ],
             'budget' => ['budget' => []],

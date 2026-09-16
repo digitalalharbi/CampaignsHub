@@ -92,6 +92,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     // LIVEREP-001 — figures recomputed on request, inside the link's own ceiling. Same token, same
     // password gate, same access log; a snapshot link answers this with 409 rather than empty data.
     Route::get('/reports/shared/{token}/live', [PublicReportController::class, 'live'])->name('reports.shared.live');
+    // The platform → content drilldown: one creative by its share-bound key, inside the same ceiling.
+    Route::get('/reports/shared/{token}/live/content/{key}', [PublicReportController::class, 'liveContent'])->name('reports.shared.live.content');
     Route::get('/reports/shared/{token}/download/{format}', [PublicReportController::class, 'download'])->name('reports.shared.download');
     /*
      * BRANDING-HIERARCHY-001 — the identity this link carries, addressed by the TOKEN alone.
