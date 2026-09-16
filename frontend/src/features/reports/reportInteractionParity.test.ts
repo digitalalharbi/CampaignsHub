@@ -22,7 +22,7 @@ import { describe, expect, it } from 'vitest'
  * press — on paper there is nothing to open, and a card that looks pressable in a PDF is worse than
  * one that plainly is not.
  */
-const TREE: Record<string, string> = import.meta.glob('/src/features/reports/*.tsx', {
+const TREE: Record<string, string> = import.meta.glob(['/src/features/reports/*.tsx', '/src/features/reports/live/*.tsx'], {
   query: '?raw',
   import: 'default',
   eager: true,
@@ -71,7 +71,17 @@ describe('a report behaves the same way whichever surface it reaches the reader 
   /** And each of them mounts the detail that opening leads to. */
   it('mounts the read-only detail on every surface that can open one', () => {
     const offenders = surfacesRenderingAds().filter((path) => {
-      const source = withoutComments(TREE['/' + path] ?? '')
+      /*
+       * The live link is one surface spread over `live/` and its shell: the views render the ads and
+       * the shell mounts the dialog they open (through `LiveContentDetail`). Reading one file of it
+       * would report a surface that opens into nothing when it does not.
+       */
+      const source = path.includes('/live/')
+        ? Object.entries(TREE)
+          .filter(([p]) => (p.includes('/live/') || p.endsWith('/LiveSharedReport.tsx')) && !/\.test\.tsx?$/.test(p))
+          .map(([, src]) => withoutComments(src))
+          .join('\n')
+        : withoutComments(TREE['/' + path] ?? '')
 
       return !/<ReportAdDetail/.test(source)
     })

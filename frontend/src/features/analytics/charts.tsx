@@ -138,7 +138,8 @@ export function PlatformDonutChart({
   currency = 'SAR',
   colorBy = 'platform',
 }: {
-  data: Array<{ name: string; value: number }>
+  /** `key` is the platform's stored key, for its colour; `name` is what the reader sees. */
+  data: Array<{ name: string; value: number; key?: string }>
   height?: number
   centerLabel?: string
   centerValue?: string
@@ -150,7 +151,9 @@ export function PlatformDonutChart({
   const big = data.filter((d) => d.value / (total || 1) >= 0.04)
   const small = data.filter((d) => d.value / (total || 1) < 0.04)
   const rows = small.length > 1 ? [...big, { name: 'أخرى', value: small.reduce((a, b) => a + b.value, 0) }] : data
-  const color = (name: string, i: number) => (colorBy === 'platform' ? platformColor(name) : CHART_SERIES[i % CHART_SERIES.length])
+  const keyOf = (name: string) => data.find((d) => d.name === name)?.key ?? name
+  // A platform's colour is looked up by its KEY: a translated name («جوجل») matched no colour, so every slice was drawn the same.
+  const color = (name: string, i: number) => (colorBy === 'platform' ? platformColor(keyOf(name)) : CHART_SERIES[i % CHART_SERIES.length])
   return (
     <div className="relative" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">

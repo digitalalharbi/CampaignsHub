@@ -182,7 +182,14 @@ describe('a live link and the form it was shared as', () => {
     await screen.findByTestId('live-report')
 
     expect(screen.getByTestId('live-kpis')).toBeInTheDocument()
-    expect(screen.getByTestId('live-platform-comparison')).toBeInTheDocument()
+    /*
+     * The platform summary is a visual in the summary product — results per platform as bars — and
+     * the sortable comparison TABLE is the dashboard's. A summary that carried the table would be the
+     * dashboard again with fewer blocks, which is row 96.
+     */
+    expect(screen.getByTestId('live-summary-platform-results')).toBeInTheDocument()
+    expect(screen.queryByTestId('live-platform-comparison')).not.toBeInTheDocument()
+    // This fixture spends 1,000 outside the sales path, so direct and blended differ and both are shown.
     expect(screen.getByTestId('live-objective-split')).toBeInTheDocument()
   })
 

@@ -39,6 +39,8 @@ import type { Locale } from '@/stores/ui'
  */
 export type RosterRow = {
   id?: string
+  /** The share-bound handle the content drilldown opens this row by — never an internal id. */
+  content_key?: string
   name?: string | null
   provider?: string | null
   preview?: CreativePreview | null
@@ -50,7 +52,7 @@ export type RosterRow = {
     clicks?: number | null
     conversions?: number | null
     ctr?: number | null
-  } | null
+  } & Record<string, number | string | null | undefined> | null
 }
 
 /**
