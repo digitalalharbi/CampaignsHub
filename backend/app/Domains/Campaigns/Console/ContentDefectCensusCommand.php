@@ -140,6 +140,8 @@ final class ContentDefectCensusCommand extends Command
         $toFetch = [];
         /** @var list<string> $zeroOriginal */
         $zeroOriginal = [];
+        /** @var array<string, array<string, true>> $overZero ratio => creative ids whose own grain reported its denominator as zero */
+        $overZero = [];
         $promoted = 0;
         $judgedPreview = 0;
 
@@ -222,6 +224,18 @@ final class ContentDefectCensusCommand extends Command
                             continue;
                         }
 
+                        /*
+                         * A ratio over a denominator this card's grain REPORTED as zero is cost per
+                         * nothing — «—» is its truthful reading, not a metric the other grain restores.
+                         * The Production run after #456 counted 46 sales creatives here whose own
+                         * rows state zero orders beside converted spend.
+                         */
+                        if ($metrics->undefinedOverAReportedZero($figures, $key)) {
+                            $overZero[$key][$id] = true;
+
+                            continue;
+                        }
+
                         if (! $metrics->statable($figures, $key) && $metrics->statable($other, $key)) {
                             $lost[] = $key;
                         }
@@ -301,6 +315,15 @@ final class ContentDefectCensusCommand extends Command
             }
         }
 
+        if ($overZero !== []) {
+            $this->line('');
+            $this->line('NOT A DEFECT — a ratio over a denominator the card\'s own grain REPORTED as zero (cost per nothing; «—» is truthful)');
+
+            foreach ($overZero as $ratio => $creatives) {
+                $this->line('  ▸ '.$ratio.'  — '.count($creatives).' creative(s)');
+            }
+        }
+
         if ((bool) $this->option('raw')) {
             $this->line('');
             $this->line('C EVIDENCE — how the provider sent spend for the zero-original creatives (retained bodies, window only)');
@@ -347,17 +370,47 @@ final class ContentDefectCensusCommand extends Command
         /** @var array<string, array<string, array{spend: string, delivered: bool}>> $points ad => date => state */
         $points = [];
 
+        /*
+         * Bounded before any text match, on a live database: the provider, the accounts bound to this
+         * project, the insights resource and the window narrow the rows first; a statement timeout and
+         * a hard limit cap the rest. A scan of the whole raw-payload table is the wrong load to put on
+         * Production for a diagnostic.
+         */
+        DB::statement("SET statement_timeout = '60s'");
+
+        $accounts = DB::table('project_integration_bindings')
+            ->where('project_id', (string) app(ProjectContext::class)->projectId())
+            ->pluck('external_account_id')
+            ->filter()
+            ->map(static fn (mixed $v): string => (string) $v)
+            ->all();
+
         IntegrationRawPayload::withoutGlobalScopes()
             ->whereIn('provider', $ads->pluck('provider')->unique()->values()->all())
+            ->whereIn('external_account_id', $accounts === [] ? ['00000000-0000-0000-0000-000000000000'] : $accounts)
             ->where('resource', 'insights')
             ->where('window_end', '>=', $from->toDateString())
             ->where('window_start', '<=', $to->toDateString())
+            /*
+             * Selected by the ADS it names, not by recency — found on Production. The walk read the
+             * newest 2,000 bodies, which with a per-campaign ad-stats call every thirty minutes is
+             * about a day, and answered «no retained body carries these ads» for all twelve creatives
+             * whose zero rows were older. A text match on the ads' own ids reaches every body that
+             * can say anything about them, and nothing else is decoded.
+             */
+            ->where(function ($query) use ($creativeByAd): void {
+                foreach (array_keys($creativeByAd) as $adId) {
+                    $query->orWhereRaw('payload::text LIKE ?', ['%'.addcslashes($adId, '%_\\').'%']);
+                }
+            })
             ->orderByDesc('fetched_at')
-            ->limit(2000)
+            ->limit(3000)
             ->cursor()
             ->each(function (IntegrationRawPayload $raw) use (&$points, $creativeByAd, $from, $to): void {
                 $this->walkForAds((array) $raw->payload, $creativeByAd, $points, $from, $to);
             });
+
+        DB::statement('RESET statement_timeout');
 
         $out = [];
         foreach ($creativeIds as $creativeId) {
