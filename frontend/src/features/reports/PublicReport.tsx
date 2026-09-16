@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { brand, productName } from '@/lib/brand'
+import { productName } from '@/lib/brand'
 import { fmtDateTime } from '@/lib/datetime'
 import { useParams } from 'react-router-dom'
 import { Download, Lock } from 'lucide-react'
@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { useUi } from '@/stores/ui'
 import { CampaignsHubBrandFooter } from '@/components/brand/CampaignsHubBrandFooter'
+import { ReportWatermark } from './ReportWatermark'
 
 interface Shared {
   name: string
@@ -208,19 +209,7 @@ export function PublicReport() {
 
         {state === 'ready' && report && (
           <div className="relative">
-            {report.settings.watermark && (
-              <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden">
-                {/*
-                  BRAND-CANONICAL-001 — the watermark says the platform's name in the READER's language.
-                  
-                  It was the Latin wordmark, hardcoded, on a document whose every other word is Arabic
-                  for most of the clients who hold one.
-                */}
-                <span className="rotate-[-25deg] text-[80px] font-extrabold text-text-primary/5">
-                  {locale === 'ar' ? brand.lockup.nameAr : brand.lockup.nameEn}
-                </span>
-              </div>
-            )}
+            {report.settings.watermark && <ReportWatermark locale={locale} />}
             <div className="relative z-[1]">
               <h1 className="mb-2 font-heading text-xl font-extrabold tracking-tight sm:text-2xl">{report.name}</h1>
 

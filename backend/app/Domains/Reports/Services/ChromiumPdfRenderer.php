@@ -121,7 +121,22 @@ final class ChromiumPdfRenderer
         $token = Str::random(48);
         Cache::put(
             'report-print:'.hash('sha256', $token),
-            ['report_id' => (string) $report->id, 'type' => $type, 'theme' => $theme, 'audience' => $report->audience ?? 'client'],
+            [
+                'report_id' => (string) $report->id,
+                'type' => $type,
+                'theme' => $theme,
+                'audience' => $report->audience ?? 'client',
+                /*
+                 * The watermark rides the SERVER-MINTED payload, never the query string.
+                 *
+                 * `audience` is carried here for exactly this reason — it decides what a document may
+                 * disclose, so it must not be expressible by whoever holds the URL. A watermark is the
+                 * same kind of fact: it is an attribution mark the operator asked for, and a flag a
+                 * caller could drop from a URL is a mark that can be removed by the person it exists
+                 * to deter.
+                 */
+                'watermark' => (bool) ($report->config['watermark'] ?? false),
+            ],
             300,
         );
 
