@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Support;
 
+use App\Domains\Reports\Services\ReportAds;
+
 /**
  * What each FORM of a report actually contains — REPORT-PRODUCT-MODEL-001, Owner defect row 96.
  *
@@ -20,7 +22,7 @@ namespace App\Domains\Reports\Support;
  * 1. The form axis was enforced by two conditionals in one React component, so an executive summary
  *    was the detailed report with two blocks withheld. That is the wrong way round: a summary is not
  *    a detailed report with things hidden, it is a shorter document with its own composition.
- * 2. The one BACKEND lever that differentiated — the roster cap in {@see \App\Domains\Reports\Services\ReportAds} —
+ * 2. The one BACKEND lever that differentiated — the roster cap in {@see ReportAds} —
  *    read `reports.form`, while the link builder writes the operator's choice to `report_shares.form`
  *    and never touches the report row. `reports.form` is `NOT NULL DEFAULT 'detailed'`, so on every
  *    link the product itself creates that lever read «detailed» whatever the operator chose. It was
