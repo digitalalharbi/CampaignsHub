@@ -282,6 +282,36 @@ final class SnapchatReportingWindowTest extends TestCase
      * The body below is that production response, reduced. A mock that is not the platform's shape
      * tests the mock.
      */
+    /**
+     * The same null rule at the campaign grain: `pointToRow()` cast a PRESENT JSON null to 0 too.
+     */
+    public function test_a_null_campaign_stat_stays_unreported_and_a_real_zero_stays_zero(): void
+    {
+        $this->account('act-1', 'Asia/Riyadh');
+
+        Http::fake([
+            'adsapi.snapchat.com/*stats*' => Http::response(['timeseries_stats' => [['timeseries_stat' => [
+                'id' => 'act-1', 'type' => 'AD_ACCOUNT',
+                'breakdown_stats' => ['campaign' => [[
+                    'id' => 'cmp-1', 'type' => 'CAMPAIGN', 'granularity' => 'DAY',
+                    'timeseries' => [[
+                        'start_time' => '2026-08-01T00:00:00.000+03:00',
+                        'end_time' => '2026-08-02T00:00:00.000+03:00',
+                        'stats' => ['spend' => null, 'impressions' => null, 'swipes' => 5, 'conversion_purchases' => 0],
+                    ]],
+                ]]],
+            ]]]]),
+        ]);
+
+        $result = $this->connector()->syncInsights('act-1', '2026-08-01', '2026-08-01');
+        $row = $result->records[0];
+
+        $this->assertArrayNotHasKey('spend', $row, 'a JSON null spend became a reported zero');
+        $this->assertArrayNotHasKey('impressions', $row, 'a JSON null impressions became a reported zero');
+        $this->assertEqualsWithDelta(5, $row['clicks'], 0.01);
+        $this->assertSame(0.0, $row['purchases'], 'a real zero must still arrive as zero');
+    }
+
     // ── SNAP-CREATIVE-METRICS-001 ─────────────────────────────────────────────────────────────
 
     /**
