@@ -11,6 +11,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -47,6 +48,8 @@ final class ContentDefectCensusTest extends TestCase
 
     private ExternalCampaign $campaign;
 
+    private ExternalAccount $account;
+
     private int $seq = 0;
 
     protected function setUp(): void
@@ -77,7 +80,7 @@ final class ContentDefectCensusTest extends TestCase
             'connection_name' => 'snapchat', 'scope' => 'project_only', 'status' => 'connected',
         ]);
 
-        $account = ExternalAccount::withoutGlobalScopes()->create([
+        $this->account = $account = ExternalAccount::withoutGlobalScopes()->create([
             'id' => (string) Str::uuid(),
             'tenant_id' => $this->tenant->getKey(),
             'provider_connection_id' => $connection->getKey(),
@@ -256,6 +259,49 @@ final class ContentDefectCensusTest extends TestCase
 
         Http::assertNothingSent();
         $this->assertStringNotContainsString('E — ', $output);
+    }
+
+    /**
+     * The 12 zero-original creatives on Production: is that zero Snapchat's, or ours?
+     *
+     * `SnapchatConnector::entityPointToRow()` skips a MISSING key and casts a PRESENT one with
+     * `(float)`, so a JSON null arrives as 0. Only the provider's own retained body can tell a reported
+     * zero from a fabricated one, and `--raw` reads it — counting how spend arrived, never the amount.
+     */
+    public function test_raw_evidence_says_how_the_provider_sent_a_zero_original_spend(): void
+    {
+        $creative = $this->creative(['provider' => 'snapchat', 'campaign_id' => $this->unified('sales')->getKey()]);
+        $this->adRow($creative, [
+            'spend' => null, 'spend_original' => 0.0, 'original_currency' => 'USD',
+            'impressions' => 500, 'clicks' => 9, 'conversions' => 3,
+        ]);
+        $adId = (string) ExternalAd::withoutGlobalScopes()->where('creative_id', $creative->getKey())->value('external_id');
+
+        IntegrationRawPayload::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(),
+            'external_account_id' => $this->account->getKey(),
+            'provider' => 'snapchat',
+            'resource' => 'insights',
+            'window_start' => Carbon::today()->subDays(7)->toDateString(),
+            'window_end' => Carbon::today()->toDateString(),
+            'normalised_rows' => 0,
+            'fetched_at' => now(),
+            'payload' => ['timeseries_stats' => [['timeseries_stat' => [
+                'id' => $adId, 'type' => 'AD',
+                'timeseries' => [
+                    ['start_time' => Carbon::today()->subDay()->toDateString().'T00:00:00.000+03:00', 'stats' => ['spend' => null, 'impressions' => 500]],
+                    ['start_time' => Carbon::today()->subDays(2)->toDateString().'T00:00:00.000+03:00', 'stats' => ['spend' => 0, 'impressions' => 0]],
+                ],
+            ]]]],
+        ]);
+
+        $this->assertStringContainsString('original of ZERO', $this->section('C'));
+
+        Artisan::call('content:census', ['--project' => (string) $this->project->getKey(), '--raw' => true]);
+        $output = Artisan::output();
+
+        $this->assertStringContainsString('C EVIDENCE', $output);
+        $this->assertStringContainsString((string) $creative->getKey().'  ads in bodies 1, day-points 2 — spend: key absent 0, JSON null 1, zero 1, positive 0; delivered impressions on 1', $output);
     }
 
     // ── fixtures ─────────────────────────────────────────────────────────────────────────────────

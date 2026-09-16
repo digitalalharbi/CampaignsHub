@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativeRows;
+use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Console\Command;
@@ -65,6 +66,7 @@ final class ContentDefectCensusCommand extends Command
         {--to= : Window end (YYYY-MM-DD). Default: today}
         {--project= : One project. Omitted: every project that holds a creative}
         {--list=40 : How many creative ids to print per finding before summarising the rest}
+        {--raw : For creatives whose spend is refused as a zero original, read the RETAINED provider bodies and say how spend arrived — absent, null, zero or positive — never the amount}
         {--fetch : Also LOAD each promoted creative\'s preview asset on the server and report what came back — by id, never the url}';
 
     protected $description = 'Read-only: list the creatives whose preview, spend or objective metrics are missing, and the rung each breaks at.';
@@ -133,6 +135,8 @@ final class ContentDefectCensusCommand extends Command
         $findings = ['A' => [], 'B' => [], 'C' => [], 'D' => [], 'E' => []];
         /** @var list<array{tag: string, what: string, url: string}> $toFetch */
         $toFetch = [];
+        /** @var list<string> $zeroOriginal */
+        $zeroOriginal = [];
         $promoted = 0;
         $judgedPreview = 0;
 
@@ -194,7 +198,12 @@ final class ContentDefectCensusCommand extends Command
 
             // ── C — indicators with no Spend ──────────────────────────────────────────────────
             if (! $spendStatable && $beside !== []) {
-                $findings['C'][$this->spendRung($id, $figures, $grains)][] = $tag;
+                $rung = $this->spendRung($id, $figures, $grains);
+                $findings['C'][$rung][] = $tag;
+
+                if (str_contains($rung, 'original of ZERO')) {
+                    $zeroOriginal[] = $id;
+                }
             }
 
             // ── D — the objective's own verdict, missing here and answered at the other grain ─
@@ -244,6 +253,10 @@ final class ContentDefectCensusCommand extends Command
             $findings['E'][$item['what'].'  '.$verdict][] = $item['tag'];
         }
 
+        $evidence = (bool) $this->option('raw') && $zeroOriginal !== []
+            ? $this->rawSpendEvidence($zeroOriginal, $from, $to)
+            : [];
+
         $titles = [
             'A' => 'A — NO PREVIEW / MEDIA (envelope draws nothing)',
             'B' => 'B — SPEND SHOWN, NO PERFORMANCE INDICATORS BESIDE IT',
@@ -282,6 +295,137 @@ final class ContentDefectCensusCommand extends Command
                 if (count($tags) > $limit) {
                     $this->line('      … and '.(count($tags) - $limit).' more');
                 }
+            }
+        }
+
+        if ((bool) $this->option('raw')) {
+            $this->line('');
+            $this->line('C EVIDENCE — how the provider sent spend for the zero-original creatives (retained bodies, window only)');
+
+            if ($evidence === []) {
+                $this->line('    none to read');
+            }
+
+            foreach ($evidence as $creativeId => $line) {
+                $this->line('      '.$creativeId.'  '.$line);
+            }
+        }
+    }
+
+    /**
+     * What the provider's OWN body said about spend for these creatives' ads — the question a stored
+     * zero cannot answer by itself.
+     *
+     * `spend_original = 0` is either the platform reporting zero or ingestion turning a JSON null into
+     * 0 (`(float) null`). The retained insights bodies hold the difference, so they are walked for any
+     * object naming one of these ads with a `timeseries`, and each point in the window is counted by
+     * how `stats.spend` arrived and whether it delivered impressions. The latest body wins for an
+     * ad and day. Counts only — never an amount.
+     *
+     * @param  list<string>  $creativeIds
+     * @return array<string, string>
+     */
+    private function rawSpendEvidence(array $creativeIds, Carbon $from, Carbon $to): array
+    {
+        $ads = DB::table('external_ads')
+            ->whereIn('creative_id', $creativeIds)
+            ->get(['creative_id', 'external_id', 'provider']);
+
+        /** @var array<string, string> $creativeByAd */
+        $creativeByAd = [];
+        foreach ($ads as $ad) {
+            $creativeByAd[(string) $ad->external_id] = (string) $ad->creative_id;
+        }
+
+        if ($creativeByAd === []) {
+            return array_fill_keys($creativeIds, 'no ads recorded for this creative');
+        }
+
+        /** @var array<string, array<string, array{spend: string, delivered: bool}>> $points ad => date => state */
+        $points = [];
+
+        IntegrationRawPayload::withoutGlobalScopes()
+            ->whereIn('provider', $ads->pluck('provider')->unique()->values()->all())
+            ->where('resource', 'insights')
+            ->where('window_end', '>=', $from->toDateString())
+            ->where('window_start', '<=', $to->toDateString())
+            ->orderByDesc('fetched_at')
+            ->limit(2000)
+            ->cursor()
+            ->each(function (IntegrationRawPayload $raw) use (&$points, $creativeByAd, $from, $to): void {
+                $this->walkForAds((array) $raw->payload, $creativeByAd, $points, $from, $to);
+            });
+
+        $out = [];
+        foreach ($creativeIds as $creativeId) {
+            $tally = ['absent' => 0, 'null' => 0, 'zero' => 0, 'positive' => 0];
+            $delivered = 0;
+            $adsSeen = 0;
+
+            foreach ($creativeByAd as $adId => $owner) {
+                if ($owner !== $creativeId || ! isset($points[$adId])) {
+                    continue;
+                }
+
+                $adsSeen++;
+                foreach ($points[$adId] as $state) {
+                    $tally[$state['spend']]++;
+                    $delivered += $state['delivered'] ? 1 : 0;
+                }
+            }
+
+            $total = array_sum($tally);
+            $out[$creativeId] = $total === 0
+                ? 'no retained provider body carries these ads in the window'
+                : sprintf(
+                    'ads in bodies %d, day-points %d — spend: key absent %d, JSON null %d, zero %d, positive %d; delivered impressions on %d',
+                    $adsSeen, $total, $tally['absent'], $tally['null'], $tally['zero'], $tally['positive'], $delivered,
+                );
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<mixed>  $node
+     * @param  array<string, string>  $creativeByAd
+     * @param  array<string, array<string, array{spend: string, delivered: bool}>>  $points
+     */
+    private function walkForAds(array $node, array $creativeByAd, array &$points, Carbon $from, Carbon $to): void
+    {
+        $id = $node['id'] ?? null;
+
+        if (is_string($id) && isset($creativeByAd[$id]) && is_array($node['timeseries'] ?? null)) {
+            foreach ($node['timeseries'] as $point) {
+                if (! is_array($point)) {
+                    continue;
+                }
+
+                $date = substr((string) ($point['start_time'] ?? ''), 0, 10);
+
+                if ($date === '' || $date < $from->toDateString() || $date > $to->toDateString() || isset($points[$id][$date])) {
+                    continue;
+                }
+
+                $stats = is_array($point['stats'] ?? null) ? $point['stats'] : [];
+
+                $points[$id][$date] = [
+                    'spend' => match (true) {
+                        ! array_key_exists('spend', $stats) => 'absent',
+                        $stats['spend'] === null => 'null',
+                        (float) $stats['spend'] === 0.0 => 'zero',
+                        default => 'positive',
+                    },
+                    'delivered' => is_numeric($stats['impressions'] ?? null) && (float) $stats['impressions'] > 0,
+                ];
+            }
+
+            return;
+        }
+
+        foreach ($node as $child) {
+            if (is_array($child)) {
+                $this->walkForAds($child, $creativeByAd, $points, $from, $to);
             }
         }
     }
