@@ -170,6 +170,21 @@ final class ProjectIntegrationController extends Controller
             $binding = DB::transaction(function () use ($account, $project, $validated) {
                 DB::table('tenants')->where('id', $account->tenant_id)->lockForUpdate()->first();
 
+                /*
+                 * ACCOUNT-SCOPE-ISOLATION-001 — the «active elsewhere» refusal, re-asked UNDER the
+                 * lock. The check above runs before the transaction, so two operators binding the same
+                 * account to two projects in the same instant both passed it and both wrote — and
+                 * `AccountAssignment::projectIdFor()` then picked one of them silently for every sync.
+                 * Re-asked here it is serialised on the tenant row, and the second writer is refused.
+                 */
+                $elsewhere = ProjectIntegrationBinding::withoutGlobalScope(ProjectScope::class)
+                    ->where('external_account_id', $account->id)
+                    ->where('is_active', true)
+                    ->where('project_id', '!=', $project->id)
+                    ->exists();
+
+                abort_if($elsewhere, 409, 'This account is already connected to another project. Detach it there first.');
+
                 $existing = ProjectIntegrationBinding::withoutGlobalScope(ProjectScope::class)
                     ->where('external_account_id', $account->id)
                     ->where('project_id', $project->id)

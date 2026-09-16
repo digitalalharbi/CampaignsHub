@@ -103,6 +103,41 @@ final class StoreSyncer
             return $this->finish($run, SyncRunStatus::Failed->value, 0, 'No credentials for '.$connector->label().' — nothing was fetched, and no request was made.');
         }
 
+        /*
+         * ACCOUNT-SCOPE-ISOLATION-001 — the token's store must BE the bound store.
+         *
+         * Salla and Zid take `$storeId` on every fetch and use it on none: the token decides which
+         * store answers, because both authorise one store per consent. `TokenVault::open()` keeps one
+         * connection per (tenant, provider, client workspace) and replaces its token on each consent,
+         * so a merchant connecting a second store puts store B's token on the connection store A is
+         * bound through — and A's next sweep would fetch B's orders, customers, products and carts and
+         * file them under A and under A's project, with nothing in the payload to say otherwise.
+         *
+         * `fetchStores()` is the one call that names the store the token reaches. It is asked before
+         * anything else, and an answer that is not this store's own id refuses the whole sync: nothing
+         * fetched, nothing filed, and the run says which store the token actually reaches so the
+         * operator can re-authorise the right one.
+         */
+        try {
+            $reached = array_values(array_filter(array_map(
+                static fn (array $s): string => (string) ($s['external_id'] ?? ''),
+                $connector->fetchStores(),
+            )));
+        } catch (Throwable $e) {
+            return $this->finish($run, SyncRunStatus::Failed->value, 0, 'The store could not identify itself: '.$e->getMessage().' Nothing was fetched.');
+        }
+
+        if (! in_array((string) $store->external_id, $reached, true)) {
+            return $this->finish(
+                $run,
+                SyncRunStatus::Failed->value,
+                0,
+                $reached === []
+                    ? 'The authorisation names no store, so nothing was fetched. Re-authorise this store.'
+                    : 'The authorisation reaches a different store than the one bound here, so nothing was fetched. Re-authorise this store, or bind the store the authorisation reaches.',
+            );
+        }
+
         $problems = [];
         $storeId = $store->external_id;
         $window = [$from->toDateString(), $to->toDateString()];
