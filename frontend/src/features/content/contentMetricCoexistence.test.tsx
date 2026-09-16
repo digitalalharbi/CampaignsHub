@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { CreativesPage } from './CreativesPage'
 import { creativeDialogFigures } from './creativeDialogFigures'
+import { creativeFigureText } from './creativeMoney'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 import { useProject } from '@/stores/project'
 
@@ -226,5 +227,56 @@ describe('the popup reads money the way the card reads it', () => {
     )
 
     expect(figures.map((f) => f.label)).toContain('Revenue')
+  })
+})
+
+/**
+ * Owner defect 95 — the one reader, asserted as the thing that closes the class.
+ *
+ * Every surface that renders a creative figure had to remember which of two readers answers money,
+ * and `headline_metrics` is a key list the SERVER chooses per objective — so which surfaces are
+ * exposed changes with the objective. That is the worst way for a defect to be distributed, and it is
+ * why the fix is one function rather than a sixth ternary.
+ */
+describe('one reader answers a creative figure, whatever kind it is', () => {
+  const WITHHELD = {
+    spend: null,
+    spend_original: 412.5,
+    spend_withheld_rows: 3,
+    revenue: null,
+    revenue_original: 1_980.25,
+    revenue_withheld_rows: 3,
+    money_original_currency: 'USD',
+    money_original_currencies: 1,
+    impressions: 90_000,
+    reported: { spend: false, revenue: false, impressions: true },
+  } as never
+
+  it('states a withheld spend as the amount the platform reported', () => {
+    expect(creativeFigureText(WITHHELD, 'spend', 'SAR', 'en')).toMatch(/412\.50 USD/)
+  })
+
+  it('states a withheld revenue as the amount the platform reported', () => {
+    expect(creativeFigureText(WITHHELD, 'revenue', 'SAR', 'en')).toMatch(/1,980\.25 USD/)
+  })
+
+  /**
+   * A count keeps the reader that is right for it.
+   *
+   * `metricState` tells a measured zero from «not sent», which money cannot do and counts need. The
+   * point of one entry is not one implementation — it is that no call site has to choose.
+   */
+  it('reads a count through the state reader, unchanged', () => {
+    expect(creativeFigureText(WITHHELD, 'impressions', 'SAR', 'en')).toBe('90,000')
+  })
+
+  /** And a metric the platform does not send still says so rather than showing an amount. */
+  it('says «not provided» for a count the platform does not send', () => {
+    expect(creativeFigureText(
+      { impressions: null, reported: { impressions: false } } as never,
+      'impressions',
+      'SAR',
+      'en',
+    )).toMatch(/Not provided/i)
   })
 })
