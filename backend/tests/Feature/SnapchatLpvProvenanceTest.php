@@ -62,6 +62,17 @@ final class SnapchatLpvProvenanceTest extends TestCase
             'created_at' => now()->subHour(), 'updated_at' => now()->subHour(),
         ]);
 
+        $runId = (string) DB::table('metric_sync_runs')->value('id');
+        DB::table('integration_raw_payloads')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->getKey(), 'sync_run_id' => $runId,
+            'provider' => 'snapchat', 'resource' => 'insights', 'window_start' => '2026-09-09', 'window_end' => '2026-09-16',
+            'normalised_rows' => 0, 'fetched_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+            'payload' => json_encode(['timeseries_stats' => [['timeseries_stat' => ['id' => 'x', 'type' => 'AD', 'timeseries' => [
+                ['start_time' => '2026-09-12T00:00:00', 'stats' => ['conversion_page_views' => 7]],
+                ['start_time' => '2026-09-13T00:00:00', 'stats' => ['landing_page_views' => null, 'conversion_page_views' => 0]],
+            ]]]]]),
+        ]);
+
         $this->entityRow('2026-08-20', lpv: 90, pageViews: 90);   // outside reach, old signature
         $this->entityRow('2026-08-21', lpv: 90, pageViews: 90);   // outside reach, old signature
         $this->entityRow('2026-09-12', lpv: 90, pageViews: 90);   // inside reach
@@ -78,6 +89,9 @@ final class SnapchatLpvProvenanceTest extends TestCase
         $this->assertStringContainsString('earliest window start 2026-09-09', $output);
         $this->assertStringContainsString("outside the sweep's reach (before 2026-09-09): 3 row(s), 2 with the old mapping's signature", $output);
         $this->assertStringContainsString("inside the sweep's reach: 1 row(s)", $output);
+        $this->assertStringContainsString('bodies read: 1', $output);
+        $this->assertMatchesRegularExpression('/ad\\s+landing_page_views\\s+key absent 1, JSON null 1, zero 0, positive 0/', $output);
+        $this->assertMatchesRegularExpression('/ad\\s+conversion_page_views\\s+key absent 0, JSON null 0, zero 1, positive 1/', $output);
         $this->assertMatchesRegularExpression('/ad\s+2026-08\s+3\s+2\s+2026-08-20\s+2026-08-22/', $output);
     }
 
