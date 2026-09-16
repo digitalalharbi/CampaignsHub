@@ -116,6 +116,11 @@ on:
         type: boolean
         required: false
         default: false
+      content_lpv_provenance:
+        description: 'Count stored Snapchat ad-grain landing_page_views rows from the old pixel mapping, by month, split at the sweep''s measured reach. Counts and dates only.'
+        type: boolean
+        required: false
+        default: false
       quarantine_sandbox:
         description: 'Report the sandbox rows sitting in LIVE accounts. Reports only; never deletes from this workflow.'
         type: boolean
@@ -350,3 +355,31 @@ jobs:
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan content:census \
                 --project="${PROJECT}" --from="${FROM}" --to="${TO}" --list="200" ${FETCH} ${RAW}
+
+  # ── Snapchat ad-grain landing-page-view provenance ───────────────────────────────────────────────
+  #
+  # #460 maps the ad and ad-squad grain's `landing_page_views` from the delivery field; stored rows
+  # keep the pixel PAGE_VIEW count until their days are re-fetched. Re-syncing history writes rows and
+  # is an Owner decision, so this job only COUNTS what that decision would cover: stored rows by month,
+  # those carrying the old mapping's signature, split at the sweep's reach measured from recent runs.
+  # Counts and dates only; writes nothing.
+  lpv_provenance:
+    if: inputs.content_lpv_provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Count old-mapping LPV rows on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan content:lpv-provenance
