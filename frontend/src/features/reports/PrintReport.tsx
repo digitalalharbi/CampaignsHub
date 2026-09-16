@@ -5,6 +5,7 @@ import { getData } from '@/lib/api/client'
 import { SlideBody, isClientAudience, type Meta, type ReportData, type Slide } from './InteractiveReport'
 import { PrintDocument } from './PrintDocument'
 import { headerIdentity, type SharedBranding } from './sharedBranding'
+import { ReportWatermark } from './ReportWatermark'
 import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { brand } from '@/lib/brand'
 
@@ -13,6 +14,14 @@ interface PrintPayload {
   name: string
   type: 'presentation' | 'document'
   theme: 'light' | 'dark'
+  /*
+   * Asked for by the share, minted by the SERVER into the print token, never read from the URL.
+   *
+   * `audience` travels the same way and for the same reason: a flag that decides what a document
+   * discloses must not be expressible by whoever holds the address. A watermark a caller could drop
+   * from a query string is a mark removable by the person it exists to deter.
+   */
+  watermark?: boolean
   audience: string
   currency: string
   is_demo: boolean
@@ -137,6 +146,7 @@ export function PrintReport() {
         // The same resolved identity this file already uses for the PDF's metadata and for the
         // slide deck. The document layout was the one surface never given it.
         identity={headerIdentity(payload.branding, 'ar')}
+        watermark={payload.watermark ?? false}
       />
     )
   }
@@ -167,6 +177,14 @@ export function PrintReport() {
       <style>{printCss(landscape)}</style>
       {slides.map((s, i) => (
         <section key={s.id} className="report-slide" data-print-page={i + 1} data-slide-type={s.type}>
+          {/*
+            On EVERY page, not only the cover.
+
+            A watermark that marks the first sheet marks the sheet nobody forwards on its own. The
+            deck is printed one section per page, so the mark belongs per section — and `.report-slide`
+            is already `position: relative`, which is what the overlay positions against.
+          */}
+          {payload.watermark && <ReportWatermark locale="ar" />}
           <div className="report-slide-inner">
             {/*
               `paged` — this is a fixed A4 slide, not a scrolling page.
