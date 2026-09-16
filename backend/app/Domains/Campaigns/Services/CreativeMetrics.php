@@ -566,6 +566,32 @@ final class CreativeMetrics
         $figures['orders'] = $conversions;
         $figures['cost_per_lpv'] = $this->ratio($spend, $num('landing_page_views'));
 
+        /*
+         * Owner defect 95 — the two figures the Engagement family is JUDGED by, and never computed.
+         *
+         * The third instance of one shape in this file, and the other two are recorded a few lines
+         * above: `cpl` and `cpi` were «named as the verdict and never computed», so `supportable()`
+         * struck them and the card «led with whatever came next»; and `ObjectiveFamily::App` named
+         * `registrations` and `in_app_events`, «two figures that could never arrive».
+         *
+         * `engagement_rate` and `cpe` were listed in `DERIVED` — this service's own claim that it can
+         * produce them — and nothing here produced either. So an engagement creative lost BOTH of its
+         * verdict metrics silently and led with spend, engagements and impressions: figures true of any
+         * campaign whatever it was bought for, on the card that is supposed to say whether this one
+         * worked.
+         *
+         * `engagements` has been a summed column all along, so both are arithmetic the service already
+         * had the inputs for. An engagement is deliberately NOT a click — the family's own comment says
+         * so — which is why the rate is engagements over impressions rather than over clicks.
+         *
+         * `ratio()` returns null when the denominator is missing or zero, so a creative whose platform
+         * reported no engagement gets «nothing to divide» rather than a rate of nothing.
+         */
+        $engagements = $num('engagements');
+
+        $figures['engagement_rate'] = $this->ratio($engagements, $impressions);
+        $figures['cpe'] = $this->ratio($spend, $engagements);
+
         return $figures;
     }
 

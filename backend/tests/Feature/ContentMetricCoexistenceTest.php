@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
@@ -306,6 +307,101 @@ final class ContentMetricCoexistenceTest extends TestCase
         $this->assertSame(1, (int) $strip['spend_withheld_rows'], 'the strip did not carry the withheld provenance');
         $this->assertSame(79.61, (float) $strip['spend_original']);
         $this->assertSame('USD', $strip['money_original_currency']);
+    }
+
+    /**
+     * Owner defect 95 — a family may not NAME a verdict the service cannot produce.
+     *
+     * This is the class behind the instance, and the class has now bitten three times. The file's own
+     * comments record two of them: `cpl` and `cpi` were «named as the verdict and never computed», so
+     * `supportable()` struck them and «the card led with whatever came next»; and
+     * `ObjectiveFamily::App` named `registrations` and `in_app_events`, «two figures that could never
+     * arrive», showing «—» forever.
+     *
+     * The third is live: `ObjectiveFamily::Engagement` names `engagement_rate` and `cpe`, both are
+     * listed in `DERIVED` as producible, and `derive()` computes neither — while `engagements` is a
+     * real summed column, so both are arithmetic this service already has the inputs for. An
+     * engagement creative therefore lost BOTH of its verdict metrics silently and led with spend,
+     * engagements and impressions: figures true of any campaign whatever it was bought for.
+     *
+     * Asserted as a property over every family rather than as three more cases, because the next
+     * family to be given a metric nobody wired up is the one no case covers. A row carrying every
+     * column is fed through `aggregate()` — which calls the same `derive()` — and every metric any
+     * family names must come back with a value.
+     */
+    public function test_every_metric_a_family_names_is_one_this_service_can_produce(): void
+    {
+        /*
+         * One row with every column a provider could ever send, at both grains.
+         *
+         * Deliberately unrealistic: no single creative answers all of these, because the creative and
+         * ad tables carry different columns. The question here is not «does a real row answer this» —
+         * that is availability, and it is asked per row at render time. It is «CAN this service
+         * produce the figure at all», and a family naming one it cannot is promising an empty cell for
+         * ever.
+         */
+        $everything = [
+            'spend' => 1_000.0, 'impressions' => 100_000.0, 'clicks' => 2_000.0,
+            'conversions' => 50.0, 'revenue' => 5_000.0, 'add_to_cart' => 80.0, 'checkout' => 60.0,
+            'purchases' => 50.0, 'landing_page_views' => 1_500.0, 'engagements' => 3_000.0,
+            'reach' => 60_000.0, 'video_views' => 40_000.0, 'video_views_2s' => 30_000.0,
+            'video_views_3s' => 25_000.0, 'video_views_6s' => 20_000.0, 'video_p25' => 18_000.0,
+            'video_p50' => 15_000.0, 'video_p75' => 12_000.0, 'video_p100' => 10_000.0,
+            'video_completions' => 10_000.0, 'leads' => 200.0, 'sign_ups' => 150.0,
+            'installs' => 120.0, 'app_opens' => 90.0, 'page_views' => 4_000.0,
+            'frequency' => 1.6, 'video_avg_watch_seconds' => 4.2, 'active_days' => 30,
+        ];
+
+        $produced = app(CreativeMetrics::class)->aggregate([$everything]);
+
+        $this->assertNotNull($produced);
+
+        $unproducible = [];
+
+        foreach (ObjectiveFamily::cases() as $family) {
+            foreach ($family->headlineMetrics() as $metric) {
+                if (($produced[$metric] ?? null) === null) {
+                    $unproducible[] = $family->value.'/'.$metric;
+                }
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $unproducible,
+            'these families name a verdict this service cannot compute, so the card promises an empty '
+            .'cell for ever: '.implode(', ', $unproducible),
+        );
+    }
+
+    /**
+     * And the two the Engagement family is judged by are the arithmetic they should be.
+     *
+     * Named separately from the property above because a property can be satisfied by a wrong number.
+     * 3,000 engagements over 100,000 impressions is 3%; 1,000 spent on 3,000 engagements is a third
+     * of a unit each.
+     */
+    public function test_engagement_rate_and_cost_per_engagement_are_derived_from_their_own_figures(): void
+    {
+        $produced = app(CreativeMetrics::class)->aggregate([[
+            'spend' => 1_000.0, 'impressions' => 100_000.0, 'engagements' => 3_000.0, 'active_days' => 7,
+        ]]);
+
+        $this->assertNotNull($produced);
+        $this->assertEqualsWithDelta(0.03, (float) $produced['engagement_rate'], 0.0001);
+        $this->assertEqualsWithDelta(0.3333, (float) $produced['cpe'], 0.0001);
+    }
+
+    /** And neither is invented where the platform reported no engagement at all. */
+    public function test_neither_engagement_figure_is_invented_without_engagements(): void
+    {
+        $produced = app(CreativeMetrics::class)->aggregate([[
+            'spend' => 1_000.0, 'impressions' => 100_000.0, 'active_days' => 7,
+        ]]);
+
+        $this->assertNotNull($produced);
+        $this->assertNull($produced['engagement_rate'], 'an engagement rate was invented from no engagements');
+        $this->assertNull($produced['cpe'], 'a cost per engagement was invented from no engagements');
     }
 
     /**
