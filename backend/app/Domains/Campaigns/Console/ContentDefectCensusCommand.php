@@ -684,6 +684,44 @@ final class ContentDefectCensusCommand extends Command
         return $read;
     }
 
+    /**
+     * What a body IS, from its leading bytes — never its content. A multipart envelope is described by
+     * the content types its parts declare within the prefix, each re-sniffed.
+     */
+    private function signature(string $bytes): string
+    {
+        $sniff = static fn (string $b): ?string => match (true) {
+            str_starts_with($b, "\xFF\xD8\xFF") => 'jpeg',
+            str_starts_with($b, "\x89PNG\r\n\x1A\n") => 'png',
+            str_starts_with($b, 'GIF87a') || str_starts_with($b, 'GIF89a') => 'gif',
+            str_starts_with($b, 'RIFF') && substr($b, 8, 4) === 'WEBP' => 'webp',
+            default => null,
+        };
+
+        if ($bytes === '') {
+            return 'empty';
+        }
+
+        if (($kind = $sniff($bytes)) !== null) {
+            return $kind.(@getimagesizefromstring($bytes) === false ? ' signature, does not decode' : ' image that decodes');
+        }
+
+        if (preg_match('/^\s*--([^\r\n]{1,200})\r?\n/', $bytes, $m) === 1) {
+            $parts = [];
+            foreach (explode('--'.$m[1], $bytes) as $part) {
+                if (preg_match('/^\r?\n(.*?)\r?\n\r?\n(.*)$/s', $part, $p) !== 1) {
+                    continue;
+                }
+                preg_match('/content-type:\s*([^\r\n;]+)/i', $p[1], $ct);
+                $parts[] = strtolower(trim($ct[1] ?? 'no type')).'='.($sniff($p[2]) ?? 'not an image');
+            }
+
+            return 'multipart envelope, parts in prefix: '.($parts === [] ? 'none' : implode(', ', $parts));
+        }
+
+        return 'unrecognised, first bytes '.bin2hex(substr($bytes, 0, 4));
+    }
+
     /** @param array{tag: string, what: string, url: string} $item */
     private function judge(array $item, Response $response): ?string
     {
@@ -700,7 +738,8 @@ final class ContentDefectCensusCommand extends Command
         }
 
         if (! str_starts_with($type, 'image/')) {
-            return 'not an image (content type '.($type === '' ? 'none' : $type).')';
+            // The declared type is not the evidence — the bytes are. Say what they actually are.
+            return 'not an image (content type '.($type === '' ? 'none' : $type).'; bytes: '.$this->signature($this->prefix($response)).')';
         }
 
         return @getimagesizefromstring($this->prefix($response)) === false ? 'an image that does not decode' : null;
