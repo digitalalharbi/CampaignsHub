@@ -274,9 +274,12 @@ final class ContentDefectCensusTest extends TestCase
         $this->assertStringContainsString((string) $page->getKey(), $section);
         $this->assertStringNotContainsString((string) $ok->getKey(), $section, 'a loaded image and a playable film were reported as broken');
         // Six assets: the working creative's still AND its film, and one still each for the four broken ones.
-        $this->assertStringContainsString('not an image (content type multipart/form-data; bytes: png image that decodes)', $section);
+        // A real image under a wrong type LOADS in every browser: not a blank, said apart.
+        $this->assertStringNotContainsString((string) $mislabelled->getKey(), strstr($section, 'NOT A DEFECT', true) ?: $section);
+        $this->assertStringContainsString('NOT A DEFECT — a still that LOADS although its declared content type is wrong', $output);
+        $this->assertStringContainsString((string) $mislabelled->getKey(), $output);
         $this->assertStringContainsString('not an image (content type multipart/form-data; bytes: multipart envelope, parts in prefix: text/plain=not an image)', $section);
-        $this->assertStringContainsString('6 asset(s), 2 loaded', $output);
+        $this->assertStringContainsString('6 asset(s), 3 loaded', $output);
 
         Http::assertNotSent(static fn ($request): bool => str_contains((string) $request->url(), 'idle-signature'));
         $this->assertStringNotContainsString('signature', $output);
