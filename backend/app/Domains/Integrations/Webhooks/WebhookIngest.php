@@ -8,6 +8,7 @@ use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationWebhookEvent;
 use App\Domains\Integrations\Models\ProviderConnection;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -36,17 +37,42 @@ use Illuminate\Support\Facades\DB;
 final class WebhookIngest
 {
     /**
+     * `accounts` is every copy of the named account this install holds — one per tenant that
+     * authorised it — so the caller can hand each its own sync.
+     *
      * @param  array<string,mixed>  $payload
-     * @return array{event: IntegrationWebhookEvent, duplicate: bool}
+     * @return array{event: IntegrationWebhookEvent, duplicate: bool, accounts: Collection<int, ExternalAccount>}
      */
     public function record(string $provider, string $rawBody, array $payload, bool $verified): array
     {
         $definition = ProviderCatalogue::get($provider);
         $externalId = $this->accountIdIn($payload);
-        $account = $externalId === null
-            ? null
-            : ExternalAccount::withoutGlobalScopes()->where('external_id', $externalId)
-                ->where('provider', $definition->key)->first();
+
+        /*
+         * ACCOUNT-SCOPE-ISOLATION-001 — every tenant holding the account, not the first row found.
+         *
+         * A provider sends ONE delivery per app for an event on an ad account, and nothing stops two
+         * tenants — an agency and the advertiser it works for — each authorising the same account
+         * under their own connection. This resolved `->first()` across every tenant in whatever order
+         * Postgres returned the rows: the event was filed under an arbitrary one of them, and only
+         * THAT tenant's copy was handed the sync the delivery exists to trigger. No row ever crossed a
+         * tenant by it — the job fetches through the chosen copy's own connection into its own
+         * project — but a lost trigger and a mis-attributed audit row are both wrong, and both were
+         * decided by row order.
+         *
+         * When exactly one tenant holds the account the event is attributed to it as before. When
+         * several do, the row names none of them: filing a delivery two tenants are entitled to under
+         * one of them is a guess recorded as a fact.
+         */
+        $accounts = $externalId === null
+            ? new Collection
+            : ExternalAccount::withoutGlobalScopes()
+                ->where('external_id', $externalId)
+                ->where('provider', $definition->key)
+                ->orderBy('id')
+                ->get();
+
+        $account = $accounts->count() === 1 ? $accounts->first() : null;
 
         $connection = $account === null
             ? null
@@ -63,7 +89,7 @@ final class WebhookIngest
             'external_account_id' => $account?->getKey(),
             'payload' => $payload,
             'signature_verified' => $verified,
-            'status' => $account === null ? 'unmatched' : 'received',
+            'status' => $accounts->isEmpty() ? 'unmatched' : 'received',
             'received_at' => Carbon::now(),
         ];
 
@@ -88,10 +114,10 @@ final class WebhookIngest
                 ->where('fingerprint', $attributes['fingerprint'])
                 ->firstOrFail();
 
-            return ['event' => $existing, 'duplicate' => true];
+            return ['event' => $existing, 'duplicate' => true, 'accounts' => new Collection];
         }
 
-        return ['event' => $event, 'duplicate' => false];
+        return ['event' => $event, 'duplicate' => false, 'accounts' => $accounts];
     }
 
     /**

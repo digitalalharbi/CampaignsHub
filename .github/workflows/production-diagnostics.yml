@@ -126,6 +126,23 @@ on:
         type: boolean
         required: false
         default: false
+      scope_audit:
+        description: 'ACCOUNT-SCOPE-ISOLATION-001 — per project and grain, which ad accounts the stored rows belong to, classified against the project''s bindings (bound / once_bound / bound_elsewhere / unbound / none). Read-only; ids and counts only.'
+        type: boolean
+        required: false
+        default: false
+      scope_project:
+        description: 'Optional: one project id for scope_audit. Omitted: every project holding a binding or a row.'
+        required: false
+        default: ''
+      scope_from:
+        description: 'Optional earliest month for the dated grains of scope_audit, YYYY-MM'
+        required: false
+        default: ''
+      scope_to:
+        description: 'Optional latest month for the dated grains of scope_audit, YYYY-MM'
+        required: false
+        default: ''
 
 concurrency:
   group: production-diagnostics
@@ -383,3 +400,45 @@ jobs:
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan content:lpv-provenance
+
+  # ── The account-scope inventory ─────────────────────────────────────────────────────────────────
+  #
+  # ACCOUNT-SCOPE-ISOLATION-001. The Owner observed «campaigns/data from accounts other than the exact
+  # selected account being mixed into results». A project's selected accounts are its ACTIVE rows in
+  # `project_integration_bindings`; `integrations:scope-audit` attributes every stored row at every
+  # grain to an ad account — directly, or through the campaign it hangs off — and classifies it
+  # against those bindings. That output is the contamination inventory a cleanup decision is made
+  # from, and it is a decision: this workflow cannot delete anything.
+  #
+  # Same bar as the other diagnostics: writes nothing (every-table digest in `ScopeAuditCommandTest`),
+  # calls no provider, and prints internal uuids, provider keys and counts — never an account name, a
+  # provider's own id or a url.
+  scope_audit:
+    if: inputs.scope_audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Account-scope inventory on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          PROJECT: ${{ inputs.scope_project }}
+          FROM: ${{ inputs.scope_from }}
+          TO: ${{ inputs.scope_to }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: PROJECT,FROM,TO
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            # Passed as VALUES to a fixed command. The dispatch's `provider` input is deliberately NOT
+            # forwarded: the inventory is about every provider a project holds, and the dispatch default
+            # of `snapchat` would silently hide Meta's and LinkedIn's rows from the count.
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan integrations:scope-audit \
+                --project="${PROJECT}" --from="${FROM}" --to="${TO}" --lines="200"

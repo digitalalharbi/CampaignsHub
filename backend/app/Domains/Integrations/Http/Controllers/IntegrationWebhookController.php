@@ -17,6 +17,7 @@ use App\Domains\Integrations\Webhooks\WebhookIngest;
 use App\Domains\Integrations\Webhooks\WebhookSignature;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use App\Http\Controllers\Controller;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
@@ -110,7 +111,7 @@ final class IntegrationWebhookController extends Controller
         $event = $result['event'];
 
         if (! $result['duplicate'] && $event->status === 'received') {
-            $this->scheduleSync($event, $definition->kind);
+            $this->scheduleSync($event, $definition->kind, $result['accounts']);
         }
 
         // Always 2xx once the row is safe. A provider retries anything else, for hours.
@@ -134,15 +135,11 @@ final class IntegrationWebhookController extends Controller
      *
      * Re-reading the store's own window costs one queued job and cannot go backwards. The webhook is
      * what makes it happen in seconds instead of within the hour.
+     *
+     * @param  Collection<int, ExternalAccount>  $accounts  every tenant's copy of the account the delivery named
      */
-    private function scheduleSync(IntegrationWebhookEvent $event, ProviderKind $kind): void
+    private function scheduleSync(IntegrationWebhookEvent $event, ProviderKind $kind, Collection $accounts): void
     {
-        if ($event->external_account_id === null) {
-            return;
-        }
-
-        $accountId = (string) $event->external_account_id;
-
         /*
          * RUNTIME-100 §11 — a delivery for an account nobody assigned queues nothing.
          *
@@ -152,12 +149,46 @@ final class IntegrationWebhookController extends Controller
          * exists only to refuse itself, and — worse — every one of those refusals looks like activity
          * on a connection that is doing nothing.
          *
+         * ACCOUNT-SCOPE-ISOLATION-001 — asked of EVERY copy of the account, one per tenant that holds
+         * it, and each copy is judged on its own binding and dispatched through its own connection.
+         * A tenant whose copy was never assigned gets nothing; a tenant whose copy was gets its sync,
+         * whichever row Postgres happened to return first.
+         *
          * The verification, the idempotency ledger and the 401 for an unsigned delivery are untouched:
          * this is about what happens AFTER a delivery has been accepted as genuine.
          */
-        $account = ExternalAccount::withoutGlobalScopes()->find($accountId);
+        $dispatched = 0;
 
-        if ($account === null || ! $this->assignment->isActivelyAssigned($account)) {
+        foreach ($accounts as $account) {
+            if (! $this->assignment->isActivelyAssigned($account)) {
+                continue;
+            }
+
+            $accountId = (string) $account->getKey();
+
+            match ($kind) {
+                ProviderKind::Advertising => SyncAccountMetricsJob::dispatch(
+                    $accountId,
+                    Carbon::now()->subDays(2)->toDateString(),
+                    Carbon::now()->toDateString(),
+                ),
+                /*
+                 * A wider window than the advertising one, because a store event is frequently ABOUT
+                 * an older order: a refund on a three-week-old purchase is a delivery today, and asking
+                 * only for the last two days would re-read everything except the order that changed.
+                 */
+                ProviderKind::Commerce => SyncStoreJob::dispatch(
+                    $accountId,
+                    Carbon::now()->subDays(30)->toDateString(),
+                    Carbon::now()->toDateString(),
+                    ['source' => 'webhook', 'topic' => $event->topic],
+                ),
+            };
+
+            $dispatched++;
+        }
+
+        if ($dispatched === 0) {
             $event->forceFill([
                 'status' => 'ignored',
                 'processed_at' => Carbon::now(),
@@ -166,25 +197,6 @@ final class IntegrationWebhookController extends Controller
 
             return;
         }
-
-        match ($kind) {
-            ProviderKind::Advertising => SyncAccountMetricsJob::dispatch(
-                $accountId,
-                Carbon::now()->subDays(2)->toDateString(),
-                Carbon::now()->toDateString(),
-            ),
-            /*
-             * A wider window than the advertising one, because a store event is frequently ABOUT an
-             * older order: a refund on a three-week-old purchase is a delivery today, and asking only
-             * for the last two days would re-read everything except the order that changed.
-             */
-            ProviderKind::Commerce => SyncStoreJob::dispatch(
-                $accountId,
-                Carbon::now()->subDays(30)->toDateString(),
-                Carbon::now()->toDateString(),
-                ['source' => 'webhook', 'topic' => $event->topic],
-            ),
-        };
 
         $event->forceFill(['status' => 'processed', 'processed_at' => Carbon::now()])->save();
     }
