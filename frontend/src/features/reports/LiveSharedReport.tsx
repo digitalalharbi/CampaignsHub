@@ -236,7 +236,7 @@ export function LiveSharedReport({
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60 motion-reduce:hidden" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
             </span>
-            <span className="tnum"><Num>{stamp}</Num></span>
+            <span className="tabular-nums"><Num>{stamp}</Num></span>
           </span>
           <button
             type="button"
