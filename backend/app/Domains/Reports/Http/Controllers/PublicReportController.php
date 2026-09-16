@@ -97,12 +97,21 @@ final class PublicReportController extends Controller
          * BEFORE the client view, because the resolution is keyed on the creative id and the client
          * boundary strips exactly that.
          */
-        $fresh = app(ReportCreativeMedia::class)->refresh($report->data ?? []);
+        /*
+         * A LIVE link renders from `/live` and never reads this document, so none of the work below is
+         * done for it: resolving every creative's media and running the client view over a snapshot
+         * the page discards was first-paint cost on the surface a client opens, for nothing. The
+         * link's own facts — form, mode, branding, settings, sections — still arrive.
+         */
+        $data = [];
+        if (! $share->isLive()) {
+            $fresh = app(ReportCreativeMedia::class)->refresh($report->data ?? []);
 
-        $data = $form === 'executive_summary'
-            ? $view->executive($fresh)
-            : $view->filter($fresh);
-        $data = $this->shares->sanitize($data, $share);
+            $data = $form === 'executive_summary'
+                ? $view->executive($fresh)
+                : $view->filter($fresh);
+            $data = $this->shares->sanitize($data, $share);
+        }
 
         return ApiResponse::success([
             'name' => $report->name,
