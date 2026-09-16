@@ -11,6 +11,7 @@ use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -88,7 +89,11 @@ final class LiveReportService
         $built = $this->ads->for($objective, $from, $to, [
             'project_ids' => $scope['project_id'] === '' ? [] : [$scope['project_id']],
             'providers' => $applied['providers'] !== [] ? $applied['providers'] : $scope['providers'],
-            'campaign_ids' => $applied['campaigns'] !== [] ? $applied['campaigns'] : $scope['campaign_ids'],
+            // The account ceiling, through the same rule `SharedCreativeView` applies to the same link.
+            'campaign_ids' => AccountCampaignCeiling::campaigns(
+                $applied['campaigns'] !== [] ? $applied['campaigns'] : $scope['campaign_ids'],
+                array_values(array_filter((array) ($share->scope['account_ids'] ?? []))),
+            ),
         ], $this->formFor($share), liveMedia: true);
 
         return [
