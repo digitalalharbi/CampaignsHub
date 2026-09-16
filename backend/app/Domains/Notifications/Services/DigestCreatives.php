@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Creative\RankingMetric;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativePulse;
 use App\Domains\Campaigns\Services\CreativeRows;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use Illuminate\Support\Carbon;
 
 /**
@@ -47,6 +48,7 @@ final class DigestCreatives
     {
         $creatives = ExternalCreative::query()
             ->where('project_id', $projectId)
+            ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_creatives.external_campaign_id', 'external_creatives.project_id'))
             ->limit(500)
             ->get();
 

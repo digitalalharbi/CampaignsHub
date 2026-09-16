@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Reports\Models\Report;
@@ -99,6 +100,7 @@ final class LiveReportBuilderController extends Controller
          */
         $providers = DailyMetric::query()
             ->where('project_id', $project)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->distinct()
             ->orderBy('provider')
             ->pluck('provider')
@@ -135,6 +137,7 @@ final class LiveReportBuilderController extends Controller
          */
         return DB::table('daily_metrics')
             ->where('project_id', $project)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->whereNotNull('unified_campaign_id')
             ->whereBetween('metric_date', [
                 Carbon::parse($from)->toDateString(),
@@ -224,7 +227,7 @@ final class LiveReportBuilderController extends Controller
 
         $providers = array_values(array_unique((array) ($data['providers'] ?? [])));
         if ($providers === []) {
-            $providers = DailyMetric::query()->where('project_id', $project)->distinct()->pluck('provider')->all();
+            $providers = DailyMetric::query()->where('project_id', $project)->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))->distinct()->pluck('provider')->all();
         }
 
         $metrics = array_values(array_intersect(

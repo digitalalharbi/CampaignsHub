@@ -10,6 +10,7 @@ use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -69,8 +70,8 @@ final class RelatedEntitiesController extends Controller
             ],
             'creatives' => [
                 'label_ar' => 'المحتويات',
-                'count' => ExternalCreative::query()->where('campaign_id', $model->id)->count(),
-                'items' => ExternalCreative::query()->where('campaign_id', $model->id)->limit(self::SAMPLE)
+                'count' => ExternalCreative::query()->where('campaign_id', $model->id)->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_creatives.external_campaign_id', 'external_creatives.project_id'))->count(),
+                'items' => ExternalCreative::query()->where('campaign_id', $model->id)->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_creatives.external_campaign_id', 'external_creatives.project_id'))->limit(self::SAMPLE)
                     ->get(['id', 'name'])->map(fn ($c) => ['id' => $c->id, 'label' => $c->name, 'to' => "/campaigns/{$project}/{$model->id}?tab=creatives"])->all(),
             ],
             'alerts' => [

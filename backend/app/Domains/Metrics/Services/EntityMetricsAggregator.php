@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Support\EntityScope;
 use Illuminate\Support\Carbon;
@@ -95,6 +96,9 @@ final class EntityMetricsAggregator
             ->where('project_id', $projectId)
             ->where('entity_type', $entityType)
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
+
+        // ACCOUNT-SCOPE-ISOLATION-001 — only rows of accounts selected for this project.
+        BoundAccountVisibility::applyToEntityMetrics($query, 'entity_daily_metrics');
 
         /*
          * DEMO-LIVE-AGGREGATION-ISOLATION-001, on the same rule as the campaign grain: a scope

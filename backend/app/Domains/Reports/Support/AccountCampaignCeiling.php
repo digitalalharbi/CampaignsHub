@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Support;
 
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 
 /**
@@ -35,6 +36,7 @@ final class AccountCampaignCeiling
 
         $granted = DailyMetric::query()
             ->withoutGlobalScopes()
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->whereIn('external_account_id', $accountIds)
             ->whereNotNull('unified_campaign_id')
             ->distinct()

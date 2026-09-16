@@ -352,6 +352,25 @@ final class ProjectIntegrationController extends Controller
         $model = ProjectIntegrationBinding::with('externalAccount')->find($binding);
         abort_if($model === null, 404, 'Binding not found for this project.');
 
+        /*
+         * ACCOUNT-SCOPE-ISOLATION-001 — the button honours the selection.
+         *
+         * `PUT /integrations/selection` deselects an account by leaving its binding row in place with
+         * `is_active = false`, and every sweep, job and webhook then refuses that account through the
+         * same question asked here. This route found the row, active or not, and imported the
+         * account's campaigns into the current project — so the one account an operator had just
+         * deselected was the one account a click could still file under the project, through the
+         * product's own interface. Refused in the same words the jobs use, before any run is recorded.
+         */
+        abort_if(
+            ! $model->is_active
+            || $model->externalAccount === null
+            || $this->assignment->projectIdFor($model->externalAccount) !== $model->project_id
+            || ! $this->assignment->isActivelyAssigned($model->externalAccount),
+            409,
+            'This account is not selected for this project, so nothing was fetched. Select it again first.',
+        );
+
         $run = IntegrationSyncRun::create([
             'binding_id' => $model->id,
             'type' => 'campaigns',
