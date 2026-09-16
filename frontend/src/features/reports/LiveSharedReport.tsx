@@ -81,6 +81,30 @@ export function LiveSharedReport({
   const { locale } = useUi()
   const ar = locale === 'ar'
 
+  /*
+   * WHICH of the two live products this is — Owner defect row 96, handoff §10.
+   *
+   * Before this the form was read inline at two call sites, which made the summary «the detailed
+   * report with two blocks withheld». That is the wrong way round and it is what the Owner saw:
+   * measured on one project and window, the two documents differed by 146px of page and eleven
+   * words. A summary is a shorter DOCUMENT with its own composition, so the composition is named
+   * once, here, and every block below states which product it belongs to.
+   *
+   *   EXECUTIVE SUMMARY  freshness · headline KPIs with their period comparison · strongest
+   *                      results · direct-against-blended · platform summary · trend and platform
+   *                      contribution · top content · how many creatives ran · budget and what
+   *                      needs a decision.
+   *
+   *   DETAILED           all of the above, and then the depth: the funnel, the store
+   *                      reconciliation, each platform's own best creatives, and the
+   *                      platform-by-platform and objective-by-objective tables.
+   *
+   * The server trims what a summary does not contain out of the payload (`ReportComposition`), so
+   * these guards agree with the document rather than hiding data that still travelled to the
+   * browser — the rule `ShareSections` sets out for the section flags and which holds here too.
+   */
+  const detailed = form !== 'executive_summary'
+
   const [days, setDays] = useState(30)
   /*
    * CLIENT-REPORT-ENTITY-BOUNDARY-001 — platform is the only scope a client narrows by.
@@ -635,7 +659,12 @@ export function LiveSharedReport({
           card, which is the decoration the owner's contract rules out and a worse answer than the
           section simply not being there.
         */}
-        {payload.funnel.length > 0 && (
+        {/*
+          The funnel is the DETAILED product's — Owner handoff §10 lists it under Detailed and not
+          under Executive. The payload no longer carries it for a summary (`ReportComposition`), so
+          this guard is the page agreeing with the document rather than a second opinion about it.
+        */}
+        {detailed && payload.funnel.length > 0 && (
         <div className="mt-3 grid gap-3" data-testid="live-funnel">
           <ChartCard title={ar ? 'قمع الأداء' : 'Performance funnel'}>
             <ConversionFunnelChart stages={payload.funnel} currency={currency} ar={ar} />
@@ -684,7 +713,7 @@ export function LiveSharedReport({
             page whose whole correction was to stop saying things twice. The component itself refuses
             a single-platform account for the same reason.
           */}
-          {form === 'detailed' && (
+          {detailed && (
             <div className="mt-6">
               <ReportPlatformCreatives
                 platforms={payload.ads_platform_groups}
@@ -723,7 +752,7 @@ export function LiveSharedReport({
           claim. A label promising «every campaign» over a top-eight bar chart is the defect this
           block closes, and `liveReportForm.test.tsx` is what stops the two drifting apart again.
         */}
-        {form === 'detailed' && <LiveDetailTables payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />}
+        {detailed && <LiveDetailTables payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />}
 
         {/*
           CLIENT-FACING-PRESENTATION-001 — the last three blocks, and the only ones a client ACTS on.
@@ -732,7 +761,8 @@ export function LiveSharedReport({
         */}
         <ClientAttention payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />
 
-        {payload.store_funnel && (
+        {/* «Attribution/store» — Detailed, for the same reason and from the same list. */}
+        {detailed && payload.store_funnel && (
           <div data-testid="shared-store-funnel" className="rounded-2xl border border-border bg-surface p-4">
             <h3 className="font-bold text-text-primary">{ar ? 'الفانل والمتجر' : 'Funnel & store'}</h3>
             <ol className="mt-3 space-y-1.5">

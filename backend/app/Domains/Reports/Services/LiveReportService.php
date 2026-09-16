@@ -11,6 +11,7 @@ use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
@@ -54,6 +55,26 @@ final class LiveReportService
     ) {}
 
     /**
+     * WHICH form this link is — asked of the share, once, by everything on this path.
+     *
+     * The link builder writes the operator's choice to `report_shares.form` and creates the report
+     * row without a form at all, so `reports.form` falls to its column default of `detailed`. This
+     * class read that default directly, which meant the operator's choice never reached the payload:
+     * on a link created by the product's own builder the page was told «executive summary» by
+     * `PublicReportController` (which does consult `formOr`) while the payload it rendered was
+     * composed as «detailed». Two sources of truth for one setting, disagreeing on every real link,
+     * and the disagreement is silent — which is why the roster cap that is supposed to distinguish
+     * the two products had been permanently off in production.
+     *
+     * `formOr()` is the share's own resolution — its choice, else the report's — and is what the
+     * `show` endpoint has always used. Asking it here is what makes the page and the payload agree.
+     */
+    private function formFor(ReportShare $share): string
+    {
+        return $share->formOr($share->report?->form);
+    }
+
+    /**
      * The ads section for a live link — the deck's own builder, narrowed to this link's scope.
      *
      * @param  array<string, mixed>  $applied
@@ -68,7 +89,7 @@ final class LiveReportService
             'project_ids' => $scope['project_id'] === '' ? [] : [$scope['project_id']],
             'providers' => $applied['providers'] !== [] ? $applied['providers'] : $scope['providers'],
             'campaign_ids' => $applied['campaigns'] !== [] ? $applied['campaigns'] : $scope['campaign_ids'],
-        ], (string) $share->report->form, liveMedia: true);
+        ], $this->formFor($share), liveMedia: true);
 
         return [
             /*
@@ -129,7 +150,7 @@ final class LiveReportService
             'ads_roster' => ClientEntityBoundary::roster($built['roster']),
             'creatives_in_scope' => $built['creatives_in_scope'],
             'creatives_withheld' => $built['creatives_withheld'],
-            'form' => (string) $share->report->form,
+            'form' => $this->formFor($share),
         ];
     }
 
@@ -472,6 +493,20 @@ final class LiveReportService
          * BEFORE the outline is composed, so «what is in this report» describes what survived.
          */
         $payload = $this->applySectionFlags($payload, $share);
+
+        /*
+         * REPORT-PRODUCT-MODEL-001 / Owner defect row 96 — the FORM composes the document.
+         *
+         * A summary is not a detailed report with blocks hidden; it is a shorter document, and what
+         * it does not contain must not travel in its payload. `ReportComposition` states which
+         * sections belong to which product and why, and it runs AFTER the operator's section flags
+         * because the form is the stronger statement: a flag can switch a section off within a
+         * product, it cannot switch one on that the product does not have.
+         *
+         * BEFORE the outline, for the same reason `applySectionFlags` is — «what is in this report»
+         * has to describe what survived.
+         */
+        $payload = ReportComposition::for($this->formFor($share))->apply($payload);
 
         $payload['outline'] = (new ReportStructure)->sections($payload, composesNarrative: false);
 
