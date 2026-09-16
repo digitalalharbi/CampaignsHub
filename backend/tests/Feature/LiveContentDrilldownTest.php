@@ -288,4 +288,28 @@ final class LiveContentDrilldownTest extends TestCase
 
         $this->getJson("/api/v1/reports/shared/{$raw}/live/content/{$key}")->assertNotFound();
     }
+
+    /**
+     * A live page renders from `/live`, never from the snapshot the first request carries.
+     *
+     * `show` resolved every creative's media and ran the client view and the hide flags over the
+     * stored document for a live link too, and the page threw all of it away — first-paint cost on
+     * the one surface a client opens, for a payload nothing reads. The link's own facts (form,
+     * mode, branding, settings, sections) still arrive; the document does not.
+     */
+    public function test_a_live_link_does_no_snapshot_work_it_would_discard(): void
+    {
+        $this->report->update(['data' => ['kpis' => ['impressions' => 5000], 'platforms' => [['provider' => 'meta']]]]);
+        [, $snapshot] = app(ShareService::class)->create($this->report, ['mode' => 'snapshot'], null);
+        [, $live] = $this->share();
+
+        $this->assertNotEmpty(
+            $this->getJson("/api/v1/reports/shared/{$snapshot}")->assertOk()->json('data.data'),
+            'the snapshot link lost its document — this guard would pass for the wrong reason',
+        );
+
+        $res = $this->getJson("/api/v1/reports/shared/{$live}")->assertOk();
+        $this->assertSame('live', $res->json('data.mode'));
+        $this->assertSame([], $res->json('data.data'), 'a live link was sent the snapshot document it never renders');
+    }
 }
