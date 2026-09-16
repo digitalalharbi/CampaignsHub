@@ -108,6 +108,34 @@ describe('a detailed link', () => {
     expect(screen.getByTestId('live-weakest-content')).toBeInTheDocument()
   })
 
+  /*
+   * KPI → charts → platform table: measured locally at 1440×900, the dashboard's first chart sat at
+   * y=1383, two screens down, under the objective split, the comparison table and the leaders.
+   */
+  it('draws the charts before the platform table and the leaders', async () => {
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+
+    const charts = await screen.findByTestId('live-platforms')
+    const table = screen.getByTestId('live-platform-comparison')
+    const leaders = screen.getByTestId('live-objective-leaders')
+    expect(charts.compareDocumentPosition(table) & 4, 'the platform table came before the charts').toBeTruthy()
+    expect(charts.compareDocumentPosition(leaders) & 4, 'the leaders came before the charts').toBeTruthy()
+  })
+
+  it('prints direct against blended only where the two differ, as the summary does', async () => {
+    vi.mocked(fetchLiveShared).mockImplementation(async (_token, opts) => {
+      const data = payloadFor(opts.providers)
+      data.objective_performance.direct.spend = data.totals.spend
+      data.objective_performance.direct.cpa = 25
+
+      return { status: 200, envelope: { data } } as never
+    })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
+
+    await screen.findByTestId('live-mode-dashboard')
+    expect(screen.queryByTestId('live-objective-split'), 'one figure printed twice under two names').not.toBeInTheDocument()
+  })
+
   it('states the strongest and weakest platform per objective as figures, not a sentence', async () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />)
 
