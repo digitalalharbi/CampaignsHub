@@ -1,0 +1,131 @@
+name: Production Scope Cleanup
+
+# ACCOUNT-SCOPE-ISOLATION-001 — the ONE workflow that may write to Production's stored rows.
+#
+# It is deliberately separate from `production-diagnostics.yml`, which stays read-only and cannot
+# delete or queue anything. This one carries two commands and both are dry-run BY DEFAULT: without
+# the `apply` box ticked they print the full plan — table, month, count — and change nothing. The
+# plan is what a person reads before deciding; the decision is the tick.
+#
+#   scope-cleanup   remove or reassign ONE non-selected account's rows inside ONE project. Refuses an
+#                   account that is actively selected for the project; refuses to reassign without
+#                   exactly one active binding as provenance; audits what it did.
+#   resync-window   queue a re-fetch of ONE window for ONE actively bound account through the ordinary
+#                   sync job, which re-proves the binding before it fetches. The Snapchat 2026-08-16 →
+#                   2026-09-06 window (#460's landing-page-view mapping) is the first use.
+#
+# Manual only: no push trigger, no schedule. Inputs are VALUES passed to a fixed command; nothing
+# here builds a command from input. Output carries internal ids and counts, never a name or a url.
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'Which write path'
+        type: choice
+        required: true
+        options:
+          - scope-cleanup
+          - resync-window
+      project:
+        description: 'scope-cleanup: the project whose rows are being cleaned (uuid)'
+        required: false
+        default: ''
+      account:
+        description: 'Both: the account (uuid, ours)'
+        required: true
+      action:
+        description: 'scope-cleanup: remove | reassign'
+        type: choice
+        required: false
+        default: remove
+        options:
+          - remove
+          - reassign
+      grain:
+        description: 'scope-cleanup: all | structure | figures | commerce | runs'
+        type: choice
+        required: false
+        default: all
+        options:
+          - all
+          - structure
+          - figures
+          - commerce
+          - runs
+      from:
+        description: 'scope-cleanup: earliest month YYYY-MM · resync-window: window start YYYY-MM-DD'
+        required: false
+        default: ''
+      to:
+        description: 'scope-cleanup: latest month YYYY-MM · resync-window: window end YYYY-MM-DD'
+        required: false
+        default: ''
+      apply:
+        description: 'ACTUALLY WRITE. Unticked: dry run, the plan is printed and nothing changes.'
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: production-scope-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: inputs.command == 'scope-cleanup'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Scope cleanup on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          PROJECT: ${{ inputs.project }}
+          ACCOUNT: ${{ inputs.account }}
+          ACTION: ${{ inputs.action }}
+          GRAIN: ${{ inputs.grain }}
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to }}
+          APPLY: ${{ inputs.apply && '--apply' || '' }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: PROJECT,ACCOUNT,ACTION,GRAIN,FROM,TO,APPLY
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan integrations:scope-cleanup \
+                --project="${PROJECT}" --account="${ACCOUNT}" --action="${ACTION}" --grain="${GRAIN}" \
+                --from="${FROM}" --to="${TO}" ${APPLY}
+
+  resync:
+    if: inputs.command == 'resync-window'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Re-sync window on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          ACCOUNT: ${{ inputs.account }}
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to }}
+          APPLY: ${{ inputs.apply && '--apply' || '' }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: ACCOUNT,FROM,TO,APPLY
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan integrations:resync-window \
+                --account="${ACCOUNT}" --from="${FROM}" --to="${TO}" ${APPLY}
