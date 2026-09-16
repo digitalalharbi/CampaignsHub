@@ -248,6 +248,29 @@ final class ContentDefectCensusTest extends TestCase
         $this->assertStringNotContainsString('signature', $output);
     }
 
+    /**
+     * Found on Production: the first `--fetch` run died at the VPS's 128 MB limit, because every asset
+     * body was buffered whole. It asks for the first bytes only and reads no further — and a still
+     * whose header arrives first still judges as loaded.
+     */
+    public function test_fetch_asks_for_a_prefix_and_still_judges_a_large_image_by_its_header(): void
+    {
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+
+        Http::fake([
+            'cdn.test/large-signature.png' => Http::response($png.str_repeat("\0", 3_000_000), 200, ['Content-Type' => 'image/png']),
+            '*' => Http::response('unexpected', 500),
+        ]);
+
+        $this->spendOnlyCreative()->forceFill(['asset_url' => 'https://cdn.test/large-signature.png'])->save();
+
+        Artisan::call('content:census', ['--project' => (string) $this->project->getKey(), '--fetch' => true]);
+        $output = Artisan::output();
+
+        $this->assertStringContainsString('1 asset(s), 1 loaded', $output);
+        Http::assertSent(static fn ($request): bool => str_starts_with((string) ($request->header('Range')[0] ?? ''), 'bytes=0-'));
+    }
+
     /** Without the flag nothing is loaded — the default census stays a pure read of the database. */
     public function test_the_census_loads_nothing_unless_asked(): void
     {

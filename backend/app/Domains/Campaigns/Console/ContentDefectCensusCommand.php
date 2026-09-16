@@ -74,6 +74,9 @@ final class ContentDefectCensusCommand extends Command
     /** States that draw nothing by design — truthful, but still a creative with no picture. */
     private const ABSENCE_STATES = ['withheld', 'expired', 'never_fetched', 'shape_not_fetched', 'unavailable'];
 
+    /** How much of an asset is read to judge it: enough for a still's header, never the file. */
+    private const PREFIX_BYTES = 262_144;
+
     public function handle(): int
     {
         [$from, $to] = $this->window();
@@ -521,11 +524,20 @@ final class ContentDefectCensusCommand extends Command
                     $requests = [];
 
                     foreach ($remote as $i => $item) {
-                        $request = $pool->as((string) $i)->timeout(20)->withOptions(['allow_redirects' => true]);
-
-                        $requests[] = $item['what'] === 'video'
-                            ? $request->withHeaders(['Range' => 'bytes=0-1023'])->get($item['url'])
-                            : $request->get($item['url']);
+                        /*
+                         * STREAMED, and only the first bytes asked for — found on Production.
+                         *
+                         * The first `--fetch` run died on the VPS at 128 MB: every response body was
+                         * buffered whole, and a still can be megabytes and a film far more (a server
+                         * free to ignore `Range` sends the whole file). What is being judged — the
+                         * status, the content type, and whether a still's header decodes — lives in
+                         * the first few kilobytes, so that is all that is read.
+                         */
+                        $requests[] = $pool->as((string) $i)
+                            ->timeout(20)
+                            ->withOptions(['allow_redirects' => true, 'stream' => true])
+                            ->withHeaders(['Range' => 'bytes=0-'.(self::PREFIX_BYTES - 1)])
+                            ->get($item['url']);
                     }
 
                     return $requests;
@@ -547,6 +559,29 @@ final class ContentDefectCensusCommand extends Command
         return $out;
     }
 
+    /**
+     * At most PREFIX_BYTES of the body, read from the stream and then released — never the whole file.
+     */
+    private function prefix(Response $response): string
+    {
+        $body = $response->toPsrResponse()->getBody();
+        $read = '';
+
+        while (! $body->eof() && strlen($read) < self::PREFIX_BYTES) {
+            $chunk = $body->read(self::PREFIX_BYTES - strlen($read));
+
+            if ($chunk === '') {
+                break;
+            }
+
+            $read .= $chunk;
+        }
+
+        $body->close();
+
+        return $read;
+    }
+
     /** @param array{tag: string, what: string, url: string} $item */
     private function judge(array $item, Response $response): ?string
     {
@@ -566,7 +601,7 @@ final class ContentDefectCensusCommand extends Command
             return 'not an image (content type '.($type === '' ? 'none' : $type).')';
         }
 
-        return @getimagesizefromstring($response->body()) === false ? 'an image that does not decode' : null;
+        return @getimagesizefromstring($this->prefix($response)) === false ? 'an image that does not decode' : null;
     }
 
     /** @param array{tag: string, what: string, url: string} $item */
