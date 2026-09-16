@@ -156,7 +156,13 @@ final class ContentDefectCensusTest extends TestCase
         $section = $this->section('A');
 
         $this->assertStringContainsString((string) $bare->getKey(), $section);
-        $this->assertStringContainsString('unavailable', $section);
+        /*
+         * The RUNG, not the word. A first draft asserted «unavailable», and emptying the absence-state
+         * list left it passing — the fallback branch files the same creative as «state=unavailable
+         * (unrecognised)», which says the census does not know the state it is reporting.
+         */
+        $this->assertStringContainsString('state=unavailable — fetched, platform exposed no asset', $section);
+        $this->assertStringNotContainsString('(unrecognised)', $section);
         $this->assertStringNotContainsString((string) $drawn->getKey(), $section);
     }
 
