@@ -271,6 +271,8 @@ export interface LivePayload {
    * all there was.
    */
   ads_roster?: RosterRow[]
+  /** The weakest content, ranked on the same objective metric as `ads`, from the same list. */
+  ads_weakest?: ReportAd[]
   creatives_in_scope?: number | null
   creatives_withheld?: number | null
   /** `executive_summary` or `detailed` — the report's own depth, decided when it was created. */
@@ -383,6 +385,33 @@ export async function fetchLiveShared(
   })
   const body = await res.json()
   return { status: res.status, envelope: body }
+}
+
+/** One point of a content trend: a day, or a week on a long window. No figures when it did not deliver. */
+export type LiveContentPoint = Record<string, unknown> & { date: string; date_to: string; reported: boolean }
+
+export interface LiveContentPayload {
+  period: { from: string; to: string; days: number }
+  granularity: 'day' | 'week'
+  content: RosterRow
+  trend: LiveContentPoint[]
+}
+
+/** The platform → content drilldown: one creative by its share-bound key, inside the link's ceiling. */
+export async function fetchLiveContent(
+  token: string,
+  key: string,
+  opts: { from: string; to: string; password?: string },
+) {
+  const qs = new URLSearchParams({ from: opts.from, to: opts.to })
+  const res = await fetch(`/api/v1/reports/shared/${token}/live/content/${encodeURIComponent(key)}?${qs.toString()}`, {
+    headers: {
+      Accept: 'application/json',
+      ...(opts.password ? { 'X-Report-Password': opts.password } : {}),
+    },
+  })
+  const body = await res.json().catch(() => ({}))
+  return { status: res.status, envelope: body as { data?: LiveContentPayload; message?: string } }
 }
 
 // ---- Recommendation approval (report annotations) ----------------------------------------------

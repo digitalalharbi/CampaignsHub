@@ -33,6 +33,8 @@ import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/con
  */
 export type ReportAd = {
   id?: string
+  /** The share-bound handle the content drilldown opens this ad by — never an internal id. */
+  content_key?: string
   name?: string | null
   provider?: string | null
   objective?: string | null
@@ -461,7 +463,7 @@ function AdCard({
  * filling the ones the platform never measured with «—» is how a report teaches a client that half
  * its numbers are missing; these are the three that exist, in the order that answers «did it work».
  */
-function figuresFor(ad: ReportAd, ar: boolean, currency: string | null): { label: string; value: string }[] {
+export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null): { label: string; value: string }[] {
   const out: { label: string; value: string }[] = []
   const n = (v: number | null | undefined, digits = 0) =>
     v === null || v === undefined ? null : v.toLocaleString('en-US', { maximumFractionDigits: digits })

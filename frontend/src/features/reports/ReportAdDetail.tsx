@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { AdPoster } from '@/features/content/AdPoster'
 import { CreativeCarousel } from '@/features/content/CreativeCarousel'
 import { CreativeVideoPlayer } from '@/features/content/CreativeVideoPlayer'
@@ -37,11 +37,14 @@ export function ReportAdDetail({
   currency,
   locale,
   onClose,
+  children,
 }: {
   ad: ReportAd
   currency: string | null
   locale: Locale
   onClose: () => void
+  /** What a surface adds below the figures — the live link puts the content's own trend here. */
+  children?: ReactNode
 }) {
   const ar = locale === 'ar'
   const preview = ad.preview ?? null
@@ -173,6 +176,8 @@ export function ReportAdDetail({
             {ad.reason}
           </p>
         )}
+
+        {children}
       </div>
     </div>
   )
