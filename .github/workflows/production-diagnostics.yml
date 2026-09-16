@@ -106,6 +106,11 @@ on:
         type: boolean
         required: false
         default: false
+      content_fetch:
+        description: 'With content_census: also LOAD each promoted creative''s preview asset on the server (image decodes, video streams) and list the ones that do not load, by id. Fetches the CDN asset only; stores nothing; prints no url.'
+        type: boolean
+        required: false
+        default: false
       quarantine_sandbox:
         description: 'Report the sandbox rows sitting in LIVE accounts. Reports only; never deletes from this workflow.'
         type: boolean
@@ -321,13 +326,14 @@ jobs:
           PROJECT: ${{ inputs.content_project }}
           FROM: ${{ inputs.content_from }}
           TO: ${{ inputs.content_to }}
+          FETCH: ${{ inputs.content_fetch && '--fetch' || '' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
           command_timeout: 12m
-          envs: PROJECT,FROM,TO
+          envs: PROJECT,FROM,TO,FETCH
           script: |
             set -Eeuo pipefail
             cd /opt/campaignshub
@@ -337,4 +343,4 @@ jobs:
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan content:census \
-                --project="${PROJECT}" --from="${FROM}" --to="${TO}" --list="200"
+                --project="${PROJECT}" --from="${FROM}" --to="${TO}" --list="200" ${FETCH}

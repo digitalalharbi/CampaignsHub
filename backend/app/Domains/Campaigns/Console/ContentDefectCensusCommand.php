@@ -11,8 +11,12 @@ use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Console\Command;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Throwable;
 
 /**
  * Content Production Recovery — WHICH creatives are broken on Production, and where.
@@ -60,7 +64,8 @@ final class ContentDefectCensusCommand extends Command
         {--from= : Window start (YYYY-MM-DD). Default: 29 days before --to}
         {--to= : Window end (YYYY-MM-DD). Default: today}
         {--project= : One project. Omitted: every project that holds a creative}
-        {--list=40 : How many creative ids to print per finding before summarising the rest}';
+        {--list=40 : How many creative ids to print per finding before summarising the rest}
+        {--fetch : Also LOAD each promoted creative\'s preview asset on the server and report what came back — by id, never the url}';
 
     protected $description = 'Read-only: list the creatives whose preview, spend or objective metrics are missing, and the rung each breaks at.';
 
@@ -125,7 +130,9 @@ final class ContentDefectCensusCommand extends Command
         $grains = $metrics->byGrain($ids, $from, $to);
 
         /** @var array<string, array<string, list<string>>> $findings category => rung => ids */
-        $findings = ['A' => [], 'B' => [], 'C' => [], 'D' => []];
+        $findings = ['A' => [], 'B' => [], 'C' => [], 'D' => [], 'E' => []];
+        /** @var list<array{tag: string, what: string, url: string}> $toFetch */
+        $toFetch = [];
         $promoted = 0;
         $judgedPreview = 0;
 
@@ -164,6 +171,12 @@ final class ContentDefectCensusCommand extends Command
                 $findings['A']["kind={$kind}  state=available BUT NOTHING TO DRAW (unexplained blank)"][] = $tag;
             } elseif (! in_array($state, ['available'], true)) {
                 $findings['A']["kind={$kind}  state={$state} (unrecognised)"][] = $tag;
+            }
+
+            if ((bool) $this->option('fetch') && $delivered && $state === 'available') {
+                foreach ($this->assetsTheCardLoads($preview) as $what => $url) {
+                    $toFetch[] = ['tag' => $tag, 'what' => $what, 'url' => $url];
+                }
             }
 
             if ($figures === null) {
@@ -219,12 +232,27 @@ final class ContentDefectCensusCommand extends Command
             .'   at ad grain: '.count($grains['ad'])
             .'   BOTH grains: '.count(array_intersect_key($grains['creative'], $grains['ad'])));
 
+        $loaded = 0;
+        foreach ($this->fetch($toFetch) as [$item, $verdict]) {
+            if ($verdict === null) {
+                $loaded++;
+
+                continue;
+            }
+
+            $findings['E'][$item['what'].'  '.$verdict][] = $item['tag'];
+        }
+
         $titles = [
             'A' => 'A — NO PREVIEW / MEDIA (envelope draws nothing)',
             'B' => 'B — SPEND SHOWN, NO PERFORMANCE INDICATORS BESIDE IT',
             'C' => 'C — PERFORMANCE INDICATORS SHOWN, NO SPEND',
             'D' => 'D — OBJECTIVE METRIC MISSING ON THE CARD THOUGH THE CREATIVE ANSWERS IT',
         ];
+
+        if ((bool) $this->option('fetch')) {
+            $titles['E'] = 'E — PREVIEW ASSET DOES NOT LOAD (fetched on the server: '.count($toFetch).' asset(s), '.$loaded.' loaded)';
+        }
 
         foreach ($titles as $category => $title) {
             $total = array_sum(array_map('count', $findings[$category]));
@@ -255,6 +283,132 @@ final class ContentDefectCensusCommand extends Command
                 }
             }
         }
+    }
+
+    /**
+     * The assets a card LOADS for an available preview, keyed by what they are for.
+     *
+     * Mirrors `adPreview.ts`: a still (the image, else the thumbnail) drawn as an `<img>`, and for a
+     * film the video the player streams — a film with no still is played rather than blanked, so the
+     * video itself is what must load. A catalog ad has no fixed asset by design and loads nothing.
+     *
+     * @param  array<string, mixed>  $preview
+     * @return array<string, string>
+     */
+    private function assetsTheCardLoads(array $preview): array
+    {
+        if ((string) ($preview['kind'] ?? '') === 'catalog') {
+            return [];
+        }
+
+        $out = [];
+        $still = $preview['image_url'] ?? $preview['thumbnail_url'] ?? null;
+
+        if (is_string($still) && $still !== '') {
+            $out['still'] = $still;
+        }
+
+        if (is_string($preview['video_url'] ?? null) && $preview['video_url'] !== '') {
+            $out['video'] = (string) $preview['video_url'];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Load every asset, a few at a time, and say what is wrong with each one that does not load.
+     *
+     * A verdict of null is «loaded and usable». Anything else names the failure — the HTTP status,
+     * a content type that is not the medium the card asked for, or a still the browser could not
+     * decode — and never the address, which carries the signature that makes it work.
+     *
+     * @param  list<array{tag: string, what: string, url: string}>  $items
+     * @return list<array{0: array{tag: string, what: string, url: string}, 1: string|null}>
+     */
+    private function fetch(array $items): array
+    {
+        $out = [];
+
+        foreach (array_chunk($items, 8) as $chunk) {
+            $remote = [];
+
+            foreach ($chunk as $i => $item) {
+                if (str_starts_with($item['url'], 'data:')) {
+                    $out[] = [$item, $this->judgeInline($item)];
+
+                    continue;
+                }
+
+                $remote[$i] = $item;
+            }
+
+            if ($remote === []) {
+                continue;
+            }
+
+            try {
+                $responses = Http::pool(function (Pool $pool) use ($remote): array {
+                    $requests = [];
+
+                    foreach ($remote as $i => $item) {
+                        $request = $pool->as((string) $i)->timeout(20)->withOptions(['allow_redirects' => true]);
+
+                        $requests[] = $item['what'] === 'video'
+                            ? $request->withHeaders(['Range' => 'bytes=0-1023'])->get($item['url'])
+                            : $request->get($item['url']);
+                    }
+
+                    return $requests;
+                });
+            } catch (Throwable) {
+                foreach ($remote as $item) {
+                    $out[] = [$item, 'request failed'];
+                }
+
+                continue;
+            }
+
+            foreach ($remote as $i => $item) {
+                $response = $responses[(string) $i] ?? null;
+                $out[] = [$item, $response instanceof Response ? $this->judge($item, $response) : 'request failed (no response)'];
+            }
+        }
+
+        return $out;
+    }
+
+    /** @param array{tag: string, what: string, url: string} $item */
+    private function judge(array $item, Response $response): ?string
+    {
+        if (! $response->successful()) {
+            return 'http '.$response->status();
+        }
+
+        $type = strtolower(trim(explode(';', (string) $response->header('Content-Type'))[0]));
+
+        if ($item['what'] === 'video') {
+            return str_starts_with($type, 'video/') || $type === 'application/octet-stream' || $type === 'binary/octet-stream'
+                ? null
+                : 'not a video (content type '.($type === '' ? 'none' : $type).')';
+        }
+
+        if (! str_starts_with($type, 'image/')) {
+            return 'not an image (content type '.($type === '' ? 'none' : $type).')';
+        }
+
+        return @getimagesizefromstring($response->body()) === false ? 'an image that does not decode' : null;
+    }
+
+    /** @param array{tag: string, what: string, url: string} $item */
+    private function judgeInline(array $item): ?string
+    {
+        if (preg_match('#^data:(image/[a-z0-9.+-]+);base64,(.*)$#is', $item['url'], $m) !== 1) {
+            return 'inline data that is not a base64 image';
+        }
+
+        $bytes = base64_decode($m[2], true);
+
+        return $bytes === false || @getimagesizefromstring($bytes) === false ? 'an inline image that does not decode' : null;
     }
 
     /**

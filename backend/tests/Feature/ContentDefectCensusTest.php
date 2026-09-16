@@ -19,6 +19,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -194,6 +195,66 @@ final class ContentDefectCensusTest extends TestCase
         $this->assertStringNotContainsString('Must Not Print', $output);
     }
 
+    /**
+     * E — the load-time blank the stored envelope cannot see.
+     *
+     * A preview can say `available` and hand the browser a link that answers 403, or a page instead of
+     * a picture. Only loading it tells the two apart, and the census does that on the server — for the
+     * PROMOTED creatives a reader is looking at, never printing the address it loaded.
+     */
+    public function test_fetch_names_the_promoted_creatives_whose_asset_does_not_load(): void
+    {
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+
+        Http::fake([
+            'cdn.test/ok-signature.png' => Http::response($png, 200, ['Content-Type' => 'image/png']),
+            'cdn.test/forbidden-signature.jpg' => Http::response('denied', 403, ['Content-Type' => 'text/plain']),
+            'cdn.test/page-signature.jpg' => Http::response('<html></html>', 200, ['Content-Type' => 'text/html; charset=utf-8']),
+            'cdn.test/film-signature.mp4' => Http::response('....', 206, ['Content-Type' => 'video/mp4']),
+            '*' => Http::response('unexpected', 500),
+        ]);
+
+        $ok = $this->spendOnlyCreative();
+        $ok->forceFill(['asset_url' => 'https://cdn.test/ok-signature.png', 'video_url' => 'https://cdn.test/film-signature.mp4'])->save();
+
+        $forbidden = $this->spendOnlyCreative();
+        $forbidden->forceFill(['asset_url' => 'https://cdn.test/forbidden-signature.jpg'])->save();
+
+        $page = $this->spendOnlyCreative();
+        $page->forceFill(['asset_url' => 'https://cdn.test/page-signature.jpg'])->save();
+
+        // Never delivered in the window: not what a reader is looking at, so not loaded at all.
+        $idle = $this->creative(['asset_url' => 'https://cdn.test/idle-signature.jpg']);
+
+        Artisan::call('content:census', ['--project' => (string) $this->project->getKey(), '--fetch' => true]);
+        $output = Artisan::output();
+        $section = $this->section('E', $output);
+
+        $this->assertStringContainsString('still  http 403', $section);
+        $this->assertStringContainsString((string) $forbidden->getKey(), $section);
+        $this->assertStringContainsString('not an image (content type text/html)', $section);
+        $this->assertStringContainsString((string) $page->getKey(), $section);
+        $this->assertStringNotContainsString((string) $ok->getKey(), $section, 'a loaded image and a playable film were reported as broken');
+        // Four assets: the working creative's still AND its film, and one still each for the two broken ones.
+        $this->assertStringContainsString('4 asset(s), 2 loaded', $output);
+
+        Http::assertNotSent(static fn ($request): bool => str_contains((string) $request->url(), 'idle-signature'));
+        $this->assertStringNotContainsString('signature', $output);
+    }
+
+    /** Without the flag nothing is loaded — the default census stays a pure read of the database. */
+    public function test_the_census_loads_nothing_unless_asked(): void
+    {
+        Http::fake();
+
+        $this->spendOnlyCreative()->forceFill(['asset_url' => 'https://cdn.test/ok-signature.png'])->save();
+
+        $output = $this->census();
+
+        Http::assertNothingSent();
+        $this->assertStringNotContainsString('E — ', $output);
+    }
+
     // ── fixtures ─────────────────────────────────────────────────────────────────────────────────
 
     private function census(): string
@@ -208,7 +269,7 @@ final class ContentDefectCensusTest extends TestCase
     {
         $output ??= $this->census();
 
-        if (preg_match('/^'.$category.' — .*?(?=^[A-D] — |\z)/ms', $output, $m) !== 1) {
+        if (preg_match('/^'.$category.' — .*?(?=^[A-E] — |\z)/ms', $output, $m) !== 1) {
             $this->fail("The census printed no section {$category}:\n".$output);
         }
 
