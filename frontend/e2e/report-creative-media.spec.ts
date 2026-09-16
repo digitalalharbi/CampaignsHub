@@ -1,5 +1,4 @@
 import { expect, test, type Page } from '@playwright/test'
-import { E2E_ORIGIN } from './helpers'
 
 /**
  * REPORT-CREATIVE-MEDIA-001 — the report's rows say about a creative what the product knows.
@@ -26,31 +25,41 @@ import { E2E_ORIGIN } from './helpers'
  */
 const TOKEN = 'demo-live-report-token'
 
-/** What the live payload says about each roster creative, in payload order. */
-async function payloadStates(page: Page): Promise<string[]> {
-  const body = await page.evaluate(async (origin) => {
-    const r = await fetch(`${origin}/api/v1/reports/shared/${'demo-live-report-token'}/live`)
+/** What the live payload says about each roster creative, keyed by the handle the page opens it by. */
+async function payloadStates(page: Page): Promise<Map<string, string>> {
+  // Relative to the page: the report and its API are one origin wherever this runs.
+  const body = await page.evaluate(async () => {
+    const r = await fetch('/api/v1/reports/shared/demo-live-report-token/live')
 
     return r.ok ? await r.json() : null
-  }, E2E_ORIGIN)
+  })
 
   const report = body?.data?.data ?? body?.data ?? null
 
   expect(report, 'the live payload could not be read').not.toBeNull()
 
-  return (report.ads_roster ?? []).map((row: { preview?: { state?: string } }) =>
-    row?.preview?.state ?? 'NO_PREVIEW_KEY')
+  return new Map((report.ads_roster ?? []).map((row: { content_key?: string; preview?: { state?: string } }) =>
+    [row?.content_key ?? 'NO_KEY', row?.preview?.state ?? 'NO_PREVIEW_KEY'] as [string, string]))
 }
 
-/** What each roster row actually drew, in page order: an image, or the reason it could not. */
-async function drawnStates(page: Page): Promise<string[]> {
+/**
+ * What each content tile actually drew — an image, or the reason it could not — by its content key.
+ *
+ * The roster moved from the bottom of one long page into the Content mode, and it is matched by KEY
+ * rather than by position: the page lets a client re-sort it, and a positional comparison would pass
+ * or fail on the sort order rather than on the media.
+ */
+async function drawnStates(page: Page): Promise<Array<[string, string]>> {
   return page.evaluate(() => {
-    const out: string[] = []
+    const out: Array<[string, string]> = []
 
-    document.querySelectorAll('[data-testid^="report-roster-poster-"]').forEach((el) => {
-      /* The absence span and its inner label share the prefix; only the outer one carries the reason. */
-      if (el.tagName === 'IMG') out.push('IMAGE')
-      else if (el.hasAttribute('data-absence')) out.push(el.getAttribute('data-absence') ?? '')
+    document.querySelectorAll('[data-testid="live-content-all"] [data-testid="live-content-tile"]').forEach((tile) => {
+      const key = tile.getAttribute('data-content-key') ?? 'NO_KEY'
+      if (tile.querySelector('img[data-testid="live-content-poster"]')) out.push([key, 'IMAGE'])
+      else {
+        const absent = tile.querySelector('[data-testid="live-content-poster-absent"]')
+        out.push([key, absent?.getAttribute('data-absence') ?? 'NOTHING_DRAWN'])
+      }
     })
 
     return out
@@ -67,36 +76,33 @@ test.describe('the report says about a creative what the product knows', () => {
           await page.addInitScript(() => window.localStorage.setItem('campaign-hub-locale', 'en'))
         }
 
-        await page.goto(`/r/${TOKEN}`)
-        await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 30000 })
+        await page.goto(`/r/${TOKEN}?view=content`)
+        await expect(page.getByTestId('live-content-all')).toBeVisible({ timeout: 30000 })
         await page.waitForLoadState('networkidle')
 
         const states = await payloadStates(page)
         const drawn = await drawnStates(page)
 
-        expect(states.length, 'the report listed no creatives, so this proves nothing').toBeGreaterThan(0)
-        expect(drawn.length, 'the roster drew no posters at all').toBeGreaterThan(0)
+        expect(states.size, 'the report listed no creatives, so this proves nothing').toBeGreaterThan(0)
+        expect(drawn.length, 'the content inventory drew no tiles at all').toBeGreaterThan(0)
 
         /*
          * NO row may be missing its envelope. This is the defect itself: the roster carried none,
          * so every row fell to the renderer's most pessimistic reading.
          */
         expect(
-          states.filter((s) => s === 'NO_PREVIEW_KEY').length,
+          [...states.values()].filter((s) => s === 'NO_PREVIEW_KEY').length,
           'roster rows arrived with no preview envelope — the renderer then claims «no file» about '
           + 'a creative nobody asked it about, in a document the client keeps',
         ).toBe(0)
 
-        /*
-         * And what was drawn follows from what was said. The page renders a bounded first page of
-         * the roster, so the drawn rows are compared against the payload rows they correspond to.
-         */
-        const expected = states.slice(0, drawn.length).map((s) => (s === 'available' ? 'IMAGE' : s))
-
-        expect(
-          drawn,
-          'a roster row drew something other than what the payload says about that creative',
-        ).toEqual(expected)
+        /* And what was drawn follows from what was said about THAT creative. */
+        for (const [key, shown] of drawn) {
+          expect(states.has(key), `a tile carries a key the payload does not know: ${key}`).toBe(true)
+          const said = states.get(key)
+          expect(shown, `content ${key} drew something other than what the payload says about it`)
+            .toBe(said === 'available' ? 'IMAGE' : said)
+        }
       })
     }
   }
