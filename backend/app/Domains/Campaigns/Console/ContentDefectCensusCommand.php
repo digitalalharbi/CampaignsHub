@@ -264,6 +264,8 @@ final class ContentDefectCensusCommand extends Command
             .'   at ad grain: '.count($grains['ad'])
             .'   BOTH grains: '.count(array_intersect_key($grains['creative'], $grains['ad'])));
 
+        $this->accountScope($projectId, $from, $to);
+
         $loaded = 0;
         foreach ($this->fetch($toFetch) as [$item, $verdict]) {
             if ($verdict === null) {
@@ -349,6 +351,46 @@ final class ContentDefectCensusCommand extends Command
                 $this->line('      '.$creativeId.'  '.$line);
             }
         }
+    }
+
+    /**
+     * Rows this project holds whose ad account is NOT one the project is bound to — the Owner's
+     * observation that unselected accounts' data reaches results. Counts per table and provider, with
+     * an unattributable (null) account said apart. Never an id, name or amount. Figures here are the
+     * ones every section above is computed from, so a non-zero count means those sections may be
+     * inflated until the account-scope lane reports.
+     */
+    private function accountScope(string $projectId, Carbon $from, Carbon $to): void
+    {
+        $active = DB::table('project_integration_bindings')->where('project_id', $projectId)->where('is_active', true)
+            ->pluck('external_account_id')->map(static fn (mixed $v): string => (string) $v)->all();
+        $inactive = DB::table('project_integration_bindings')->where('project_id', $projectId)->where('is_active', false)
+            ->pluck('external_account_id')->map(static fn (mixed $v): string => (string) $v)->all();
+
+        $this->line('  accounts  : bound active '.count($active).', bound inactive '.count(array_diff($inactive, $active)));
+
+        $window = [$from->toDateString(), $to->toDateString()];
+        $report = function (string $label, $query, string $accountColumn, string $providerColumn = 'provider') use ($active): void {
+            $rows = $query->selectRaw($providerColumn.' AS provider, '
+                ."COUNT(*) FILTER (WHERE {$accountColumn} IS NULL) AS no_account, "
+                .'COUNT(*) FILTER (WHERE '.$accountColumn.' IS NOT NULL'.($active === [] ? '' : ' AND '.$accountColumn.'::text NOT IN ('.implode(',', array_fill(0, count($active), '?')).')').') AS outside, '
+                .'COUNT(*) AS total', $active)
+                ->groupBy($providerColumn)->orderBy($providerColumn)->get();
+
+            foreach ($rows as $r) {
+                $this->line(sprintf('    %-24s %-10s rows %d — account outside the bound set %d, no account %d',
+                    $label, (string) $r->provider, (int) $r->total, (int) $r->outside, (int) $r->no_account));
+            }
+        };
+
+        $report('daily_metrics', DB::table('daily_metrics')->where('project_id', $projectId)->whereBetween('metric_date', $window), 'external_account_id');
+        $report('entity_daily_metrics', DB::table('entity_daily_metrics')->where('project_id', $projectId)->whereBetween('metric_date', $window), 'external_account_id');
+        $report('external_campaigns', DB::table('external_campaigns')->where('project_id', $projectId), 'external_account_id');
+        $report('creative_daily_metrics', DB::table('creative_daily_metrics AS m')
+            ->join('external_creatives AS c', 'c.id', '=', 'm.creative_id')
+            ->leftJoin('external_campaigns AS e', 'e.id', '=', 'c.external_campaign_id')
+            ->where('m.project_id', $projectId)->whereBetween('m.metric_date', $window)
+            ->select([]), 'e.external_account_id', 'c.provider');
     }
 
     /**
