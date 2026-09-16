@@ -29,7 +29,8 @@ use Illuminate\Support\Facades\DB;
 final class SnapchatLpvProvenanceCommand extends Command
 {
     protected $signature = 'content:lpv-provenance
-        {--hours=48 : How far back to read Snapchat metric runs to measure the sweep\'s reach}';
+        {--hours=48 : How far back to read Snapchat metric runs to measure the sweep\'s reach}
+        {--runs=2 : How many of the latest Snapchat metric runs to read retained bodies from}';
 
     protected $description = 'Read-only: count stored Snapchat ad-grain landing-page-view rows from the old pixel mapping, by date, against the sweep\'s measured reach.';
 
@@ -66,6 +67,8 @@ final class SnapchatLpvProvenanceCommand extends Command
             ->orderBy('entity_type')
             ->orderBy('month')
             ->get();
+
+        $this->deliveryFieldPresence(max(1, (int) ($this->option('runs') ?: 2)));
 
         $this->line('');
 
@@ -109,5 +112,117 @@ final class SnapchatLpvProvenanceCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Does Snapchat send the fields at all, for this estate, NOW? Read from the retained bodies of the
+     * latest runs (by `sync_run_id`, indexed; 5 bodies per query), counting per stat type how each
+     * point carried `landing_page_views` (the delivery metric) and `conversion_page_views` (the pixel
+     * event): key absent, JSON null, zero, positive. Counts only.
+     */
+    private function deliveryFieldPresence(int $runs): void
+    {
+        $runIds = DB::table('metric_sync_runs')
+            ->where('provider', 'snapchat')
+            ->orderByDesc('created_at')
+            ->limit($runs)
+            ->pluck('id')
+            ->map(static fn (mixed $v): string => (string) $v)
+            ->all();
+
+        $this->line('');
+        $this->line(sprintf('  retained bodies of the latest %d Snapchat metric run(s) — how each point carried the field', count($runIds)));
+
+        /** @var array<string, array<string, array{absent: int, null: int, zero: int, positive: int}>> $tally type => field => state */
+        $tally = [];
+        $bodies = 0;
+        $fields = ['landing_page_views', 'conversion_page_views'];
+
+        DB::statement("SET statement_timeout = '20s'");
+
+        try {
+            foreach ($runIds as $runId) {
+                $lastId = '00000000-0000-0000-0000-000000000000';
+                do {
+                    $chunk = DB::table('integration_raw_payloads')
+                        ->where('sync_run_id', $runId)
+                        ->where('resource', 'insights')
+                        ->where('id', '>', $lastId)
+                        ->orderBy('id')
+                        ->limit(5)
+                        ->get(['id', 'payload']);
+
+                    foreach ($chunk as $body) {
+                        $lastId = (string) $body->id;
+                        $bodies++;
+                        $decoded = json_decode((string) $body->payload, true);
+
+                        if (is_array($decoded)) {
+                            $this->walk($decoded, 'unknown', $fields, $tally);
+                        }
+                    }
+                } while ($chunk->count() === 5 && $bodies < 5000);
+            }
+        } catch (\Throwable $e) {
+            $this->line('    the read failed ('.class_basename($e).' '.$e->getCode().')');
+        } finally {
+            DB::statement('RESET statement_timeout');
+        }
+
+        $this->line(sprintf('    bodies read: %d', $bodies));
+
+        if ($tally === []) {
+            $this->line('    no point in those bodies');
+
+            return;
+        }
+
+        ksort($tally);
+        foreach ($tally as $type => $byField) {
+            foreach ($fields as $field) {
+                $t = $byField[$field] ?? ['absent' => 0, 'null' => 0, 'zero' => 0, 'positive' => 0];
+                $this->line(sprintf(
+                    '    %-10s %-22s key absent %d, JSON null %d, zero %d, positive %d',
+                    $type, $field, $t['absent'], $t['null'], $t['zero'], $t['positive'],
+                ));
+            }
+        }
+    }
+
+    /**
+     * @param  array<mixed>  $node
+     * @param  list<string>  $fields
+     * @param  array<string, array<string, array{absent: int, null: int, zero: int, positive: int}>>  $tally
+     */
+    private function walk(array $node, string $type, array $fields, array &$tally): void
+    {
+        $type = is_string($node['type'] ?? null) ? strtolower($node['type']) : $type;
+
+        if (is_array($node['timeseries'] ?? null)) {
+            foreach ($node['timeseries'] as $point) {
+                $stats = is_array($point) && is_array($point['stats'] ?? null) ? $point['stats'] : null;
+
+                if ($stats === null) {
+                    continue;
+                }
+
+                foreach ($fields as $field) {
+                    $state = match (true) {
+                        ! array_key_exists($field, $stats) => 'absent',
+                        $stats[$field] === null => 'null',
+                        (float) $stats[$field] === 0.0 => 'zero',
+                        default => 'positive',
+                    };
+                    $tally[$type][$field] ??= ['absent' => 0, 'null' => 0, 'zero' => 0, 'positive' => 0];
+                    $tally[$type][$field][$state]++;
+                }
+            }
+        }
+
+        foreach ($node as $key => $child) {
+            if (is_array($child) && $key !== 'timeseries') {
+                $this->walk($child, $type, $fields, $tally);
+            }
+        }
     }
 }
