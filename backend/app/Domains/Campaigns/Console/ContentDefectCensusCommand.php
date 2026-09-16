@@ -217,7 +217,8 @@ final class ContentDefectCensusCommand extends Command
 
                     if ($lost !== []) {
                         $findings['D']['family='.$metrics->familyFor($objective)->value.'  card read grain='.$grain
-                            .'  answered only at the other grain: '.implode(', ', $lost)][] = $tag;
+                            .'  answered only at the other grain: '.implode(', ', $lost)
+                            .$this->whyNotFilled($figures, $other)][] = $tag;
                     }
                 }
             }
@@ -283,6 +284,31 @@ final class ContentDefectCensusCommand extends Command
                 }
             }
         }
+    }
+
+    /**
+     * Why `forCreatives()` did not take a metric the other grain answers — so the next fix is chosen by
+     * the data, not guessed. Days covered by each grain (the coverage rule), whether the card's own
+     * spend is converted, withheld or absent (a cost-per needs converted spend), and whether its own
+     * conversions were reported. States only, never amounts.
+     *
+     * @param  array<string, mixed>  $figures
+     * @param  array<string, mixed>  $other
+     */
+    private function whyNotFilled(array $figures, array $other): string
+    {
+        $mine = (int) ($figures['active_days'] ?? 0);
+        $theirs = (int) ($other['active_days'] ?? 0);
+
+        $spend = match (true) {
+            ($figures['spend'] ?? null) !== null => 'converted',
+            (int) ($figures['spend_withheld_rows'] ?? 0) > 0 => 'withheld',
+            default => 'absent',
+        };
+
+        return '  [days: card '.$mine.', other '.$theirs.($theirs < $mine ? ' — fewer, so not filled' : '')
+            .'; card spend '.$spend
+            .'; card conversions '.(($figures['conversions'] ?? null) !== null ? 'reported' : 'absent').']';
     }
 
     /**

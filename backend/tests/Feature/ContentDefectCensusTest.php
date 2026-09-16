@@ -123,6 +123,9 @@ final class ContentDefectCensusTest extends TestCase
         $this->assertStringContainsString((string) $creative->getKey(), $section);
         $this->assertStringContainsString('leads', $section);
         $this->assertStringContainsString('card read grain=creative', $section);
+        // And WHY the product did not take them: the ads cover one day against the card's two.
+        $this->assertStringContainsString('days: card 2, other 1 — fewer, so not filled', $section);
+        $this->assertStringContainsString('card spend converted', $section);
         $this->assertStringNotContainsString((string) $creative->getKey(), $this->section('C'));
     }
 
