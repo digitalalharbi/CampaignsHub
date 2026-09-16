@@ -486,6 +486,26 @@ final class CreativeMetrics
     }
 
     /**
+     * Whether a ratio is absent here because its denominator was REPORTED as zero — cost per nothing.
+     *
+     * A CPA over zero orders is not a missing figure the other grain «answers»; it is a figure that
+     * does not exist for this row, and «—» is its truthful reading. The content census asks this so it
+     * does not report an arithmetic absence as a lost metric.
+     *
+     * @param  array<string, mixed>  $figures
+     */
+    public function undefinedOverAReportedZero(array $figures, string $key): bool
+    {
+        if (! isset(self::RATIO_INPUTS[$key])) {
+            return false;
+        }
+
+        $denominator = self::RATIO_INPUTS[$key][1];
+
+        return is_numeric($figures[$denominator] ?? null) && (float) $figures[$denominator] === 0.0;
+    }
+
+    /**
      * Whether a surface can STATE this figure for this row — the card's own test, made askable.
      *
      * Delegates to the private rule `headline()` filters by, including the money contract's withheld

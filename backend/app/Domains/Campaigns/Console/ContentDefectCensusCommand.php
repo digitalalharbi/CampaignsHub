@@ -74,6 +74,9 @@ final class ContentDefectCensusCommand extends Command
     /** States that draw nothing by design — truthful, but still a creative with no picture. */
     private const ABSENCE_STATES = ['withheld', 'expired', 'never_fetched', 'shape_not_fetched', 'unavailable'];
 
+    /** How much of an asset is read to judge it: enough for a still's header, never the file. */
+    private const PREFIX_BYTES = 262_144;
+
     public function handle(): int
     {
         [$from, $to] = $this->window();
@@ -137,6 +140,8 @@ final class ContentDefectCensusCommand extends Command
         $toFetch = [];
         /** @var list<string> $zeroOriginal */
         $zeroOriginal = [];
+        /** @var array<string, array<string, true>> $overZero ratio => creative ids whose own grain reported its denominator as zero */
+        $overZero = [];
         $promoted = 0;
         $judgedPreview = 0;
 
@@ -219,6 +224,18 @@ final class ContentDefectCensusCommand extends Command
                             continue;
                         }
 
+                        /*
+                         * A ratio over a denominator this card's grain REPORTED as zero is cost per
+                         * nothing — «—» is its truthful reading, not a metric the other grain restores.
+                         * The Production run after #456 counted 46 sales creatives here whose own
+                         * rows state zero orders beside converted spend.
+                         */
+                        if ($metrics->undefinedOverAReportedZero($figures, $key)) {
+                            $overZero[$key][$id] = true;
+
+                            continue;
+                        }
+
                         if (! $metrics->statable($figures, $key) && $metrics->statable($other, $key)) {
                             $lost[] = $key;
                         }
@@ -298,6 +315,15 @@ final class ContentDefectCensusCommand extends Command
             }
         }
 
+        if ($overZero !== []) {
+            $this->line('');
+            $this->line('NOT A DEFECT — a ratio over a denominator the card\'s own grain REPORTED as zero (cost per nothing; «—» is truthful)');
+
+            foreach ($overZero as $ratio => $creatives) {
+                $this->line('  ▸ '.$ratio.'  — '.count($creatives).' creative(s)');
+            }
+        }
+
         if ((bool) $this->option('raw')) {
             $this->line('');
             $this->line('C EVIDENCE — how the provider sent spend for the zero-original creatives (retained bodies, window only)');
@@ -344,17 +370,47 @@ final class ContentDefectCensusCommand extends Command
         /** @var array<string, array<string, array{spend: string, delivered: bool}>> $points ad => date => state */
         $points = [];
 
+        /*
+         * Bounded before any text match, on a live database: the provider, the accounts bound to this
+         * project, the insights resource and the window narrow the rows first; a statement timeout and
+         * a hard limit cap the rest. A scan of the whole raw-payload table is the wrong load to put on
+         * Production for a diagnostic.
+         */
+        DB::statement("SET statement_timeout = '60s'");
+
+        $accounts = DB::table('project_integration_bindings')
+            ->where('project_id', (string) app(ProjectContext::class)->projectId())
+            ->pluck('external_account_id')
+            ->filter()
+            ->map(static fn (mixed $v): string => (string) $v)
+            ->all();
+
         IntegrationRawPayload::withoutGlobalScopes()
             ->whereIn('provider', $ads->pluck('provider')->unique()->values()->all())
+            ->whereIn('external_account_id', $accounts === [] ? ['00000000-0000-0000-0000-000000000000'] : $accounts)
             ->where('resource', 'insights')
             ->where('window_end', '>=', $from->toDateString())
             ->where('window_start', '<=', $to->toDateString())
+            /*
+             * Selected by the ADS it names, not by recency — found on Production. The walk read the
+             * newest 2,000 bodies, which with a per-campaign ad-stats call every thirty minutes is
+             * about a day, and answered «no retained body carries these ads» for all twelve creatives
+             * whose zero rows were older. A text match on the ads' own ids reaches every body that
+             * can say anything about them, and nothing else is decoded.
+             */
+            ->where(function ($query) use ($creativeByAd): void {
+                foreach (array_keys($creativeByAd) as $adId) {
+                    $query->orWhereRaw('payload::text LIKE ?', ['%'.addcslashes($adId, '%_\\').'%']);
+                }
+            })
             ->orderByDesc('fetched_at')
-            ->limit(2000)
+            ->limit(3000)
             ->cursor()
             ->each(function (IntegrationRawPayload $raw) use (&$points, $creativeByAd, $from, $to): void {
                 $this->walkForAds((array) $raw->payload, $creativeByAd, $points, $from, $to);
             });
+
+        DB::statement('RESET statement_timeout');
 
         $out = [];
         foreach ($creativeIds as $creativeId) {
@@ -521,11 +577,20 @@ final class ContentDefectCensusCommand extends Command
                     $requests = [];
 
                     foreach ($remote as $i => $item) {
-                        $request = $pool->as((string) $i)->timeout(20)->withOptions(['allow_redirects' => true]);
-
-                        $requests[] = $item['what'] === 'video'
-                            ? $request->withHeaders(['Range' => 'bytes=0-1023'])->get($item['url'])
-                            : $request->get($item['url']);
+                        /*
+                         * STREAMED, and only the first bytes asked for — found on Production.
+                         *
+                         * The first `--fetch` run died on the VPS at 128 MB: every response body was
+                         * buffered whole, and a still can be megabytes and a film far more (a server
+                         * free to ignore `Range` sends the whole file). What is being judged — the
+                         * status, the content type, and whether a still's header decodes — lives in
+                         * the first few kilobytes, so that is all that is read.
+                         */
+                        $requests[] = $pool->as((string) $i)
+                            ->timeout(20)
+                            ->withOptions(['allow_redirects' => true, 'stream' => true])
+                            ->withHeaders(['Range' => 'bytes=0-'.(self::PREFIX_BYTES - 1)])
+                            ->get($item['url']);
                     }
 
                     return $requests;
@@ -547,6 +612,29 @@ final class ContentDefectCensusCommand extends Command
         return $out;
     }
 
+    /**
+     * At most PREFIX_BYTES of the body, read from the stream and then released — never the whole file.
+     */
+    private function prefix(Response $response): string
+    {
+        $body = $response->toPsrResponse()->getBody();
+        $read = '';
+
+        while (! $body->eof() && strlen($read) < self::PREFIX_BYTES) {
+            $chunk = $body->read(self::PREFIX_BYTES - strlen($read));
+
+            if ($chunk === '') {
+                break;
+            }
+
+            $read .= $chunk;
+        }
+
+        $body->close();
+
+        return $read;
+    }
+
     /** @param array{tag: string, what: string, url: string} $item */
     private function judge(array $item, Response $response): ?string
     {
@@ -566,7 +654,7 @@ final class ContentDefectCensusCommand extends Command
             return 'not an image (content type '.($type === '' ? 'none' : $type).')';
         }
 
-        return @getimagesizefromstring($response->body()) === false ? 'an image that does not decode' : null;
+        return @getimagesizefromstring($this->prefix($response)) === false ? 'an image that does not decode' : null;
     }
 
     /** @param array{tag: string, what: string, url: string} $item */

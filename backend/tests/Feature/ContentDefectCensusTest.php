@@ -132,6 +132,29 @@ final class ContentDefectCensusTest extends TestCase
         $this->assertStringNotContainsString((string) $creative->getKey(), $this->section('C'));
     }
 
+    /**
+     * Not a defect: a CPA over zero orders. Production after #456 counted 46 sales creatives under D
+     * whose own rows state converted spend and zero orders, while their ads (over fewer days) report
+     * purchases. Cost per nothing is «—» truthfully, and the coverage rule rightly refuses the
+     * mixed-period fill — so the census names them apart instead of calling them lost metrics.
+     */
+    public function test_a_ratio_over_a_reported_zero_is_not_filed_under_d(): void
+    {
+        $creative = $this->creative([
+            'campaign_id' => $this->unified('sales')->getKey(),
+            'asset_url' => 'data:image/png;base64,AAAA',
+        ]);
+        $this->creativeRow($creative, ['spend' => 50.0, 'impressions' => 4_000, 'clicks' => 60, 'conversions' => 0]);
+        $this->creativeRow($creative, ['spend' => 50.0, 'impressions' => 4_000, 'clicks' => 60, 'conversions' => 0], Carbon::today()->subDays(2));
+        $this->adRow($creative, ['spend' => 60.0, 'impressions' => 5_000, 'clicks' => 70, 'conversions' => 4, 'revenue' => 400.0]);
+
+        $output = $this->census();
+
+        $this->assertStringNotContainsString('cpa, aov', $this->section('D', $output));
+        $this->assertStringContainsString('NOT A DEFECT', $output);
+        $this->assertStringContainsString('▸ cpa  — 1 creative(s)', $output);
+    }
+
     /** B — a card that can state Spend and has nothing to render beside it. */
     public function test_a_spend_only_creative_is_filed_under_b(): void
     {
@@ -248,6 +271,29 @@ final class ContentDefectCensusTest extends TestCase
         $this->assertStringNotContainsString('signature', $output);
     }
 
+    /**
+     * Found on Production: the first `--fetch` run died at the VPS's 128 MB limit, because every asset
+     * body was buffered whole. It asks for the first bytes only and reads no further — and a still
+     * whose header arrives first still judges as loaded.
+     */
+    public function test_fetch_asks_for_a_prefix_and_still_judges_a_large_image_by_its_header(): void
+    {
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+
+        Http::fake([
+            'cdn.test/large-signature.png' => Http::response($png.str_repeat("\0", 3_000_000), 200, ['Content-Type' => 'image/png']),
+            '*' => Http::response('unexpected', 500),
+        ]);
+
+        $this->spendOnlyCreative()->forceFill(['asset_url' => 'https://cdn.test/large-signature.png'])->save();
+
+        Artisan::call('content:census', ['--project' => (string) $this->project->getKey(), '--fetch' => true]);
+        $output = Artisan::output();
+
+        $this->assertStringContainsString('1 asset(s), 1 loaded', $output);
+        Http::assertSent(static fn ($request): bool => str_starts_with((string) ($request->header('Range')[0] ?? ''), 'bytes=0-'));
+    }
+
     /** Without the flag nothing is loaded — the default census stays a pure read of the database. */
     public function test_the_census_loads_nothing_unless_asked(): void
     {
@@ -276,6 +322,17 @@ final class ContentDefectCensusTest extends TestCase
             'impressions' => 500, 'clicks' => 9, 'conversions' => 3,
         ]);
         $adId = (string) ExternalAd::withoutGlobalScopes()->where('creative_id', $creative->getKey())->value('external_id');
+
+        DB::table('project_integration_bindings')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'external_account_id' => $this->account->getKey(),
+            'provider' => 'snapchat',
+            'purpose' => 'ads',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
         IntegrationRawPayload::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->getKey(),
