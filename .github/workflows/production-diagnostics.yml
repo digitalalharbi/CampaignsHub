@@ -101,6 +101,11 @@ on:
         description: 'Optional window end for the Content walk (YYYY-MM-DD). Default: today.'
         required: false
         default: ''
+      content_census:
+        description: 'Content Production Recovery — LIST the creatives with no preview, spend without indicators, indicators without spend, or a missing objective metric, and the rung each breaks at. Uses content_project/from/to. Read-only; prints ids, never names or urls.'
+        type: boolean
+        required: false
+        default: false
       quarantine_sandbox:
         description: 'Report the sandbox rows sitting in LIVE accounts. Reports only; never deletes from this workflow.'
         type: boolean
@@ -291,3 +296,45 @@ jobs:
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan content:reconcile \
                 "${CREATIVE}" --project="${PROJECT}" --from="${FROM}" --to="${TO}" ${SCOPE}
+
+  # ── The Content defect census ────────────────────────────────────────────────────────────────────
+  #
+  # The walk above answers «which rung does ONE creative fall off». The Owner's Production observation
+  # is about a SET: some items with no preview, some with Spend and no indicators, some with
+  # indicators and no Spend. Which creatives those are cannot be guessed from a laptop, so
+  # `content:census` lists them — every creative in every project that holds one (or the one project
+  # named), through the same services the library calls, filed by what a reader sees and the rung it
+  # breaks at.
+  #
+  # Same bar as the walk: writes nothing (every-column digest in `ContentDefectCensusTest`), calls no
+  # provider, and prints the internal creative id, provider, format, kind and objective — never a
+  # name, an account, a url or a signed link.
+  census:
+    if: inputs.content_census
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: List the broken creatives on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          PROJECT: ${{ inputs.content_project }}
+          FROM: ${{ inputs.content_from }}
+          TO: ${{ inputs.content_to }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 12m
+          envs: PROJECT,FROM,TO
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            # Passed as VALUES to a fixed command; empty options fall back to the command's defaults
+            # (every project, the last thirty days) — see the note on the content job above.
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan content:census \
+                --project="${PROJECT}" --from="${FROM}" --to="${TO}" --list="200"
