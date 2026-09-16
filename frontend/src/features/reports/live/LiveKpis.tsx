@@ -48,7 +48,7 @@ export function LiveKpiBoard({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="live-kpis">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4" data-testid="live-kpis">
         {hero.map((key) => {
           const meta = reader.meta[key]
           const read = meta.format(t, payload, reader.asMoney, reader.count)
