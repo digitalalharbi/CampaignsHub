@@ -168,7 +168,13 @@ export function PrintReport() {
       {slides.map((s, i) => (
         <section key={s.id} className="report-slide" data-print-page={i + 1} data-slide-type={s.type}>
           <div className="report-slide-inner">
-            <SlideBody slide={s} data={d} meta={meta} />
+            {/*
+              `paged` — this is a fixed A4 slide, not a scrolling page.
+
+              The deck shares `SlideBody` with the on-screen report, so a section that is merely
+              long there becomes one that cannot fit here. See the prop's note in InteractiveReport.
+            */}
+            <SlideBody slide={s} data={d} meta={meta} paged />
             {/*
               Verifiable provenance on the methodology page — INTERNAL only.
 
