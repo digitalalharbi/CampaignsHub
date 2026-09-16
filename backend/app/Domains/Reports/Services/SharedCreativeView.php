@@ -17,6 +17,7 @@ use App\Domains\Campaigns\Support\CreativeDemoPolicy;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
+use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -658,18 +659,8 @@ final class SharedCreativeView
         }
 
         $preview['cards'] = array_map(static function (array $card) use ($visibility): array {
-            if (! $visibility->adCopy) {
-                unset($card['body']);
-            }
-            if (! $visibility->headline) {
-                unset($card['headline']);
-            }
-            if (! $visibility->cta) {
-                unset($card['cta']);
-            }
-            if (! $visibility->destinationUrl) {
-                unset($card['destination_url']);
-            }
+            $card = ContentCopy::card($card, $visibility);
+
             if (! $visibility->video) {
                 $card['video_url'] = null;
             }
