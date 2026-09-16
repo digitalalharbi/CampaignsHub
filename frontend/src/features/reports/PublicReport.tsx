@@ -252,18 +252,18 @@ export function PublicReport() {
               )}
 
               {/*
-                The creative sections, for BOTH modes.
-                A live link and a snapshot link differ in where the report's own figures come from;
-                the content section reads the pipeline either way, and says when it last synced. What
-                keeps a snapshot honest is its ceiling: the link's window stops where the document
-                does, so the section cannot show weeks the rest of the report never covered.
+                The creative library, for a SNAPSHOT link. A live link's content has its own home — the
+                Content mode, platform → content → one piece — and stacking this library under every
+                live mode (the short summary included) would give each mode a second content surface
+                at its foot. What keeps a snapshot honest is its ceiling: the link's window stops where
+                the document does, so the section cannot show weeks the rest of the report never covered.
               */}
               {/*
                 ATTRIB-VIS-001 — the answer to «why does your report say 1,169 orders when my shop
                 recorded 640?», for the links whose operator chose to give it.
               */}
               {report.sections?.attribution && <SharedAttributionSection token={token} password={accepted} />}
-              {report.creatives?.creatives && (
+              {report.mode !== 'live' && report.creatives?.creatives && (
                 <SharedCreativeSection
                   token={token}
                   password={accepted}
