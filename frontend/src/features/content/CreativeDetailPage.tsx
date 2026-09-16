@@ -846,11 +846,34 @@ function MetricBlock({
    */
   const overWhole = RATE_KEYS.has(metricKey) && now.kind === 'value' && now.value > 1
 
+  /*
+   * Owner defect 95 — money through the money contract, on the grid a reader looks at FIRST.
+   *
+   * The per-platform table lower down this same file already does this, and its comment says why:
+   * «`metricState` reads the CONVERTED column only, so a withheld spend rendered as … every other
+   * surface reads `creativeMoney`; this one did not». That correction was applied to the table and not
+   * to this grid — «the figures this creative was bought to move», the first section of the page.
+   *
+   * So on the owner's own account, where FX-001 withholds by design because no USD→SAR rate exists,
+   * this grid printed «Not provided» over real measured money while the card the reader clicked to get
+   * here printed «412.50 USD» and the table further down printed it too: one creative, three readings.
+   * And it was the most confident possible way to be wrong — `reported.spend` is FALSE for a withheld
+   * row by construction, so the page stated that the platform does not send spend about a creative
+   * whose spend the platform sent.
+   *
+   * Only `spend` and `revenue` change hands. A cost-per is a derived ratio already in the reporting
+   * currency, and `metricState` is right for it: when the spend behind it was withheld the ratio is
+   * genuinely absent, and «no data» is the true answer rather than an amount in another currency.
+   */
+  const text = metricKey === 'spend' || metricKey === 'revenue'
+    ? creativeMoney(metrics, metricKey, currency, locale).text
+    : formatMetric(now, metricKey, locale, currency)
+
   return (
     <div className="rounded-md border border-border p-3">
       <p className="text-xs text-text-secondary">{metricLabel(metricKey, locale)}</p>
       <p className="mt-1 text-lg font-semibold tabular-nums text-text-primary">
-        <Num>{formatMetric(now, metricKey, locale, currency)}
+        <Num>{text}
         {overWhole && (
           <span
             className="ms-1 cursor-help text-xs font-normal text-text-muted"

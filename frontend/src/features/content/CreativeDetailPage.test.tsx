@@ -183,6 +183,91 @@ describe('CreativeDetailPage', () => {
     mocked.mockResolvedValue(detail())
   })
 
+  /**
+   * Owner defect 95 — Content Analytics reads money the way every other surface reads it.
+   *
+   * ## The defect, in this file, beside its own fix
+   *
+   * The per-platform table lower down already goes through `creativeMoney`, and the comment above it
+   * says why: «`metricState` reads the CONVERTED column only, so a withheld spend rendered as … every
+   * other surface reads `creativeMoney`; this one did not». That correction was applied to the table
+   * and not to the FIGURES grid at the top of the page — the section headed «the figures this creative
+   * was bought to move», which is the first thing a reader looks at.
+   *
+   * So on the owner's own account — a USD account with no USD→SAR rate, where FX-001 withholds by
+   * design — the headline grid rendered «Not provided» over real, measured money, while the card the
+   * reader clicked to get here printed «412.50 USD» and the table further down the same page printed
+   * it too. One creative, three readings, two of them right.
+   *
+   * `reported.spend` is FALSE for a withheld row by construction — the backend sets it from the
+   * converted column — which is why `metricState` answers «not provided» rather than «no data». That
+   * makes it the most confident possible way to be wrong: it states that the platform does not send
+   * spend, about a creative whose spend the platform did send.
+   */
+  it('shows a withheld spend as the amount the platform reported, not as «Not provided»', async () => {
+    mocked.mockResolvedValue(detail({
+      metrics: metrics({
+        spend: null,
+        spend_original: 412.5,
+        spend_withheld_rows: 3,
+        money_original_currency: 'USD',
+        money_original_currencies: 1,
+        reported: { spend: false, impressions: true, clicks: true, conversions: true, revenue: true },
+      } as Partial<CreativeMetrics>),
+      headline_metrics: ['spend', 'impressions'],
+    }))
+
+    render()
+
+    const figures = await screen.findByText('Spend')
+    const block = figures.closest('div') as HTMLElement
+
+    expect(within(block).getByText(/412\.50 USD/)).toBeInTheDocument()
+    expect(within(block).queryByText(/Not provided/i)).not.toBeInTheDocument()
+  })
+
+  /** And a revenue withheld the same way, on the same grid. */
+  it('shows a withheld revenue as the amount the platform reported', async () => {
+    mocked.mockResolvedValue(detail({
+      metrics: metrics({
+        revenue: null,
+        revenue_original: 1_980.25,
+        revenue_withheld_rows: 3,
+        money_original_currency: 'USD',
+        money_original_currencies: 1,
+        reported: { spend: true, impressions: true, clicks: true, conversions: true, revenue: false },
+      } as Partial<CreativeMetrics>),
+      headline_metrics: ['revenue', 'impressions'],
+    }))
+
+    render()
+
+    const label = await screen.findByText('Revenue')
+    const block = label.closest('div') as HTMLElement
+
+    expect(within(block).getByText(/1,980\.25 USD/)).toBeInTheDocument()
+  })
+
+  /**
+   * A metric the platform genuinely does not send still says so.
+   *
+   * The fix must widen which reader answers money, not stop the page telling the truth about an
+   * absence — `metricState` stays correct for counts and ratios, and for money it is the contract
+   * that decides.
+   */
+  it('still says «Not provided» for a metric the platform does not send', async () => {
+    mocked.mockResolvedValue(detail({
+      headline_metrics: ['video_views', 'impressions'],
+    }))
+
+    render()
+
+    const label = await screen.findByText('Video views')
+    const block = label.closest('div') as HTMLElement
+
+    expect(within(block).getByText(/Not provided/i)).toBeInTheDocument()
+  })
+
   /** The window in the address is the window that is fetched — that is what makes a link shareable. */
   it('asks for the ad in the window carried by the address', async () => {
     render()
