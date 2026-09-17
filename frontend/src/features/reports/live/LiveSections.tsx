@@ -9,6 +9,7 @@ import { platformColor } from '@/features/analytics/components'
 import { ratio } from '@/features/analytics/format'
 import type { LivePayload } from '../api'
 import type { useLiveMetricReader } from './liveMetrics'
+import { sectionShown } from '../reportSections'
 
 /*
  * The sections a live link composes its modes from — lifted out of the single long page so each mode
@@ -166,20 +167,25 @@ export function useSpendCharting(payload: LivePayload, currency: string) {
     const spendState = moneyState(payload.totals as MoneyTotals, 'spend').state
     return {
       spendChartable: spendState === 'complete_converted' || spendState === 'zero',
-      platformSpendRank: rankableMoney(payload.platforms as MoneyTotals[], 'spend', currency),
+      platformSpendRank: rankableMoney((payload.platforms ?? []) as MoneyTotals[], 'spend', currency),
     }
   }, [payload, currency])
 }
 
 export function TrendAndDistribution({ payload, ar, currency }: { payload: LivePayload; ar: boolean; currency: string }) {
   const { spendChartable, platformSpendRank } = useSpendCharting(payload, currency)
+  // One card per section: the trend belongs to `trends`, the spend split to `platform_comparison`.
+  const trend = sectionShown(payload, 'trends')
+  const split = sectionShown(payload, 'platform_comparison')
+  if (!trend && !split) return null
 
   return (
     <>
         <div className="mt-3 grid gap-3 lg:grid-cols-3" data-testid="live-platforms">
-          <ChartCard title={ar ? 'الأداء بمرور الوقت' : 'Performance over time'} className="lg:col-span-2">
+          {trend && (
+          <ChartCard title={ar ? 'الأداء بمرور الوقت' : 'Performance over time'} className={split ? 'lg:col-span-2' : 'lg:col-span-3'}>
             <MetricLineChart
-              data={payload.timeseries}
+              data={payload.timeseries ?? []}
               currency={currency}
               height={220}
               /* Results on their own axis: on the spend axis a few hundred orders draw as a flat line at zero. */
@@ -196,13 +202,15 @@ export function TrendAndDistribution({ payload, ar, currency }: { payload: LiveP
               <p className="mt-1 text-center text-[11px] text-text-muted">{ar ? 'خط الإنفاق غير معروض: المبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend line hidden: amounts await an exchange rate or span currencies'}</p>
             )}
           </ChartCard>
-          <ChartCard title={ar ? 'توزيع الإنفاق' : 'Spend by platform'}>
+          )}
+          {split && (
+          <ChartCard title={ar ? 'توزيع الإنفاق' : 'Spend by platform'} className={trend ? undefined : 'lg:col-span-3'}>
             {platformSpendRank === null ? (
               <p className="flex h-[220px] items-center justify-center text-center text-sm text-text-muted">{ar ? 'توزيع الإنفاق غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة لا تُجمع' : 'Spend share unavailable — amounts await a rate or span currencies'}</p>
             ) : (
               <>
                 <PlatformDonutChart
-                  data={payload.platforms.flatMap((p, i) => {
+                  data={(payload.platforms ?? []).flatMap((p, i) => {
                     const value = platformSpendRank.values[i]
                     // The platform's NAME, not its key: «snapchat» is a database value, «سناب شات» is a platform.
                     return value === null ? [] : [{ name: providerLabel(canonicalPlatform(p.provider), ar ? 'ar' : 'en'), value, key: canonicalPlatform(p.provider) }]
@@ -220,6 +228,7 @@ export function TrendAndDistribution({ payload, ar, currency }: { payload: LiveP
               </>
             )}
           </ChartCard>
+          )}
         </div>
     </>
   )
@@ -228,17 +237,17 @@ export function TrendAndDistribution({ payload, ar, currency }: { payload: LiveP
 export function FunnelSection({ payload, ar, currency }: { payload: LivePayload; ar: boolean; currency: string }) {
   return (
     <>
-        {payload.funnel.length > 0 && (
+        {(payload.funnel ?? []).length > 0 && (
         <div className="mt-3 grid gap-3" data-testid="live-funnel">
           <ChartCard title={ar ? 'قمع الأداء' : 'Performance funnel'}>
-            <ConversionFunnelChart stages={payload.funnel} currency={currency} ar={ar} />
+            <ConversionFunnelChart stages={payload.funnel ?? []} currency={currency} ar={ar} />
             {/* FUNNEL-NULL-001 — said once in a sentence as well as drawn. The client has no second
                 view of their account to check a gap against, so the gap must explain itself. */}
-            {payload.funnel.some((s) => !s.reported) && (
+            {(payload.funnel ?? []).some((s) => !s.reported) && (
               <p className="mt-3 text-xs text-text-muted" data-testid="shared-funnel-unreported">
                 {ar
-                  ? `لم ترسل أي منصة هذه المراحل في هذه الفترة: ${payload.funnel.filter((s) => !s.reported).map((s) => s.label).join('، ')}. الفراغ ليس صفرًا.`
-                  : `No platform reported these stages in this period: ${payload.funnel.filter((s) => !s.reported).map((s) => s.label).join(', ')}. A gap is not a zero.`}
+                  ? `لم ترسل أي منصة هذه المراحل في هذه الفترة: ${(payload.funnel ?? []).filter((s) => !s.reported).map((s) => s.label).join('، ')}. الفراغ ليس صفرًا.`
+                  : `No platform reported these stages in this period: ${(payload.funnel ?? []).filter((s) => !s.reported).map((s) => s.label).join(', ')}. A gap is not a zero.`}
               </p>
             )}
           </ChartCard>

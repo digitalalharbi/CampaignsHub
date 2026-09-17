@@ -114,8 +114,9 @@ final class LiveReportShareTest extends TestCase
 
         $body = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk()->json('data');
 
-        $this->assertSame([], $body['campaigns'], 'the campaign breakdown names the agency’s own campaigns');
-        $this->assertSame([], $body['ad_sets'], 'the ad-set breakdown is the targeting plan');
+        // Absent, not merely empty: the detailed tables are off for a client unless an operator turns them on.
+        $this->assertEmpty($body['campaigns'] ?? [], 'the campaign breakdown names the agency’s own campaigns');
+        $this->assertEmpty($body['ad_sets'] ?? [], 'the ad-set breakdown is the targeting plan');
         $this->assertSame([], $body['available']['campaigns'], 'the picker published names and ids');
 
         // Belt and braces: the names must not survive anywhere else in the response either.
@@ -290,7 +291,8 @@ final class LiveReportShareTest extends TestCase
         $body = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk()->json('data');
 
         $this->assertArrayHasKey('platforms', $body);
-        $this->assertArrayHasKey('objective_performance', $body);
+        // Direct against blended is advanced segmentation now — off unless an operator enables it.
+        $this->assertArrayNotHasKey('objective_performance', $body);
         $this->assertNotSame([], $body['available']['providers'], 'the platform picker replaces the campaign one');
     }
 
@@ -382,14 +384,19 @@ final class LiveReportShareTest extends TestCase
      * An empty grid under «الإعلانات» reads as «your ads were so bad there is nothing to show» — a
      * claim about the client's advertising made by a gap in ours.
      */
-    public function test_a_live_link_with_no_ads_says_why(): void
+    public function test_a_live_link_with_no_ads_carries_no_content_section(): void
     {
+        /*
+         * REPORT-SECTION-SURFACES-001 — the Owner's rule replaced «say why it is empty» for a client:
+         * a section with no data disappears cleanly, with no empty card and no placeholder.
+         */
         $token = $this->liveLink();
 
         $res = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk();
 
-        $this->assertSame([], $res->json('data.ads'));
-        $this->assertSame('no_creatives_in_window', $res->json('data.ads_absent_reason'));
+        $this->assertNull($res->json('data.ads'));
+        $this->assertNull($res->json('data.ads_absent_reason'));
+        $this->assertNotContains('content_performance', $res->json('data.report_sections'));
     }
 
     /**
@@ -471,6 +478,8 @@ final class LiveReportShareTest extends TestCase
      */
     public function test_a_live_link_splits_by_objective_rather_than_blending(): void
     {
+        // Only where the operator enabled advanced segmentation — it is off for a client by default.
+        $this->report->update(['section_settings' => ['sections' => ['advanced_segmentation' => true]]]);
         $token = $this->liveLink();
 
         $split = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk()->json('data.objective_performance');

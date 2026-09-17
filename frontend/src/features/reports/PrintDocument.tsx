@@ -4,6 +4,7 @@ import { moneyExact } from '@/features/analytics/format'
 import { mixedResultsNote, type ResultPart } from './reportMetrics'
 import { brand, productName } from '@/lib/brand'
 import { ReportWatermark } from './ReportWatermark'
+import { sectionShown, type ReportSectionKey } from './reportSections'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 
 /**
@@ -324,8 +325,16 @@ export function PrintDocument({
     return n === undefined ? title : `${n}. ${title}`
   }
   /** An absent section prints WHY, in the words the generator chose. */
+  /*
+   * REPORT-SECTION-SURFACES-001 — a section the report does not carry is not printed, and its
+   * absence is not explained either: the page, the link and this document all leave it out.
+   */
+  const shown = (key: ReportSectionKey) => sectionShown(data, key)
+  const OUTLINE_SECTION: Record<string, ReportSectionKey> = { platforms: 'platform_comparison', objectives: 'advanced_segmentation', ads: 'content_performance' }
+
   const Absent = ({ sectionKey, fallback }: { sectionKey: string; fallback: string }) => {
     const s = section(sectionKey)
+    if (OUTLINE_SECTION[sectionKey] && !shown(OUTLINE_SECTION[sectionKey])) return null
     if (s === undefined || s.present) return null
 
     return (
@@ -406,14 +415,18 @@ export function PrintDocument({
         <section className="doc-section">
           <h2>{heading('executive_summary', 'Executive Summary')}</h2>
           {(data.summary ?? []).map((s, i) => <p key={i}>{s}</p>)}
-          <h3>Key metrics</h3>
-          <Table head={['Metric', 'Value']} rows={kpiRows} />
+          {shown('kpis') && (
+            <>
+              <h3>Key metrics</h3>
+              <Table head={['Metric', 'Value']} rows={kpiRows} />
+            </>
+          )}
         </section>
       )}
       <Absent sectionKey="executive_summary" fallback="No summary could be composed from this period’s figures." />
 
       {/* Platform performance */}
-      {section('platforms')?.present !== false && (
+      {shown('platform_comparison') && section('platforms')?.present !== false && (
         <section className="doc-section">
           <h2>{heading('platforms', 'Platform Performance')}</h2>
           <Table head={['Platform', 'Spend', 'Revenue', 'Results', 'ROAS']} rows={platformRows} />
@@ -422,7 +435,7 @@ export function PrintDocument({
       <Absent sectionKey="platforms" fallback="No platform reported figures in this window." />
 
       {/* Breakdown by objective — the same spend, divided by what it was bought for. */}
-      {section('objectives')?.present !== false && objectiveRows.length > 0 && (
+      {shown('advanced_segmentation') && section('objectives')?.present !== false && objectiveRows.length > 0 && (
         <section className="doc-section">
           <h2>{heading('objectives', 'Breakdown by Objective')}</h2>
           <Table
@@ -441,7 +454,7 @@ export function PrintDocument({
         what the money did; the roster carried how it was arranged, which is ours.
       */}
       {/* Budget */}
-      {budgetRows.length > 0 && (
+      {shown('budget_pacing') && budgetRows.length > 0 && (
         <section className="doc-section">
           <h2>Budget Pacing</h2>
           <Table head={['Line', 'Budget', 'Spent', 'Remaining', 'Pacing']} rows={budgetRows} />
@@ -458,7 +471,7 @@ export function PrintDocument({
         preview says `available`; every other state prints its reason, because a grey box in a
         client's PDF reads as a broken export.
       */}
-      {adRows.length > 0 ? (
+      {!shown('content_performance') ? null : adRows.length > 0 ? (
         <section className="doc-section">
           <h2>{heading('ads', 'Ads')}</h2>
           <table className="doc-table doc-ads">
@@ -512,7 +525,7 @@ export function PrintDocument({
       {/*
         REPORT-CREATIVE-TRUTH-001 §B — everything that ran, under the twelve that worked best.
       */}
-      {inScope > 0 && (
+      {shown('content_performance') && inScope > 0 && (
         <section className="doc-section">
           <h2>Everything That Ran</h2>
           <p>
@@ -530,7 +543,7 @@ export function PrintDocument({
       )}
 
       {/* Recommendations */}
-      {recs.length > 0 && (
+      {shown('recommendations') && recs.length > 0 && (
         <section className="doc-section">
           <h2>{heading('recommendations', 'Recommendations')}</h2>
           <ol className="doc-recs">

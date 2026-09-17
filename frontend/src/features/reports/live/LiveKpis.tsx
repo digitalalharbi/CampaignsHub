@@ -2,6 +2,7 @@ import { KpiCard, TrendPill } from '@/features/analytics/components'
 import { Num } from '@/components/ui/Num'
 import type { LivePayload } from '../api'
 import type { useLiveMetricReader } from './liveMetrics'
+import { sectionShown } from '../reportSections'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
 
@@ -39,9 +40,10 @@ export function LiveKpiBoard({
   keys: string[]
   heroOnly?: boolean
 }) {
+  if (!sectionShown(payload, 'kpis')) return null
   const t = payload.totals
   const d = payload.deltas ?? {}
-  const series = (key: string) => payload.timeseries.map((r) => Number(r[key] ?? 0))
+  const series = (key: string) => (payload.timeseries ?? []).map((r) => Number(r[key] ?? 0))
   const known = keys.filter((k) => reader.meta[k])
   const hero = known.slice(0, 4)
   const rest = heroOnly ? [] : known.slice(4)
@@ -100,7 +102,7 @@ export function LiveKpiBoard({
  * pieces of content that ran.
  */
 export function LiveScopeCounts({ payload, ar }: { payload: LivePayload; ar: boolean }) {
-  const active = payload.platforms.filter((p) => (Number(p.spend ?? 0) > 0) || Number(p.conversions ?? 0) > 0).length
+  const active = (payload.platforms ?? []).filter((p) => (Number(p.spend ?? 0) > 0) || Number(p.conversions ?? 0) > 0).length
   const content = payload.creatives_in_scope
 
   const items: Array<{ key: string; label: string; value: string }> = [

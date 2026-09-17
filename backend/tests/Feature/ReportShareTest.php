@@ -125,7 +125,8 @@ final class ReportShareTest extends TestCase
 
         $encoded = json_encode($notes, JSON_UNESCAPED_UNICODE) ?: '';
 
-        $this->assertSame([], $notes, 'a campaign-scoped note reached a client');
+        // No note survives, so the section is absent (null) rather than an empty list.
+        $this->assertEmpty($notes ?? [], 'a campaign-scoped note reached a client');
         $this->assertStringNotContainsString('burner', $encoded);
         $this->assertStringNotContainsString('Lead Gen', $encoded);
     }

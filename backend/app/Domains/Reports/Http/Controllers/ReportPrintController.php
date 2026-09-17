@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Services\ClientReportView;
 use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Http\Controllers\Controller;
@@ -68,6 +69,8 @@ final class ReportPrintController extends Controller
         } elseif ($audience === 'executive') {
             $body = app(ClientReportView::class)->executive($body);
         }
+        // REPORT-SECTION-SURFACES-001 — the PDF carries exactly the sections the page does.
+        $body = app(ReportSectionSurfaces::class)->apply($body, $report, null, 'print', audience: (string) $audience);
 
         return ApiResponse::success([
             'report_id' => (string) $report->id,

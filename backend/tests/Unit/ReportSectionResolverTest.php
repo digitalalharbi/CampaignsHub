@@ -182,4 +182,23 @@ final class ReportSectionResolverTest extends TestCase
 
         $this->assertSame(['sections' => ['kpis' => false]], $settings->toArray());
     }
+
+    public function test_the_deck_and_the_outline_lose_what_the_report_does_not_carry(): void
+    {
+        $payload = $this->fullPayload() + [
+            'slides' => [
+                ['type' => 'cover'], ['type' => 'budget'], ['type' => 'objective_performance'], ['type' => 'platform_comparison'],
+            ],
+            'outline' => [
+                ['key' => 'executive_summary', 'present' => true],
+                ['key' => 'platforms', 'present' => true],
+                ['key' => 'objectives', 'present' => true],
+            ],
+        ];
+
+        $out = $this->resolve(['platform_comparison' => false], $payload)->apply($payload);
+
+        $this->assertSame(['cover', 'budget'], array_column($out['slides'], 'type'));
+        $this->assertSame(['executive_summary'], array_column($out['outline'], 'key'));
+    }
 }

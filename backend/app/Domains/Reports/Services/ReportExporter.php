@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Services;
 
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
+use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -42,16 +43,33 @@ final class ReportExporter
         private readonly ClientReportView $clientView,
         private readonly ClientReportContentValidator $contentValidator,
         private readonly NarrativeConsistencyValidator $narrativeValidator,
+        private readonly ReportSectionSurfaces $sections,
     ) {}
 
-    /** Render a report to file bytes for a format, without persisting anything (used by public share). */
-    public function render(Report $report, string $format): string
+    /**
+     * The data every export format is rendered from — gated, audience-filtered and section-resolved.
+     *
+     * Public so the section parity test can read what the FILE is built from, rather than a copy of
+     * the rule; `render()` renders nothing else.
+     *
+     * @return array<string, mixed>
+     */
+    public function exportData(Report $report): array
     {
         // No format may render until the snapshot passes the data-consistency gate.
         $this->gate->ensureReady($report);
         // SINGLE enforcement point: every export path (admin export, scheduled, email, share) is filtered
         // by the report's audience here — an authenticated admin can NEVER bypass client filtering.
         $data = $this->withoutHiddenSections($report, $this->audienceData($report));
+
+        // REPORT-SECTION-SURFACES-001 — the file carries the same section set as the page and the PDF.
+        return $this->sections->apply($data, $report, null, 'export');
+    }
+
+    /** Render a report to file bytes for a format, without persisting anything (used by public share). */
+    public function render(Report $report, string $format): string
+    {
+        $data = $this->exportData($report);
 
         return match ($format) {
             'csv' => $this->csv($report, $data),
