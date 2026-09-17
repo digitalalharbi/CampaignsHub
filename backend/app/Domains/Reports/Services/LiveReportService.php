@@ -14,6 +14,8 @@ use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
+use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\ContentKey;
@@ -614,6 +616,24 @@ final class LiveReportService
          *
          * BEFORE the outline is composed, so «what is in this report» describes what survived.
          */
+        /*
+         * REPORT-OBJECTIVE-ANALYTICS-001 — objective-aware KPI blocks, leaders, trend and contribution.
+         *
+         * The same section the generated snapshot (and so its PDF) carries, built by the same class on
+         * the same bounds as the objective split above, and fed the roster this link already read so
+         * the content leaders and the ads grid describe the same creatives. Built BEFORE the section
+         * flags, so switching «objective breakdown» off removes it like its neighbours.
+         */
+        $payload[ObjectiveAnalyticsSection::KEY] = (new ObjectiveAnalyticsSection)->build(new ObjectiveAnalyticsInput(
+            from: $from,
+            to: $to,
+            projectIds: $scope['project_id'] === '' ? null : [$scope['project_id']],
+            campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : $campaignCeiling,
+            providers: $applied['providers'] !== [] ? $applied['providers'] : ($scope['providers'] ?: null),
+            accountIds: $accountCeiling,
+            content: array_values((array) ($payload['ads_roster'] ?? [])),
+        ));
+
         $payload = $this->applySectionFlags($payload, $share);
 
         /*
@@ -662,7 +682,7 @@ final class LiveReportService
          */
         $owned = [
             'platform_comparison' => ['platforms' => []],
-            'objective_breakdown' => ['objective_performance' => null, 'objective_leaders' => null],
+            'objective_breakdown' => ['objective_performance' => null, 'objective_leaders' => null, 'objective_analytics' => null],
             'creatives' => [
                 'ads' => [], 'ads_groups' => [], 'ads_platform_groups' => [], 'ads_roster' => [], 'ads_weakest' => [], 'top_creatives' => [],
                 'worst_creatives' => [], 'ads_reading' => null, 'ads_level' => null, 'ads_absent_reason' => null,
@@ -676,6 +696,16 @@ final class LiveReportService
              */
             'previous_comparison' => ['deltas' => [], 'previous' => null, 'objective_performance_previous' => null],
         ];
+
+        /*
+         * The content leaders name creatives, so they follow the CONTENT switch as well as their own:
+         * a link that hides the ads must not name the best and weakest of them one section earlier.
+         */
+        if (! ($sections['creatives'] ?? true) && is_array($payload['objective_analytics'] ?? null)) {
+            foreach ($payload['objective_analytics']['families'] ?? [] as $i => $block) {
+                $payload['objective_analytics']['families'][$i]['content_ranking'] = null;
+            }
+        }
 
         foreach ($owned as $flag => $keys) {
             if ($sections[$flag] ?? true) {
