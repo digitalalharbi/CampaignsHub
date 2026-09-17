@@ -113,6 +113,22 @@ final class ClientReportContentValidator
         return $found;
     }
 
+    /**
+     * The campaign-management entities alone — REPORT-DRILLDOWN-001.
+     *
+     * The drill-down endpoints answer with preview URLs, and a CDN URL routinely carries a hex digest
+     * the body patterns above would flag as a checksum. The entity rule is the one a drill-down must
+     * never break — platform → content, no campaign or ad set — so it is offered on its own for a
+     * guard that runs on every response.
+     *
+     * @param  array<string, mixed>  $clientData
+     * @return list<array{code: string, match: string, path: string}>
+     */
+    public static function campaignEntities(array $clientData): array
+    {
+        return self::entityViolations($clientData);
+    }
+
     public function passes(array $clientData): bool
     {
         return $this->scan($clientData) === [];

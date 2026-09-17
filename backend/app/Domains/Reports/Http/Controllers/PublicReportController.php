@@ -9,6 +9,7 @@ use App\Domains\Metrics\Services\AttributionTransparency;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ClientReportView;
+use App\Domains\Reports\Services\LiveDrilldown;
 use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Reports\Services\ReportCreativeMedia;
 use App\Domains\Reports\Services\ReportExporter;
@@ -167,39 +168,50 @@ final class PublicReportController extends Controller
      * with 404 when the link does not show content at all, because a section the operator switched
      * off is not reachable by knowing its address.
      */
-    public function liveContent(Request $request, string $token, string $key, LiveReportService $live): JsonResponse
+    public function liveContent(Request $request, string $token, string $key, LiveDrilldown $drilldown): JsonResponse
     {
-        $this->throttle($request);
-        $share = $this->shares->resolveActive($token);
-        if (! $share) {
-            return ApiResponse::error('الرابط غير صالح أو انتهت صلاحيته أو أُلغي.', status: 404);
-        }
-        if ($share->password_hash !== null) {
-            $provided = (string) ($request->header('X-Report-Password') ?? $request->query('password', ''));
-            if (! Hash::check($provided, $share->password_hash)) {
-                $this->shares->log($share, 'denied', $request, 'bad password');
-
-                return ApiResponse::error('كلمة المرور مطلوبة أو غير صحيحة.', status: 401, errors: ['password_required' => [true]]);
-            }
+        [$share, $error] = $this->open($request, $token);
+        if ($error !== null) {
+            return $error;
         }
         if (! $share->isLive()) {
             return ApiResponse::error('هذا الرابط يعرض تقريرًا ثابتًا وليس بيانات لحظية.', status: 409);
         }
-        if (! ($share->visibleSections()['creatives'] ?? false)) {
-            return ApiResponse::error('هذا المحتوى غير متاح في هذا الرابط.', status: 404);
-        }
 
-        $content = $live->content($share, $key, $request->query());
+        $content = $drilldown->content($share, $key, $request->query());
         if ($content === null) {
             return ApiResponse::error('هذا المحتوى غير متاح في هذا الرابط.', status: 404);
         }
 
-        // The same hide flags as the page: the row rides the roster's rules, the points the timeseries'.
-        $sanitised = $this->shares->sanitizeLive(['ads_roster' => [$content['content']], 'timeseries' => $content['trend']], $share);
-        $content['content'] = $sanitised['ads_roster'][0];
-        $content['trend'] = $sanitised['timeseries'];
-
         return ApiResponse::success($content, 'Live content.');
+    }
+
+    /**
+     * REPORT-DRILLDOWN-001 — one platform of a live link, opened from its comparison.
+     *
+     * The same three gates as every endpoint here, the same live-only rule as `live()`, and then
+     * {@see LiveDrilldown}, which owns the breakdown switch, the hide flags and the campaign guard.
+     * A platform outside the link, one with no figures, and a link whose comparison is switched off
+     * all answer the same 404.
+     */
+    public function livePlatform(Request $request, string $token, string $provider, LiveDrilldown $drilldown): JsonResponse
+    {
+        [$share, $error] = $this->open($request, $token);
+        if ($error !== null) {
+            return $error;
+        }
+        if (! $share->isLive()) {
+            return ApiResponse::error('هذا الرابط يعرض تقريرًا ثابتًا وليس بيانات لحظية.', status: 409);
+        }
+
+        $payload = $drilldown->platform($share, $provider, $request->query());
+        if ($payload === null) {
+            return ApiResponse::error('هذه المنصة غير متاحة في هذا الرابط.', status: 404);
+        }
+
+        $this->shares->log($share, 'view', $request, 'platform');
+
+        return ApiResponse::success($payload, 'Live platform.');
     }
 
     public function live(Request $request, string $token, LiveReportService $live): JsonResponse
