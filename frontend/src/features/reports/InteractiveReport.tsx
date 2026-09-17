@@ -66,6 +66,7 @@ export interface ReportData {
   /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
   report_sections?: string[]
   business_streams?: BusinessStreamRow[]
+  business_streams_cover_total?: boolean
   period: { from: string; to: string }
   /** REPORT-DRILLDOWN-001 — the PDF's optional platform drill-down; sent only when the operator enabled it. */
   platform_drilldowns?: import('./PrintPlatformDrilldowns').PrintPlatformDrilldown[]
@@ -338,7 +339,7 @@ export function SlideBody({ slide, data, meta, paged = false }: {
   paged?: boolean
 }) {
   switch (slide.type) {
-    case '__streams': return <div><Title sub="كما حدّدها فريق الحساب">الأداء حسب مسار العمل</Title><BusinessStreamsSection streams={data.business_streams} currency={data.currency} ar /></div>
+    case '__streams': return <div><Title sub="كما حدّدها فريق الحساب">الأداء حسب مسار العمل</Title><BusinessStreamsSection streams={data.business_streams} coverTotal={data.business_streams_cover_total === true} currency={data.currency} ar /></div>
     case 'cover': return <CoverSlide data={data} meta={meta} />
     case 'recommendations': return <RecommendationsSlide data={data} />
     case 'executive_summary': return <ExecutiveSlide data={data} />

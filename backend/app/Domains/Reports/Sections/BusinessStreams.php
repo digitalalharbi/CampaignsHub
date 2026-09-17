@@ -25,8 +25,9 @@ use Illuminate\Support\Carbon;
  * Each stream is the report's own engine narrowed further, so its figures are the same sums every
  * other section reads — ratios are recomputed from the stream's own sums, never averaged. A mapping
  * can only NARROW the report's ceiling: a platform or account outside the report's scope matches
- * nothing rather than widening the report. Streams may overlap (one platform in two streams), so they
- * are not presented as adding up to the total, and `share_of_spend` is each stream against the whole.
+ * nothing rather than widening the report. A platform or an ad account belongs to at most one stream
+ * (refused on save), so streams never double-count; their sum is called the total only when
+ * `coversTotal()` confirms every in-scope account is mapped.
  */
 final class BusinessStreams
 {
@@ -67,6 +68,32 @@ final class BusinessStreams
         }
 
         return $out;
+    }
+
+    /**
+     * Whether every account with figures in the report's scope is mapped to some stream, directly or
+     * through its whole platform. Only then is the sum of the streams the report's total.
+     *
+     * @param  list<array{key: string, label: string, providers: list<string>, account_ids: list<string>}>  $streams
+     */
+    public function coversTotal(MetricsAggregator $engine, array $streams, Carbon $from, Carbon $to): bool
+    {
+        if ($streams === []) {
+            return false;
+        }
+
+        $providers = array_merge(...array_map(static fn (array $s): array => $s['providers'], $streams));
+        $accounts = array_merge(...array_map(static fn (array $s): array => $s['account_ids'], $streams));
+
+        foreach ($engine->byAccount($from, $to) as $row) {
+            $mapped = in_array($row['provider'] ?? null, $providers, true)
+                || ($row['account_id'] !== null && in_array($row['account_id'], $accounts, true));
+            if (! $mapped) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

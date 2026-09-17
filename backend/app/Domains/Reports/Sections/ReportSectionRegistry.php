@@ -137,7 +137,7 @@ final class ReportSectionRegistry
                 key: 'advanced_segmentation',
                 titleAr: 'التقسيم المتقدم',
                 titleEn: 'Advanced segmentation',
-                payloadKeys: ['objective_performance', 'objective_performance_previous', 'business_streams'],
+                payloadKeys: ['objective_performance', 'objective_performance_previous', 'business_streams', 'business_streams_cover_total'],
                 slideTypes: ['objective_performance'],
                 clientDefault: false,
                 breakdown: true,
