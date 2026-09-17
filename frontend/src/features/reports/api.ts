@@ -606,3 +606,36 @@ export const createScopeTemplate = (p: string, body: { name: string; description
   postData<ScopeTemplate>(`${base(p)}/scope-templates`, body)
 
 export const deleteScopeTemplate = (p: string, id: string) => api.delete(`${base(p)}/scope-templates/${id}`)
+
+/* ---- REPORT-SECTION-MODEL-001 — which sections a report or template shows ---------------------- */
+
+export type SectionReason = 'disabled_by_operator' | 'unsupported_by_provider_or_objective' | 'data_unavailable'
+
+export interface ResolvedSectionRow {
+  key: string
+  title_ar: string
+  title_en: string
+  breakdown: boolean
+  visible: boolean
+  reason: SectionReason | null
+  because: string | null
+}
+
+export interface ReportSectionsState {
+  report_id: string
+  audience: string
+  chosen: Record<string, boolean>
+  effective: Record<string, boolean>
+  resolved: ResolvedSectionRow[]
+  visible: string[]
+  availability_judged: boolean
+}
+
+export const getReportSections = (p: string, id: string) =>
+  getData<ReportSectionsState>(`${base(p)}/${id}/sections`)
+
+export const updateReportSections = (p: string, id: string, body: { sections?: Record<string, boolean>; template_id?: string }) =>
+  putData<ReportSectionsState>(`${base(p)}/${id}/sections`, body)
+
+export const updateTemplateSections = (p: string, templateId: string, sections: Record<string, boolean>) =>
+  putData<{ template_id: string; chosen: Record<string, boolean> }>(`${base(p)}/scope-templates/${templateId}/sections`, { sections })
