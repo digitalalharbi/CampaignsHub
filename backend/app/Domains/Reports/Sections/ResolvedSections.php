@@ -27,6 +27,20 @@ final class ResolvedSections
     public const PAYLOAD_KEY = 'report_sections';
 
     /**
+     * `ReportStructure`'s outline entries, in section vocabulary. An outline entry of a hidden section
+     * leaves the outline: the contents page must not list — or explain the absence of — a section the
+     * report does not carry. The executive summary is the report itself and belongs to no section.
+     */
+    private const OUTLINE = [
+        'performance' => 'kpis',
+        'platforms' => 'platform_comparison',
+        'objectives' => 'advanced_segmentation',
+        'ads' => 'content_performance',
+        'findings' => 'recommendations',
+        'recommendations' => 'recommendations',
+    ];
+
+    /**
      * @param  array<string, array{section: ReportSection, visible: bool, reason: ?string, because: ?string}>  $entries
      */
     public function __construct(
@@ -89,6 +103,35 @@ final class ResolvedSections
                     unset($payload[$key]);
                 }
             }
+        }
+
+        /*
+         * The snapshot deck lists its slides; a slide of a hidden section leaves the list, so a
+         * renderer is never handed a slide whose data was just removed. A slide type no section
+         * claims (the cover, data quality) is left alone.
+         */
+        if (is_array($payload['slides'] ?? null)) {
+            $hiddenSlides = [];
+            foreach ($this->entries as $entry) {
+                if (! $entry['visible']) {
+                    foreach ($entry['section']->slideTypes as $type) {
+                        $hiddenSlides[$type] = true;
+                    }
+                }
+            }
+            $payload['slides'] = array_values(array_filter(
+                $payload['slides'],
+                static fn ($slide): bool => ! (is_array($slide) && isset($hiddenSlides[(string) ($slide['type'] ?? '')])),
+            ));
+        }
+
+        if (is_array($payload['outline'] ?? null)) {
+            $payload['outline'] = array_values(array_filter(
+                $payload['outline'],
+                fn ($entry): bool => ! (is_array($entry)
+                    && isset(self::OUTLINE[(string) ($entry['key'] ?? '')])
+                    && ! $this->isVisible(self::OUTLINE[(string) $entry['key']])),
+            ));
         }
 
         $payload[self::PAYLOAD_KEY] = $this->visible();
