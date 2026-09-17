@@ -6,6 +6,7 @@ namespace App\Domains\Campaigns\Console;
 
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CardPopupParity;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativeRows;
@@ -189,6 +190,8 @@ final class ReconcileContentMetricsCommand extends Command
             .'   video: '.(($preview['video_url'] ?? null) !== null ? 'yes' : 'no')
             .'   cards: '.(is_array($preview['cards'] ?? null) ? (string) count((array) $preview['cards']) : 'not fetched'));
 
+        $this->cardAgainstPopup($card + ['preview' => $preview]);
+
         $this->judge($figures, $totals, $aggregate, $card, $roster, $withFigures, $withoutFigures);
 
         $this->line('');
@@ -272,6 +275,57 @@ final class ReconcileContentMetricsCommand extends Command
             $this->divergences[] = 'The card renders its Spend cell and NOTHING beside it, with no sentence '
                 .'saying why — `headline_metrics` holds only `spend`, so the «no displayable metrics» panel '
                 .'never fires (RUNG 6). This is the owner\'s «Spend appears and the other KPIs disappear».';
+        }
+    }
+
+    /**
+     * RUNG 10 — what the CARD and the POPUP each resolve to, from this one payload.
+     *
+     * OWNER CONTENT P0: the owner read a card showing Spend and three figures beside a popup showing
+     * five more, and a card drawing a picture whose creative said it had no cover. #505 closed both
+     * and guarded them in a browser — which is exactly what cannot be pointed at Production here, so
+     * this asks the same question on the server, of the payload the two surfaces actually receive.
+     *
+     * `CardPopupParity` mirrors the browser's own rules and is held to them by its own test. The
+     * output is metric KEYS with their states, the preview DECISION each surface reads, and one
+     * verdict. Never a value, a name, an account or a url.
+     *
+     * @param  array<string, mixed>  $card  the library row, as `CreativeRows::present()` returns it
+     */
+    private function cardAgainstPopup(array $card): void
+    {
+        $parity = app(CardPopupParity::class);
+
+        $cardFigures = $parity->card($card);
+        $popupFigures = $parity->popup($card);
+        $preview = $parity->preview($card);
+
+        $say = static fn (array $figures): string => $figures === []
+            ? 'none'
+            : implode(', ', array_map(
+                static fn (string $key, string $state): string => $key.'='.$state,
+                array_keys($figures),
+                $figures,
+            ));
+
+        $shape = static fn (string $draws): string => sprintf(
+            'kind=%s  state=%s  hero=%s  tiles=%s  draws=%s',
+            $preview['kind'], $preview['state'], $preview['hero'], $preview['tiles'], $draws,
+        );
+
+        $differences = $parity->differences($cardFigures, $popupFigures, $preview);
+
+        $this->line('');
+        $this->line('RUNG 10 — CARD ↔ POPUP  (what each surface resolves to from this payload; keys and states, never values)');
+        $this->line('    card  figures : '.$say($cardFigures));
+        $this->line('    popup figures : '.$say($popupFigures));
+        $this->line('    card  preview : '.$shape($preview['card_draws']));
+        $this->line('    popup preview : '.$shape($preview['popup_draws']));
+        $this->line('    PARITY        : '.($differences === [] ? 'MATCH' : 'DIFFERS'));
+
+        foreach ($differences as $difference) {
+            $this->line('                  · '.$difference);
+            $this->divergences[] = 'card ↔ popup: '.$difference;
         }
     }
 

@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
@@ -90,6 +91,86 @@ final class ContentReconcileWalkTest extends TestCase
             'external_account_id' => $account->getKey(),
             'provider' => 'meta', 'external_id' => 'cmp-1', 'name' => 'Campaign', 'status' => 'active',
         ]);
+    }
+
+    /**
+     * OWNER CONTENT P0 — the walk says what the CARD and the POPUP each resolve to, side by side.
+     *
+     * #505 is guarded in a browser, and Production cannot be read in one here: the page needs an
+     * authenticated session and the figures live on a connected ad account. This is the same question
+     * asked of the same payload on the server, so «the two surfaces agree on Production» becomes
+     * evidence somebody can dispatch rather than a screenshot somebody has to take.
+     *
+     * Keys, states and one verdict. No value, no name, no url.
+     */
+    public function test_the_walk_states_what_the_card_and_the_popup_each_resolve_to(): void
+    {
+        $creative = $this->collectionWithHeroAndFigures();
+
+        $this->artisan('content:reconcile', ['creative' => (string) $creative->getKey()])
+            ->expectsOutputToContain('RUNG 10 — CARD ↔ POPUP')
+            /*
+             * The whole line, on both surfaces: the objective's verdict leads the card, the panel
+             * leads with its own floor, and every figure this row reports is on both. Asserted in
+             * order, because `expectsOutputToContain` walks the output line by line.
+             */
+            ->expectsOutputToContain('card  figures : spend=reported, orders=reported, cpa=reported, revenue=reported, roas=reported, conversion_rate=reported, aov=reported, impressions=reported, clicks=reported, ctr=reported')
+            ->expectsOutputToContain('popup figures : spend=reported, impressions=reported, clicks=reported, ctr=reported, cpc=reported, cpm=reported, revenue=reported, roas=reported, orders=reported')
+            ->expectsOutputToContain('card  preview : kind=collection  state=available  hero=yes  tiles=not fetched  draws=still')
+            ->expectsOutputToContain('popup preview : kind=collection  state=available  hero=yes  tiles=not fetched  draws=still')
+            ->expectsOutputToContain('PARITY        : MATCH')
+            ->doesntExpectOutputToContain('cdn.test')
+            ->assertExitCode(0);
+    }
+
+    /** And it prints the figures' KEYS and STATES — never an amount, on the rung that reads money. */
+    public function test_the_card_popup_rung_prints_no_figure_and_no_url(): void
+    {
+        $creative = $this->collectionWithHeroAndFigures();
+
+        $this->artisan('content:reconcile', ['creative' => (string) $creative->getKey()])
+            ->doesntExpectOutputToContain('cdn.test')
+            ->doesntExpectOutputToContain('hero-secret')
+            ->assertExitCode(0);
+    }
+
+    /** The owner's shape: a sales collection, hero available, tiles never fetched, full figures. */
+    private function collectionWithHeroAndFigures(): ExternalCreative
+    {
+        $campaign = UnifiedCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'client_workspace_id' => Project::withoutGlobalScopes()->whereKey($this->project->getKey())->value('client_workspace_id'),
+            'name' => 'Sale', 'objective' => 'sales', 'status' => 'active',
+        ]);
+
+        $creative = ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'campaign_id' => $campaign->getKey(),
+            'provider' => 'snapchat',
+            'external_creative_id' => 'cr-collection-parity',
+            'name' => 'Collection with a hero',
+            'format' => 'collection',
+            'status' => 'active',
+            'source_type' => 'api',
+            'asset_url' => 'https://cdn.test/hero-secret.jpg',
+            'cards' => null,
+        ]);
+
+        DB::table('creative_daily_metrics')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'creative_id' => $creative->getKey(),
+            'campaign_id' => $campaign->getKey(),
+            'metric_date' => Carbon::today()->subDay()->toDateString(),
+            'spend' => 400, 'impressions' => 90000, 'clicks' => 1800,
+            'conversions' => 60, 'revenue' => 3000,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        return $creative;
     }
 
     /**
