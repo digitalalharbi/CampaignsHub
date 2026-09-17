@@ -14,6 +14,7 @@ use App\Domains\Projects\Http\Controllers\ProjectCapabilityController;
 use App\Domains\Projects\Http\Controllers\ProjectController;
 use App\Domains\Projects\Http\Controllers\ProjectMembershipController;
 use App\Domains\Projects\Http\Controllers\ProjectOverviewController;
+use App\Domains\Reports\Http\Controllers\LiveDrilldownController;
 use App\Domains\Reports\Http\Controllers\LiveReportBuilderController;
 use App\Domains\Reports\Http\Controllers\ReportAnnotationController;
 use App\Domains\Reports\Http\Controllers\ReportController;
@@ -248,6 +249,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::post('reports/{report}/shares/{share}/revoke', [ReportShareController::class, 'revoke'])->middleware('project.can:reports.manage')->name('reports.shares.revoke');
     Route::post('reports/{report}/shares/{share}/renew', [ReportShareController::class, 'renew'])->middleware('project.can:reports.manage')->name('reports.shares.renew');
     Route::get('reports/{report}/shares/{share}/logs', [ReportShareController::class, 'logs'])->middleware('project.can:reports.view')->name('reports.shares.logs');
+    // REPORT-DRILLDOWN-001 — the live link's platform and content drill-downs, as its recipient sees them.
+    Route::get('reports/{report}/shares/{share}/live/platform/{provider}', [LiveDrilldownController::class, 'platform'])->middleware('project.can:reports.view')->name('reports.shares.live.platform')->whereUuid(['report', 'share'])->where('provider', '[a-z_]{2,32}');
+    Route::get('reports/{report}/shares/{share}/live/content/{key}', [LiveDrilldownController::class, 'content'])->middleware('project.can:reports.view')->name('reports.shares.live.content')->whereUuid(['report', 'share']);
 
     /*
      * TEAM-PROJECT-RBAC-001 — who may change WHO ELSE can see this client.

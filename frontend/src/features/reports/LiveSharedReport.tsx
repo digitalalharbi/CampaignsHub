@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { FileText, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -9,6 +10,7 @@ import { Num } from '@/components/ui/Num'
 import type { ReportAd } from './ReportAdsSection'
 import { ReportAdDetail } from './ReportAdDetail'
 import { LiveContentDetail } from './live/LiveContent'
+import { LivePlatformDrawer } from './live/LivePlatformDrawer'
 import { FreshnessStrip } from './live/LiveSections'
 import { ContentView, DashboardView, PlatformsView, platformsOf, SummaryView } from './live/LiveViews'
 import { useLiveMetricReader } from './live/liveMetrics'
@@ -97,6 +99,8 @@ export function LiveSharedReport({
    */
   const [providers, setProviders] = useState<string[]>([])
   const [open, setOpen] = useState<ReportAd | null>(null)
+  /* REPORT-DRILLDOWN-001 — the platform opened from the comparison. Not in the address: a drawer is a glance, not a place. */
+  const [drawer, setDrawer] = useState<string | null>(null)
 
   const failedMessage = ar ? 'تعذّر تحميل التقرير.' : 'The report could not be loaded.'
   const main = useLivePayload({
@@ -262,7 +266,7 @@ export function LiveSharedReport({
       {/* Dimmed, not blanked, while refreshing: blanking would make every filter change feel like a page load. */}
       <div className={refreshing ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}>
         {mode === 'summary' && <SummaryView payload={payload} {...common} />}
-        {mode === 'dashboard' && <DashboardView payload={payload} {...common} goTo={(m, p) => navigate(m, p)} />}
+        {mode === 'dashboard' && <DashboardView payload={payload} {...common} goTo={(m, p) => navigate(m, p)} onOpenPlatform={setDrawer} />}
         {mode === 'platforms' && (
           <PlatformsView
             whole={payload}
@@ -286,7 +290,25 @@ export function LiveSharedReport({
         )}
       </div>
 
-      {open && (open.content_key
+      {drawer && mode === 'dashboard' && (
+        <LivePlatformDrawer
+          token={token}
+          secret={password}
+          provider={drawer}
+          whole={payload}
+          reader={reader}
+          currency={currency}
+          locale={locale}
+          onOpenContent={onOpenContent}
+          onClose={() => setDrawer(null)}
+        />
+      )}
+
+      {/*
+        Portalled with the platform drawer: a content tile inside the drawer opens this dialog, and a
+        dialog left inside the report's stacking context would open BENEATH the drawer on the body.
+      */}
+      {open && createPortal(open.content_key && payload.breakdowns?.content_drilldown !== false
         ? (
           <LiveContentDetail
             token={token}
@@ -299,7 +321,8 @@ export function LiveSharedReport({
             onClose={() => setOpen(null)}
           />
         )
-        : <ReportAdDetail ad={open} currency={currency} locale={locale} onClose={() => setOpen(null)} />
+        : <ReportAdDetail ad={open} currency={currency} locale={locale} onClose={() => setOpen(null)} />,
+      document.body,
       )}
     </div>
   )
