@@ -88,6 +88,18 @@ final class ReportBreakdowns
         return $out;
     }
 
+    /** Whether the operator hid a section of this report — its slide is present and `visible: false`. */
+    public static function reportSlideHidden(Report $report, string $type): bool
+    {
+        foreach ((array) (((array) ($report->config ?? []))['slides'] ?? []) as $slide) {
+            if (is_array($slide) && ($slide['type'] ?? null) === $type && ($slide['visible'] ?? true) === false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * The report's own form, read WITHOUT touching `$share->report`.
      *
@@ -104,6 +116,31 @@ final class ReportBreakdowns
         $form = Report::withoutGlobalScopes()->whereKey($share->report_id)->value('form');
 
         return is_string($form) ? $form : null;
+    }
+
+    /**
+     * Which breakdowns a generated REPORT's document carries on a surface (the PDF).
+     *
+     * A document has no share: the operator's switch lives on the report, `config.breakdowns.<surface>`,
+     * and the parent section is the report's own slide — a platform section the operator hid takes its
+     * drill-down with it, and a hidden ads section takes the content lists.
+     *
+     * @return array<string, bool>
+     */
+    public static function forReport(Report $report, string $surface = 'pdf'): array
+    {
+        $config = (array) ($report->config ?? []);
+        $overrides = (array) (((array) ($config['breakdowns'] ?? []))[$surface] ?? []);
+
+        $parentSlide = [self::PLATFORM => 'platform_comparison', self::CONTENT => 'ads'];
+
+        $out = [];
+        foreach (self::REGISTRY as $key => $entry) {
+            $wanted = is_bool($overrides[$key] ?? null) ? $overrides[$key] : self::defaultFor($key, $surface);
+            $out[$key] = $wanted && ! self::reportSlideHidden($report, $parentSlide[$key]);
+        }
+
+        return $out;
     }
 
     public static function allows(ReportShare $share, string $breakdown, string $surface = 'live'): bool
