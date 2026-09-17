@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { withStreamsSlide } from './reportSections'
 import { fmtDate } from '@/lib/datetime'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
@@ -86,6 +87,7 @@ export function PrintReport() {
     for (let i = 0; i < (d.attention?.length ?? 0); i += ATTENTION_PER_PAGE) {
       visible.push({ ...ATTENTION_SLIDE, id: `${ATTENTION_SLIDE.id}-${i}`, range: [i, i + ATTENTION_PER_PAGE] })
     }
+    withStreamsSlide(visible, d)
     if (d.disclaimer) visible.push({ id: '__methodology', type: '__methodology', order: 9999, visible: true })
     return visible
   }, [payload])
