@@ -112,7 +112,7 @@ export function reportMetrics(data: Input, ar = true): ReportMetric[] {
     .map((key) => {
       const spec = SPECS[key]
       const substituted = direct && (key === 'cpa' || key === 'roas')
-      const value = substituted ? direct[key as 'cpa' | 'roas'] : data.kpis[key]
+      const value = substituted ? direct[key as 'cpa' | 'roas'] : (data.kpis ?? {})[key]
 
       return {
         key,
@@ -126,7 +126,7 @@ export function reportMetrics(data: Input, ar = true): ReportMetric[] {
               ? { kind: 'no_data' }
               // MONEY-USD-001 — the report's own currency, not the formatter's default.
               : { kind: 'value', text: spec.format(value, data.currency ?? null) })
-          : readMetric(key, spec, data.kpis, data.reported, data.currency ?? null),
+          : readMetric(key, spec, data.kpis ?? {}, data.reported, data.currency ?? null),
         // The period-over-period change belongs to the blended figure it was computed from. Showing
         // it beside a Direct value would attach one scope's movement to another scope's number.
         delta: substituted ? undefined : (data.delta?.[key] ?? null),
@@ -158,7 +158,7 @@ export function previousReading(metric: ReportMetric, data: Input): { text: stri
 
   const current = metric.substituted
     ? data.objective_performance?.direct?.[metric.key as 'cpa' | 'roas'] ?? null
-    : data.kpis[metric.key]
+    : (data.kpis ?? {})[metric.key]
 
   return {
     text: spec.format(before, data.currency ?? null),

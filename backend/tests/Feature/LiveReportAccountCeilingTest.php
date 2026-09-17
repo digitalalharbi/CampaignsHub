@@ -104,6 +104,8 @@ final class LiveReportAccountCeilingTest extends TestCase
             'project_id' => $this->project->id, 'name' => 'R', 'type' => 'executive', 'status' => 'completed',
             'currency' => 'SAR', 'period_start' => '2026-07-01', 'period_end' => '2026-07-31',
             'data' => ['kpis' => ['spend' => 100]],
+            // The objective split is advanced segmentation, which a client report only carries when enabled.
+            'section_settings' => ['sections' => ['advanced_segmentation' => true]],
         ]);
 
         app(ProjectContext::class)->forget();

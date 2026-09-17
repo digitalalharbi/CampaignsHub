@@ -13,7 +13,9 @@ use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\ContentKey;
@@ -631,6 +633,18 @@ final class LiveReportService
         $payload = ReportComposition::for($this->formFor($share))->apply($payload);
 
         $payload['outline'] = (new ReportStructure)->sections($payload, composesNarrative: false);
+
+        /*
+         * REPORT-SECTION-SURFACES-001 — the report's section set, resolved by the one resolver every
+         * surface uses: the report's saved choices narrowed by this link's flags, the objective's
+         * support, and the figures just assembled. It runs after the outline, which it trims to
+         * match. A hidden section's keys leave the payload and `report_sections` names what stayed,
+         * so the page draws from that list rather than from whichever keys happen to be present.
+         */
+        $report = Report::withoutGlobalScopes()->find($share->report_id);
+        if ($report !== null) {
+            $payload = app(ReportSectionSurfaces::class)->apply($payload, $report, $share, 'live');
+        }
 
         return $payload;
     }

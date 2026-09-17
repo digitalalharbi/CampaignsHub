@@ -138,13 +138,15 @@ final class LiveReportFormCompositionTest extends TestCase
     {
         $summary = $this->payloadFor('executive_summary');
 
-        $this->assertSame([], $summary['funnel'], 'the funnel is the detailed product’s — handoff §10');
-        $this->assertNull($summary['store_funnel'], 'and so is the store reconciliation');
+        // REPORT-SECTION-SURFACES-001 — a section the form does not contain is absent, not emptied.
+        $this->assertArrayNotHasKey('funnel', $summary, 'the funnel is the detailed product’s — handoff §10');
+        $this->assertArrayNotHasKey('store_funnel', $summary, 'and so is the store reconciliation');
+        $this->assertNotContains('funnel', $summary['report_sections']);
     }
 
     public function test_a_summary_does_not_carry_the_per_platform_creative_rankings(): void
     {
-        $this->assertSame([], $this->payloadFor('executive_summary')['ads_platform_groups']);
+        $this->assertEmpty($this->payloadFor('executive_summary')['ads_platform_groups'] ?? []);
     }
 
     public function test_the_detailed_report_keeps_every_one_of_them(): void
@@ -152,7 +154,7 @@ final class LiveReportFormCompositionTest extends TestCase
         $detailed = $this->payloadFor('detailed');
 
         $this->assertNotEmpty($detailed['funnel'], 'the detailed report lost its funnel');
-        $this->assertArrayHasKey('ads_platform_groups', $detailed);
+        $this->assertContains('funnel', $detailed['report_sections']);
     }
 
     /**
@@ -171,7 +173,11 @@ final class LiveReportFormCompositionTest extends TestCase
         $this->assertNotEmpty($summary['totals'], 'the headline figures');
         $this->assertNotEmpty($summary['platforms'], 'the platform summary');
         $this->assertNotNull($summary['deltas'] ?? null, 'the period comparison');
-        $this->assertNotNull($summary['objective_performance'] ?? null, 'direct against blended');
+        /*
+         * Direct against blended is no longer part of a client's summary: it lives only inside
+         * advanced segmentation, off by default, and the headline stays the truthful overall figures.
+         */
+        $this->assertArrayNotHasKey('objective_performance', $summary);
     }
 
     /**
@@ -182,8 +188,11 @@ final class LiveReportFormCompositionTest extends TestCase
      * nothing about the rest» — through a change meant to shorten the document. The component reads
      * `creatives_in_scope` to state the count, so the key has to survive the trimming.
      */
-    public function test_a_summary_still_says_how_many_creatives_ran(): void
+    public function test_a_summary_with_no_content_carries_no_content_section(): void
     {
-        $this->assertArrayHasKey('creatives_in_scope', $this->payloadFor('executive_summary'));
+        // Nothing ran in this window, so the content section is absent — not a count of zero on a card.
+        $summary = $this->payloadFor('executive_summary');
+        $this->assertArrayNotHasKey('creatives_in_scope', $summary);
+        $this->assertNotContains('content_performance', $summary['report_sections']);
     }
 }
