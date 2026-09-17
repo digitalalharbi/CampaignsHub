@@ -17,7 +17,14 @@ import { AUTH, seededProject, selectProject, switchToEnglish } from './helpers'
  * class assertion would have passed on the broken markup, which held the right class all along.
  */
 
-const CARDS = 'article button'
+/*
+ * The POSTER button, by name rather than by position.
+ *
+ * This was `article button`, which worked only while a card held exactly one button: the card now
+ * also carries the «+N» control that reveals the figures the objective did not lead with, so the
+ * nth button stopped being the nth card's poster. The testid is on the poster itself.
+ */
+const CARDS = '[data-testid="creative-card-open"]'
 const STAGE = '[data-testid="ad-preview-dialog-stage"]'
 
 async function open(page: Page, index: number) {
