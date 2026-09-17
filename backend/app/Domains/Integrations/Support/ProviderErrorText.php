@@ -75,6 +75,52 @@ final class ProviderErrorText
         return mb_substr($text, 0, self::CEILING).' […truncated]';
     }
 
+    /**
+     * The message itself, credentials removed, with NO ceiling — for a reader who is about to be
+     * told it now, not a row that will be read later.
+     *
+     * The OAuth callback sends the failure back to the browser as `?reason=`, and Guzzle's own
+     * connection-failure message names the URL that failed, query string and all. TikTok's discovery
+     * call carries the app secret in that query string, so a timeout during discovery would have put
+     * the secret in the address bar and the browser history. The caller trims for the URL; the
+     * redaction happens here, before the trim, so a cut cannot leave half a secret standing.
+     */
+    public static function forDisplay(?string $raw): ?string
+    {
+        if ($raw === null) {
+            return null;
+        }
+
+        $text = trim(self::redact($raw));
+
+        return $text === '' ? null : $text;
+    }
+
+    /**
+     * A request receipt: the URL a connector called, with every credential removed.
+     *
+     * By NAME through the same list `forStorage()` uses, and by VALUE through `$secretValues` — the
+     * configured secrets the connector holds. The name list catches `secret=`; only the value catches
+     * the next platform that calls the same parameter `sig`, `key` or `pass`. The rest of the URL
+     * stays whole, because a receipt that reads `https://[redacted]` is no receipt: the endpoint and
+     * the non-secret parameters are what a diagnosis compares against the platform's own reference.
+     *
+     * @param  list<string>  $secretValues
+     */
+    public static function forReceipt(string $url, array $secretValues = []): string
+    {
+        $text = self::redact($url);
+
+        foreach ($secretValues as $value) {
+            if ($value === '') {
+                continue;
+            }
+            $text = str_replace([$value, rawurlencode($value), urlencode($value)], '[redacted]', $text);
+        }
+
+        return $text;
+    }
+
     /** Replace the VALUE of anything that names a credential, in query strings, JSON and headers. */
     private static function redact(string $text): string
     {
