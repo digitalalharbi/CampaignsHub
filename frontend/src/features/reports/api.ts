@@ -676,12 +676,10 @@ export const createScopeTemplate = (p: string, body: { name: string; description
 
 export const deleteScopeTemplate = (p: string, id: string) => api.delete(`${base(p)}/scope-templates/${id}`)
 
-/** REPORT-RECOMMENDATION-BLOCKS-001 — every attention item for a window, with audience and decision. */
-export const fetchAttention = (p: string, from: string, to: string, currency: string) =>
-  getData<{ items: AttentionItem[]; period: { from: string; to: string } }>(
-    `/projects/${p}/report-attention?${new URLSearchParams({ from, to, currency }).toString()}`,
-  )
+/** REPORT-RECOMMENDATION-BLOCKS-001 — every attention item for a report's own window, with audience and decision. */
+export const fetchAttention = (p: string, reportId: string) =>
+  getData<{ items: AttentionItem[]; period: { from: string; to: string } }>(`${base(p)}/${reportId}/attention`)
 
-/** Approve or hide one item for client reports; `null` clears the decision. */
-export const decideAttention = (p: string, key: string, decision: 'approved' | 'hidden' | null) =>
-  putData<{ item_key: string; decision: string | null }>(`/projects/${p}/report-attention/${key}`, { decision })
+/** Approve or hide one item for THIS report and period only; `null` clears the decision. */
+export const decideAttention = (p: string, reportId: string, key: string, decision: 'approved' | 'hidden' | null) =>
+  putData<{ item_key: string; decision: string | null }>(`${base(p)}/${reportId}/attention/${key}`, { decision })
