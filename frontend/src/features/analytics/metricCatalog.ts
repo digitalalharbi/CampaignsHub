@@ -134,8 +134,8 @@ export const SPECS: Record<string, Spec> = {
     label: { ar: 'الوصول', en: 'Reach' },
     format: compact,
     hint: {
-      ar: 'عدد الأشخاص الذين رأوا الإعلان مرة واحدة على الأقل، كما تحسبه كل منصة داخل نفسها. عند الجمع بين أكثر من منصة تُجمع الأرقام ولا يُطرح المكرَّر: من رآه على منصتين يُحسب مرتين.',
-      en: 'How many people saw the ad at least once, as each platform counts it within itself. Across platforms the figures are added, not de-duplicated — somebody reached on two is counted twice.',
+      ar: 'عدد الأشخاص الذين رأوا الإعلان مرة واحدة على الأقل، كما تحسبه المنصة نفسها. يظهر فقط حيث أرسلت المنصة رقمًا واحدًا لهذه الفترة؛ جمع الوصول عبر أيام أو حملات أو منصات يعدّ الشخص نفسه أكثر من مرة، فلا يُعرض.',
+      en: 'How many people saw the ad at least once, as the platform itself counts them. Shown only where the platform sent one figure for this period — reach added across days, campaigns or platforms counts the same person more than once, so it is not shown.',
     },
   },
   frequency: {

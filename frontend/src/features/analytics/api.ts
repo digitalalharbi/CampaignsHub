@@ -16,7 +16,7 @@ export interface MetricTotals extends MoneyProvenance {
   cpc: number | null
   cpm: number | null
   // DASH-010-D objective-specific base + derived metrics.
-  reach: number
+  reach: number | null
   video_views: number
   video_completions: number
   landing_page_views: number
