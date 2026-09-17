@@ -12,6 +12,7 @@ use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Reports\Jobs\GenerateReportJob;
@@ -140,10 +141,12 @@ final class ReportScopeController extends Controller
 
         $providers = DailyMetric::query()
             ->where('project_id', $project)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->distinct()->orderBy('provider')->pluck('provider')->all();
 
         $accountIds = DailyMetric::query()
             ->where('project_id', $project)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->whereNotNull('external_account_id')
             ->distinct()->pluck('external_account_id')->all();
 
@@ -180,7 +183,7 @@ final class ReportScopeController extends Controller
         );
 
         [$creatives, $creativesMore] = $this->bounded(
-            ExternalCreative::query()->where('project_id', $project)->orderBy('name')->orderBy('id'),
+            ExternalCreative::query()->where('project_id', $project)->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_creatives.external_campaign_id', 'external_creatives.project_id'))->orderBy('name')->orderBy('id'),
             ['id', 'name', 'client_display_name', 'provider', 'format', 'campaign_id'],
             fn (ExternalCreative $c): array => [
                 'id' => (string) $c->getKey(),
@@ -643,7 +646,7 @@ final class ReportScopeController extends Controller
             'project_ids' => $submitted->projectIds === [] ? [] : [$project],
             'providers' => $submitted->providers,
             'account_ids' => $keep($submitted->accountIds, DailyMetric::query()
-                ->where('project_id', $project)->whereNotNull('external_account_id')
+                ->where('project_id', $project)->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))->whereNotNull('external_account_id')
                 ->distinct()->pluck('external_account_id')->map(fn ($id): string => (string) $id)->all()),
             'campaign_ids' => $keep($submitted->campaignIds, $campaignIds),
             'ad_set_ids' => $keep($submitted->adSetIds, ExternalAdSet::query()
@@ -651,7 +654,7 @@ final class ReportScopeController extends Controller
             'ad_ids' => $keep($submitted->adIds, ExternalAd::query()
                 ->where('project_id', $project)->pluck('id')->map(fn ($id): string => (string) $id)->all()),
             'creative_ids' => $keep($submitted->creativeIds, ExternalCreative::query()
-                ->where('project_id', $project)->pluck('id')->map(fn ($id): string => (string) $id)->all()),
+                ->where('project_id', $project)->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_creatives.external_campaign_id', 'external_creatives.project_id'))->pluck('id')->map(fn ($id): string => (string) $id)->all()),
             'objectives' => $submitted->objectives,
             'paths' => $submitted->paths,
             'metrics' => $submitted->metrics,

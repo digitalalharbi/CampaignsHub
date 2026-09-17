@@ -9,6 +9,7 @@ use App\Domains\Commerce\Models\CommerceCustomer;
 use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Commerce\Models\CommerceOrderItem;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Support\AdPlatforms;
@@ -273,6 +274,7 @@ final class StoreFunnelService
     {
         $rows = DailyMetric::withoutGlobalScopes()
             ->where('project_id', $projectId)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->whereBetween('metric_date', [$fromDate, $toDate])
             ->selectRaw('metric_key, SUM(value) AS total')
             ->groupBy('metric_key')
@@ -483,6 +485,7 @@ final class StoreFunnelService
     {
         $spendByProvider = DailyMetric::withoutGlobalScopes()
             ->where('project_id', $projectId)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->where('metric_key', 'spend')
             ->whereBetween('metric_date', [$fromDate, $toDate])
             ->selectRaw('provider, SUM(value) AS total')
