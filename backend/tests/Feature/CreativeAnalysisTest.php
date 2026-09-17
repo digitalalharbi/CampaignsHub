@@ -105,6 +105,77 @@ final class CreativeAnalysisTest extends TestCase
     }
 
     /**
+     * FATIGUE-REAL-SIGNALS-001 — decay measured on the creative's OWN daily rows inside the window.
+     *
+     * Eight active days: the earlier four at CTR 2.0% and CPM 10, the later four at CTR 1.0% and CPM 13.
+     * The halves are equal counts of the creative's own active days, and each ratio is rebuilt from
+     * that half's summed clicks, impressions and spend — never an average of daily ratios.
+     */
+    public function test_the_figures_carry_the_creatives_own_early_and_late_halves(): void
+    {
+        $creative = $this->creative('Wearing', $this->awarenessCampaign);
+        foreach (['2026-07-01', '2026-07-02', '2026-07-03', '2026-07-04'] as $d) {
+            $this->day($creative, $d, ['spend' => 100, 'impressions' => 10000, 'clicks' => 200]);
+        }
+        // A quiet middle day on an odd count is in neither half.
+        foreach (['2026-07-06', '2026-07-07', '2026-07-08', '2026-07-09'] as $d) {
+            $this->day($creative, $d, ['spend' => 130, 'impressions' => 10000, 'clicks' => 100]);
+        }
+
+        $figures = app(CreativeMetrics::class)->forCreatives(
+            [(string) $creative->getKey()],
+            Carbon::parse('2026-07-01'),
+            Carbon::parse('2026-07-31'),
+        )[(string) $creative->getKey()];
+
+        $this->assertSame(4, $figures['decay']['days_per_half']);
+        $this->assertEqualsWithDelta(0.02, $figures['decay']['early']['ctr'], 0.00001);
+        $this->assertEqualsWithDelta(0.01, $figures['decay']['late']['ctr'], 0.00001);
+        $this->assertEqualsWithDelta(10.0, $figures['decay']['early']['cpm'], 0.001);
+        $this->assertEqualsWithDelta(13.0, $figures['decay']['late']['cpm'], 0.001);
+        $this->assertEqualsWithDelta(40000, $figures['decay']['late']['impressions'], 0.01);
+    }
+
+    /** CTR falling and CPM rising inside the window are fatigue signals, weighed like CTR and CPC already are. */
+    public function test_within_window_ctr_and_cpm_decay_are_fatigue_signals(): void
+    {
+        $current = [
+            'active_days' => 8, 'impressions' => 80000, 'spend' => 920, 'conversions' => 0,
+            'decay' => [
+                'days_per_half' => 4,
+                'early' => ['impressions' => 40000, 'ctr' => 0.02, 'cpm' => 10.0],
+                'late' => ['impressions' => 40000, 'ctr' => 0.01, 'cpm' => 13.0],
+            ],
+        ];
+
+        $verdict = app(CreativeFatigue::class)->assess($current, ['spend' => 920, 'conversions' => 0]);
+
+        $keys = array_column($verdict['signals'], 'key');
+        $this->assertContains('ctr_decay', $keys);
+        $this->assertContains('cpm_decay', $keys);
+        $this->assertSame(3, $verdict['score'], 'CTR decay weighs as CTR does (2), CPM decay as a cost per unit does (1)');
+        $this->assertSame(CreativeFatigue::WATCH, $verdict['status']);
+    }
+
+    /** A half below the impressions floor the verdict already uses is noise, not a trend. */
+    public function test_decay_is_not_judged_on_halves_below_the_existing_impressions_floor(): void
+    {
+        $current = [
+            'active_days' => 8, 'impressions' => 1200,
+            'decay' => [
+                'days_per_half' => 4,
+                'early' => ['impressions' => 600, 'ctr' => 0.02, 'cpm' => 10.0],
+                'late' => ['impressions' => 600, 'ctr' => 0.005, 'cpm' => 30.0],
+            ],
+        ];
+
+        $verdict = app(CreativeFatigue::class)->assess($current, []);
+
+        $this->assertNotContains('ctr_decay', array_column($verdict['signals'], 'key'));
+        $this->assertNotContains('cpm_decay', array_column($verdict['signals'], 'key'));
+    }
+
+    /**
      * A platform that reports no video data leaves NULL, and the response says so.
      *
      * The `reported` map exists because the frontend cannot infer this from the value: a genuine zero
