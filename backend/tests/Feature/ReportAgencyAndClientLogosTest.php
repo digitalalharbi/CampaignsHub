@@ -123,6 +123,40 @@ final class ReportAgencyAndClientLogosTest extends TestCase
         $this->assertSame('ar', $this->getJson("/api/v1/reports/shared/{$this->token}")->assertOk()->json('data.locale'));
     }
 
+    /**
+     * The link's title is the report's name ending with the product's, in the REPORT's language —
+     * Arabic «— كامبينز هب», English «— CampaignsHub» — on the card a pasted link renders as and in
+     * the spreadsheet's own title.
+     */
+    public function test_a_reports_title_ends_with_the_product_name_in_its_own_language(): void
+    {
+        $this->assertSame('تقرير الأداء الشهري — كامبينز هب', $this->meta($this->preview(), 'og:title'));
+
+        app(TenantContext::class)->setTenantId($this->agency->id);
+        $this->report->update(['name' => 'Monthly performance', 'config' => ['locale' => 'en']]);
+        app(TenantContext::class)->forget();
+
+        $html = $this->preview();
+        $this->assertSame('Monthly performance — CampaignsHub', $this->meta($html, 'og:title'));
+        $this->assertStringContainsString('<title>Monthly performance — CampaignsHub</title>', $html);
+        $this->assertStringContainsString('lang="en"', $html);
+        $this->assertSame('CampaignsHub', $this->meta($html, 'og:site_name'));
+    }
+
+    private function preview(): string
+    {
+        app(TenantContext::class)->forget();
+
+        return (string) $this->withHeaders(['User-Agent' => 'facebookexternalhit/1.1'])->get("/r/{$this->token}")->assertOk()->getContent();
+    }
+
+    private function meta(string $html, string $property): ?string
+    {
+        return preg_match('/<meta (?:property|name)="'.preg_quote($property, '/').'" content="([^"]*)"/u', $html, $m) === 1
+            ? html_entity_decode($m[1], ENT_QUOTES)
+            : null;
+    }
+
     /** @return array<string, mixed> */
     private function branding(): array
     {

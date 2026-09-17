@@ -37,6 +37,31 @@ final class ReportIdentity
      * `نوع التقرير — العميل/المشروع — الفترة`, with any part that is not known simply absent rather
      * than filled with a placeholder: «تقرير — — أغسطس» tells a reader that something is broken.
      */
+    /**
+     * REPORT BRANDING — the report's name ending with the product's, in the REPORT's own language.
+     *
+     * «<اسم التقرير> — كامبينز هب» for an Arabic report, «<Report name> — CampaignsHub» for an English
+     * one. It is what the tab, the pasted-link card and the file's own title say; whose report it is
+     * travels beside it (the header, the card's description), not in it. The SPA mirrors this in
+     * `reportPageTitle()`, and `ReportPageTitleParityTest` holds the two to one format.
+     */
+    public static function pageTitle(Report $report): string
+    {
+        $locale = $report->reportLocale();
+        $name = trim((string) ($report->name ?? ''));
+        if ($name === '') {
+            $name = $locale === 'en' ? 'Performance report' : 'تقرير الأداء';
+        }
+
+        return "{$name} — ".self::productName($locale);
+    }
+
+    /** The product's name in a language — `brand.name_ar` for Arabic, `brand.name` otherwise. */
+    public static function productName(string $locale): string
+    {
+        return (string) ($locale === 'ar' ? config('brand.name_ar', 'كامبينز هب') : config('brand.name', 'CampaignsHub'));
+    }
+
     public static function title(Report $report, string $locale = 'ar'): string
     {
         $parts = array_values(array_filter([

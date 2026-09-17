@@ -213,7 +213,9 @@ final class ReportExportPipelineTest extends TestCase
         self::assertSame('CampaignsHub', $properties->getCreator());
         self::assertSame('CampaignsHub', $properties->getCompany());
         // The REPORT is still what the file is about; the product only says it made it.
-        self::assertSame('Monthly — Acme', $properties->getTitle());
+        // REPORT BRANDING: the file's title is the report's, ending with the product's name in the report's language.
+        self::assertSame(ReportIdentity::pageTitle($report), $properties->getTitle());
+        self::assertStringStartsWith('Monthly — Acme — ', $properties->getTitle());
         self::assertStringContainsString('campaignshub.io', $properties->getDescription());
 
         @unlink($file);

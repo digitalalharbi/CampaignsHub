@@ -5,6 +5,8 @@ declare(strict_types=1);
 // Central brand + domain identity. Change here (or via env) — never hard-code the name in code.
 return [
     'name' => env('APP_BRAND_NAME', 'CampaignsHub'),
+    // The product's name as an Arabic reader reads it — «كامبينز هب», no fatha. Titles end with it on Arabic surfaces.
+    'name_ar' => env('APP_BRAND_NAME_AR', 'كامبينز هب'),
     'domain' => env('APP_DOMAIN', 'campaignshub.io'),
     'frontend_url' => env('FRONTEND_URL', 'https://campaignshub.io'),
     'app_url' => env('APP_MARKETING_URL', 'https://campaignshub.io'),
