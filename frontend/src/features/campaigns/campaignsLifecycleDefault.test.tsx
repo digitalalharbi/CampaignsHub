@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { CampaignsPage } from './CampaignsPage'
 import type { UnifiedCampaign } from './types'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
@@ -173,14 +173,51 @@ describe('the campaigns workspace, opened cold', () => {
    * dark, and an «active only» view would render an empty workspace as a fact about the account
    * rather than about a request that has not answered.
    */
-  it('shows everything, and says why, while the metrics have not arrived', async () => {
+  /*
+   * CAMPAIGNS-PROVISIONAL-LIST-001 — pending is not failed.
+   *
+   * While the figures are in flight the page cannot judge the list, and the list it would show is a
+   * PROVISIONAL one: the unfiltered answer, which is replaced a moment later by the narrowed one. On
+   * a slow engine that swap was measured lifting every card 44px, reordering them and removing one —
+   * a click in that window lands on a card that moves or is gone. So nothing clickable is offered
+   * until the figures answer; the skeleton says a request is in flight, which is the truth.
+   */
+  it('offers no clickable list while the figures are still coming', async () => {
     metrics.value = { data: undefined, isPending: true, isLoading: true, isError: false }
 
     renderWithProviders(<CampaignsPage />, { locale: 'en' })
     await openList()
+    /* «2 in total» comes from the campaigns response: the rows are in, only the figures are not. */
+    await screen.findByText(/2 in total/)
 
-    expect(await screen.findByText('Last year')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByTestId('lifecycle-degraded')).toBeInTheDocument())
+    expect(screen.queryByText('Last year')).toBeNull()
+    expect(screen.queryByText('Still running')).toBeNull()
+    expect(screen.queryAllByTestId('campaign-card')).toHaveLength(0)
+    /* The degraded sentence belongs to a FAILED request; saying it now and removing it later is the lift. */
+    expect(screen.queryByTestId('lifecycle-degraded')).toBeNull()
+    expect(screen.getByTestId('campaigns-list-pending')).toBeInTheDocument()
+  })
+
+  it('shows the judged list, and never the provisional one, once the figures arrive', async () => {
+    metrics.value = { data: undefined, isPending: true, isLoading: true, isError: false }
+    const { rerender } = renderWithProviders(<CampaignsPage />, { locale: 'en' })
+    await openList()
+    await screen.findByText(/2 in total/)
+
+    metrics.value = {
+      data: [
+        { campaign_id: 'running', spend: 10, last_active_on: today },
+        { campaign_id: 'finished', spend: 90000, last_active_on: '2026-01-05' },
+      ],
+      isPending: false, isLoading: false, isError: false,
+    }
+    rerender(<CampaignsPage />)
+
+    /* Whatever frame the provisional answer is held in, the finished campaign must never be offered. */
+    expect(screen.queryByText('Last year')).toBeNull()
+    expect(await screen.findByText('Still running')).toBeInTheDocument()
+    expect(screen.queryByText('Last year')).toBeNull()
+    expect(screen.queryByTestId('lifecycle-degraded')).toBeNull()
   })
 
   it('does the same when the metrics request failed outright', async () => {
