@@ -350,6 +350,29 @@ describe('CreativesPage', () => {
    * because each one fetches its own metadata. Cards render a poster; the player exists only inside
    * the viewer, after somebody opens a creative.
    */
+  it('draws a picture ad from its full image, not its small thumbnail', async () => {
+    vi.mocked(listCreatives).mockResolvedValue(
+      page({
+        creatives: [
+          card({
+            id: 'cr-image',
+            name: 'Full picture',
+            preview: {
+              state: 'available', kind: 'image',
+              image_url: 'https://cdn.example.com/full.jpg', video_url: null,
+              thumbnail_url: 'https://cdn.example.com/small.jpg', expires_at: null, note_ar: null, note_en: null,
+            },
+          }),
+        ],
+      }),
+    )
+
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+    await screen.findByRole('article')
+
+    expect(screen.getByAltText('Full picture')).toHaveAttribute('src', 'https://cdn.example.com/full.jpg')
+  })
+
   it('renders posters on cards and mounts no video element until a ad is opened', async () => {
     vi.mocked(listCreatives).mockResolvedValue(
       page({

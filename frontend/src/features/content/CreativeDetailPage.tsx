@@ -321,8 +321,14 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
 
   const preview = creative.preview
   const note = ar ? preview.note_ar : preview.note_en
+  /*
+   * The best still the payload holds: the full image, else the thumbnail. A Meta video creative
+   * arrives with `thumbnail_url` only — the platform exposes no file — and this page read
+   * `image_url` alone, so it said «no preview» over a picture it was holding.
+   */
+  const still = preview.image_url ?? preview.thumbnail_url
   const showing: 'video' | 'image' | 'none' =
-    preview.state !== 'available' ? 'none' : preview.video_url ? 'video' : preview.image_url ? 'image' : 'none'
+    preview.state !== 'available' ? 'none' : preview.video_url ? 'video' : still ? 'image' : 'none'
 
   return (
     <div className="space-y-6">
@@ -396,11 +402,11 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
               durationHint={creative.duration_seconds}
               className="w-full max-w-3xl"
             />
-          ) : showing === 'image' && preview.image_url ? (
+          ) : showing === 'image' && still ? (
             <img
-              src={preview.image_url}
+              src={still}
               alt={creative.name}
-              loading={imageLoading(preview.image_url)}
+              loading={imageLoading(still)}
               decoding="async"
               style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
               className="max-h-[60vh] max-w-full object-contain transition-transform"

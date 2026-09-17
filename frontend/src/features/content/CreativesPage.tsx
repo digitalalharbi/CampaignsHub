@@ -270,6 +270,18 @@ const FATIGUE_LABEL: Record<FatigueStatus, { ar: string; en: string }> = {
  * Exported so the detail page reads this map rather than growing a second one three lines long,
  * which is how the label maps in this codebase have drifted every previous time.
  */
+
+/**
+ * The still a card draws. A picture ad's full `image_url` beats its thumbnail — Meta serves the
+ * thumbnail small, so the library showed a blurred picture beside a full-size one it held. A film's
+ * poster is its thumbnail first, the frame the platform chose for it.
+ */
+function bestStill(preview: { kind?: string | null; image_url: string | null; thumbnail_url: string | null }): string | null {
+  return preview.kind === 'video'
+    ? preview.thumbnail_url ?? preview.image_url
+    : preview.image_url ?? preview.thumbnail_url
+}
+
 export const KIND_LABEL: Record<string, { ar: string; en: string }> = {
   image: { ar: 'صورة', en: 'Image' },
   video: { ar: 'فيديو', en: 'Video' },
@@ -1077,7 +1089,7 @@ export function CreativesPage() {
               {creatives.map((creative, index) => {
                 const resultKey = primaryResultKey(creative.headline_metrics)
                 const efficiencyKey = primaryEfficiencyKey(creative.headline_metrics)
-                const poster = creative.preview.thumbnail_url ?? creative.preview.image_url
+                const poster = bestStill(creative.preview)
                 /*
                  * CONTENT-PREVIEW-VIDEO-001 — a video with no poster is not «no preview».
                  *
@@ -1318,7 +1330,7 @@ function CreativeGridCard({
   detailsTo: string
 }) {
   const preview = creative.preview
-  const poster = preview.thumbnail_url ?? preview.image_url
+  const poster = bestStill(preview)
   /*
    * CONTENT-PREVIEW-VIDEO-001 — a video with no poster is not «no preview».
    *

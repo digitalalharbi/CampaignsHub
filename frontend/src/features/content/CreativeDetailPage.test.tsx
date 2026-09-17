@@ -303,6 +303,26 @@ describe('CreativeDetailPage', () => {
     expect(container.querySelectorAll('video')).toHaveLength(0)
   })
 
+  /** A Meta video creative carries only a thumbnail: that picture is drawn, not «no preview». */
+  it('draws the thumbnail when the ad holds no image and no file', async () => {
+    mocked.mockResolvedValue(
+      detail({
+        creative: {
+          ...detail().creative,
+          preview: {
+            state: 'available', kind: 'video', image_url: null, video_url: null,
+            thumbnail_url: 'https://cdn.example.com/meta-thumb.jpg', expires_at: null, note_ar: null, note_en: null,
+          },
+        } as CreativeDetail['creative'],
+      }),
+    )
+
+    const { container } = render()
+    await screen.findByText('Hero image')
+
+    expect(container.querySelector('img[src="https://cdn.example.com/meta-thumb.jpg"]')).not.toBeNull()
+  })
+
   /** A video arms nothing: metadata only, no autoplay, and the source is not fetched up front. */
   it('mounts a video with metadata only and no autoplay', async () => {
     mocked.mockResolvedValue(
