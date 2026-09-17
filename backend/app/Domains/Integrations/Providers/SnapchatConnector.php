@@ -441,6 +441,8 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         }
 
         $media = [];
+        /** @var array<string, true> $unasked media ids whose lookup failed — «never managed to ask», not «nothing» */
+        $unasked = [];
 
         foreach (array_chunk($mediaIds, self::MEDIA_PER_REQUEST) as $chunk) {
             try {
@@ -491,6 +493,10 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                  */
                 $this->mediaFailure ??= $e->getMessage();
 
+                foreach ($chunk as $failedId) {
+                    $unasked[$failedId] = true;
+                }
+
                 continue;
             }
 
@@ -509,6 +515,15 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             $m = $media[$creative['media_id'] ?? ''] ?? null;
 
             if ($m === null) {
+                /*
+                 * A throttled or refused lookup is not the platform saying «no file». Marked, so the
+                 * importer keeps the link it already holds instead of wiping it — a card that said
+                 * `expired` must not turn into `unavailable` for six hours because one call failed.
+                 */
+                if (isset($unasked[$creative['media_id'] ?? ''])) {
+                    $creatives[$id]['media_unresolved'] = true;
+                }
+
                 continue;
             }
 

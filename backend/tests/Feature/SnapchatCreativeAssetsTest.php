@@ -313,6 +313,27 @@ final class SnapchatCreativeAssetsTest extends TestCase
         $this->assertArrayNotHasKey('asset_expires_at', $this->creatives()['cr-1']);
     }
 
+    /** A refused media lookup marks its creatives unresolved; an answered empty lookup does not. */
+    public function test_a_refused_media_lookup_marks_its_creatives_unresolved(): void
+    {
+        Http::fake([
+            '*get_media_by_ids*' => Http::response(['request_status' => 'ERROR', 'debug_message' => 'rate limited'], 429),
+            '*/creatives*' => Http::response(['creatives' => [
+                ['creative' => ['id' => 'cr-1', 'name' => 'A', 'type' => 'WEB_VIEW', 'top_snap_media_id' => 'me-1']],
+            ]], 200),
+            '*' => Http::response([], 200),
+        ]);
+
+        $this->assertTrue($this->creatives()['cr-1']['media_unresolved'] ?? false);
+    }
+
+    public function test_an_answered_lookup_without_the_media_is_not_unresolved(): void
+    {
+        $this->fakeApi(['cr-1' => ['media' => 'me-1', 'type' => 'WEB_VIEW']], []);
+
+        $this->assertArrayNotHasKey('media_unresolved', $this->creatives()['cr-1']);
+    }
+
     /** @return array<string, array<string, mixed>> */
     private function creatives(): array
     {

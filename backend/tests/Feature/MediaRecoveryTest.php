@@ -164,6 +164,22 @@ final class MediaRecoveryTest extends TestCase
         $this->assertNotSame('available', $this->previewFromTheApi()['state']);
     }
 
+    /**
+     * A FAILED media lookup is not «the platform resolved nothing». The connector marks the creative
+     * `media_unresolved`, and the stored link and its expiry stand — a throttled call must not turn a
+     * working (or an expired, recoverable) card into «unavailable» until the next sweep.
+     */
+    public function test_a_failed_media_lookup_keeps_the_link_already_held(): void
+    {
+        $held = 'https://cf.snapchat.com/o/asset-4.jpg?e='.now()->addWeek()->getTimestamp().'&s=sig';
+        $this->sync($held);
+
+        $this->sync(null, unresolved: true);
+
+        $this->assertSame($held, $this->creative()->asset_url, 'a failed lookup wiped a link the platform never withdrew');
+        $this->assertSame('available', $this->previewFromTheApi()['state']);
+    }
+
     /** The presenter and the API must agree — a surface reading either one gets the same answer. */
     public function test_the_api_and_the_presenter_tell_the_same_story(): void
     {
@@ -187,9 +203,10 @@ final class MediaRecoveryTest extends TestCase
      * `asset_expires_at` is derived with `AssetExpiry::fromUrl`, which is what both connectors do —
      * so the expiry under test is the one the product would really store, not a value invented here.
      */
-    private function sync(?string $asset): void
+    private function sync(?string $asset, bool $unresolved = false): void
     {
         $creative = [
+            'media_unresolved' => $unresolved,
             'external_id' => 'cr-recovery',
             'name' => 'A story',
             'format' => 'image',

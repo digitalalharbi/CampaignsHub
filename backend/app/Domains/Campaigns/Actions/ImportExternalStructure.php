@@ -161,18 +161,12 @@ final class ImportExternalStructure
             return null;
         }
 
-        $row = ExternalCreative::withoutGlobalScopes()->updateOrCreate(
-            [
-                'project_id' => $campaign->project_id,
-                'provider' => $account->provider,
-                'external_creative_id' => (string) $creative['external_id'],
-            ],
-            [
-                'tenant_id' => $campaign->tenant_id,
-                'campaign_id' => $campaign->unified_campaign_id,
-                'external_campaign_id' => $campaign->id,
-                'name' => (string) ($creative['name'] ?? $creative['external_id']),
-                /*
+        $attributes = [
+            'tenant_id' => $campaign->tenant_id,
+            'campaign_id' => $campaign->unified_campaign_id,
+            'external_campaign_id' => $campaign->id,
+            'name' => (string) ($creative['name'] ?? $creative['external_id']),
+            /*
                  * CONTENT-PREVIEW-SHAPES-001 — an unstated format is not an image.
                  *
                  * This read `(string) ($creative['format'] ?? 'image')`. A connector that could not
@@ -184,10 +178,10 @@ final class ImportExternalStructure
                  * Null is what a column says when nobody knows. The presenter has an honest answer
                  * for it; it had none for a lie.
                  */
-                'format' => isset($creative['format']) ? (string) $creative['format'] : null,
-                'thumbnail_url' => $creative['thumbnail_url'] ?? null,
-                'preview_url' => $creative['preview_url'] ?? null,
-                /*
+            'format' => isset($creative['format']) ? (string) $creative['format'] : null,
+            'thumbnail_url' => $creative['thumbnail_url'] ?? null,
+            'preview_url' => $creative['preview_url'] ?? null,
+            /*
                  * SNAP-CREATIVE-ASSETS-001 — the file itself, when the connector resolved one.
                  *
                  * These two columns existed, were fillable, were read by `CreativePresenter`, and
@@ -198,9 +192,9 @@ final class ImportExternalStructure
                  * Null-coalesced rather than omitted: a provider that sends no asset must not have
                  * a previously-stored one silently kept alive under a new sync.
                  */
-                'asset_url' => $creative['asset_url'] ?? null,
-                'video_url' => $creative['video_url'] ?? null,
-                /*
+            'asset_url' => $creative['asset_url'] ?? null,
+            'video_url' => $creative['video_url'] ?? null,
+            /*
                  * AD-MEDIA-RECOVERY-001 — a carousel's cards, when the connector read them.
                  *
                  * `cards` has been a column, a cast and a documented three-state contract since
@@ -213,13 +207,30 @@ final class ImportExternalStructure
                  * The three states survive the write: absent ⇒ null (no breakdown), `[]` ⇒ the
                  * provider sent an empty one, a list ⇒ the cards it sent.
                  */
-                'cards' => $creative['cards'] ?? null,
-                'asset_expires_at' => $this->time($creative['asset_expires_at'] ?? null),
-                'destination_url' => $creative['destination_url'] ?? null,
-                'source_type' => 'api',
-                'is_demo' => false,
-                'last_synced_at' => Carbon::now(),
+            'cards' => $creative['cards'] ?? null,
+            'asset_expires_at' => $this->time($creative['asset_expires_at'] ?? null),
+            'destination_url' => $creative['destination_url'] ?? null,
+            'source_type' => 'api',
+            'is_demo' => false,
+            'last_synced_at' => Carbon::now(),
+        ];
+
+        /*
+         * The media lookup FAILED for this creative (the connector says so): the platform never
+         * answered, so the stored file, film and expiry stand. Clearing them is right only when the
+         * platform actually answered with nothing.
+         */
+        if (($creative['media_unresolved'] ?? false) === true) {
+            unset($attributes['asset_url'], $attributes['video_url'], $attributes['asset_expires_at']);
+        }
+
+        $row = ExternalCreative::withoutGlobalScopes()->updateOrCreate(
+            [
+                'project_id' => $campaign->project_id,
+                'provider' => $account->provider,
+                'external_creative_id' => (string) $creative['external_id'],
             ],
+            $attributes,
         );
 
         $counts['creatives']++;
