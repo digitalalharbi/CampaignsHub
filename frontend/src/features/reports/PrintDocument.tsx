@@ -459,6 +459,7 @@ export function PrintDocument({
               s.share_of_spend === null ? '—' : `${Math.round(s.share_of_spend * 100)}%`,
             ])}
           />
+          <p>{data.business_streams_cover_total ? 'The streams add up to the total spend.' : 'The streams do not cover every account, so their sum is not the total spend.'}</p>
         </section>
       )}
 

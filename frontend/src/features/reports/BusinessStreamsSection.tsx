@@ -8,7 +8,8 @@ import { formatMoneyReading, readCostPer, type MoneyTotals } from '@/lib/money/c
  * Shown only where an operator enabled advanced segmentation and defined streams; the server removes
  * the block everywhere else. Each stream carries the report's own sums narrowed to the platforms or
  * accounts the operator mapped, so its cost per result is recomputed from its own spend and results.
- * Streams may overlap, so they are never drawn as parts adding up to the total.
+ * A platform or ad account belongs to one stream only, so streams never double-count — and their sum is
+ * called the total only when the server says every in-scope account is mapped.
  */
 export interface BusinessStreamRow {
   key: string
@@ -17,7 +18,7 @@ export interface BusinessStreamRow {
   share_of_spend: number | null
 }
 
-export function BusinessStreamsSection({ streams, currency, ar }: { streams: BusinessStreamRow[] | undefined; currency: string; ar: boolean }) {
+export function BusinessStreamsSection({ streams, coverTotal = false, currency, ar }: { streams: BusinessStreamRow[] | undefined; coverTotal?: boolean; currency: string; ar: boolean }) {
   const rows = streams ?? []
   if (rows.length === 0) return null
 
@@ -63,6 +64,11 @@ export function BusinessStreamsSection({ streams, currency, ar }: { streams: Bus
           )
         })}
       </div>
+      <p data-testid="business-streams-coverage" className="mt-2 text-[11px] text-text-muted">
+        {coverTotal
+          ? (ar ? 'مجموع المسارات يساوي إجمالي الإنفاق.' : 'The streams add up to the total spend.')
+          : (ar ? 'لا تغطي المسارات كل الحسابات، فمجموعها ليس إجمالي الإنفاق.' : 'The streams do not cover every account, so their sum is not the total spend.')}
+      </p>
     </section>
   )
 }
