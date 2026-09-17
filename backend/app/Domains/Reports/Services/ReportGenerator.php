@@ -348,6 +348,8 @@ final class ReportGenerator
              * them. Frozen with the snapshot like every other figure; changing a stream regenerates.
              */
             'business_streams' => $this->businessStreams($report, $agg, $scope, $from, $to, $totals),
+            'business_streams_cover_total' => $report->sectionSettings()->streams() !== []
+                && app(BusinessStreams::class)->coversTotal($agg, $report->sectionSettings()->streams(), $from, $to),
             'summary' => $this->executiveSummary($lens, $totals, $delta, $platforms, $campaigns, $currency ?? ''),
             /*
              * The professional analysis — §14.7.

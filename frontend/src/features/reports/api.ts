@@ -218,6 +218,7 @@ export interface LivePayload {
   report_sections?: string[]
   /** REPORT-SECTION-STREAMS-001 — present only with advanced segmentation on and streams defined. */
   business_streams?: BusinessStreamRow[]
+  business_streams_cover_total?: boolean
   period: { from: string; to: string; days: number }
   currency: string
   totals: Record<string, number | null>
