@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Services;
 
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
@@ -31,6 +32,11 @@ final class PeriodReachFetcher
         $connector = $this->registry->get($account->provider);
 
         if (! $connector instanceof ReportsPeriodReach || $connector->periodReachGrains() === []) {
+            return false;
+        }
+
+        // Never ask a platform we hold no credentials for — the same rule the metrics sync keeps.
+        if ($connector->status() === ConnectorStatus::AwaitingCredentials) {
             return false;
         }
 
