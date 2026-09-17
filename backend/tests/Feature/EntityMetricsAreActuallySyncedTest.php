@@ -246,6 +246,28 @@ final class EntityMetricsAreActuallySyncedTest extends TestCase
         Http::assertSent(fn ($request): bool => str_contains($request->url(), 'campaigns/cmp-1/stats'));
     }
 
+    /**
+     * The live campaigns a real structure sync stores carry the provider's body in `raw` — with no
+     * `sandbox` key. The sandbox filter must keep them; on Production it dropped every one of them.
+     */
+    public function test_a_live_campaign_with_a_provider_body_is_still_swept(): void
+    {
+        $this->seed(MetricDefinitionSeeder::class);
+        [$account] = $this->liveSnapchatAccount();
+
+        ExternalCampaign::withoutGlobalScopes()
+            ->where('external_account_id', $account->id)
+            ->update(['raw' => json_encode(['id' => 'cmp-1', 'objective' => 'WEB_VIEW', 'status' => 'ACTIVE'])]);
+
+        $this->fakeSnapchatStats();
+
+        app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-02'));
+
+        Http::assertSent(fn ($request): bool => str_contains($request->url(), 'campaigns/cmp-1/stats'));
+        $this->assertGreaterThan(0, DB::table('entity_daily_metrics')->where('entity_type', 'ad_set')->count());
+        $this->assertGreaterThan(0, DB::table('entity_daily_metrics')->where('entity_type', 'ad')->count());
+    }
+
     /** @return array{0: ExternalAccount, 1: Project} */
     private function liveSnapchatAccount(): array
     {
