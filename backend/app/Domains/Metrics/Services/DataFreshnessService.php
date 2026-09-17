@@ -110,13 +110,14 @@ final class DataFreshnessService
         $missing = $hasAdPlatform ? $this->missingDays($projectIds, $from, $to) : 0;
         $failed = array_filter($sources, static fn (array $s): bool => $s['state'] === 'failed');
         $stale = array_filter($sources, static fn (array $s): bool => $s['state'] === 'stale');
+        $partialSources = array_filter($sources, static fn (array $s): bool => $s['state'] === 'partial');
 
         $lastSync = collect($sources)->pluck('data_as_of')->filter()->max();
 
         return [
             'state' => match (true) {
                 $failed !== [] => 'sync_failed',
-                $missing > 0 => 'partial',
+                $missing > 0, $partialSources !== [] => 'partial',
                 $stale !== [] => 'stale',
                 default => 'fresh',
             },
@@ -176,6 +177,8 @@ final class DataFreshnessService
         $runs = MetricSyncRun::withoutGlobalScopes()
             ->whereIn('project_id', $projectIds)
             ->when($providers !== null && $providers !== [], fn ($q) => $q->whereIn('provider', $providers))
+            // ACCOUNT-SCOPE-ISOLATION-001 — a deselected account's failed run is not this project's failure.
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'metric_sync_runs'))
             ->toBase()
             ->select('project_id', 'provider')
             /*
@@ -185,7 +188,13 @@ final class DataFreshnessService
              * that is simply quiet look like one we have never been able to read, and then age it into
              * a staleness alert about a problem that does not exist.
              */
-            ->selectRaw("MAX(finished_at) FILTER (WHERE status IN ('success', 'no_data', 'partial_mapping')) AS succeeded_at")
+            /*
+             * `partial_mapping` is NOT a success for freshness: part of what was asked for did not land —
+             * unmapped campaign rows, or an ad-set/ad grain that failed — and a «fresh» badge over it is
+             * how 3,979 stale ad rows read as current. It is reported as its own state, naming the grain.
+             */
+            ->selectRaw("MAX(finished_at) FILTER (WHERE status IN ('success', 'no_data')) AS succeeded_at")
+            ->selectRaw("MAX(finished_at) FILTER (WHERE status = 'partial_mapping') AS partial_at")
             ->selectRaw('MAX(finished_at) AS checked_at')
             ->selectRaw("MAX(finished_at) FILTER (WHERE status = 'failed') AS failed_at")
             ->groupBy('project_id', 'provider')
@@ -227,6 +236,14 @@ final class DataFreshnessService
             $d = $byKey->get($key);
             $run = $runs->get($key);
             $dataAsOf = $d?->data_as_of;
+            $state = $this->verdict(
+                succeededAt: $run?->succeeded_at,
+                checkedAt: $run?->checked_at,
+                failedAt: $run?->failed_at,
+                dataAsOf: $dataAsOf,
+                now: $now,
+                partialAt: $run?->partial_at,
+            );
 
             $rows[] = [
                 'kind' => 'ad_platform',
@@ -238,13 +255,10 @@ final class DataFreshnessService
                 'latest_metric_date' => $d?->latest_metric_date ? Carbon::parse((string) $d->latest_metric_date)->toDateString() : null,
                 'last_checked_at' => $this->iso($run?->checked_at),
                 'last_sync_error' => null,
-                'state' => $this->verdict(
-                    succeededAt: $run?->succeeded_at,
-                    checkedAt: $run?->checked_at,
-                    failedAt: $run?->failed_at,
-                    dataAsOf: $dataAsOf,
-                    now: $now,
-                ),
+                'state' => $state,
+                'missing_grain' => $state === 'partial'
+                    ? $this->missingGrain((string) $identity['project_id'], (string) $identity['provider'])
+                    : null,
             ];
         }
 
@@ -343,8 +357,12 @@ final class DataFreshnessService
      * failed is `failed` even if an older run succeeded, because the figures on the page are now
      * knowingly behind and somebody has to go and look.
      */
-    private function verdict(mixed $succeededAt, mixed $checkedAt, mixed $failedAt, mixed $dataAsOf, Carbon $now): string
+    private function verdict(mixed $succeededAt, mixed $checkedAt, mixed $failedAt, mixed $dataAsOf, Carbon $now, mixed $partialAt = null): string
     {
+        if ($partialAt !== null && $succeededAt === null && $dataAsOf === null) {
+            return 'partial';
+        }
+
         /*
          * Figures on the table DISPROVE «awaiting credentials», whatever the run log says.
          *
@@ -361,6 +379,11 @@ final class DataFreshnessService
 
         if ($failedAt !== null && $succeededAt !== null && Carbon::parse((string) $failedAt)->gte(Carbon::parse((string) $succeededAt))) {
             return 'failed';
+        }
+
+        // The newest reply was partial: some grain did not land, whatever the day's rows say.
+        if ($partialAt !== null && ($succeededAt === null || Carbon::parse((string) $partialAt)->gt(Carbon::parse((string) $succeededAt)))) {
+            return 'partial';
         }
 
         if ($dataAsOf === null || Carbon::parse((string) $dataAsOf)->lt($now->copy()->subHours(self::STALE_AFTER_HOURS))) {
@@ -395,6 +418,30 @@ final class DataFreshnessService
             ->count('metric_date');
 
         return max(0, ((int) $from->diffInDays($end) + 1) - $withData);
+    }
+
+    /**
+     * Which grain the newest partial run left behind: `ad_set`, `ad`, or `campaign` (rows that named a
+     * campaign not yet discovered). Read from what the run recorded, never guessed.
+     */
+    private function missingGrain(string $projectId, string $provider): string
+    {
+        $run = MetricSyncRun::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->where('provider', $provider)
+            ->where('status', 'partial_mapping')
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'metric_sync_runs'))
+            ->orderByDesc('finished_at')
+            ->first(['meta']);
+
+        $meta = $run === null ? [] : (array) ($run->meta ?? []);
+
+        return match (true) {
+            ($meta['entity_ad_sets_failure'] ?? null) !== null => 'ad_set',
+            ($meta['entity_ads_failure'] ?? null) !== null => 'ad',
+            ($meta['entity_failure'] ?? null) !== null => 'ad_set',
+            default => 'campaign',
+        };
     }
 
     private function iso(mixed $value): ?string

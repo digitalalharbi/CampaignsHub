@@ -1082,6 +1082,8 @@ final class MetricsController extends Controller
                 'days_with_data' => $days,
                 'missing_days' => $days === null ? null : max(0, $periodDays - $days),
                 'last_sync_status' => $source['state'],
+                // Which grain an incomplete sync left behind: `campaign`, `ad_set` or `ad`.
+                'missing_grain' => $source['missing_grain'] ?? null,
                 'last_sync_at' => $source['last_checked_at'],
                 'last_sync_error' => $source['last_sync_error'],
             ];

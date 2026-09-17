@@ -66,6 +66,8 @@ const USER_STATE_META: Record<string, { tone: 'success' | 'warning' | 'danger' |
   ACCOUNT_SELECTION_REQUIRED: { tone: 'warning', ar: 'يحتاج اختيار حسابات', en: 'Needs account selection' },
   SYNCING: { tone: 'info', ar: 'جارٍ أول مزامنة', en: 'First sync running' },
   HEALTHY: { tone: 'success', ar: 'يعمل', en: 'Healthy' },
+  /* Every selected account answered with nothing: not working, not broken. */
+  NO_DATA: { tone: 'neutral', ar: 'لا توجد بيانات', en: 'No data' },
   ATTENTION_REQUIRED: { tone: 'warning', ar: 'يحتاج انتباه', en: 'Needs attention' },
   REAUTH_REQUIRED: { tone: 'danger', ar: 'يحتاج إعادة مصادقة', en: 'Needs reconnecting' },
   AUTH_REQUIRED: { tone: 'warning', ar: 'يحتاج مصادقة', en: 'Needs authentication' },
@@ -79,6 +81,7 @@ const STATE_META: Record<PlatformState, { tone: 'success' | 'warning' | 'danger'
   awaiting_credentials: { tone: 'warning', ar: 'بانتظار بيانات الاعتماد', en: 'Awaiting credentials' },
   unavailable: { tone: 'neutral', ar: 'غير متاح حاليًا', en: 'Currently unavailable' },
   disconnected: { tone: 'neutral', ar: 'غير مربوط', en: 'Not connected' },
+  revoked: { tone: 'danger', ar: 'الربط ملغى', en: 'Authorisation revoked' },
 }
 
 /** The two states a customer cannot act on, and the same honest sentence for both. */
@@ -242,7 +245,8 @@ export function AdPlatformsPanel() {
    */
   const wizardStates = useQuery({ queryKey: ['resumable-connections'], queryFn: fetchResumableConnections })
   const wizardByProvider = new Map<string, ResumableConnection>(
-    (wizardStates.data?.connections ?? []).map((w) => [w.connection.provider, w]),
+    // Canonical on both sides: the Google card is keyed `google_ads` and its connection says `google`.
+    (wizardStates.data?.connections ?? []).map((w) => [canonicalPlatform(w.connection.provider), w]),
   )
   const unfinished = wizardStates.data?.resumable ?? []
 
@@ -395,7 +399,7 @@ export function AdPlatformsPanel() {
             <ConnectorCard
               key={c.key}
               connector={c}
-              wizard={wizardByProvider.get(c.key) ?? null}
+              wizard={wizardByProvider.get(canonicalPlatform(c.key)) ?? null}
               onOpenWizard={(id) => { setManagingProjectId(null); setWizardConnectionId(id) }}
               onManageAccounts={currentProjectId === null ? undefined : (id) => {
                 setManagingProjectId(currentProjectId)
@@ -582,6 +586,10 @@ function ConnectorCard({
             {' · '}
             {whenSynced(c.data_last_synced_at, ar)}
           </span>
+        ) : state === 'revoked' ? (
+          <span data-testid={`connector-revoked-${c.key}`}>
+            {ar ? 'أُلغي الربط — أعد الربط لاستئناف المزامنة.' : 'The authorisation was revoked — reconnect to resume syncing.'}
+          </span>
         ) : (
           <span>{ar ? 'جاهز للربط — لم يربط أحد حسابه بعد.' : 'Ready to connect — nobody has authorised it yet.'}</span>
         )}
@@ -653,7 +661,7 @@ function ConnectorCard({
           </>
         ) : state ? (
           <Button variant="secondary" loading={authorizing} onClick={onAuthorize} data-testid={`connector-connect-${c.key}`}>
-            <Plug size={14} /> {state === 'error' ? (ar ? 'إعادة الربط' : 'Reconnect') : t('connect')}
+            <Plug size={14} /> {state === 'error' || state === 'revoked' ? (ar ? 'إعادة الربط' : 'Reconnect') : t('connect')}
           </Button>
         ) : c.status === 'connected' ? (
           <Button variant="secondary" loading={syncing} onClick={onSync}>
