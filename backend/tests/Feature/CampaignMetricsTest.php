@@ -17,6 +17,7 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Jobs\SyncAccountStructureJob;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
@@ -597,6 +598,10 @@ final class CampaignMetricsTest extends TestCase
             'unified_campaign_id' => $this->campA1->id, 'external_account_id' => $account->id,
             'provider' => 'meta', 'external_id' => 'c-9', 'name' => 'Ext', 'status' => 'active',
         ]);
+        $binding = ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id, 'external_account_id' => $account->id,
+            'provider' => 'meta', 'purpose' => 'advertising', 'is_active' => true,
+        ]);
         app(TenantContext::class)->forget();
 
         $this->actingAs($this->owner)
@@ -605,6 +610,22 @@ final class CampaignMetricsTest extends TestCase
             ->assertJsonPath('data.queued', 1);
 
         Queue::assertPushed(SyncAccountStructureJob::class, 1);
+
+        // ACCOUNT-SCOPE-ISOLATION-001 — the account now selected for ANOTHER project keeps its old
+        // campaign rows here; this project's button must not fetch for it.
+        $binding->update(['project_id' => $this->projectB->id]);
+        $this->actingAs($this->owner)
+            ->postJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA1->id}/structure/sync")
+            ->assertStatus(422);
+        Queue::assertPushed(SyncAccountStructureJob::class, 1);
+
+        // …nor when it is deselected outright.
+        $binding->update(['project_id' => $this->projectA->id, 'is_active' => false]);
+        $this->actingAs($this->owner)
+            ->postJson("/api/v1/projects/{$this->projectA->id}/campaigns/{$this->campA1->id}/structure/sync")
+            ->assertStatus(422);
+        Queue::assertPushed(SyncAccountStructureJob::class, 1);
+        $binding->update(['is_active' => true]);
 
         // A revoked authorisation is refused rather than queued into a guaranteed failure row.
         $this->holdingTenant((string) $this->tenant->id);

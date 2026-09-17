@@ -1074,6 +1074,8 @@ final class CreativeAnalysisController extends Controller
         ]);
 
         $this->applyReach($scope, $request);
+        // ACCOUNT-SCOPE-ISOLATION-001 — a creative the reader cannot see (its account is deselected) cannot be grouped.
+        BoundAccountVisibility::applyThroughCampaign($scope, 'external_creatives.external_campaign_id', 'external_creatives.project_id');
 
         $creatives = $scope->whereIn('id', $data['creative_ids'])->get();
 
@@ -1150,6 +1152,7 @@ final class CreativeAnalysisController extends Controller
         abort_unless($request->user()?->hasPermission('campaigns.link'), 403);
 
         $this->applyReach($scope, $request);
+        BoundAccountVisibility::applyThroughCampaign($scope, 'external_creatives.external_campaign_id', 'external_creatives.project_id');
 
         $model = $scope->whereKey($creative)->first();
         abort_if($model === null, 404, 'Creative not found.');
