@@ -84,6 +84,9 @@ Schedule::command('integrations:sync')->everyThirtyMinutes()->withoutOverlapping
  */
 Schedule::command('integrations:sync-structure')->cron('55 */6 * * *')->withoutOverlapping();
 
+// AD-MEDIA-RECOVERY-002 — a dying platform link is re-signed by creative id, hourly, before a card goes blank.
+Schedule::command('integrations:refresh-expired-media')->hourlyAt(25)->withoutOverlapping();
+
 /*
  * Close the runs a worker abandoned — before the next sweep reads them as work in progress.
  *

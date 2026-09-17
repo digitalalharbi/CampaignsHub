@@ -20,6 +20,7 @@ use App\Domains\Integrations\Console\ProbeInsightsCommand;
 use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
 use App\Domains\Integrations\Console\QuarantineSandboxRowsCommand;
 use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
+use App\Domains\Integrations\Console\RefreshExpiredCreativeMediaCommand;
 use App\Domains\Integrations\Console\ScopeAuditCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
@@ -90,6 +91,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // INTEG-SYNC-001 — the sweep that drives synced data, the token refresh that runs ahead of
         // need, and the retention that keeps raw payloads from becoming the largest table here.
         SyncAdPlatformsCommand::class,
+        RefreshExpiredCreativeMediaCommand::class,
         // STRUCT-001 — the discovery half: campaigns, ad sets, ads and creatives, on its own cadence.
         SyncAdPlatformStructureCommand::class,
         // SNAP-STRUCTURE-RETRY-001 — the same sweep, queued once and WATCHED to a terminal state.

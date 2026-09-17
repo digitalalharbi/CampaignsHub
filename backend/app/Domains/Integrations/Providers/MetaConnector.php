@@ -23,7 +23,7 @@ use App\Domains\Integrations\ValueObjects\SyncResult;
  *
  * Awaiting credentials on this install.
  */
-final class MetaConnector extends ApiAdvertisingConnector implements ReportsEntityGrains
+final class MetaConnector extends ApiAdvertisingConnector implements RefreshesCreativeMedia, ReportsEntityGrains
 {
     /**
      * A ceiling on paging, so a wrong `paging.next` cannot become an unbounded loop.
@@ -218,6 +218,36 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
         }
 
         return $sets;
+    }
+
+    /**
+     * AD-MEDIA-RECOVERY-002 — `GET /?ids=a,b&fields=…`, fifty creatives a call.
+     *
+     * The same creative fields the ads sweep asks for, read through the same `creativeFrom()`, so a
+     * refreshed row cannot differ from a swept one except in being current. Graph re-signs
+     * `image_url` / `thumbnail_url` on every read, whatever state the ad is in.
+     */
+    public function refreshCreativeMedia(string $adAccountId, array $externalCreativeIds): array
+    {
+        $tokens = $this->tokens();
+        $out = [];
+
+        foreach (array_chunk(array_values(array_unique($externalCreativeIds)), 50) as $chunk) {
+            $body = $this->read($this->api($tokens)->get($this->url(''), [
+                'ids' => implode(',', $chunk),
+                'fields' => 'id,name,thumbnail_url,object_type,image_url,object_story_spec',
+            ]), 'creative media');
+
+            foreach ($chunk as $id) {
+                $creative = $body[$id] ?? null;
+
+                if (is_array($creative) && isset($creative['id'])) {
+                    $out[(string) $creative['id']] = $this->creativeFrom($creative, []);
+                }
+            }
+        }
+
+        return $out;
     }
 
     protected function fetchAds(OAuthTokens $tokens, string $adAccountId): array

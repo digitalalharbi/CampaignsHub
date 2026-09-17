@@ -46,6 +46,7 @@ final class ScheduledWorkInventoryTest extends TestCase
          */
         'integrations:close-abandoned-runs',
         'integrations:prune-raw',
+        'integrations:refresh-expired-media',
         'integrations:refresh-tokens',
         'integrations:sync',
         'integrations:sync-structure',
@@ -124,6 +125,7 @@ final class ScheduledWorkInventoryTest extends TestCase
         $mustNotOverlap = [
             'integrations:sync',
             'integrations:sync-structure',
+            'integrations:refresh-expired-media',
             'integrations:refresh-tokens',
             'notifications:send-digests',
             'notifications:send-alerts',

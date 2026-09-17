@@ -21,7 +21,7 @@ use App\Domains\Integrations\ValueObjects\SyncResult;
  *
  * Awaiting credentials on this install — no round trip has been made against a real organisation.
  */
-final class SnapchatConnector extends ApiAdvertisingConnector implements ReportsCreativeInsights, ReportsEntityGrains
+final class SnapchatConnector extends ApiAdvertisingConnector implements RefreshesCreativeMedia, ReportsCreativeInsights, ReportsEntityGrains
 {
     /** Snapchat states money in millionths. */
     private const MICRO = 1_000_000;
@@ -273,7 +273,18 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         ];
     }
 
-    private function creativesById(OAuthTokens $tokens, string $adAccountId): array
+    /**
+     * AD-MEDIA-RECOVERY-002 — the account's creatives read as the sweep reads them, media resolved only
+     * for the ones asked about. Snapchat has no batch creative-by-id read; the account's creative list
+     * is the cheap half, and `get_media_by_ids` for a handful of ids is the only per-asset cost.
+     */
+    public function refreshCreativeMedia(string $adAccountId, array $externalCreativeIds): array
+    {
+        return $this->creativesById($this->tokens(), $adAccountId, array_values(array_unique($externalCreativeIds)));
+    }
+
+    /** @param  list<string>|null  $only  resolve media only for these creative ids (null: every creative) */
+    private function creativesById(OAuthTokens $tokens, string $adAccountId, ?array $only = null): array
     {
         $creatives = [];
         /* The provider's own body per creative, kept for the composite pass. */
@@ -347,7 +358,13 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             $bodies[(string) $c['id']] = $c;
         }
 
-        return $this->withMedia($tokens, $adAccountId, $this->coversForComposites($creatives, $bodies));
+        $covered = $this->coversForComposites($creatives, $bodies);
+
+        if ($only !== null) {
+            $covered = array_intersect_key($covered, array_flip($only));
+        }
+
+        return $this->withMedia($tokens, $adAccountId, $covered);
     }
 
     /**

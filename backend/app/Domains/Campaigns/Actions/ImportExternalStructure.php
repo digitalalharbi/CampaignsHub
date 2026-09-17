@@ -228,6 +228,34 @@ final class ImportExternalStructure
     }
 
     /** A platform timestamp, or null — an unparseable one is not worth failing a whole import over. */
+    /**
+     * AD-MEDIA-RECOVERY-002 — only the media of a creative already held, from a by-id refresh.
+     *
+     * The same rules `creativeFor()` applies to the same columns, and nothing else: a refresh knows no
+     * ad and no campaign, so it must not touch the relation, the name or the destination. A lookup
+     * that failed (`media_unresolved`) changes nothing; one that answered with no file clears it,
+     * exactly as a sweep would.
+     *
+     * @param  array<string, mixed>  $creative
+     */
+    public function refreshMedia(ExternalCreative $row, array $creative): bool
+    {
+        if (($creative['media_unresolved'] ?? false) === true) {
+            return false;
+        }
+
+        $row->forceFill([
+            'thumbnail_url' => $creative['thumbnail_url'] ?? null,
+            'asset_url' => $creative['asset_url'] ?? null,
+            'video_url' => $creative['video_url'] ?? null,
+            'cards' => $creative['cards'] ?? null,
+            'asset_expires_at' => $this->time($creative['asset_expires_at'] ?? null),
+            'last_synced_at' => Carbon::now(),
+        ])->save();
+
+        return true;
+    }
+
     private function time(mixed $value): ?Carbon
     {
         if (! is_string($value) || $value === '') {
