@@ -716,3 +716,32 @@ export const updateReportSections = (p: string, id: string, body: { sections?: R
 
 export const updateTemplateSections = (p: string, templateId: string, sections: Record<string, boolean>) =>
   putData<{ template_id: string; chosen: Record<string, boolean> }>(`${base(p)}/scope-templates/${templateId}/sections`, { sections })
+
+/** The same registry list as the report's, off-only for one link. */
+export type LinkSectionState = 'shown' | 'hidden_by_link' | 'hidden_by_report'
+
+export interface ShareSectionsState {
+  share_id: string
+  sections: Array<{ key: string; title_ar: string; title_en: string; breakdown: boolean; state: LinkSectionState }>
+  resolved: ResolvedSectionRow[]
+  visible: string[]
+  availability_judged: boolean
+}
+
+export interface SectionRegistryRow {
+  key: string
+  title_ar: string
+  title_en: string
+  breakdown: boolean
+  default_client: boolean
+  default_internal: boolean
+}
+
+export const reportSectionRegistry = (p: string) =>
+  getData<{ sections: SectionRegistryRow[]; reasons: string[] }>(`${base(p)}/sections`)
+
+export const getShareSections = (p: string, reportId: string, shareId: string) =>
+  getData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`)
+
+export const updateShareSections = (p: string, reportId: string, shareId: string, sections: Record<string, boolean>) =>
+  putData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`, { sections })
