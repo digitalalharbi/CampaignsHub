@@ -6,6 +6,7 @@ namespace Tests\Unit;
 
 use App\Domains\Integrations\Catalogue\ProviderDisplayName;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * INTEGRATION-META-001 — a probe that can write is not a probe.
@@ -71,5 +72,50 @@ final class ProbeWorkflowsStayReadOnlyTest extends TestCase
                 "The diagnosis form offers provider key `{$offered}`, which no account can carry.",
             );
         }
+    }
+
+    /**
+     * A manual workflow may declare at most 25 inputs, because GitHub refuses to dispatch one with more.
+     *
+     * The cap is GitHub's («you may only define up to 25 `inputs` for a `workflow_dispatch` event»)
+     * and it is enforced at DISPATCH, not at merge: CI stays green, the file parses, and every push
+     * quietly records a «workflow file issue» run that reads like noise. #465 took the diagnosis
+     * workflow from 24 inputs to 28 and the first anybody knew was a read-only dispatch on main being
+     * refused — the one workflow that can ask Production a question, unable to be asked anything.
+     *
+     * Every workflow is walked, not the two read-only ones, because the cap is not about reading.
+     */
+    public function test_no_workflow_declares_more_dispatch_inputs_than_github_will_accept(): void
+    {
+        $limit = 25;
+        $files = glob(dirname(__DIR__, 3).'/.github/workflows/*.yml') ?: [];
+        $this->assertNotEmpty($files, 'no workflows found — the guard would pass over nothing');
+
+        $over = [];
+        $seen = 0;
+
+        foreach ($files as $path) {
+            $parsed = Yaml::parse((string) file_get_contents($path));
+            // YAML reads a bare `on:` as boolean true; both spellings are the same trigger table.
+            $triggers = $parsed['on'] ?? $parsed[true] ?? $parsed[1] ?? null;
+            $inputs = is_array($triggers) ? ($triggers['workflow_dispatch']['inputs'] ?? null) : null;
+
+            if (! is_array($inputs)) {
+                continue;
+            }
+
+            $seen++;
+            if (count($inputs) > $limit) {
+                $over[] = basename($path).': '.count($inputs).' inputs';
+            }
+        }
+
+        $this->assertGreaterThan(0, $seen, 'no workflow declares dispatch inputs — the guard measured nothing');
+        $this->assertSame(
+            [],
+            $over,
+            "GitHub refuses to dispatch a workflow with more than {$limit} inputs, and refuses it only at "
+            ."dispatch time, so a green CI proves nothing about it:\n".implode("\n", $over),
+        );
     }
 }

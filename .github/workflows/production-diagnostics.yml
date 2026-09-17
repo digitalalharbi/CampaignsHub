@@ -127,20 +127,7 @@ on:
         required: false
         default: false
       scope_audit:
-        description: 'ACCOUNT-SCOPE-ISOLATION-001 — per project and grain, which ad accounts the stored rows belong to, classified against the project''s bindings (bound / once_bound / bound_elsewhere / unbound / none). Read-only; ids and counts only.'
-        type: boolean
-        required: false
-        default: false
-      scope_project:
-        description: 'Optional: one project id for scope_audit. Omitted: every project holding a binding or a row.'
-        required: false
-        default: ''
-      scope_from:
-        description: 'Optional earliest month for the dated grains of scope_audit, YYYY-MM'
-        required: false
-        default: ''
-      scope_to:
-        description: 'Optional latest month for the dated grains of scope_audit, YYYY-MM'
+        description: "ACCOUNT-SCOPE-ISOLATION-001 — read-only inventory of stored rows by binding state. Empty: off. `all`: every project holding a binding or a row. A project uuid: that project only. ONE input because GitHub dispatches at most 25."
         required: false
         default: ''
 
@@ -414,7 +401,7 @@ jobs:
   # calls no provider, and prints internal uuids, provider keys and counts — never an account name, a
   # provider's own id or a url.
   scope_audit:
-    if: inputs.scope_audit
+    if: inputs.scope_audit != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -422,15 +409,14 @@ jobs:
       - name: Account-scope inventory on VPS
         uses: appleboy/ssh-action@v1.2.2
         env:
-          PROJECT: ${{ inputs.scope_project }}
-          FROM: ${{ inputs.scope_from }}
-          TO: ${{ inputs.scope_to }}
+          # `all` is the estate; anything else is a project id. Still a VALUE into a fixed flag.
+          PROJECT: ${{ inputs.scope_audit == 'all' && '' || inputs.scope_audit }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          envs: PROJECT,FROM,TO
+          envs: PROJECT
           script: |
             set -Eeuo pipefail
             cd /opt/campaignshub
@@ -441,4 +427,4 @@ jobs:
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan integrations:scope-audit \
-                --project="${PROJECT}" --from="${FROM}" --to="${TO}" --lines="200"
+                --project="${PROJECT}" --lines="200"
