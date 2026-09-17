@@ -167,7 +167,10 @@ final class LiveSectionTogglesTest extends TestCase
     {
         $this->assertNotEmpty($this->payloadWith([])['platforms']);
 
-        $this->assertSame([], $this->payloadWith(['platform_comparison' => false])['platforms']);
+        // REPORT-SECTION-SURFACES-001 — switched off means absent from the payload, not an empty list.
+        $off = $this->payloadWith(['platform_comparison' => false]);
+        $this->assertArrayNotHasKey('platforms', $off);
+        $this->assertNotContains('platform_comparison', $off['report_sections']);
     }
 
     public function test_switching_the_budget_off_removes_it_from_the_document(): void
@@ -179,17 +182,17 @@ final class LiveSectionTogglesTest extends TestCase
     {
         $payload = $this->payloadWith(['funnel_store' => false]);
 
-        $this->assertSame([], $payload['funnel']);
-        $this->assertNull($payload['store_funnel']);
+        $this->assertArrayNotHasKey('funnel', $payload);
+        $this->assertArrayNotHasKey('store_funnel', $payload);
     }
 
     public function test_switching_the_objective_breakdown_off_removes_both_of_its_blocks(): void
     {
         $payload = $this->payloadWith(['objective_breakdown' => false]);
 
-        /* null, not `[]` — an empty LIST would still be truthy on the page and render a block with nothing in it. */
-        $this->assertNull($payload['objective_performance']);
-        $this->assertNull($payload['objective_leaders']);
+        /* Absent — neither an empty list nor null reaches the page for a section that is off. */
+        $this->assertArrayNotHasKey('objective_performance', $payload);
+        $this->assertArrayNotHasKey('objective_leaders', $payload);
     }
 
     /**
