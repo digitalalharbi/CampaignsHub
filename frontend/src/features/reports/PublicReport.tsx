@@ -5,7 +5,7 @@ import { useParams } from 'react-router-dom'
 import { Download, Lock } from 'lucide-react'
 import { fetchSharedReport, sharedBranding, sharedDownloadUrl } from './api'
 import type { ReportFormat } from './api'
-import { headerIdentity, hideBrokenLogo, type SharedBranding } from './sharedBranding'
+import { headerIdentity, hideBrokenLogo, reportPageTitle, type SharedBranding } from './sharedBranding'
 import { InteractiveReport } from './InteractiveReport'
 import { LiveSharedReport } from './LiveSharedReport'
 import { productLabel } from './reportProduct'
@@ -22,6 +22,8 @@ interface Shared {
   currency: string
   is_demo: boolean
   generated_at: string | null
+  /** The report's own language — its title follows it, not the viewer's interface. */
+  locale?: 'ar' | 'en'
   /** LIVEREP-001 — `live` renders the filterable dashboard; `snapshot` renders the generated document. */
   mode?: 'live' | 'snapshot'
   /**
@@ -131,11 +133,12 @@ export function PublicReport() {
      * «Demo Store — Analytics» produced «… — … — … — …», four names and three identical separators
      * with nothing to say where the report stops and the client starts.
      */
-    if (report) document.title = `${report.name} · ${identity.name}`
+    // REPORT BRANDING (Owner): the report's name ending with the product's, in the REPORT's language.
+    if (report) document.title = reportPageTitle(report.name, report.locale)
 
     // Restored on the way out, so a client link cannot rename the tab the reader goes back to.
     return () => { document.title = previous }
-  }, [report, identity.name])
+  }, [report])
 
   return (
     <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-background text-text-primary">
@@ -156,8 +159,11 @@ export function PublicReport() {
             <span className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-2">
             <span className="truncate font-heading text-base font-extrabold tracking-tight sm:text-lg" data-testid="shared-report-name">{identity.name}</span>
             {identity.by && (
-              <span className="truncate text-xs text-text-secondary" data-testid="shared-report-by">
+              <span className="flex min-w-0 items-center gap-1.5 truncate text-xs text-text-secondary" data-testid="shared-report-by">
                 {locale === 'ar' ? `بواسطة ${identity.by}` : `by ${identity.by}`}
+                {identity.byLogoUrl && (
+                  <img src={identity.byLogoUrl} alt="" data-testid="shared-report-agency-logo" onError={hideBrokenLogo} className="h-4 w-auto max-w-[72px] shrink-0 object-contain" />
+                )}
               </span>
             )}
             </span>
