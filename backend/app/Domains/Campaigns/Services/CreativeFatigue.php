@@ -120,6 +120,44 @@ final class CreativeFatigue
         }
 
         /*
+         * FATIGUE-REAL-SIGNALS-001 — decay INSIDE the window, on the creative's own daily rows.
+         *
+         * The comparison above is this window against the last. This is the same creative earlier in
+         * the window against later in it — equal counts of its own active days, ratios rebuilt from each
+         * half's sums (`CreativeMetrics::withDecay`). A falling CTR weighs as the CTR comparison does and
+         * a rising CPM as a cost per unit does (CPC); the materiality rule is the one every signal here
+         * already uses, and each half must clear the impressions floor the verdict already requires.
+         * No new threshold is introduced to make up for the frequency signal that no longer exists.
+         */
+        $decay = is_array($current['decay'] ?? null) ? $current['decay'] : null;
+        $early = is_array($decay['early'] ?? null) ? $decay['early'] : null;
+        $late = is_array($decay['late'] ?? null) ? $decay['late'] : null;
+
+        if ($early !== null && $late !== null
+            && (float) ($early['impressions'] ?? 0) >= self::MIN_IMPRESSIONS
+            && (float) ($late['impressions'] ?? 0) >= self::MIN_IMPRESSIONS) {
+            foreach ([['ctr_decay', 'ctr', false, 2], ['cpm_decay', 'cpm', true, 1]] as [$key, $metric, $higherIsWorse, $weight]) {
+                $moved = $this->change($late[$metric] ?? null, $early[$metric] ?? null);
+
+                if ($moved === null || abs($moved) < self::MATERIAL) {
+                    continue;
+                }
+
+                $worse = $higherIsWorse ? $moved > 0 : $moved < 0;
+
+                $signals[] = [
+                    'key' => $key,
+                    'direction' => $worse ? 'worse' : 'better',
+                    'change' => round($moved, 4),
+                    'current' => (float) $late[$metric],
+                    'previous' => (float) $early[$metric],
+                ];
+
+                $score += $worse ? $weight : -$weight;
+            }
+        }
+
+        /*
          * Spending more for the same results — the signal that catches what the ratios miss.
          *
          * A creative can hold its CTR and its CPA steady while its spend doubles and its orders do
