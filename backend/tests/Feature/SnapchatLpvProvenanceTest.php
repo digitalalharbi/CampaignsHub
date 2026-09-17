@@ -93,7 +93,7 @@ final class SnapchatLpvProvenanceTest extends TestCase
         $this->assertStringContainsString('bodies read: 1', $output);
         $this->assertMatchesRegularExpression('/ad\\s+landing_page_views\\s+key absent 1, JSON null 1, zero 0, positive 0/', $output);
         $this->assertMatchesRegularExpression('/ad\\s+conversion_page_views\\s+key absent 0, JSON null 0, zero 1, positive 1/', $output);
-        $this->assertMatchesRegularExpression('/ad\s+2026-08\s+4\s+3\s+2\s+0\s+2026-08-20\s+2026-08-24/', $output);
+        $this->assertMatchesRegularExpression('/ad\s+2026-08\s+4\s+3\s+2\s+0\s+0\s+2026-08-20\s+2026-08-24/', $output);
     }
 
     private function entityRow(string $date, ?int $lpv, ?int $pageViews): void
