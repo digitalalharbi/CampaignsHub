@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Providers;
 
+use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Contracts\AdvertisingConnector;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ProviderConnection;
@@ -12,6 +13,7 @@ use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\PlatformOAuth;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Support\PlatformHttp;
+use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Integrations\ValueObjects\HealthResult;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Http\Client\PendingRequest;
@@ -71,8 +73,11 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
      * are what turn «they had nothing» into «they had nothing, for THIS question, and here is the
      * receipt they can look up».
      *
-     * The URL carries no secret — every platform here authenticates in a header — so it is recorded
-     * whole rather than sanitised into uselessness.
+     * The URL is recorded whole EXCEPT for a credential. Every platform here authenticates in a
+     * header — except TikTok's advertiser list, which takes `app_id` and `secret` in the query string
+     * by the platform's own documentation — so the receipt is passed through `forReceipt()`, which
+     * removes a secret by name and by configured value and leaves everything else standing. A receipt
+     * printed into a workflow log must never be the place a secret is read from.
      *
      * @var list<array{url:string,status:int,request_id:?string,keys:list<string>}>
      */
@@ -325,6 +330,29 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
         return PlatformCredentials::for($this->platform());
     }
 
+    /**
+     * Every configured secret this connector holds — what a receipt must never carry, whatever
+     * parameter name it travelled under. Read from the catalogue's own `secret` marking rather than a
+     * list here, so a credential added to the catalogue is covered the day it is added.
+     *
+     * @return list<string>
+     */
+    protected function secretValues(): array
+    {
+        $platform = $this->platform();
+
+        if (! ProviderCatalogue::has($platform)) {
+            return [];
+        }
+
+        $credentials = $this->credentials();
+
+        return array_values(array_filter(array_map(
+            static fn (string $key): ?string => $credentials->get($key),
+            ProviderCatalogue::get($platform)->secretKeys(),
+        )));
+    }
+
     protected function tokens(): OAuthTokens
     {
         if ($this->connection === null) {
@@ -440,7 +468,7 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
          * of its status or its request id.
          */
         $this->callLog[] = [
-            'url' => (string) $response->effectiveUri(),
+            'url' => ProviderErrorText::forReceipt((string) $response->effectiveUri(), $this->secretValues()),
             'status' => $response->status(),
             // Snapchat and TikTok both return one; the others do not, and null says so.
             'request_id' => isset($body['request_id']) && is_scalar($body['request_id'])
