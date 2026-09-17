@@ -196,6 +196,16 @@ export function CampaignsPage() {
 
   /* Relevance is read from the metrics window; before it answers, nothing about it is known. */
   const metricsKnown = !metricCampaigns.isPending && !metricCampaigns.isError
+  /*
+   * CAMPAIGNS-PROVISIONAL-LIST-001 — pending and failed are two different answers.
+   *
+   * FAILED never resolves, so the page shows every campaign and says why (`lifecycle-degraded`).
+   * PENDING resolves in a moment, and a list shown in that moment is PROVISIONAL: the unfiltered
+   * answer, replaced by the narrowed one once the figures land. Measured on firefox, that swap lifted
+   * every card 44px, reordered them and removed one — so a click in the window hit a card that moved
+   * or vanished. Nothing clickable is offered until the figures answer.
+   */
+  const metricsPending = metricCampaigns.isPending && !metricCampaigns.isError
 
   const campaignsQuery = useQuery({
     /*
@@ -207,7 +217,12 @@ export function CampaignsPage() {
      * whatever the previous scope fetched.
      */
     queryKey: ['project', projectId, 'campaigns', { status, objective: objectiveParam, search, sort, dir, lifecycle, metricsKnown }, page],
-    queryFn: () => listCampaigns(projectId!, {
+    /*
+     * The answer records whether it was JUDGED — asked with the figures in hand — because
+     * `placeholderData` holds the previous answer while the next one loads, and the previous answer
+     * across the pending → known flip is exactly the provisional list this must never show.
+     */
+    queryFn: async () => ({ ...(await listCampaigns(projectId!, {
       status: status || undefined, objective: objectiveParam, search: search || undefined,
       /*
        * «all» is the absence of the filter, not a third value the server has to know about.
@@ -223,10 +238,12 @@ export function CampaignsPage() {
       /* Undefined when nothing is chosen — an empty string is a value, and «no sort» is not one. */
       sort: sort || undefined, dir: sort ? dir : undefined,
       page, from: range.from, to: range.to,
-    }),
+    })), judged: metricsKnown }),
     enabled: Boolean(projectId),
     placeholderData: (prev) => prev,
   })
+  /* The provisional window: figures in flight, or held over from an answer asked without them. */
+  const listProvisional = metricsPending || (metricsKnown && campaignsQuery.data?.judged === false)
   const summary = useSummary(projectId, range)
   const timeseries = useTimeseries(view === 'overview' ? projectId : null, range)
   const platforms = usePlatforms(view === 'overview' ? projectId : null, range)
@@ -1069,7 +1086,7 @@ export function CampaignsPage() {
               about the account rather than about a request that has not answered — so everything is
               shown, and the page says why.
             */}
-            {lifecycleShown.degraded && (
+            {lifecycleShown.degraded && metricCampaigns.isError && (
               <p data-testid="lifecycle-degraded" className="text-xs text-text-secondary">
                 {ar
                   ? 'يُعرض كل الحملات — تعذّر تحديد النشِط منها حتى تصل مؤشرات الفترة.'
@@ -1079,8 +1096,8 @@ export function CampaignsPage() {
           </div>
 
           {/* Campaign list */}
-          {campaignsQuery.isLoading ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-40" />)}</div>
+          {campaignsQuery.isLoading || (listProvisional && view !== 'attention') ? (
+            <div data-testid="campaigns-list-pending" aria-busy="true" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-40" />)}</div>
           ) : campaigns.length === 0 ? (
             <EmptyState title={t('no_campaigns')} description={t('no_campaigns_hint')} />
           ) : view === 'attention' ? (
