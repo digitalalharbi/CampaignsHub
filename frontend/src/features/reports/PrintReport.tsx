@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { fmtDate } from '@/lib/datetime'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
-import { SlideBody, isClientAudience, type Meta, type ReportData, type Slide } from './InteractiveReport'
+import { ATTENTION_SLIDE, SlideBody, isClientAudience, type Meta, type ReportData, type Slide } from './InteractiveReport'
 import { PrintDocument } from './PrintDocument'
 import { headerIdentity, type SharedBranding } from './sharedBranding'
 import { ReportWatermark } from './ReportWatermark'
 import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { brand } from '@/lib/brand'
+
+const ATTENTION_PER_PAGE = 2
 
 interface PrintPayload {
   report_id: string
@@ -65,6 +67,13 @@ export function PrintReport() {
       .filter((s) => s.visible)
       .filter((s) => s.type !== 'next_steps' || (d.next_steps?.length ?? 0) > 0)
       .sort((a, b) => a.order - b.order)
+    /*
+     * REPORT-RECOMMENDATION-BLOCKS-001 — the same attention blocks the deck and the shared link draw,
+     * two to a fixed page so no block is cut by the page edge the layout gate measures.
+     */
+    for (let i = 0; i < (d.attention?.length ?? 0); i += ATTENTION_PER_PAGE) {
+      visible.push({ ...ATTENTION_SLIDE, id: `${ATTENTION_SLIDE.id}-${i}`, range: [i, i + ATTENTION_PER_PAGE] })
+    }
     if (d.disclaimer) visible.push({ id: '__methodology', type: '__methodology', order: 9999, visible: true })
     return visible
   }, [payload])
@@ -296,7 +305,8 @@ function measureLayout() {
   document.querySelectorAll<HTMLElement>('.report-slide').forEach((el, i) => {
     const isCover = !!el.querySelector('.report-cover')
     // Methodology is a legitimate text page; like the cover it is exempt from the "sparse" heuristic.
-    const isTextPage = el.getAttribute('data-slide-type') === '__methodology'
+    // So is an attention page holding a single block: its content is complete, not missing.
+    const isTextPage = ['__methodology', '__attention'].includes(el.getAttribute('data-slide-type') ?? '')
     const pr = el.getBoundingClientRect()
     const cs = getComputedStyle(el)
     const padT = parseFloat(cs.paddingTop) || 0

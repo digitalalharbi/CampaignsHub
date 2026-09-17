@@ -94,6 +94,7 @@ final class ReportStructure
          */
         'not_composed_for_a_live_link' => ['ar' => 'هذا رابط مباشر يعيد حساب الأرقام عند كل فتح، ولا تُكتب فيه النتائج والتوصيات — تُكتب عند إصدار التقرير.', 'en' => 'This is a live link: it recomputes the figures on every open and composes no written analysis. Findings and recommendations are written when a report is generated.'],
         'no_finding_the_figures_support' => ['ar' => 'لا نتيجة تدعمها الأرقام في هذه الفترة.', 'en' => 'No finding is supported by the figures in this period.'],
+        'not_published_on_this_link' => ['ar' => 'هذا القسم غير منشور في هذا الرابط.', 'en' => 'This section is not published on this link.'],
         'no_recommendation_the_figures_support' => ['ar' => 'لا توصية تدعمها الأرقام في هذه الفترة.', 'en' => 'No recommendation is supported by the figures in this period.'],
     ];
 
@@ -147,7 +148,8 @@ final class ReportStructure
              * remembers wrongly.
              */
             'findings' => $has('findings'),
-            'recommendations' => $has('recommendations'),
+            // REPORT-RECOMMENDATION-BLOCKS-001 — the attention blocks are this section too.
+            'recommendations' => $has('recommendations') || $has('attention'),
         ];
 
         $reason = [
@@ -160,9 +162,15 @@ final class ReportStructure
             // built the list knows which applies.
             'ads' => is_string($data['ads_absent_reason'] ?? null) ? $data['ads_absent_reason'] : 'no_ads_to_show',
             'findings' => $composesNarrative ? 'no_finding_the_figures_support' : 'not_composed_for_a_live_link',
-            'recommendations' => $composesNarrative
-                ? 'no_recommendation_the_figures_support'
-                : 'not_composed_for_a_live_link',
+            /*
+             * A live link DOES evaluate attention now, so where it carries the list (even empty) the
+             * figures were examined; a null list is a section this link does not publish.
+             */
+            'recommendations' => match (true) {
+                array_key_exists('attention', $data) && $data['attention'] === null => 'not_published_on_this_link',
+                $composesNarrative, is_array($data['attention'] ?? null) => 'no_recommendation_the_figures_support',
+                default => 'not_composed_for_a_live_link',
+            },
         ];
 
         /*
@@ -222,6 +230,35 @@ final class ReportStructure
         }
 
         return $out;
+    }
+
+    /**
+     * Re-derive ONE section's entry after a client filter changed what the payload holds.
+     *
+     * The outline is written at generation over the operator's full lists; a client cut that removes
+     * every item would otherwise leave the contents promising a section the document no longer has.
+     * Only the named entry is replaced, and only when an outline exists.
+     *
+     * @param  array<string,mixed>  $data
+     * @return array<string,mixed>
+     */
+    public static function refresh(array $data, string $key): array
+    {
+        if (! is_array($data['outline'] ?? null)) {
+            return $data;
+        }
+
+        $fresh = array_column((new self)->sections($data), null, 'key');
+        if (! isset($fresh[$key])) {
+            return $data;
+        }
+
+        $data['outline'] = array_map(
+            static fn ($section) => is_array($section) && ($section['key'] ?? null) === $key ? $fresh[$key] : $section,
+            $data['outline'],
+        );
+
+        return $data;
     }
 
     /**
