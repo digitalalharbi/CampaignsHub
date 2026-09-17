@@ -29,7 +29,14 @@ import type { MoneyTotals } from '@/lib/money/contract'
  * rule, and the reason the dialog can now promise what its docblock always claimed: that it cannot
  * disagree with the line the reader clicked.
  */
-export type DialogFigure = { label: string; value: string }
+/**
+ * OWNER CONTENT P0 — a figure carries its KEY as well as its label.
+ *
+ * The label is for the reader and the key is for everything else: it is what makes «the card and the
+ * popup state the same figure» a question a test can ask in either language, and it is what stopped
+ * the two surfaces being comparable only by eye.
+ */
+export type DialogFigure = { key: string; label: string; value: string }
 
 /**
  * @param metrics the creative's own figures — the money contract's envelope, not a plain bag
@@ -81,10 +88,17 @@ export function creativeDialogFigures(
      * panel to look closely. The tables keep the compact reader with the exact figure a hover away,
      * which is the same rule stated for a surface that has to fit forty rows on a screen.
      */
-    { label: ar ? 'الإنفاق' : 'Spend', value: creativeMoney(metrics as CreativeMetrics | null, 'spend', currency, locale).text },
-    { label: ar ? 'الظهور' : 'Impressions', value: readMetricValue('number', bag.impressions ?? null).text },
-    { label: ar ? 'النقرات' : 'Clicks', value: readMetricValue('number', bag.clicks ?? null).text },
-    { label: 'CTR', value: rate('ctr') },
+    /*
+     * Labelled through `metricLabel`, like the card — the panel used to hold its own words.
+     *
+     * Four of these were English literals («CTR», «CPC», «CPM», «ROAS»), so an Arabic reader met
+     * «تكلفة النقرة» on the card and «CPC» in the panel one click away, about the same figure. In
+     * English the two lists were already identical, which is exactly why nobody saw it.
+     */
+    { key: 'spend', label: metricLabel('spend', locale), value: creativeMoney(metrics as CreativeMetrics | null, 'spend', currency, locale).text },
+    { key: 'impressions', label: metricLabel('impressions', locale), value: readMetricValue('number', bag.impressions ?? null).text },
+    { key: 'clicks', label: metricLabel('clicks', locale), value: readMetricValue('number', bag.clicks ?? null).text },
+    { key: 'ctr', label: metricLabel('ctr', locale), value: rate('ctr') },
     /*
      * The denominators are stated here, where the factor of a thousand is visible.
      *
@@ -93,8 +107,8 @@ export function creativeDialogFigures(
      * that no payload carries — a lookup that misses reads as «unavailable» and looks like a
      * provenance decision rather than a typo.
      */
-    { label: 'CPC', value: costPer(metrics, 'cpc', n('clicks'), currency, bag.cpc) },
-    { label: 'CPM', value: costPer(metrics, 'cpm', n('impressions') / 1000, currency, bag.cpm) },
+    { key: 'cpc', label: metricLabel('cpc', locale), value: costPer(metrics, 'cpc', n('clicks'), currency, bag.cpc) },
+    { key: 'cpm', label: metricLabel('cpm', locale), value: costPer(metrics, 'cpm', n('impressions') / 1000, currency, bag.cpm) },
   ]
 
   /*
@@ -120,13 +134,14 @@ export function creativeDialogFigures(
    */
   if (moneyIsStatable(metrics, 'revenue', currency, ar)) {
     figures.push({
-      label: ar ? 'الإيرادات' : 'Revenue',
+      key: 'revenue',
+      label: metricLabel('revenue', locale),
       value: creativeMoney(metrics as CreativeMetrics | null, 'revenue', currency, locale).text,
     })
   }
 
   if (typeof bag.roas === 'number') {
-    figures.push({ label: 'ROAS', value: rowRoas(metrics) })
+    figures.push({ key: 'roas', label: metricLabel('roas', locale), value: rowRoas(metrics) })
   }
 
   /*
@@ -157,7 +172,7 @@ export function creativeDialogFigures(
         ? percent(raw, 2)
         : readMetricValue(kind === 'ratio' ? 'ratio' : 'number', raw).text
 
-    figures.push({ label: metricLabel(key, locale), value })
+    figures.push({ key, label: metricLabel(key, locale), value })
   }
 
   return figures
