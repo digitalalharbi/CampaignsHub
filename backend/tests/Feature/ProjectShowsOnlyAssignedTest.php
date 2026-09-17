@@ -11,6 +11,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -135,6 +136,24 @@ final class ProjectShowsOnlyAssignedTest extends TestCase
      * An identifier where a name belongs is the same defect as the organisation list showing UUIDs:
      * it claims the provider called it that.
      */
+    public function test_the_platform_last_sync_is_never_a_deselected_accounts_run(): void
+    {
+        $accounts = $this->discoverMany(2);
+        $this->assign($accounts[0], $this->projectA);
+
+        MetricSyncRun::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->projectA->id, 'external_account_id' => $accounts[1]->id,
+            'provider' => 'snapchat', 'status' => 'failed', 'error' => 'foreign failure',
+            'window_start' => now()->subDay(), 'window_end' => now(), 'started_at' => now(), 'finished_at' => now(),
+        ]);
+
+        $platform = collect($this->actingAs($this->operator)
+            ->getJson("/api/v1/projects/{$this->projectA->id}/integrations/platforms")->assertOk()->json('data.platforms'))
+            ->firstWhere('key', 'snapchat');
+
+        $this->assertNull($platform['last_sync'], 'the project panel showed a run of an account it does not select');
+    }
+
     public function test_each_row_names_the_account_and_its_parent(): void
     {
         $accounts = $this->discoverMany(2);
