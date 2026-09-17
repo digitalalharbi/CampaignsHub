@@ -47,7 +47,7 @@ export function BusinessStreamsSection({ streams, coverTotal = false, currency, 
                 </div>
                 <div className="min-w-0">
                   <dt className="text-text-muted">{ar ? 'تكلفة النتيجة' : 'Cost per result'}</dt>
-                  <dd className="tnum truncate font-extrabold text-text-primary" dir="ltr"><Num>{cost}</Num></dd>
+                  <dd className="tnum truncate font-extrabold text-text-primary"><Num>{cost}</Num></dd>
                 </div>
               </dl>
               {stream.share_of_spend !== null && (
