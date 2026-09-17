@@ -108,14 +108,17 @@ final class EntityMetricsAggregatorTest extends TestCase
         $this->assertNull($out['cpm'], 'A CPM derived from a withheld spend would read as free.');
     }
 
-    /** Frequency is averaged, never summed — a summed frequency grows with the window. */
-    public function test_frequency_is_averaged_across_days(): void
+    /**
+     * Frequency is neither summed nor averaged across days — REACH-DEDUP-001. This pinned the mean
+     * (3.0); a window of two days has no frequency, and one day keeps the provider's own.
+     */
+    public function test_frequency_is_not_averaged_across_days(): void
     {
         $id = (string) Str::uuid();
         $this->row($id, '2026-08-01', ['impressions' => 100, 'frequency' => 2.0]);
         $this->row($id, '2026-08-02', ['impressions' => 100, 'frequency' => 4.0]);
 
-        $this->assertEqualsWithDelta(3.0, $this->aggregate()[0]['frequency'], 0.01);
+        $this->assertNull($this->aggregate()[0]['frequency']);
     }
 
     /** Drill-down into one parent shows that parent's children only. */
