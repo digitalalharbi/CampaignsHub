@@ -731,11 +731,12 @@ final class CreativePulseApiTest extends TestCase
             $this->day($tired, now()->subDays($offset)->toDateString(), [
                 // Withheld exactly as the pipeline writes it: no converted value, the original kept.
                 'spend' => null, 'spend_original' => 200, 'original_currency' => 'USD', 'project_currency' => 'SAR',
-                'impressions' => 20000, 'clicks' => 100, 'conversions' => 1, 'revenue' => null, 'frequency' => 6.0,
+                // REACH-DEDUP-001 — the view rate carries the fifth point the averaged frequency used to.
+                'impressions' => 20000, 'clicks' => 100, 'conversions' => 1, 'revenue' => null, 'video_views' => 4000, 'frequency' => 6.0,
             ]);
             $this->day($tired, now()->subDays($offset + 30)->toDateString(), [
                 'spend' => null, 'spend_original' => 100, 'original_currency' => 'USD', 'project_currency' => 'SAR',
-                'impressions' => 20000, 'clicks' => 400, 'conversions' => 20, 'revenue' => null, 'frequency' => 2.0,
+                'impressions' => 20000, 'clicks' => 400, 'conversions' => 20, 'revenue' => null, 'video_views' => 10000, 'frequency' => 2.0,
             ]);
         }
 

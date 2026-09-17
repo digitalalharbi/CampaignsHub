@@ -263,7 +263,13 @@ final class ContentMetricCoexistenceTest extends TestCase
             }
         }
 
-        $missing = array_values(array_diff(array_keys($answeredByCards), $this->answered($strip)));
+        /*
+         * REACH-DEDUP-001 — the one principled exception. A card's reach is that creative's own
+         * provider figure; the strip over two creatives has none, because adding them counts somebody
+         * who saw both twice. Frequency follows reach. Everything else still has to coexist.
+         */
+        $this->assertNull($strip['reach'], 'the strip added two creatives\' reach');
+        $missing = array_values(array_diff(array_keys($answeredByCards), $this->answered($strip), ['reach', 'frequency']));
 
         $this->assertSame(
             [],
