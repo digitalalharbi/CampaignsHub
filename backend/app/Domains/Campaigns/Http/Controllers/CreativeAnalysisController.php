@@ -18,6 +18,7 @@ use App\Domains\Campaigns\Services\CreativeMetricsAvailability;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativePulse;
 use App\Domains\Campaigns\Services\CreativeRows;
+use App\Domains\Campaigns\Support\PresentationAudience;
 use App\Domains\Metrics\Services\ContentIntelligence;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -65,7 +66,10 @@ final class CreativeAnalysisController extends Controller
         private readonly CreativeFatigue $fatigue,
         private readonly CreativePresenter $presenter,
         private readonly CreativeRows $rows,
-    ) {}
+    ) {
+        // The operator's own content surfaces: a connection problem may be named here, never to a client.
+        app(PresentationAudience::class)->forOperator();
+    }
 
     /**
      * The library (§15.2): every creative the caller may reach, filtered, with objective-aware figures.
