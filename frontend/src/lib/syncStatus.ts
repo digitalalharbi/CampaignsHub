@@ -34,7 +34,7 @@
  */
 export const SYNC_STATUSES = [
   'running', 'success', 'no_data', 'partial_mapping', 'failed', 'awaiting_assignment',
-  'fresh', 'stale', 'awaiting_credentials',
+  'fresh', 'stale', 'awaiting_credentials', 'partial',
 ] as const
 
 export type SyncStatus = (typeof SYNC_STATUSES)[number]
@@ -87,6 +87,11 @@ const MEANINGS: Record<SyncStatus, SyncStatusMeaning> = {
   failed: {
     tone: 'danger', ar: 'فشلت', en: 'Failed',
     hint_ar: 'لم نتمكن من إتمام الطلب.', hint_en: 'The request could not be completed.',
+  },
+  partial: {
+    tone: 'warning', ar: 'ناقصة', en: 'Partial',
+    hint_ar: 'آخر مزامنة لم تكتمل: جزء من البيانات لم يصل، فالأرقام ليست كاملة.',
+    hint_en: 'The last sync was incomplete: part of the data did not arrive, so the figures are not complete.',
   },
   awaiting_assignment: {
     tone: 'warning', ar: 'بانتظار ربط بمشروع', en: 'Awaiting a project',

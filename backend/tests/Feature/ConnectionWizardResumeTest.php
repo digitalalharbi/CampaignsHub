@@ -414,6 +414,37 @@ final class ConnectionWizardResumeTest extends TestCase
         $this->assertSame('error', $card['state'], 'a running sync hid a broken authorisation');
     }
 
+    public function test_selected_accounts_that_all_answered_with_no_data_are_not_healthy(): void
+    {
+        $connection = $this->connection('snapchat');
+        $this->discover($connection, 1);
+        $account = ExternalAccount::withoutGlobalScopes()->first();
+        $this->assign($account);
+        $account->forceFill(['last_synced_at' => now()])->save();
+
+        MetricSyncRun::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => ProjectIntegrationBinding::withoutGlobalScopes()->where('external_account_id', $account->id)->value('project_id'),
+            'external_account_id' => $account->id, 'provider' => 'snapchat', 'status' => 'no_data', 'metrics_upserted' => 0,
+            'window_start' => now()->subDay(), 'window_end' => now(), 'started_at' => now(), 'finished_at' => now(),
+        ]);
+
+        $this->assertSame(ConnectionWizardState::USER_NO_DATA, app(ConnectionWizardState::class)->for($connection)['user_state']);
+    }
+
+    public function test_a_revoked_authorisation_does_not_read_as_ready_to_connect(): void
+    {
+        foreach (PlatformCredentials::for('meta')->requires() as $key) {
+            config()->set("ad_platforms.platforms.meta.{$key}", "test-{$key}");
+        }
+        $this->connection('meta')->update(['status' => 'revoked']);
+
+        $card = collect($this->actingAs($this->operator, 'sanctum')->getJson('/api/v1/integrations')->assertOk()->json('data'))
+            ->firstWhere('key', 'meta');
+
+        $this->assertSame('revoked', $card['state']);
+    }
+
     private function connection(string $provider, ?Tenant $tenant = null): ProviderConnection
     {
         $credential = new IntegrationCredential([
