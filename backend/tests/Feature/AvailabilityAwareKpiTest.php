@@ -211,7 +211,7 @@ final class AvailabilityAwareKpiTest extends TestCase
      * `SUM(...) FILTER (...)` returns zero for an empty set as readily as for a set of zeros, and
      * the card cannot tell them apart. The one that would be wrong is the one it must not print.
      */
-    public function test_a_zero_original_is_not_answerable_on_its_own(): void
+    public function test_a_zero_original_over_withheld_rows_is_the_platforms_reported_zero(): void
     {
         $headline = $this->metrics->headline('sales', $this->productionRow([
             'spend' => null,
@@ -219,7 +219,7 @@ final class AvailabilityAwareKpiTest extends TestCase
             'spend_withheld_rows' => 11,
         ]));
 
-        $this->assertNotContains('spend', $headline);
+        $this->assertContains('spend', $headline, 'eleven withheld rows summing to zero are a reported zero, not an absence');
     }
 
     /**

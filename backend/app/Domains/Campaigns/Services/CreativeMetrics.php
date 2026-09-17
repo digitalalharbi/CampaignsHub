@@ -1159,9 +1159,15 @@ final class CreativeMetrics
         $currency = $figures['money_original_currency'] ?? null;
         $currencies = (int) ($figures['money_original_currencies'] ?? 0);
 
+        /*
+         * CONTENT-C-REPORTED-ZERO — PREPARED, NOT RELEASED: valid only when the raw evidence shows the
+         * platform sent a JSON zero for these rows AND #458 has stopped ingestion casting a JSON null
+         * to 0. `*_withheld_rows > 0` already proves the set is not empty, so an original of exactly
+         * zero over those rows is the platform's zero, not an empty sum — stated as 0, never as «—».
+         */
         return $withheldRows > 0
             && is_numeric($original)
-            && (float) $original > 0.0
+            && ((float) $original > 0.0 || ($key === 'spend' && (float) $original === 0.0))
             && $currencies === 1
             && is_string($currency)
             && trim($currency) !== '';

@@ -66,6 +66,20 @@ describe('readMoney', () => {
   })
 })
 
+describe('a reported zero over withheld rows (CONTENT-C-REPORTED-ZERO)', () => {
+  it('reads as 0 in the original currency, never as absent', () => {
+    const r = readMoney({ spend: null, spend_original: 0, spend_withheld_rows: 5, money_original_currency: 'USD', money_original_currencies: 1 } as never, 'spend', 'SAR', false)
+    expect(r.kind).toBe('zero')
+    expect(r.amount).toBe(0)
+    expect(r.currency).toBe('USD')
+  })
+
+  it('no withheld rows is still absent', () => {
+    const r = readMoney({ spend: null, spend_original: 0, spend_withheld_rows: 0, money_original_currency: null, money_original_currencies: 0 } as never, 'spend', 'SAR', false)
+    expect(r.kind).toBe('absent')
+  })
+})
+
 describe('readCostPer', () => {
   it('CASE A — cost-per over a partial spend is unavailable, never the converted subset ÷ denominator', () => {
     expect(readCostPer(PARTIAL, 'cpa', 100, 'SAR', false).kind).toBe('unavailable')

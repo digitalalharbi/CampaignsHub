@@ -143,6 +143,11 @@ export function moneyState(totals: MoneyTotals, key: 'spend' | 'revenue'): Money
   if (hasWithheld && currencies !== 1) return { state: 'mixed_currency', converted: convertedAmount, original, originalCurrency: null }
   if (hasWithheld && hasConverted) return { state: 'partial', converted: convertedAmount, original, originalCurrency: currency }
   if (hasWithheld) return { state: 'complete_withheld', converted: convertedAmount, original, originalCurrency: currency }
+  // CONTENT-C-REPORTED-ZERO (prepared, not released): withheld rows whose originals are all zero,
+  // in one currency, are the platform's reported zero — not an absence. Spend only (revenue: see CreativeMetrics).
+  if (key === 'spend' && convertedAmount === null && rows > 0 && original === 0 && currencies === 1 && currency !== null) {
+    return { state: 'zero', converted: 0, original: 0, originalCurrency: currency }
+  }
   if (convertedAmount === null) return { state: 'absent', converted: null, original: 0, originalCurrency: null }
   if (convertedAmount === 0) return { state: 'zero', converted: 0, original: 0, originalCurrency: null }
   return { state: 'complete_converted', converted: convertedAmount, original: 0, originalCurrency: null }
@@ -174,7 +179,7 @@ export function readMoney(
     case 'absent':
       return { kind: 'absent', amount: null, currency: null, note: null }
     case 'zero':
-      return { kind: 'zero', amount: 0, currency: reportingCurrency, note: null }
+      return { kind: 'zero', amount: 0, currency: s.originalCurrency ?? reportingCurrency, note: null }
     case 'complete_converted':
       return { kind: 'converted', amount: s.converted as number, currency: reportingCurrency, note: null }
   }

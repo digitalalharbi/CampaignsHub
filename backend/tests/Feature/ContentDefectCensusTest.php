@@ -352,13 +352,15 @@ final class ContentDefectCensusTest extends TestCase
             ]]]],
         ]);
 
-        $this->assertStringContainsString('original of ZERO', $this->section('C'));
+        // CONTENT-C-REPORTED-ZERO: withheld rows summing to exactly zero are a reported 0, so the card
+        // states Spend 0 and the creative is no longer in C.
+        $this->assertStringNotContainsString((string) $creative->getKey(), $this->census());
 
         Artisan::call('content:census', ['--project' => (string) $this->project->getKey(), '--raw' => true]);
         $output = Artisan::output();
 
         $this->assertStringContainsString('C EVIDENCE', $output);
-        $this->assertStringContainsString((string) $creative->getKey().'  ads in bodies 1, day-points 2 — spend: key absent 0, JSON null 1, zero 1, positive 0; delivered impressions on 1', $output);
+        $this->assertStringContainsString('none to read', $output);
     }
 
     // ── fixtures ─────────────────────────────────────────────────────────────────────────────────
