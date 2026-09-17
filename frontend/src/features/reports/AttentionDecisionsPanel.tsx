@@ -8,15 +8,15 @@ import { decideAttention, fetchAttention } from './api'
  * REPORT-RECOMMENDATION-BLOCKS-001 — the operator approves or hides each attention item for clients.
  *
  * Every item for the report's window, including the operator-internal ones a client never receives,
- * each with its current decision. A decision is stored per project and read by the server on every
- * client surface, so it applies to this report's shared link and PDF without regenerating it.
+ * each with its current decision. A decision belongs to THIS report and period: the server applies it
+ * to this report's link, snapshot and PDF without regenerating, and never to another period.
  */
-export function AttentionDecisionsPanel({ projectId, from, to, currency, ar }: { projectId: string; from: string; to: string; currency: string; ar: boolean }) {
+export function AttentionDecisionsPanel({ projectId, reportId, ar }: { projectId: string; reportId: string; ar: boolean }) {
   const qc = useQueryClient()
-  const key = ['report-attention', projectId, from, to, currency]
-  const q = useQuery({ queryKey: key, queryFn: () => fetchAttention(projectId, from, to, currency) })
+  const key = ['report-attention', projectId, reportId]
+  const q = useQuery({ queryKey: key, queryFn: () => fetchAttention(projectId, reportId) })
   const decide = useMutation({
-    mutationFn: (v: { item: AttentionItem; decision: 'approved' | 'hidden' | null }) => decideAttention(projectId, v.item.key, v.decision),
+    mutationFn: (v: { item: AttentionItem; decision: 'approved' | 'hidden' | null }) => decideAttention(projectId, reportId, v.item.key, v.decision),
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
   })
 
@@ -35,8 +35,8 @@ export function AttentionDecisionsPanel({ projectId, from, to, currency, ar }: {
     <div className="rounded-2xl border border-border bg-surface-secondary p-4" data-testid="attention-panel">
       <p className="mb-3 text-xs text-text-muted">
         {ar
-          ? 'البنود الداخلية لا تصل إلى العميل إلا باعتمادك، والبنود المخفية لا تصل أبدًا — على الرابط والنسخة والملف.'
-          : 'Internal items reach a client only when you approve them, and hidden items never do — on the link, the snapshot and the file.'}
+          ? 'البنود الداخلية لا تصل إلى العميل إلا باعتمادك، والبنود المخفية لا تصل أبدًا — على الرابط والنسخة والملف. القرار لهذا التقرير وفترته فقط.'
+          : 'Internal items reach a client only when you approve them, and hidden items never do — on the link, the snapshot and the file. A decision applies to this report and period only.'}
       </p>
       <AttentionBlocks
         items={items}

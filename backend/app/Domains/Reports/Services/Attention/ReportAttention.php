@@ -35,20 +35,25 @@ final class ReportAttention
     }
 
     /**
-     * The operator's current decisions for a project, read without the ambient tenant: a shared
-     * link has no session, so the tenant is stated explicitly rather than assumed.
+     * The operator's current decisions for ONE report over ONE window, read without the ambient
+     * tenant: a shared link has no session, so the tenant is stated explicitly rather than assumed.
+     *
+     * A decision taken for another report, or for this report over another window, is not returned:
+     * an approval must not silently carry into figures nobody approved.
      *
      * @return array<string,string>
      */
-    public function decisions(string $tenantId, string $projectId): array
+    public function decisions(string $tenantId, string $reportId, ?string $from, ?string $to): array
     {
-        if ($tenantId === '' || $projectId === '') {
+        if ($tenantId === '' || $reportId === '' || $from === null || $to === null || $from === '' || $to === '') {
             return [];
         }
 
         return ReportAttentionDecision::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
-            ->where('project_id', $projectId)
+            ->where('report_id', $reportId)
+            ->whereDate('period_from', $from)
+            ->whereDate('period_to', $to)
             ->whereIn('decision', AttentionAudience::DECISIONS)
             ->pluck('decision', 'item_key')
             ->all();
