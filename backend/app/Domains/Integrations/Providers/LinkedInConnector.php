@@ -20,7 +20,7 @@ use Illuminate\Support\Carbon;
  *
  * Awaiting credentials — LinkedIn's Marketing Developer Platform is an application, not a signup.
  */
-final class LinkedInConnector extends ApiAdvertisingConnector
+final class LinkedInConnector extends ApiAdvertisingConnector implements ReportsPeriodReach
 {
     /**
      * LINKEDIN-PAGE-001 — how many rows to ask for, because LinkedIn's own default is **ten**.
@@ -397,5 +397,59 @@ final class LinkedInConnector extends ApiAdvertisingConnector
         }
 
         return (float) $value['amount'];
+    }
+
+    /*
+     * REACH-PERIOD-001 — LinkedIn's `approximateMemberReach` with `timeGranularity=ALL` is one figure for
+     * the whole range, on non-demographic pivots (ACCOUNT and CAMPAIGN here), for ranges of at most 92
+     * days. With `ALL`, dates older than six months are rounded to whole months — the answer would be
+     * for a different window than the one shown — so such a window is not asked for.
+     */
+    public function periodReachGrains(): array
+    {
+        return [ReportsPeriodReach::ACCOUNT, ReportsPeriodReach::CAMPAIGN];
+    }
+
+    public function periodReachWindowSupported(string $from, string $to): bool
+    {
+        $start = Carbon::parse($from);
+
+        return $start->diffInDays(Carbon::parse($to)) + 1 <= self::REACH_MAX_DAYS
+            && $start->greaterThanOrEqualTo(Carbon::now()->subMonthsNoOverflow(6)->startOfDay());
+    }
+
+    public function periodReach(string $adAccountId, string $grain, string $from, string $to): array
+    {
+        $account = $grain === ReportsPeriodReach::ACCOUNT;
+
+        $reported = $this->readAll($this->tokens(), 'adAnalytics', 'period reach', [
+            'q' => 'analytics',
+            'pivot' => $account ? 'ACCOUNT' : 'CAMPAIGN',
+            'timeGranularity' => 'ALL',
+        ], [
+            'dateRange' => $this->dateRange($from, $to),
+            'accounts' => 'List('.rawurlencode("urn:li:sponsoredAccount:{$adAccountId}").')',
+            'fields' => 'pivotValues,impressions,approximateMemberReach',
+        ]);
+
+        $rows = [];
+
+        foreach ($reported as $row) {
+            $id = $account ? $adAccountId : $this->campaignIdFrom($row['pivotValues'] ?? null);
+
+            if ($id === null || $id === '') {
+                continue;
+            }
+
+            $rows[] = [
+                'external_id' => $id,
+                'reach' => is_numeric($row['approximateMemberReach'] ?? null) ? (float) $row['approximateMemberReach'] : null,
+                'impressions' => is_numeric($row['impressions'] ?? null) ? (float) $row['impressions'] : null,
+                // LinkedIn returns no frequency; the reader derives impressions ÷ reach.
+                'frequency' => null,
+            ];
+        }
+
+        return $rows;
     }
 }
