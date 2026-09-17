@@ -7,6 +7,7 @@ namespace App\Domains\Reports\Http\Controllers;
 use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\ReportIdentity;
 use App\Http\Controllers\Controller;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
@@ -46,12 +47,13 @@ final class SharePreviewController extends Controller
         $who = $identity['name'];
 
         $period = $this->period($report);
-        $name = trim((string) ($report->name ?? '')) !== '' ? (string) $report->name : __('Performance report');
+        $locale = $report->reportLocale();
 
         return view('reports.share-preview', [
-            'lang' => 'ar',
-            'dir' => 'rtl',
-            'title' => "{$name} — {$who}",
+            // The report's own language, and its title ends with the product's name in it (REPORT BRANDING).
+            'lang' => $locale,
+            'dir' => $locale === 'ar' ? 'rtl' : 'ltr',
+            'title' => ReportIdentity::pageTitle($report),
             /*
              * The period and nothing else. It is what makes the card useful in a chat — «which
              * report is this?» — and it is already implied by the link the sender chose to send.
@@ -72,7 +74,7 @@ final class SharePreviewController extends Controller
              * that there is one source: an install that renamed the brand renamed this card with it,
              * and one that never set `APP_NAME` no longer sends «Laravel» to WhatsApp.
              */
-            'siteName' => (string) config('brand.name'),
+            'siteName' => ReportIdentity::productName($locale),
             'url' => url("/r/{$token}"),
             'image' => $identity['logo_url'],
         ]);

@@ -89,8 +89,11 @@ final class SharePreviewMetadataTest extends TestCase
     {
         $html = $this->preview();
 
-        $this->assertStringContainsString('<title>تقرير الأداء الشهري — Nakheel</title>', $html);
-        $this->assertSame('تقرير الأداء الشهري — Nakheel', $this->meta($html, 'og:title'));
+        // REPORT BRANDING (Owner): the title is the report's name ending with the product's, in the
+        // report's language; whose report it is travels in the description below.
+        $this->assertStringContainsString('<title>تقرير الأداء الشهري — كامبينز هب</title>', $html);
+        $this->assertSame('تقرير الأداء الشهري — كامبينز هب', $this->meta($html, 'og:title'));
+        $this->assertSame('كامبينز هب', $this->meta($html, 'og:site_name'));
         $this->assertSame('article', $this->meta($html, 'og:type'));
     }
 
@@ -133,7 +136,7 @@ final class SharePreviewMetadataTest extends TestCase
 
         $html = $this->preview($gated);
 
-        $this->assertSame('تقرير الأداء الشهري — Nakheel', $this->meta($html, 'og:title'));
+        $this->assertSame('تقرير الأداء الشهري — كامبينز هب', $this->meta($html, 'og:title'));
         $this->assertStringNotContainsString('918273', $html);
         $this->assertStringNotContainsString('let-me-in', $html);
     }
