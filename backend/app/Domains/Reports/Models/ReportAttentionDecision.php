@@ -20,7 +20,7 @@ final class ReportAttentionDecision extends Model
     use BelongsToTenant;
     use HasUuidKey;
 
-    protected $fillable = ['tenant_id', 'project_id', 'item_key', 'decision', 'decided_by', 'decided_at'];
+    protected $fillable = ['tenant_id', 'project_id', 'report_id', 'period_from', 'period_to', 'item_key', 'decision', 'decided_by', 'decided_at'];
 
-    protected $casts = ['decided_at' => 'datetime'];
+    protected $casts = ['decided_at' => 'datetime', 'period_from' => 'date', 'period_to' => 'date'];
 }
