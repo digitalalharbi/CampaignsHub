@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ShareService;
@@ -282,6 +283,7 @@ final class ReportShareController extends Controller
 
         return DB::table('daily_metrics')
             ->where('project_id', $projectId)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->whereNotNull('unified_campaign_id')
             ->when(
                 $model->period_start !== null && $model->period_end !== null,

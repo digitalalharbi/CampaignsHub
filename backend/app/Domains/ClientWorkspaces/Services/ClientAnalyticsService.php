@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\ClientWorkspaces\Services;
 
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -154,6 +155,7 @@ final class ClientAnalyticsService
         }
         $rows = DB::table('daily_metrics')
             ->where('tenant_id', $tenantId)->whereIn('project_id', $ids)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->where('metric_key', 'spend')->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->groupBy('project_id', 'project_currency')
             ->select('project_id', 'project_currency', DB::raw('sum(value) as spend'))
