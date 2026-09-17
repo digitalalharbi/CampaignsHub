@@ -13,6 +13,7 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Services\AccountMetricsSyncer;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -153,6 +154,49 @@ final class EntityMetricsAreActuallySyncedTest extends TestCase
 
         $this->assertSame('success', $run->status);
         $this->assertNull($run->meta['entity_failure'] ?? null);
+    }
+
+    /**
+     * ENTITY-GRAIN-FAILURE-001 — a connector that reports failure WITHOUT throwing is still a failure.
+     *
+     * Snapchat's `syncEntityInsights()` catches everything and returns `SyncResult::failed()`. The
+     * syncer read only `->records`, so after #479 the Production re-sync still read success while
+     * writing zero ad-set and ad rows, with no failure recorded anywhere.
+     */
+    public function test_a_failure_reported_as_a_result_rather_than_thrown_is_recorded(): void
+    {
+        $syncer = app(AccountMetricsSyncer::class);
+        $grain = (new \ReflectionClass($syncer))->getMethod('grain');
+
+        $failure = null;
+        $args = [fn () => SyncResult::failed('Snapchat has no connection bound.'), &$failure];
+        $rows = $grain->invokeArgs($syncer, $args);
+
+        $this->assertSame([], $rows);
+        $this->assertSame('Snapchat has no connection bound.', $failure, 'a failed SyncResult was read as an empty success');
+    }
+
+    /** Rows came back and none matched a discovered entity: not a success, and the counts say so. */
+    public function test_rows_that_match_no_discovered_entity_are_not_a_successful_grain(): void
+    {
+        $this->seed(MetricDefinitionSeeder::class);
+        [$account] = $this->liveSnapchatAccount();
+
+        $this->fakeCampaignGrainThen(fn () => Http::response(['timeseries_stats' => [
+            ['timeseries_stat' => ['breakdown_stats' => ['adsquad' => [
+                ['id' => 'sq-never-discovered', 'timeseries' => [[
+                    'start_time' => '2026-08-01T00:00:00.000+03:00', 'stats' => ['spend' => 1_000_000, 'impressions' => 10],
+                ]]],
+            ], 'ad' => []]]],
+        ]], 200));
+
+        $run = app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-02'));
+
+        $this->assertSame('partial_mapping', $run->status);
+        $this->assertStringContainsString('none matched a discovered ad-set', (string) ($run->meta['entity_ad_sets_failure'] ?? ''));
+        $this->assertGreaterThan(0, (int) ($run->meta['entity_ad_sets_fetched'] ?? 0));
+        $this->assertSame((int) $run->meta['entity_ad_sets_fetched'], (int) $run->meta['entity_ad_sets_skipped']);
+        $this->assertSame(1, (int) ($run->meta['entity_parents_asked'] ?? 0));
     }
 
     /** The account-level campaign breakdown answers; every entity-grain request gets `$entity`. */
