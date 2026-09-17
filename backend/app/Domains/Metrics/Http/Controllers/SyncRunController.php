@@ -140,10 +140,11 @@ final class SyncRunController extends Controller
          * row is not an ownership record: it is a consequence of one, which is precisely the kind of
          * stand-in the ownership rule exists to forbid.
          */
+        // ACCOUNT-SCOPE-ISOLATION-001 — assigned to THIS project, not merely to some project.
         abort_if(
-            $this->assignment->projectIdFor($account) === null,
+            ! $this->assignment->isActivelyAssignedTo($account, (string) $request->route('project')),
             404,
-            'That ad account is not assigned to a project yet.',
+            'That ad account is not selected for this project.',
         );
 
         $to = isset($data['to']) ? Carbon::parse($data['to']) : Carbon::now();
