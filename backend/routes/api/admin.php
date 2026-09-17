@@ -145,6 +145,9 @@ Route::middleware(['auth:sanctum', 'platform'])
             Route::put('/', [MetaCandidateAppController::class, 'update'])->name('update');
             Route::delete('/credentials/{key}', [MetaCandidateAppController::class, 'forget'])->name('credentials.forget');
             Route::post('/test', [MetaCandidateAppController::class, 'start'])->middleware('throttle:10,1')->name('test');
+            // Prepared, never automatic: both need an explicit `confirm`, both are audited.
+            Route::post('/promote', [MetaCandidateAppController::class, 'promote'])->middleware('throttle:5,1')->name('promote');
+            Route::post('/rollback', [MetaCandidateAppController::class, 'rollback'])->middleware('throttle:5,1')->name('rollback');
         });
 
         Route::prefix('/settings/integrations/providers')->name('providers.')->group(function (): void {
