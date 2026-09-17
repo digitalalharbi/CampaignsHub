@@ -22,8 +22,10 @@ use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\Actions\UpsertEntityDailyMetrics;
 use App\Domains\Metrics\Enums\SyncRunStatus;
+use App\Domains\Metrics\Jobs\FetchPeriodReachJob;
 use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Metrics\Models\PeriodReach;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -157,6 +159,27 @@ final class AccountMetricsSyncer
         }
 
         [$upserted, $skipped] = $this->ingest($account, $result->records);
+
+        /*
+         * REACH-PERIOD-001 — a stored window reach that this sync may have changed is asked for again.
+         *
+         * A window's reach is the provider's answer at the moment it was fetched. Once new delivery for
+         * any day inside that window has arrived, the old answer describes fewer days than the cards
+         * now show, so every stored window overlapping the synced range is re-requested (queued, one
+         * per window). Windows entirely before the sync are untouched: their delivery did not change.
+         */
+        PeriodReach::withoutGlobalScopes()
+            ->where('external_account_id', $account->getKey())
+            ->whereDate('date_to', '>=', $from->toDateString())
+            ->whereDate('date_from', '<=', $to->toDateString())
+            ->select('date_from', 'date_to')
+            ->distinct()
+            ->get()
+            ->each(static fn (PeriodReach $w) => FetchPeriodReachJob::dispatch(
+                (string) $account->getKey(),
+                Carbon::parse($w->getRawOriginal('date_from'))->toDateString(),
+                Carbon::parse($w->getRawOriginal('date_to'))->toDateString(),
+            ));
 
         /*
          * SNAP-CREATIVE-METRICS-001 — the same window, asked again at the creative level.
