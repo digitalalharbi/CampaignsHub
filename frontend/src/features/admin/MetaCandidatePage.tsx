@@ -7,6 +7,7 @@ import {
   type MetaCandidateRun, type MetaCandidateStep, type MetaCandidateStepKey,
 } from './api'
 import { Button } from '@/components/ui/Button'
+import { Num } from '@/components/ui/Num'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 
@@ -139,8 +140,8 @@ export function MetaCandidatePage() {
                 value={form[v.key]}
                 onChange={(e) => setForm({ ...form, [v.key]: e.target.value })}
               />
-              <span className="flex items-center gap-2 text-xs text-text-muted" dir="ltr">
-                {v.present ? `${v.source === 'environment' ? c.environment : c.stored} · ••••${v.hint ?? ''}` : c.notSet}
+              <span className="flex items-center gap-2 text-xs text-text-muted">
+                {v.present ? <span>{v.source === 'environment' ? c.environment : c.stored} · <bdi dir="ltr">••••{v.hint ?? ''}</bdi></span> : c.notSet}
                 {v.source === 'stored' && (
                   <button type="button" className="inline-flex items-center gap-1 text-danger" onClick={() => forget.mutate(v.key)}>
                     <Trash2 size={12} aria-hidden /> {c.clear}
@@ -165,14 +166,14 @@ export function MetaCandidatePage() {
         </label>
 
         {/* The scopes the Candidate profile will actually request — read from the server, never assumed. */}
-        <p data-testid="meta-candidate-effective-scopes" className="mt-3 text-xs text-text-secondary" dir="ltr">
-          {c.scopes}: {credentials.effective_scopes.join(' ')}
+        <p data-testid="meta-candidate-effective-scopes" className="mt-3 text-xs text-text-secondary">
+          {c.scopes}: <bdi dir="ltr">{credentials.effective_scopes.join(' ')}</bdi>
         </p>
         <p className="mt-1 break-all text-xs text-text-secondary">
           {c.redirect}: <span dir="ltr" className="font-mono">{credentials.redirect_uri}</span>
         </p>
         {credentials.missing.length > 0 && (
-          <p className="mt-1 text-xs text-danger" dir="ltr">{c.missing}: {credentials.missing.join(', ')}</p>
+          <p className="mt-1 text-xs text-danger">{c.missing}: <bdi dir="ltr">{credentials.missing.join(', ')}</bdi></p>
         )}
         {save.isError && <p className="mt-2 text-xs text-danger">{toApiError(save.error).message}</p>}
 
@@ -208,8 +209,8 @@ function RunChecklist({ run, copy: c }: { run: MetaCandidateRun | null; copy: Co
         <h2 className="font-heading text-[15px] font-bold text-text-primary">{c.checklist}</h2>
         <span data-testid="meta-candidate-status" className="text-sm font-semibold text-text-primary">{c[run.status]}</span>
       </div>
-      <p className="mt-1 text-xs text-text-muted" dir="ltr">
-        App ID ••••{run.app_id_hint ?? ''} · {run.started_at ?? ''}
+      <p className="mt-1 text-xs text-text-muted">
+        <bdi dir="ltr">App ID ••••{run.app_id_hint ?? ''} · {run.started_at ?? ''}</bdi>
       </p>
 
       <ol className="mt-4 grid gap-2">
@@ -217,9 +218,9 @@ function RunChecklist({ run, copy: c }: { run: MetaCandidateRun | null; copy: Co
       </ol>
 
       <dl className="mt-4 grid gap-1 text-xs text-text-secondary">
-        <div className="flex gap-2"><dt>{c.accounts}:</dt><dd className="tnum" dir="ltr">{run.discovered_accounts.length}</dd></div>
+        <div className="flex gap-2"><dt>{c.accounts}:</dt><dd className="tnum"><Num>{run.discovered_accounts.length}</Num></dd></div>
         {run.granted_scopes.length > 0 && (
-          <div className="flex gap-2"><dt>{c.scopesGranted}:</dt><dd dir="ltr">{run.granted_scopes.join(' ')}</dd></div>
+          <div className="flex gap-2"><dt>{c.scopesGranted}:</dt><dd><bdi dir="ltr">{run.granted_scopes.join(' ')}</bdi></dd></div>
         )}
       </dl>
     </section>
@@ -243,15 +244,15 @@ function StepRow({ step, copy: c }: { step: MetaCandidateStep; copy: Copy }) {
         <span className="ms-auto font-mono text-[11px] text-text-muted" dir="ltr">{step.status}</span>
       </div>
       {e && (
-        <p className="mt-1 break-words font-mono text-[11px] text-danger" dir="ltr">
-          {[
+        <p className="mt-1 break-words font-mono text-[11px] text-danger">
+          <bdi dir="ltr">{[
             e.http_status != null ? `HTTP ${e.http_status}` : null,
             e.code != null ? `code ${e.code}` : null,
             e.subcode != null ? `subcode ${e.subcode}` : null,
             e.type ?? null,
             e.fbtrace_id ? `fbtrace_id ${e.fbtrace_id}` : null,
           ].filter(Boolean).join(' · ')}
-          {e.message ? ` — ${e.message}` : ''}
+          {e.message ? ` — ${e.message}` : ''}</bdi>
         </p>
       )}
     </li>
