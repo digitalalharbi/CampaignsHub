@@ -188,12 +188,20 @@ describe('the figures a creative’s dialog carries', () => {
       .toBe(creativeMoney(row as never, 'revenue', 'SAR', 'en').text)
   })
 
-  /** Arabic labels the money figures in Arabic and leaves the acronyms alone — they are read as-is. */
+  /**
+   * Arabic labels EVERY figure in Arabic — including the acronyms, which the card has always named.
+   *
+   * OWNER CONTENT P0: four of these tiles carried English literals («CTR», «CPC», «CPM», «ROAS»)
+   * while the card beneath them read «تكلفة النقرة» through `metricLabel`. In English the two lists
+   * were identical, which is why it survived: the divergence existed only for the Arabic reader, who
+   * is most of this product's audience. Both surfaces now ask the same labeller.
+   */
   it('labels in the reader’s language', () => {
     const figures = creativeDialogFigures(metrics(), 'USD', true)
 
     expect(find(figures, 'الإنفاق')).toBeDefined()
-    expect(find(figures, 'CPC')).toBeDefined()
+    expect(find(figures, 'تكلفة النقرة')).toBeDefined()
+    expect(find(figures, 'CPC')).toBeUndefined()
   })
 })
 

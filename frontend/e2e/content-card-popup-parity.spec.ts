@@ -24,25 +24,27 @@ import { AUTH, seededProject, selectProject } from './helpers'
  */
 test.use({ storageState: AUTH.owner })
 
-/** The labels a container states a VALUE for — the card is a definition list, the panel a grid of tiles. */
-const STATED = `(root) => {
-  const pairs = []
+/** What a surface actually drew: a named still, a film, or nothing at all. */
+const MEDIA = (root: Element): string => {
+  const img = root.querySelector('img')
 
-  root.querySelectorAll('dt').forEach((dt) => pairs.push([dt.textContent, dt.nextElementSibling?.textContent]))
+  if (img) return `image:${img.getAttribute('src') ?? ''}`
 
-  if (pairs.length === 0) {
-    root.querySelectorAll(':scope > div').forEach((tile) => {
-      const kids = Array.from(tile.children)
-      pairs.push([kids[0]?.textContent, kids[1]?.textContent])
-    })
-  }
+  return root.querySelector('video') ? 'video' : 'none'
+}
 
-  return pairs
-    .map(([label, value]) => [(label ?? '').trim(), (value ?? '').trim()])
-    .filter(([, value]) => value !== '' && value !== '—')
-    .map(([label]) => label)
-    .sort()
-}`
+/** The metric KEYS a container states a value for — a dash is «we cannot say», not a figure. */
+const STATED = (root: Element): string[] => {
+  const out: string[] = []
+
+  root.querySelectorAll('[data-metric]').forEach((cell) => {
+    const value = (cell.lastElementChild?.textContent ?? '').trim()
+
+    if (value !== '' && value !== '—') out.push(cell.getAttribute('data-metric') ?? '')
+  })
+
+  return out.sort()
+}
 
 test('a content card states every figure its own popup states, and the same still', async ({ page, request }) => {
   await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
@@ -63,15 +65,16 @@ test('a content card states every figure its own popup states, and the same stil
   if (await more.count() > 0) await more.click()
 
   const cardFigures = await metrics.evaluate(STATED)
-  const cardStill = await card.locator('img').first().getAttribute('src').catch(() => null)
+  const cardMedia = await card.evaluate(MEDIA)
 
-  await card.getByRole('button', { name: /Open preview/ }).click()
+  // By testid, not by label: this gate runs the product in Arabic as well as in English.
+  await card.getByTestId('creative-card-open').click()
 
   const dialog = page.getByTestId('ad-preview-dialog')
   await expect(dialog).toBeVisible()
 
   const popupFigures = await dialog.getByTestId('ad-preview-dialog-figures').evaluate(STATED)
-  const popupStill = await dialog.locator('img').first().getAttribute('src').catch(() => null)
+  const popupMedia = await dialog.evaluate(MEDIA)
 
   for (const figure of popupFigures) {
     expect(
@@ -80,8 +83,22 @@ test('a content card states every figure its own popup states, and the same stil
     ).toContain(figure)
   }
 
+  /*
+   * A still is compared by its FILE; a film is compared as «there is a film here».
+   *
+   * The card draws a poster and the panel mounts a player, so the two hold different elements for
+   * the same video by design. What must never differ is whether there is an ad to look at: the
+   * owner's reading was a card with a picture and a creative saying it had no cover.
+   */
+  if (cardMedia.startsWith('image:') && popupMedia.startsWith('image:')) {
+    expect(
+      cardMedia,
+      'the card and the popup drew different stills for one creative — one of them is not the ad',
+    ).toBe(popupMedia)
+  }
+
   expect(
-    cardStill,
-    'the card and the popup drew different stills for one creative — one of them is not the ad',
-  ).toBe(popupStill)
+    cardMedia === 'none',
+    `the card and the popup disagree about whether this creative has media — card: ${cardMedia}, popup: ${popupMedia}`,
+  ).toBe(popupMedia === 'none')
 })

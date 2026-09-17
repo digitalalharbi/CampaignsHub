@@ -32,7 +32,7 @@ describe('a figure summed from ads says so', () => {
         locale="en"
         creative={creative({ grain: 'ad', spend: 120 })}
         onClose={() => {}}
-        figures={[{ label: 'Spend', value: '120 SAR' }]}
+        figures={[{ key: 'spend', label: 'Spend', value: '120 SAR' }]}
       />,
       { locale: 'en' },
     )
@@ -47,7 +47,7 @@ describe('a figure summed from ads says so', () => {
         locale="en"
         creative={creative({ grain: 'creative', spend: 120 })}
         onClose={() => {}}
-        figures={[{ label: 'Spend', value: '120 SAR' }]}
+        figures={[{ key: 'spend', label: 'Spend', value: '120 SAR' }]}
       />,
       { locale: 'en' },
     )
@@ -62,7 +62,7 @@ describe('a figure summed from ads says so', () => {
         locale="en"
         creative={creative({ spend: 120 })}
         onClose={() => {}}
-        figures={[{ label: 'Spend', value: '120 SAR' }]}
+        figures={[{ key: 'spend', label: 'Spend', value: '120 SAR' }]}
       />,
       { locale: 'en' },
     )
@@ -78,7 +78,7 @@ describe('a set partly filled from the ads says so', () => {
         locale="en"
         creative={creative({ grain: 'creative', spend: 100, from_ads: ['spend', 'cpa'] })}
         onClose={() => {}}
-        figures={[{ label: 'Spend', value: '100 SAR' }]}
+        figures={[{ key: 'spend', label: 'Spend', value: '100 SAR' }]}
       />,
       { locale: 'en' },
     )
@@ -93,7 +93,7 @@ describe('a set partly filled from the ads says so', () => {
         locale="en"
         creative={creative({ grain: 'creative', spend: 100, from_ads: [] })}
         onClose={() => {}}
-        figures={[{ label: 'Spend', value: '100 SAR' }]}
+        figures={[{ key: 'spend', label: 'Spend', value: '100 SAR' }]}
       />,
       { locale: 'en' },
     )

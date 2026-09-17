@@ -104,27 +104,17 @@ const PAGE: LibraryPage = {
   },
 } as unknown as LibraryPage
 
-/** The labels a container states a VALUE for — a dash is «we cannot say», not a figure. */
-const statedLabels = (root: HTMLElement): string[] => {
-  const pairs: { label: string; value: string }[] = []
+/** The metric KEYS a container states a value for — a dash is «we cannot say», not a figure. */
+const stated = (root: HTMLElement): string[] => {
+  const out: string[] = []
 
-  /* The card is a definition list; the popup is a grid of two-line tiles. Same question, two markups. */
-  root.querySelectorAll('dt').forEach((dt) => {
-    pairs.push({ label: (dt.textContent ?? '').trim(), value: (dt.nextElementSibling?.textContent ?? '').trim() })
+  root.querySelectorAll('[data-metric]').forEach((cell) => {
+    const value = (cell.lastElementChild?.textContent ?? '').trim()
+
+    if (value !== '' && value !== '—') out.push(cell.getAttribute('data-metric') ?? '')
   })
 
-  if (pairs.length === 0) {
-    root.querySelectorAll(':scope > div').forEach((tile) => {
-      const [label, value] = Array.from(tile.children)
-
-      pairs.push({ label: (label?.textContent ?? '').trim(), value: (value?.textContent ?? '').trim() })
-    })
-  }
-
-  return pairs
-    .filter((p) => p.value !== '' && p.value !== '—')
-    .map((p) => p.label)
-    .sort()
+  return out.sort()
 }
 
 describe('a collection with a hero and no tiles reads the same on the card and in the popup', () => {
@@ -163,15 +153,15 @@ describe('a collection with a hero and no tiles reads the same on the card and i
     const more = screen.queryByTestId('creative-card-more-metrics')
     if (more) fireEvent.click(more)
 
-    const card = statedLabels(screen.getByTestId('creative-card-metrics'))
+    const card = stated(screen.getByTestId('creative-card-metrics'))
 
     fireEvent.click(screen.getByRole('button', { name: /^Open preview: Collection with a hero$/ }))
 
-    const popup = statedLabels(await screen.findByTestId('ad-preview-dialog-figures'))
+    const popup = stated(await screen.findByTestId('ad-preview-dialog-figures'))
 
     expect(card).toEqual(popup)
-    expect(card).toContain('Impressions')
-    expect(card).toContain('CPM')
-    expect(card).toContain('Orders')
+    expect(card).toContain('impressions')
+    expect(card).toContain('cpm')
+    expect(card).toContain('orders')
   })
 })

@@ -1400,6 +1400,12 @@ function CreativeGridCard({
         <button
           type="button"
           onClick={onOpen}
+          /*
+           * Named for what it IS, so a selector can ask for the poster rather than for «a button in a
+           * card». The card grew a second control — the «+N» that reveals the rest of the figures —
+           * and any index-based reading of `article button` silently re-pointed at it.
+           */
+          data-testid="creative-card-open"
           aria-label={`${t.open}: ${creative.name}`}
           /*
            * CONTENT-PREVIEW-SHAPES-001 — the frame is the shape the ad actually is.
@@ -1595,7 +1601,9 @@ function CreativeGridCard({
           */
           <div data-testid="creative-card-metrics" className="flex flex-col gap-1">
             <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-              <div className="flex flex-col">
+              {/* Each cell carries its metric KEY, so «the card and the popup state the same figure»
+                  is answerable without comparing words in two languages. */}
+              <div data-metric="spend" className="flex flex-col">
                 <dt className="text-text-secondary">{metricLabel('spend', locale)}</dt>
                 <dd className="tabular-nums text-text-primary">
                   {/*
@@ -1614,7 +1622,7 @@ function CreativeGridCard({
 
               {shownKeys
                 .map((key) => (
-                  <div key={key} className="flex flex-col">
+                  <div key={key} data-metric={key} className="flex flex-col">
                     <dt className="text-text-secondary">{metricLabel(key, locale)}</dt>
                     <dd className="tabular-nums text-text-primary">
                       <Num>{/*
