@@ -1,4 +1,5 @@
 import { DataMetricTable, type Column, type Row as TableRow } from '@/components/ui/MetricTable'
+import { sectionShown } from './reportSections'
 import { productName } from '@/lib/brand'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import { useMemo, useState } from 'react'
@@ -50,6 +51,8 @@ export interface ReportSection {
 }
 
 export interface ReportData {
+  /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
+  report_sections?: string[]
   period: { from: string; to: string }
   currency: string
   objective?: string
@@ -524,7 +527,7 @@ const seriesOf = (rows: Row[], k: string | null): number[] | undefined => {
 
   return rows.map((r) => Number(r[k] ?? 0))
 }
-const pRow = (data: ReportData, p: string) => data.platforms.find((r) => r.provider === p) as Record<string, number> | undefined
+const pRow = (data: ReportData, p: string) => (data.platforms ?? []).find((r) => r.provider === p) as Record<string, number> | undefined
 
 /** How an absent reading is written on a card — the same two states the dashboard uses. */
 /**
@@ -548,7 +551,7 @@ const readingNote = (r: MetricReading): string | null =>
 /** The un-abbreviated figure for the selectable strip under the cards. */
 const exactOf = (m: ReportMetric, data: ReportData): string => {
   const direct = data.objective_performance?.direct
-  const value = direct && (m.key === 'cpa' || m.key === 'roas') ? direct[m.key] : data.kpis[m.key]
+  const value = direct && (m.key === 'cpa' || m.key === 'roas') ? direct[m.key] : (data.kpis ?? {})[m.key]
 
   /*
    * The READING decides first, before the raw value is consulted.
@@ -704,7 +707,10 @@ function RecommendationsSlide({ data }: { data: ReportData }) {
 }
 
 function ExecutiveSlide({ data }: { data: ReportData }) {
-  const donut = data.platforms.map((p) => ({ name: plat(String(p.provider)), value: Number(p.spend ?? 0) }))
+  // REPORT-SECTION-SURFACES-001 — the trend and the spend split are sections of their own.
+  const showTrend = sectionShown(data, 'trends')
+  const showSplit = sectionShown(data, 'platform_comparison')
+  const donut = (data.platforms ?? []).map((p) => ({ name: plat(String(p.provider)), value: Number(p.spend ?? 0) }))
   const totalSpend = donut.reduce((a, b) => a + b.value, 0)
   /*
     §14.6 — the cards follow the objective, and the DIRECT pair still leads where it exists.
@@ -733,7 +739,7 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
             note={readingNote(m.reading)}
             delta={m.reading.kind === 'withheld' ? undefined : (m.delta ?? undefined)}
             invert={m.invertGood}
-            spark={m.reading.kind === 'value' ? seriesOf(data.timeseries, m.series) : undefined}
+            spark={m.reading.kind === 'value' ? seriesOf(data.timeseries ?? [], m.series) : undefined}
             accent={ACCENTS[m.key] ?? 'var(--brand-600)'}
           />
         ))}
@@ -746,12 +752,14 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
         that the campaign earned nothing rather than that it was not selling anything. The chart
         now plots spend against whatever this money was buying.
       */}
+      {(showTrend || showSplit) && (
       <div className="mt-3 grid gap-3 lg:grid-cols-3">
-        <ChartCard title={trend.title} subtitle="الاتجاه اليومي" className="lg:col-span-2">
+        {showTrend && (
+        <ChartCard title={trend.title} subtitle="الاتجاه اليومي" className={showSplit ? 'lg:col-span-2' : 'lg:col-span-3'}>
           {trend.key === 'revenue'
-            ? <SpendRevenueAreaChart data={data.timeseries} currency={data.currency} height={200} />
+            ? <SpendRevenueAreaChart data={data.timeseries ?? []} currency={data.currency} height={200} />
             : <MetricLineChart
-                data={data.timeseries}
+                data={data.timeseries ?? []}
                 currency={data.currency}
                 series={[
                   { key: 'spend', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' },
@@ -761,8 +769,10 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
                 rightAxisFor={trend.key}
               />}
         </ChartCard>
-        <ChartCard title="توزيع الإنفاق" subtitle="حسب المنصة"><PlatformDonutChart data={donut} centerLabel="إجمالي الإنفاق" centerValue={compact(totalSpend)} currency={data.currency} height={200} /></ChartCard>
+        )}
+        {showSplit && <ChartCard title="توزيع الإنفاق" subtitle="حسب المنصة" className={showTrend ? undefined : 'lg:col-span-3'}><PlatformDonutChart data={donut} centerLabel="إجمالي الإنفاق" centerValue={compact(totalSpend)} currency={data.currency} height={200} /></ChartCard>}
       </div>
+      )}
       {/*
         The leader board names the metric it ranked on (§14.6).
 
@@ -1086,7 +1096,7 @@ function NotesSlide({ data, platform }: { data: ReportData; platform: string }) 
 }
 
 function ComparisonSlide({ data }: { data: ReportData }) {
-  const donut = data.platforms.map((p) => ({ name: plat(String(p.provider)), value: Number(p.spend ?? 0) }))
+  const donut = (data.platforms ?? []).map((p) => ({ name: plat(String(p.provider)), value: Number(p.spend ?? 0) }))
   return (
     <div>
       <Title sub="الإنفاق والعائد والمساهمة عبر المنصات">مقارنة المنصات</Title>
@@ -1133,7 +1143,7 @@ function ComparisonSlide({ data }: { data: ReportData }) {
             { key: 'roas', label: 'ROAS', kind: 'ratio' },
             { key: 'spend_share', label: 'المساهمة', kind: 'percent' },
           ]}
-          rows={data.platforms.map((p) => ({
+          rows={(data.platforms ?? []).map((p) => ({
             platform: (
               <span className="inline-flex items-center gap-1.5 font-semibold">
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: platformColor(String(p.provider)) }} />
