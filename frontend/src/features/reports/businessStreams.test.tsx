@@ -18,6 +18,16 @@ describe('business streams', () => {
     expect(document.body.textContent).not.toMatch(/blended|مخلوط|مباشر/i)
   })
 
+  it('calls the streams’ sum the total only when every in-scope account is mapped', () => {
+    const { unmount } = renderWithProviders(<BusinessStreamsSection streams={streams} coverTotal currency="SAR" ar />, { locale: 'ar' })
+    expect(screen.getByTestId('business-streams-coverage')).toHaveTextContent('مجموع المسارات يساوي إجمالي الإنفاق')
+    unmount()
+
+    renderWithProviders(<BusinessStreamsSection streams={streams} coverTotal={false} currency="SAR" ar />, { locale: 'ar' })
+    expect(screen.getByTestId('business-streams-coverage')).toHaveTextContent('لا تغطي المسارات كل الحسابات')
+    expect(screen.getByTestId('business-streams-coverage')).not.toHaveTextContent('يساوي إجمالي')
+  })
+
   it('draws nothing without streams', () => {
     const { container } = renderWithProviders(<BusinessStreamsSection streams={[]} currency="SAR" ar />, { locale: 'ar' })
     expect(container.querySelector('[data-testid="business-streams"]')).toBeNull()

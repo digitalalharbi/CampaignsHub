@@ -294,11 +294,69 @@ final class ReportSectionController extends Controller
             ->map(fn ($id): string => (string) $id)
             ->all();
 
-        return array_map(static function (array $stream) use ($known): array {
+        $streams = array_map(static function (array $stream) use ($known): array {
             $stream['account_ids'] = array_values(array_intersect((array) ($stream['account_ids'] ?? []), $known));
 
             return $stream;
         }, array_values((array) $request->input('streams', [])));
+
+        $this->refuseOverlaps($streams, $project);
+
+        return $streams;
+    }
+
+    /**
+     * Coordinator decision — a platform or an ad account belongs to at most ONE stream.
+     *
+     * Overlapping streams count the same spend twice, so they could never be read side by side, let
+     * alone summed. An account also overlaps a stream that holds its whole platform. Refused with the
+     * conflicting platform or account named, never silently resolved.
+     *
+     * @param  list<array<string, mixed>>  $streams
+     */
+    private function refuseOverlaps(array $streams, string $project): void
+    {
+        $providerOf = DailyMetric::query()
+            ->where('project_id', $project)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->whereNotNull('external_account_id')
+            ->distinct()
+            ->pluck('provider', 'external_account_id')
+            ->mapWithKeys(fn ($provider, $id): array => [(string) $id => (string) $provider])
+            ->all();
+
+        $providerOwner = [];
+        $accountOwner = [];
+        $conflicts = [];
+
+        foreach ($streams as $i => $stream) {
+            $label = (string) ($stream['label'] ?? '#'.($i + 1));
+            foreach (array_unique((array) ($stream['providers'] ?? [])) as $provider) {
+                if (isset($providerOwner[$provider]) && $providerOwner[$provider] !== $i) {
+                    $conflicts[] = "platform {$provider} is in «{$streams[$providerOwner[$provider]]['label']}» and «{$label}»";
+                }
+                $providerOwner[$provider] ??= $i;
+            }
+        }
+
+        foreach ($streams as $i => $stream) {
+            $label = (string) ($stream['label'] ?? '#'.($i + 1));
+            foreach (array_unique((array) ($stream['account_ids'] ?? [])) as $account) {
+                if (isset($accountOwner[$account]) && $accountOwner[$account] !== $i) {
+                    $conflicts[] = "ad account {$account} is in «{$streams[$accountOwner[$account]]['label']}» and «{$label}»";
+                }
+                $accountOwner[$account] ??= $i;
+
+                $provider = $providerOf[$account] ?? null;
+                if ($provider !== null && isset($providerOwner[$provider]) && $providerOwner[$provider] !== $i) {
+                    $conflicts[] = "ad account {$account} ({$provider}) is in «{$label}» while platform {$provider} is in «{$streams[$providerOwner[$provider]]['label']}»";
+                }
+            }
+        }
+
+        if ($conflicts !== []) {
+            throw ValidationException::withMessages(['streams' => array_values(array_unique($conflicts))]);
+        }
     }
 
     private function isLive(Report $report): bool

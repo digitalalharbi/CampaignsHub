@@ -198,4 +198,62 @@ final class BusinessStreamsTest extends TestCase
             ->putJson($url, ['streams' => [['providers' => ['meta']]]])
             ->assertUnprocessable();
     }
+
+    /**
+     * Coordinator decision — a platform or an ad account belongs to at most ONE stream.
+     *
+     * Overlapping streams count the same money twice, so they cannot be read side by side. Refused
+     * server-side with the conflict named, rather than stored and explained away on the page.
+     */
+    public function test_a_platform_in_two_streams_is_refused_and_named(): void
+    {
+        $report = $this->report();
+        $url = "/api/v1/projects/{$this->project->getKey()}/reports/{$report->getKey()}/sections";
+
+        $res = $this->actingAs($this->operator, 'sanctum')->putJson($url, ['streams' => [
+            ['label' => 'الاستحواذ', 'providers' => ['meta', 'snapchat']],
+            ['label' => 'إعادة الاستهداف', 'providers' => ['meta']],
+        ]])->assertUnprocessable();
+        $this->assertStringContainsString('platform meta', json_encode($res->json(), JSON_UNESCAPED_UNICODE));
+
+        $this->assertNull($report->fresh()->section_settings);
+    }
+
+    public function test_an_account_in_two_streams_or_under_a_platform_another_stream_holds_is_refused(): void
+    {
+        $report = $this->report();
+        $url = "/api/v1/projects/{$this->project->getKey()}/reports/{$report->getKey()}/sections";
+
+        $res = $this->actingAs($this->operator, 'sanctum')->putJson($url, ['streams' => [
+            ['label' => 'أ', 'account_ids' => [$this->metaAccount]],
+            ['label' => 'ب', 'account_ids' => [$this->metaAccount]],
+        ]])->assertUnprocessable();
+        $this->assertStringContainsString($this->metaAccount, json_encode($res->json(), JSON_UNESCAPED_UNICODE));
+
+        // The account is Meta's, and Meta as a whole already sits in the first stream.
+        $res = $this->actingAs($this->operator, 'sanctum')->putJson($url, ['streams' => [
+            ['label' => 'أ', 'providers' => ['meta']],
+            ['label' => 'ب', 'account_ids' => [$this->metaAccount]],
+        ]])->assertUnprocessable();
+        $this->assertStringContainsString("ad account {$this->metaAccount} (meta)", json_encode($res->json(), JSON_UNESCAPED_UNICODE));
+
+        $this->assertNull($report->fresh()->section_settings);
+    }
+
+    /** The sum of the streams is the total only when every in-scope account is mapped. */
+    public function test_streams_say_whether_they_cover_the_whole_report(): void
+    {
+        $partial = $this->live($this->report(['sections' => ['advanced_segmentation' => true], 'streams' => [
+            ['label' => 'المبيعات عبر الإنترنت', 'providers' => ['meta']],
+        ]]));
+        $this->assertFalse($partial['business_streams_cover_total']);
+
+        $whole = $this->live($this->report(['sections' => ['advanced_segmentation' => true], 'streams' => self::STREAMS]));
+        $this->assertTrue($whole['business_streams_cover_total']);
+        $this->assertEqualsWithDelta(
+            (float) $whole['totals']['spend'],
+            collect($whole['business_streams'])->sum(fn (array $s): float => (float) $s['figures']['spend']),
+            0.001,
+        );
+    }
 }
