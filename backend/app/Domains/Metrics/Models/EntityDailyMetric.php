@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Models;
 
+use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 
@@ -16,6 +17,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 final class EntityDailyMetric extends Model
 {
+    use BelongsToTenant;
     use HasUuids;
 
     protected $table = 'entity_daily_metrics';

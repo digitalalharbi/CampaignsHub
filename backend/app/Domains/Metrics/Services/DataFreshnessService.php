@@ -7,6 +7,7 @@ namespace App\Domains\Metrics\Services;
 use App\Domains\Commerce\Services\ProjectStores;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use Illuminate\Support\Carbon;
@@ -163,6 +164,8 @@ final class DataFreshnessService
         $data = DailyMetric::withoutGlobalScopes()
             ->whereIn('project_id', $projectIds)
             ->when($providers !== null && $providers !== [], fn ($q) => $q->whereIn('provider', $providers))
+            // ACCOUNT-SCOPE-ISOLATION-001 — freshness of the accounts the project shows, not of every row it holds.
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->toBase()
             ->select('project_id', 'provider')
             ->selectRaw('MAX(data_freshness_at) AS data_as_of')
@@ -387,6 +390,7 @@ final class DataFreshnessService
         $withData = (int) DB::table('daily_metrics')
             ->whereIn('project_id', $projectIds)
             ->whereBetween('metric_date', [$from->toDateString(), $end->toDateString()])
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->distinct()
             ->count('metric_date');
 

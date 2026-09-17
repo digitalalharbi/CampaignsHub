@@ -173,6 +173,27 @@ final class OwnerDefectLedgerTest extends TestCase
         );
     }
 
+    /**
+     * A row number names ONE observation, and two lanes may append at once.
+     *
+     * The width guard above catches a malformed row; it cannot catch two well-formed rows both
+     * numbered 100, which is what happens when two branches each append «highest on main + 1» and
+     * merge one after the other. Nothing else in this file would notice — `rows()` reads both
+     * happily — and the owner's «row 100» would then name two defects.
+     */
+    public function test_no_two_rows_carry_the_same_number(): void
+    {
+        $numbers = array_map(static fn (array $row): string => $row['no'], $this->rows());
+        $duplicates = array_keys(array_filter(array_count_values($numbers), static fn (int $n): bool => $n > 1));
+
+        $this->assertSame(
+            [],
+            $duplicates,
+            'these row numbers appear more than once — a lane appended «highest + 1» without '
+            .'re-reading main after the other lane merged: '.implode(', ', $duplicates),
+        );
+    }
+
     /** @return list<array{no:string,ids:string,verified:string,gap:string}> */
     private function rows(): array
     {

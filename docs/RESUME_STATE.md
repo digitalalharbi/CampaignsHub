@@ -21,6 +21,18 @@ hero heading's own weight. `mergeStateStatus=BLOCKED`; `frontend` and `image` gr
 the three `gate` checks not reported. It belongs to the Marketing lane and **must not be absorbed
 into the Content or Reports closure branches.**
 
+## 2026-09-17 — ACCOUNT-SCOPE ISOLATION, Owner P0 (defect 100)
+
+`ACCOUNT-SCOPE-ISOLATION-001`. The Owner observed data from accounts other than the exact selected
+account mixed into results. Established from the code: every WRITE path honours the ACTIVE binding and
+NO reader did. #465 carries the read-only inventory (`integrations:scope-audit`, the diagnostics
+workflow's `scope_audit` input) and the webhook fix; `fix/account-scope-isolation-2` carries the one
+shared reader rule (`BoundAccountVisibility`), the write-path leaks closed at their rung, and the
+dry-run-first cleanup and re-sync commands on the separate manual workflow `production-scope-cleanup.yml`.
+Order: #465 merges → deploy → `scope_audit` on Production → Part 2 PR → its deploy → cleanup and re-sync
+DRY RUNS on Production, plans in the PR → the coordinator dispatches the apply. Nothing here is
+VERIFIED until the Owner sees only the selected account on every surface.
+
 ## The execution model from 2026-09-16
 
 The parent session is **coordinator only** — state reader, merge-order controller, blocker recorder.

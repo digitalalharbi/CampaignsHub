@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Support\CreativeDemoPolicy;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Projects\Context\ProjectContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -443,6 +444,12 @@ final class CreativeMetrics
             ->whereIn('creative_id', $creativeIds)
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'creative_daily_metrics', app(ProjectContext::class)->projectId()))
+            // ACCOUNT-SCOPE-ISOLATION-001 — the creative's account, through its campaign, must be selected.
+            ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign(
+                $q,
+                '(select cr.external_campaign_id from external_creatives cr where cr.id = creative_daily_metrics.creative_id)',
+                'creative_daily_metrics.project_id',
+            ))
             ->groupBy('creative_id')
             ->selectRaw(implode(', ', $select))
             ->get();
@@ -573,6 +580,8 @@ final class CreativeMetrics
             ->join('external_ads', 'external_ads.id', '=', 'entity_daily_metrics.entity_id')
             ->where('entity_daily_metrics.entity_type', 'ad')
             ->whereIn('external_ads.creative_id', $creativeIds)
+            // ACCOUNT-SCOPE-ISOLATION-001 — the ad's account must be selected for the row's project.
+            ->tap(fn ($q) => BoundAccountVisibility::applyToEntityMetrics($q, 'entity_daily_metrics'))
             ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'entity_daily_metrics', app(ProjectContext::class)->projectId()))
             ->whereBetween('entity_daily_metrics.metric_date', [$from->toDateString(), $to->toDateString()])
             ->groupBy('external_ads.creative_id')

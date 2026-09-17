@@ -6,6 +6,7 @@ namespace App\Domains\Metrics\Services;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Support\AdPlatforms;
@@ -653,6 +654,8 @@ final class ObjectivePerformance
         return DailyMetric::query()
             ->when($this->projectIds !== null, fn ($q) => $q->withoutGlobalScope(ProjectScope::class))
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            // ACCOUNT-SCOPE-ISOLATION-001 — the same visibility rule the aggregator applies.
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->join('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
             ->when($this->projectIds !== null, fn ($q) => $q->whereIn(
                 'daily_metrics.project_id',
@@ -685,6 +688,8 @@ final class ObjectivePerformance
         $query = DailyMetric::query()
             ->when($this->projectIds !== null, fn ($q) => $q->withoutGlobalScope(ProjectScope::class))
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            // ACCOUNT-SCOPE-ISOLATION-001 — the same visibility rule the aggregator applies.
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->join('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
             ->when($this->projectIds !== null, fn ($q) => $q->whereIn(
                 'daily_metrics.project_id',

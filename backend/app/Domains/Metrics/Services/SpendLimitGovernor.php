@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Services;
 
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Enums\MoneyState;
 use App\Domains\Metrics\Enums\SpendLimitScope;
 use App\Domains\Metrics\Enums\SpendLimitState;
@@ -167,6 +168,7 @@ final class SpendLimitGovernor
     {
         $value = DailyMetric::query()
             ->where('project_id', $limit->project_id)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->whereNotNull('project_currency')
             ->toBase()

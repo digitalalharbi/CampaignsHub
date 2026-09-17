@@ -7,6 +7,7 @@ namespace App\Domains\Campaigns\Http\Controllers;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CreativePresenter;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -42,6 +43,7 @@ final class CampaignCreativesController extends Controller
         // Aggregate each creative's metrics for the window (one pass, project-scoped).
         $agg = DB::table('creative_daily_metrics')
             ->where('campaign_id', $model->id)
+            ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, '(select cr.external_campaign_id from external_creatives cr where cr.id = creative_daily_metrics.creative_id)', 'creative_daily_metrics.project_id'))
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->select('creative_id')
             ->selectRaw('SUM(spend) spend, SUM(impressions) impressions, SUM(clicks) clicks, SUM(conversions) conversions, SUM(revenue) revenue, SUM(video_views) video_views, SUM(video_completions) video_completions')
@@ -49,7 +51,7 @@ final class CampaignCreativesController extends Controller
             ->get()
             ->keyBy('creative_id');
 
-        $creatives = ExternalCreative::query()->where('campaign_id', $model->id)->get();
+        $creatives = ExternalCreative::query()->where('campaign_id', $model->id)->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_creatives.external_campaign_id', 'external_creatives.project_id'))->get();
 
         [$rankKey, $higherBetter] = self::RANK[$model->objective] ?? ['roas', true];
 
