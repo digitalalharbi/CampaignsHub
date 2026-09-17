@@ -16,6 +16,7 @@ use App\Domains\Integrations\OAuth\AuthorizationState;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\PlatformOAuth;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -177,7 +178,9 @@ final class StoreOAuthController extends Controller
             // The first real round trip. Until this returns a store, nothing is called connected.
             $discovered = $this->discoverStores($connection);
         } catch (Throwable $e) {
-            return $this->back($creds->platform, 'failed', $e->getMessage());
+            // Redacted before it is trimmed, for the same reason as the advertising callback: a
+            // provider's failure message can name the URL that failed, query string included.
+            return $this->back($creds->platform, 'failed', ProviderErrorText::forDisplay($e->getMessage()));
         }
 
         $audit->log(

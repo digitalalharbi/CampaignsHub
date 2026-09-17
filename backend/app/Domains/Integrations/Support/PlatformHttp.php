@@ -64,9 +64,17 @@ final class PlatformHttp
      * `Retry-After` is real on some quota resets, and sleeping a queue worker for an hour is not a
      * retry, it is an outage. Past two minutes the job gives up and is re-driven by the scheduler.
      */
-    public static function backoff(int $attempt, ?RequestException $exception = null): int
+    public static function backoff(int $attempt, ?\Exception $exception = null): int
     {
-        $retryAfter = $exception?->response?->header('Retry-After');
+        /*
+         * Typed as ANY exception, deliberately. The framework hands this callback whatever attempt
+         * failed with, and a connection that never landed fails with a `ConnectionException`, which
+         * is not a `RequestException` — it carries no response and no `Retry-After`. Typed on the
+         * narrower class, the first real timeout on any platform threw a TypeError out of the retry
+         * loop instead of waiting and trying again: the one failure `isWorthRetrying()` says is
+         * always worth retrying was the one failure that could not be retried at all.
+         */
+        $retryAfter = $exception instanceof RequestException ? $exception->response->header('Retry-After') : null;
 
         if (is_numeric($retryAfter)) {
             return (int) min((float) $retryAfter * 1000, 120_000);
