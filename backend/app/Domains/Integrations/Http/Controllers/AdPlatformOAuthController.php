@@ -13,6 +13,7 @@ use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\PlatformOAuth;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Services\AccountDiscovery;
+use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\AdPlatforms;
@@ -207,7 +208,9 @@ final class AdPlatformOAuthController extends Controller
             // The first real round trip. Until this returns, nothing is called connected.
             $discovered = $this->discoverAccounts($connection);
         } catch (Throwable $e) {
-            return $this->back($creds->platform, 'failed', $e->getMessage());
+            // Redacted before it is trimmed: a provider's own failure message names the URL that
+            // failed, and one platform's discovery URL carries the app secret (SecretNeverInLoggedUrlTest).
+            return $this->back($creds->platform, 'failed', ProviderErrorText::forDisplay($e->getMessage()));
         }
 
         $audit->log(
