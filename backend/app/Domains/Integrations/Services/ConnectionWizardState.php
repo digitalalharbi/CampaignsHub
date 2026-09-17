@@ -77,6 +77,9 @@ final class ConnectionWizardState
 
     public const USER_REAUTH_REQUIRED = 'REAUTH_REQUIRED';
 
+    /** Every selected account answered, and none has any data. Not healthy, and not an error. */
+    public const USER_NO_DATA = 'NO_DATA';
+
     public function __construct(private readonly AccountHealth $health) {}
 
     /**
@@ -177,6 +180,7 @@ final class ConnectionWizardState
             $state === self::FIRST_SYNC_PENDING => self::USER_SYNCING,
             // Nothing selected has produced data yet: still syncing, not «working».
             ($health['healthy'] ?? 0) === 0 && ($health['pending_first_sync'] ?? 0) > 0 => self::USER_SYNCING,
+            ($health['healthy'] ?? 0) === 0 && ($health['no_data'] ?? 0) > 0 => self::USER_NO_DATA,
             default => self::USER_HEALTHY,
         };
 
