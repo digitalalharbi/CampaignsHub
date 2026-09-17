@@ -34,7 +34,7 @@ final class ObjectiveMetricFamilies
     /** The base figures read from `daily_metrics`. Everything else is derived from these sums. */
     public const BASE = [
         'spend', 'impressions', 'reach', 'clicks', 'landing_page_views', 'engagements',
-        'video_views', 'leads', 'conversions', 'revenue', 'installs',
+        'video_views', 'leads', 'purchases', 'conversions', 'revenue', 'installs',
     ];
 
     /** Base figures that are money and obey FX-001's withheld-conversion rule. */
@@ -43,9 +43,9 @@ final class ObjectiveMetricFamilies
     /**
      * Derived figures: [numerator, denominator, scale].
      *
-     * `frequency` is impressions ÷ reach, the same derivation the KPI cards use. Reach is summed as the
-     * platforms report it per day, so the figure inherits that basis — it is not a deduplicated
-     * unique reach, and no surface here claims it is.
+     * `frequency` is impressions ÷ reach, and exists only where reach does — see `figure()`: reach is
+     * reported only for a single provider grain (one campaign, one platform, one day), because a sum of
+     * daily or per-platform reach counts a returning person once per row and is not reach.
      *
      * @var array<string, array{0:string, 1:string, 2:float}>
      */
@@ -59,7 +59,9 @@ final class ObjectiveMetricFamilies
         'cpe' => ['spend', 'engagements', 1.0],
         'cost_per_view' => ['spend', 'video_views', 1.0],
         'cpl' => ['spend', 'leads', 1.0],
-        'cpa' => ['spend', 'conversions', 1.0],
+        // CPA is spend over the provider's PURCHASES. A conversion is not a purchase.
+        'cpa' => ['spend', 'purchases', 1.0],
+        'cost_per_conversion' => ['spend', 'conversions', 1.0],
         'roas' => ['revenue', 'spend', 1.0],
         'cpi' => ['spend', 'installs', 1.0],
     ];
@@ -67,9 +69,9 @@ final class ObjectiveMetricFamilies
     /**
      * Each family's KPI keys, in reading order, and the outcome its contribution is a share of.
      *
-     * `conversions` is the sales family's order count because it is the product's one definition of an
-     * order — the key `ObjectivePerformance`'s direct CPA divides by. Two definitions of an order would
-     * make this block's CPA disagree with the direct-vs-blended block printed beside it.
+     * The sales family counts the provider's `purchases`. Where no platform in scope sends purchases but
+     * conversions are reported, the block says CONVERSIONS instead — «التحويلات», cost per conversion —
+     * and never prints a conversion under the word purchase. See `salesKeys()`.
      *
      * The outcome list is tried in order and the first one reported wins: a sales scope whose platforms
      * return revenue shares revenue; one that does not shares orders. Awareness shares IMPRESSIONS,
@@ -83,7 +85,7 @@ final class ObjectiveMetricFamilies
         'engagement' => ['kpis' => ['engagements', 'engagement_rate', 'cpe'], 'outcomes' => ['engagements']],
         'video' => ['kpis' => ['video_views', 'cost_per_view'], 'outcomes' => ['video_views']],
         'leads' => ['kpis' => ['leads', 'cpl'], 'outcomes' => ['leads']],
-        'sales' => ['kpis' => ['conversions', 'revenue', 'cpa', 'roas'], 'outcomes' => ['revenue', 'conversions']],
+        'sales' => ['kpis' => ['purchases', 'revenue', 'cpa', 'roas'], 'outcomes' => ['revenue', 'purchases']],
         'app' => ['kpis' => ['installs', 'cpi'], 'outcomes' => ['installs']],
     ];
 
@@ -108,8 +110,9 @@ final class ObjectiveMetricFamilies
         'cpe' => ['engagements', 30],
         'cost_per_view' => ['video_views', 300],
         'cpl' => ['leads', 5],
-        'cpa' => ['conversions', 5],
-        'roas' => ['conversions', 5],
+        'cpa' => ['purchases', 5],
+        'cost_per_conversion' => ['conversions', 5],
+        'roas' => ['purchases', 5],
         'cpi' => ['installs', 10],
     ];
 
@@ -132,7 +135,9 @@ final class ObjectiveMetricFamilies
         'cost_per_view' => ['ar' => 'تكلفة المشاهدة', 'en' => 'Cost per view'],
         'leads' => ['ar' => 'العملاء المحتملون', 'en' => 'Leads'],
         'cpl' => ['ar' => 'تكلفة العميل المحتمل', 'en' => 'CPL'],
-        'conversions' => ['ar' => 'المشتريات', 'en' => 'Purchases'],
+        'purchases' => ['ar' => 'المشتريات', 'en' => 'Purchases'],
+        'conversions' => ['ar' => 'التحويلات', 'en' => 'Conversions'],
+        'cost_per_conversion' => ['ar' => 'تكلفة التحويل', 'en' => 'Cost per conversion'],
         'revenue' => ['ar' => 'الإيراد', 'en' => 'Revenue'],
         'cpa' => ['ar' => 'تكلفة الشراء', 'en' => 'CPA'],
         'roas' => ['ar' => 'العائد على الإنفاق', 'en' => 'ROAS'],
@@ -164,6 +169,27 @@ final class ObjectiveMetricFamilies
     }
 
     /**
+     * The sales family's keys for a scope: purchases where any platform sends them, conversions —
+     * named as conversions — where none does.
+     *
+     * @return array{kpis: list<string>, outcomes: list<string>, volume: string}
+     */
+    public static function salesKeys(bool $purchasesReported): array
+    {
+        return $purchasesReported
+            ? ['kpis' => ['purchases', 'revenue', 'cpa', 'roas'], 'outcomes' => ['revenue', 'purchases'], 'volume' => 'purchases']
+            : ['kpis' => ['conversions', 'revenue', 'cost_per_conversion', 'roas'], 'outcomes' => ['revenue', 'conversions'], 'volume' => 'conversions'];
+    }
+
+    /** @return list<string> every money base a figure is built from */
+    public static function moneyParts(string $key): array
+    {
+        $parts = isset(self::DERIVED[$key]) ? [self::DERIVED[$key][0], self::DERIVED[$key][1]] : [$key];
+
+        return array_values(array_intersect($parts, self::MONEY_BASE));
+    }
+
+    /**
      * Whether a figure belongs to this family at all. `inapplicable` is not `unavailable`: the first is
      * a question nobody asked of this money, the second is a question no provider answered.
      */
@@ -187,7 +213,7 @@ final class ObjectiveMetricFamilies
     public static function kind(string $key): string
     {
         return match (true) {
-            in_array($key, ['spend', 'revenue', 'cpm', 'cpc', 'cost_per_lpv', 'cpe', 'cost_per_view', 'cpl', 'cpa', 'cpi'], true) => 'money',
+            in_array($key, ['spend', 'revenue', 'cpm', 'cpc', 'cost_per_lpv', 'cpe', 'cost_per_view', 'cpl', 'cpa', 'cost_per_conversion', 'cpi'], true) => 'money',
             in_array($key, ['ctr', 'engagement_rate'], true) => 'rate',
             $key === 'roas' => 'multiplier',
             $key === 'frequency' => 'ratio',
