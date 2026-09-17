@@ -8,6 +8,7 @@ use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Metrics\Services\AttributionTransparency;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Services\ClientReportView;
 use App\Domains\Reports\Services\LiveDrilldown;
 use App\Domains\Reports\Services\LiveReportService;
@@ -112,6 +113,8 @@ final class PublicReportController extends Controller
                 ? $view->executive($fresh)
                 : $view->filter($fresh);
             $data = $this->shares->sanitize($data, $share);
+            // REPORT-SECTION-SURFACES-001 — the same resolver as the live page, the print route and the export.
+            $data = app(ReportSectionSurfaces::class)->apply($data, $report, $share, 'shared');
         }
 
         return ApiResponse::success([
@@ -178,6 +181,14 @@ final class PublicReportController extends Controller
         }
         if (! $share->isLive()) {
             return ApiResponse::error('هذا الرابط يعرض تقريرًا ثابتًا وليس بيانات لحظية.', status: 409);
+        }
+        if (! ($share->visibleSections()['creatives'] ?? false)) {
+            return ApiResponse::error('هذا المحتوى غير متاح في هذا الرابط.', status: 404);
+        }
+        // A content section the report switched off is not reachable by knowing its address either.
+        $owner = Report::withoutGlobalScopes()->find($share->report_id);
+        if ($owner === null || ! app(ReportSectionSurfaces::class)->operatorAllows('content_performance', $owner, $share)) {
+            return ApiResponse::error('هذا المحتوى غير متاح في هذا الرابط.', status: 404);
         }
 
         $content = $drilldown->content($share, $key, $request->query());
@@ -369,7 +380,7 @@ final class PublicReportController extends Controller
             return $error;
         }
 
-        if (! $share->creativeVisibility()->creatives) {
+        if (! $share->creativeVisibility()->creatives || ! $this->contentSectionAllowed($share)) {
             return ApiResponse::error('لا يعرض هذا الرابط تفاصيل المحتوى.', status: 404);
         }
 
@@ -385,7 +396,7 @@ final class PublicReportController extends Controller
             return $error;
         }
 
-        if (! $share->creativeVisibility()->creatives) {
+        if (! $share->creativeVisibility()->creatives || ! $this->contentSectionAllowed($share)) {
             return ApiResponse::error('لا يعرض هذا الرابط تفاصيل المحتوى.', status: 404);
         }
 
@@ -401,7 +412,7 @@ final class PublicReportController extends Controller
             return $error;
         }
 
-        $payload = $creatives->detail($share, $creative, $request->query());
+        $payload = $this->contentSectionAllowed($share) ? $creatives->detail($share, $creative, $request->query()) : null;
 
         if ($payload === null) {
             $this->shares->log($share, 'denied', $request, 'creative out of scope');
@@ -424,7 +435,7 @@ final class PublicReportController extends Controller
             (array) $request->query('creative_ids', []),
         )));
 
-        $payload = $creatives->compare($share, $ids, $request->query());
+        $payload = $this->contentSectionAllowed($share) ? $creatives->compare($share, $ids, $request->query()) : null;
 
         if ($payload === null) {
             $this->shares->log($share, 'denied', $request, 'comparison out of scope');
@@ -474,6 +485,19 @@ final class PublicReportController extends Controller
      *
      * @return array<string, mixed>
      */
+    /**
+     * REPORT-SECTION-SURFACES-001 — the content endpoints answer only while the report shows content.
+     *
+     * A section switched off on the report is absent from the page, and it must not stay reachable by
+     * the addresses the page used to call.
+     */
+    private function contentSectionAllowed(ReportShare $share): bool
+    {
+        $report = Report::withoutGlobalScopes()->find($share->report_id);
+
+        return $report !== null && app(ReportSectionSurfaces::class)->operatorAllows('content_performance', $report, $share);
+    }
+
     private function branding(Report $report): array
     {
         $config = (array) ($report->config ?? []);
@@ -523,6 +547,8 @@ final class PublicReportController extends Controller
          */
         $data = $this->shares->downloadDocument($report, $share);
 
+        // The link's section set is applied by the exporter, which is handed the share for exactly
+        // that — the same resolver the page and the print route use (REPORT-SECTION-SURFACES-001).
         $sanitized->data = $data;
         $content = app(ReportExporter::class)->render($sanitized, $format, $share);
         $this->shares->log($share, 'download', $request, $format);

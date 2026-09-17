@@ -94,6 +94,11 @@ final class ReportFormTest extends TestCase
             'generated_at' => now(),
             'data' => [
                 'checksum' => 'internal-only',
+                // REPORT-SECTION-SURFACES-001 — a slide appears only where its section has figures.
+                'kpis' => ['spend' => 100.0],
+                'platforms' => [['provider' => 'meta', 'spend' => 100.0]],
+                'budget' => [['provider' => 'meta', 'budget' => 500.0, 'spent' => 100.0]],
+                'funnel' => [['stage' => 'impressions', 'label' => 'Impressions', 'reported' => true, 'count' => 1000]],
                 'recommendations' => [
                     ['status' => 'approved', 'text' => 'زد ميزانية حملة المبيعات'],
                     ['status' => 'draft', 'text' => 'ملاحظة داخلية لم تُعتمد'],
