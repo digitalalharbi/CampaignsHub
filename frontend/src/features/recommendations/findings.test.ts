@@ -139,6 +139,14 @@ describe('opportunity or problem is decided by the metric and its direction', ()
   })
 })
 
+describe('a fatigue signal that is money is read as money', () => {
+  it('states the spend-without-results signal in the pulse currency', () => {
+    const creative = { id: 'k2', name: 'Hero', provider: 'meta', fatigue: { status: 'fatigued', signals: [{ key: 'spend_without_results', direction: 'worse', change: 0.16, current: 7546, previous: 6512 }], reason_ar: '', reason_en: '' } } as never
+    const [f] = one({ fatigued: [creative] })
+    expect(f.kpis[0]).toMatchObject({ kind: 'money', currency: 'USD', higherIsBetter: false })
+  })
+})
+
 describe('one fact, one card', () => {
   it('shows a spend limit once when its alert and its reading both arrive', () => {
     const limitAlert = alert({ type: 'budget_risk', entity_type: 'App\\Domains\\Metrics\\Models\\SpendLimit', entity_id: 'l1', context: { consumed: 1200, limit: 1000, currency: 'SAR', threshold: 100 } })

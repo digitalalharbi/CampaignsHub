@@ -8,6 +8,7 @@ import { platformColor } from '@/features/analytics/components'
 import { lastNDays, useTimeseries } from '@/features/analytics/api'
 import { moneyExact, num, percent, ratio } from '@/features/analytics/format'
 import { metricLabel } from '@/features/analytics/metricLabels'
+import { SPECS } from '@/features/analytics/metricCatalog'
 import { providerLabel } from '@/features/campaigns/labels'
 import type { ActionSeverity } from './actionCenter'
 import { relativeChange, type Finding, type FindingKpi, type FindingNature } from './findings'
@@ -113,6 +114,12 @@ export function FindingCard({ finding, projectId, ar, currency }: { finding: Fin
   )
 }
 
+/** The catalogue's name first — it carries CPA, ROAS and CTR — then the shorter label map. */
+function nameOf(key: string, ar: boolean): string {
+  const spec = SPECS[key]
+  return extraMetricLabel(key, ar) ?? (spec ? (ar ? spec.label.ar : spec.label.en) : metricLabel(key, ar))
+}
+
 function formatKpi(k: FindingKpi, v: number | null): string {
   if (v === null) return '—'
   if (k.kind === 'money') return moneyExact(v, k.currency ?? null)
@@ -134,7 +141,7 @@ function KpiTile({ kpi, ar }: { kpi: FindingKpi; ar: boolean }) {
 
   return (
     <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-border p-2.5" data-testid={`kpi-${kpi.key}`}>
-      <dt className="truncate text-[11px] text-text-muted">{extraMetricLabel(kpi.key, ar) ?? metricLabel(kpi.key, ar)}</dt>
+      <dt className="truncate text-[11px] text-text-muted">{nameOf(kpi.key, ar)}</dt>
       <dd className="flex flex-wrap items-baseline gap-x-2">
         <span className="text-base font-extrabold text-text-primary" data-testid="kpi-current"><Num>{formatKpi(kpi, kpi.current)}</Num></span>
         {change !== null && change !== 0 && (
@@ -184,7 +191,7 @@ function FindingTrend({ projectId, trend, ar, currency }: { projectId: string; t
         data={rows as unknown as Array<Record<string, unknown>>}
         height={120}
         currency={currency ?? ''}
-        series={[{ key: trend.metric, name: metricLabel(trend.metric, ar), kind: trend.kind === 'count' ? 'num' : trend.kind === 'money' ? 'money' : trend.kind }]}
+        series={[{ key: trend.metric, name: nameOf(trend.metric, ar), kind: trend.kind === 'count' ? 'num' : trend.kind === 'money' ? 'money' : trend.kind }]}
       />
     </div>
   )

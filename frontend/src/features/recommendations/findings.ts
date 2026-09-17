@@ -118,10 +118,10 @@ export interface FindingContext {
   campaigns: Map<string, { name: string | null; provider: string | null }>
 }
 
-const COSTS = new Set(['projected_spend', 'cpa', 'cpl', 'cpc', 'cpm', 'cpi', 'cpe', 'cost_per_result', 'frequency', 'spend'])
+const COSTS = new Set(['spend_without_results', 'projected_spend', 'cpa', 'cpl', 'cpc', 'cpm', 'cpi', 'cpe', 'cost_per_result', 'frequency', 'spend'])
 const RATIOS = new Set(['roas', 'frequency'])
 const PERCENTS = new Set(['ctr', 'conversion_rate', 'engagement_rate', 'video_completion_rate', 'view_rate', 'hook_rate'])
-const MONEY = new Set(['projected_spend', 'spend', 'revenue', 'cpa', 'cpl', 'cpc', 'cpm', 'cpi', 'cpe', 'aov', 'cost_per_result'])
+const MONEY = new Set(['spend_without_results', 'projected_spend', 'spend', 'revenue', 'cpa', 'cpl', 'cpc', 'cpm', 'cpi', 'cpe', 'aov', 'cost_per_result'])
 /** Outcomes: a rise here is good news about the account, not a risk. */
 const OUTCOMES = new Set(['conversions', 'purchases', 'leads', 'revenue', 'roas', 'clicks', 'installs', 'landing_page_views', 'ctr', 'conversion_rate'])
 
