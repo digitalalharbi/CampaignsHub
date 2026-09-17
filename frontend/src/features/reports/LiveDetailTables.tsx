@@ -185,7 +185,7 @@ export function LivePlatformComparison({
    * The selected set is what the READER is looking at: the link's own providers, narrowed by any
    * filter they applied. A platform they filtered out is not silent, it is excluded.
    */
-  const reported = payload.platforms as Array<Record<string, unknown>>
+  const reported = (payload.platforms ?? []) as Array<Record<string, unknown>>
   const selected = (payload.applied?.providers?.length ?? 0) > 0
     ? (payload.applied?.providers ?? [])
     : (payload.available?.providers ?? [])

@@ -15,6 +15,7 @@ import { FreshnessStrip } from './live/LiveSections'
 import { ContentView, DashboardView, PlatformsView, platformsOf, SummaryView } from './live/LiveViews'
 import { useLiveMetricReader } from './live/liveMetrics'
 import { MODE_LABELS, modesFor, ownsPlatformChoice, readMode, type LiveMode } from './live/modes'
+import { sectionShown } from './reportSections'
 import { useLivePayload } from './live/useLivePayload'
 
 /**
@@ -113,6 +114,15 @@ export function LiveSharedReport({
   })
 
   const whole = main.load.state === 'ready' ? main.load.payload : null
+  /*
+   * REPORT-SECTION-SURFACES-001 — a view whose section the report does not carry is not offered:
+   * the platform view reads the comparison's rows, the content view the content section.
+   */
+  const offeredHere = whole === null ? offered : offered.filter((m) => (
+    m === 'platforms' ? sectionShown(whole, 'platform_comparison')
+      : m === 'content' ? sectionShown(whole, 'content_performance')
+        : true
+  ))
   const known = whole ? platformsOf(whole) : []
   const platform = ownsPlatformChoice(mode)
     ? (rawPlatform && known.includes(rawPlatform) ? rawPlatform : (mode === 'platforms' ? known[0] ?? null : null))
@@ -167,9 +177,9 @@ export function LiveSharedReport({
      * is `auto`, and a chart container's min-content is wider than a 375px screen.
      */
     <div className="grid gap-4 [&>*]:min-w-0" data-testid="live-report" data-mode={mode}>
-      {offered.length > 1 && (
-        <nav role="tablist" aria-label={ar ? 'طريقة العرض' : 'View'} data-testid="live-modes" className="grid grid-cols-4 gap-1 rounded-2xl border border-border bg-surface p-1">
-          {offered.map((m) => {
+      {offeredHere.length > 1 && (
+        <nav role="tablist" aria-label={ar ? 'طريقة العرض' : 'View'} data-testid="live-modes" className="grid gap-1 rounded-2xl border border-border bg-surface p-1" style={{ gridTemplateColumns: `repeat(${offeredHere.length}, minmax(0, 1fr))` }}>
+          {offeredHere.map((m) => {
             const Icon = MODE_ICONS[m]
             const selected = m === mode
 
@@ -267,7 +277,7 @@ export function LiveSharedReport({
       <div className={refreshing ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}>
         {mode === 'summary' && <SummaryView payload={payload} {...common} />}
         {mode === 'dashboard' && <DashboardView payload={payload} {...common} goTo={(m, p) => navigate(m, p)} onOpenPlatform={setDrawer} />}
-        {mode === 'platforms' && (
+        {mode === 'platforms' && offeredHere.includes('platforms') && (
           <PlatformsView
             whole={payload}
             {...common}
@@ -277,7 +287,7 @@ export function LiveSharedReport({
             goToContent={(p) => navigate('content', p)}
           />
         )}
-        {mode === 'content' && (
+        {mode === 'content' && offeredHere.includes('content') && (
           <ContentView
             whole={payload}
             currency={currency}
