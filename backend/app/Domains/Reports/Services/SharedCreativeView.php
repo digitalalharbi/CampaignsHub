@@ -544,6 +544,42 @@ final class SharedCreativeView
         }
 
         /*
+         * FATIGUE-REAL-SIGNALS-001 — the window's two halves and the fatigue signals carry figures too.
+         *
+         * A half's CPM is spend over impressions, and a signal carries the two values it compared. Both
+         * are nested below the keys the loop above reaches, so they are named here: a hidden metric
+         * leaves the halves, and a signal on a hidden metric keeps its direction and loses its values —
+         * «CPM rose» is delivery context the client may see; «13.00 against 10.00» is the spend.
+         */
+        $signalMetric = static fn (string $key): string => match (true) {
+            // Its two values are the spend of each period.
+            $key === 'spend_without_results' => 'spend',
+            str_ends_with($key, '_decay') => substr($key, 0, -6),
+            default => $key,
+        };
+
+        foreach ($visibility->hiddenMetrics() as $metric) {
+            foreach (['metrics', 'previous'] as $bag) {
+                foreach (['early', 'late'] as $half) {
+                    if (isset($row[$bag]['decay'][$half]) && is_array($row[$bag]['decay'][$half])) {
+                        unset($row[$bag]['decay'][$half][$metric]);
+                    }
+                }
+            }
+        }
+
+        if (isset($row['fatigue']['signals']) && is_array($row['fatigue']['signals'])) {
+            $row['fatigue']['signals'] = array_map(static function ($signal) use ($visibility, $signalMetric) {
+                if (is_array($signal) && $visibility->hides($signalMetric((string) ($signal['key'] ?? '')))) {
+                    $signal['current'] = null;
+                    $signal['previous'] = null;
+                }
+
+                return $signal;
+            }, $row['fatigue']['signals']);
+        }
+
+        /*
          * CLIENT-REPORT-MONEY-REDACTION-001 — a hidden figure takes its ORIGINAL with it.
          *
          * The loop above removes the CONVERTED column, which is the only place money lived when this
