@@ -100,4 +100,6 @@ const FACTS: Record<FindingFactKey, Pair> = {
 export const factLabel = (k: FindingFactKey, ar: boolean) => pick(FACTS[k], ar, k)
 
 export const extraMetricLabel = (key: string, ar: boolean): string | null =>
-  key === 'projected_spend' ? (ar ? 'الإنفاق المتوقع' : 'Projected spend') : null
+  key === 'projected_spend' ? (ar ? 'الإنفاق المتوقع' : 'Projected spend')
+    : key === 'spend_without_results' ? (ar ? 'إنفاق بلا نتائج إضافية' : 'Spend, results flat')
+      : null
