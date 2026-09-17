@@ -15,6 +15,7 @@ use App\Domains\Integrations\Console\AcceptStructureSyncCommand;
 use App\Domains\Integrations\Console\CloseAbandonedSyncRunsCommand;
 use App\Domains\Integrations\Console\DiagnoseSyncCommand;
 use App\Domains\Integrations\Console\GoogleAdsAccessCommand;
+use App\Domains\Integrations\Console\MetaCandidateStatusCommand;
 use App\Domains\Integrations\Console\MetaSyncProbeCommand;
 use App\Domains\Integrations\Console\ProbeInsightsCommand;
 use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
@@ -103,6 +104,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // INTEG-RUNTIME §7 — read-only: where a sync's rows stopped, with the four counts. Calls no
         // provider and writes nothing, which is what makes it safe to point at production.
         DiagnoseSyncCommand::class,
+        // META-CANDIDATE-001 — read-only: the last Candidate Meta app round trip, step by step.
+        MetaCandidateStatusCommand::class,
         // ACCOUNT-SCOPE-ISOLATION-001 — read-only: per project and grain, which ad accounts the stored
         // rows belong to, classified against the project's bindings. Writes nothing.
         ScopeAuditCommand::class,

@@ -715,6 +715,73 @@ export function forgetIntegrationCredential(provider: string, key: string): Prom
   return deleteData(`/admin/settings/integrations/providers/${provider}/credentials/${key}`)
 }
 
+// ---- Candidate Meta app (META-CANDIDATE-001) ----------------------------------------------------
+
+export type MetaCandidateStepKey = 'oauth_start' | 'consent' | 'token_exchange' | 'account_discovery' | 'ads_read'
+
+/** Meta's own identifiers for a refusal — never a token or a secret. */
+export interface MetaCandidateStepError {
+  http_status?: number | null
+  code?: number | string | null
+  subcode?: number | string | null
+  type?: string | null
+  reason?: string | null
+  fbtrace_id?: string | null
+  message?: string | null
+}
+
+export interface MetaCandidateStep {
+  key: MetaCandidateStepKey
+  status: 'ok' | 'failed' | 'pending'
+  at?: string
+  detail?: unknown
+  error?: MetaCandidateStepError
+}
+
+export interface MetaCandidateRun {
+  id: string
+  profile: 'candidate'
+  status: 'started' | 'succeeded' | 'failed'
+  app_id_hint: string | null
+  started_at: string | null
+  finished_at: string | null
+  token_expires_at: string | null
+  granted_scopes: string[]
+  discovered_accounts: { id: string; name: string | null; account_status: number | null; currency: string | null }[]
+  steps: MetaCandidateStep[]
+}
+
+export interface MetaCandidateState {
+  credentials: {
+    profile: 'candidate'
+    configured: boolean
+    missing: string[]
+    effective_scopes: string[]
+    redirect_uri: string
+    values: { key: 'client_id' | 'client_secret' | 'config_id'; secret: boolean; present: boolean; source: 'stored' | 'environment' | null; hint: string | null }[]
+    configured_at: string | null
+  }
+  latest_run: MetaCandidateRun | null
+}
+
+export function fetchMetaCandidate(): Promise<MetaCandidateState> {
+  return getData('/admin/settings/integrations/meta-candidate')
+}
+
+/** Partial, like the provider console: a blank field is left alone. */
+export function saveMetaCandidate(body: { client_id?: string; client_secret?: string; config_id?: string; scopes?: string[] }): Promise<MetaCandidateState & { fields_changed: string[] }> {
+  return putData('/admin/settings/integrations/meta-candidate', body)
+}
+
+export function forgetMetaCandidateCredential(key: string): Promise<MetaCandidateState> {
+  return deleteData(`/admin/settings/integrations/meta-candidate/credentials/${key}`)
+}
+
+/** Starts a round trip: the browser is sent to Meta's dialog and returns to this page. */
+export function startMetaCandidateTest(): Promise<{ run: MetaCandidateRun; authorization_url: string; expires_in_minutes: number }> {
+  return postData('/admin/settings/integrations/meta-candidate/test', {})
+}
+
 // ---- Email operations (MAIL-014) -----------------------------------------------------------------
 
 export interface EmailDelivery {
