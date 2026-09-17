@@ -245,9 +245,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::post('reports/{report}/regenerate', [ReportController::class, 'regenerate'])->middleware('project.can:reports.manage')->name('reports.regenerate');
     Route::get('reports/{report}/scope', [ReportScopeController::class, 'show'])->middleware('project.can:reports.view')->name('reports.scope.show');
     Route::match(['put', 'patch'], 'reports/{report}/scope', [ReportScopeController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.scope.update');
-    // REPORT-RECOMMENDATION-BLOCKS-001 — attention items and the operator's approve/hide per item.
-    Route::get('report-attention', [ReportAttentionController::class, 'index'])->middleware('project.can:reports.view')->name('reports.attention.index');
-    Route::put('report-attention/{item}', [ReportAttentionController::class, 'decide'])->middleware('project.can:reports.manage')->name('reports.attention.decide');
+    // REPORT-RECOMMENDATION-BLOCKS-001 — attention items and the operator's approve/hide, per report and period.
+    Route::get('reports/{report}/attention', [ReportAttentionController::class, 'index'])->middleware('project.can:reports.view')->name('reports.attention.index');
+    Route::put('reports/{report}/attention/{item}', [ReportAttentionController::class, 'decide'])->middleware('project.can:reports.manage')->name('reports.attention.decide');
     Route::get('reports/{report}/annotations', [ReportAnnotationController::class, 'index'])->middleware('project.can:reports.view')->name('reports.annotations.index');
     Route::post('reports/{report}/annotations/{annotation}/status', [ReportAnnotationController::class, 'updateStatus'])->middleware('project.can:reports.manage')->name('reports.annotations.status');
     Route::get('reports/{report}/validation', [ReportController::class, 'validation'])->middleware('project.can:reports.view')->name('reports.validation');

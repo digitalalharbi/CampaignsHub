@@ -655,7 +655,7 @@ final class LiveReportService
         if (is_array($payload['attention'] ?? null)) {
             $payload['attention'] = AttentionAudience::withEvidence(
                 AttentionAudience::redact(
-                    AttentionAudience::forClient($payload['attention'], $this->attention->decisions((string) $share->tenant_id, $scope['project_id'])),
+                    AttentionAudience::forClient($payload['attention'], $this->attention->decisions((string) $share->tenant_id, (string) $share->report_id, $payload['period']['from'], $payload['period']['to'])),
                     (bool) $share->hide_spend,
                     (bool) $share->hide_revenue,
                 ),
