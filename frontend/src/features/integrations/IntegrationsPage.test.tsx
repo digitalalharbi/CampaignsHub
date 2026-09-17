@@ -599,4 +599,50 @@ describe('disconnecting a platform', () => {
 
     expect(await screen.findByTestId('connector-state-linkedin')).toHaveTextContent('Needs attention')
   })
+
+  /** ACCOUNT-SCOPE-ISOLATION-001 — every selected account answered with nothing: not «Healthy». */
+  it('shows a neutral no-data chip, not a green one, when nothing selected has data', async () => {
+    rows.data = [connector({ key: 'meta', label: 'Meta', state: 'connected', accounts: 1 })]
+    wizardStates.resumable = []
+    wizardStates.connections = [{
+      state: 'active', user_state: 'NO_DATA', discovered: 1, assigned: 1, synced: 1,
+      has_parent: false, resumable: false, next_step: null,
+      health: { connected: 1, healthy: 0, no_data: 1, needs_attention: 0, pending_first_sync: 0, states: { no_data: 1 } },
+      connection: { id: 'conn-m', provider: 'meta', label: 'Meta', label_ar: 'ميتا', client_workspace_id: null },
+    }]
+
+    renderWithProviders(<IntegrationsPage />, { locale: 'en' })
+
+    const chip = await screen.findByTestId('connector-state-meta')
+    expect(chip).toHaveTextContent('No data')
+    expect(chip).not.toHaveTextContent('Healthy')
+  })
+
+  it('says a revoked authorisation was revoked and offers reconnecting, not «ready to connect»', async () => {
+    rows.data = [connector({ key: 'meta', label: 'Meta', state: 'revoked' })]
+    wizardStates.connections = []
+    wizardStates.resumable = []
+
+    renderWithProviders(<IntegrationsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('connector-revoked-meta')).toBeInTheDocument()
+    expect(screen.queryByText(/Ready to connect/)).not.toBeInTheDocument()
+    expect(screen.getByTestId('connector-connect-meta')).toHaveTextContent('Reconnect')
+  })
+
+  /** The Google card is keyed `google_ads`; its connection says `google`. They are one platform. */
+  it('gives the Google card its own connection state', async () => {
+    rows.data = [connector({ key: 'google_ads', label: 'Google Ads', state: 'connected' })]
+    wizardStates.resumable = []
+    wizardStates.connections = [{
+      state: 'active', user_state: 'ATTENTION_REQUIRED', discovered: 2, assigned: 2, synced: 1,
+      has_parent: true, resumable: false, next_step: null,
+      health: { connected: 2, healthy: 1, needs_attention: 1, pending_first_sync: 0, states: {} },
+      connection: { id: 'conn-g', provider: 'google', label: 'Google', label_ar: 'جوجل', client_workspace_id: null },
+    }]
+
+    renderWithProviders(<IntegrationsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('connector-state-google_ads')).toHaveTextContent('Needs attention')
+  })
 })

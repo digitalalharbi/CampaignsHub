@@ -268,6 +268,13 @@ const useAr = () => useUi((u) => u.locale) === 'ar'
  */
 export type Surface = 'analytics' | 'dashboard'
 
+/** Which part of the hierarchy an incomplete sync did not deliver, in the reader's words. */
+const GRAIN_MISSING: Record<'campaign' | 'ad_set' | 'ad', { ar: string; en: string }> = {
+  campaign: { ar: 'صفوف حملات لم تُطابَق', en: 'campaign rows not matched' },
+  ad_set: { ar: 'لم تصل بيانات المجموعات الإعلانية', en: 'ad-set figures missing' },
+  ad: { ar: 'لم تصل بيانات الإعلانات', en: 'ad figures missing' },
+}
+
 export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } = {}) {
   const ar = useAr()
   const { currentProjectId, setCurrentProjectId } = useProject()
@@ -1676,7 +1683,14 @@ export function QualityTab({ projectId, range, filters }: TabProps) {
            * was painted as a success. A raw English key on a positive green pill was the whole
            * report a customer got about an account that had never been assigned to a project.
            */
-          <SyncStatusPill key="s" status={r.last_sync_status} ar={ar} />,
+          <span key="s" className="inline-flex flex-wrap items-center gap-1.5">
+            <SyncStatusPill status={r.last_sync_status} ar={ar} />
+            {r.last_sync_status === 'partial' && r.missing_grain && (
+              <span className="text-xs text-text-secondary" data-testid={`freshness-missing-grain-${r.provider}`}>
+                {GRAIN_MISSING[r.missing_grain][ar ? 'ar' : 'en']}
+              </span>
+            )}
+          </span>,
         ])}
         values={rows.map((r) => [
           providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),

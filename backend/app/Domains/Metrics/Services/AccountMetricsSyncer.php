@@ -705,6 +705,17 @@ final class AccountMetricsSyncer
 
         if ($account !== null) {
             $this->checkpoint($account, $status, $category);
+
+            /*
+             * The connection's last successful sync, written where the fact occurs. The project panel
+             * read this column and nothing had ever written it, so it was always «never». A partial
+             * or failed run is not a success; a `no_data` run is — the platform answered in full.
+             */
+            if (in_array($status, [SyncRunStatus::Success, SyncRunStatus::NoData], true) && $account->provider_connection_id !== null) {
+                ProviderConnection::withoutGlobalScopes()
+                    ->whereKey($account->provider_connection_id)
+                    ->update(['last_successful_sync_at' => Carbon::now()]);
+            }
         }
 
         return $run;

@@ -333,6 +333,8 @@ export interface FreshnessRow {
   missing_days: number | null
   /** `fresh` | `stale` | `failed` | `awaiting_credentials` — one vocabulary, every surface. */
   last_sync_status: string | null
+  /** With `partial`: which grain the last sync did not deliver. */
+  missing_grain?: 'campaign' | 'ad_set' | 'ad' | null
   last_sync_at: string | null
   last_sync_error: string | null
 }
