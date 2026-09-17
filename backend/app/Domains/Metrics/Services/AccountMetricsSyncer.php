@@ -464,7 +464,12 @@ final class AccountMetricsSyncer
         $campaigns = ExternalCampaign::withoutGlobalScopes()
             ->where('external_account_id', $account->id)
             ->where(function ($q): void {
-                $q->whereNull('raw')->orWhereJsonDoesntContain('raw->sandbox', true);
+                // NOT `orWhereJsonDoesntContain('raw->sandbox', true)`: on PostgreSQL a live campaign's
+                // body has no `sandbox` key, `NOT (NULL @> 'true')` is NULL, and every real campaign
+                // dropped out — the sweep asked for 0 campaigns and the ad grains were never refreshed.
+                $q->whereNull('raw')
+                    ->orWhereNull('raw->sandbox')
+                    ->orWhereJsonDoesntContain('raw->sandbox', true);
             })
             ->pluck('external_id', 'id');
 
