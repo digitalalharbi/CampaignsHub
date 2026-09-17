@@ -18,6 +18,7 @@ use App\Domains\Integrations\Providers\ReportsEntityGrains;
 use App\Domains\Integrations\Providers\SnapchatConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\Actions\UpsertEntityDailyMetrics;
 use App\Domains\Metrics\Enums\SyncRunStatus;
@@ -469,10 +470,10 @@ final class AccountMetricsSyncer
 
         $squadThrown = null;
         $squadRows = $this->grain(
-            fn (): array => $connector->entityInsights(
+            fn (): SyncResult => $connector->entityInsights(
                 $account->external_id, ReportsEntityGrains::AD_SET,
                 $campaigns->values()->all(), $from->toDateString(), $to->toDateString(),
-            )->records,
+            ),
             $squadThrown,
         );
         // Read now: the ad sweep below resets the connector's own record of a refusal.
@@ -501,6 +502,7 @@ final class AccountMetricsSyncer
         $squadResult = app(UpsertEntityDailyMetrics::class)->execute(
             $account, EntityDailyMetric::AD_SET, $squadRows, $knownSquads, (string) $run->getKey(),
         );
+        $squadFailure ??= $this->nothingPlaced('ad-set', count($squadRows), $squadResult['upserted']);
 
         $adThrown = null;
         $adRows = $this->grain(
@@ -514,11 +516,11 @@ final class AccountMetricsSyncer
              *
              * Asking campaigns for both grains is also 89 calls instead of 187 + 89.
              */
-            fn (): array => $connector->entityInsights(
+            fn (): SyncResult => $connector->entityInsights(
                 $account->external_id, ReportsEntityGrains::AD,
                 $campaigns->values()->all(),
                 $from->toDateString(), $to->toDateString(),
-            )->records,
+            ),
             $adThrown,
         );
         $adFailure = $adThrown ?? $connector->lastEntityFailure();
@@ -541,6 +543,7 @@ final class AccountMetricsSyncer
         $adResult = app(UpsertEntityDailyMetrics::class)->execute(
             $account, EntityDailyMetric::AD, $adRows, $knownAds, (string) $run->getKey(),
         );
+        $adFailure ??= $this->nothingPlaced('ad', count($adRows), $adResult['upserted']);
 
         /*
          * Record WHY the grains are empty, when they are.
@@ -555,6 +558,16 @@ final class AccountMetricsSyncer
                 ...(array) ($run->meta ?? []),
                 'entity_ad_sets' => $squadResult['upserted'],
                 'entity_ads' => $adResult['upserted'],
+                /*
+                 * What was ASKED and what CAME BACK, beside what was written: «0 rows written» is three
+                 * different facts — no parent to ask, the platform answered with nothing, or rows came
+                 * back that matched no discovered entity — and only these numbers tell them apart.
+                 */
+                'entity_parents_asked' => $campaigns->count(),
+                'entity_ad_sets_fetched' => count($squadRows),
+                'entity_ad_sets_skipped' => $squadResult['skipped'],
+                'entity_ads_fetched' => count($adRows),
+                'entity_ads_skipped' => $adResult['skipped'],
                 'entity_failure' => $squadFailure ?? $adFailure,
                 'entity_ad_sets_failure' => $squadFailure,
                 'entity_ads_failure' => $adFailure,
@@ -570,18 +583,41 @@ final class AccountMetricsSyncer
      * The failure is contained, not discarded: `$failure` receives what was thrown, so the run can
      * say the grain failed instead of reading success over rows it never rewrote.
      *
-     * @param  callable(): list<array<string,mixed>>  $fetch
+     * @param  callable(): (SyncResult|list<array<string,mixed>>)  $fetch
      * @return list<array<string,mixed>>
      */
     private function grain(callable $fetch, ?string &$failure = null): array
     {
         try {
-            return $fetch();
+            $result = $fetch();
+
+            /*
+             * A connector may report a failure without throwing: Snapchat's `syncEntityInsights()`
+             * catches everything and returns `SyncResult::failed($message)`. Reading only `->records`
+             * turned that into an empty, successful grain — the message is kept now.
+             */
+            if ($result instanceof SyncResult) {
+                if (! $result->success) {
+                    $failure = Str::limit((string) ($result->message ?? 'The platform reported a failure with no message.'), 480);
+                }
+
+                return $result->records;
+            }
+
+            return $result;
         } catch (Throwable $e) {
             $failure = Str::limit(class_basename($e).': '.$e->getMessage(), 480);
 
             return [];
         }
+    }
+
+    /** Rows came back and none matched a discovered entity: nothing was written, and that is not a success. */
+    private function nothingPlaced(string $grain, int $fetched, int $upserted): ?string
+    {
+        return $fetched > 0 && $upserted === 0
+            ? "{$fetched} {$grain} row(s) came back and none matched a discovered {$grain}, so none was stored."
+            : null;
     }
 
     /**
