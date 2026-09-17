@@ -175,7 +175,7 @@ final class AdPlatformOAuthController extends Controller
                 $run = app(MetaCandidateRoundTrip::class)->complete($record, $request->query());
 
                 return redirect()->away(Frontend::origin().'/admin/settings/integrations/meta-candidate?'.http_build_query([
-                    'outcome' => $run?->status ?? 'invalid_state',
+                    'outcome' => $run === null ? 'invalid_state' : $run->status,
                 ]));
             }
 
