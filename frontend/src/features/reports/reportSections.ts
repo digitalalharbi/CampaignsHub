@@ -31,3 +31,20 @@ export function sectionShown(payload: WithReportSections | null | undefined, key
 
   return !Array.isArray(list) || (list as string[]).includes(key)
 }
+
+/**
+ * REPORT-SECTION-STREAMS-001 — the deck's business-stream page, added where the server sent streams.
+ *
+ * The template engine's slide list predates the streams, so the page is appended after the report's
+ * own slides (before the methodology note) rather than stored in every snapshot's config.
+ */
+export function withStreamsSlide<S extends { id: string; type: string; order: number; visible: boolean }>(
+  slides: S[],
+  data: WithReportSections & { business_streams?: unknown[] },
+): S[] {
+  if (sectionShown(data, 'advanced_segmentation') && (data.business_streams?.length ?? 0) > 0) {
+    slides.push({ id: '__streams', type: '__streams', order: 9998, visible: true } as S)
+  }
+
+  return slides
+}

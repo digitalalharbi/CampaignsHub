@@ -505,6 +505,22 @@ export function PrintDocument({
         </section>
       )}
 
+      {/* REPORT-SECTION-STREAMS-001 — advanced segmentation, in the operator's own stream names. */}
+      {shown('advanced_segmentation') && (data.business_streams ?? []).length > 0 && (
+        <section className="doc-section">
+          <h2>Performance by Business Stream</h2>
+          <Table
+            head={['Stream', 'Spend', 'Results', 'Share of spend']}
+            rows={(data.business_streams ?? []).map((s) => [
+              s.label,
+              moneyExact(typeof s.figures.spend === 'number' ? s.figures.spend : null, currency),
+              typeof s.figures.conversions === 'number' ? s.figures.conversions.toLocaleString('en-US') : '—',
+              s.share_of_spend === null ? '—' : `${Math.round(s.share_of_spend * 100)}%`,
+            ])}
+          />
+        </section>
+      )}
+
       {/*
         CLIENT-REPORT-ENTITY-BOUNDARY-001 — the campaign table is gone from the printed document.
 

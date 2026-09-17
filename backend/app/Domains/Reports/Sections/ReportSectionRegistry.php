@@ -196,6 +196,11 @@ final class ReportSectionRegistry
         $this->availableWhen('advanced_segmentation', 'has_segments', static function (SectionContext $c): bool {
             $split = $c->value('objective_performance');
 
+            // A client's segmentation is the operator's business streams and nothing else.
+            if ($c->isClientFacing()) {
+                return $c->rows('business_streams') !== [];
+            }
+
             return $c->rows('business_streams') !== []
                 || (is_array($split) && is_array($split['paths'] ?? null) && $split['paths'] !== []);
         });
