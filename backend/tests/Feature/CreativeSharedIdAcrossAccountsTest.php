@@ -80,9 +80,9 @@ final class CreativeSharedIdAcrossAccountsTest extends TestCase
         }
     }
 
-    public function test_one_accounts_figures_are_never_written_onto_a_creative_the_other_account_owns(): void
+    public function test_two_accounts_reporting_one_creative_id_keep_two_creatives_and_their_own_figures(): void
     {
-        // Both accounts run an ad carrying the SAME provider creative id; the second import wins the row.
+        // CREATIVE-ACCOUNT-IDENTITY-001 — the key includes the account, so nothing collapses and nothing is skipped.
         foreach ([$this->first, $this->second] as $account) {
             app(ImportExternalStructure::class)->execute($account, [], [[
                 'external_id' => 'ad-'.$account->external_id, 'name' => 'Ad', 'status' => 'active',
@@ -91,21 +91,35 @@ final class CreativeSharedIdAcrossAccountsTest extends TestCase
             ]]);
         }
 
-        $this->assertSame(1, ExternalCreative::withoutGlobalScopes()->where('external_creative_id', 'cr-shared')->count(), 'the account-blind key collapses the two into one row');
+        $rows = ExternalCreative::withoutGlobalScopes()->where('external_creative_id', 'cr-shared')->get();
+        $this->assertCount(2, $rows, 'two accounts collapsed into one creative row');
+        $this->assertEqualsCanonicalizing([$this->first->id, $this->second->id], $rows->pluck('external_account_id')->all());
 
-        $row = ['campaign_id' => 'cr-shared', 'date' => '2026-08-01', 'spend' => 10.0];
+        $first = app(UpsertCreativeDailyMetrics::class)->execute($this->first, [['campaign_id' => 'cr-shared', 'date' => '2026-08-01', 'spend' => 10.0]]);
+        $second = app(UpsertCreativeDailyMetrics::class)->execute($this->second, [['campaign_id' => 'cr-shared', 'date' => '2026-08-01', 'spend' => 999.0]]);
 
-        $firstResult = app(UpsertCreativeDailyMetrics::class)->execute($this->first, [$row]);
-        $secondResult = app(UpsertCreativeDailyMetrics::class)->execute($this->second, [['campaign_id' => 'cr-shared', 'date' => '2026-08-01', 'spend' => 999.0]]);
+        $this->assertSame(1, $first['upserted']);
+        $this->assertSame(1, $second['upserted']);
 
-        // Fail-closed: the first account's figure is skipped and counted, never written onto the row.
-        $this->assertSame(0, $firstResult['upserted'], 'the first account\'s figure landed on a creative the second account now owns');
-        $this->assertSame(1, $firstResult['ids_unmapped']);
-        $this->assertSame(1, $secondResult['upserted']);
+        foreach ([[$this->first, 10.0], [$this->second, 999.0]] as [$account, $spend]) {
+            $creativeId = $rows->firstWhere('external_account_id', $account->id)->id;
+            $stored = DB::table('creative_daily_metrics')->where('creative_id', $creativeId)->get();
+            $this->assertCount(1, $stored);
+            $this->assertEqualsWithDelta($spend, (float) ($stored[0]->spend ?? $stored[0]->spend_original), 0.001, 'a figure landed on the other account\'s creative');
+        }
+    }
 
-        $stored = DB::table('creative_daily_metrics')->get();
-        $this->assertCount(1, $stored);
-        $this->assertEqualsWithDelta(999.0, (float) ($stored[0]->spend ?? $stored[0]->spend_original), 0.001, 'the stored figure is not the owning account\'s');
+    public function test_a_creative_stored_before_it_carried_an_account_is_still_reached_through_its_campaign(): void
+    {
+        $campaign = ExternalCampaign::withoutGlobalScopes()->where('external_account_id', $this->first->id)->firstOrFail();
+        $legacy = ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'provider' => 'snapchat',
+            'external_campaign_id' => $campaign->id, 'external_creative_id' => 'cr-legacy', 'name' => 'Legacy',
+        ]);
+
+        $this->assertNull($legacy->external_account_id);
+        $this->assertSame(1, app(UpsertCreativeDailyMetrics::class)->execute($this->first, [['campaign_id' => 'cr-legacy', 'date' => '2026-08-01', 'spend' => 5.0]])['upserted']);
+        $this->assertSame(0, app(UpsertCreativeDailyMetrics::class)->execute($this->second, [['campaign_id' => 'cr-legacy', 'date' => '2026-08-02', 'spend' => 7.0]])['upserted'], 'another account reached a legacy creative');
     }
 
     private function account(ProviderConnection $connection, string $externalId): ExternalAccount
