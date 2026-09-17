@@ -344,6 +344,47 @@ final class ObjectivePerformance
     }
 
     /**
+     * REPORT-RECOMMENDATION-BLOCKS-001 — the same rows, summed per (objective FAMILY, platform).
+     *
+     * `byPlatform()` groups by marketing PATH, and the conversion path holds leads and sales together:
+     * judged there, a cost per lead and a cost per sale become one blended «cost per result», which is
+     * the flattering mistake `result_composition` already exists to expose. A finding about what a
+     * lead costs has to be computed from lead campaigns alone, so this groups by the family the
+     * objective belongs to instead.
+     *
+     * Sums only — every ratio is left to the caller to derive from these numerators and denominators,
+     * never averaged. The withheld-money counts travel beside the money for the reason `heldMoney()`
+     * states: a converted sum that silently skipped rows is not the spend.
+     *
+     * @return list<array{family: string, provider: string, spend: float, impressions: float, clicks: float, landing_page_views: float, results: float, revenue: float, spend_withheld_rows: int, revenue_withheld_rows: int}>
+     */
+    public function byFamilyAndPlatform(Carbon $from, Carbon $to): array
+    {
+        $out = [];
+
+        foreach ($this->rows($from, $to) as $row) {
+            $objective = CampaignObjective::tryFrom((string) $row->objective) ?? CampaignObjective::Other;
+            $key = $objective->family()->value.'|'.(string) $row->provider;
+
+            $out[$key] ??= [
+                'family' => $objective->family()->value,
+                'provider' => (string) $row->provider,
+                'spend' => 0.0, 'impressions' => 0.0, 'clicks' => 0.0, 'landing_page_views' => 0.0,
+                'results' => 0.0, 'revenue' => 0.0, 'spend_withheld_rows' => 0, 'revenue_withheld_rows' => 0,
+            ];
+
+            foreach (['spend', 'impressions', 'clicks', 'landing_page_views', 'revenue'] as $metric) {
+                $out[$key][$metric] += (float) ($row->{$metric} ?? 0);
+            }
+            $out[$key]['results'] += (float) ($row->orders ?? 0);
+            $out[$key]['spend_withheld_rows'] += (int) ($row->spend_withheld_rows ?? 0);
+            $out[$key]['revenue_withheld_rows'] += (int) ($row->revenue_withheld_rows ?? 0);
+        }
+
+        return array_values($out);
+    }
+
+    /**
      * OBJECTIVE-ANALYTICS-DEPTH-001 — the strongest and weakest campaign INSIDE each path.
      *
      * The same rule as `byPlatform()`, one level down. A leads campaign and an awareness campaign

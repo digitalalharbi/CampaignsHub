@@ -5,6 +5,7 @@ import { mixedResultsNote, type ResultPart } from './reportMetrics'
 import { brand, productName } from '@/lib/brand'
 import { ReportWatermark } from './ReportWatermark'
 import { drawableFamilies, formatKpi, formatRankingValue, rankingMetricLabel, type ObjectiveRanking, type RankingEnd } from './objectiveAnalytics'
+import { AttentionBlocks } from './AttentionBlocks'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 
 /**
@@ -567,9 +568,12 @@ export function PrintDocument({
       )}
 
       {/* Recommendations */}
-      {recs.length > 0 && (
+      {(recs.length > 0 || (data.attention?.length ?? 0) > 0) && (
         <section className="doc-section">
           <h2>{heading('recommendations', 'Recommendations')}</h2>
+          {/* REPORT-RECOMMENDATION-BLOCKS-001 — the same blocks as the deck and the links, laid out open. */}
+          <AttentionBlocks items={data.attention} ar={false} />
+          {recs.length > 0 && (
           <ol className="doc-recs">
             {recs.map((r, i) => {
               const body = (r as { detail?: string; body?: string }).detail ?? (r as { body?: string }).body
@@ -581,6 +585,7 @@ export function PrintDocument({
               )
             })}
           </ol>
+          )}
         </section>
       )}
 
