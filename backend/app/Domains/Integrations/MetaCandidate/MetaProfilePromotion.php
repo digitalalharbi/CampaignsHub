@@ -67,6 +67,20 @@ final class MetaProfilePromotion
         return ['eligible' => true, 'reason' => null];
     }
 
+    /**
+     * The scopes the current Live profile requests that the candidate would NOT request.
+     *
+     * Promotion makes the candidate's scopes Live's. Dropping one silently would take a permission away
+     * from every future Live authorisation, so a non-empty answer refuses promotion unless the operator
+     * confirms the narrowing separately and by name.
+     *
+     * @return list<string>
+     */
+    public function droppedScopes(): array
+    {
+        return array_values(array_diff($this->settings->scopes('meta'), $this->candidate->scopes()));
+    }
+
     public function rollbackAvailable(): bool
     {
         return ProviderConfiguration::query()->where('provider', self::PREVIOUS_LIVE)->exists();
