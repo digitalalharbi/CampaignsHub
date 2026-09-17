@@ -165,6 +165,19 @@ final class SyncCheckpointAndHealthTest extends TestCase
         $account->refresh();
         $this->assertNull($account->last_sync_error_category);
         $this->assertNotNull($account->last_synced_at);
+        $this->assertNotNull(
+            ProviderConnection::withoutGlobalScopes()->find($account->provider_connection_id)->last_successful_sync_at,
+            'the connection\'s last successful sync was never written, so the panel always said «never»',
+        );
+    }
+
+    public function test_a_refused_sync_does_not_move_the_connections_last_success(): void
+    {
+        $account = $this->assignedAccount($this->projectB, $this->clientB, provider: 'snapchat');
+
+        app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-02'));
+
+        $this->assertNull(ProviderConnection::withoutGlobalScopes()->find($account->provider_connection_id)->last_successful_sync_at);
     }
 
     // ── The health model ──────────────────────────────────────────────────────────────────────
