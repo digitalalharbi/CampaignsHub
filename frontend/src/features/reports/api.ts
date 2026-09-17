@@ -2,6 +2,7 @@ import type { AdGroup, AdPlatformGroup, AdsReading, ReportAd } from './ReportAds
 import type { RosterRow } from './ReportCreativeRoster'
 import type { ObjectivePerformance } from './InteractiveReport'
 import type { PathLeaders } from '@/features/analytics/api'
+import type { ObjectiveAnalytics } from './objectiveAnalytics'
 
 import { getData, postData, putData } from '@/lib/api/client'
 import type { SharedBranding } from './sharedBranding'
@@ -287,6 +288,12 @@ export interface LivePayload {
   objective_performance?: ObjectivePerformance
   /** The strongest and weakest campaign inside each path — never one list across paths. */
   objective_leaders?: { paths: PathLeaders[] }
+  /**
+   * REPORT-OBJECTIVE-ANALYTICS-001 — KPI blocks per objective family, best/weakest platform and content
+   * above a minimum volume, trend and contribution. Built server-side by the same class as the
+   * snapshot's; null when the section is switched off or nothing classified was reported.
+   */
+  objective_analytics?: ObjectiveAnalytics | null
   /**
    * ATTRIB-VIS-001 / LIVE-SECTIONS-001 — which sections this link publishes.
    *
