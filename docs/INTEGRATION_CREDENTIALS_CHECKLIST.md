@@ -108,7 +108,8 @@ has ever been made for any of them.**
 
 | Provider | Env |
 |---|---|
-| Meta Ads | `META_ADS_APP_ID` · `META_ADS_APP_SECRET` |
+| Meta Ads | `META_ADS_APP_ID` · `META_ADS_APP_SECRET` · optional `META_ADS_CONFIG_ID` (unset = dialog asks for `scope` as before) |
+| Meta **Candidate** app (META-CANDIDATE-001) | `META_CANDIDATE_APP_ID` · `META_CANDIDATE_APP_SECRET` · `META_CANDIDATE_CONFIG_ID` · optional `META_CANDIDATE_SCOPES` (comma list, default `ads_read`) — see below |
 | Google Ads | `GOOGLE_ADS_CLIENT_ID` · `GOOGLE_ADS_CLIENT_SECRET` · `GOOGLE_ADS_DEVELOPER_TOKEN` — **no manager (MCC) account id** (GADS-MCC-001) |
 | TikTok Ads | `TIKTOK_ADS_APP_ID` · `TIKTOK_ADS_APP_SECRET` |
 | Snapchat Ads | `SNAPCHAT_ADS_CLIENT_ID` · `SNAPCHAT_ADS_CLIENT_SECRET` — **no organisation id** (SNAP-ORG-001) |
@@ -121,6 +122,26 @@ has ever been made for any of them.**
 **Webhook URL (advertising family):**
 `POST {APP_URL}/api/v1/webhooks/ads/{provider}` — the same path answers `GET` for the
 subscription-verification handshake several platforms perform before they will deliver anything.
+
+### Meta Candidate app (META-CANDIDATE-001)
+
+One isolated second Meta app, used only to prove a Facebook Login for Business round trip before it
+replaces the Live app. It never touches the Live app's credentials, customer connections, accounts or
+data.
+
+**Where the Owner sets it (no values in git, chat or logs):** `/admin/settings/integrations/meta-candidate`
+→ App ID, App Secret, Configuration ID (stored encrypted in `provider_configurations`, row
+`meta.candidate`). The environment keys above are the fallback, exactly like the Live keys; none has a
+default and none falls back to a Live value.
+
+**In the new Meta app (developers.facebook.com):**
+- Facebook Login for Business → Settings → Valid OAuth Redirect URIs:
+  `https://api.campaignshub.io/api/v1/oauth/ads/meta/callback` (the same URL as Live; the profile
+  travels in the signed state).
+- Settings → Basic → App Domains: `campaignshub.io` (and `api.campaignshub.io`).
+- Facebook Login for Business → Configurations → create one with token type **User access token**,
+  asset type **Ad accounts**, permission **ads_read**. Its ID is the Configuration ID.
+- No webhooks are needed.
 
 Set `AD_PLATFORM_REDIRECT_BASE` explicitly in a split deployment — several providers refuse to
 register a redirect that does not match byte for byte.

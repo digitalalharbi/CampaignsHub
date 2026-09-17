@@ -12,6 +12,7 @@ use App\Domains\CRM\Models\Company;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Models\Opportunity;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
+use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
@@ -105,6 +106,8 @@ class AppServiceProvider extends ServiceProvider
          * in place before an operator rotated one, for the life of the worker process.
          */
         $this->app->scoped(ProviderConfigurationService::class);
+        // META-CANDIDATE-001 — the Candidate app's store memoises its row the same way.
+        $this->app->scoped(MetaCandidateCredentials::class);
 
         // Advertising connector registry; Sandbox is excluded in production.
         $this->app->singleton(
