@@ -86,6 +86,9 @@ describe('a finding card carries its figures, its action and its evidence', () =
     expect(within(card).getByTestId('finding-nature')).toHaveTextContent('Problem')
     expect(within(card).getByTestId('finding-subject')).toHaveTextContent('Riyadh launch')
     const roas = within(card).getByTestId('kpi-roas')
+    /* The catalogue's name, never the raw key a reader cannot parse. */
+    expect(roas).toHaveTextContent('Return on ad spend')
+    expect(roas).not.toHaveTextContent(/^roas/)
     expect(within(roas).getByTestId('kpi-current')).toHaveTextContent('2.00×')
     expect(within(roas).getByTestId('kpi-before')).toHaveTextContent('4.00×')
     expect(within(roas).getByTestId('kpi-change')).toHaveTextContent('50%')
