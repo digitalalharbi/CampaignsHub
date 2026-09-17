@@ -189,6 +189,11 @@ final class ReconcileContentMetricsCommand extends Command
             .'   video: '.(($preview['video_url'] ?? null) !== null ? 'yes' : 'no')
             .'   cards: '.(is_array($preview['cards'] ?? null) ? (string) count((array) $preview['cards']) : 'not fetched'));
 
+        if (($preview['image_url'] ?? null) === null && ($preview['video_url'] ?? null) === null
+            && ($preview['thumbnail_url'] ?? null) === null && ! is_array($preview['cards'] ?? null)) {
+            $this->mediaProvenance($creative);
+        }
+
         $this->judge($figures, $totals, $aggregate, $card, $roster, $withFigures, $withoutFigures);
 
         $this->line('');
@@ -273,6 +278,192 @@ final class ReconcileContentMetricsCommand extends Command
                 .'saying why — `headline_metrics` holds only `spend`, so the «no displayable metrics» panel '
                 .'never fires (RUNG 6). This is the owner\'s «Spend appears and the other KPIs disappear».';
         }
+    }
+
+    /** Retained structure bodies decoded per query: a creatives page can be large and the command runs at 128MB. */
+    private const STRUCTURE_CHUNK = 5;
+
+    /** A hard ceiling on bodies read for one sweep. */
+    private const STRUCTURE_MAX_BODIES = 400;
+
+    /**
+     * RUNG 10 — where the platform's media stopped, read from the latest sweep's OWN bodies.
+     *
+     * Census A found four Snapchat collections with nothing to draw while hundreds on the same account
+     * draw. The row can only say «nothing arrived»; the structure sweep retained what the platform
+     * actually sent, so this follows the creative through it: was it in the creatives edge, did it name
+     * a top snap, did the media lookup answer for that snap, and in what state.
+     *
+     * Read-only, bounded (one sweep, found by account; bodies keyset by id, a few per query, a statement
+     * timeout) and printing key names and platform enums only — never an id, a name, a copy or a link.
+     */
+    private function mediaProvenance(ExternalCreative $creative): void
+    {
+        $this->line('');
+        $this->line('RUNG 10 — where the media stopped (the latest retained structure sweep; key names and platform states only)');
+        $this->line('    row last synced       : '.($creative->last_synced_at?->toDateTimeString() ?? 'never'));
+
+        if ((string) $creative->provider !== 'snapchat') {
+            $this->line('    not walked — only Snapchat structure bodies are read here');
+
+            return;
+        }
+
+        $accountId = $creative->external_campaign_id === null
+            ? null
+            : DB::table('external_campaigns')->where('id', (string) $creative->external_campaign_id)->value('external_account_id');
+
+        if ($accountId === null) {
+            $this->line('    no campaign on the row, so no ad account whose sweep could be read');
+
+            return;
+        }
+
+        $externalId = (string) $creative->external_creative_id;
+
+        DB::statement("SET statement_timeout = '20s'");
+
+        try {
+            $sweep = DB::table('integration_raw_payloads')
+                ->where('external_account_id', (string) $accountId)
+                ->where('resource', 'structure')
+                ->whereNotNull('sync_run_id')
+                ->orderByDesc('fetched_at')
+                ->limit(1)
+                ->first(['sync_run_id', 'fetched_at']);
+
+            if ($sweep === null) {
+                $this->line('    no retained structure body for this account');
+
+                return;
+            }
+
+            $found = null;
+            $mediaId = null;
+            /** @var array<string, int> $adStatuses */
+            $adStatuses = [];
+            $mediaBodies = 0;
+            $mediaEntry = null;
+            $bodies = 0;
+            $lastId = '00000000-0000-0000-0000-000000000000';
+
+            do {
+                $chunk = DB::table('integration_raw_payloads')
+                    ->where('sync_run_id', (string) $sweep->sync_run_id)
+                    ->where('resource', 'structure')
+                    ->where('id', '>', $lastId)
+                    ->orderBy('id')
+                    ->limit(self::STRUCTURE_CHUNK)
+                    ->get(['id', 'payload']);
+
+                foreach ($chunk as $row) {
+                    $lastId = (string) $row->id;
+                    $bodies++;
+                    $body = json_decode((string) $row->payload, true);
+
+                    if (! is_array($body)) {
+                        continue;
+                    }
+
+                    foreach ((array) ($body['creatives'] ?? []) as $wrapper) {
+                        $c = (array) (((array) $wrapper)['creative'] ?? []);
+
+                        if ((string) ($c['id'] ?? '') === $externalId) {
+                            $found = $c;
+                            $mediaId = is_string($c['top_snap_media_id'] ?? null) ? $c['top_snap_media_id'] : null;
+                        }
+                    }
+
+                    foreach ((array) ($body['ads'] ?? []) as $wrapper) {
+                        $a = (array) (((array) $wrapper)['ad'] ?? []);
+
+                        if ((string) ($a['creative_id'] ?? '') === $externalId) {
+                            $status = self::enum($a['status'] ?? null);
+                            $adStatuses[$status] = ($adStatuses[$status] ?? 0) + 1;
+                        }
+                    }
+
+                    if (array_key_exists('media', $body)) {
+                        $mediaBodies++;
+
+                        foreach ((array) $body['media'] as $wrapper) {
+                            $wrapper = (array) $wrapper;
+                            $m = (array) ($wrapper['media'] ?? []);
+                            $mediaEntry[(string) ($m['id'] ?? '')] = [
+                                'type' => self::enum($m['type'] ?? null),
+                                'media_status' => self::enum($m['media_status'] ?? null),
+                                'sub_request_status' => self::enum($wrapper['sub_request_status'] ?? null),
+                                'link' => is_string($m['download_link'] ?? null) && $m['download_link'] !== '' ? 'present' : 'absent',
+                            ];
+                        }
+                    }
+                }
+            } while ($chunk->count() === self::STRUCTURE_CHUNK && $bodies < self::STRUCTURE_MAX_BODIES);
+        } catch (\Throwable $e) {
+            // Never the SQL: it carries ids into a public log.
+            $this->line('    the read failed ('.class_basename($e).' '.$e->getCode().')');
+
+            return;
+        } finally {
+            DB::statement('RESET statement_timeout');
+        }
+
+        $this->line('    sweep read            : '.(string) $sweep->fetched_at.'  ('.$bodies.' bodies'.($bodies >= self::STRUCTURE_MAX_BODIES ? ', ceiling reached' : '').')');
+
+        if ($found === null) {
+            $this->line('    in the creatives edge : no — the latest sweep did not return this creative, so the row keeps what an earlier sweep wrote');
+
+            return;
+        }
+
+        $keys = [];
+        foreach ($found as $key => $value) {
+            $keys[] = (string) $key;
+
+            if (is_array($value)) {
+                foreach (array_keys($value) as $inner) {
+                    if (! is_int($inner)) {
+                        $keys[] = $key.'.'.$inner;
+                    }
+                }
+            }
+        }
+        sort($keys);
+
+        ksort($adStatuses);
+        $this->line('    in the creatives edge : yes — type '.self::enum($found['type'] ?? null));
+        $this->line('    body keys             : '.implode(', ', $keys));
+        $this->line('    top_snap_media_id     : '.($mediaId === null ? 'absent' : 'present'));
+        $this->line('    ads naming it         : '.array_sum($adStatuses).($adStatuses === [] ? '' : ' ('.implode(', ', array_map(
+            static fn (string $s, int $n): string => $s.' '.$n, array_keys($adStatuses), $adStatuses,
+        )).')'));
+
+        if ($mediaId === null) {
+            $this->line('    media lookup          : not asked — the body names no top snap');
+
+            return;
+        }
+
+        $entry = $mediaEntry[$mediaId] ?? null;
+
+        $this->line('    media lookup          : '.match (true) {
+            $mediaBodies === 0 => 'no media body in the sweep — the lookup failed or was never made',
+            $entry === null => 'this snap is in no media body of the sweep ('.$mediaBodies.' media bodies)',
+            default => sprintf(
+                'answered for this snap — type %s, media_status %s, sub_request_status %s, download_link %s',
+                $entry['type'], $entry['media_status'], $entry['sub_request_status'], $entry['link'],
+            ),
+        });
+    }
+
+    /** A platform enum as printed: upper-case words only, anything else is not echoed. */
+    private static function enum(mixed $value): string
+    {
+        if (! is_string($value) || $value === '') {
+            return 'unstated';
+        }
+
+        return preg_match('/^[A-Z][A-Z0-9_]{0,39}$/', $value) === 1 ? $value : 'other';
     }
 
     /**
