@@ -259,7 +259,7 @@ export function DashboardView({ payload, reader, currency, locale, onOpenContent
         </div>
       )}
       {sectionOn(payload, 'objective_breakdown') && <ObjectiveLeaders payload={payload} ar={ar} reader={reader} />}
-      {sectionOn(payload, 'advanced_segmentation') && <BusinessStreamsSection streams={payload.business_streams} currency={currency} ar={ar} />}
+      {sectionOn(payload, 'advanced_segmentation') && <BusinessStreamsSection streams={payload.business_streams} coverTotal={payload.business_streams_cover_total === true} currency={currency} ar={ar} />}
       {sectionOn(payload, 'content_performance') && (
         <section className="flex flex-col gap-5">
           <div>

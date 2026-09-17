@@ -556,6 +556,8 @@ final class LiveReportService
              * report can show them: advanced segmentation on, and at least one stream defined.
              */
             'business_streams' => $this->businessStreams($share, $engine, $applied, $scope, $from, $to, $totals),
+            'business_streams_cover_total' => ($streamSet = $this->streamSettings($share)) !== []
+                && app(BusinessStreams::class)->coversTotal($engine, $streamSet, $from, $to),
             'store_funnel' => $this->storeFunnel($share, $scope['project_id'], $from, $to),
             'freshness' => $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers']),
             /*
@@ -661,6 +663,14 @@ final class LiveReportService
      * @param  array<string, mixed>  $totals
      * @return list<array<string, mixed>>
      */
+    /** @return list<array{key: string, label: string, providers: list<string>, account_ids: list<string>}> */
+    private function streamSettings(ReportShare $share): array
+    {
+        $report = Report::withoutGlobalScopes()->find($share->report_id);
+
+        return $report === null ? [] : $report->sectionSettings()->streams();
+    }
+
     private function businessStreams(ReportShare $share, MetricsAggregator $engine, array $applied, array $scope, Carbon $from, Carbon $to, array $totals): array
     {
         $report = Report::withoutGlobalScopes()->find($share->report_id);
