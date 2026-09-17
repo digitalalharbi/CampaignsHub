@@ -586,13 +586,27 @@ final class ReportGenerator
         foreach ($platforms as $p) {
             $strengths = [];
             $weaknesses = [];
+            $neutralStrengths = [];
+            $neutralWeaknesses = [];
             $value = $p[$metric['key']] ?? null;
             if ($value !== null && $average !== null) {
                 $better = $metric['lower_is_better'] ? (float) $value <= $average : (float) $value >= $average;
                 $sentence = sprintf('%s %s المتوسط (%s).', $metric['label_ar'], $better ? 'أفضل من' : 'دون', $lens->formatRanking((float) $value, $currency));
                 $better ? $strengths[] = $sentence : $weaknesses[] = $sentence;
+                /*
+                 * SHARED-PDF-HIDE-FLAGS-001 — the same judgement without the figure, written HERE, where
+                 * the sentence is written. A link hiding the figure prints this one instead; the
+                 * sentence above is never edited after the fact.
+                 */
+                $plain = sprintf('%s %s المتوسط.', $metric['label_ar'], $better ? 'أفضل من' : 'دون');
+                $better ? $neutralStrengths[] = $plain : $neutralWeaknesses[] = $plain;
             }
-            $notes[$p['provider']] = ['strengths' => $strengths, 'weaknesses' => $weaknesses];
+            $notes[$p['provider']] = [
+                'strengths' => $strengths,
+                'weaknesses' => $weaknesses,
+                'reveals' => [$metric['key']],
+                'neutral' => ['strengths' => $neutralStrengths, 'weaknesses' => $neutralWeaknesses],
+            ];
         }
 
         return $notes;
@@ -622,14 +636,14 @@ final class ReportGenerator
             $best = ($metric['lower_is_better'] ? $rated->sortBy($metric['key']) : $rated->sortByDesc($metric['key']))->first();
             $out[] = ['severity' => 'positive', 'title' => 'أفضل '.$metric['label_ar'].' على '.ProviderDisplayName::short($best['provider']), 'platform' => $best['provider'],
                 'kpi' => $metric['label_ar'], 'value' => $lens->formatRanking((float) $best[$metric['key']], $currency),
-                'detail' => 'أفضل أداء على المؤشر الذي تُقاس به هذه الحملات.'];
+                'detail' => 'أفضل أداء على المؤشر الذي تُقاس به هذه الحملات.', 'reveals' => [$metric['key']]];
 
             // «Below average» needs somebody to be below it: with one platform there is no average.
             if ($rated->count() > 1) {
                 $worst = ($metric['lower_is_better'] ? $rated->sortByDesc($metric['key']) : $rated->sortBy($metric['key']))->first();
                 $out[] = ['severity' => 'warning', 'title' => ProviderDisplayName::short($worst['provider']).' دون المتوسط', 'platform' => $worst['provider'],
                     'kpi' => $metric['label_ar'], 'value' => $lens->formatRanking((float) $worst[$metric['key']], $currency),
-                    'detail' => 'يحتاج مراجعة الاستهداف والمحتوى.'];
+                    'detail' => 'يحتاج مراجعة الاستهداف والمحتوى.', 'reveals' => [$metric['key']]];
             }
         }
 
@@ -653,14 +667,14 @@ final class ReportGenerator
             if ($burning !== null) {
                 $where = implode('، ', array_map(ProviderDisplayName::short(...), $burning['providers']));
                 $out[] = ['severity' => 'critical', 'title' => 'إنفاق دون تحويلات على '.$where, 'platform' => $burning['providers'][0] ?? null,
-                    'kpi' => 'الإنفاق', 'value' => number_format($burning['spend']).' '.$currency, 'detail' => 'يستدعي المراجعة: إمّا إيقاف ما لا يُنتج أو التحقق من التتبع.'];
+                    'kpi' => 'الإنفاق', 'value' => number_format($burning['spend']).' '.$currency, 'detail' => 'يستدعي المراجعة: إمّا إيقاف ما لا يُنتج أو التحقق من التتبع.', 'reveals' => ['spend']];
             }
         }
 
         // Revenue growth is a finding about revenue, and only a sales report is judged on it.
         if ($lens->judgesOnRevenue() && isset($delta['revenue']) && $delta['revenue'] > 0.1) {
             $out[] = ['severity' => 'positive', 'title' => 'نمو الإيرادات مقابل الفترة السابقة', 'platform' => null,
-                'kpi' => 'الإيرادات', 'value' => '+'.number_format((float) $delta['revenue'] * 100, 0).'%', 'detail' => 'اتجاه إيجابي في العائد.'];
+                'kpi' => 'الإيرادات', 'value' => '+'.number_format((float) $delta['revenue'] * 100, 0).'%', 'detail' => 'اتجاه إيجابي في العائد.', 'reveals' => ['revenue']];
         }
 
         return array_slice($out, 0, 5);
@@ -688,13 +702,13 @@ final class ReportGenerator
             $worthScaling = ! $lens->judgesOnRevenue() || (float) $best['roas'] > 1;
             if ($worthScaling) {
                 $out[] = ['severity' => 'positive', 'title' => 'زيادة ميزانية '.ProviderDisplayName::short($best['provider']).' تدريجيًا', 'platform' => $best['provider'],
-                    'action' => 'scale', 'detail' => "أفضل {$metric['label_ar']} — وسّع بحذر مع مراقبة مرحلة التعلّم.", 'kpi' => $metric['label_ar']];
+                    'action' => 'scale', 'detail' => "أفضل {$metric['label_ar']} — وسّع بحذر مع مراقبة مرحلة التعلّم.", 'kpi' => $metric['label_ar'], 'reveals' => []];
             }
 
             if ($rated->count() > 1) {
                 $worst = ($metric['lower_is_better'] ? $rated->sortByDesc($metric['key']) : $rated->sortBy($metric['key']))->first();
                 $out[] = ['severity' => 'warning', 'title' => 'تحسين استهداف '.ProviderDisplayName::short($worst['provider']), 'platform' => $worst['provider'],
-                    'action' => 'optimize', 'detail' => "أضعف {$metric['label_ar']} — راجع الجمهور والمحتوى والصفحة.", 'kpi' => $metric['label_ar']];
+                    'action' => 'optimize', 'detail' => "أضعف {$metric['label_ar']} — راجع الجمهور والمحتوى والصفحة.", 'kpi' => $metric['label_ar'], 'reveals' => []];
             }
         }
 
@@ -704,7 +718,7 @@ final class ReportGenerator
             if ($burning !== null) {
                 $where = implode('، ', array_map(ProviderDisplayName::short(...), $burning['providers']));
                 $out[] = ['severity' => 'critical', 'title' => 'مراجعة الإنفاق غير المُنتج على '.$where, 'platform' => $burning['providers'][0] ?? null,
-                    'action' => 'pause', 'detail' => number_format($burning['spend']).' '.$currency.' دون تحويلات — تحقق من التتبع قبل الاستمرار.', 'kpi' => 'الإنفاق'];
+                    'action' => 'pause', 'detail' => number_format($burning['spend']).' '.$currency.' دون تحويلات — تحقق من التتبع قبل الاستمرار.', 'kpi' => 'الإنفاق', 'reveals' => ['spend']];
             }
             /*
              * «Expand what works» named the top-converting CAMPAIGN. The platform carrying the most
@@ -714,7 +728,7 @@ final class ReportGenerator
             $topConv = collect($platforms)->sortByDesc('conversions')->first();
             if ($topConv && ($topConv['conversions'] ?? 0) > 0) {
                 $out[] = ['severity' => 'positive', 'title' => 'توسيع ما ينجح على '.ProviderDisplayName::short($topConv['provider']), 'platform' => $topConv['provider'] ?? null,
-                    'action' => 'expand', 'detail' => 'أعلى نتائج — كرّر الزوايا الرابحة على جماهير مشابهة.', 'kpi' => 'النتائج'];
+                    'action' => 'expand', 'detail' => 'أعلى نتائج — كرّر الزوايا الرابحة على جماهير مشابهة.', 'kpi' => 'النتائج', 'reveals' => []];
             }
         }
 
@@ -789,6 +803,8 @@ final class ReportGenerator
                 'priority' => $r['priority'] ?? 'normal',
                 'owner' => $r['owner'] ?? 'فريق الأداء',
                 'due' => $r['due'] ?? null,
+                // What the reason sentence states, carried from the recommendation it restates.
+                'reveals' => $r['reveals'] ?? null,
             ],
             array_filter($recommendations, fn ($r) => ($r['status'] ?? 'draft') === 'approved'),
         ));
