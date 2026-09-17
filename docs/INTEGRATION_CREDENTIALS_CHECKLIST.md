@@ -149,6 +149,14 @@ at Meta → back on the same page with the step checklist (OAuth start, consent,
 by `php artisan integrations:meta-candidate`, and by the **Production diagnostics** workflow when it
 is dispatched with `provider: meta` (no new input).
 
+**Promote / roll back (prepared, never automatic):** the same page offers «Promote candidate to Live»
+only when the latest round trip succeeded with the credentials configured now, and «Roll back» only
+after a promotion. Promotion switches the Live row's App ID, App Secret, Configuration ID and scopes
+to the candidate's and keeps the previous values in `meta.previous_live`. It does not touch customer
+connections or tokens and forces no reconnect. Meta tokens are app-scoped: existing connections keep
+working while the old app stays valid, and a connection whose token nears expiry is refreshed with
+the new app's credentials. Meta refuses that, so the connection asks for a reconnect at that point.
+
 Set `AD_PLATFORM_REDIRECT_BASE` explicitly in a split deployment — several providers refuse to
 register a redirect that does not match byte for byte.
 
