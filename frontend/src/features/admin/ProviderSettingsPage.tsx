@@ -8,6 +8,7 @@ import {
   setIntegrationProviderEnabled, testIntegrationProvider,
   type IntegrationProvider, type ProviderSetupState,
 } from './api'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { toApiError } from '@/lib/api/client'
@@ -157,6 +158,10 @@ export function ProviderSettingsPage() {
       <header>
         <h1 className="font-heading text-2xl font-extrabold text-text-primary">{c.title}</h1>
         <p className="mt-1 max-w-3xl text-sm text-text-secondary">{c.subtitle}</p>
+        {/* META-CANDIDATE-001 — the isolated second Meta app lives on its own page. */}
+        <Link data-testid="meta-candidate-link" to="/admin/settings/integrations/meta-candidate" className="mt-2 inline-block text-sm font-semibold text-brand-700 underline">
+          {ar ? 'تطبيق ميتا المرشّح (اختبار Facebook Login for Business)' : 'Candidate Meta app (Facebook Login for Business test)'}
+        </Link>
       </header>
 
       <dl className="grid grid-cols-3 gap-3">

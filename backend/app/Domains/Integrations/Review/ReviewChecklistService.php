@@ -104,11 +104,19 @@ final class ReviewChecklistService
                 ];
             })(),
 
+            /*
+             * META-CANDIDATE-001 — the scopes the install ACTUALLY requests, not the catalogue default.
+             *
+             * This read `$definition->scopes`, so an operator override never showed here, and the note
+             * claimed every scope was read-only while Meta's Live default includes `ads_management`.
+             * The value is now the effective list, and the note says what it is rather than vouching
+             * for it.
+             */
             'least_privilege' => [
                 'ready',
-                implode(' · ', $definition->scopes) ?: '—',
-                'النطاقات المطلوبة قراءة فقط؛ لا يطلب المنتج إنشاء حملة ولا تعديلها ولا النشر نيابةً عنك.',
-                'Every scope requested is read-only; the product asks for nothing that creates, edits or posts.',
+                implode(' · ', $this->configuration->scopes($definition->key)) ?: '—',
+                'هذه النطاقات التي يطلبها هذا التثبيت فعلًا. راجع أن كل نطاق منها يستخدمه المنتج.',
+                'These are the scopes this install actually requests. Check that the product uses each one.',
             ],
 
             /*
