@@ -65,18 +65,32 @@ final class ImportExternalCampaigns
                 ]);
 
                 /*
-                 * The project is settled once, when the row is first created.
+                 * The project is the account's CURRENT binding — ACCOUNT-SCOPE-ISOLATION-001.
                  *
-                 * Writing it on every import would MOVE a campaign that somebody has already bound to
-                 * a different project — taking its unified-campaign link, its metrics and its reports
-                 * with it — every time the sweep happened to resolve a different project for the
-                 * account. Where a campaign lives is a decision, not a synced field.
+                 * This used to be settled once, on insert, on the reasoning that re-stamping it would
+                 * move a campaign somebody had bound elsewhere. That reasoning was written when the
+                 * sweep could resolve a different project for an account on different days; the
+                 * binding is the one source now, and the OPPOSITE failure was live: an account
+                 * deselected from A and selected for B kept filling A for ever, because every lower
+                 * grain — ad sets, ads, creatives, every metric row — takes its project from this
+                 * campaign row and this row still said A.
+                 *
+                 * So a campaign is re-filed under the binding's project when they disagree. Its link
+                 * to A's unified campaign is dropped, not carried: that unified campaign IS A's
+                 * history and stays there with A's rows; the campaign is adopted afresh in B below.
+                 * Nothing already stored is moved or deleted — the inventory names those rows as
+                 * `bound_elsewhere`, and the cleanup decides them on that evidence.
                  */
                 $isNew = ! $campaign->exists;
 
-                if ($isNew && $projectId !== null) {
+                if ($projectId !== null && ($isNew || (string) $campaign->project_id !== (string) $projectId)) {
                     $campaign->tenant_id = $account->tenant_id;
                     $campaign->project_id = $projectId;
+
+                    if (! $isNew) {
+                        $campaign->unified_campaign_id = null;
+                        $campaign->unlinked_at = null;
+                    }
                 }
 
                 $campaign->fill([
