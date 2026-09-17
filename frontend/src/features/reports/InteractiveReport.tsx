@@ -1,5 +1,6 @@
 import { DataMetricTable, type Column, type Row as TableRow } from '@/components/ui/MetricTable'
-import { sectionShown } from './reportSections'
+import { sectionShown, withStreamsSlide } from './reportSections'
+import { BusinessStreamsSection, type BusinessStreamRow } from './BusinessStreamsSection'
 import { productName } from '@/lib/brand'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import { useMemo, useState } from 'react'
@@ -53,6 +54,7 @@ export interface ReportSection {
 export interface ReportData {
   /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
   report_sections?: string[]
+  business_streams?: BusinessStreamRow[]
   period: { from: string; to: string }
   currency: string
   objective?: string
@@ -321,6 +323,7 @@ export function SlideBody({ slide, data, meta, paged = false }: {
   paged?: boolean
 }) {
   switch (slide.type) {
+    case '__streams': return <div><Title sub="كما حدّدها فريق الحساب">الأداء حسب مسار العمل</Title><BusinessStreamsSection streams={data.business_streams} currency={data.currency} ar /></div>
     case 'cover': return <CoverSlide data={data} meta={meta} />
     case 'recommendations': return <RecommendationsSlide data={data} />
     case 'executive_summary': return <ExecutiveSlide data={data} />
@@ -378,11 +381,12 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
       // Drop the Next Steps slide entirely when there are no approved steps (never show it empty).
       .filter((s) => s.type !== 'next_steps' || (data.next_steps?.length ?? 0) > 0)
       .sort((a, b) => a.order - b.order)
+    withStreamsSlide(visible, data)
     if (data.disclaimer) {
       visible.push({ id: '__methodology', type: '__methodology', order: 9999, visible: true })
     }
     return visible
-  }, [data.slides, data.disclaimer, data.next_steps])
+  }, [data])
   const cur = slides[i]
 
   const render = (s: Slide) => <SlideBody slide={s} data={data} meta={meta} />

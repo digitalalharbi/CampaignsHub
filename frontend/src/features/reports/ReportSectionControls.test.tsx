@@ -11,7 +11,7 @@ import * as api from './api'
 vi.mock('./api', async () => {
   const actual = await vi.importActual<typeof api>('./api')
 
-  return { ...actual, getReportSections: vi.fn(), updateReportSections: vi.fn(), updateTemplateSections: vi.fn(), listScopeTemplates: vi.fn(), listShares: vi.fn(), getShareSections: vi.fn(), updateShareSections: vi.fn() }
+  return { ...actual, getReportSections: vi.fn(), updateReportSections: vi.fn(), updateTemplateSections: vi.fn(), listScopeTemplates: vi.fn(), scopeOptions: vi.fn(), listShares: vi.fn(), getShareSections: vi.fn(), updateShareSections: vi.fn() }
 })
 
 const row = (key: string, visible: boolean, reason: api.SectionReason | null, breakdown = false): api.ResolvedSectionRow => ({
@@ -22,6 +22,7 @@ const state = (overrides: Partial<api.ReportSectionsState> = {}): api.ReportSect
   report_id: 'r1',
   audience: 'client',
   chosen: {},
+  streams: [],
   effective: { kpis: true, budget_pacing: true, detailed_tables: false, advanced_segmentation: false },
   resolved: [
     row('kpis', true, null),
@@ -38,6 +39,7 @@ describe('ReportSectionControls', () => {
   beforeEach(() => {
     vi.mocked(api.getReportSections).mockResolvedValue(state())
     vi.mocked(api.listScopeTemplates).mockResolvedValue({ templates: [] })
+    vi.mocked(api.scopeOptions).mockResolvedValue({ providers: ['meta', 'snapchat'], accounts: [] } as never)
     vi.mocked(api.listShares).mockResolvedValue([])
   })
 
@@ -78,6 +80,26 @@ describe('ReportSectionControls', () => {
 
     expect(await screen.findByTestId('section-controls-error')).toBeInTheDocument()
     expect(screen.getByTestId('section-toggle-detailed_tables')).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('streams are named by the operator, mapped to platforms, and offered only with advanced segmentation on', async () => {
+    const { unmount } = renderWithProviders(<ReportSectionControls projectId="p1" reportId="r1" />, { locale: 'en' })
+    await screen.findByTestId('report-section-controls')
+    expect(screen.queryByTestId('streams-editor')).toBeNull()
+    unmount()
+
+    vi.mocked(api.getReportSections).mockResolvedValue(state({ effective: { ...state().effective, advanced_segmentation: true } }))
+    vi.mocked(api.updateReportSections).mockResolvedValue(state())
+    renderWithProviders(<ReportSectionControls projectId="p1" reportId="r1" />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('stream-add'))
+    fireEvent.change(screen.getByTestId('stream-label-0'), { target: { value: 'المبيعات عبر الإنترنت' } })
+    fireEvent.click(await screen.findByTestId('stream-0-provider-meta'))
+    fireEvent.click(screen.getByTestId('stream-save'))
+
+    await waitFor(() => expect(api.updateReportSections).toHaveBeenCalledWith('p1', 'r1', {
+      streams: [{ label: 'المبيعات عبر الإنترنت', providers: ['meta'], account_ids: [] }],
+    }))
   })
 
   it('a link’s switches are the same list, off-only, and say what the report already hides', async () => {

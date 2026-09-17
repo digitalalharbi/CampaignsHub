@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { withStreamsSlide } from './reportSections'
 import { fmtDate } from '@/lib/datetime'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
@@ -65,6 +66,7 @@ export function PrintReport() {
       .filter((s) => s.visible)
       .filter((s) => s.type !== 'next_steps' || (d.next_steps?.length ?? 0) > 0)
       .sort((a, b) => a.order - b.order)
+    withStreamsSlide(visible, d)
     if (d.disclaimer) visible.push({ id: '__methodology', type: '__methodology', order: 9999, visible: true })
     return visible
   }, [payload])

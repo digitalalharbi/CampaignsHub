@@ -5,12 +5,15 @@ import { Switch } from '@/components/ui/Switch'
 import { Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { providerLabel } from '@/features/campaigns/labels'
 import { fmtDate } from '@/lib/datetime'
 import {
   getReportSections,
   getShareSections,
   listShares,
+  scopeOptions,
   updateShareSections,
+  type BusinessStreamDefinition,
   type ShareSectionsState,
   listScopeTemplates,
   updateReportSections,
@@ -159,6 +162,10 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
         <p className="mt-4 mb-1 text-xs font-bold text-text-muted">{ar ? 'تفصيلات اختيارية' : 'Optional breakdowns'}</p>
         <ul className="divide-y divide-border">{breakdowns.map(row)}</ul>
 
+        {!onLink && effective.advanced_segmentation && (
+          <StreamsEditor projectId={projectId} reportId={reportId} saved={state.data.streams ?? []} ar={ar} onSaved={onSaved} onFailed={onFailed} />
+        )}
+
         {!onLink && (templates.data?.templates.length ?? 0) > 0 && (
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3 text-xs">
             <select
@@ -215,6 +222,123 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
           </p>
         )}
       </aside>
+    </div>
+  )
+}
+
+/** Neutral labels an operator can start from; any other label may be typed. */
+const STREAM_PRESETS = ['التوعية في الفروع', 'المبيعات عبر الإنترنت', 'الاستحواذ', 'إعادة الاستهداف']
+
+/**
+ * REPORT-SECTION-STREAMS-001 — the operator names the business streams and maps platforms or ad
+ * accounts to them. Campaigns are deliberately not offered: a stream divides the client's business,
+ * it does not publish how the buying was arranged.
+ */
+function StreamsEditor({
+  projectId,
+  reportId,
+  saved,
+  ar,
+  onSaved,
+  onFailed,
+}: {
+  projectId: string
+  reportId: string
+  saved: BusinessStreamDefinition[]
+  ar: boolean
+  onSaved: (next: ReportSectionsState) => void
+  onFailed: (e: unknown) => void
+}) {
+  const options = useQuery({ queryKey: ['report-scope-options', projectId], queryFn: () => scopeOptions(projectId), retry: false })
+  const [draft, setDraft] = useState<BusinessStreamDefinition[] | null>(null)
+  const streams = draft ?? saved
+  const save = useMutation({
+    mutationFn: () => updateReportSections(projectId, reportId, { streams: streams.filter((s) => s.label.trim() !== '') }),
+    onSuccess: (next) => {
+      setDraft(null)
+      onSaved(next)
+    },
+    onError: onFailed,
+  })
+
+  const change = (i: number, next: Partial<BusinessStreamDefinition>) =>
+    setDraft(streams.map((s, j) => (j === i ? { ...s, ...next } : s)))
+  const flip = (list: string[], value: string) => (list.includes(value) ? list.filter((v) => v !== value) : [...list, value])
+
+  return (
+    <div data-testid="streams-editor" className="mt-3 rounded-xl border border-border p-3">
+      <p className="text-xs font-bold text-text-primary">{ar ? 'مسارات العمل' : 'Business streams'}</p>
+      <p className="mb-2 text-[11px] text-text-muted">
+        {ar ? 'أسماء محايدة تحدّدها أنت، وتُربط بالمنصات أو الحسابات الإعلانية — لا بالحملات.' : 'Neutral names you choose, mapped to platforms or ad accounts — never campaigns.'}
+      </p>
+      <datalist id={`stream-presets-${reportId}`}>
+        {STREAM_PRESETS.map((p) => <option key={p} value={p} />)}
+      </datalist>
+      <ul className="space-y-3">
+        {streams.map((stream, i) => (
+          <li key={i} data-testid={`stream-${i}`} className="rounded-lg bg-surface-secondary p-2">
+            <div className="flex gap-2">
+              <input
+                value={stream.label}
+                list={`stream-presets-${reportId}`}
+                maxLength={60}
+                onChange={(e) => change(i, { label: e.target.value })}
+                placeholder={ar ? 'اسم المسار' : 'Stream name'}
+                data-testid={`stream-label-${i}`}
+                className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 py-1 text-xs"
+              />
+              <button type="button" onClick={() => setDraft(streams.filter((_, j) => j !== i))} className="text-xs text-text-muted hover:text-danger">
+                {ar ? 'حذف' : 'Remove'}
+              </button>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {(options.data?.providers ?? []).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  aria-pressed={stream.providers.includes(p)}
+                  data-testid={`stream-${i}-provider-${p}`}
+                  onClick={() => change(i, { providers: flip(stream.providers, p) })}
+                  className={`rounded-md border px-2 py-0.5 text-[11px] ${stream.providers.includes(p) ? 'border-brand-600 bg-brand-600 text-white' : 'border-border text-text-secondary'}`}
+                >
+                  {providerLabel(p, ar ? 'ar' : 'en')}
+                </button>
+              ))}
+              {(options.data?.accounts ?? []).map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  aria-pressed={stream.account_ids.includes(a.id)}
+                  onClick={() => change(i, { account_ids: flip(stream.account_ids, a.id) })}
+                  className={`rounded-md border px-2 py-0.5 text-[11px] ${stream.account_ids.includes(a.id) ? 'border-brand-600 bg-brand-600 text-white' : 'border-border text-text-secondary'}`}
+                >
+                  {a.name}
+                </button>
+              ))}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-2 flex gap-2">
+        <button
+          type="button"
+          disabled={streams.length >= 8}
+          onClick={() => setDraft([...streams, { label: '', providers: [], account_ids: [] }])}
+          data-testid="stream-add"
+          className="rounded-lg border border-border px-2 py-1 text-xs font-semibold text-text-secondary hover:bg-surface-hover disabled:opacity-50"
+        >
+          {ar ? 'إضافة مسار' : 'Add stream'}
+        </button>
+        <button
+          type="button"
+          disabled={draft === null || save.isPending}
+          onClick={() => save.mutate()}
+          data-testid="stream-save"
+          className="rounded-lg bg-brand-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-50"
+        >
+          {ar ? 'حفظ المسارات' : 'Save streams'}
+        </button>
+      </div>
     </div>
   )
 }

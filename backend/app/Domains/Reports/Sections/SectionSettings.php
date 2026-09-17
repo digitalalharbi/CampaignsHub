@@ -16,8 +16,14 @@ namespace App\Domains\Reports\Sections;
  */
 final class SectionSettings
 {
-    /** @param array<string, bool> $chosen */
-    private function __construct(private readonly array $chosen) {}
+    /** The most business streams one report may define — a segmentation, not a campaign list. */
+    public const MAX_STREAMS = 8;
+
+    /**
+     * @param  array<string, bool>  $chosen
+     * @param  list<array{key: string, label: string, providers: list<string>, account_ids: list<string>}>  $streams
+     */
+    private function __construct(private readonly array $chosen, private readonly array $streams = []) {}
 
     /** @param array<string, mixed>|null $raw  the stored JSON, `{"sections": {"kpis": true, …}}` */
     public static function fromArray(?array $raw, ReportSectionRegistry $registry): self
@@ -31,7 +37,50 @@ final class SectionSettings
             }
         }
 
-        return new self($chosen);
+        return new self($chosen, self::normaliseStreams($raw['streams'] ?? null));
+    }
+
+    /**
+     * Operator-defined business streams for advanced segmentation — neutral labels the operator
+     * writes («المبيعات عبر الإنترنت», «التوعية في الفروع»…), each mapped to platforms and/or ad
+     * accounts. Never campaigns: a stream is how the client's business is divided, not how the
+     * agency arranged its buying. A stream that maps to nothing is dropped.
+     *
+     * @return list<array{key: string, label: string, providers: list<string>, account_ids: list<string>}>
+     */
+    public static function normaliseStreams(mixed $raw): array
+    {
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $out = [];
+        foreach (array_values($raw) as $i => $stream) {
+            if (! is_array($stream) || count($out) >= self::MAX_STREAMS) {
+                continue;
+            }
+            $label = is_string($stream['label'] ?? null) ? trim(mb_substr($stream['label'], 0, 60)) : '';
+            $providers = array_values(array_unique(array_filter((array) ($stream['providers'] ?? []), static fn ($v): bool => is_string($v) && $v !== '')));
+            $accounts = array_values(array_unique(array_filter((array) ($stream['account_ids'] ?? []), static fn ($v): bool => is_string($v) && $v !== '')));
+            if ($label === '' || ($providers === [] && $accounts === [])) {
+                continue;
+            }
+            $out[] = ['key' => 's'.($i + 1), 'label' => $label, 'providers' => $providers, 'account_ids' => $accounts];
+        }
+
+        return $out;
+    }
+
+    /** @return list<array{key: string, label: string, providers: list<string>, account_ids: list<string>}> */
+    public function streams(): array
+    {
+        return $this->streams;
+    }
+
+    /** @param list<array<string, mixed>> $streams */
+    public function withStreams(array $streams): self
+    {
+        return new self($this->chosen, self::normaliseStreams($streams));
     }
 
     public static function none(): self
@@ -70,13 +119,15 @@ final class SectionSettings
             }
         }
 
-        return new self($chosen);
+        return new self($chosen, $this->streams);
     }
 
-    /** @return array{sections: array<string, bool>} */
+    /** @return array{sections: array<string, bool>, streams?: list<array<string, mixed>>} */
     public function toArray(): array
     {
-        return ['sections' => $this->chosen];
+        return $this->streams === []
+            ? ['sections' => $this->chosen]
+            : ['sections' => $this->chosen, 'streams' => $this->streams];
     }
 
     /**

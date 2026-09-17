@@ -5,6 +5,7 @@ import type { PathLeaders } from '@/features/analytics/api'
 
 import { getData, postData, putData } from '@/lib/api/client'
 import type { SharedBranding } from './sharedBranding'
+import type { BusinessStreamRow } from './BusinessStreamsSection'
 import { api } from '@/lib/api/client'
 
 export type ReportStatus = 'draft' | 'processing' | 'completed' | 'failed'
@@ -208,6 +209,8 @@ export interface StoreFunnelPayload {
 export interface LivePayload {
   /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
   report_sections?: string[]
+  /** REPORT-SECTION-STREAMS-001 — present only with advanced segmentation on and streams defined. */
+  business_streams?: BusinessStreamRow[]
   period: { from: string; to: string; days: number }
   currency: string
   totals: Record<string, number | null>
@@ -625,6 +628,7 @@ export interface ReportSectionsState {
   report_id: string
   audience: string
   chosen: Record<string, boolean>
+  streams: BusinessStreamDefinition[]
   effective: Record<string, boolean>
   resolved: ResolvedSectionRow[]
   visible: string[]
@@ -634,7 +638,15 @@ export interface ReportSectionsState {
 export const getReportSections = (p: string, id: string) =>
   getData<ReportSectionsState>(`${base(p)}/${id}/sections`)
 
-export const updateReportSections = (p: string, id: string, body: { sections?: Record<string, boolean>; template_id?: string }) =>
+/** An operator-defined business stream: a neutral label mapped to platforms and/or ad accounts — never campaigns. */
+export interface BusinessStreamDefinition {
+  key?: string
+  label: string
+  providers: string[]
+  account_ids: string[]
+}
+
+export const updateReportSections = (p: string, id: string, body: { sections?: Record<string, boolean>; template_id?: string; streams?: BusinessStreamDefinition[] }) =>
   putData<ReportSectionsState>(`${base(p)}/${id}/sections`, body)
 
 export const updateTemplateSections = (p: string, templateId: string, sections: Record<string, boolean>) =>
