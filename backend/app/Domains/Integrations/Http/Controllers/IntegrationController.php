@@ -11,6 +11,7 @@ use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\Integration;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
@@ -168,9 +169,21 @@ final class IntegrationController extends Controller
             ->latest('updated_at')
             ->first();
 
+        /*
+         * ACCOUNT-SCOPE-ISOLATION-001 — the card speaks for the accounts this connection FEEDS.
+         *
+         * It counted, and took «last synced» from, every account the connection ever discovered. A
+         * deselected account's sync from last week kept the card reading current; an account whose
+         * access was withdrawn still counted as one of «N ad accounts».
+         */
         $accountIds = $connection === null
             ? collect()
-            : ExternalAccount::query()->where('provider_connection_id', $connection->getKey())->pluck('id');
+            : ExternalAccount::query()
+                ->where('provider_connection_id', $connection->getKey())
+                ->where('account_type', 'ad_account')
+                ->whereNull('access_lost_at')
+                ->whereIn('id', ProjectIntegrationBinding::query()->where('is_active', true)->select('external_account_id'))
+                ->pluck('id');
 
         $syncing = $accountIds->isNotEmpty() && MetricSyncRun::query()
             ->whereIn('external_account_id', $accountIds)
@@ -183,8 +196,9 @@ final class IntegrationController extends Controller
             ! $this->settings->isEnabled($platform) => 'unavailable',
             ! $creds->isConfigured() => 'awaiting_credentials',
             $connection === null => 'disconnected',
-            $syncing => 'syncing',
+            // An error outranks a run in progress: a stuck `running` row must not hide a broken authorisation.
             $connection->status === 'error' => 'error',
+            $syncing => 'syncing',
             default => 'connected',
         };
 

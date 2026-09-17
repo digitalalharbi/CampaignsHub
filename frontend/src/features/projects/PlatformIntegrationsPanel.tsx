@@ -159,7 +159,10 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
                   their project, so that is what the chip says; the platform's own readiness is
                   stated once, in the sources screen, to the person who can change it.
                 */}
-                {p.accounts.length > 0
+                {/* A linked account behind a broken authorisation is not feeding anything. */}
+                {p.accounts.length > 0 && p.connections.some((c) => c.status !== 'connected')
+                  ? <Badge tone="warning"><KeyRound size={11} /> {ar ? 'يحتاج إعادة ربط' : 'Needs reconnecting'}</Badge>
+                  : p.accounts.length > 0
                   ? <Badge tone="success"><Check size={11} /> {ar ? 'تُغذّي المشروع' : 'Feeding this project'}</Badge>
                   : <Badge tone="neutral"><KeyRound size={11} /> {ar ? 'لا حسابات هنا' : 'No accounts here'}</Badge>}
               </header>
