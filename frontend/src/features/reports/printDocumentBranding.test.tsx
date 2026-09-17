@@ -30,7 +30,7 @@ beforeAll(() => {
 
 const data = { period: { from: '2026-08-01', to: '2026-08-31' }, platforms: [], objective: 'Sales' } as never
 
-const render = (identity?: { name: string; logoUrl: string | null; by: string | null }) =>
+const render = (identity?: { name: string; logoUrl: string | null; by: string | null; byLogoUrl?: string | null }) =>
   renderWithProviders(
     <PrintDocument data={data} reportName="August" currency="SAR" identity={identity} />,
     { locale: 'en' },
@@ -72,10 +72,31 @@ describe('the document PDF’s cover', () => {
     expect(screen.getByTestId('print-document-brand')).toHaveTextContent('CampaignsHub')
   })
 
-  it('puts the resolved name in the file’s own title, not the product’s', () => {
-    render({ name: 'Nakheel', logoUrl: null, by: null })
+  // REPORT BRANDING (Owner): the file's title is the report's name ending with the product's, in the
+  // report's language — the same title its link and its deck carry.
+  it('titles the file with the report’s name ending with the product’s', () => {
+    render({ name: 'Nakheel', logoUrl: null, by: null, byLogoUrl: null })
 
-    expect(document.title).toContain('Nakheel')
-    expect(document.title).not.toContain('CampaignsHub')
+    expect(document.title).toBe('August — كامبينز هب')
+  })
+
+  it('shows the agency’s own mark beside its name, and none where it has none', () => {
+    render({ name: 'Nakheel', logoUrl: '/l/client', by: 'Razah Agency', byLogoUrl: '/l/agency' })
+    expect(screen.getByTestId('print-document-logo')).toHaveAttribute('src', '/l/client')
+    expect(screen.getByTestId('print-document-agency-logo')).toHaveAttribute('src', '/l/agency')
+  })
+
+  it('names the platforms the report covers, not «undefined»', () => {
+    renderWithProviders(
+      <PrintDocument
+        data={{ period: { from: '2026-08-01', to: '2026-08-31' }, platforms: [{ provider: 'snapchat' }, { provider: 'meta' }], objective: 'Sales' } as never}
+        reportName="August" currency="SAR"
+      />,
+      { locale: 'en' },
+    )
+    const facts = document.querySelector('.doc-facts')?.textContent ?? ''
+    expect(facts).not.toMatch(/undefined/)
+    expect(facts).toMatch(/snapchat/i)
+    expect(facts).toMatch(/meta/i)
   })
 })
