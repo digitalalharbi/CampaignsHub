@@ -3,6 +3,7 @@ import type { AlertEvent } from '@/features/alerts/api'
 import type { Recommendation, RecommendationPriority } from './api'
 import type { SpendLimitReading } from '@/features/budget/spendLimitsApi'
 import type { CreativeCard } from '@/features/content/api'
+import type { CreativeMove, FatigueAlert } from '@/features/content/pulse'
 
 /**
  * RECOMMENDATIONS-ACTION-CENTER-002 — everything a person should act on, in one place.
@@ -35,7 +36,13 @@ export type ActionCategory = AlertCategory | 'creative'
 export type ActionItem =
   | { id: string; kind: 'alert'; severity: ActionSeverity; category: ActionCategory; alert: AlertEvent }
   | { id: string; kind: 'budget'; severity: ActionSeverity; category: 'budget'; limit: SpendLimitReading }
-  | { id: string; kind: 'creative'; severity: ActionSeverity; category: 'creative'; creative: CreativeCard }
+  | { id: string; kind: 'creative'; severity: ActionSeverity; category: 'creative'; creative: CreativeCard; fatigue?: FatigueAlert | null }
+  /*
+   * RECOMMENDATIONS-VISUAL-001 — `CreativePulse` already ranks the creatives that moved, above its own
+   * evidence floor. A mover that got BETTER is the one kind of finding this page could never show,
+   * and an action centre that only ever reports trouble cannot say «put more behind this».
+   */
+  | { id: string; kind: 'creative_move'; severity: ActionSeverity; category: 'creative'; move: CreativeMove; direction: 'rising' | 'declining' }
   | { id: string; kind: 'written'; severity: ActionSeverity; category: ActionCategory; recommendation: Recommendation }
 
 const SEVERITY_RANK: Record<ActionSeverity, number> = { critical: 0, warning: 1, info: 2 }
@@ -74,6 +81,10 @@ export function buildActionCentre(input: {
   alerts?: AlertEvent[]
   limits?: SpendLimitReading[]
   fatigued?: CreativeCard[]
+  /** Fatigued AND still spending — `fatigue.alerts`, carrying the spend the pulse measured. */
+  fatigueAlerts?: FatigueAlert[]
+  rising?: CreativeMove[]
+  declining?: CreativeMove[]
   written?: Recommendation[]
 }): ActionItem[] {
   const items: ActionItem[] = []
@@ -100,8 +111,29 @@ export function buildActionCentre(input: {
     items.push({ id: `budget:${limit.id}`, kind: 'budget', severity, category: 'budget', limit })
   }
 
+  const spending = new Map((input.fatigueAlerts ?? []).map((a) => [a.creative.id, a]))
+  const judged = new Set<string>()
+
   for (const creative of input.fatigued ?? []) {
-    items.push({ id: `creative:${creative.id}`, kind: 'creative', severity: 'warning', category: 'creative', creative })
+    judged.add(creative.id)
+    items.push({ id: `creative:${creative.id}`, kind: 'creative', severity: 'warning', category: 'creative', creative, fatigue: spending.get(creative.id) ?? null })
+  }
+
+  /*
+   * One finding per creative. A fatigued creative is also, very often, the pulse's biggest decliner —
+   * two cards about one creative would be one fact counted twice, and the fatigue verdict is the
+   * stronger of the two because it weighs several signals rather than one.
+   */
+  for (const move of input.declining ?? []) {
+    if (judged.has(move.creative.id)) continue
+    judged.add(move.creative.id)
+    items.push({ id: `move:${move.creative.id}`, kind: 'creative_move', severity: 'info', category: 'creative', move, direction: 'declining' })
+  }
+
+  for (const move of input.rising ?? []) {
+    if (judged.has(move.creative.id)) continue
+    judged.add(move.creative.id)
+    items.push({ id: `move:${move.creative.id}`, kind: 'creative_move', severity: 'info', category: 'creative', move, direction: 'rising' })
   }
 
   for (const recommendation of input.written ?? []) {
