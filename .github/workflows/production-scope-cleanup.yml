@@ -3,7 +3,7 @@ name: Production Scope Cleanup
 # ACCOUNT-SCOPE-ISOLATION-001 — the ONE workflow that may write to Production's stored rows.
 #
 # It is deliberately separate from `production-diagnostics.yml`, which stays read-only and cannot
-# delete or queue anything. This one carries two commands and both are dry-run BY DEFAULT: without
+# delete or queue anything. This one carries three commands, all dry-run BY DEFAULT: without
 # the `apply` box ticked they print the full plan — table, month, count — and change nothing. The
 # plan is what a person reads before deciding; the decision is the tick.
 #
@@ -13,6 +13,9 @@ name: Production Scope Cleanup
 #   resync-window   queue a re-fetch of ONE window for ONE actively bound account through the ordinary
 #                   sync job, which re-proves the binding before it fetches. The Snapchat 2026-08-16 →
 #                   2026-09-06 window (#460's landing-page-view mapping) is the first use.
+#   quarantine-sandbox  remove campaigns the SANDBOX connector wrote into live accounts, proven by the
+#                   connector's own `raw.sandbox` marker — never by a name or an id prefix. Takes no
+#                   project or account: the marker is the provenance. Sync runs are not touched.
 #
 # Manual only: no push trigger, no schedule. Inputs are VALUES passed to a fixed command; nothing
 # here builds a command from input. Output carries internal ids and counts, never a name or a url.
@@ -27,13 +30,15 @@ on:
         options:
           - scope-cleanup
           - resync-window
+          - quarantine-sandbox
       project:
         description: 'scope-cleanup: the project whose rows are being cleaned (uuid)'
         required: false
         default: ''
       account:
-        description: 'Both: the account (uuid, ours)'
-        required: true
+        description: 'scope-cleanup and resync-window: the account (uuid, ours). Not used by quarantine-sandbox.'
+        required: false
+        default: ''
       action:
         description: 'scope-cleanup: remove | reassign'
         type: choice
@@ -129,3 +134,26 @@ jobs:
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan integrations:resync-window \
                 --account="${ACCOUNT}" --from="${FROM}" --to="${TO}" ${APPLY}
+
+  quarantine:
+    if: inputs.command == 'quarantine-sandbox'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Sandbox quarantine on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          APPLY: ${{ inputs.apply && '--apply' || '' }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: APPLY
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan integrations:quarantine-sandbox ${APPLY}

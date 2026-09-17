@@ -38,6 +38,18 @@ final class ProbeWorkflowsStayReadOnlyTest extends TestCase
                     continue;
                 }
 
+                // ACCOUNT-SCOPE-ISOLATION-001 — deleting and queueing live in production-scope-cleanup.yml.
+                $this->assertStringNotContainsString(
+                    '--apply',
+                    $line,
+                    "$file:".($number + 1).' passes --apply, which deletes or queues. Writes belong to production-scope-cleanup.yml.',
+                );
+                $this->assertDoesNotMatchRegularExpression(
+                    '/integrations:(scope-cleanup|resync-window)/',
+                    $line,
+                    "$file:".($number + 1).' calls a writing command. Writes belong to production-scope-cleanup.yml.',
+                );
+
                 $this->assertStringNotContainsString(
                     '--sync',
                     $line,
@@ -45,6 +57,46 @@ final class ProbeWorkflowsStayReadOnlyTest extends TestCase
                 );
             }
         }
+    }
+
+    /**
+     * The one writing workflow writes only when a person ticks `apply`.
+     *
+     * Every `--apply` on an executable line is the product of `inputs.apply`, and the workflow runs
+     * exactly its three writing commands — so a dispatch left at its defaults is a dry run for
+     * scope-cleanup, resync-window and quarantine-sandbox alike.
+     */
+    public function test_the_cleanup_workflow_applies_only_when_the_apply_box_is_ticked(): void
+    {
+        $path = dirname(__DIR__, 3).'/.github/workflows/production-scope-cleanup.yml';
+        $this->assertFileExists($path);
+
+        $commands = [];
+
+        foreach (explode("\n", (string) file_get_contents($path)) as $number => $line) {
+            if (preg_match('/^\s*#/', $line) === 1) {
+                continue;
+            }
+
+            if (str_contains($line, '--apply')) {
+                $this->assertSame(
+                    'APPLY: ${{ inputs.apply && \'--apply\' || \'\' }}',
+                    trim($line),
+                    'production-scope-cleanup.yml:'.($number + 1).' passes --apply without the apply box.',
+                );
+            }
+
+            if (preg_match('/artisan (integrations:[a-z-]+)/', $line, $m) === 1) {
+                $commands[] = $m[1];
+            }
+        }
+
+        sort($commands);
+        $this->assertSame(
+            ['integrations:quarantine-sandbox', 'integrations:resync-window', 'integrations:scope-cleanup'],
+            $commands,
+            'the cleanup workflow no longer runs exactly its three writing commands',
+        );
     }
 
     /**
