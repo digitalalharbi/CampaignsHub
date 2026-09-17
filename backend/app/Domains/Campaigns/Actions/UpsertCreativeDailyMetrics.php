@@ -104,9 +104,14 @@ final class UpsertCreativeDailyMetrics
             ->where('provider', $account->provider)
             ->where('tenant_id', $account->tenant_id)
             ->whereIn('external_creative_id', $ids)
-            ->whereIn('external_campaign_id', ExternalCampaign::withoutGlobalScopes()
+            ->where(fn ($q) => $q
                 ->where('external_account_id', $account->getKey())
-                ->select('id'))
+                // A creative written before it carried an account is still reached through its campaign.
+                ->orWhere(fn ($legacy) => $legacy
+                    ->whereNull('external_account_id')
+                    ->whereIn('external_campaign_id', ExternalCampaign::withoutGlobalScopes()
+                        ->where('external_account_id', $account->getKey())
+                        ->select('id'))))
             ->get(['id', 'tenant_id', 'project_id', 'campaign_id', 'external_creative_id']);
 
         $byProviderId = [];
