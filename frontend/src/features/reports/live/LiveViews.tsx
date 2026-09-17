@@ -25,6 +25,7 @@ import {
 } from './LiveSections'
 import type { useLiveMetricReader } from './liveMetrics'
 import type { LiveLoad } from './useLivePayload'
+import { sectionShown, type ReportSectionKey } from '../reportSections'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
 
@@ -36,7 +37,21 @@ type Common = {
   onOpenContent: (content: ReportAd) => void
 }
 
-const sectionOn = (payload: LivePayload, key: keyof NonNullable<LivePayload['sections']>) => payload.sections?.[key] !== false
+const LEGACY_FLAG: Partial<Record<ReportSectionKey, keyof NonNullable<LivePayload['sections']>>> = {
+  platform_comparison: 'platform_comparison',
+  objective_breakdown: 'objective_breakdown',
+  advanced_segmentation: 'objective_breakdown',
+  content_performance: 'creatives',
+  budget_pacing: 'budget',
+  funnel: 'funnel_store',
+}
+
+/* The server's resolved set decides; the link's older flag is honoured for a payload that predates it. */
+const sectionOn = (payload: LivePayload, key: ReportSectionKey) => {
+  const legacy = LEGACY_FLAG[key]
+
+  return sectionShown(payload, key) && (legacy === undefined || payload.sections?.[legacy] !== false)
+}
 
 function SectionTitle({ children, action }: { children: string; action?: React.ReactNode }) {
   return (
@@ -111,7 +126,8 @@ function ContentStrip({
  * category labels and drew one bar, and a comparison whose rows cannot be told apart is not one.
  */
 function PlatformResultsBars({ payload, ar }: { payload: LivePayload; ar: boolean }) {
-  const rows = payload.platforms
+  if (!sectionOn(payload, 'platform_comparison')) return null
+  const rows = (payload.platforms ?? [])
     .filter((p) => p.conversions !== null && p.conversions !== undefined)
     .map((p) => ({ key: canonicalPlatform(p.provider), results: Number(p.conversions) }))
     .sort((a, b) => b.results - a.results)
@@ -179,7 +195,7 @@ function BudgetRing({ payload, ar }: { payload: LivePayload; ar: boolean }) {
 function splitDiffers(payload: LivePayload): boolean {
   const split = payload.objective_performance
 
-  return sectionOn(payload, 'objective_breakdown') && !!split
+  return sectionOn(payload, 'advanced_segmentation') && !!split
     && (Number(split.blended?.spend ?? 0) !== Number(split.direct?.spend ?? 0) || (split.blended?.blended_cpa ?? null) !== (split.direct?.cpa ?? null))
 }
 
@@ -203,7 +219,7 @@ export function SummaryView({ payload, reader, currency, locale, onOpenContent }
       {showSplit && <ObjectiveSplit payload={payload} ar={ar} reader={reader} />}
       <TrendAndDistribution payload={payload} ar={ar} currency={currency} />
       <PlatformResultsBars payload={payload} ar={ar} />
-      {sectionOn(payload, 'creatives') && (
+      {sectionOn(payload, 'content_performance') && (
         <ContentStrip
           title={ar ? 'أفضل المحتوى' : 'Best content'}
           items={top}
@@ -215,7 +231,7 @@ export function SummaryView({ payload, reader, currency, locale, onOpenContent }
           ranked
         />
       )}
-      {sectionOn(payload, 'budget') && <BudgetRing payload={payload} ar={ar} />}
+      {sectionOn(payload, 'budget_pacing') && <BudgetRing payload={payload} ar={ar} />}
     </div>
   )
 }
@@ -241,8 +257,8 @@ export function DashboardView({ payload, reader, currency, locale, onOpenContent
           </div>
         </div>
       )}
-      <ObjectiveLeaders payload={payload} ar={ar} reader={reader} />
-      {sectionOn(payload, 'creatives') && (
+      {sectionOn(payload, 'objective_breakdown') && <ObjectiveLeaders payload={payload} ar={ar} reader={reader} />}
+      {sectionOn(payload, 'content_performance') && (
         <section className="flex flex-col gap-5">
           <div>
             <SectionTitle action={<GoTo testid="live-goto-content" ar={ar} label={ar ? 'كل المحتوى' : 'All content'} onClick={() => goTo('content')} />}>
@@ -269,10 +285,10 @@ export function DashboardView({ payload, reader, currency, locale, onOpenContent
           />
         </section>
       )}
-      <FunnelSection payload={payload} ar={ar} currency={currency} />
-      <LiveDetailTables payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />
-      {sectionOn(payload, 'budget') && <ClientAttention payload={payload} currency={currency} locale={locale} />}
-      <StoreFunnelSection payload={payload} ar={ar} />
+      {sectionOn(payload, 'funnel') && <FunnelSection payload={payload} ar={ar} currency={currency} />}
+      {sectionOn(payload, 'detailed_tables') && <LiveDetailTables payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />}
+      {sectionOn(payload, 'budget_pacing') && <ClientAttention payload={payload} currency={currency} locale={locale} />}
+      {sectionOn(payload, 'funnel') && <StoreFunnelSection payload={payload} ar={ar} />}
     </div>
   )
 }
@@ -300,7 +316,7 @@ export function LoadGate({ load, ar, children }: { load: LiveLoad; ar: boolean; 
 
 /** The platforms a link actually carries figures for, largest spend first. */
 export function platformsOf(payload: LivePayload): string[] {
-  return [...payload.platforms]
+  return [...(payload.platforms ?? [])]
     .sort((a, b) => Number(b.spend ?? 0) - Number(a.spend ?? 0))
     .map((p) => canonicalPlatform(p.provider))
     .filter((p, i, all) => all.indexOf(p) === i)
@@ -327,8 +343,9 @@ export function PlatformsView({
 }) {
   const ar = locale === 'ar'
   const platforms = platformsOf(whole)
-  const totalSpend = whole.platforms.reduce((a, p) => a + Number(p.spend ?? 0), 0)
-  const totalResults = whole.platforms.reduce((a, p) => a + Number(p.conversions ?? 0), 0)
+  const wholeRows = whole.platforms ?? []
+  const totalSpend = wholeRows.reduce((a, p) => a + Number(p.spend ?? 0), 0)
+  const totalResults = wholeRows.reduce((a, p) => a + Number(p.conversions ?? 0), 0)
 
   if (platforms.length === 0) {
     return (
@@ -342,7 +359,7 @@ export function PlatformsView({
     <div data-testid="live-mode-platforms" className="flex flex-col gap-5">
       <div role="tablist" aria-label={ar ? 'المنصات' : 'Platforms'} className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {platforms.map((p) => {
-          const row = whole.platforms.find((r) => canonicalPlatform(r.provider) === p)
+          const row = wholeRows.find((r) => canonicalPlatform(r.provider) === p)
           const share = totalSpend > 0 && row ? Number(row.spend ?? 0) / totalSpend : null
           const selected = p === platform
 
@@ -383,7 +400,7 @@ export function PlatformsView({
             <PlatformDetail
               platform={platform}
               payload={one}
-              wholeRow={whole.platforms.find((r) => canonicalPlatform(r.provider) === platform)}
+              wholeRow={wholeRows.find((r) => canonicalPlatform(r.provider) === platform)}
               totalSpend={totalSpend}
               totalResults={totalResults}
               reader={reader}
@@ -433,10 +450,11 @@ function PlatformDetail({
       <LiveKpiBoard payload={payload} reader={reader} ar={ar} keys={kpiKeysFor(payload, reader)} />
 
       <div className="grid gap-3 lg:grid-cols-3 [&>*]:min-w-0">
+        {sectionOn(payload, 'trends') && (
         <ChartCard title={ar ? 'الأداء بمرور الوقت' : 'Performance over time'} className="lg:col-span-2">
           <div data-testid="live-platform-trend">
             <MetricLineChart
-              data={payload.timeseries}
+              data={payload.timeseries ?? []}
               currency={currency}
               height={220}
               rightAxisFor="conversions"
@@ -448,6 +466,7 @@ function PlatformDetail({
             />
           </div>
         </ChartCard>
+        )}
         <ChartCard title={ar ? `حصة ${name} من الإجمالي` : `${name}’s share of the total`}>
           <div data-testid="live-platform-shares" className="flex flex-wrap items-center justify-around gap-4 py-2">
             {spendShare !== null && <ProgressRing value={spendShare} sublabel={ar ? 'من الإنفاق' : 'of spend'} size={116} />}
@@ -462,7 +481,7 @@ function PlatformDetail({
         </ChartCard>
       </div>
 
-      {payload.sections?.creatives !== false && (
+      {sectionOn(payload, 'content_performance') && (
         <>
           <ContentStrip
             title={ar ? `أفضل محتوى على ${name}` : `Best content on ${name}`}
@@ -516,7 +535,9 @@ export function ContentView({
   narrowed: LiveLoad
 }) {
   const ar = locale === 'ar'
-  const platforms = platformsOf(whole)
+  // Without the comparison rows, the platforms the link covers still name the tabs.
+  const fromRows = platformsOf(whole)
+  const platforms = fromRows.length > 0 ? fromRows : (whole.available?.providers ?? []).map(canonicalPlatform).filter((p, i, all) => all.indexOf(p) === i)
 
   return (
     <div data-testid="live-mode-content" className="flex flex-col gap-5">
@@ -571,7 +592,7 @@ function ContentBody({ payload, currency, locale, onOpenContent }: Omit<Common, 
     })
   }, [payload, sort])
 
-  if (payload.sections?.creatives === false) {
+  if (!sectionOn(payload, 'content_performance')) {
     return <p className="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-text-secondary">{ar ? 'هذا الرابط لا يعرض المحتوى.' : 'This link does not show content.'}</p>
   }
 
