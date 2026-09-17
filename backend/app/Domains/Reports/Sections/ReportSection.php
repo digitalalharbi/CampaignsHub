@@ -22,6 +22,7 @@ final class ReportSection
 {
     /**
      * @param  list<string>  $payloadKeys  every key this section draws from, in either payload shape
+     * @param  list<string>  $slideTypes
      */
     public function __construct(
         public readonly string $key,
@@ -32,6 +33,13 @@ final class ReportSection
         public readonly bool $internalDefault = true,
         /** A breakdown is optional depth under the main report, never part of its headline. */
         public readonly bool $breakdown = false,
+        /**
+         * The snapshot deck's slide types this section draws. A hidden section's slides leave the
+         * slide list too, so no renderer is handed a slide whose data was removed.
+         *
+         * @var list<string>
+         */
+        public readonly array $slideTypes = [],
     ) {}
 
     public function defaultFor(string $audience): bool
