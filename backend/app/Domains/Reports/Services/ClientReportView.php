@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Reports\Services\Attention\AttentionAudience;
+use App\Domains\Reports\Services\Attention\ReportAttention;
+
 /**
  * Produces the CLIENT-facing view of a report snapshot. A client report is not the campaign-manager
  * dashboard: it drops operational and technical fields, shows only APPROVED recommendations, and
@@ -30,6 +33,12 @@ namespace App\Domains\Reports\Services;
  */
 final class ClientReportView
 {
+    /**
+     * The operator's CURRENT attention decisions, so every served client document — shared snapshot,
+     * PDF, executive view — agrees with the live link the moment a decision is taken.
+     */
+    public function __construct(private readonly ReportAttention $attention) {}
+
     /** Internal-only top-level keys that must never surface in a client report body. */
     private const INTERNAL_KEYS = ['checksum', 'data_version', 'tenant_id', 'project_id'];
 
@@ -55,6 +64,18 @@ final class ClientReportView
             $data['recommendations'] ?? [],
             fn ($r) => ($r['status'] ?? 'draft') === 'approved',
         ));
+
+        /*
+         * 2b. REPORT-RECOMMENDATION-BLOCKS-001 — attention items: operator-internal ones only when
+         * approved, hidden ones never, operator fields removed. Against the CURRENT decisions, so a
+         * snapshot, its shared link and its PDF agree with the live link the moment one is taken.
+         * An old snapshot with no attention key gains none.
+         */
+        if (array_key_exists('attention', $data)) {
+            $decisions = $this->attention->decisions((string) ($data['tenant_id'] ?? ''), (string) ($data['project_id'] ?? ''));
+            $out['attention'] = AttentionAudience::forClient($data['attention'], $decisions);
+            $out = ReportStructure::refresh($out, 'recommendations');
+        }
 
         // 3. Client-facing names on every list that carries a campaign/creative name.
         //    Resolution order: explicit client_display_name → sanitised internal name → safe generated.

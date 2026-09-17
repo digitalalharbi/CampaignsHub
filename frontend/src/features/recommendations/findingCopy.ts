@@ -102,4 +102,7 @@ export const factLabel = (k: FindingFactKey, ar: boolean) => pick(FACTS[k], ar, 
 export const extraMetricLabel = (key: string, ar: boolean): string | null =>
   key === 'projected_spend' ? (ar ? 'الإنفاق المتوقع' : 'Projected spend')
     : key === 'spend_without_results' ? (ar ? 'إنفاق بلا نتائج إضافية' : 'Spend, results flat')
-      : null
+      : key === 'lpv_rate' ? (ar ? 'نسبة زيارات صفحة الهبوط' : 'Landing-page view rate')
+        : key === 'cost_per_lpv' ? (ar ? 'تكلفة زيارة صفحة الهبوط' : 'Cost per landing-page view')
+          : key === 'results' ? (ar ? 'النتائج' : 'Results')
+            : null

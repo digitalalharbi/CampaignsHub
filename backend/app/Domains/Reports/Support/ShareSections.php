@@ -41,6 +41,12 @@ final class ShareSections
         'budget',
         'funnel_store',
         'previous_comparison',
+        /*
+         * REPORT-RECOMMENDATION-BLOCKS-001 — «what needs attention → the one thing to do».
+         * A display section, on by default; its operator-internal items are filtered separately,
+         * per item, by `AttentionAudience` — switching the section on never publishes those.
+         */
+        'recommendations',
     ];
 
     /**
@@ -65,6 +71,7 @@ final class ShareSections
         public readonly bool $budget,
         public readonly bool $funnel_store,
         public readonly bool $previous_comparison,
+        public readonly bool $recommendations = true,
     ) {}
 
     /** @param array<string,mixed> $raw */
@@ -82,6 +89,7 @@ final class ShareSections
             budget: $flag('budget'),
             funnel_store: $flag('funnel_store'),
             previous_comparison: $flag('previous_comparison'),
+            recommendations: $flag('recommendations'),
         );
     }
 
@@ -102,6 +110,7 @@ final class ShareSections
             'budget' => $this->budget,
             'funnel_store' => $this->funnel_store,
             'previous_comparison' => $this->previous_comparison,
+            'recommendations' => $this->recommendations,
         ];
     }
 }
