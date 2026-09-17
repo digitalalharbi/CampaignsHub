@@ -97,18 +97,25 @@ final class DiagnoseSyncCommand extends Command
             ->limit($accountLimit)
             ->get();
 
-        if ($accounts->isEmpty()) {
-            $this->warn('No external account matches that filter.');
-
-            return self::SUCCESS;
-        }
-
         $this->line('');
         $this->line(str_repeat('=', 78));
         $this->line('  INTEGRATIONS DIAGNOSIS — read-only. No provider was called.');
         $this->line(str_repeat('=', 78));
 
+        /*
+         * The estate is printed BEFORE the empty-filter return. «No external account matches» is
+         * also what a provider whose OAuth callback ran and whose discovery then failed looks like:
+         * the connection row exists, the accounts never arrived. Whether that callback ever ran is
+         * the question a leak through the callback (SecretNeverInLoggedUrlTest) turns on, and it is
+         * answered by the connections line, not the accounts one.
+         */
         $this->reportProviderTotals($provider);
+
+        if ($accounts->isEmpty()) {
+            $this->warn('No external account matches that filter.');
+
+            return self::SUCCESS;
+        }
 
         foreach ($accounts as $account) {
             $this->reportAccount($account, $runLimit);
@@ -134,12 +141,27 @@ final class DiagnoseSyncCommand extends Command
             )
             ->count();
 
+        $connections = ProviderConnection::withoutGlobalScopes()
+            ->when($provider !== null, fn ($q) => $q->where('provider', $provider))
+            ->selectRaw('status, count(*) as n')
+            ->groupBy('status')
+            ->orderBy('status')
+            ->pluck('n', 'status');
+
         $this->line('');
         $this->line(sprintf(
             '  Estate%s: %d account(s) discovered, %d with an ACTIVE binding to a project.',
             $provider === null ? '' : " [{$provider}]",
             $discovered,
             $assigned,
+        ));
+        // Connections are counted separately from accounts: a connection with no accounts is an
+        // authorisation that ran and a discovery that did not, and both facts matter on their own.
+        $this->line(sprintf(
+            '  Connections%s: %d — %s',
+            $provider === null ? '' : " [{$provider}]",
+            (int) $connections->sum(),
+            $connections->isEmpty() ? 'none' : $connections->map(fn ($n, $status) => "{$status}={$n}")->implode(', '),
         ));
     }
 
