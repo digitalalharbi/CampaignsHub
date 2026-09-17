@@ -11,6 +11,7 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
@@ -129,6 +130,56 @@ final class RefreshExpiredCreativeMediaTest extends TestCase
         $this->assertSame($fresh, $creative->fresh()->asset_url);
         $this->assertSame('available', app(CreativePresenter::class)->preview($creative->fresh())['state']);
         Http::assertSent(static fn ($r): bool => str_contains((string) $r->url(), 'ids=120002'));
+    }
+
+    /** A permission refusal is not asked again until the connection is re-authorised. */
+    public function test_a_refused_connection_is_not_asked_again_until_it_is_reauthorised(): void
+    {
+        $this->configure('meta');
+        [$selected] = $this->twoAccountsOneConnection('meta');
+        $dead = 'https://scontent.xx.fbcdn.net/v/t45/old.jpg?oh=x&oe='.dechex(now()->subHour()->getTimestamp());
+        $this->creativeUnder($selected, '120003', $dead);
+
+        Http::fake(['*' => Http::response(['error' => ['message' => '(#200) Ad account owner has NOT grant ads_read permission', 'code' => 200]], 403)]);
+
+        Artisan::call('integrations:refresh-expired-media');
+        $asked = count(Http::recorded());
+        $this->assertGreaterThan(0, $asked);
+
+        $this->travel(1)->hours();
+        Artisan::call('integrations:refresh-expired-media');
+        $this->assertSame($asked, count(Http::recorded()), 'a refused account was asked again with nothing changed');
+
+        // The owner re-authorises: discovery / OAuth stamp the connection, and the account is asked again.
+        $this->travel(1)->minutes();
+        ProviderConnection::withoutGlobalScopes()->whereKey($selected->provider_connection_id)
+            ->update(['last_health_check_at' => now()]);
+        $this->travel(1)->minutes();
+        Artisan::call('integrations:refresh-expired-media');
+        $this->assertGreaterThan($asked, count(Http::recorded()), 'a re-authorised connection was never asked again');
+    }
+
+    /** A throttle ends the run as failed-with-message after the bounded retries, and is retried next hour. */
+    public function test_a_rate_limit_fails_the_run_after_bounded_retries_and_is_not_treated_as_a_refusal(): void
+    {
+        $this->configure('meta');
+        [$selected] = $this->twoAccountsOneConnection('meta');
+        $dead = 'https://scontent.xx.fbcdn.net/v/t45/old.jpg?oh=x&oe='.dechex(now()->subHour()->getTimestamp());
+        $this->creativeUnder($selected, '120004', $dead);
+
+        Http::fake(['*' => Http::response(['error' => ['message' => 'User request limit reached', 'code' => 17]], 429, ['Retry-After' => '0'])]);
+
+        Artisan::call('integrations:refresh-expired-media');
+
+        $this->assertLessThanOrEqual(4, count(Http::recorded()), 'a throttled platform was hammered');
+        $run = IntegrationSyncRun::withoutGlobalScopes()->where('type', 'media_refresh')->firstOrFail();
+        $this->assertSame('failed', $run->status);
+        $this->assertNotEmpty($run->error);
+
+        $this->travel(1)->hours();
+        $before = count(Http::recorded());
+        Artisan::call('integrations:refresh-expired-media');
+        $this->assertGreaterThan($before, count(Http::recorded()), 'a throttle was mistaken for a permission refusal');
     }
 
     private function configure(string $platform): void

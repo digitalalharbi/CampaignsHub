@@ -39,6 +39,40 @@ final class RefreshExpiredCreativeMediaCommand extends Command
 
     protected $description = 'Re-fetch, by creative id, the media of creatives whose platform links have expired or are about to.';
 
+    /**
+     * A connection whose last media refresh was a PERMISSION refusal is not asked again until it has
+     * been re-authorised or rediscovered (both stamp `last_health_check_at`; a routine token refresh
+     * does not). Otherwise a refused Meta account is asked twenty-four times a day for an answer that
+     * cannot change without the owner. A rate limit or a server error is not a refusal and is retried
+     * next hour — `PlatformHttp` has already honoured `Retry-After` within the run.
+     */
+    private function stillRefused(ProviderConnection $connection): bool
+    {
+        $last = IntegrationSyncRun::withoutGlobalScopes()
+            ->where('provider_connection_id', $connection->getKey())
+            ->where('type', 'media_refresh')
+            ->orderByDesc('started_at')
+            ->first();
+
+        if ($last === null || $last->status !== SyncRunStatus::Failed->value || ! self::isPermissionRefusal((string) $last->error)) {
+            return false;
+        }
+
+        return $connection->last_health_check_at === null
+            || $last->finished_at === null
+            || $connection->last_health_check_at->lte($last->finished_at);
+    }
+
+    /** A refusal about ACCESS — not a throttle, not an outage. */
+    public static function isPermissionRefusal(string $message): bool
+    {
+        if (preg_match('/\b429\b|rate.?limit|too many|throttl/i', $message) === 1) {
+            return false;
+        }
+
+        return preg_match('/\(#(10|190|200|2\d\d)\)|permission|unauthori[sz]ed|forbidden|access denied|invalid[_ ]token|OAuthException|USER_PERMISSION_DENIED/i', $message) === 1;
+    }
+
     public function handle(AdvertisingConnectorRegistry $registry, AccountAssignment $assignment, ImportExternalStructure $import): int
     {
         $horizon = Carbon::now()->addHours(max(0, (int) $this->option('within')));
@@ -71,6 +105,12 @@ final class RefreshExpiredCreativeMediaCommand extends Command
             $connection = ProviderConnection::withoutGlobalScopes()->find($account->provider_connection_id);
 
             if ($connection === null) {
+                continue;
+            }
+
+            if ($this->stillRefused($connection)) {
+                $this->line(sprintf('  %s account %s: skipped — the connection refused access and has not been re-authorised since', $account->provider, $account->getKey()));
+
                 continue;
             }
 
