@@ -11,6 +11,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -91,6 +92,141 @@ final class ContentReconcileWalkTest extends TestCase
             'external_account_id' => $account->getKey(),
             'provider' => 'meta', 'external_id' => 'cmp-1', 'name' => 'Campaign', 'status' => 'active',
         ]);
+    }
+
+    /**
+     * Census A: four Snapchat collections read `shape_not_fetched` — no hero, no film, no tiles — while
+     * 430 others on the same account draw. Which rung dropped them cannot be read from the row, which
+     * only says «nothing arrived». The sweep's own retained bodies can: was the creative in the
+     * creatives edge, did it name a top snap, did the media lookup answer for that snap, and in what
+     * state. Key names and platform enums only — never a media id, a name or a link.
+     */
+    public function test_the_walk_says_where_a_collections_media_stopped_in_the_latest_sweep(): void
+    {
+        $account = ExternalAccount::withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->getKey(),
+            'provider_connection_id' => ExternalAccount::withoutGlobalScopes()->value('provider_connection_id'),
+            'provider' => 'snapchat', 'account_type' => 'ad_account',
+            'external_id' => 'snap-acct', 'name' => 'Snap', 'status' => 'active',
+        ]);
+        $campaign = ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
+            'external_account_id' => $account->getKey(),
+            'provider' => 'snapchat', 'external_id' => 'snap-cmp', 'name' => 'Snap campaign', 'status' => 'active',
+        ]);
+        $creative = ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
+            'external_campaign_id' => $campaign->getKey(),
+            'provider' => 'snapchat', 'external_creative_id' => 'cr-collection',
+            'name' => 'Collection', 'format' => 'collection', 'status' => 'active', 'source_type' => 'api',
+        ]);
+
+        $old = (string) Str::uuid();
+        $latest = (string) Str::uuid();
+        $body = fn (string $run, array $payload, string $at) => IntegrationRawPayload::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'external_account_id' => $account->getKey(),
+            'sync_run_id' => $run, 'provider' => 'snapchat', 'resource' => 'structure',
+            'payload' => $payload, 'fetched_at' => $at,
+        ]);
+
+        // An OLDER sweep that did resolve it must not be what is read.
+        $body($old, ['media' => [['sub_request_status' => 'SUCCESS', 'media' => [
+            'id' => 'media-secret-1', 'type' => 'IMAGE', 'media_status' => 'READY', 'download_link' => 'https://cf.test/old-signed.jpg',
+        ]]]], '2026-09-01 00:00:00');
+
+        $body($latest, ['creatives' => [
+            ['creative' => ['id' => 'cr-other', 'type' => 'SNAP_AD', 'top_snap_media_id' => 'media-secret-2']],
+            ['creative' => [
+                'id' => 'cr-collection', 'name' => 'CONFIDENTIAL NAME', 'type' => 'COLLECTION',
+                'top_snap_media_id' => 'media-secret-1',
+                'collection_properties' => ['interaction_zone_id' => 'zone-secret'],
+            ]],
+        ]], '2026-09-16 00:00:00');
+        $body($latest, ['ads' => [
+            ['ad' => ['id' => 'ad-1', 'creative_id' => 'cr-collection', 'status' => 'ACTIVE']],
+        ]], '2026-09-16 00:00:01');
+        $body($latest, ['media' => [
+            ['sub_request_status' => 'SUCCESS', 'media' => [
+                'id' => 'media-secret-1', 'type' => 'IMAGE', 'media_status' => 'PENDING_UPLOAD',
+            ]],
+            ['sub_request_status' => 'SUCCESS', 'media' => [
+                'id' => 'media-secret-2', 'type' => 'VIDEO', 'media_status' => 'READY', 'download_link' => 'https://cf.test/signed-abc.mp4?sig=zzz',
+            ]],
+        ]], '2026-09-16 00:00:02');
+
+        $before = $this->tableDigests();
+
+        $this->artisan('content:reconcile', ['creative' => (string) $creative->getKey()])
+            ->expectsOutputToContain('RUNG 11')
+            ->expectsOutputToContain('in the creatives edge : yes — type COLLECTION')
+            ->expectsOutputToContain('top_snap_media_id     : present')
+            ->expectsOutputToContain('collection_properties.interaction_zone_id')
+            ->expectsOutputToContain('ads naming it         : 1 (ACTIVE 1)')
+            ->expectsOutputToContain('media lookup          : answered for this snap — type IMAGE, media_status PENDING_UPLOAD, sub_request_status SUCCESS, download_link absent')
+            ->doesntExpectOutputToContain('media-secret')
+            ->doesntExpectOutputToContain('zone-secret')
+            ->doesntExpectOutputToContain('CONFIDENTIAL NAME')
+            ->doesntExpectOutputToContain('cf.test')
+            ->assertExitCode(0);
+
+        $this->assertSame($before, $this->tableDigests(), 'the media rung changed a table it was only meant to read');
+    }
+
+    /** A snap the sweep never asked about, and a creative the sweep never saw, are said apart. */
+    public function test_the_walk_says_when_the_sweep_never_saw_the_creative_or_its_snap(): void
+    {
+        $account = ExternalAccount::withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->getKey(),
+            'provider_connection_id' => ExternalAccount::withoutGlobalScopes()->value('provider_connection_id'),
+            'provider' => 'snapchat', 'account_type' => 'ad_account',
+            'external_id' => 'snap-acct-2', 'name' => 'Snap', 'status' => 'active',
+        ]);
+        $campaign = ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
+            'external_account_id' => $account->getKey(),
+            'provider' => 'snapchat', 'external_id' => 'snap-cmp-2', 'name' => 'Snap campaign', 'status' => 'active',
+        ]);
+        $seen = ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
+            'external_campaign_id' => $campaign->getKey(),
+            'provider' => 'snapchat', 'external_creative_id' => 'cr-seen',
+            'name' => 'Seen', 'format' => 'collection', 'status' => 'active', 'source_type' => 'api',
+        ]);
+        $unseen = ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
+            'external_campaign_id' => $campaign->getKey(),
+            'provider' => 'snapchat', 'external_creative_id' => 'cr-unseen',
+            'name' => 'Unseen', 'format' => 'collection', 'status' => 'active', 'source_type' => 'api',
+        ]);
+
+        IntegrationRawPayload::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'external_account_id' => $account->getKey(),
+            'sync_run_id' => (string) Str::uuid(), 'provider' => 'snapchat', 'resource' => 'structure',
+            'payload' => ['creatives' => [['creative' => ['id' => 'cr-seen', 'type' => 'COLLECTION', 'top_snap_media_id' => 'media-x']]]],
+            'fetched_at' => '2026-09-16 00:00:00',
+        ]);
+
+        $this->artisan('content:reconcile', ['creative' => (string) $seen->getKey()])
+            ->expectsOutputToContain('media lookup          : no media body in the sweep')
+            ->assertExitCode(0);
+
+        IntegrationRawPayload::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'external_account_id' => $account->getKey(),
+            'sync_run_id' => IntegrationRawPayload::withoutGlobalScopes()->value('sync_run_id'),
+            'provider' => 'snapchat', 'resource' => 'structure',
+            'payload' => ['media' => [['sub_request_status' => 'SUCCESS', 'media' => ['id' => 'media-y', 'type' => 'IMAGE']]]],
+            'fetched_at' => '2026-09-16 00:00:01',
+        ]);
+
+        $this->artisan('content:reconcile', ['creative' => (string) $seen->getKey()])
+            ->expectsOutputToContain('media lookup          : this snap is in no media body of the sweep')
+            ->assertExitCode(0);
+
+        $this->artisan('content:reconcile', ['creative' => (string) $unseen->getKey()])
+            ->expectsOutputToContain('in the creatives edge : no')
+            ->assertExitCode(0);
     }
 
     /**
