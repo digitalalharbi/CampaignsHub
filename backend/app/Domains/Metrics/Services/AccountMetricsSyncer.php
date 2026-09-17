@@ -280,8 +280,9 @@ final class AccountMetricsSyncer
          * and CPA, which Meta reports perfectly well, and the product printed our silence as the
          * platform's.
          */
+        $entityFailure = null;
         if ($connector instanceof ReportsEntityGrains) {
-            $this->syncEntityGrains($connector, $account, $run, $from, $to);
+            $entityFailure = $this->syncEntityGrains($connector, $account, $run, $from, $to);
         }
 
         /*
@@ -356,6 +357,25 @@ final class AccountMetricsSyncer
             );
         }
 
+        /*
+         * ENTITY-GRAIN-FAILURE-001 — a run whose ad-set or ad grain failed is not a success.
+         *
+         * The campaign figures landed, so this is not `failed`; but the ad and ad-set rows in the
+         * window were left as they were, and a green run over them is how a re-sync of 3,979 stale
+         * rows reported success while rewriting none of them.
+         */
+        if ($entityFailure !== null) {
+            return $this->finish(
+                $run,
+                SyncRunStatus::PartialMapping,
+                $upserted,
+                'Campaign figures were stored; the ad-set/ad grain was not: '.$entityFailure,
+                $account,
+                $counts,
+                'entity_grain_failed',
+            );
+        }
+
         return $this->finish($run, SyncRunStatus::Success, $upserted, null, $account, $counts);
     }
 
@@ -416,7 +436,7 @@ final class AccountMetricsSyncer
         MetricSyncRun $run,
         Carbon $from,
         Carbon $to,
-    ): void {
+    ): ?string {
         /*
          * The campaigns this account owns — the parents of the ad-squad grain.
          *
@@ -447,12 +467,16 @@ final class AccountMetricsSyncer
             })
             ->pluck('external_id', 'id');
 
+        $squadThrown = null;
         $squadRows = $this->grain(
             fn (): array => $connector->entityInsights(
                 $account->external_id, ReportsEntityGrains::AD_SET,
                 $campaigns->values()->all(), $from->toDateString(), $to->toDateString(),
             )->records,
+            $squadThrown,
         );
+        // Read now: the ad sweep below resets the connector's own record of a refusal.
+        $squadFailure = $squadThrown ?? $connector->lastEntityFailure();
 
         /*
          * The sweep resolves the provider's ids against what the structure sync already discovered.
@@ -478,6 +502,7 @@ final class AccountMetricsSyncer
             $account, EntityDailyMetric::AD_SET, $squadRows, $knownSquads, (string) $run->getKey(),
         );
 
+        $adThrown = null;
         $adRows = $this->grain(
             /*
              * Ads come from the CAMPAIGN endpoint, not the ad-squad one.
@@ -494,7 +519,9 @@ final class AccountMetricsSyncer
                 $campaigns->values()->all(),
                 $from->toDateString(), $to->toDateString(),
             )->records,
+            $adThrown,
         );
+        $adFailure = $adThrown ?? $connector->lastEntityFailure();
 
         $ads = ExternalAd::withoutGlobalScopes()
             ->whereIn('external_ad_set_id', $squads->modelKeys())
@@ -528,22 +555,31 @@ final class AccountMetricsSyncer
                 ...(array) ($run->meta ?? []),
                 'entity_ad_sets' => $squadResult['upserted'],
                 'entity_ads' => $adResult['upserted'],
-                'entity_failure' => $connector->lastEntityFailure(),
+                'entity_failure' => $squadFailure ?? $adFailure,
+                'entity_ad_sets_failure' => $squadFailure,
+                'entity_ads_failure' => $adFailure,
             ],
         ])->save();
+
+        return $squadFailure ?? $adFailure;
     }
 
     /**
      * One grain's fetch, with its failure contained.
      *
+     * The failure is contained, not discarded: `$failure` receives what was thrown, so the run can
+     * say the grain failed instead of reading success over rows it never rewrote.
+     *
      * @param  callable(): list<array<string,mixed>>  $fetch
      * @return list<array<string,mixed>>
      */
-    private function grain(callable $fetch): array
+    private function grain(callable $fetch, ?string &$failure = null): array
     {
         try {
             return $fetch();
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            $failure = Str::limit(class_basename($e).': '.$e->getMessage(), 480);
+
             return [];
         }
     }
