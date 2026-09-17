@@ -7,6 +7,7 @@ namespace App\Domains\Alerts\Services;
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Enums\LeadStage;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\Integrations\Models\ProviderConnection;
@@ -859,6 +860,7 @@ final class AlertEvaluator
                 ->where('tenant_id', $rule->tenant_id)
                 ->when($rule->project_id, fn (Builder $q): Builder => $q->where('project_id', $rule->project_id))
                 ->whereNotIn('status', [LeadStage::Won->value, LeadStage::Lost->value, LeadStage::Invalid->value])
+                ->tap(fn (Builder $q): Builder => LeadVisibility::boundToItsProject($q))
         )
             /*
              * Grouped by project even when the rule already names one, so a tenant-wide rule tells
