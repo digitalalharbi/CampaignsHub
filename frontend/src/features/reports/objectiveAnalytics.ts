@@ -79,6 +79,7 @@ export const RANKING_METRICS: Record<string, { ar: string; en: string; kind: Obj
   cost_per_view: { ar: 'تكلفة المشاهدة', en: 'Cost per view', kind: 'money' },
   cpl: { ar: 'تكلفة العميل المحتمل', en: 'CPL', kind: 'money' },
   cpa: { ar: 'تكلفة الشراء', en: 'CPA', kind: 'money' },
+  cost_per_conversion: { ar: 'تكلفة التحويل', en: 'Cost per conversion', kind: 'money' },
   roas: { ar: 'العائد على الإنفاق', en: 'ROAS', kind: 'multiplier' },
   cpi: { ar: 'تكلفة التثبيت', en: 'CPI', kind: 'money' },
 }

@@ -38,7 +38,9 @@ final class ObjectiveReportAnalyticsTest extends TestCase
 
         foreach ($figures as $key => $value) {
             $row[$key] = $value;
-            $row["{$key}_rows"] = 1;
+            if ($key !== 'grains') {
+                $row["{$key}_rows"] = 1;
+            }
         }
         foreach ($withheld as $key) {
             $row["{$key}_withheld"] = 1;
@@ -80,14 +82,14 @@ final class ObjectiveReportAnalyticsTest extends TestCase
     /** @return iterable<string, array{string, string, array<string,float>, array<string,float>, list<string>}> */
     public static function objectives(): iterable
     {
-        yield 'awareness' => ['reach', 'awareness', ['spend' => 500, 'impressions' => 100_000, 'reach' => 40_000],
+        yield 'awareness' => ['reach', 'awareness', ['spend' => 500, 'impressions' => 100_000, 'reach' => 40_000, 'grains' => 1],
             ['reach' => 40_000, 'impressions' => 100_000, 'frequency' => 2.5, 'cpm' => 5.0], ['cpa', 'roas', 'cpl', 'ctr']];
         yield 'traffic' => ['landing_page_views', 'traffic', ['spend' => 300, 'impressions' => 60_000, 'clicks' => 1_200, 'landing_page_views' => 600],
             ['clicks' => 1_200, 'ctr' => 0.02, 'cpc' => 0.25, 'landing_page_views' => 600, 'cost_per_lpv' => 0.5], ['cpa', 'roas', 'cpm', 'reach']];
         yield 'leads' => ['leads', 'leads', ['spend' => 1_000, 'leads' => 40],
             ['leads' => 40, 'cpl' => 25.0], ['roas', 'revenue', 'cpa', 'cpm']];
-        yield 'sales' => ['purchases', 'sales', ['spend' => 2_000, 'conversions' => 50, 'revenue' => 10_000],
-            ['conversions' => 50, 'revenue' => 10_000, 'cpa' => 40.0, 'roas' => 5.0], ['cpl', 'cpm', 'reach', 'ctr']];
+        yield 'sales' => ['purchases', 'sales', ['spend' => 2_000, 'purchases' => 50, 'revenue' => 10_000],
+            ['purchases' => 50, 'revenue' => 10_000, 'cpa' => 40.0, 'roas' => 5.0], ['cpl', 'cpm', 'reach', 'ctr']];
         yield 'engagement' => ['engagement', 'engagement', ['spend' => 100, 'impressions' => 20_000, 'engagements' => 400],
             ['engagements' => 400, 'engagement_rate' => 0.02, 'cpe' => 0.25], ['cpa', 'roas']];
         yield 'app' => ['app_installs', 'app', ['spend' => 900, 'installs' => 300],
@@ -146,8 +148,8 @@ final class ObjectiveReportAnalyticsTest extends TestCase
     public function a_ratio_rests_only_on_the_platforms_that_reported_both_of_its_parts(): void
     {
         $block = $this->family($this->build([
-            $this->row('sales', 'meta', ['spend' => 1_000, 'conversions' => 20, 'revenue' => 5_000]),
-            $this->row('sales', 'tiktok', ['spend' => 1_000, 'conversions' => 10]),
+            $this->row('sales', 'meta', ['spend' => 1_000, 'purchases' => 20, 'revenue' => 5_000]),
+            $this->row('sales', 'tiktok', ['spend' => 1_000, 'purchases' => 10]),
         ]), 'sales');
 
         // Diluted by TikTok's unmeasured return it would read 2.5×; the truth is Meta's 5× over Meta.
@@ -161,15 +163,15 @@ final class ObjectiveReportAnalyticsTest extends TestCase
     public function withheld_money_is_unavailable_not_a_smaller_number(): void
     {
         $block = $this->family($this->build([
-            $this->row('sales', 'meta', ['spend' => 1_000, 'conversions' => 10, 'revenue' => 4_000]),
-            $this->row('sales', 'snapchat', ['conversions' => 5], withheld: ['spend']),
+            $this->row('sales', 'meta', ['spend' => 1_000, 'purchases' => 10, 'revenue' => 4_000]),
+            $this->row('sales', 'snapchat', ['purchases' => 5], withheld: ['spend']),
         ]), 'sales');
 
         $this->assertSame('money_not_converted', $this->kpi($block, 'spend')['reason']);
         // CPA rests on the platform whose spend WAS converted, and names the one that was not.
         $this->assertSame(100.0, $this->kpi($block, 'cpa')['value']);
         $this->assertSame(['snapchat'], $this->kpi($block, 'cpa')['not_reported_by']);
-        $this->assertSame(15.0, $this->kpi($block, 'conversions')['value']);
+        $this->assertSame(15.0, $this->kpi($block, 'purchases')['value']);
     }
 
     #[Test]
@@ -189,7 +191,7 @@ final class ObjectiveReportAnalyticsTest extends TestCase
     {
         $section = $this->build([
             $this->row('awareness', 'meta', ['spend' => 4_000, 'impressions' => 2_000_000]),
-            $this->row('sales', 'meta', ['spend' => 1_000, 'conversions' => 50, 'revenue' => 10_000]),
+            $this->row('sales', 'meta', ['spend' => 1_000, 'purchases' => 50, 'revenue' => 10_000]),
         ]);
 
         $this->assertTrue($section['mixed']);
@@ -250,8 +252,8 @@ final class ObjectiveReportAnalyticsTest extends TestCase
     public function two_ends_a_rounding_apart_are_not_a_strongest_and_a_weakest(): void
     {
         $ranking = $this->family($this->build([
-            $this->row('sales', 'meta', ['spend' => 1_000, 'conversions' => 20]),      // 50.00
-            $this->row('sales', 'snapchat', ['spend' => 999.8, 'conversions' => 20]),  // 49.99
+            $this->row('sales', 'meta', ['spend' => 1_000, 'purchases' => 20]),      // 50.00
+            $this->row('sales', 'snapchat', ['spend' => 999.8, 'purchases' => 20]),  // 49.99
         ]), 'sales')['platform_ranking'];
 
         $this->assertNull($ranking['best']);
@@ -263,8 +265,8 @@ final class ObjectiveReportAnalyticsTest extends TestCase
     {
         // Reach reported, but no spend-per-impression: the canonical fallback is a volume — refused.
         $ranking = $this->family($this->build([
-            $this->row('awareness', 'meta', ['spend' => 100, 'reach' => 90_000]),
-            $this->row('awareness', 'tiktok', ['spend' => 100, 'reach' => 10_000]),
+            $this->row('awareness', 'meta', ['spend' => 100, 'reach' => 90_000, 'grains' => 1]),
+            $this->row('awareness', 'tiktok', ['spend' => 100, 'reach' => 10_000, 'grains' => 1]),
         ]), 'awareness')['platform_ranking'];
 
         $this->assertNull($ranking['best']);
@@ -275,15 +277,15 @@ final class ObjectiveReportAnalyticsTest extends TestCase
     public function sales_platforms_rank_on_roas_and_fall_back_to_cpa_when_revenue_is_not_reported(): void
     {
         $withRevenue = $this->family($this->build([
-            $this->row('sales', 'meta', ['spend' => 1_000, 'conversions' => 20, 'revenue' => 5_000]),
-            $this->row('sales', 'snapchat', ['spend' => 1_000, 'conversions' => 30, 'revenue' => 2_000]),
+            $this->row('sales', 'meta', ['spend' => 1_000, 'purchases' => 20, 'revenue' => 5_000]),
+            $this->row('sales', 'snapchat', ['spend' => 1_000, 'purchases' => 30, 'revenue' => 2_000]),
         ]), 'sales')['platform_ranking'];
         $this->assertSame('roas', $withRevenue['metric']);
         $this->assertSame('meta', $withRevenue['best']['provider']);
 
         $noRevenue = $this->family($this->build([
-            $this->row('sales', 'meta', ['spend' => 1_000, 'conversions' => 20]),
-            $this->row('sales', 'snapchat', ['spend' => 1_000, 'conversions' => 40]),
+            $this->row('sales', 'meta', ['spend' => 1_000, 'purchases' => 20]),
+            $this->row('sales', 'snapchat', ['spend' => 1_000, 'purchases' => 40]),
         ]), 'sales')['platform_ranking'];
         $this->assertSame('cpa', $noRevenue['metric']);
         $this->assertSame('snapchat', $noRevenue['best']['provider']);
@@ -295,8 +297,8 @@ final class ObjectiveReportAnalyticsTest extends TestCase
     {
         // Only Meta sends revenue, so ROAS compares nothing; both send orders, so CPA compares two.
         $ranking = $this->family($this->build([
-            $this->row('sales', 'meta', ['spend' => 1_000, 'conversions' => 20, 'revenue' => 5_000]),
-            $this->row('sales', 'snapchat', ['spend' => 1_000, 'conversions' => 40]),
+            $this->row('sales', 'meta', ['spend' => 1_000, 'purchases' => 20, 'revenue' => 5_000]),
+            $this->row('sales', 'snapchat', ['spend' => 1_000, 'purchases' => 40]),
         ]), 'sales')['platform_ranking'];
 
         $this->assertSame('cpa', $ranking['metric']);
@@ -349,18 +351,18 @@ final class ObjectiveReportAnalyticsTest extends TestCase
     #[Test]
     public function sales_contribution_uses_revenue_when_reported_and_orders_otherwise(): void
     {
-        $withRevenue = $this->family($this->build([$this->row('sales', 'meta', ['spend' => 1, 'conversions' => 1, 'revenue' => 10])]), 'sales');
+        $withRevenue = $this->family($this->build([$this->row('sales', 'meta', ['spend' => 1, 'purchases' => 1, 'revenue' => 10])]), 'sales');
         $this->assertSame('revenue', $withRevenue['contribution']['outcome']);
 
-        $orders = $this->family($this->build([$this->row('sales', 'meta', ['spend' => 1, 'conversions' => 1])]), 'sales');
-        $this->assertSame('conversions', $orders['contribution']['outcome']);
+        $orders = $this->family($this->build([$this->row('sales', 'meta', ['spend' => 1, 'purchases' => 1])]), 'sales');
+        $this->assertSame('purchases', $orders['contribution']['outcome']);
 
         // Revenue from one platform only: the share is of orders, which both reported.
         $partial = $this->family($this->build([
-            $this->row('sales', 'meta', ['spend' => 1, 'conversions' => 3, 'revenue' => 10]),
-            $this->row('sales', 'snapchat', ['spend' => 1, 'conversions' => 1]),
+            $this->row('sales', 'meta', ['spend' => 1, 'purchases' => 3, 'revenue' => 10]),
+            $this->row('sales', 'snapchat', ['spend' => 1, 'purchases' => 1]),
         ]), 'sales');
-        $this->assertSame('conversions', $partial['contribution']['outcome']);
+        $this->assertSame('purchases', $partial['contribution']['outcome']);
         $this->assertSame([0.75, 0.25], array_column($partial['contribution']['rows'], 'share'));
     }
 
@@ -382,6 +384,80 @@ final class ObjectiveReportAnalyticsTest extends TestCase
         $this->assertFalse($trend['points'][1]['reported']);
         $this->assertNull($trend['points'][1]['value'], 'a day with no row is a gap, not a zero');
         $this->assertSame(15.0, $trend['points'][2]['value']);
+    }
+
+    #[Test]
+    public function reach_summed_across_days_is_not_reach_and_frequency_goes_with_it(): void
+    {
+        // Fourteen daily reach rows for one campaign: their sum counts a returning person fourteen times.
+        $row = $this->row('awareness', 'meta', ['spend' => 500, 'impressions' => 100_000, 'reach' => 60_000]);
+        $row['reach_rows'] = 14;
+        $row['grains'] = 14;
+
+        $block = $this->family($this->build([$row]), 'awareness');
+
+        $this->assertSame(['value' => null, 'state' => 'unavailable', 'reason' => 'not_reported'], array_intersect_key($this->kpi($block, 'reach'), array_flip(['value', 'state', 'reason'])));
+        $this->assertSame(['value' => null, 'state' => 'unavailable', 'reason' => 'not_reported'], array_intersect_key($this->kpi($block, 'frequency'), array_flip(['value', 'state', 'reason'])));
+    }
+
+    #[Test]
+    public function reach_summed_across_platforms_is_not_reach_even_when_each_platform_reports_its_own(): void
+    {
+        $block = $this->family($this->build([
+            $this->row('awareness', 'meta', ['spend' => 100, 'impressions' => 10_000, 'reach' => 4_000, 'grains' => 1]),
+            $this->row('awareness', 'tiktok', ['spend' => 100, 'impressions' => 10_000, 'reach' => 5_000, 'grains' => 1]),
+        ]), 'awareness');
+
+        $this->assertSame('unavailable', $this->kpi($block, 'reach')['state']);
+        $this->assertSame('unavailable', $this->kpi($block, 'frequency')['state']);
+
+        $meta = collect($block['platforms'])->firstWhere('provider', 'meta');
+        $reach = collect($meta['kpis'])->firstWhere('key', 'reach');
+        $this->assertSame(4_000.0, $reach['value'], 'one platform, one grain: the provider\'s own deduplicated reach');
+        $this->assertSame(2.5, collect($meta['kpis'])->firstWhere('key', 'frequency')['value']);
+    }
+
+    #[Test]
+    public function purchases_are_the_providers_purchases_and_cpa_rests_on_the_platforms_that_sent_them(): void
+    {
+        $block = $this->family($this->build([
+            $this->row('sales', 'meta', ['spend' => 1_000, 'purchases' => 20, 'conversions' => 90]),
+            $this->row('sales', 'snapchat', ['spend' => 500, 'conversions' => 30]),
+        ]), 'sales');
+
+        $this->assertSame(['spend', 'purchases', 'revenue', 'cpa', 'roas'], array_column($block['kpis'], 'key'));
+        $this->assertSame('المشتريات', $this->kpi($block, 'purchases')['label_ar']);
+        $this->assertSame(20.0, $this->kpi($block, 'purchases')['value']);
+        // Meta's spend over Meta's purchases — Snapchat's conversions are not purchases.
+        $this->assertSame(50.0, $this->kpi($block, 'cpa')['value']);
+        $this->assertSame(['snapchat'], $this->kpi($block, 'cpa')['not_reported_by']);
+        $this->assertNull($this->kpi($block, 'conversions'));
+    }
+
+    #[Test]
+    public function conversions_are_labelled_conversions_where_no_platform_sends_purchases(): void
+    {
+        $block = $this->family($this->build([
+            $this->row('sales', 'meta', ['spend' => 1_000, 'conversions' => 40]),
+            $this->row('sales', 'snapchat', ['spend' => 1_000, 'conversions' => 20]),
+        ]), 'sales');
+
+        $this->assertSame(['spend', 'conversions', 'revenue', 'cost_per_conversion', 'roas'], array_column($block['kpis'], 'key'));
+        $this->assertSame('التحويلات', $this->kpi($block, 'conversions')['label_ar']);
+        $this->assertSame('Conversions', $this->kpi($block, 'conversions')['label_en']);
+        $this->assertSame('تكلفة التحويل', $this->kpi($block, 'cost_per_conversion')['label_ar']);
+        $this->assertEqualsWithDelta(2_000 / 60, $this->kpi($block, 'cost_per_conversion')['value'], 0.01);
+        $this->assertNull($this->kpi($block, 'purchases'));
+        $this->assertNull($this->kpi($block, 'cpa'));
+        $this->assertStringNotContainsString('المشتريات', json_encode($block, JSON_UNESCAPED_UNICODE));
+
+        $ranking = $block['platform_ranking'];
+        $this->assertSame('cost_per_conversion', $ranking['metric']);
+        $this->assertSame('meta', $ranking['best']['provider']);
+        $this->assertSame('conversions', $block['contribution']['outcome']);
+
+        $redacted = $this->family(ObjectiveReportAnalytics::redact(['families' => [$block]], ['spend']), 'sales');
+        $this->assertNull($this->kpi($redacted, 'cost_per_conversion'), 'a cost per conversion is spend divided');
     }
 
     #[Test]
