@@ -169,6 +169,12 @@ final class IntegrationController extends Controller
             ->latest('updated_at')
             ->first();
 
+        // A revoked authorisation is a fact about this tenant, not «nobody has ever connected».
+        $revoked = $connection === null && ProviderConnection::query()
+            ->whereIn('provider', array_unique([$platform, $key]))
+            ->whereIn('status', ['revoked', 'disconnected'])
+            ->exists();
+
         /*
          * ACCOUNT-SCOPE-ISOLATION-001 — the card speaks for the accounts this connection FEEDS.
          *
@@ -195,6 +201,7 @@ final class IntegrationController extends Controller
             // otherwise a tenant would be offered a connect button the OAuth start is going to refuse.
             ! $this->settings->isEnabled($platform) => 'unavailable',
             ! $creds->isConfigured() => 'awaiting_credentials',
+            $revoked => 'revoked',
             $connection === null => 'disconnected',
             // An error outranks a run in progress: a stuck `running` row must not hide a broken authorisation.
             $connection->status === 'error' => 'error',

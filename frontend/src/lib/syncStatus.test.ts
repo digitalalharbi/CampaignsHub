@@ -21,8 +21,14 @@ describe('syncStatus', () => {
       // A sync run's outcome.
       'running', 'success', 'no_data', 'partial_mapping', 'failed', 'awaiting_assignment',
       // A source's freshness — `DataFreshnessService::verdict()`.
-      'fresh', 'stale', 'awaiting_credentials',
+      // `partial`: the newest reply left a grain behind (ACCOUNT-SCOPE-ISOLATION-001) — not fresh.
+      'fresh', 'stale', 'awaiting_credentials', 'partial',
     ])
+  })
+
+  it('reads a partial source as needing attention, never as fresh', () => {
+    expect(syncStatusMeaning('partial').tone).toBe('warning')
+    expect(syncStatusMeaning('partial').en).toBe('Partial')
   })
 
   it('gives every freshness verdict a label and a tone that matches its meaning', () => {
