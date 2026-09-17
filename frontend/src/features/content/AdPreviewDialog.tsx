@@ -52,7 +52,7 @@ export function AdPreviewDialog({
   creative: CreativeCard
   locale: Locale
   /** The row's own numbers, already formatted by the surface that owns them. */
-  figures?: { label: string; value: string }[]
+  figures?: { key: string; label: string; value: string }[]
   /**
    * This creative's movement over the window, as a NODE the caller supplies.
    *
@@ -280,7 +280,9 @@ export function AdPreviewDialog({
         {figures && figures.length > 0 && (
           <div data-testid="ad-preview-dialog-figures" className="mt-3 grid grid-cols-3 gap-1.5">
             {figures.map((f) => (
-              <div key={f.label} className="rounded-lg bg-surface-secondary p-2 text-start">
+              /* The KEY travels with the tile: «the card and the panel state the same figure» is then
+                 a question about metrics rather than about wording, in either language. */
+              <div key={f.key} data-metric={f.key} className="rounded-lg bg-surface-secondary p-2 text-start">
                 <div className="text-[11px] font-semibold leading-tight text-text-muted">{f.label}</div>
                 <div className="tnum text-sm font-bold text-text-primary"><Num>{f.value}</Num></div>
               </div>

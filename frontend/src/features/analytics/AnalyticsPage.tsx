@@ -140,7 +140,8 @@ import { AttributionPanel } from './AttributionPanel'
 import { AdPoster } from '@/features/content/AdPoster'
 import { usePortalPath } from '@/app/portalPath'
 import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
-import { creativeDialogFigures } from '@/features/content/creativeDialogFigures'
+import { creativeDialogFigures, type DialogFigure } from '@/features/content/creativeDialogFigures'
+import { metricLabel } from '@/features/content/metrics'
 import { CreativeComparison, CreativeTrend } from '@/features/content/CreativeTrend'
 import { creativeScope, decodePath, drillInto, drillUpTo, encodePath, nextLevel, parentFor, rememberName,
   stepLabel, withNames,
@@ -2848,7 +2849,7 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
     return map
   }, [previews.data])
 
-  const [openAd, setOpenAd] = useState<{ creative: CreativeCard; figures: { label: string; value: string }[] } | null>(null)
+  const [openAd, setOpenAd] = useState<{ creative: CreativeCard; figures: DialogFigure[] } | null>(null)
   /*
    * Drilling moves the TAB as well as the path.
    *
@@ -2943,9 +2944,9 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
               creative,
               // The row's own figures — the numbers the reader is looking at, not a second query.
               figures: [
-                { label: ar ? 'الإنفاق' : 'Spend', value: rowMoney(row, 'spend', currency) },
-                { label: ar ? 'الظهور' : 'Impressions', value: countCell(row.impressions).text },
-                { label: 'CTR', value: rateOrDash(row.ctr) },
+                { key: 'spend', label: metricLabel('spend', ar ? 'ar' : 'en'), value: rowMoney(row, 'spend', currency) },
+                { key: 'impressions', label: metricLabel('impressions', ar ? 'ar' : 'en'), value: countCell(row.impressions).text },
+                { key: 'ctr', label: metricLabel('ctr', ar ? 'ar' : 'en'), value: rateOrDash(row.ctr) },
               ],
             })
           }}

@@ -78,6 +78,7 @@ final class SnapchatLpvProvenanceTest extends TestCase
         $this->entityRow('2026-09-12', lpv: 90, pageViews: 90);   // inside reach
         $this->entityRow('2026-08-22', lpv: 40, pageViews: 90);   // outside reach, delivery mapping
         $this->entityRow('2026-08-23', lpv: null, pageViews: 90); // no LPV at all — not counted
+        $this->entityRow('2026-08-24', lpv: 0, pageViews: 0);     // a real day with no views: matches, but is not evidence
 
         $before = $this->digest();
 
@@ -87,12 +88,12 @@ final class SnapchatLpvProvenanceTest extends TestCase
         $this->assertSame($before, $this->digest(), 'the provenance count changed a table it was only meant to read');
 
         $this->assertStringContainsString('earliest window start 2026-09-09', $output);
-        $this->assertStringContainsString("outside the sweep's reach (before 2026-09-09): 3 row(s), 2 with the old mapping's signature", $output);
+        $this->assertStringContainsString("outside the sweep's reach (before 2026-09-09): 4 row(s), 3 with the old mapping's signature", $output);
         $this->assertStringContainsString("inside the sweep's reach: 1 row(s)", $output);
         $this->assertStringContainsString('bodies read: 1', $output);
         $this->assertMatchesRegularExpression('/ad\\s+landing_page_views\\s+key absent 1, JSON null 1, zero 0, positive 0/', $output);
         $this->assertMatchesRegularExpression('/ad\\s+conversion_page_views\\s+key absent 0, JSON null 0, zero 1, positive 1/', $output);
-        $this->assertMatchesRegularExpression('/ad\s+2026-08\s+3\s+2\s+2026-08-20\s+2026-08-22/', $output);
+        $this->assertMatchesRegularExpression('/ad\s+2026-08\s+4\s+3\s+2\s+0\s+0\s+2026-08-20\s+2026-08-24/', $output);
     }
 
     private function entityRow(string $date, ?int $lpv, ?int $pageViews): void

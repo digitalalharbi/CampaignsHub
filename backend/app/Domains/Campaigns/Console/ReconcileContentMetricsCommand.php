@@ -6,6 +6,7 @@ namespace App\Domains\Campaigns\Console;
 
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CardPopupParity;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativeRows;
@@ -189,6 +190,8 @@ final class ReconcileContentMetricsCommand extends Command
             .'   video: '.(($preview['video_url'] ?? null) !== null ? 'yes' : 'no')
             .'   cards: '.(is_array($preview['cards'] ?? null) ? (string) count((array) $preview['cards']) : 'not fetched'));
 
+        $this->cardAgainstPopup($card + ['preview' => $preview]);
+
         if (($preview['image_url'] ?? null) === null && ($preview['video_url'] ?? null) === null
             && ($preview['thumbnail_url'] ?? null) === null && ! is_array($preview['cards'] ?? null)) {
             $this->mediaProvenance($creative);
@@ -287,7 +290,7 @@ final class ReconcileContentMetricsCommand extends Command
     private const STRUCTURE_MAX_BODIES = 400;
 
     /**
-     * RUNG 10 — where the platform's media stopped, read from the latest sweep's OWN bodies.
+     * RUNG 11 — where the platform's media stopped, read from the latest sweep's OWN bodies.
      *
      * Census A found four Snapchat collections with nothing to draw while hundreds on the same account
      * draw. The row can only say «nothing arrived»; the structure sweep retained what the platform
@@ -300,7 +303,7 @@ final class ReconcileContentMetricsCommand extends Command
     private function mediaProvenance(ExternalCreative $creative): void
     {
         $this->line('');
-        $this->line('RUNG 10 — where the media stopped (the latest retained structure sweep; key names and platform states only)');
+        $this->line('RUNG 11 — where the media stopped (the latest retained structure sweep; key names and platform states only)');
         $this->line('    row last synced       : '.($creative->last_synced_at?->toDateTimeString() ?? 'never'));
 
         if ((string) $creative->provider !== 'snapchat') {
@@ -464,6 +467,57 @@ final class ReconcileContentMetricsCommand extends Command
         }
 
         return preg_match('/^[A-Z][A-Z0-9_]{0,39}$/', $value) === 1 ? $value : 'other';
+    }
+
+    /**
+     * RUNG 10 — what the CARD and the POPUP each resolve to, from this one payload.
+     *
+     * OWNER CONTENT P0: the owner read a card showing Spend and three figures beside a popup showing
+     * five more, and a card drawing a picture whose creative said it had no cover. #505 closed both
+     * and guarded them in a browser — which is exactly what cannot be pointed at Production here, so
+     * this asks the same question on the server, of the payload the two surfaces actually receive.
+     *
+     * `CardPopupParity` mirrors the browser's own rules and is held to them by its own test. The
+     * output is metric KEYS with their states, the preview DECISION each surface reads, and one
+     * verdict. Never a value, a name, an account or a url.
+     *
+     * @param  array<string, mixed>  $card  the library row, as `CreativeRows::present()` returns it
+     */
+    private function cardAgainstPopup(array $card): void
+    {
+        $parity = app(CardPopupParity::class);
+
+        $cardFigures = $parity->card($card);
+        $popupFigures = $parity->popup($card);
+        $preview = $parity->preview($card);
+
+        $say = static fn (array $figures): string => $figures === []
+            ? 'none'
+            : implode(', ', array_map(
+                static fn (string $key, string $state): string => $key.'='.$state,
+                array_keys($figures),
+                $figures,
+            ));
+
+        $shape = static fn (string $draws): string => sprintf(
+            'kind=%s  state=%s  hero=%s  tiles=%s  draws=%s',
+            $preview['kind'], $preview['state'], $preview['hero'], $preview['tiles'], $draws,
+        );
+
+        $differences = $parity->differences($cardFigures, $popupFigures, $preview);
+
+        $this->line('');
+        $this->line('RUNG 10 — CARD ↔ POPUP  (what each surface resolves to from this payload; keys and states, never values)');
+        $this->line('    card  figures : '.$say($cardFigures));
+        $this->line('    popup figures : '.$say($popupFigures));
+        $this->line('    card  preview : '.$shape($preview['card_draws']));
+        $this->line('    popup preview : '.$shape($preview['popup_draws']));
+        $this->line('    PARITY        : '.($differences === [] ? 'MATCH' : 'DIFFERS'));
+
+        foreach ($differences as $difference) {
+            $this->line('                  · '.$difference);
+            $this->divergences[] = 'card ↔ popup: '.$difference;
+        }
     }
 
     /**

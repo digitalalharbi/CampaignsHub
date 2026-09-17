@@ -18,6 +18,7 @@ use App\Domains\Integrations\Providers\ReportsEntityGrains;
 use App\Domains\Integrations\Providers\SnapchatConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\Actions\UpsertEntityDailyMetrics;
 use App\Domains\Metrics\Enums\SyncRunStatus;
@@ -280,8 +281,9 @@ final class AccountMetricsSyncer
          * and CPA, which Meta reports perfectly well, and the product printed our silence as the
          * platform's.
          */
+        $entityFailure = null;
         if ($connector instanceof ReportsEntityGrains) {
-            $this->syncEntityGrains($connector, $account, $run, $from, $to);
+            $entityFailure = $this->syncEntityGrains($connector, $account, $run, $from, $to);
         }
 
         /*
@@ -356,6 +358,25 @@ final class AccountMetricsSyncer
             );
         }
 
+        /*
+         * ENTITY-GRAIN-FAILURE-001 — a run whose ad-set or ad grain failed is not a success.
+         *
+         * The campaign figures landed, so this is not `failed`; but the ad and ad-set rows in the
+         * window were left as they were, and a green run over them is how a re-sync of 3,979 stale
+         * rows reported success while rewriting none of them.
+         */
+        if ($entityFailure !== null) {
+            return $this->finish(
+                $run,
+                SyncRunStatus::PartialMapping,
+                $upserted,
+                'Campaign figures were stored; the ad-set/ad grain was not: '.$entityFailure,
+                $account,
+                $counts,
+                'entity_grain_failed',
+            );
+        }
+
         return $this->finish($run, SyncRunStatus::Success, $upserted, null, $account, $counts);
     }
 
@@ -416,7 +437,7 @@ final class AccountMetricsSyncer
         MetricSyncRun $run,
         Carbon $from,
         Carbon $to,
-    ): void {
+    ): ?string {
         /*
          * The campaigns this account owns — the parents of the ad-squad grain.
          *
@@ -443,16 +464,25 @@ final class AccountMetricsSyncer
         $campaigns = ExternalCampaign::withoutGlobalScopes()
             ->where('external_account_id', $account->id)
             ->where(function ($q): void {
-                $q->whereNull('raw')->orWhereJsonDoesntContain('raw->sandbox', true);
+                // NOT `orWhereJsonDoesntContain('raw->sandbox', true)`: on PostgreSQL a live campaign's
+                // body has no `sandbox` key, `NOT (NULL @> 'true')` is NULL, and every real campaign
+                // dropped out — the sweep asked for 0 campaigns and the ad grains were never refreshed.
+                $q->whereNull('raw')
+                    ->orWhereNull('raw->sandbox')
+                    ->orWhereJsonDoesntContain('raw->sandbox', true);
             })
             ->pluck('external_id', 'id');
 
+        $squadThrown = null;
         $squadRows = $this->grain(
-            fn (): array => $connector->entityInsights(
+            fn (): SyncResult => $connector->entityInsights(
                 $account->external_id, ReportsEntityGrains::AD_SET,
                 $campaigns->values()->all(), $from->toDateString(), $to->toDateString(),
-            )->records,
+            ),
+            $squadThrown,
         );
+        // Read now: the ad sweep below resets the connector's own record of a refusal.
+        $squadFailure = $squadThrown ?? $connector->lastEntityFailure();
 
         /*
          * The sweep resolves the provider's ids against what the structure sync already discovered.
@@ -477,7 +507,9 @@ final class AccountMetricsSyncer
         $squadResult = app(UpsertEntityDailyMetrics::class)->execute(
             $account, EntityDailyMetric::AD_SET, $squadRows, $knownSquads, (string) $run->getKey(),
         );
+        $squadFailure ??= $this->nothingPlaced('ad-set', count($squadRows), $squadResult['upserted']);
 
+        $adThrown = null;
         $adRows = $this->grain(
             /*
              * Ads come from the CAMPAIGN endpoint, not the ad-squad one.
@@ -489,12 +521,14 @@ final class AccountMetricsSyncer
              *
              * Asking campaigns for both grains is also 89 calls instead of 187 + 89.
              */
-            fn (): array => $connector->entityInsights(
+            fn (): SyncResult => $connector->entityInsights(
                 $account->external_id, ReportsEntityGrains::AD,
                 $campaigns->values()->all(),
                 $from->toDateString(), $to->toDateString(),
-            )->records,
+            ),
+            $adThrown,
         );
+        $adFailure = $adThrown ?? $connector->lastEntityFailure();
 
         $ads = ExternalAd::withoutGlobalScopes()
             ->whereIn('external_ad_set_id', $squads->modelKeys())
@@ -514,6 +548,7 @@ final class AccountMetricsSyncer
         $adResult = app(UpsertEntityDailyMetrics::class)->execute(
             $account, EntityDailyMetric::AD, $adRows, $knownAds, (string) $run->getKey(),
         );
+        $adFailure ??= $this->nothingPlaced('ad', count($adRows), $adResult['upserted']);
 
         /*
          * Record WHY the grains are empty, when they are.
@@ -528,24 +563,66 @@ final class AccountMetricsSyncer
                 ...(array) ($run->meta ?? []),
                 'entity_ad_sets' => $squadResult['upserted'],
                 'entity_ads' => $adResult['upserted'],
-                'entity_failure' => $connector->lastEntityFailure(),
+                /*
+                 * What was ASKED and what CAME BACK, beside what was written: «0 rows written» is three
+                 * different facts — no parent to ask, the platform answered with nothing, or rows came
+                 * back that matched no discovered entity — and only these numbers tell them apart.
+                 */
+                'entity_parents_asked' => $campaigns->count(),
+                'entity_ad_sets_fetched' => count($squadRows),
+                'entity_ad_sets_skipped' => $squadResult['skipped'],
+                'entity_ads_fetched' => count($adRows),
+                'entity_ads_skipped' => $adResult['skipped'],
+                'entity_failure' => $squadFailure ?? $adFailure,
+                'entity_ad_sets_failure' => $squadFailure,
+                'entity_ads_failure' => $adFailure,
             ],
         ])->save();
+
+        return $squadFailure ?? $adFailure;
     }
 
     /**
      * One grain's fetch, with its failure contained.
      *
-     * @param  callable(): list<array<string,mixed>>  $fetch
+     * The failure is contained, not discarded: `$failure` receives what was thrown, so the run can
+     * say the grain failed instead of reading success over rows it never rewrote.
+     *
+     * @param  callable(): (SyncResult|list<array<string,mixed>>)  $fetch
      * @return list<array<string,mixed>>
      */
-    private function grain(callable $fetch): array
+    private function grain(callable $fetch, ?string &$failure = null): array
     {
         try {
-            return $fetch();
-        } catch (Throwable) {
+            $result = $fetch();
+
+            /*
+             * A connector may report a failure without throwing: Snapchat's `syncEntityInsights()`
+             * catches everything and returns `SyncResult::failed($message)`. Reading only `->records`
+             * turned that into an empty, successful grain — the message is kept now.
+             */
+            if ($result instanceof SyncResult) {
+                if (! $result->success) {
+                    $failure = Str::limit((string) ($result->message ?? 'The platform reported a failure with no message.'), 480);
+                }
+
+                return $result->records;
+            }
+
+            return $result;
+        } catch (Throwable $e) {
+            $failure = Str::limit(class_basename($e).': '.$e->getMessage(), 480);
+
             return [];
         }
+    }
+
+    /** Rows came back and none matched a discovered entity: nothing was written, and that is not a success. */
+    private function nothingPlaced(string $grain, int $fetched, int $upserted): ?string
+    {
+        return $fetched > 0 && $upserted === 0
+            ? "{$fetched} {$grain} row(s) came back and none matched a discovered {$grain}, so none was stored."
+            : null;
     }
 
     /**

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Support;
 
+use App\Domains\Integrations\Configuration\ProviderConfigurationService;
+use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
+
 /**
  * INTEGRATION-ERROR-CONTRACT-001 — one place that prepares a provider's failure for storage.
  *
@@ -75,9 +78,88 @@ final class ProviderErrorText
         return mb_substr($text, 0, self::CEILING).' […truncated]';
     }
 
+    /**
+     * The message itself, credentials removed, with NO ceiling — for a reader who is about to be
+     * told it now, not a row that will be read later.
+     *
+     * The OAuth callback sends the failure back to the browser as `?reason=`, and Guzzle's own
+     * connection-failure message names the URL that failed, query string and all. TikTok's discovery
+     * call carries the app secret in that query string, so a timeout during discovery would have put
+     * the secret in the address bar and the browser history. The caller trims for the URL; the
+     * redaction happens here, before the trim, so a cut cannot leave half a secret standing.
+     */
+    public static function forDisplay(?string $raw): ?string
+    {
+        if ($raw === null) {
+            return null;
+        }
+
+        $text = trim(self::redact($raw));
+
+        return $text === '' ? null : $text;
+    }
+
+    /**
+     * A request receipt: the URL a connector called, with every credential removed.
+     *
+     * By NAME through the same list `forStorage()` uses, and by VALUE through `$secretValues` — the
+     * configured secrets the connector holds. The name list catches `secret=`; only the value catches
+     * the next platform that calls the same parameter `sig`, `key` or `pass`. The rest of the URL
+     * stays whole, because a receipt that reads `https://[redacted]` is no receipt: the endpoint and
+     * the non-secret parameters are what a diagnosis compares against the platform's own reference.
+     *
+     * @param  list<string>  $secretValues
+     */
+    public static function forReceipt(string $url, array $secretValues = []): string
+    {
+        $text = self::redact($url);
+
+        foreach ($secretValues as $value) {
+            if ($value === '') {
+                continue;
+            }
+            $text = str_replace([$value, rawurlencode($value), urlencode($value)], '[redacted]', $text);
+        }
+
+        return $text;
+    }
+
+    /**
+     * META-CANDIDATE-001 — the Meta app secrets this install holds, Live AND Candidate, by VALUE.
+     *
+     * The key-name rule above catches `client_secret=`. It cannot catch a secret quoted under any
+     * other name, and the Candidate app adds a second secret that flows through the same callback and
+     * the same error paths as Live. So both are removed wherever they appear. Best-effort by design:
+     * outside a booted application (a plain unit test) there is nothing configured to find.
+     *
+     * @return list<string>
+     */
+    private static function configuredSecretValues(): array
+    {
+        try {
+            if (! function_exists('app') || ! app()->bound('config')) {
+                return [];
+            }
+
+            $values = [
+                app(ProviderConfigurationService::class)->value('meta', 'client_secret'),
+                app(MetaCandidateCredentials::class)->value('client_secret'),
+            ];
+        } catch (\Throwable) {
+            return [];
+        }
+
+        // Too short to be a real secret, and replacing it would shred ordinary words.
+        return array_values(array_filter($values, static fn ($v) => is_string($v) && strlen($v) >= 8));
+    }
+
     /** Replace the VALUE of anything that names a credential, in query strings, JSON and headers. */
     private static function redact(string $text): string
     {
+        foreach (self::configuredSecretValues() as $value) {
+            $text = str_replace([$value, rawurlencode($value), urlencode($value)], '[redacted]', $text);
+        }
+
         $keys = implode('|', array_map('preg_quote', self::SECRET_KEYS));
 
         /*

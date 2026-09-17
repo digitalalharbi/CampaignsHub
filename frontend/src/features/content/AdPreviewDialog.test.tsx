@@ -58,7 +58,7 @@ describe('the in-place ad preview', () => {
       <AdPreviewDialog
         creative={creative()}
         locale="en"
-        figures={[{ label: 'Spend', value: '4.2K SAR' }, { label: 'Impressions', value: '310K' }]}
+        figures={[{ key: 'spend', label: 'Spend', value: '4.2K SAR' }, { key: 'impressions', label: 'Impressions', value: '310K' }]}
         onClose={() => {}}
       />,
       { locale: 'en' },
@@ -314,7 +314,7 @@ describe('what the popup puts first', () => {
       <AdPreviewDialog
         creative={withEverything() as never}
         locale="en"
-        figures={[{ label: 'Spend', value: '10 USD' }]}
+        figures={[{ key: 'spend', label: 'Spend', value: '10 USD' }]}
         trend={<div data-testid="a-chart" />}
         onClose={() => {}}
       />,

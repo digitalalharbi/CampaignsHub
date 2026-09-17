@@ -128,6 +128,61 @@ final class CreativeLibraryApiTest extends TestCase
     }
 
     /**
+     * OWNER CONTENT P0 — a collection with a hero, no tiles, and a full set of figures.
+     *
+     * The owner's production reading, on one creative and one period: the CARD showed Spend and three
+     * figures while the POPUP one click away showed impressions, clicks, CTR, CPC and CPM as well. The
+     * card's list is `headline_metrics`, and it was capped — the objective's own metrics filled the
+     * four cells the card had room for, and every universal figure the platform DID report for the
+     * same creative and window was dropped before it ever reached a surface.
+     *
+     * A cap is a layout decision. Losing a provider-reported figure on the way to the payload is not:
+     * the popup, Content Analytics and the report all read this list, so one number of cells decided
+     * what four surfaces could say. The payload now carries every figure this row can answer, and the
+     * card decides how many to draw at once.
+     *
+     * The shape is the owner's: a collection whose hero image IS available while its product tiles
+     * were never fetched. Missing tiles must not suppress the hero — the preview stays `available`
+     * with the hero on it, and `cards_reported` says the tiles are a separate, unanswered question.
+     */
+    public function test_a_collection_with_a_hero_carries_every_figure_it_can_answer(): void
+    {
+        $creative = $this->creative([
+            'name' => 'Collection with a hero',
+            'format' => 'collection',
+            'campaign_id' => $this->sales->getKey(),
+            'asset_url' => 'https://cdn.test/hero.jpg',
+            'cards' => null,
+        ]);
+
+        $this->day($creative, now()->subDay()->toDateString(), [
+            'spend' => 400, 'impressions' => 90_000, 'clicks' => 1_800,
+            'conversions' => 60, 'revenue' => 3_000,
+        ]);
+
+        $row = collect($this->actingAs($this->operator, 'sanctum')
+            ->getJson($this->url($this->window()))
+            ->assertOk()
+            ->json('data.creatives'))->firstWhere('id', (string) $creative->getKey());
+
+        // The hero is drawn, and the tiles are a separate statement — not a reason to hide it.
+        $this->assertSame('available', $row['preview']['state']);
+        $this->assertSame('collection', $row['preview']['kind']);
+        $this->assertSame('https://cdn.test/hero.jpg', $row['preview']['image_url']);
+        $this->assertFalse($row['preview']['cards_reported'], 'the tiles were never fetched, and the payload must say so');
+
+        $headline = $row['headline_metrics'];
+
+        // The objective's own verdict still leads: the family's answerable metrics, in the family's order.
+        $this->assertSame(['spend', 'orders', 'cpa', 'revenue', 'roas', 'conversion_rate', 'aov'], array_slice($headline, 0, 7));
+
+        // And every universal figure this row reported survives to the payload the popup already shows.
+        foreach (['impressions', 'clicks', 'ctr', 'cpc', 'cpm'] as $universal) {
+            $this->assertContains($universal, $headline, "the platform reported {$universal} and the card's list dropped it");
+        }
+    }
+
+    /**
      * CONTENT-AD-DELIVERED-001 — the card must be able to tell «did not run» from «the platform did
      * not break this result down per creative».
      *

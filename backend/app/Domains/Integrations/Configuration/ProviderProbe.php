@@ -228,9 +228,11 @@ final class ProviderProbe
         if (is_string($token) && $token !== '') {
             return [
                 'passed' => true,
+                // META-CANDIDATE-001 — the scopes named are the ones configured, not a fixed trio.
                 'message' => 'Meta issued an app access token for these credentials, so the App ID and App Secret are a '
-                    .'real pair that Meta recognises. That is all this proves: not that ads_read, ads_management or '
-                    .'business_management have been approved, not that App Review has passed, and not that any ad '
+                    .'real pair that Meta recognises. That is all this proves: not that the requested scopes ('
+                    .implode(', ', $this->settings->scopes('meta')).') have been approved, '
+                    .'not that App Review has passed, and not that any ad '
                     .'account has granted access. Those are proven when someone authorises and their accounts list.',
             ];
         }

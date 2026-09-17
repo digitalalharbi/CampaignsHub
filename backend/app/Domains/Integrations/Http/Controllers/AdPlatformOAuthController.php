@@ -6,13 +6,16 @@ namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
+use App\Domains\Integrations\MetaCandidate\MetaCandidateRoundTrip;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\AuthorizationState;
+use App\Domains\Integrations\OAuth\MetaCredentialProfile;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\PlatformOAuth;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Services\AccountDiscovery;
+use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\AdPlatforms;
@@ -158,16 +161,46 @@ final class AdPlatformOAuthController extends Controller
     {
         $creds = $this->credentialsOr404($provider);
 
-        // The platform's own refusal — the customer pressed "cancel", or the app is not approved.
-        if ($request->has('error')) {
-            return $this->back($creds->platform, 'denied', (string) $request->query('error_description', (string) $request->query('error')));
-        }
+        /*
+         * META-CANDIDATE-001 — one callback URL, two Meta apps, and the state decides which.
+         *
+         * For Meta the state is claimed FIRST, even on a refusal, because the profile inside it is what
+         * says whose flow this is. The profile is read from that verified record and from nothing else;
+         * a missing or tampered profile does not resolve, and the flow ends before a secret is sent.
+         */
+        if ($creds->platform === 'meta') {
+            $record = AuthorizationState::claim((string) $request->query('state', ''), 'meta');
 
-        $record = AuthorizationState::claim((string) $request->query('state', ''), $creds->platform);
+            if ($record !== null && $record['profile'] === MetaCredentialProfile::Candidate->value) {
+                $run = app(MetaCandidateRoundTrip::class)->complete($record, $request->query());
 
-        if ($record === null) {
-            // Deliberately vague to the browser, because this is the branch an attacker sees.
-            return $this->back($creds->platform, 'invalid_state', 'This authorisation link has expired or was already used.');
+                return redirect()->away(Frontend::origin().'/admin/settings/integrations/meta-candidate?'.http_build_query([
+                    'outcome' => $run === null ? 'invalid_state' : $run->status,
+                ]));
+            }
+
+            if ($request->has('error')) {
+                return $this->back($creds->platform, 'denied', (string) $request->query('error_description', (string) $request->query('error')));
+            }
+
+            if ($record === null) {
+                return $this->back($creds->platform, 'invalid_state', 'This authorisation link has expired or was already used.');
+            }
+
+            // Live, by the record — the same credentials `credentialsOr404` resolved, now by name.
+            $creds = PlatformCredentials::forMeta(MetaCredentialProfile::Live);
+        } else {
+            // The platform's own refusal — the customer pressed "cancel", or the app is not approved.
+            if ($request->has('error')) {
+                return $this->back($creds->platform, 'denied', (string) $request->query('error_description', (string) $request->query('error')));
+            }
+
+            $record = AuthorizationState::claim((string) $request->query('state', ''), $creds->platform);
+
+            if ($record === null) {
+                // Deliberately vague to the browser, because this is the branch an attacker sees.
+                return $this->back($creds->platform, 'invalid_state', 'This authorisation link has expired or was already used.');
+            }
         }
 
         /*
@@ -207,7 +240,9 @@ final class AdPlatformOAuthController extends Controller
             // The first real round trip. Until this returns, nothing is called connected.
             $discovered = $this->discoverAccounts($connection);
         } catch (Throwable $e) {
-            return $this->back($creds->platform, 'failed', $e->getMessage());
+            // Redacted before it is trimmed: a provider's own failure message names the URL that
+            // failed, and one platform's discovery URL carries the app secret (SecretNeverInLoggedUrlTest).
+            return $this->back($creds->platform, 'failed', ProviderErrorText::forDisplay($e->getMessage()));
         }
 
         $audit->log(

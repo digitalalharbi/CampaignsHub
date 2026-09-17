@@ -200,6 +200,11 @@ final class ProviderCatalogue
                 ProviderField::secret('client_secret', 'App Secret', 'سر التطبيق (App Secret)',
                     'Same page, revealed once after re-entering your password',
                     'الصفحة نفسها، ويُكشف بعد إعادة إدخال كلمة المرور'),
+                // META-CANDIDATE-001 — optional. Present, the dialog is built from this Facebook Login
+                // for Business configuration instead of a `scope` list; absent, nothing changes.
+                ProviderField::plain('config_id', 'Configuration ID (Facebook Login for Business)', 'معرّف الإعداد (Facebook Login for Business)',
+                    'developers.facebook.com → your app → Facebook Login for Business → Configurations',
+                    'developers.facebook.com ← تطبيقك ← Facebook Login for Business ← Configurations', required: false),
                 ProviderField::secret('webhook_verify_token', 'Webhook verify token', 'رمز التحقق للـ Webhook',
                     'A value you choose. Meta echoes it back on the one-time GET that activates the subscription',
                     'قيمة تختارها أنت. تعيدها ميتا في طلب GET لمرة واحدة يُفعّل الاشتراك', required: false),

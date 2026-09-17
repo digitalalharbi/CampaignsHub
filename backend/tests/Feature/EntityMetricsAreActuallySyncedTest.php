@@ -13,12 +13,14 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Services\AccountMetricsSyncer;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\MetricDefinitionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -104,6 +106,124 @@ final class EntityMetricsAreActuallySyncedTest extends TestCase
      * Asserted on the REQUEST rather than on the stored rows, because the defect is a call being
      * made: a version that filtered the results afterwards would store the same thing and still ask.
      */
+    /**
+     * ENTITY-GRAIN-FAILURE-001 — a refused ad-set/ad grain is recorded, and the run does not read success.
+     *
+     * Production re-synced 2026-08-16 → 2026-09-06: four runs read `success` and every one of the
+     * 3,979 ad and ad-set rows in the window kept its old value, because the grain's failure was
+     * dropped on the floor.
+     */
+    public function test_a_refused_entity_grain_is_recorded_and_the_run_is_not_a_success(): void
+    {
+        $this->seed(MetricDefinitionSeeder::class);
+        [$account] = $this->liveSnapchatAccount();
+
+        $this->fakeCampaignGrainThen(fn () => Http::response(['request_status' => 'ERROR', 'debug_message' => 'Request URL can not be correctly processed'], 400));
+
+        $run = app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-02'));
+
+        $this->assertGreaterThan(0, (int) $run->metrics_upserted, 'the campaign grain must still land');
+        $this->assertSame('partial_mapping', $run->status, 'a run whose entity grain failed read as success');
+        $this->assertStringContainsString('ad-set/ad grain', (string) $run->error);
+        $this->assertNotNull($run->meta['entity_ad_sets_failure'] ?? null);
+        $this->assertNotNull($run->meta['entity_ads_failure'] ?? null, 'the ad grain\'s refusal was overwritten by the reset');
+    }
+
+    public function test_a_connection_failure_at_the_entity_grain_is_recorded_rather_than_swallowed(): void
+    {
+        $this->seed(MetricDefinitionSeeder::class);
+        [$account] = $this->liveSnapchatAccount();
+
+        $this->fakeCampaignGrainThen(fn () => throw new ConnectionException('cURL error 28: timed out'));
+
+        $run = app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-02'));
+
+        $this->assertSame('partial_mapping', $run->status);
+        // Whatever the transport said, it is on the run and names the parent it failed on.
+        $this->assertStringContainsString('cmp-1', (string) ($run->meta['entity_failure'] ?? ''));
+    }
+
+    public function test_a_clean_entity_grain_leaves_the_run_a_success(): void
+    {
+        $this->seed(MetricDefinitionSeeder::class);
+        [$account] = $this->liveSnapchatAccount();
+
+        $this->fakeCampaignGrainThen(fn () => Http::response(['timeseries_stats' => []], 200));
+
+        $run = app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-02'));
+
+        $this->assertSame('success', $run->status);
+        $this->assertNull($run->meta['entity_failure'] ?? null);
+    }
+
+    /**
+     * ENTITY-GRAIN-FAILURE-001 — a connector that reports failure WITHOUT throwing is still a failure.
+     *
+     * Snapchat's `syncEntityInsights()` catches everything and returns `SyncResult::failed()`. The
+     * syncer read only `->records`, so after #479 the Production re-sync still read success while
+     * writing zero ad-set and ad rows, with no failure recorded anywhere.
+     */
+    public function test_a_failure_reported_as_a_result_rather_than_thrown_is_recorded(): void
+    {
+        $syncer = app(AccountMetricsSyncer::class);
+        $grain = (new \ReflectionClass($syncer))->getMethod('grain');
+
+        $failure = null;
+        $args = [fn () => SyncResult::failed('Snapchat has no connection bound.'), &$failure];
+        $rows = $grain->invokeArgs($syncer, $args);
+
+        $this->assertSame([], $rows);
+        $this->assertSame('Snapchat has no connection bound.', $failure, 'a failed SyncResult was read as an empty success');
+    }
+
+    /** Rows came back and none matched a discovered entity: not a success, and the counts say so. */
+    public function test_rows_that_match_no_discovered_entity_are_not_a_successful_grain(): void
+    {
+        $this->seed(MetricDefinitionSeeder::class);
+        [$account] = $this->liveSnapchatAccount();
+
+        $this->fakeCampaignGrainThen(fn () => Http::response(['timeseries_stats' => [
+            ['timeseries_stat' => ['breakdown_stats' => ['adsquad' => [
+                ['id' => 'sq-never-discovered', 'timeseries' => [[
+                    'start_time' => '2026-08-01T00:00:00.000+03:00', 'stats' => ['spend' => 1_000_000, 'impressions' => 10],
+                ]]],
+            ], 'ad' => []]]],
+        ]], 200));
+
+        $run = app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-02'));
+
+        $this->assertSame('partial_mapping', $run->status);
+        $this->assertStringContainsString('none matched a discovered ad-set', (string) ($run->meta['entity_ad_sets_failure'] ?? ''));
+        $this->assertGreaterThan(0, (int) ($run->meta['entity_ad_sets_fetched'] ?? 0));
+        $this->assertSame((int) $run->meta['entity_ad_sets_fetched'], (int) $run->meta['entity_ad_sets_skipped']);
+        $this->assertSame(1, (int) ($run->meta['entity_parents_asked'] ?? 0));
+    }
+
+    /** The account-level campaign breakdown answers; every entity-grain request gets `$entity`. */
+    private function fakeCampaignGrainThen(callable $entity): void
+    {
+        Http::fake(function ($request) use ($entity) {
+            $url = $request->url();
+
+            if (str_contains($url, 'breakdown=campaign')) {
+                return Http::response(['timeseries_stats' => [
+                    ['timeseries_stat' => ['type' => 'AD_ACCOUNT', 'breakdown_stats' => ['campaign' => [
+                        ['id' => 'cmp-1', 'timeseries' => [[
+                            'start_time' => '2026-08-01T00:00:00.000+03:00',
+                            'stats' => ['spend' => 100_000_000, 'impressions' => 1000, 'swipes' => 10],
+                        ]]],
+                    ]]]],
+                ]], 200);
+            }
+
+            if (str_contains($url, '/stats')) {
+                return $entity();
+            }
+
+            return Http::response([], 200);
+        });
+    }
+
     public function test_a_sandbox_campaign_is_never_asked_of_the_live_provider(): void
     {
         $this->seed(MetricDefinitionSeeder::class);
@@ -124,6 +244,28 @@ final class EntityMetricsAreActuallySyncedTest extends TestCase
 
         // ...and the real campaign beside it is still swept, so this is a filter and not a stop.
         Http::assertSent(fn ($request): bool => str_contains($request->url(), 'campaigns/cmp-1/stats'));
+    }
+
+    /**
+     * The live campaigns a real structure sync stores carry the provider's body in `raw` — with no
+     * `sandbox` key. The sandbox filter must keep them; on Production it dropped every one of them.
+     */
+    public function test_a_live_campaign_with_a_provider_body_is_still_swept(): void
+    {
+        $this->seed(MetricDefinitionSeeder::class);
+        [$account] = $this->liveSnapchatAccount();
+
+        ExternalCampaign::withoutGlobalScopes()
+            ->where('external_account_id', $account->id)
+            ->update(['raw' => json_encode(['id' => 'cmp-1', 'objective' => 'WEB_VIEW', 'status' => 'ACTIVE'])]);
+
+        $this->fakeSnapchatStats();
+
+        app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-02'));
+
+        Http::assertSent(fn ($request): bool => str_contains($request->url(), 'campaigns/cmp-1/stats'));
+        $this->assertGreaterThan(0, DB::table('entity_daily_metrics')->where('entity_type', 'ad_set')->count());
+        $this->assertGreaterThan(0, DB::table('entity_daily_metrics')->where('entity_type', 'ad')->count());
     }
 
     /** @return array{0: ExternalAccount, 1: Project} */
