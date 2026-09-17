@@ -68,8 +68,8 @@ final class ObjectiveAnalyticsSectionTest extends TestCase
 
         $this->campaign('Brand push', 'awareness', $this->accountInside, 'meta', ['spend' => 500, 'impressions' => 100_000]);
         $this->campaign('Lead form', 'leads', $this->accountInside, 'meta', ['spend' => 300, 'leads' => 0]);
-        $this->campaign('Summer sale', 'sales', $this->accountInside, 'meta', ['spend' => 1_000, 'conversions' => 50, 'revenue' => 10_000]);
-        $this->campaign('Other account sale', 'sales', $this->accountOutside, 'tiktok', ['spend' => 999, 'conversions' => 9]);
+        $this->campaign('Summer sale', 'sales', $this->accountInside, 'meta', ['spend' => 1_000, 'purchases' => 50, 'revenue' => 10_000]);
+        $this->campaign('Other account sale', 'sales', $this->accountOutside, 'tiktok', ['spend' => 999, 'purchases' => 9]);
 
         $this->report = Report::create([
             'project_id' => $this->project->id, 'name' => 'R', 'type' => 'monthly', 'status' => 'processing',
@@ -154,6 +154,7 @@ final class ObjectiveAnalyticsSectionTest extends TestCase
         $this->assertFalse($section['cross_family_blend']);
 
         $awareness = $this->family($section, 'awareness');
+        $this->assertSame('unavailable', $this->kpi($awareness, 'frequency')['state']);
         $this->assertSame('unavailable', $this->kpi($awareness, 'reach')['state'], 'reach was never sent');
         $this->assertSame('not_reported', $this->kpi($awareness, 'reach')['reason']);
         $this->assertSame(5.0, $this->kpi($awareness, 'cpm')['value']);
@@ -167,6 +168,33 @@ final class ObjectiveAnalyticsSectionTest extends TestCase
         // Sales spend only: 1000 ÷ 50. The awareness 500 and the leads 300 never reach it.
         $this->assertSame(20.0, $this->kpi($sales, 'cpa')['value']);
         $this->assertEquals(10.0, $this->kpi($sales, 'roas')['value']);
+    }
+
+    public function test_daily_reach_rows_are_not_summed_into_a_period_reach(): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        app(ProjectContext::class)->setProjectId($this->project->id);
+        $campaign = UnifiedCampaign::create(['project_id' => $this->project->id, 'name' => 'Reach', 'status' => 'active', 'objective' => 'reach']);
+        foreach (['2026-07-11', '2026-07-12'] as $day) {
+            foreach (['spend' => 10, 'impressions' => 5_000, 'reach' => 3_000] as $key => $value) {
+                DailyMetric::create([
+                    'id' => (string) Str::uuid(), 'project_id' => $this->project->id, 'external_account_id' => $this->accountInside,
+                    'external_campaign_id' => (string) Str::uuid(), 'unified_campaign_id' => $campaign->id, 'provider' => 'meta',
+                    'metric_key' => $key, 'metric_date' => $day, 'value' => $value,
+                ]);
+            }
+        }
+
+        $read = fn (string $from, string $to) => $this->family((new ObjectiveAnalyticsSection)->build(new ReportSectionInput(
+            from: Carbon::parse($from), to: Carbon::parse($to), projectIds: [(string) $this->project->id], accountIds: [$this->accountInside],
+        )), 'awareness');
+
+        // Two days: 6,000 would count a returning person twice. Not reach.
+        $this->assertSame('not_reported', $this->kpi($read('2026-07-11', '2026-07-12'), 'reach')['reason']);
+        // One campaign, one platform, one day: the provider's own deduplicated figure.
+        $oneDay = $read('2026-07-11', '2026-07-11');
+        $this->assertEquals(3_000, $this->kpi($oneDay, 'reach')['value']);
+        $this->assertEquals(round(5_000 / 3_000, 2), $this->kpi($oneDay, 'frequency')['value']);
     }
 
     public function test_the_live_link_carries_the_section_inside_its_account_ceiling(): void
@@ -191,7 +219,7 @@ final class ObjectiveAnalyticsSectionTest extends TestCase
         foreach (['spend', 'cpa', 'roas'] as $hidden) {
             $this->assertNotContains($hidden, $keys);
         }
-        $this->assertContains('conversions', $keys);
+        $this->assertContains('purchases', $keys);
         $this->assertNotContains('cpm', array_column($this->family($res->json('data.objective_analytics'), 'awareness')['kpis'], 'key'));
     }
 

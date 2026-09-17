@@ -141,6 +141,14 @@ final class ObjectiveReportAnalytics
             return $section;
         }
 
+        // A figure built from hidden money is hidden money: every cost-per this section can produce,
+        // including ones a shared list has never heard of (cost per conversion), goes with its base.
+        foreach ([...ObjectiveMetricFamilies::BASE, ...array_keys(ObjectiveMetricFamilies::DERIVED)] as $key) {
+            if (array_intersect(ObjectiveMetricFamilies::moneyParts($key), $hidden) !== []) {
+                $hidden[] = $key;
+            }
+        }
+
         $keep = static fn (array $kpis): array => array_values(array_filter(
             $kpis,
             static fn ($k): bool => is_array($k) && ! in_array($k['key'] ?? null, $hidden, true),
@@ -199,7 +207,10 @@ final class ObjectiveReportAnalytics
      */
     private function block(string $family, array $total, array $platforms, array $days, array $content, Carbon $from, Carbon $to): array
     {
-        $keys = ['spend', ...ObjectiveMetricFamilies::kpis($family)];
+        $purchases = (float) ($total['purchases_rows'] ?? 0) > 0;
+        $sales = ObjectiveMetricFamilies::salesKeys($purchases);
+        $keys = ['spend', ...($family === 'sales' ? $sales['kpis'] : ObjectiveMetricFamilies::kpis($family))];
+        $outcomes = $family === 'sales' ? $sales['outcomes'] : ObjectiveMetricFamilies::outcomes($family);
         $label = ObjectiveFamily::from($family)->label();
 
         $platformRows = [];
@@ -220,18 +231,18 @@ final class ObjectiveReportAnalytics
                 : null;
         }
 
-        $contribution = $this->contribution($family, $total, $platformRows);
+        $contribution = $this->contribution($outcomes, $total, $platformRows);
         $platformRanking = $this->rank($family, array_map(fn (array $r): array => [
             'provider' => $r['provider'],
             ...$this->flat($r['_bag']),
-        ], $platformRows));
+        ], $platformRows), $purchases);
 
         $contentRanking = $this->rank($family, array_map(fn (array $item): array => [
             'name' => (string) ($item['name'] ?? ''),
             'provider' => (string) ($item['provider'] ?? ''),
             'format' => $item['format'] ?? null,
             ...$this->contentFlat((array) $item['metrics']),
-        ], $content));
+        ], $content), $purchases);
 
         foreach ($platformRows as $i => $row) {
             unset($platformRows[$i]['_bag']);
@@ -246,7 +257,7 @@ final class ObjectiveReportAnalytics
             'contribution' => $contribution,
             'platform_ranking' => $platformRanking,
             'content_ranking' => $contentRanking,
-            'trend' => $this->trend($family, $total, $days, $contribution['outcome'] ?? null, $from, $to),
+            'trend' => $this->trend($keys, $total, $days, $contribution['outcome'] ?? null, $from, $to),
         ];
     }
 
@@ -343,6 +354,18 @@ final class ObjectiveReportAnalytics
             return ['value' => null, 'state' => 'unavailable', 'reason' => 'not_reported'];
         }
 
+        /*
+         * Reach is deduplicated by the PROVIDER, for the grain it was asked about — and what is stored is
+         * one figure per campaign, per platform, per day. Adding two of those counts a person who came
+         * back on Tuesday twice, so a sum across days, campaigns or platforms is not reach and is not
+         * printed as reach. It is reported only where the whole bag is ONE provider grain carrying ONE
+         * reach row; anything else is «not reported», which is the truth about a deduplicated period
+         * reach. Frequency divides by this figure and inherits the rule.
+         */
+        if ($key === 'reach' && ((float) ($bag['grains'] ?? 0) !== 1.0 || (float) $bag['reach_rows'] !== 1.0)) {
+            return ['value' => null, 'state' => 'unavailable', 'reason' => 'not_reported'];
+        }
+
         if (in_array($key, ObjectiveMetricFamilies::MONEY_BASE, true) && (float) ($bag["{$key}_withheld"] ?? 0) > 0) {
             // FX-001 withheld some of it: a partial sum in the reporting currency is not the figure.
             return ['value' => null, 'state' => 'unavailable', 'reason' => 'money_not_converted'];
@@ -354,11 +377,12 @@ final class ObjectiveReportAnalytics
     /**
      * Each platform's share of the family's OUTCOME — the first outcome anybody reported.
      *
+     * @param  list<string>  $outcomes
      * @param  array<string,float>  $total
      * @param  list<array<string,mixed>>  $platformRows
      * @return array<string,mixed>|null
      */
-    private function contribution(string $family, array $total, array $platformRows): ?array
+    private function contribution(array $outcomes, array $total, array $platformRows): ?array
     {
         /*
          * An outcome EVERY platform reported is preferred over one only some did: «Meta 100% of
@@ -366,7 +390,6 @@ final class ObjectiveReportAnalytics
          * happened. Only when no outcome is universal does the first reported one stand, with the
          * silent platforms shown as «—».
          */
-        $outcomes = ObjectiveMetricFamilies::outcomes($family);
         $universal = array_values(array_filter($outcomes, function (string $outcome) use ($platformRows): bool {
             foreach ($platformRows as $row) {
                 if ($this->figure($row['_bag'], $outcome)['state'] !== 'reported') {
@@ -416,7 +439,7 @@ final class ObjectiveReportAnalytics
      * @param  list<array<string,mixed>>  $rows  flat rows (metric keys at the top level)
      * @return array<string,mixed>
      */
-    private function rank(string $family, array $rows): array
+    private function rank(string $family, array $rows, bool $purchases = true): array
     {
         $none = static fn (?string $metric, string $reason, int $eligible = 0): array => [
             'metric' => $metric, 'best' => null, 'weakest' => null,
@@ -432,23 +455,22 @@ final class ObjectiveReportAnalytics
         $familyEnum = ObjectiveFamily::from($family);
         $resolved = $this->ranking->resolveMetric($spending, $familyEnum);
 
-        if ($resolved === null) {
-            return $none(null, 'no_metric_reported');
-        }
-
         /*
          * The canonical metric first, then the family's other DEFENSIBLE metrics in the canonical
          * layout's own order — the first one at least two rows can be compared on wins.
          *
          * The canonical resolver takes the primary whenever ANY row reports it. That is right for a
          * list, and wrong for a comparison: one platform reporting revenue makes ROAS the metric, and
-         * a two-platform sales scope then has nothing to compare even though both report what an
-         * order cost. Falling back along the SAME layout keeps «what better means» the ranker's,
+         * a two-platform sales scope then has nothing to compare even though both report what a
+         * purchase cost. Falling back along the SAME layout keeps «what better means» the ranker's,
          * and a volume metric is still never reached.
+         *
+         * A scope with no purchases reads the layout's CPA as cost per CONVERSION, under its own name.
          */
         $layout = RankingMetric::forObjective($familyEnum);
+        $named = static fn (?string $m): ?string => ! $purchases && $m === 'cpa' ? 'cost_per_conversion' : $m;
         $candidates = array_values(array_unique(array_filter(
-            [$resolved, $layout['primary'], ...$layout['secondary']],
+            array_map($named, [$resolved, $layout['primary'], ...$layout['secondary']]),
             // Defensible, and reported by at least one row — an unreported metric compares nothing.
             static fn (?string $m): bool => $m !== null
                 && isset(ObjectiveMetricFamilies::MINIMUM_VOLUME[$m])
@@ -456,23 +478,32 @@ final class ObjectiveReportAnalytics
         )));
 
         if ($candidates === []) {
-            // A volume orders by budget; refusing is the honest answer.
-            return $none(null, 'no_defensible_metric');
+            return $none(null, $resolved === null ? 'no_metric_reported' : 'no_defensible_metric');
         }
 
         $metric = $candidates[0];
-        $volumeKey = ObjectiveMetricFamilies::MINIMUM_VOLUME[$metric][0];
+        $volumeKey = $this->volumeFor($metric, $purchases);
         $ranked = [];
 
         foreach ($candidates as $candidate) {
-            [$candidateVolume, $minimum] = ObjectiveMetricFamilies::MINIMUM_VOLUME[$candidate];
+            $candidateVolume = $this->volumeFor($candidate, $purchases);
+            $minimum = ObjectiveMetricFamilies::MINIMUM_VOLUME[$candidate][1];
 
             $eligible = array_values(array_filter(
                 $spending,
                 static fn (array $r): bool => is_numeric($r[$candidate] ?? null) && (float) ($r[$candidateVolume] ?? 0) >= $minimum,
             ));
 
-            $attempt = $this->ranking->rank($eligible, $familyEnum, $candidate)['ranked'];
+            /*
+             * Cost per conversion is ordered by the ranker's CPA rule — both are «lower cost per
+             * result is better» — so its direction is the canonical one, not a second opinion.
+             */
+            $rankedBy = $candidate === 'cost_per_conversion' ? 'cpa' : $candidate;
+            $input = $candidate === 'cost_per_conversion'
+                ? array_map(static fn (array $r): array => ['cpa' => $r['cost_per_conversion']] + $r, $eligible)
+                : $eligible;
+
+            $attempt = $this->ranking->rank($input, $familyEnum, $rankedBy)['ranked'];
 
             if (count($attempt) >= 2) {
                 [$metric, $volumeKey, $ranked] = [$candidate, $candidateVolume, $attempt];
@@ -517,6 +548,14 @@ final class ObjectiveReportAnalytics
         ];
     }
 
+    /** ROAS rests on purchases, or on conversions where the scope has no purchases. */
+    private function volumeFor(string $metric, bool $purchases): string
+    {
+        $key = ObjectiveMetricFamilies::MINIMUM_VOLUME[$metric][0];
+
+        return $key === 'purchases' && ! $purchases ? 'conversions' : $key;
+    }
+
     /**
      * The family's trend: spend, outcome and its lead efficiency figure, per day, from that day's sums.
      *
@@ -524,14 +563,14 @@ final class ObjectiveReportAnalytics
      * @param  array<string, array<string,float>>  $days
      * @return array<string,mixed>|null
      */
-    private function trend(string $family, array $total, array $days, ?string $outcome, Carbon $from, Carbon $to): ?array
+    private function trend(array $keys, array $total, array $days, ?string $outcome, Carbon $from, Carbon $to): ?array
     {
         if ($days === []) {
             return null;
         }
 
         $metric = null;
-        foreach (ObjectiveMetricFamilies::kpis($family) as $key) {
+        foreach ($keys as $key) {
             if (isset(ObjectiveMetricFamilies::DERIVED[$key]) && $key !== 'frequency' && $this->figure($total, $key)['state'] === 'reported') {
                 $metric = $key;
                 break;
@@ -615,6 +654,9 @@ final class ObjectiveReportAnalytics
                 $bag[$column] = ($bag[$column] ?? 0.0) + (float) ($row[$column] ?? 0);
             }
         }
+
+        // Distinct (campaign, platform, day) grains — summable, because no grain spans two rows here.
+        $bag['grains'] = ($bag['grains'] ?? 0.0) + (float) ($row['grains'] ?? 0);
 
         return $bag;
     }

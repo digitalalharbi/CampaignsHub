@@ -117,4 +117,17 @@ describe('objective analytics section', () => {
     expect(screen.queryByTestId('objective-analytics')).toBeNull()
     expect(formatKpi(kpi('leads', 0), 'SAR')).toBe('0')
   })
+
+  it('names a cost per conversion as such on a ranking card', () => {
+    const conversions: ObjectiveFamilyBlock = {
+      ...awareness,
+      family: 'sales',
+      platform_ranking: { ...awareness.platform_ranking, metric: 'cost_per_conversion' },
+      content_ranking: null,
+    }
+    renderWithProviders(<ObjectiveAnalyticsSection section={section([conversions])} currency="SAR" ar />)
+
+    expect(screen.getByTestId('objective-platform-leaders-sales')).toHaveTextContent('تكلفة التحويل')
+    expect(screen.getByTestId('objective-platform-leaders-sales')).not.toHaveTextContent('المشتريات')
+  })
 })
