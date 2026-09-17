@@ -10,6 +10,7 @@ import { Num } from '@/components/ui/Num'
 import type { Locale } from '@/stores/ui'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import type { LivePayload } from '../api'
+import { AttentionBlocks } from '../AttentionBlocks'
 import { ClientAttention } from '../ClientAttention'
 import { LiveDetailTables, LivePlatformComparison } from '../LiveDetailTables'
 import { ReportAdsSection, type ReportAd } from '../ReportAdsSection'
@@ -184,6 +185,20 @@ function splitDiffers(payload: LivePayload): boolean {
     && (Number(split.blended?.spend ?? 0) !== Number(split.direct?.spend ?? 0) || (split.blended?.blended_cpa ?? null) !== (split.direct?.cpa ?? null))
 }
 
+/**
+ * REPORT-RECOMMENDATION-BLOCKS-001 — the story's last step, the same on both views: the server's
+ * client cut, drawn as blocks. The drill-down opens a piece of content this link already carries.
+ */
+function LiveAttention({ payload, ar, onOpenContent }: { payload: LivePayload; ar: boolean; onOpenContent: (content: ReportAd) => void }) {
+  if (!sectionOn(payload, 'recommendations')) return null
+  const open = (key: string) => {
+    const ad = (payload.ads ?? []).find((a) => a.content_key === key)
+    if (ad) onOpenContent(ad)
+  }
+
+  return <AttentionBlocks items={payload.attention} ar={ar} onOpenContent={open} />
+}
+
 /* ─────────────────────────────── A — Executive summary ─────────────────────────────── */
 
 export function SummaryView({ payload, reader, currency, locale, onOpenContent }: Common) {
@@ -217,6 +232,7 @@ export function SummaryView({ payload, reader, currency, locale, onOpenContent }
         />
       )}
       {sectionOn(payload, 'budget') && <BudgetRing payload={payload} ar={ar} />}
+      <LiveAttention payload={payload} ar={ar} onOpenContent={onOpenContent} />
     </div>
   )
 }
@@ -300,6 +316,7 @@ export function DashboardView({
       <LiveDetailTables payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />
       {sectionOn(payload, 'budget') && <ClientAttention payload={payload} currency={currency} locale={locale} />}
       <StoreFunnelSection payload={payload} ar={ar} />
+      <LiveAttention payload={payload} ar={ar} onOpenContent={onOpenContent} />
     </div>
   )
 }

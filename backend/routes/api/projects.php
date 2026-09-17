@@ -17,6 +17,7 @@ use App\Domains\Projects\Http\Controllers\ProjectOverviewController;
 use App\Domains\Reports\Http\Controllers\LiveDrilldownController;
 use App\Domains\Reports\Http\Controllers\LiveReportBuilderController;
 use App\Domains\Reports\Http\Controllers\ReportAnnotationController;
+use App\Domains\Reports\Http\Controllers\ReportAttentionController;
 use App\Domains\Reports\Http\Controllers\ReportBreakdownController;
 use App\Domains\Reports\Http\Controllers\ReportController;
 use App\Domains\Reports\Http\Controllers\ReportPrintController;
@@ -248,6 +249,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::put('reports/{report}/breakdowns', [ReportBreakdownController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.breakdowns.update')->whereUuid('report');
     Route::get('reports/{report}/scope', [ReportScopeController::class, 'show'])->middleware('project.can:reports.view')->name('reports.scope.show');
     Route::match(['put', 'patch'], 'reports/{report}/scope', [ReportScopeController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.scope.update');
+    // REPORT-RECOMMENDATION-BLOCKS-001 — attention items and the operator's approve/hide per item.
+    Route::get('report-attention', [ReportAttentionController::class, 'index'])->middleware('project.can:reports.view')->name('reports.attention.index');
+    Route::put('report-attention/{item}', [ReportAttentionController::class, 'decide'])->middleware('project.can:reports.manage')->name('reports.attention.decide');
     Route::get('reports/{report}/annotations', [ReportAnnotationController::class, 'index'])->middleware('project.can:reports.view')->name('reports.annotations.index');
     Route::post('reports/{report}/annotations/{annotation}/status', [ReportAnnotationController::class, 'updateStatus'])->middleware('project.can:reports.manage')->name('reports.annotations.status');
     Route::get('reports/{report}/validation', [ReportController::class, 'validation'])->middleware('project.can:reports.view')->name('reports.validation');

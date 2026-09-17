@@ -5,6 +5,7 @@ import type { PathLeaders } from '@/features/analytics/api'
 import type { ObjectiveAnalytics } from './objectiveAnalytics'
 
 import { getData, postData, putData } from '@/lib/api/client'
+import type { AttentionItem } from './attention'
 import type { SharedBranding } from './sharedBranding'
 import { api } from '@/lib/api/client'
 
@@ -316,6 +317,8 @@ export interface LivePayload {
     budget?: boolean
     funnel_store?: boolean
     previous_comparison?: boolean
+    /** REPORT-RECOMMENDATION-BLOCKS-001 — «what needs attention». Absent means on. */
+    recommendations?: boolean
   }
   /**
    * REPORT-DRILLDOWN-001 — the optional breakdowns this link offers. An absent key means on (older
@@ -323,6 +326,10 @@ export interface LivePayload {
    * control is drawn at all.
    */
   breakdowns?: { platform_drilldown?: boolean; content_drilldown?: boolean }
+   * REPORT-RECOMMENDATION-BLOCKS-001 — already the client cut: operator-internal items are not in it
+   * unless the operator approved them. `null` when the link does not publish the section.
+   */
+  attention?: AttentionItem[] | null
   store_funnel: StoreFunnelPayload | null
   /**
    * CLIENT-FACING-PRESENTATION-001 — «what needs attention», which the link never carried.
@@ -668,3 +675,13 @@ export const createScopeTemplate = (p: string, body: { name: string; description
   postData<ScopeTemplate>(`${base(p)}/scope-templates`, body)
 
 export const deleteScopeTemplate = (p: string, id: string) => api.delete(`${base(p)}/scope-templates/${id}`)
+
+/** REPORT-RECOMMENDATION-BLOCKS-001 — every attention item for a window, with audience and decision. */
+export const fetchAttention = (p: string, from: string, to: string, currency: string) =>
+  getData<{ items: AttentionItem[]; period: { from: string; to: string } }>(
+    `/projects/${p}/report-attention?${new URLSearchParams({ from, to, currency }).toString()}`,
+  )
+
+/** Approve or hide one item for client reports; `null` clears the decision. */
+export const decideAttention = (p: string, key: string, decision: 'approved' | 'hidden' | null) =>
+  putData<{ item_key: string; decision: string | null }>(`/projects/${p}/report-attention/${key}`, { decision })

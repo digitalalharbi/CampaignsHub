@@ -16,6 +16,9 @@ use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Services\Attention\AttentionAudience;
+use App\Domains\Reports\Services\Attention\ObjectivePerformanceFigures;
+use App\Domains\Reports\Services\Attention\ReportAttention;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\ContentKey;
@@ -63,6 +66,7 @@ final class LiveReportService
         private readonly ReportAds $ads,
         private readonly CreativeRows $rows,
         private readonly CreativeMetrics $creativeMetrics,
+        private readonly ReportAttention $attention,
     ) {}
 
     /**
@@ -545,6 +549,19 @@ final class LiveReportService
             'sections' => $share->visibleSections(),
             // REPORT-DRILLDOWN-001 — which optional breakdowns this link offers; off here means no control is drawn.
             'breakdowns' => ReportBreakdowns::forShare($share),
+            /*
+             * REPORT-RECOMMENDATION-BLOCKS-001 — what needs attention, judged per objective family and
+             * platform on the SAME bounds as the objective split above. Built only when the section is
+             * published; cut to what a client may read before this method returns.
+             */
+            'attention' => ($share->visibleSections()['recommendations'] ?? true)
+                ? $this->attention->items(new ObjectivePerformanceFigures(new ObjectivePerformance(
+                    projectIds: $scope['project_id'] === '' ? null : [$scope['project_id']],
+                    campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : $campaignCeiling,
+                    providers: $applied['providers'] !== [] ? $applied['providers'] : ($scope['providers'] ?: null),
+                    accountIds: $accountCeiling,
+                )), $from, $to, $currency)
+                : null,
             'store_funnel' => $this->storeFunnel($share, $scope['project_id'], $from, $to),
             'freshness' => $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers']),
             /*
@@ -644,6 +661,22 @@ final class LiveReportService
          * has to describe what survived.
          */
         $payload = ReportComposition::for($this->formFor($share))->apply($payload);
+
+        /*
+         * The client cut, AFTER the flags and the form so the drill-down only names content that
+         * survived them — and before the outline, so «what is in this report» describes it.
+         * Operator-internal items never leave this method unless the operator approved them.
+         */
+        if (is_array($payload['attention'] ?? null)) {
+            $payload['attention'] = AttentionAudience::withEvidence(
+                AttentionAudience::redact(
+                    AttentionAudience::forClient($payload['attention'], $this->attention->decisions((string) $share->tenant_id, $scope['project_id'])),
+                    (bool) $share->hide_spend,
+                    (bool) $share->hide_revenue,
+                ),
+                $payload['ads'] ?? [],
+            );
+        }
 
         $payload['outline'] = (new ReportStructure)->sections($payload, composesNarrative: false);
 
@@ -791,6 +824,8 @@ final class LiveReportService
              * comparison, which is what the switch is called.
              */
             'previous_comparison' => ['deltas' => [], 'previous' => null, 'objective_performance_previous' => null],
+            // Null, not `[]`: «not published on this link» is a different fact from «nothing qualified».
+            'recommendations' => ['attention' => null],
         ];
 
         /*
