@@ -125,7 +125,7 @@ final class MetaCandidatePromotionTest extends TestCase
 
         $this->passRoundTrip();
 
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true])
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'confirm_narrow_scopes' => true])
             ->assertOk()
             ->assertJsonPath('data.promotion.rollback_available', true)
             ->assertJsonPath('data.promotion.reason', 'candidate_already_live');
@@ -153,7 +153,7 @@ final class MetaCandidatePromotionTest extends TestCase
     public function test_rollback_restores_the_previous_live_app_exactly_and_only_once(): void
     {
         $this->passRoundTrip();
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true])->assertOk();
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'confirm_narrow_scopes' => true])->assertOk();
 
         $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/rollback', ['confirm' => true])
             ->assertOk()->assertJsonPath('data.promotion.rollback_available', false);
@@ -179,7 +179,7 @@ final class MetaCandidatePromotionTest extends TestCase
         $settings->forgetCache();
 
         $this->passRoundTrip();
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true])->assertOk();
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'confirm_narrow_scopes' => true])->assertOk();
         $this->assertSame('verify-me', $this->live()->get('webhook_verify_token'), 'Promotion leaves the webhook fields.');
         $this->assertNull(ProviderConfiguration::query()->where('provider', 'meta')->value('last_test_status'));
 
@@ -194,10 +194,57 @@ final class MetaCandidatePromotionTest extends TestCase
         $this->assertSame('passed', ProviderConfiguration::query()->where('provider', 'meta')->value('last_test_status'));
     }
 
+    public function test_promotion_that_would_drop_a_live_scope_is_refused_without_the_named_confirmation(): void
+    {
+        $this->passRoundTrip();
+
+        // Live requests ads_read, ads_management, business_management; the candidate only ads_read.
+        $this->actingAs($this->platformOwner, 'sanctum')->getJson(self::BASE)
+            ->assertJsonPath('data.promotion.dropped_scopes', ['ads_management', 'business_management']);
+
+        foreach ([['confirm' => true], ['confirm' => true, 'confirm_narrow_scopes' => false]] as $body) {
+            $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', $body)
+                ->assertStatus(409)
+                ->assertJsonPath('errors.promotion.0', 'scopes_would_narrow')
+                ->assertJsonPath('errors.dropped_scopes', ['ads_management', 'business_management']);
+        }
+
+        $this->assertSame('live-app-111111', $this->live()->get('client_id'));
+        $this->assertFalse(ProviderConfiguration::query()->where('provider', 'meta.previous_live')->exists());
+        $this->assertDatabaseMissing('audit_logs', ['action' => 'platform.integration.meta.promoted']);
+    }
+
+    public function test_a_confirmed_narrowing_is_audited_with_the_scopes_it_dropped(): void
+    {
+        $this->passRoundTrip();
+
+        $this->actingAs($this->platformOwner, 'sanctum')
+            ->postJson(self::BASE.'/promote', ['confirm' => true, 'confirm_narrow_scopes' => true])->assertOk();
+
+        $after = json_decode((string) DB::table('audit_logs')->where('action', 'platform.integration.meta.promoted')->value('after'), true);
+        $this->assertSame(['ads_management', 'business_management'], $after['dropped_scopes']);
+        $this->assertTrue($after['scope_narrowing_confirmed']);
+        $this->assertSame(['ads_read'], $this->live()->scopes());
+    }
+
+    public function test_a_candidate_requesting_every_live_scope_needs_no_narrowing_confirmation(): void
+    {
+        config()->set('ad_platforms.meta_candidate.scopes', 'ads_read,ads_management,business_management');
+        app(MetaCandidateCredentials::class)->forgetCache();
+        $this->passRoundTrip();
+
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true])->assertOk();
+
+        $after = json_decode((string) DB::table('audit_logs')->where('action', 'platform.integration.meta.promoted')->value('after'), true);
+        $this->assertSame([], $after['dropped_scopes']);
+        $this->assertFalse($after['scope_narrowing_confirmed']);
+        $this->assertSame(['ads_read', 'ads_management', 'business_management'], $this->live()->scopes());
+    }
+
     public function test_a_second_promotion_of_the_same_candidate_is_refused(): void
     {
         $this->passRoundTrip();
-        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true])->assertOk();
+        $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true, 'confirm_narrow_scopes' => true])->assertOk();
 
         $this->actingAs($this->platformOwner, 'sanctum')->postJson(self::BASE.'/promote', ['confirm' => true])
             ->assertStatus(409)->assertJsonPath('errors.promotion.0', 'candidate_already_live');
