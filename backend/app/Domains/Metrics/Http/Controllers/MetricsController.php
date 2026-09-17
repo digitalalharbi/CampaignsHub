@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Enums\CampaignOutcome;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Services\StoreFunnelService;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Models\MetricDefinition;
@@ -827,6 +828,7 @@ final class MetricsController extends Controller
         $scope = fn () => $agg->applyScope(
             DailyMetric::query()
                 ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+                ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
         )->toBase();
 
         // Money rows only. `original_currency` is null on impressions and clicks — a count has no
@@ -1057,6 +1059,7 @@ final class MetricsController extends Controller
         // window rather than about the source, and the service reports gaps for the project as a whole.
         $daysWithData = DailyMetric::query()
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->when($providerFilter !== [], fn ($q) => $q->whereIn('provider', $providerFilter))
             ->toBase()
             ->select('provider')
@@ -1530,6 +1533,7 @@ final class MetricsController extends Controller
     {
         $value = DailyMetric::query()
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->whereNotNull('project_currency')
             ->toBase()
             ->value('project_currency');

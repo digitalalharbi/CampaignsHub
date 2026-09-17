@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\ClientWorkspaces\Services;
 
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
@@ -65,6 +66,7 @@ final class ClientPortfolioStats
         // Spend + freshness + data sources: group daily_metrics by project, fold up to client.
         $spendByProject = $projectIds === [] ? collect() : DB::table('daily_metrics')
             ->where('tenant_id', $tenantId)->whereIn('project_id', $projectIds)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->where('metric_key', 'spend')->where('metric_date', '>=', $from)
             ->groupBy('project_id')->select('project_id', DB::raw('sum(value) as v'))
             ->pluck('v', 'project_id');

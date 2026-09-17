@@ -12,6 +12,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Support\CreativeDemoPolicy;
 use App\Domains\Campaigns\Support\CreativeKind;
 use App\Domains\Campaigns\Support\Relevance;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
@@ -108,6 +109,14 @@ final class CreativeRows
      */
     public function applyFilters(mixed $query, array $filters): void
     {
+        /*
+         * ACCOUNT-SCOPE-ISOLATION-001 — a creative is this project's only while the account behind
+         * its campaign is selected for the project. Applied here, at the one entry every listing
+         * passes through — the library, the pulse, the comparison, the client's shared section, the
+         * live link's content mode and the report's ads section — so all of them read one set.
+         */
+        BoundAccountVisibility::applyThroughCampaign($query, 'external_creatives.external_campaign_id', 'external_creatives.project_id');
+
         $list = static function (string $key) use ($filters): array {
             return array_values(array_filter((array) ($filters[$key] ?? []), static fn ($v): bool => $v !== null && $v !== ''));
         };

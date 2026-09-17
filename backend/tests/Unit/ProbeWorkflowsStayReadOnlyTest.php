@@ -118,4 +118,25 @@ final class ProbeWorkflowsStayReadOnlyTest extends TestCase
             ."dispatch time, so a green CI proves nothing about it:\n".implode("\n", $over),
         );
     }
+
+    /**
+     * In a GitHub Actions expression `cond && '' || x` ALWAYS yields x, because '' is falsy — so
+     * `scope_audit == 'all' && '' || scope_audit` passed the literal «all» as a project uuid and the
+     * Production inventory crashed on its first run. An empty string may never be the middle operand.
+     */
+    public function test_no_workflow_expression_uses_an_empty_string_as_the_true_branch(): void
+    {
+        foreach (glob(dirname(__DIR__, 3).'/.github/workflows/*.yml') ?: [] as $path) {
+            foreach (explode("\n", (string) file_get_contents($path)) as $number => $line) {
+                if (preg_match('/^\s*#/', $line) === 1) {
+                    continue;
+                }
+                $this->assertDoesNotMatchRegularExpression(
+                    "/&&\s*''\s*\|\|/",
+                    $line,
+                    basename($path).':'.($number + 1)." uses `&& '' ||`, which always takes the right-hand value."
+                );
+            }
+        }
+    }
 }

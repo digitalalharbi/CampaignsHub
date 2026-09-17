@@ -449,6 +449,19 @@ final class CommerceStoreSyncTest extends TestCase
 
     private function store(string $provider): ExternalAccount
     {
+        /*
+         * ACCOUNT-SCOPE-ISOLATION-001 — the store identifies itself before anything is fetched.
+         *
+         * `StoreSyncer` now asks `fetchStores()` first and refuses a token that reaches a store other
+         * than the bound one. These fixtures are about what a store's data does once it is the right
+         * store, so the identity call answers with the bound store's own id. Registered before each
+         * test's own fakes, so a later catch-all pattern never answers the identity call.
+         */
+        Http::fake([
+            'api.salla.dev/*/store/info' => Http::response(['data' => ['id' => "store_{$provider}", 'name' => 'Ours']]),
+            'api.zid.sa/*/managers/account/profile' => Http::response(['user' => ['store' => ['id' => "store_{$provider}", 'title' => 'Ours']]]),
+        ]);
+
         $connection = app(TokenVault::class)->open(
             tenantId: $this->tenant->id,
             provider: $provider,

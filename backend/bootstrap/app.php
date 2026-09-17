@@ -20,7 +20,9 @@ use App\Domains\Integrations\Console\ProbeInsightsCommand;
 use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
 use App\Domains\Integrations\Console\QuarantineSandboxRowsCommand;
 use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
+use App\Domains\Integrations\Console\ResyncWindowCommand;
 use App\Domains\Integrations\Console\ScopeAuditCommand;
+use App\Domains\Integrations\Console\ScopeCleanupCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
 use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
@@ -104,6 +106,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // ACCOUNT-SCOPE-ISOLATION-001 — read-only: per project and grain, which ad accounts the stored
         // rows belong to, classified against the project's bindings. Writes nothing.
         ScopeAuditCommand::class,
+        // ACCOUNT-SCOPE-ISOLATION-001 — the two WRITE paths of the cleanup, dry-run unless --apply. Neither
+        // is reachable from the read-only diagnostics workflow.
+        ScopeCleanupCommand::class,
+        ResyncWindowCommand::class,
         // Owner defect 95 — read-only: one creative walked from the provider rows to every Content
         // surface, with the divergences named. Calls no provider and writes nothing.
         ReconcileContentMetricsCommand::class,

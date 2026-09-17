@@ -18,6 +18,7 @@ use App\Domains\Campaigns\Services\CreativeMetricsAvailability;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativePulse;
 use App\Domains\Campaigns\Services\CreativeRows;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Services\ContentIntelligence;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -370,7 +371,7 @@ final class CreativeAnalysisController extends Controller
     ): JsonResponse {
         abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
 
-        $query = ExternalCreative::query()->whereKey($creative);
+        $query = ExternalCreative::query()->whereKey($creative)->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_creatives.external_campaign_id', 'external_creatives.project_id'));
 
         if ($project !== null) {
             $query->where('project_id', $project);
@@ -571,7 +572,7 @@ final class CreativeAnalysisController extends Controller
 
         [$from, $to] = $this->window($request);
 
-        $bounded = ExternalCreative::query()->whereNotNull('creative_group_id');
+        $bounded = ExternalCreative::query()->whereNotNull('creative_group_id')->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_creatives.external_campaign_id', 'external_creatives.project_id'));
         $this->applyReach($bounded, $request);
 
         $groupIds = (clone $bounded)->distinct()->pluck('creative_group_id')
@@ -615,7 +616,7 @@ final class CreativeAnalysisController extends Controller
 
         [$from, $to] = $this->window($request);
 
-        $bounded = ExternalCreative::query()->where('creative_group_id', $group);
+        $bounded = ExternalCreative::query()->where('creative_group_id', $group)->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_creatives.external_campaign_id', 'external_creatives.project_id'));
         $this->applyReach($bounded, $request);
         $members = $bounded->get();
 
@@ -704,6 +705,7 @@ final class CreativeAnalysisController extends Controller
     {
         return DB::table('creative_daily_metrics')
             ->where('creative_id', $creativeId)
+            ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, '(select cr.external_campaign_id from external_creatives cr where cr.id = creative_daily_metrics.creative_id)', 'creative_daily_metrics.project_id'))
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->orderBy('metric_date')
             ->get([
@@ -754,6 +756,7 @@ final class CreativeAnalysisController extends Controller
     {
         $rows = DB::table('creative_daily_metrics')
             ->where('creative_id', $creative->getKey())
+            ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, '(select cr.external_campaign_id from external_creatives cr where cr.id = creative_daily_metrics.creative_id)', 'creative_daily_metrics.project_id'))
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->groupBy('campaign_id')
             ->select('campaign_id')
@@ -979,6 +982,7 @@ final class CreativeAnalysisController extends Controller
 
         $peerIds = ExternalCreative::query()
             ->where('project_id', $project)
+            ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_creatives.external_campaign_id', 'external_creatives.project_id'))
             ->whereKeyNot($exclude)
             ->whereIn('campaign_id', function ($sub) use ($objectives): void {
                 $sub->select('id')->from('unified_campaigns')->whereIn('objective', $objectives);
@@ -1354,6 +1358,7 @@ final class CreativeAnalysisController extends Controller
             'confirmed' => $group->isConfirmed(),
             'members' => ExternalCreative::query()
                 ->where('creative_group_id', $group->getKey())
+                ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_creatives.external_campaign_id', 'external_creatives.project_id'))
                 ->get(['id', 'provider', 'name'])
                 ->map(static fn (ExternalCreative $c): array => [
                     'id' => (string) $c->getKey(),
@@ -1368,7 +1373,7 @@ final class CreativeAnalysisController extends Controller
     {
         return $this->rows->filterOptions(
             function () use ($request, $project) {
-                $q = ExternalCreative::query();
+                $q = ExternalCreative::query()->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_creatives.external_campaign_id', 'external_creatives.project_id'));
                 if ($project !== null) {
                     $q->where('project_id', $project);
                 }
