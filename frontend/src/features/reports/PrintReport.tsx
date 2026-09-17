@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
 import { SlideBody, isClientAudience, type Meta, type ReportData, type Slide } from './InteractiveReport'
 import { PrintDocument } from './PrintDocument'
+import { PrintPlatformDrilldown } from './PrintPlatformDrilldowns'
 import { headerIdentity, type SharedBranding } from './sharedBranding'
 import { ReportWatermark } from './ReportWatermark'
 import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
@@ -65,6 +66,15 @@ export function PrintReport() {
       .filter((s) => s.visible)
       .filter((s) => s.type !== 'next_steps' || (d.next_steps?.length ?? 0) > 0)
       .sort((a, b) => a.order - b.order)
+    /*
+     * REPORT-DRILLDOWN-001 — one page per platform, straight after the platform comparison, only when
+     * the operator enabled the section (the server sends nothing otherwise).
+     */
+    const drill = (d.platform_drilldowns ?? []).map((b, i) => ({ id: `__drilldown_${b.provider}`, type: '__platform_drilldown', order: 0, visible: true, provider: b.provider, index: i }))
+    if (drill.length > 0) {
+      const at = visible.findIndex((s) => s.type === 'platform_comparison')
+      visible.splice(at === -1 ? Math.max(0, visible.length) : at + 1, 0, ...(drill as unknown as Slide[]))
+    }
     if (d.disclaimer) visible.push({ id: '__methodology', type: '__methodology', order: 9999, visible: true })
     return visible
   }, [payload])
@@ -192,7 +202,9 @@ export function PrintReport() {
               The deck shares `SlideBody` with the on-screen report, so a section that is merely
               long there becomes one that cannot fit here. See the prop's note in InteractiveReport.
             */}
-            <SlideBody slide={s} data={d} meta={meta} paged />
+            {s.type === '__platform_drilldown'
+              ? <PrintPlatformDrilldown block={d.platform_drilldowns![(s as unknown as { index: number }).index]} locale="ar" currency={payload.currency} />
+              : <SlideBody slide={s} data={d} meta={meta} paged />}
             {/*
               Verifiable provenance on the methodology page — INTERNAL only.
 
