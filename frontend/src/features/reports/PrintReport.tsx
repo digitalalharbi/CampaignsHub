@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
 import { SlideBody, isClientAudience, type Meta, type ReportData, type Slide } from './InteractiveReport'
 import { PrintDocument } from './PrintDocument'
-import { headerIdentity, type SharedBranding } from './sharedBranding'
+import { coverMeta, headerIdentity, printTitle, type SharedBranding } from './sharedBranding'
 import { ReportWatermark } from './ReportWatermark'
 import { PerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { brand } from '@/lib/brand'
@@ -35,6 +35,8 @@ interface PrintPayload {
    * fetches it with a short-lived token and no cookie, so it has no tenant to resolve anything with.
    */
   branding?: SharedBranding
+  /** The report's own language — the file is titled in it. */
+  locale?: 'ar' | 'en'
 }
 
 /**
@@ -98,10 +100,8 @@ export function PrintReport() {
     */
     const who = headerIdentity(payload.branding, 'ar').name
 
-    document.title =
-      isClientAudience(payload.audience)
-        ? `${who} — ${payload.currency} Report`
-        : `${who} | rid=${payload.report_id} | cs=${payload.checksum ?? ''} | dv=${payload.data_version ?? ''} | cur=${payload.currency}`
+    // REPORT BRANDING: a client file is titled like its link; an internal file keeps its provenance.
+    document.title = printTitle(payload, who)
   }, [payload])
 
   // Readiness protocol — Chromium waits on these before printing. Also publishes a per-page layout
@@ -142,6 +142,7 @@ export function PrintReport() {
       <PrintDocument
         data={payload.data}
         reportName={payload.name}
+        reportLocale={payload.locale}
         currency={payload.currency}
         // The same resolved identity this file already uses for the PDF's metadata and for the
         // slide deck. The document layout was the one surface never given it.
@@ -152,7 +153,7 @@ export function PrintReport() {
   }
 
   const d = payload.data
-  const meta: Meta = { reportName: payload.name, platforms: (d.platforms ?? []).map((p) => String(p.provider)), isDemo: payload.is_demo, agencyName: headerIdentity(payload.branding, 'ar').name }
+  const meta: Meta = { reportName: payload.name, platforms: (d.platforms ?? []).map((p) => String(p.provider)), isDemo: payload.is_demo, ...coverMeta(headerIdentity(payload.branding, 'ar')) }
   const landscape = type === 'presentation'
   const period = d.period ? `${d.period.from} → ${d.period.to}` : ''
   const mode = (d.mode as string) === 'live' ? 'Live' : 'Snapshot'

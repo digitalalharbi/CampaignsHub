@@ -9,6 +9,7 @@
  * notice immediately.
  */
 import { productName } from '@/lib/brand'
+import { isClientAudience } from './InteractiveReport'
 export interface SharedBranding {
   name: string
   logo_url: string | null
@@ -94,4 +95,31 @@ export function headerIdentity(branding: SharedBranding | undefined, locale?: st
   const byLogoUrl = named && by !== null && branding.client ? clean(branding.agency?.logo_url) : null
 
   return { name, logoUrl, by, byLogoUrl }
+}
+
+/**
+ * The title an EXPORTED file carries in its own metadata — what a title bar and a mail client show.
+ *
+ * A client or executive file is titled like its link (`reportPageTitle`). An internal file keeps its
+ * provenance (`rid`/`checksum`/`data_version`), because that is what makes it auditable — and it stays
+ * out of client files, because a title travels with the document wherever it is forwarded.
+ */
+export function printTitle(
+  payload: { name: string | null | undefined; locale?: string | null; audience: string; currency: string; report_id: string; checksum: string | null; data_version: number | null },
+  who: string,
+): string {
+  return isClientAudience(payload.audience)
+    ? reportPageTitle(payload.name, payload.locale)
+    : `${who} | rid=${payload.report_id} | cs=${payload.checksum ?? ''} | dv=${payload.data_version ?? ''} | cur=${payload.currency}`
+}
+
+/**
+ * The cover's two marks from the header's identity — one mapping for the PDF deck and the snapshot
+ * link, so the first page of either says the same thing the header does. With a client, the agency is
+ * «by»; without one, the report is the agency's own and it has no client mark.
+ */
+export function coverMeta(identity: HeaderIdentity): { agencyName: string; agencyLogoUrl: string | null; clientName: string | undefined; clientLogoUrl: string | null } {
+  return identity.by !== null
+    ? { agencyName: identity.by, agencyLogoUrl: identity.byLogoUrl, clientName: identity.name, clientLogoUrl: identity.logoUrl }
+    : { agencyName: identity.name, agencyLogoUrl: identity.logoUrl, clientName: undefined, clientLogoUrl: null }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { headerIdentity, type SharedBranding } from './sharedBranding'
+import { headerIdentity, printTitle, type SharedBranding } from './sharedBranding'
 import { isClientAudience } from './InteractiveReport'
 
 /**
@@ -14,33 +14,27 @@ import { isClientAudience } from './InteractiveReport'
  * internal snapshot auditable, and they must stay OUT of client and executive files — a title is
  * metadata that travels with the document to wherever the client forwards it.
  */
-const title = (branding: SharedBranding | undefined, audience: string, payload: { currency: string; report_id: string; checksum: string | null; data_version: number | null }) => {
-  const who = headerIdentity(branding).name
-
-  /*
-   * The PRODUCT's predicate, not a copy of it.
-   *
-   * This test re-stated the audience rule inline, so it could only ever agree with itself: the file
-   * it guards had a second copy of the same rule that answered differently for the executive
-   * audience, and this test passed throughout. A test that re-implements what it is checking is a
-   * test of the test.
-   */
-  return isClientAudience(audience)
-    ? `${who} — ${payload.currency} Report`
-    : `${who} | rid=${payload.report_id} | cs=${payload.checksum ?? ''} | dv=${payload.data_version ?? ''} | cur=${payload.currency}`
-}
+/*
+ * The PRODUCT's rule — `printTitle()` — and not a copy of it. This file used to re-state the title in
+ * a local function, so it could only agree with itself.
+ */
+const title = (branding: SharedBranding | undefined, audience: string, payload: { currency: string; report_id: string; checksum: string | null; data_version: number | null }) =>
+  printTitle({ ...payload, name: 'Q3 Performance', locale: 'ar', audience }, headerIdentity(branding).name)
 
 const PAYLOAD = { currency: 'SAR', report_id: 'r-1', checksum: 'abc', data_version: 3 }
 
 const client: SharedBranding = { name: 'Nakheel', logo_url: null, logo_source: 'none', by: 'Al Harbi Agency' }
 
 describe('the name a printed report carries in its metadata', () => {
-  it('names the client on a client file, not the product', () => {
-    expect(title(client, 'client', PAYLOAD)).toBe('Nakheel — SAR Report')
+  // REPORT BRANDING (Owner): a client or executive file is titled like its link — the report's name
+  // ending with the product's, in the report's language. Whose report it is is on the cover.
+  it('titles a client file with the report’s name and the product’s, in the report’s language', () => {
+    expect(title(client, 'client', PAYLOAD)).toBe('Q3 Performance — كامبينز هب')
+    expect(printTitle({ ...PAYLOAD, name: 'Q3 Performance', locale: 'en', audience: 'client' }, 'Nakheel')).toBe('Q3 Performance — CampaignsHub')
   })
 
-  it('names the client on an executive file too', () => {
-    expect(title(client, 'executive', PAYLOAD)).toContain('Nakheel')
+  it('titles an executive file the same way', () => {
+    expect(title(client, 'executive', PAYLOAD)).toBe('Q3 Performance — كامبينز هب')
   })
 
   /* Client and executive files must not carry internal identifiers — that rule is untouched. */
@@ -62,8 +56,8 @@ describe('the name a printed report carries in its metadata', () => {
   })
 
   /* With nothing resolved, the product's name — never an empty title. */
-  it('falls back to the product rather than to an empty title', () => {
-    expect(title(undefined, 'client', PAYLOAD)).toBe('CampaignsHub — SAR Report')
+  it('never produces an empty title, even for an unnamed report', () => {
+    expect(printTitle({ ...PAYLOAD, name: '', locale: 'ar', audience: 'client' }, 'CampaignsHub')).toBe('تقرير الأداء — كامبينز هب')
   })
 
   /**

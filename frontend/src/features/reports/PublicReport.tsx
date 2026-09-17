@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
-import { productName } from '@/lib/brand'
 import { fmtDateTime } from '@/lib/datetime'
 import { useParams } from 'react-router-dom'
 import { Download, Lock } from 'lucide-react'
 import { fetchSharedReport, sharedBranding, sharedDownloadUrl } from './api'
 import type { ReportFormat } from './api'
-import { headerIdentity, hideBrokenLogo, reportPageTitle, type SharedBranding } from './sharedBranding'
+import { coverMeta, headerIdentity, hideBrokenLogo, reportPageTitle, type SharedBranding } from './sharedBranding'
 import { InteractiveReport } from './InteractiveReport'
 import { LiveSharedReport } from './LiveSharedReport'
 import { productLabel } from './reportProduct'
@@ -251,7 +250,7 @@ export function PublicReport() {
                 <>
                   <InteractiveReport
                     data={report.data as never}
-                    meta={{ reportName: report.name, platforms, isDemo: report.is_demo, agencyName: report.branding?.name ?? productName(locale) }}
+                    meta={{ reportName: report.name, platforms, isDemo: report.is_demo, ...coverMeta(identity) }}
                   />
                   <ReportMetaStrip report={report} />
                 </>

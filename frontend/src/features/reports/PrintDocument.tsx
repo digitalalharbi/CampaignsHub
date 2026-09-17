@@ -2,9 +2,10 @@ import { useEffect } from 'react'
 import type { ReportData } from './InteractiveReport'
 import { moneyExact } from '@/features/analytics/format'
 import { mixedResultsNote, type ResultPart } from './reportMetrics'
-import { brand, productName } from '@/lib/brand'
+import { brand } from '@/lib/brand'
 import { ReportWatermark } from './ReportWatermark'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
+import { reportPageTitle } from './sharedBranding'
 
 /**
  * English, LTR, A4-portrait DOCUMENT rendering of a report (distinct from the RTL 16:9 slide
@@ -122,9 +123,12 @@ export function PrintDocument({
   clientName,
   identity,
   watermark = false,
+  reportLocale,
 }: {
   data: ReportData
   reportName: string
+  /** The report's own language — the file is titled in it (REPORT BRANDING). */
+  reportLocale?: string
   currency: string
   clientName?: string
   /** Asked for by the share and minted by the server; see `ReportWatermark`. */
@@ -143,14 +147,15 @@ export function PrintDocument({
    * client → agency → CampaignsHub chain there — this is the last link of that chain, not a second
    * default competing with it.
    */
-  identity?: { name: string; logoUrl: string | null; by: string | null }
+  identity?: { name: string; logoUrl: string | null; by: string | null; byLogoUrl?: string | null }
 }) {
   useEffect(() => {
     document.documentElement.setAttribute('dir', 'ltr')
     document.documentElement.setAttribute('lang', 'en')
     // The file's own title — «CampaignsHub» here put the product in the title bar and beside the
     // attachment in a mail client, on a report an agency sends to its own client under its own name.
-    document.title = `${identity?.name ?? productName('ar')} — ${currency} Report`
+    // REPORT BRANDING (Owner): the report's name ending with the product's, in the report's language.
+    document.title = reportPageTitle(reportName, reportLocale)
     const w = window as Window & {
       __REPORT_DATA_READY__?: boolean; __REPORT_CHARTS_READY__?: boolean
       __REPORT_IMAGES_READY__?: boolean; __REPORT_LAYOUT__?: unknown
@@ -390,7 +395,14 @@ export function PrintDocument({
           The agency is named secondarily, never in place of the client — the same rule the shared
           link follows, so a reader moving between the link and its PDF meets one hierarchy.
         */}
-        {identity?.by && <div className="doc-by" data-testid="print-document-by">by {identity.by}</div>}
+        {identity?.by && (
+          <div className="doc-by inline-flex items-center gap-1.5" data-testid="print-document-by">
+            by {identity.by}
+            {identity.byLogoUrl && (
+              <img src={identity.byLogoUrl} alt="" data-testid="print-document-agency-logo" className="h-5 w-auto max-w-[96px] object-contain" />
+            )}
+          </div>
+        )}
         <h1>{reportName}</h1>
         <div className="doc-sub">{clientName ?? 'Client Report'}</div>
         <dl className="doc-facts">

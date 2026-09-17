@@ -32,6 +32,7 @@ import { type ReportMetric, type ResultPart, creativeReadings, mixedResultsNote,
 import { useUi } from '@/stores/ui'
 import { ReportOutline } from './ReportOutline'
 import { Num } from '@/components/ui/Num'
+import { hideBrokenLogo } from './sharedBranding'
 
 export interface Slide { id: string; type: string; platform?: string; order: number; visible: boolean }
 type Row = Record<string, number | string | null>
@@ -288,7 +289,7 @@ export interface NextStep {
   owner?: string
   due?: string | null
 }
-export interface Meta { reportName: string; clientName?: string; agencyName?: string; platforms: string[]; isDemo?: boolean }
+export interface Meta { reportName: string; clientName?: string; agencyName?: string; agencyLogoUrl?: string | null; clientLogoUrl?: string | null; platforms: string[]; isDemo?: boolean }
 
 /**
  * Whether this document is addressed to a CLIENT — CLIENT-DIAGNOSTIC-SEPARATION-001.
@@ -575,17 +576,32 @@ const ACCENTS: Record<string, string> = {
   leads: 'var(--purple)', cpl: 'var(--teal)', landing_page_views: 'var(--info)',
 }
 
-function CoverSlide({ data, meta }: { data: ReportData; meta: Meta }) {
+export function CoverSlide({ data, meta }: { data: ReportData; meta: Meta }) {
   const ar = useUi((s) => s.locale) === 'ar'
 
   return (
     <div className="report-cover flex h-full min-h-[380px] flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 via-brand-600 to-brand-700 p-8 text-white">
       <div className="flex items-center justify-between">
-        <span className="rounded-lg bg-white/15 px-3 py-1 text-sm font-bold">{meta.agencyName ?? productName(ar ? 'ar' : 'en')}</span>
+        {/*
+          REPORT BRANDING — the issuing agency's mark where it has one, its name where it has none. The
+          chip is white so a dark logo stays legible on the brand gradient; a logo that fails to load
+          hides itself and the name beside it stands.
+        */}
+        <span data-testid="report-cover-agency" className="inline-flex items-center gap-2 rounded-lg bg-white/15 px-3 py-1 text-sm font-bold">
+          {meta.agencyLogoUrl && (
+            <img src={meta.agencyLogoUrl} alt="" data-testid="report-cover-agency-logo" onError={hideBrokenLogo} className="h-6 w-auto max-w-[120px] rounded bg-white object-contain p-0.5" />
+          )}
+          {meta.agencyName ?? productName(ar ? 'ar' : 'en')}
+        </span>
         {meta.isDemo && <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-semibold">بيانات تجريبية · Demo</span>}
       </div>
       <div>
-        <div className="text-sm opacity-80">{meta.clientName ?? 'تقرير الأداء'}</div>
+        <div data-testid="report-cover-client" className="flex items-center gap-2 text-sm opacity-90">
+          {meta.clientLogoUrl && (
+            <img src={meta.clientLogoUrl} alt="" data-testid="report-cover-client-logo" onError={hideBrokenLogo} className="h-9 w-auto max-w-[160px] rounded bg-white object-contain p-1" />
+          )}
+          <span>{meta.clientName ?? 'تقرير الأداء'}</span>
+        </div>
         <h1 className="mt-1 text-4xl font-extrabold sm:text-5xl">{meta.reportName}</h1>
         <div className="mt-3 flex flex-wrap gap-2">{meta.platforms.map((p) => <span key={p} className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold">{providerLabel(canonicalPlatform(p), 'ar')}</span>)}</div>
       </div>
