@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Support;
 
+use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 
 /**
@@ -60,6 +61,8 @@ final class ReportBreakdowns
     /**
      * Which breakdowns this link may open on a surface.
      *
+     * An executive-summary link defaults every breakdown OFF; only an explicit override opens one.
+     *
      * The operator's override is read from `settings.breakdowns.<surface>.<key>` and may only be a
      * boolean; anything else falls back to the registry default. The parent section is checked last
      * and always wins — an override can switch a breakdown off, never switch a hidden section on.
@@ -70,14 +73,37 @@ final class ReportBreakdowns
     {
         $overrides = (array) ((((array) ($share->settings ?? []))['breakdowns'] ?? [])[$surface] ?? []);
         $sections = $share->visibleSections();
+        /*
+         * An executive summary is the short product the operator chose to send: it offers no
+         * drill-down by default on any surface. The operator may enable one on that link, explicitly.
+         */
+        $summary = ReportComposition::for($share->formOr(self::reportForm($share)))->isSummary();
 
         $out = [];
         foreach (self::REGISTRY as $key => $entry) {
-            $wanted = is_bool($overrides[$key] ?? null) ? $overrides[$key] : self::defaultFor($key, $surface);
+            $wanted = is_bool($overrides[$key] ?? null) ? $overrides[$key] : ($summary ? false : self::defaultFor($key, $surface));
             $out[$key] = $wanted && ($sections[$entry['requires']] ?? false);
         }
 
         return $out;
+    }
+
+    /**
+     * The report's own form, read WITHOUT touching `$share->report`.
+     *
+     * This runs before the live builders enter the share's tenant and project, and loading the
+     * relation here cached it as null under the project scope — the drill-down then read the
+     * report's objective as «custom» and put a sales platform's share on results instead of revenue.
+     */
+    private static function reportForm(ReportShare $share): ?string
+    {
+        if ($share->relationLoaded('report')) {
+            return $share->report?->form;
+        }
+
+        $form = Report::withoutGlobalScopes()->whereKey($share->report_id)->value('form');
+
+        return is_string($form) ? $form : null;
     }
 
     public static function allows(ReportShare $share, string $breakdown, string $surface = 'live'): bool
