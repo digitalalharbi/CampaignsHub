@@ -87,7 +87,9 @@ final class CreativeRankingService
             return $direction === 'desc' ? $vb <=> $va : $va <=> $vb;
         });
 
-        return array_map(fn ($i) => $i + ['reason' => $reason($i)], array_slice($items, 0, $limit));
+        // `reason_basis` — the figure the reason sentence states, so a link hiding it can withhold the sentence
+        // rather than scrub the number out of it (SHARED-PDF-HIDE-FLAGS-001).
+        return array_map(fn ($i) => $i + ['reason' => $reason($i), 'reason_basis' => $sortKey], array_slice($items, 0, $limit));
     }
 
     /**
@@ -134,7 +136,7 @@ final class CreativeRankingService
         $reason = $this->weakness($sortKey);
 
         return array_map(
-            fn ($i) => $i + ['reason' => $reason($i)],
+            fn ($i) => $i + ['reason' => $reason($i), 'reason_basis' => $sortKey],
             array_slice($measured, 0, $limit),
         );
     }
