@@ -294,6 +294,10 @@ final class LeadController extends Controller
         $user = $request->user();
         $projectId = $lead->project_id === null ? null : (string) $lead->project_id;
 
+        // ACCOUNT-SCOPE-ISOLATION-001 — a lead from a deselected account is not this project's: 404,
+        // asked before the permission so the answer does not say the lead exists.
+        abort_unless(LeadVisibility::isBoundToItsProject($lead), 404, 'Lead not found.');
+
         abort_unless(
             $user !== null && ($projectId === null
                 ? $user->hasPermission($tenantPermission)

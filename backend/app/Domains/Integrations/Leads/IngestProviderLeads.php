@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Leads;
 use App\Domains\CRM\Actions\LinkDuplicateLead;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Support\PhoneNumber;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
@@ -103,12 +104,14 @@ final class IngestProviderLeads
      */
     private function attributes(string $tenantId, ProviderLead $lead): array
     {
+        $account = $this->accountFor($tenantId, $lead);
+
         return [
             'tenant_id' => $tenantId,
             // The project comes off the ACCOUNT's binding, never off the payload. A body that could
             // name its own project is a body that could name somebody else's — the same rule the
             // webhook ledger already follows for tenants.
-            'project_id' => $this->projectFor($tenantId, $lead),
+            'project_id' => $account === null ? null : app(AccountAssignment::class)->projectIdFor($account),
 
             'name' => $lead->name ?? '',
             'email' => $lead->email,
@@ -117,7 +120,9 @@ final class IngestProviderLeads
             'status' => 'new',
 
             'provider' => $lead->provider,
-            'external_account_id' => $lead->externalAccountId,
+            // OUR account id: the column is a uuid, and every selection rule compares it to a binding.
+            // The provider's own account id stayed on this row before and matched nothing.
+            'external_account_id' => $account?->getKey(),
             'provider_lead_id' => $lead->providerLeadId,
             'provider_created_at' => $lead->providerCreatedAt,
             'received_at' => Carbon::now(),
@@ -154,20 +159,25 @@ final class IngestProviderLeads
         ];
     }
 
-    /** The project this account is bound to, or null — a lead may arrive before the binding exists. */
-    private function projectFor(string $tenantId, ProviderLead $lead): ?string
+    /**
+     * The discovered account the lead names — by the PROVIDER's account id, inside this tenant.
+     *
+     * ACCOUNT-SCOPE-ISOLATION-001 — the project is then the one that account is actively SELECTED
+     * for. This used to read `external_accounts.project_id`, a discovery-time column no selection
+     * writes: a lead from a deselected account, or one moved to another project, was filed where the
+     * account once pointed. No active binding means no project, and the lead waits unfiled.
+     */
+    private function accountFor(string $tenantId, ProviderLead $lead): ?ExternalAccount
     {
         if ($lead->externalAccountId === null) {
             return null;
         }
 
-        $project = ExternalAccount::withoutGlobalScopes()
+        return ExternalAccount::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('external_id', $lead->externalAccountId)
             ->where('provider', $lead->provider)
-            ->value('project_id');
-
-        return $project === null ? null : (string) $project;
+            ->first();
     }
 
     /**
