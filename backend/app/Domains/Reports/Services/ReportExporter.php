@@ -220,9 +220,7 @@ final class ReportExporter
 
     private function localeFor(Report $report): string
     {
-        $locale = $report->config['locale'] ?? null;
-
-        return in_array($locale, ['ar', 'en'], true) ? $locale : 'ar';
+        return $report->reportLocale();
     }
 
     private function csv(Report $report, array $data): string

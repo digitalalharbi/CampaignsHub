@@ -119,6 +119,8 @@ final class PublicReportController extends Controller
             'currency' => $report->currency,
             'is_demo' => $report->is_demo,
             'generated_at' => $report->generated_at?->toIso8601String(),
+            // The report's own language — it titles the page, which is not the viewer's interface language.
+            'locale' => $report->reportLocale(),
             /*
              * Two independent facts, and the client page needs both: `form` is what the report is,
              * `mode` is where its numbers come from. A summary can be live and a detailed report can
@@ -573,13 +575,13 @@ final class PublicReportController extends Controller
      * `logo_url: null` and should not have asked, and inventing a placeholder image here would put a
      * logo on a report that has none.
      */
-    public function sharedBrandingLogo(Request $request, string $token, SharedLinkBranding $branding): mixed
+    public function sharedBrandingLogo(Request $request, string $token, SharedLinkBranding $branding, ?string $role = null): mixed
     {
         $this->throttleBranding($request);
         $share = $this->shares->resolveActive($token);
         abort_unless((bool) $share, 404);
 
-        $file = $branding->logoFor(Report::withoutGlobalScopes()->find($share->report_id), (string) $share->tenant_id);
+        $file = $branding->logoFor(Report::withoutGlobalScopes()->find($share->report_id), (string) $share->tenant_id, $role);
         abort_unless($file !== null, 404);
 
         return $file;
