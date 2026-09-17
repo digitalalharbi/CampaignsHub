@@ -368,7 +368,7 @@ final class ReportGenerator
                     $this->attention->items(new ObjectivePerformanceFigures($scope->objectivePerformance()), $from, $to, (string) ($currency ?? '')),
                     $ads['ads'],
                 ),
-                $this->attention->decisions((string) $report->tenant_id, (string) $report->project_id),
+                $this->attention->decisions((string) $report->tenant_id, (string) $report->id, $from->toDateString(), $to->toDateString()),
             ),
             /*
              * How old these figures are, travelling WITH them (§14.7, §14.10).
@@ -460,6 +460,8 @@ final class ReportGenerator
         $data['data_version'] = self::DATA_VERSION;
         $data['tenant_id'] = (string) $report->tenant_id;
         $data['project_id'] = (string) $report->project_id;
+        // Which report these figures are, so a served client copy reads THIS report's attention decisions.
+        $data['report_id'] = (string) $report->id;
         $data['timezone'] = $report->timezone;
         $data['attribution_window'] = $report->attribution_window;
         $data['data_source'] = $report->data_source;

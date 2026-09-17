@@ -99,11 +99,11 @@ final class ReportAttentionSurfacesTest extends TestCase
 
     public function test_the_operator_sees_both_audiences_and_every_client_surface_sees_only_the_client_safe_item(): void
     {
-        $operator = $this->operatorItems();
+        $report = $this->generate();
+        $operator = $this->operatorItems($report);
         $this->assertEqualsCanonicalizing(['cpl_rise', 'cpc_rise'], array_column($operator, 'code'));
         $this->assertSame(['cpl_rise' => 'client', 'cpc_rise' => 'operator'], array_column($operator, 'audience', 'code') + []);
 
-        $report = $this->generate();
         $this->assertEqualsCanonicalizing(['cpl_rise', 'cpc_rise'], array_column($report->data['attention'], 'code'), 'the snapshot lost the operator\'s view');
 
         foreach ($this->clientSurfaces($report) as $surface => $payload) {
@@ -129,15 +129,15 @@ final class ReportAttentionSurfacesTest extends TestCase
     public function test_an_operator_decision_reaches_every_client_surface_without_regeneration(): void
     {
         $report = $this->generate();
-        $keys = array_column($this->operatorItems(), 'key', 'code');
+        $keys = array_column($this->operatorItems($report), 'key', 'code');
 
-        $this->decide($keys['cpc_rise'], 'approved')->assertOk();
+        $this->decide($report, $keys['cpc_rise'], 'approved')->assertOk();
         foreach ($this->clientSurfaces($report) as $surface => $payload) {
             $this->assertEqualsCanonicalizing(['cpl_rise', 'cpc_rise'], array_column($payload['attention'], 'code'), "{$surface}: approval did not publish the item");
         }
 
-        $this->decide($keys['cpl_rise'], 'hidden')->assertOk();
-        $this->decide($keys['cpc_rise'], null)->assertOk();
+        $this->decide($report, $keys['cpl_rise'], 'hidden')->assertOk();
+        $this->decide($report, $keys['cpc_rise'], null)->assertOk();
         foreach ($this->clientSurfaces($report) as $surface => $payload) {
             $this->assertSame([], $payload['attention'], "{$surface}: a hidden or un-approved item reached a client");
             $outline = $this->outline($payload);
@@ -145,13 +145,55 @@ final class ReportAttentionSurfacesTest extends TestCase
         }
     }
 
+    /**
+     * Coordinator decision on #490: an approval belongs to ONE report and its period. It must not
+     * silently carry into the next period's report, or into another window on the same live link —
+     * the operator re-approves against the figures they are actually publishing.
+     */
+    public function test_an_approval_does_not_carry_into_another_report_or_period(): void
+    {
+        // August repeats July's movement, so the same finding (same item key) exists in both.
+        $this->seedCampaign('Leads — August', CampaignObjective::Leads, [
+            '2026-08-15' => ['spend' => 4500, 'conversions' => 50, 'clicks' => 1000, 'impressions' => 50_000],
+        ]);
+        $this->seedCampaign('Traffic — August', CampaignObjective::Traffic, [
+            '2026-08-15' => ['spend' => 4000, 'clicks' => 1000, 'impressions' => 100_000],
+        ]);
+
+        $july = $this->generate();
+        $august = $this->generate('2026-08-01', '2026-08-31');
+        $julyKeys = array_column($this->operatorItems($july), 'key', 'code');
+        $augustKeys = array_column($this->operatorItems($august), 'key', 'code');
+        $this->assertSame($julyKeys['cpc_rise'], $augustKeys['cpc_rise'] ?? null, 'the fixture must repeat the finding in August for this to mean anything');
+
+        $this->decide($july, $julyKeys['cpc_rise'], 'approved')->assertOk();
+
+        $this->assertContains('cpc_rise', array_column($this->clientSurfaces($july)['shared snapshot']['attention'], 'code'));
+        foreach ($this->clientSurfaces($august) as $surface => $payload) {
+            $this->assertNotContains('cpc_rise', array_column($payload['attention'], 'code'), "{$surface}: July's approval published August's item");
+        }
+        $this->assertSame(null, collect($this->operatorItems($august))->firstWhere('code', 'cpc_rise')['decision']);
+
+        // The live link of the July report, opened on another window, is another period.
+        [, $live] = app(ShareService::class)->create($july, [
+            'mode' => 'live',
+            'scope' => [
+                'project_id' => (string) $this->project->id, 'campaign_ids' => $this->campaignIds,
+                'providers' => ['meta'], 'earliest' => '2026-07-01', 'latest' => '2026-08-31',
+            ],
+        ], $this->operator->id);
+        $august = $this->getJson("/api/v1/reports/shared/{$live}/live?from=2026-08-01&to=2026-08-31")->assertOk()->json('data.attention');
+        $this->assertNotContains('cpc_rise', array_column($august, 'code'), 'an approval for July reached the same link opened on August');
+    }
+
     public function test_approving_needs_the_approve_permission(): void
     {
-        $keys = array_column($this->operatorItems(), 'key', 'code');
+        $report = $this->generate();
+        $keys = array_column($this->operatorItems($report), 'key', 'code');
         $viewer = $this->user('viewer@attention.local', ['reports.view', 'reports.manage']);
 
         $this->actingAs($viewer, 'sanctum')
-            ->putJson("/api/v1/projects/{$this->project->id}/report-attention/{$keys['cpc_rise']}", ['decision' => 'approved'])
+            ->putJson("/api/v1/projects/{$this->project->id}/reports/{$report->id}/attention/{$keys['cpc_rise']}", ['decision' => 'approved'])
             ->assertForbidden();
     }
 
@@ -179,26 +221,26 @@ final class ReportAttentionSurfacesTest extends TestCase
     // ---------------------------------------------------------------------------------------------
 
     /** @return list<array<string,mixed>> */
-    private function operatorItems(): array
+    private function operatorItems(Report $report): array
     {
         return $this->actingAs($this->operator, 'sanctum')
-            ->getJson("/api/v1/projects/{$this->project->id}/report-attention?from=2026-07-01&to=2026-07-31&currency=SAR")
+            ->getJson("/api/v1/projects/{$this->project->id}/reports/{$report->id}/attention")
             ->assertOk()
             ->json('data.items');
     }
 
-    private function decide(string $key, ?string $decision): TestResponse
+    private function decide(Report $report, string $key, ?string $decision): TestResponse
     {
         return $this->actingAs($this->operator, 'sanctum')
-            ->putJson("/api/v1/projects/{$this->project->id}/report-attention/{$key}", ['decision' => $decision]);
+            ->putJson("/api/v1/projects/{$this->project->id}/reports/{$report->id}/attention/{$key}", ['decision' => $decision]);
     }
 
-    private function generate(): Report
+    private function generate(string $from = '2026-07-01', string $to = '2026-07-31'): Report
     {
         $report = Report::create([
-            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'name' => 'July',
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'name' => 'Report '.$from,
             'type' => 'monthly', 'status' => 'processing', 'audience' => 'client',
-            'period_start' => '2026-07-01', 'period_end' => '2026-07-31', 'currency' => 'SAR',
+            'period_start' => $from, 'period_end' => $to, 'currency' => 'SAR',
         ]);
         (new GenerateReportJob((string) $report->id))->handle(app(ReportGenerator::class));
 
@@ -214,17 +256,19 @@ final class ReportAttentionSurfacesTest extends TestCase
     private function clientSurfaces(Report $report, array $settings = [], bool $hideSpend = false, bool $skipPrint = false): array
     {
         $shares = app(ShareService::class);
+        $from = $report->period_start->toDateString();
+        $to = $report->period_end->toDateString();
         [, $snapshot] = $shares->create($report, ['settings' => $settings, 'hide_spend' => $hideSpend], $this->operator->id);
         [, $live] = $shares->create($report, [
             'mode' => 'live', 'settings' => $settings, 'hide_spend' => $hideSpend,
             'scope' => [
                 'project_id' => (string) $this->project->id, 'campaign_ids' => $this->campaignIds,
-                'providers' => ['meta'], 'earliest' => '2026-07-01', 'latest' => '2026-07-31',
+                'providers' => ['meta'], 'earliest' => $from, 'latest' => $to,
             ],
         ], $this->operator->id);
 
         $out = [
-            'live link' => $this->getJson("/api/v1/reports/shared/{$live}/live?from=2026-07-01&to=2026-07-31")->assertOk()->json('data'),
+            'live link' => $this->getJson("/api/v1/reports/shared/{$live}/live?from={$from}&to={$to}")->assertOk()->json('data'),
             'shared snapshot' => $this->getJson("/api/v1/reports/shared/{$snapshot}")->assertOk()->json('data.data'),
         ];
 

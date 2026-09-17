@@ -40,7 +40,7 @@ final class ClientReportView
     public function __construct(private readonly ReportAttention $attention) {}
 
     /** Internal-only top-level keys that must never surface in a client report body. */
-    private const INTERNAL_KEYS = ['checksum', 'data_version', 'tenant_id', 'project_id'];
+    private const INTERNAL_KEYS = ['checksum', 'data_version', 'tenant_id', 'project_id', 'report_id'];
 
     /** Internal name markers stripped from client-facing campaign/creative names. */
     private const INTERNAL_MARKERS = ['/\s*\((?:burner|test|copy|internal|draft|wip)\)/i', '/\s*[-–]\s*(?:v\d+|final|copy|test|draft)\b/i'];
@@ -72,7 +72,7 @@ final class ClientReportView
          * An old snapshot with no attention key gains none.
          */
         if (array_key_exists('attention', $data)) {
-            $decisions = $this->attention->decisions((string) ($data['tenant_id'] ?? ''), (string) ($data['project_id'] ?? ''));
+            $decisions = $this->attention->decisions((string) ($data['tenant_id'] ?? ''), (string) ($data['report_id'] ?? ''), $data['period']['from'] ?? null, $data['period']['to'] ?? null);
             $out['attention'] = AttentionAudience::forClient($data['attention'], $decisions);
             $out = ReportStructure::refresh($out, 'recommendations');
         }
