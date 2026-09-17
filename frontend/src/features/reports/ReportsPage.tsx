@@ -4,7 +4,7 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, Copy, Download, FileText, LayoutGrid, Link2, Loader2, Plus, RefreshCw, Rows3, Send, Share2, Trash2, SlidersHorizontal } from 'lucide-react'
+import { AlertTriangle, Check, Copy, Download, FileText, LayoutGrid, Link2, Loader2, Plus, RefreshCw, Rows3, Send, Share2, Trash2, SlidersHorizontal, ListChecks } from 'lucide-react'
 import { productName } from '@/lib/brand'
 import {
   createReport,
@@ -38,6 +38,7 @@ import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { SchedulesPanel } from './SchedulesPanel'
 import { LiveLinkBuilder } from './LiveLinkBuilder'
 import { ReportScopePicker } from './ReportScopePicker'
+import { ReportSectionControls } from './ReportSectionControls'
 import {
   ShareCreativeControls,
   creativeSharingBody,
@@ -107,6 +108,7 @@ export function ReportsPage() {
    * and wrong, with the client holding it and no sign that anything had moved.
    */
   const [scopeId, setScopeId] = useState<string | null>(null)
+  const [sectionsId, setSectionsId] = useState<string | null>(null)
   const [shareId, setShareId] = useState<string | null>(null)
   const [liveOpen, setLiveOpen] = useState(false)
   const [view, setView] = useState<'table' | 'cards'>('table')
@@ -392,6 +394,7 @@ export function ReportsPage() {
                     onPreview={() => setPreviewId(r.id)}
                     onShare={() => setShareId(r.id)}
                     onScope={() => setScopeId(r.id)}
+                    onSections={() => setSectionsId(r.id)}
                     onRegenerate={() => regen.mutate(r.id)}
                     onExport={(f) => exp.mutate({ id: r.id, format: f })}
                     onSend={() => {
@@ -462,6 +465,15 @@ export function ReportsPage() {
           ? <ShareManager projectId={currentProjectId} reportId={shareId} onClose={() => setShareId(null)} />
           : <ScopeLostDialog ar={ar} onClose={() => setShareId(null)} />
       )}
+      {sectionsId && (
+        currentProjectId ? (
+          <Modal open onClose={() => setSectionsId(null)} title={ar ? 'أقسام التقرير' : 'Report sections'} size="lg">
+            <ReportSectionControls projectId={currentProjectId} reportId={sectionsId} />
+          </Modal>
+        ) : (
+          <ScopeLostDialog ar={ar} onClose={() => setSectionsId(null)} />
+        )
+      )}
       {scopeId && (
         currentProjectId ? (
           <ScopeEditor
@@ -487,6 +499,7 @@ function ReportRowView({
   onPreview,
   onShare,
   onScope,
+  onSections,
   onRegenerate,
   onExport,
   onSend,
@@ -497,6 +510,7 @@ function ReportRowView({
   onPreview: () => void
   onShare: () => void
   onScope: () => void
+  onSections: () => void
   onRegenerate: () => void
   onExport: (f: ReportFormat) => void
   onSend: () => void
@@ -610,6 +624,7 @@ function ReportRowView({
             </>
           )}
           <IconBtn title={ar ? 'نطاق التقرير' : 'Report scope'} onClick={onScope}><SlidersHorizontal size={15} /></IconBtn>
+          <IconBtn title={ar ? 'أقسام التقرير' : 'Report sections'} onClick={onSections}><ListChecks size={15} /></IconBtn>
           <IconBtn title={ar ? 'إعادة الإنشاء' : 'Regenerate'} onClick={onRegenerate}><RefreshCw size={15} /></IconBtn>
           <IconBtn title={ar ? 'حذف' : 'Delete'} onClick={onDelete} danger><Trash2 size={15} /></IconBtn>
         </div>
