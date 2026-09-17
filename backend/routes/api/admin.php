@@ -14,6 +14,7 @@ use App\Domains\Platform\Http\Controllers\PlatformEmailController;
 use App\Domains\Platform\Http\Controllers\PlatformGrantController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
+use App\Domains\Platform\Http\Controllers\MetaCandidateAppController;
 use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
@@ -134,6 +135,18 @@ Route::middleware(['auth:sanctum', 'platform'])
          *
          * `test` and `rotate` are throttled because both leave the building or change what leaves it.
          */
+        /*
+         * META-CANDIDATE-001 — the ONE isolated Candidate Meta app: its credentials (write-only), and
+         * its round trip. Declared before `providers/{provider}` only for reading order; the paths do
+         * not overlap. `test` leaves the building, so it is throttled like the provider test.
+         */
+        Route::prefix('/settings/integrations/meta-candidate')->name('meta-candidate.')->group(function (): void {
+            Route::get('/', [MetaCandidateAppController::class, 'show'])->name('show');
+            Route::put('/', [MetaCandidateAppController::class, 'update'])->name('update');
+            Route::delete('/credentials/{key}', [MetaCandidateAppController::class, 'forget'])->name('credentials.forget');
+            Route::post('/test', [MetaCandidateAppController::class, 'start'])->middleware('throttle:10,1')->name('test');
+        });
+
         Route::prefix('/settings/integrations/providers')->name('providers.')->group(function (): void {
             Route::get('/', [PlatformProviderSettingsController::class, 'index'])->name('index');
             Route::get('/{provider}', [PlatformProviderSettingsController::class, 'show'])->name('show');
