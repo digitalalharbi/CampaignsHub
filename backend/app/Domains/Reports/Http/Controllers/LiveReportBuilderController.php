@@ -11,6 +11,7 @@ use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Sections\ReportSectionRegistry;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Http\Controllers\Controller;
@@ -206,6 +207,12 @@ final class LiveReportBuilderController extends Controller
              * before this meant, and reinterpreting them would change what an existing link shows.
              */
             'form' => ['nullable', Rule::in(['executive_summary', 'detailed'])],
+            /*
+             * The sections this link hides — the report-section registry's own vocabulary, off-only.
+             * The builder used to send display flags this endpoint never read, so they changed nothing.
+             */
+            'section_overrides' => ['sometimes', 'array'],
+            'section_overrides.*' => [Rule::in(app(ReportSectionRegistry::class)->keys())],
         ]);
 
         /*
@@ -278,6 +285,7 @@ final class LiveReportBuilderController extends Controller
             'hide_spend' => $data['hide_spend'] ?? false,
             'hide_revenue' => $data['hide_revenue'] ?? false,
             'form' => $data['form'] ?? null,
+            'settings' => ['section_overrides' => array_values(array_unique((array) ($data['section_overrides'] ?? [])))],
             'scope' => [
                 'project_id' => (string) $project,
                 'campaign_ids' => $campaignIds,

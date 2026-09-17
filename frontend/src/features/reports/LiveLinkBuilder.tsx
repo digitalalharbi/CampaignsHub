@@ -3,7 +3,7 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Check, Copy, Link2 } from 'lucide-react'
-import { createLiveLink, liveBuilderOptions } from './api'
+import { createLiveLink, liveBuilderOptions, reportSectionRegistry } from './api'
 import { groupByLifecycle } from './reportScopeLifecycle'
 import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
@@ -42,16 +42,6 @@ const isoDaysAgo = (days: number) => {
   return d.toISOString().slice(0, 10)
 }
 
-/** The display sections an operator can switch off, in the order the page renders them. */
-const SECTION_CHOICES = [
-  { key: 'platform_comparison', ar: 'مقارنة المنصات وتوزيع الإنفاق', en: 'Platform comparison & spend split' },
-  { key: 'objective_breakdown', ar: 'التحليل حسب الهدف', en: 'Objective breakdown' },
-  { key: 'creatives', ar: 'المحتويات الأعلى أداءً', en: 'Top performing content' },
-  { key: 'budget', ar: 'الميزانية ووتيرة الصرف', en: 'Budget & pacing' },
-  { key: 'funnel_store', ar: 'القمع والمتجر', en: 'Funnel & store' },
-  { key: 'previous_comparison', ar: 'المقارنة بالفترة السابقة', en: 'Comparison with the previous period' },
-] as const
-
 /**
  * The sections an EXECUTIVE SUMMARY does not contain — the mirror of `ReportComposition`.
  *
@@ -66,7 +56,7 @@ const SECTION_CHOICES = [
  * on the summary form would reasonably conclude the control was lost, where a disabled row with a
  * sentence tells them what to change to get it.
  */
-const SUMMARY_WITHHOLDS: readonly string[] = ['funnel_store']
+const SUMMARY_WITHHOLDS: readonly string[] = ['funnel']
 
 export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const ar = useUi((s) => s.locale) === 'ar'
@@ -113,21 +103,12 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const [hideRevenue, setHideRevenue] = useState(false)
   const [allowDownload, setAllowDownload] = useState(false)
   /*
-    The SECTIONS the link publishes.
-    
-    Display sections are on unless the operator turns one off — the asymmetry `ShareSections` sets
-    out: a link built before these existed must keep what it has always rendered, where a DISCLOSURE
-    like attribution stays off until somebody asks. Off is sent explicitly so the payload drops the
-    block rather than the page hiding it.
+    The sections this link HIDES — coordinator decision: the report-section registry's own list,
+    off-only. A section a client report hides by default is shown as «hidden by the report» rather
+    than as a switch, because a link can narrow a report and never widen one.
   */
-  const [sections, setSections] = useState<Record<string, boolean>>({
-    platform_comparison: true,
-    objective_breakdown: true,
-    creatives: true,
-    budget: true,
-    funnel_store: true,
-    previous_comparison: true,
-  })
+  const registry = useQuery({ queryKey: ['report-section-registry', projectId], queryFn: () => reportSectionRegistry(projectId), retry: false })
+  const [linkOff, setLinkOff] = useState<string[]>([])
   const [created, setCreated] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -144,7 +125,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         hide_spend: hideSpend,
         hide_revenue: hideRevenue,
         allow_download: allowDownload,
-        sections,
+        section_overrides: linkOff,
         ...(password ? { password } : {}),
         ...(expiresAt ? { expires_at: expiresAt } : {}),
       }),
@@ -393,33 +374,38 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
           <div className="rounded-xl border border-border p-3">
             <p className="mb-2 text-xs font-bold text-text-muted">{ar ? 'أقسام التقرير' : 'Report sections'}</p>
             <div className="grid gap-1.5 sm:grid-cols-2">
-              {SECTION_CHOICES.map((choice) => {
+              {(registry.data?.sections ?? []).map((choice) => {
                 /* A summary does not contain this section, so the toggle cannot honour it. */
                 const withheld = form === 'executive_summary' && SUMMARY_WITHHOLDS.includes(choice.key)
+                const byReport = !choice.default_client
 
                 return (
                   <label
                     key={choice.key}
                     data-testid={`live-link-section-row-${choice.key}`}
-                    data-withheld={withheld ? 'by-form' : undefined}
-                    className={`flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm ${withheld ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-surface-hover'}`}
+                    data-withheld={withheld ? 'by-form' : byReport ? 'by-report' : undefined}
+                    className={`flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm ${withheld || byReport ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-surface-hover'}`}
                   >
                     <span>
-                      {ar ? choice.ar : choice.en}
+                      {ar ? choice.title_ar : choice.title_en}
                       {withheld && (
                         <span className="block text-[11px] text-text-muted">
                           {ar ? 'في التقرير التفصيلي فقط' : 'In the detailed report only'}
                         </span>
                       )}
                     </span>
-                    <input
-                      type="checkbox"
-                      data-testid={`live-link-section-${choice.key}`}
-                      disabled={withheld}
-                      checked={withheld ? false : (sections[choice.key] ?? true)}
-                      onChange={(e) => setSections((prev) => ({ ...prev, [choice.key]: e.target.checked }))}
-                      className="h-4 w-4 accent-brand-600"
-                    />
+                    {byReport ? (
+                      <span className="text-[11px] text-text-muted">{ar ? 'مخفي في التقرير' : 'Hidden by the report'}</span>
+                    ) : (
+                      <input
+                        type="checkbox"
+                        data-testid={`live-link-section-${choice.key}`}
+                        disabled={withheld}
+                        checked={withheld ? false : !linkOff.includes(choice.key)}
+                        onChange={(e) => setLinkOff((prev) => (e.target.checked ? prev.filter((k) => k !== choice.key) : [...prev, choice.key]))}
+                        className="h-4 w-4 accent-brand-600"
+                      />
+                    )}
                   </label>
                 )
               })}
