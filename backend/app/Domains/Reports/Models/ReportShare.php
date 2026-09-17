@@ -135,6 +135,20 @@ final class ReportShare extends Model
         return (array) ($scope['account_ids'] ?? []) !== [] || (array) ($scope['campaign_ids'] ?? []) !== [];
     }
 
+    /**
+     * The report sections this link hides on top of the report — off-only, in the registry's own
+     * vocabulary (REPORT-SECTION-MODEL-001). A link can narrow a report; it can never widen one.
+     *
+     * @return list<string>
+     */
+    public function sectionOverrides(): array
+    {
+        return array_values(array_filter(
+            (array) (($this->settings ?? [])['section_overrides'] ?? []),
+            static fn ($key): bool => is_string($key) && $key !== '',
+        ));
+    }
+
     public function sectionVisibility(): ShareSections
     {
         return ShareSections::fromArray((array) (($this->settings ?? [])['sections'] ?? []));

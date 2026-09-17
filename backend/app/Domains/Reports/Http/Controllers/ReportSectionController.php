@@ -8,8 +8,10 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportScopeTemplate;
+use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionRegistry;
 use App\Domains\Reports\Sections\ReportSectionResolver;
+use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Sections\SectionContext;
 use App\Domains\Reports\Sections\SectionSettings;
 use App\Http\Controllers\Controller;
@@ -90,6 +92,98 @@ final class ReportSectionController extends Controller
         );
 
         return ApiResponse::success($this->reportShape($model->fresh() ?? $model), 'Report sections saved.');
+    }
+
+    /**
+     * One link's switches — the SAME registry list as the report's, off-only.
+     *
+     * Each section reads `hidden_by_report` (the report already hides it; the link cannot change
+     * that), `hidden_by_link` or `shown`. The preview is what this link's client gets.
+     */
+    public function showShare(Request $request, string $project, string $report, string $share): JsonResponse
+    {
+        $this->authorise($request, $project, 'reports.view');
+        [$model, $link] = $this->findShare($report, $share);
+
+        return ApiResponse::success($this->shareShape($model, $link), 'Link sections.');
+    }
+
+    public function updateShare(Request $request, AuditLogger $audit, string $project, string $report, string $share): JsonResponse
+    {
+        $this->authorise($request, $project, 'reports.manage');
+        [$model, $link] = $this->findShare($report, $share);
+
+        $surfaces = app(ReportSectionSurfaces::class);
+        $before = array_keys($surfaces->hiddenByLink($link));
+        $hidden = array_fill_keys($before, true);
+
+        foreach ($this->validatedSections($request, []) as $key => $on) {
+            if ($on) {
+                unset($hidden[$key]);
+            } else {
+                $hidden[$key] = true;
+            }
+        }
+
+        /*
+         * The older display flags fold into the overrides and are set back to ON, so the link has one
+         * list: switching a section back on here cannot be undone by a flag nobody can see.
+         * `attribution` and `previous_comparison` are not sections and are left as they were.
+         */
+        $settings = (array) ($link->settings ?? []);
+        $flags = (array) ($settings['sections'] ?? []);
+        foreach (array_keys(ReportSectionSurfaces::SHARE_FLAGS) as $flag) {
+            $flags[$flag] = true;
+        }
+        $settings['sections'] = $flags;
+        $settings['section_overrides'] = array_values(array_intersect($this->registry->keys(), array_keys($hidden)));
+        $link->settings = $settings;
+        $link->save();
+
+        $audit->log(
+            action: 'report.shared_link_sections_updated',
+            entityType: ReportShare::class,
+            entityId: (string) $link->getKey(),
+            before: ['hidden' => $before],
+            after: ['hidden' => $settings['section_overrides']],
+        );
+
+        return ApiResponse::success($this->shareShape($model, $link->fresh() ?? $link), 'Link sections saved.');
+    }
+
+    /** @return array{0: Report, 1: ReportShare} */
+    private function findShare(string $report, string $share): array
+    {
+        $model = Report::query()->findOrFail($report);
+        $link = ReportShare::query()->where('report_id', $model->getKey())->findOrFail($share);
+
+        return [$model, $link];
+    }
+
+    /** @return array<string, mixed> */
+    private function shareShape(Report $report, ReportShare $link): array
+    {
+        $surfaces = app(ReportSectionSurfaces::class);
+        $reportOn = $this->resolver->resolve($report->sectionSettings(), $surfaces->contextFor($report, $link, 'preview'));
+        $byLink = $surfaces->hiddenByLink($link);
+        $data = ! $link->isLive() && is_array($report->data) && $report->data !== [] ? $report->data : null;
+        $resolved = $surfaces->resolve($report, $link, 'preview', $data);
+
+        return [
+            'share_id' => (string) $link->getKey(),
+            'sections' => array_map(fn ($section): array => [
+                'key' => $section->key,
+                'title_ar' => $section->titleAr,
+                'title_en' => $section->titleEn,
+                'breakdown' => $section->breakdown,
+                'state' => $reportOn->reasonFor($section->key) === ReportSectionResolver::DISABLED_BY_OPERATOR
+                    ? 'hidden_by_report'
+                    : (isset($byLink[$section->key]) ? 'hidden_by_link' : 'shown'),
+            ], $this->registry->all()),
+            'resolved' => $resolved->toArray(),
+            'visible' => $resolved->visible(),
+            'availability_judged' => $resolved->availabilityJudged,
+        ];
     }
 
     public function showTemplate(Request $request, string $project, string $template): JsonResponse

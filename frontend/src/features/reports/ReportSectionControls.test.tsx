@@ -11,7 +11,7 @@ import * as api from './api'
 vi.mock('./api', async () => {
   const actual = await vi.importActual<typeof api>('./api')
 
-  return { ...actual, getReportSections: vi.fn(), updateReportSections: vi.fn(), updateTemplateSections: vi.fn(), listScopeTemplates: vi.fn() }
+  return { ...actual, getReportSections: vi.fn(), updateReportSections: vi.fn(), updateTemplateSections: vi.fn(), listScopeTemplates: vi.fn(), listShares: vi.fn(), getShareSections: vi.fn(), updateShareSections: vi.fn() }
 })
 
 const row = (key: string, visible: boolean, reason: api.SectionReason | null, breakdown = false): api.ResolvedSectionRow => ({
@@ -38,6 +38,7 @@ describe('ReportSectionControls', () => {
   beforeEach(() => {
     vi.mocked(api.getReportSections).mockResolvedValue(state())
     vi.mocked(api.listScopeTemplates).mockResolvedValue({ templates: [] })
+    vi.mocked(api.listShares).mockResolvedValue([])
   })
 
   it('shows each switch at its effective state and the preview with the server’s reasons', async () => {
@@ -77,5 +78,32 @@ describe('ReportSectionControls', () => {
 
     expect(await screen.findByTestId('section-controls-error')).toBeInTheDocument()
     expect(screen.getByTestId('section-toggle-detailed_tables')).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('a link’s switches are the same list, off-only, and say what the report already hides', async () => {
+    vi.mocked(api.listShares).mockResolvedValue([{ id: 'sh1', active: true, mode: 'live', created_at: '2026-09-01T00:00:00Z' }] as never)
+    const link = (budget: 'shown' | 'hidden_by_link'): api.ShareSectionsState => ({
+      share_id: 'sh1',
+      sections: [
+        { key: 'kpis', title_ar: 'kpis', title_en: 'kpis', breakdown: false, state: 'shown' },
+        { key: 'budget_pacing', title_ar: 'budget_pacing', title_en: 'budget_pacing', breakdown: false, state: budget },
+        { key: 'detailed_tables', title_ar: 'detailed_tables', title_en: 'detailed_tables', breakdown: false, state: 'hidden_by_report' },
+      ],
+      resolved: [row('kpis', true, null)],
+      visible: ['kpis'],
+      availability_judged: false,
+    })
+    vi.mocked(api.getShareSections).mockResolvedValue(link('shown'))
+    vi.mocked(api.updateShareSections).mockResolvedValue(link('hidden_by_link'))
+    renderWithProviders(<ReportSectionControls projectId="p1" reportId="r1" />, { locale: 'en' })
+
+    fireEvent.change(await screen.findByTestId('section-level'), { target: { value: 'sh1' } })
+
+    expect(await screen.findByTestId('section-link-hidden-by-report-detailed_tables')).toHaveTextContent('Hidden by the report')
+    expect(screen.queryByTestId('section-toggle-detailed_tables')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('section-toggle-budget_pacing'))
+    await waitFor(() => expect(api.updateShareSections).toHaveBeenCalledWith('p1', 'r1', 'sh1', { budget_pacing: false }))
+    await waitFor(() => expect(screen.getByTestId('section-toggle-budget_pacing')).toHaveAttribute('aria-checked', 'false'))
   })
 })
