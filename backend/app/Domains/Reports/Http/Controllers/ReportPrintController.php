@@ -6,8 +6,10 @@ namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ClientReportView;
 use App\Domains\Reports\Services\ExportReadinessGate;
+use App\Domains\Reports\Services\ShareService;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -63,6 +65,24 @@ final class ReportPrintController extends Controller
         // internal fields (checksum/tenant/project) are removed from the BODY, so CSS can never be the
         // only thing hiding them. Provenance stays only in the response envelope for PDF /Title metadata.
         $body = $report->data ?? [];
+
+        /*
+         * SHARED-PDF-HIDE-FLAGS-001 — a shared link's PDF prints that link's document, not the report's.
+         *
+         * The context names the share when the file is a client's download. It is re-checked here, not
+         * trusted: a link revoked, expired or closed to downloads between the click and Chromium's
+         * fetch serves nothing, and a share of another report never borrows this one.
+         */
+        if (($ctx['share_id'] ?? null) !== null) {
+            $share = ReportShare::withoutGlobalScopes()->find($ctx['share_id']);
+            abort_if(
+                $share === null || ! $share->isActive() || ! $share->allow_download || (string) $share->report_id !== (string) $report->id,
+                404,
+                'Print token invalid or expired.',
+            );
+            $body = app(ShareService::class)->downloadDocument($report, $share);
+        }
+
         if ($audience === 'client') {
             $body = app(ClientReportView::class)->filter($body);
         } elseif ($audience === 'executive') {

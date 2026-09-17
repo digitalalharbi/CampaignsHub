@@ -500,28 +500,17 @@ final class PublicReportController extends Controller
          * The PDF is the copy a client KEEPS, so it is the last place to print «no cover» over an
          * ad whose picture the product can resolve — REPORT-CREATIVE-MEDIA-001.
          */
-        $data = $this->shares->sanitize(
-            app(ReportCreativeMedia::class)->refresh($report->data ?? []),
-            $share,
-        );
-
         /*
-         * §15.12 — the creative rows reach the file only if the link may show them.
+         * ONE share-filtered document for every file this link produces — SHARED-PDF-HIDE-FLAGS-001.
          *
-         * Attached HERE rather than stored on the report, so the same generated report exports with
-         * creatives for one recipient and without them for another. The rows come back already
-         * redacted by `SharedCreativeView`, which is the only place the visibility rules live: an
-         * exporter that re-derived «may this show ROAS?» would be a second opinion, and the first
-         * time the two disagreed the disagreement would be sitting in a file somebody had already
-         * been sent.
+         * The CSV and XLSX render from it directly. The PDF is printed by Chromium from the print
+         * route, which used to read the stored report and so printed what this link hides; the share
+         * now rides the print context and that route builds this same document.
          */
-        if ($share->creativeVisibility()->creatives) {
-            $creatives = app(SharedCreativeView::class)->library($share, ['per_page' => 48]);
-            $data['creatives'] = $creatives['creatives'];
-        }
+        $data = $this->shares->downloadDocument($report, $share);
 
         $sanitized->data = $data;
-        $content = app(ReportExporter::class)->render($sanitized, $format);
+        $content = app(ReportExporter::class)->render($sanitized, $format, $share);
         $this->shares->log($share, 'download', $request, $format);
 
         $mime = ['pdf' => 'application/pdf', 'csv' => 'text/csv', 'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'][$format];

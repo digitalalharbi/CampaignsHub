@@ -208,6 +208,27 @@ final class ShareService
         return array_merge($config, ['watermark' => (bool) $share->watermark]);
     }
 
+    /**
+     * The document a shared link's FILES are made from — SHARED-PDF-HIDE-FLAGS-001.
+     *
+     * Media resolved now (REPORT-CREATIVE-MEDIA-001), then this link's hide flags, then the creative
+     * rows the link may show, already redacted by `SharedCreativeView`. The download controller and the
+     * print route both call this, so the spreadsheet and the PDF of one link cannot say different things.
+     *
+     * @return array<string, mixed>
+     */
+    public function downloadDocument(Report $report, ReportShare $share): array
+    {
+        $data = $this->sanitize(app(ReportCreativeMedia::class)->refresh($report->data ?? []), $share);
+
+        // §15.12 — the creative rows reach the file only if the link may show them.
+        if ($share->creativeVisibility()->creatives) {
+            $data['creatives'] = app(SharedCreativeView::class)->library($share, ['per_page' => 48])['creatives'];
+        }
+
+        return $data;
+    }
+
     public function sanitize(array $data, ReportShare $share): array
     {
         /*
@@ -279,6 +300,26 @@ final class ShareService
         }
 
         /* The wrapper-shaped section that was on no list — see the live path's note. */
+        /*
+         * SHARED-PDF-HIDE-FLAGS-001 — the per-platform series the deck's platform charts draw from.
+         *
+         * Keyed by provider rather than a list, so the section loop above never reached it: a link
+         * hiding spend still published every platform's daily spend under `platform_series`.
+         */
+        if (! empty($data['platform_series']) && is_array($data['platform_series'])) {
+            foreach ($data['platform_series'] as &$series) {
+                if (is_array($series)) {
+                    foreach ($series as &$point) {
+                        if (is_array($point)) {
+                            $stripMoney($point);
+                        }
+                    }
+                    unset($point);
+                }
+            }
+            unset($series);
+        }
+
         if (! empty($data['objective_performance']) && is_array($data['objective_performance'])) {
             if (! empty($data['objective_performance']['paths']) && is_array($data['objective_performance']['paths'])) {
                 foreach ($data['objective_performance']['paths'] as &$path) {
@@ -337,6 +378,74 @@ final class ShareService
 
                 return $platform;
             }, $data['ads_platform_groups']);
+        }
+
+        /*
+         * SHARED-PDF-HIDE-FLAGS-001 — and then every hidden key, at any depth, as the backstop.
+         *
+         * The named sections above are the ones known today; `platform_series` was the one that was
+         * not, and the next section a generator adds would be the next one. A hidden figure is null
+         * wherever its key appears, so a new section cannot publish one until someone remembers it.
+         */
+        $walk = function (array &$node) use (&$walk, $stripMoney): void {
+            $stripMoney($node);
+            foreach ($node as &$child) {
+                if (is_array($child)) {
+                    $walk($child);
+                }
+            }
+            unset($child);
+        };
+        if ($share->hide_spend || $share->hide_revenue) {
+            $walk($data);
+        }
+
+        /*
+         * Money the generator stores under names no metric list uses — SHARED-PDF-HIDE-FLAGS-001.
+         *
+         * `funnel_spend` is the funnel's spend and each stage's `cost_per` is that spend divided by the
+         * stage; `best.platform_value` is the ranking figure written out («30.00×»), and a ROAS is
+         * both money figures at once. Found by walking a generated report, not by reading the list.
+         */
+        if ($share->hide_spend) {
+            /*
+             * A budget row states spend under other names: `spent` is spend, and remaining, consumed,
+             * pace, projected, daily average and over/under are spend measured against the stated
+             * plan — each gives the hidden figure back from the budget printed beside it.
+             */
+            if (! empty($data['budget']) && is_array($data['budget'])) {
+                foreach ($data['budget'] as &$line) {
+                    if (is_array($line)) {
+                        foreach (['spent', 'spend_withheld', 'remaining', 'consumed_pct', 'pace', 'projected_spend', 'daily_average', 'over_under'] as $key) {
+                            if (array_key_exists($key, $line)) {
+                                $line[$key] = null;
+                            }
+                        }
+                    }
+                }
+                unset($line);
+            }
+            if (array_key_exists('funnel_spend', $data)) {
+                $data['funnel_spend'] = null;
+            }
+            if (! empty($data['funnel']) && is_array($data['funnel'])) {
+                foreach ($data['funnel'] as &$stage) {
+                    if (is_array($stage) && array_key_exists('cost_per', $stage)) {
+                        $stage['cost_per'] = null;
+                    }
+                }
+                unset($stage);
+            }
+        }
+        if (($share->hide_spend || $share->hide_revenue) && isset($data['best']) && is_array($data['best'])) {
+            $basis = (string) ($data['best']['basis']['key'] ?? '');
+            $hiddenKeys = array_merge(
+                $share->hide_spend ? CreativeVisibility::COST_METRICS : [],
+                $share->hide_revenue ? CreativeVisibility::REVENUE_METRICS : [],
+            );
+            if (in_array($basis, $hiddenKeys, true)) {
+                $data['best']['platform_value'] = null;
+            }
         }
 
         if ($share->hide_spend || $share->hide_revenue) {
