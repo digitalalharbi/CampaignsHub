@@ -69,6 +69,7 @@ final class SnapchatLpvProvenanceCommand extends Command
             ->get();
 
         $this->deliveryFieldPresence(max(1, (int) ($this->option('runs') ?: 2)));
+        $this->entityGrainRuns(max(1, (int) ($this->option('runs') ?: 2)), $earliest);
 
         $this->line('');
 
@@ -224,5 +225,66 @@ final class SnapchatLpvProvenanceCommand extends Command
                 $this->walk($child, $type, $fields, $tally);
             }
         }
+    }
+
+    /**
+     * Did the ad-set and ad grain actually write, and what did it write, since the sweep's reach? The
+     * latest runs' own meta (rows upserted per grain, the first refusal with every id masked), and the
+     * stored rows inside the reach — all of them, and those carrying `landing_page_views`. Counts only.
+     */
+    private function entityGrainRuns(int $runs, ?string $earliest): void
+    {
+        $this->line('');
+        $this->line('  entity grain in the latest run(s) — rows written and the first refusal (ids masked)');
+
+        foreach (DB::table('metric_sync_runs')->where('provider', 'snapchat')->orderByDesc('created_at')->limit($runs)->get(['created_at', 'status', 'meta']) as $run) {
+            $meta = is_string($run->meta) ? (array) json_decode($run->meta, true) : (array) $run->meta;
+            $failure = $meta['entity_failure'] ?? null;
+            $this->line(sprintf(
+                '    %s  status %s  ad sets %s  ads %s  refusal %s',
+                Carbon::parse((string) $run->created_at)->toDateTimeString(),
+                (string) $run->status,
+                array_key_exists('entity_ad_sets', $meta) ? (string) (int) $meta['entity_ad_sets'] : 'not recorded',
+                array_key_exists('entity_ads', $meta) ? (string) (int) $meta['entity_ads'] : 'not recorded',
+                is_string($failure) && $failure !== '' ? self::mask($failure) : 'none',
+            ));
+        }
+
+        if ($earliest === null) {
+            return;
+        }
+
+        $inside = DB::table('entity_daily_metrics')
+            ->where('provider', 'snapchat')
+            ->where('metric_date', '>=', $earliest)
+            ->selectRaw('entity_type, COUNT(*) AS rows_found, COUNT(landing_page_views) AS with_lpv, COUNT(page_views) AS with_page_views, MAX(updated_at) AS last_written')
+            ->groupBy('entity_type')
+            ->orderBy('entity_type')
+            ->get();
+
+        $this->line(sprintf('  stored entity rows ON or AFTER %s:', $earliest));
+
+        if ($inside->isEmpty()) {
+            $this->line('    none');
+        }
+
+        foreach ($inside as $row) {
+            $this->line(sprintf(
+                '    %-8s rows %d, carrying landing_page_views %d, carrying page_views %d, last written %s',
+                (string) $row->entity_type,
+                (int) $row->rows_found,
+                (int) $row->with_lpv,
+                (int) $row->with_page_views,
+                $row->last_written === null ? 'never' : Carbon::parse((string) $row->last_written)->toDateTimeString(),
+            ));
+        }
+    }
+
+    /** A provider message with every identifier and URL masked, cut to one line. */
+    private static function mask(string $message): string
+    {
+        $masked = (string) preg_replace(['#https?://\S+#', '/[0-9a-f]{8}-[0-9a-f-]{27,}/i', '/\b\d{5,}\b/'], ['<url>', '<id>', '<n>'], $message);
+
+        return mb_substr(str_replace(["\r", "\n"], ' ', $masked), 0, 200);
     }
 }

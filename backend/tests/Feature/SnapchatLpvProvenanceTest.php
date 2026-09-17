@@ -62,6 +62,10 @@ final class SnapchatLpvProvenanceTest extends TestCase
             'created_at' => now()->subHour(), 'updated_at' => now()->subHour(),
         ]);
 
+        DB::table('metric_sync_runs')->update(['meta' => json_encode([
+            'entity_ad_sets' => 0, 'entity_ads' => 0,
+            'entity_failure' => 'Snapchat could not return ad stats: denied [path: /v1/campaigns/8f3ace06-5ddd-4f9f-a684-cb281d0becde/stats]',
+        ])]);
         $runId = (string) DB::table('metric_sync_runs')->value('id');
         DB::table('integration_raw_payloads')->insert([
             'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->getKey(), 'sync_run_id' => $runId,
@@ -90,6 +94,9 @@ final class SnapchatLpvProvenanceTest extends TestCase
         $this->assertStringContainsString("outside the sweep's reach (before 2026-09-09): 3 row(s), 2 with the old mapping's signature", $output);
         $this->assertStringContainsString("inside the sweep's reach: 1 row(s)", $output);
         $this->assertStringContainsString('bodies read: 1', $output);
+        $this->assertMatchesRegularExpression('/status success\\s+ad sets 0\\s+ads 0\\s+refusal Snapchat could not return ad stats: denied \\[path: \\/v1\\/campaigns\\/<id>\\/stats\\]/', $output);
+        $this->assertStringNotContainsString('8f3ace06', $output);
+        $this->assertMatchesRegularExpression('/ad\\s+rows 1, carrying landing_page_views 1, carrying page_views 1/', $output);
         $this->assertMatchesRegularExpression('/ad\\s+landing_page_views\\s+key absent 1, JSON null 1, zero 0, positive 0/', $output);
         $this->assertMatchesRegularExpression('/ad\\s+conversion_page_views\\s+key absent 0, JSON null 0, zero 1, positive 1/', $output);
         $this->assertMatchesRegularExpression('/ad\s+2026-08\s+3\s+2\s+2026-08-20\s+2026-08-22/', $output);
