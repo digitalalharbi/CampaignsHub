@@ -143,6 +143,12 @@ default and none falls back to a Live value.
   asset type **Ad accounts**, permission **ads_read**. Its ID is the Configuration ID.
 - No webhooks are needed.
 
+**Running the test:** `/admin/settings/integrations/meta-candidate` → «Run connection test» → consent
+at Meta → back on the same page with the step checklist (OAuth start, consent, token exchange,
+`me/adaccounts`, one `ads_read` insights read for the last 7 days). The same result is printed, read-only,
+by `php artisan integrations:meta-candidate`, and by the **Production diagnostics** workflow when it
+is dispatched with `provider: meta` (no new input).
+
 Set `AD_PLATFORM_REDIRECT_BASE` explicitly in a split deployment — several providers refuse to
 register a redirect that does not match byte for byte.
 

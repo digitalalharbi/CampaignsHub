@@ -177,6 +177,26 @@ jobs:
                 --accounts="${ACCOUNTS}" \
                 ${LINKED} ${PAYLOAD} ${DOWNSTREAM} ${HIERARCHY}
 
+      # META-CANDIDATE-001 — with `provider: meta`, the same read-only dispatch also prints the last
+      # Candidate Meta app round trip: its step checklist and Meta's error identifiers. No new input
+      # (this workflow is at GitHub's 25-input cap). Calls no provider, writes nothing, prints no token,
+      # secret or App ID.
+      - name: Last Candidate Meta app round trip
+        if: inputs.provider == 'meta'
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan integrations:meta-candidate
+
   # ── The probe ────────────────────────────────────────────────────────────────────────────────────
   #
   # `integrations:probe` DOES call the platform — that is its whole purpose — and stores nothing: no
