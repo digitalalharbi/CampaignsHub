@@ -9,6 +9,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ClientReportView;
 use App\Domains\Reports\Services\ExportReadinessGate;
+use App\Domains\Reports\Services\ReportPlatformDrilldowns;
 use App\Domains\Reports\Services\ShareService;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -87,6 +88,16 @@ final class ReportPrintController extends Controller
             $body = app(ClientReportView::class)->filter($body);
         } elseif ($audience === 'executive') {
             $body = app(ClientReportView::class)->executive($body);
+        }
+
+        /*
+         * REPORT-DRILLDOWN-001 — the optional platform drill-down section, present only when the operator
+         * enabled it on this report. Attached AFTER the client filter and built client-safe itself, so
+         * the filter has nothing of it to miss.
+         */
+        $drilldowns = app(ReportPlatformDrilldowns::class)->forPrint($report, $body);
+        if ($drilldowns !== []) {
+            $body['platform_drilldowns'] = $drilldowns;
         }
 
         return ApiResponse::success([

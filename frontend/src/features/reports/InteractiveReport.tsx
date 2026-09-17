@@ -54,6 +54,8 @@ export interface ReportSection {
 
 export interface ReportData {
   period: { from: string; to: string }
+  /** REPORT-DRILLDOWN-001 — the PDF's optional platform drill-down; sent only when the operator enabled it. */
+  platform_drilldowns?: import('./PrintPlatformDrilldowns').PrintPlatformDrilldown[]
   currency: string
   objective?: string
   kpis: Record<string, number | null>
