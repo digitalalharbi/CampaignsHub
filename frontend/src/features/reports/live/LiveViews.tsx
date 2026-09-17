@@ -13,6 +13,7 @@ import type { LivePayload } from '../api'
 import { ClientAttention } from '../ClientAttention'
 import { LiveDetailTables, LivePlatformComparison } from '../LiveDetailTables'
 import { ReportAdsSection, type ReportAd } from '../ReportAdsSection'
+import { ObjectiveAnalyticsSection } from '../ObjectiveAnalyticsSection'
 import { asContent, ContentTile } from './LiveContent'
 import { kpiKeysFor, LiveKpiBoard, LiveScopeCounts } from './LiveKpis'
 import {
@@ -241,7 +242,16 @@ export function DashboardView({ payload, reader, currency, locale, onOpenContent
           </div>
         </div>
       )}
-      <ObjectiveLeaders payload={payload} ar={ar} reader={reader} />
+      {/*
+        REPORT-OBJECTIVE-ANALYTICS-001 — the objective section supersedes the per-path leaders: the same
+        «strongest and weakest inside an objective», per family rather than per money path, above a
+        minimum volume, with content and contribution beside it. A payload built before it falls back.
+      */}
+      {payload.objective_analytics
+        ? sectionOn(payload, 'objective_breakdown') && (
+          <ObjectiveAnalyticsSection section={payload.objective_analytics} currency={currency} ar={ar} showContent={sectionOn(payload, 'creatives')} />
+        )
+        : <ObjectiveLeaders payload={payload} ar={ar} reader={reader} />}
       {sectionOn(payload, 'creatives') && (
         <section className="flex flex-col gap-5">
           <div>
