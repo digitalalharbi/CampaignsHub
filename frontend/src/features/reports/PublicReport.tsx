@@ -153,15 +153,23 @@ export function PublicReport() {
           */}
           <span className="flex min-w-0 items-center gap-2">
             {identity.logoUrl && (
-              <img src={identity.logoUrl} alt="" data-testid="shared-report-logo" onError={hideBrokenLogo} className="h-7 w-auto max-w-[120px] shrink-0 object-contain sm:max-w-[160px]" />
+              <img src={identity.logoUrl} alt="" data-testid="shared-report-logo" onError={hideBrokenLogo} className="h-7 w-auto max-w-[72px] shrink-0 object-contain sm:max-w-[160px]" />
             )}
             <span className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-2">
             <span className="truncate font-heading text-base font-extrabold tracking-tight sm:text-lg" data-testid="shared-report-name">{identity.name}</span>
             {identity.by && (
-              <span className="flex min-w-0 items-center gap-1.5 truncate text-xs text-text-secondary" data-testid="shared-report-by">
-                {locale === 'ar' ? `بواسطة ${identity.by}` : `by ${identity.by}`}
+              <span className="flex min-w-0 items-center gap-1.5 text-xs text-text-secondary" data-testid="shared-report-by">
+                {/* The words truncate on their own; the mark keeps its size beside them rather than escaping the line. */}
+                {/*
+                  With its mark, the agency is «by» and the mark — the logo carries the name (and says it
+                  to a screen reader), so a phone header is not «by» and a truncated name beside a logo
+                  that already says it. Without a mark, the name is the words.
+                */}
+                <span className="min-w-0 truncate">
+                  {identity.byLogoUrl ? (locale === 'ar' ? 'بواسطة' : 'by') : (locale === 'ar' ? `بواسطة ${identity.by}` : `by ${identity.by}`)}
+                </span>
                 {identity.byLogoUrl && (
-                  <img src={identity.byLogoUrl} alt="" data-testid="shared-report-agency-logo" onError={hideBrokenLogo} className="h-4 w-auto max-w-[72px] shrink-0 object-contain" />
+                  <img src={identity.byLogoUrl} alt={identity.by} data-testid="shared-report-agency-logo" onError={hideBrokenLogo} className="h-4 w-auto max-w-[72px] shrink-0 object-contain" />
                 )}
               </span>
             )}
