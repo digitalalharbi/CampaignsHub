@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Services;
 
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
+use App\Domains\Reports\Models\ReportShare;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -45,10 +46,10 @@ final class ReportExporter
     ) {}
 
     /** Render a report to file bytes for a format, without persisting anything (used by public share). */
-    public function render(Report $report, string $format): string
+    public function render(Report $report, string $format, ?ReportShare $share = null): string
     {
         // No format may render until the snapshot passes the data-consistency gate.
-        $this->gate->ensureReady($report);
+        $this->gate->ensureReady($this->stored($report, $share));
         // SINGLE enforcement point: every export path (admin export, scheduled, email, share) is filtered
         // by the report's audience here — an authenticated admin can NEVER bypass client filtering.
         $data = $this->withoutHiddenSections($report, $this->audienceData($report));
@@ -56,7 +57,7 @@ final class ReportExporter
         return match ($format) {
             'csv' => $this->csv($report, $data),
             'xlsx' => $this->xlsx($report, $data),
-            'pdf' => $this->pdf($report, $data),
+            'pdf' => $this->pdf($report, $data, $share),
             default => throw new \InvalidArgumentException("Unsupported format: {$format}"),
         };
     }
@@ -665,14 +666,32 @@ final class ReportExporter
         return $rows;
     }
 
-    private function pdf(Report $report, array $data): string
+    /**
+     * The report the readiness gate judges — the STORED snapshot, never a link's redacted copy.
+     *
+     * SHARED-PDF-HIDE-FLAGS-001. A link hiding spend hands this class a replica whose spend is null,
+     * and the consistency rules read that as «results with zero spend» and refused the export: every
+     * file of every link that hides spend answered 422. Whether a snapshot is consistent is a fact
+     * about the snapshot; what a link may show of it is decided afterwards.
+     */
+    private function stored(Report $report, ?ReportShare $share): Report
+    {
+        if ($share === null) {
+            return $report;
+        }
+
+        return Report::withoutGlobalScopes()->find($report->getKey()) ?? $report;
+    }
+
+    private function pdf(Report $report, array $data, ?ReportShare $share = null): string
     {
         // Creative Arabic reports render via headless Chromium over the print route (correct RTL, real
         // charts, fonts). A failure throws so the export is marked Failed — never a broken/partial file.
         if ($this->chromium->isEnabled()) {
             $type = ($report->config['pdf_type'] ?? 'presentation') === 'document' ? 'document' : 'presentation';
 
-            return $this->chromium->render($report, $type);
+            // A shared link's file prints from that link's filtered document — SHARED-PDF-HIDE-FLAGS-001.
+            return $this->chromium->render($report, $type, share: $share);
         }
 
         // FAIL-CLOSED for client-facing reports: the Dompdf fallback is text-first and cannot render the

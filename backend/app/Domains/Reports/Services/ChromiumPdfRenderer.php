@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Services;
 
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Models\ReportShare;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -30,11 +31,17 @@ final class ChromiumPdfRenderer
     /**
      * @param  'presentation'|'document'  $type
      */
-    public function render(Report $report, string $type = 'presentation', string $theme = 'light'): string
+    /**
+     * @param  ReportShare|null  $share  SHARED-PDF-HIDE-FLAGS-001 — when the file is a shared link's
+     *                                   download, the link it was downloaded through. The print route
+     *                                   then serves the share-filtered document, never the stored one.
+     */
+    public function render(Report $report, string $type = 'presentation', string $theme = 'light', ?ReportShare $share = null): string
     {
-        $this->gate->ensureReady($report);
+        // A link's redacted replica is judged by its stored snapshot — see ReportExporter::stored().
+        $this->gate->ensureReady($share === null ? $report : (Report::withoutGlobalScopes()->find($report->getKey()) ?? $report));
 
-        $token = $this->issueToken($report, $type, $theme);
+        $token = $this->issueToken($report, $type, $theme, $share);
         $appUrl = rtrim((string) config('reports.chromium.app_url'), '/');
         $url = "{$appUrl}/reports/print/{$token}?type={$type}&theme={$theme}";
 
@@ -114,7 +121,7 @@ final class ChromiumPdfRenderer
     }
 
     /** Call the internal print-token endpoint so the token is minted through the same gated flow. */
-    private function issueToken(Report $report, string $type, string $theme): string
+    private function issueToken(Report $report, string $type, string $theme, ?ReportShare $share = null): string
     {
         // In-process token mint (no HTTP round-trip): mirror ReportPrintController::issue. The audience
         // carries through so the print route receives backend-filtered (client-safe) data.
@@ -136,6 +143,14 @@ final class ChromiumPdfRenderer
                  * to deter.
                  */
                 'watermark' => (bool) ($report->config['watermark'] ?? false),
+                /*
+                 * SHARED-PDF-HIDE-FLAGS-001 — the link, by id, in the server-minted context.
+                 *
+                 * Without it the print route could only read the REPORT, and served its stored data:
+                 * a link hiding spend held on the page and in the spreadsheet and printed spend into
+                 * the PDF. The id rides the cache entry, never the URL, for the reason `audience` does.
+                 */
+                'share_id' => $share?->getKey() === null ? null : (string) $share->getKey(),
             ],
             300,
         );
