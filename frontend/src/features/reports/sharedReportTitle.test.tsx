@@ -44,11 +44,13 @@ function open(brandingName: string | null, locale: 'ar' | 'en' = 'en') {
 }
 
 describe('the tab a client’s report opens in', () => {
-  it('carries the report and the client, not the product’s advertising', async () => {
+  // REPORT BRANDING (Owner): the report's name ending with the product's, in the report's language
+  // (Arabic unless the report says English) — whose report it is lives in the header, not the tab.
+  it('carries the report’s name, not the product’s advertising', async () => {
     document.title = 'كل حملاتك الإعلانية المدفوعة في مكان واحد — CampaignsHub'
     open('Nakheel')
 
-    await waitFor(() => expect(document.title).toBe('Q3 Performance · Nakheel'))
+    await waitFor(() => expect(document.title).toBe('Q3 Performance — كامبينز هب'))
   })
 
   /**
