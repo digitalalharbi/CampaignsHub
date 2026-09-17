@@ -3,8 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { CheckCircle2, Circle, Loader2, PlayCircle, Trash2, XCircle } from 'lucide-react'
 import {
-  fetchMetaCandidate, forgetMetaCandidateCredential, saveMetaCandidate, startMetaCandidateTest,
-  type MetaCandidateRun, type MetaCandidateStep, type MetaCandidateStepKey,
+  fetchMetaCandidate, forgetMetaCandidateCredential, promoteMetaCandidate, rollbackMetaLive, saveMetaCandidate,
+  startMetaCandidateTest, type MetaCandidateRun, type MetaCandidateState, type MetaCandidateStep, type MetaCandidateStepKey,
 } from './api'
 import { Button } from '@/components/ui/Button'
 import { Num } from '@/components/ui/Num'
@@ -41,6 +41,16 @@ const COPY = {
       oauth_start: 'بدء OAuth', consent: 'موافقة ميتا', token_exchange: 'استبدال الرمز',
       account_discovery: 'اكتشاف الحسابات الإعلانية (me/adaccounts)', ads_read: 'طلب ads_read حقيقي (آخر 7 أيام)',
     } as Record<MetaCandidateStepKey, string>,
+    promotion: 'الاعتماد بدل التطبيق الحالي',
+    promotionNote: 'يستبدل هوية تطبيق ميتا الحالي (App ID والسر والإعداد والصلاحيات) بالمرشّح، ويحفظ السابق للتراجع خطوة واحدة. لا يمس أي ربط عميل ولا رموزه ولا يطلب إعادة ربط. الرموز مرتبطة بالتطبيق: الربط القائم يعمل ما دام التطبيق القديم صالحًا، ويحتاج إعادة ربط عند اقتراب انتهاء رمزه.',
+    promote: 'اعتماد المرشّح كتطبيق حالي', rollback: 'التراجع إلى التطبيق السابق',
+    confirmPromote: 'اعتماد تطبيق ميتا المرشّح بدل الحالي؟', confirmRollback: 'التراجع إلى تطبيق ميتا السابق؟',
+    notEligible: 'غير متاح', reasons: {
+      candidate_not_configured: 'بيانات المرشّح غير مكتملة.',
+      latest_round_trip_not_succeeded: 'آخر اختبار لم ينجح كاملًا.',
+      credentials_changed_since_round_trip: 'تغيّرت البيانات بعد آخر اختبار ناجح — أعد الاختبار.',
+      candidate_already_live: 'المرشّح هو التطبيق الحالي بالفعل.',
+    } as Record<string, string>,
     outcome: { succeeded: 'عاد الاختبار من ميتا بنجاح.', failed: 'عاد الاختبار من ميتا بفشل — التفاصيل أدناه.', invalid_state: 'رابط التفويض منتهٍ أو استُخدم من قبل.' } as Record<string, string>,
   },
   en: {
@@ -61,6 +71,16 @@ const COPY = {
       oauth_start: 'OAuth start', consent: 'Meta consent', token_exchange: 'Token exchange',
       account_discovery: 'Ad-account discovery (me/adaccounts)', ads_read: 'One real ads_read request (last 7 days)',
     } as Record<MetaCandidateStepKey, string>,
+    promotion: 'Promote to Live',
+    promotionNote: 'Replaces the Live Meta app identity (App ID, secret, configuration, scopes) with the candidate and keeps the previous one for a one-step rollback. It touches no customer connection or token and forces no reconnect. Tokens are app-scoped: an existing connection keeps working while the old app stays valid, and needs a reconnect when its token nears expiry.',
+    promote: 'Promote candidate to Live', rollback: 'Roll back to the previous Live app',
+    confirmPromote: 'Promote the Candidate Meta app to Live?', confirmRollback: 'Roll back to the previous Live Meta app?',
+    notEligible: 'Not available', reasons: {
+      candidate_not_configured: 'The candidate credentials are incomplete.',
+      latest_round_trip_not_succeeded: 'The latest test did not pass end to end.',
+      credentials_changed_since_round_trip: 'The credentials changed after the last passing test — run it again.',
+      candidate_already_live: 'The candidate is already the Live app.',
+    } as Record<string, string>,
     outcome: { succeeded: 'The test came back from Meta and passed.', failed: 'The test came back from Meta and failed — details below.', invalid_state: 'The authorisation link expired or was already used.' } as Record<string, string>,
   },
 }
@@ -194,7 +214,50 @@ export function MetaCandidatePage() {
       </section>
 
       <RunChecklist run={run} copy={c} />
+
+      {query.data.promotion && <Promotion promotion={query.data.promotion} copy={c} />}
     </div>
+  )
+}
+
+function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidateState['promotion']>; copy: Copy }) {
+  const qc = useQueryClient()
+  const onSuccess = (data: MetaCandidateState) => qc.setQueryData(['admin', 'meta-candidate'], data)
+  const promote = useMutation({ mutationFn: promoteMetaCandidate, onSuccess })
+  const rollback = useMutation({ mutationFn: rollbackMetaLive, onSuccess })
+  const error = promote.error ?? rollback.error
+
+  return (
+    <section data-testid="meta-candidate-promotion" className="rounded-2xl border border-border bg-surface p-5">
+      <h2 className="font-heading text-[15px] font-bold text-text-primary">{c.promotion}</h2>
+      <p className="mt-1 max-w-3xl text-xs text-text-secondary">{c.promotionNote}</p>
+      {!promotion.eligible && promotion.reason && (
+        <p data-testid="meta-candidate-promotion-reason" className="mt-2 text-xs text-text-muted">
+          {c.notEligible}: {c.reasons[promotion.reason] ?? promotion.reason}
+        </p>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button
+          data-testid="meta-candidate-promote"
+          variant="danger"
+          disabled={!promotion.eligible}
+          loading={promote.isPending}
+          onClick={() => { if (window.confirm(c.confirmPromote)) promote.mutate() }}
+        >
+          {c.promote}
+        </Button>
+        <Button
+          data-testid="meta-candidate-rollback"
+          variant="secondary"
+          disabled={!promotion.rollback_available}
+          loading={rollback.isPending}
+          onClick={() => { if (window.confirm(c.confirmRollback)) rollback.mutate() }}
+        >
+          {c.rollback}
+        </Button>
+      </div>
+      {error && <p className="mt-2 text-xs text-danger">{toApiError(error).message}</p>}
+    </section>
   )
 }
 
