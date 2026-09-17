@@ -1,5 +1,5 @@
 import { percent, rowCostPer, rowRoas } from '@/features/analytics/format'
-import { readMoney } from '@/lib/money/contract'
+import { canonicalFigureKeys, moneyIsStatable } from './canonicalFigures'
 import { metricKind, metricLabel } from './metrics'
 import { creativeMoney } from './creativeMoney'
 import { readMetricValue } from '@/lib/metricValue'
@@ -137,7 +137,13 @@ export function creativeDialogFigures(
    */
   const shown = new Set(['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm', 'revenue', 'roas'])
 
-  for (const key of headlineMetrics) {
+  /*
+   * OWNER CONTENT P0 — the same canonical list the CARD draws, so neither can hold a figure the other
+   * does not. The six universal tiles above are the panel's own floor — it states them as «—» where
+   * the platform sent nothing, which a panel opened to study one creative should — and everything
+   * beyond them is this creative's answerable set, decided once.
+   */
+  for (const key of canonicalFigureKeys(headlineMetrics, metrics, currency, ar)) {
     if (shown.has(key)) continue
     shown.add(key)
 
@@ -155,19 +161,6 @@ export function creativeDialogFigures(
   }
 
   return figures
-}
-
-/**
- * Whether the money contract holds something to state for this key.
- *
- * `converted`, `withheld` and `zero` are all real answers a reader can act on; `absent` and
- * `unavailable` are not. Asked here rather than re-derived from the fields, because the contract is
- * the one place those five states are decided and the card already asks it the same way.
- */
-function moneyIsStatable(metrics: MoneyTotals, key: 'spend' | 'revenue', currency: string | null, ar: boolean): boolean {
-  const { kind } = readMoney(metrics, key, currency, ar)
-
-  return kind === 'converted' || kind === 'withheld' || kind === 'zero'
 }
 
 /**
