@@ -62,6 +62,26 @@ final class PlatformOAuth
     {
         $this->assertConfigured($creds);
 
+        /*
+         * META-CANDIDATE-001 — Facebook Login for Business.
+         *
+         * With a Configuration ID the permissions are the CONFIGURATION's, and Meta's guide says
+         * `config_id` replaces `scope`, which should not be sent alongside it. `response_type=code` with
+         * `override_default_response_type` is the documented pairing for a code (server-side) exchange,
+         * which is the only exchange this product performs. No Configuration ID — every Live install
+         * today — and the dialog below is built exactly as it always was.
+         */
+        if ($creds->platform === 'meta' && $creds->get('config_id') !== null) {
+            return $creds->authorizeUrl().'?'.http_build_query([
+                'client_id' => $creds->get('client_id'),
+                'redirect_uri' => $creds->redirectUri(),
+                'state' => $state,
+                'config_id' => $creds->get('config_id'),
+                'response_type' => 'code',
+                'override_default_response_type' => 'true',
+            ]);
+        }
+
         $query = match ($creds->platform) {
             // TikTok: app_id/state/redirect_uri, and no response_type or scope.
             'tiktok' => [
@@ -214,8 +234,12 @@ final class PlatformOAuth
         $response = $request->post($creds->tokenUrl(), $grant);
 
         if ($response->failed()) {
-            throw new RuntimeException(
+            // A RuntimeException as before, carrying the parsed body so a caller that records Meta's
+            // error code and fbtrace_id need not re-parse a 200-character excerpt.
+            throw new ProviderRequestRefused(
                 $creds->label().' refused the token request ('.$response->status().'): '.$this->briefly($response->body()),
+                $response->status(),
+                is_array($response->json()) ? $response->json() : [],
             );
         }
 

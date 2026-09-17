@@ -105,6 +105,8 @@ class AppServiceProvider extends ServiceProvider
          * in place before an operator rotated one, for the life of the worker process.
          */
         $this->app->scoped(ProviderConfigurationService::class);
+        // META-CANDIDATE-001 — the Candidate app's store memoises its row the same way.
+        $this->app->scoped(\App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials::class);
 
         // Advertising connector registry; Sandbox is excluded in production.
         $this->app->singleton(

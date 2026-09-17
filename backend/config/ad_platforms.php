@@ -115,6 +115,14 @@ return [
             'scopes' => ['ads_read', 'ads_management', 'business_management'],
             'client_id' => env('META_ADS_APP_ID'),
             'client_secret' => env('META_ADS_APP_SECRET'),
+            /*
+             * META-CANDIDATE-001 — the Facebook Login for Business Configuration ID of the LIVE app.
+             *
+             * Optional, and unset on every install today: without it the live dialog keeps asking for
+             * `scope` exactly as before. It exists so that promoting the Candidate app — whose dialog is
+             * built from a configuration — carries that configuration into the Live profile.
+             */
+            'config_id' => env('META_ADS_CONFIG_ID'),
         ],
 
         'google' => [
@@ -197,5 +205,28 @@ return [
              */
             'version' => env('LINKEDIN_ADS_VERSION', '202607'),
         ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | META-CANDIDATE-001 — the ONE isolated Candidate Meta app
+    |--------------------------------------------------------------------------
+    |
+    | A second Meta app, used only to prove a Facebook Login for Business round trip before it replaces
+    | the Live app. It is deliberately NOT an entry under `platforms`: nothing that loops over the
+    | advertising platforms — the sync scheduler, the connector registry, the customer integrations page —
+    | can ever meet it.
+    |
+    | Like every platform credential, the operator normally enters these at
+    | `/admin/settings/integrations/meta-candidate`, stored encrypted in `provider_configurations`
+    | (row `meta.candidate`), which always wins. The environment keys are the fallback. None has a
+    | default: an absent value is an unconfigured candidate, never a borrowed Live value.
+    */
+    'meta_candidate' => [
+        'client_id' => env('META_CANDIDATE_APP_ID'),
+        'client_secret' => env('META_CANDIDATE_APP_SECRET'),
+        'config_id' => env('META_CANDIDATE_CONFIG_ID'),
+        // Comma-separated. Empty means the candidate default, `ads_read` only.
+        'scopes' => env('META_CANDIDATE_SCOPES'),
     ],
 ];

@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\OAuth;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Catalogue\ProviderKind;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
+use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
 use App\Support\AdPlatforms;
 use InvalidArgumentException;
 
@@ -41,7 +42,43 @@ final class PlatformCredentials
     private function __construct(
         public readonly string $platform,
         private readonly array $config,
+        /**
+         * META-CANDIDATE-001 — which app these credentials belong to. `live` for every provider, and
+         * for Meta unless the Candidate profile was asked for BY NAME through `forMeta()`.
+         */
+        public readonly MetaCredentialProfile $profile = MetaCredentialProfile::Live,
     ) {}
+
+    /**
+     * META-CANDIDATE-001 — Meta's credentials for one named profile, and never a guess.
+     *
+     * Live is exactly `for('meta')`. Candidate takes Meta's PROTOCOL half (dialog, token and API hosts,
+     * the pinned version) and nothing else from Live: App ID, App Secret, Configuration ID and scopes
+     * all come from the candidate's own store. A missing candidate value stays missing.
+     */
+    public static function forMeta(MetaCredentialProfile $profile): self
+    {
+        if ($profile === MetaCredentialProfile::Live) {
+            return self::for('meta');
+        }
+
+        $config = config('ad_platforms.platforms.meta');
+
+        if (! is_array($config)) {
+            throw new InvalidArgumentException("No platform configuration for 'meta'.");
+        }
+
+        $candidate = app(MetaCandidateCredentials::class);
+
+        return new self('meta', [
+            'label' => 'Meta Marketing API (Candidate app)',
+            'authorize_url' => $config['authorize_url'],
+            'token_url' => $config['token_url'],
+            'api_base' => $config['api_base'],
+            ...$candidate->values(),
+            'scopes' => $candidate->scopes(),
+        ], MetaCredentialProfile::Candidate);
+    }
 
     /**
      * @throws InvalidArgumentException when the key is not a provider this product integrates with
@@ -135,6 +172,11 @@ final class PlatformCredentials
      */
     public function requires(): array
     {
+        // The candidate is FLfB-only: without a Configuration ID it has no dialog to open.
+        if ($this->profile === MetaCredentialProfile::Candidate) {
+            return MetaCandidateCredentials::KEYS;
+        }
+
         return ProviderCatalogue::get($this->platform)->requiredKeys();
     }
 
