@@ -132,10 +132,16 @@ export function LivePlatformComparison({
   payload,
   currency,
   locale,
+  onOpenPlatform,
 }: {
   payload: LivePayload
   currency: string
   locale: Locale
+  /**
+   * REPORT-DRILLDOWN-001 — opens one platform's drill-down. Absent where the link does not offer it,
+   * and never offered on a platform that reported nothing: there is nothing below that row to open.
+   */
+  onOpenPlatform?: (provider: string) => void
 }) {
   const ar = locale === 'ar'
   const t = {
@@ -201,7 +207,19 @@ export function LivePlatformComparison({
   const built = {
     rows: rows.map((row) => [
       <span key="name" className="font-semibold">
-        {providerLabel(canonicalPlatform(String(row.provider ?? '')), locale)}
+        {onOpenPlatform && row.__silent !== true
+          ? (
+            <button
+              type="button"
+              data-testid={`live-platform-open-${canonicalPlatform(String(row.provider ?? ''))}`}
+              onClick={() => onOpenPlatform(String(row.provider ?? ''))}
+              aria-label={ar ? `تفاصيل ${providerLabel(canonicalPlatform(String(row.provider ?? '')), locale)}` : `${providerLabel(canonicalPlatform(String(row.provider ?? '')), locale)} details`}
+              className="rounded font-semibold text-brand-600 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"
+            >
+              {providerLabel(canonicalPlatform(String(row.provider ?? '')), locale)}
+            </button>
+          )
+          : providerLabel(canonicalPlatform(String(row.provider ?? '')), locale)}
         {/*
           Said in words, not left to six dashes.
           
