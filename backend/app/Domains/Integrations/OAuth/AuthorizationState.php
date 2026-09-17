@@ -43,17 +43,80 @@ final class AuthorizationState
         ?string $clientWorkspaceId = null,
         array $extra = [],
     ): string {
-        $state = Str::random(48);
-
-        Cache::put(self::PREFIX.$state, [
+        /*
+         * META-CANDIDATE-001 — a tenant's authorisation is ALWAYS the Live profile.
+         *
+         * Whatever `$extra` carries, `profile` is overwritten after it: the Candidate profile can only be
+         * minted by `issueMetaCandidate()`, which only the platform owner's console calls.
+         */
+        $record = [
             'tenant_id' => $tenantId,
             'provider' => $provider,
             'user_id' => $userId,
             'client_workspace_id' => $clientWorkspaceId,
             ...$extra,
-        ], now()->addMinutes((int) config('ad_platforms.state_ttl_minutes', 15)));
+        ];
+
+        if ($provider === 'meta') {
+            $record['profile'] = MetaCredentialProfile::Live->value;
+        }
+
+        return self::put($record);
+    }
+
+    /**
+     * META-CANDIDATE-001 — the state for the platform owner's Candidate test.
+     *
+     * No tenant: the Candidate app belongs to the platform, and its connection is filed under no
+     * workspace. Bound to the owner who started it and to the test run it will complete.
+     */
+    public static function issueMetaCandidate(int $userId, string $runId): string
+    {
+        return self::put([
+            'tenant_id' => null,
+            'provider' => 'meta',
+            'user_id' => $userId,
+            'client_workspace_id' => null,
+            'candidate_run_id' => $runId,
+            'profile' => MetaCredentialProfile::Candidate->value,
+        ]);
+    }
+
+    /** @param array<string,mixed> $record */
+    private static function put(array $record): string
+    {
+        $state = Str::random(48);
+
+        if (($record['provider'] ?? null) === 'meta') {
+            $record['nonce'] = Str::random(32);
+            $record['binding'] = self::binding($state, $record);
+        }
+
+        Cache::put(self::PREFIX.$state, $record, now()->addMinutes((int) config('ad_platforms.state_ttl_minutes', 15)));
 
         return $state;
+    }
+
+    /**
+     * The signature that ties the profile to the state, the tenant, the user and the nonce.
+     *
+     * The record already lives server-side, so the state string alone cannot be forged. This is the
+     * second lock: a record whose profile was altered — or one written by anything other than `put()` —
+     * no longer matches its own signature and is refused.
+     *
+     * @param  array<string,mixed>  $record
+     */
+    private static function binding(string $state, array $record): string
+    {
+        return hash_hmac('sha256', implode('|', [
+            $state,
+            (string) ($record['provider'] ?? ''),
+            (string) ($record['profile'] ?? ''),
+            (string) ($record['tenant_id'] ?? ''),
+            (string) ($record['user_id'] ?? ''),
+            (string) ($record['candidate_run_id'] ?? ''),
+            (string) ($record['nonce'] ?? ''),
+        ]), 'meta-oauth-state|'.(string) config('app.key'));
     }
 
     /**
@@ -76,6 +139,39 @@ final class AuthorizationState
             return null;
         }
 
+        if ($provider === 'meta' && ! self::metaProfileHolds($state, $record)) {
+            return null;
+        }
+
         return $record;
+    }
+
+    /**
+     * META-CANDIDATE-001 — fail CLOSED on anything but a signed, coherent profile.
+     *
+     * A missing profile, an unknown one, a broken signature, a Live record with no tenant or a Candidate
+     * record with one: each is refused before a token is exchanged, because the profile decides WHICH
+     * app's secret is about to be sent.
+     *
+     * @param  array<string,mixed>  $record
+     */
+    private static function metaProfileHolds(string $state, array $record): bool
+    {
+        $profile = MetaCredentialProfile::tryFrom((string) ($record['profile'] ?? ''));
+
+        if ($profile === null || ! is_string($record['binding'] ?? null) || ! is_string($record['nonce'] ?? null)) {
+            return false;
+        }
+
+        if (! hash_equals(self::binding($state, $record), $record['binding'])) {
+            return false;
+        }
+
+        return match ($profile) {
+            MetaCredentialProfile::Live => is_string($record['tenant_id'] ?? null) && $record['tenant_id'] !== ''
+                && ! isset($record['candidate_run_id']),
+            MetaCredentialProfile::Candidate => ($record['tenant_id'] ?? null) === null
+                && isset($record['user_id'], $record['candidate_run_id']),
+        };
     }
 }
