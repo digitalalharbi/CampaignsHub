@@ -154,6 +154,18 @@ final class AccountAssignment
     }
 
     /**
+     * ACCOUNT-SCOPE-ISOLATION-001 — actively assigned to THIS project, not merely to some project.
+     *
+     * The jobs ask `isActivelyAssigned()` because a job has no project of its own. An action taken
+     * from a project's page does, and «bound somewhere» let project A queue a fetch for project B's
+     * account. The action must be about the project it was taken from.
+     */
+    public function isActivelyAssignedTo(ExternalAccount $account, string $projectId): bool
+    {
+        return $this->projectIdFor($account) === $projectId && $this->isActivelyAssigned($account);
+    }
+
+    /**
      * How many accounts a tenant has ASSIGNED — the figure a «connected ad accounts» cap is about.
      *
      * Counted on distinct accounts rather than bindings: one account deliberately shared across two
