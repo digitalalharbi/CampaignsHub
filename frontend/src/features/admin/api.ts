@@ -763,7 +763,7 @@ export interface MetaCandidateState {
   }
   latest_run: MetaCandidateRun | null
   /** Present once promotion exists server-side. `reason` names why it is refused. */
-  promotion?: { eligible: boolean; reason: string | null; rollback_available: boolean }
+  promotion?: { eligible: boolean; reason: string | null; dropped_scopes?: string[]; rollback_available: boolean }
 }
 
 export function fetchMetaCandidate(): Promise<MetaCandidateState> {
@@ -785,8 +785,12 @@ export function startMetaCandidateTest(): Promise<{ run: MetaCandidateRun; autho
 }
 
 /** Candidate → Live. Refused (409) unless the latest round trip passed with today's credentials. */
-export function promoteMetaCandidate(): Promise<MetaCandidateState> {
-  return postData('/admin/settings/integrations/meta-candidate/promote', { confirm: true })
+export function promoteMetaCandidate(confirmNarrowScopes = false): Promise<MetaCandidateState> {
+  return postData('/admin/settings/integrations/meta-candidate/promote', {
+    confirm: true,
+    // A separate, named confirmation: Live would stop requesting `dropped_scopes`.
+    confirm_narrow_scopes: confirmNarrowScopes,
+  })
 }
 
 /** One step back to the previous Live Meta app. */
