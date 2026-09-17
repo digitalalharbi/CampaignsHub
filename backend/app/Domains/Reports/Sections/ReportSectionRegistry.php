@@ -64,6 +64,7 @@ final class ReportSectionRegistry
                 titleAr: 'المؤشرات الرئيسية',
                 titleEn: 'Key metrics',
                 payloadKeys: ['kpis', 'totals', 'delta', 'deltas', 'previous', 'metrics', 'metric_set', 'reported', 'conversions_basis', 'timeseries'],
+                slideTypes: ['comparison'],
             ),
             new ReportSection(
                 key: 'trends',
@@ -76,18 +77,21 @@ final class ReportSectionRegistry
                 titleAr: 'مقارنة المنصات',
                 titleEn: 'Platform comparison',
                 payloadKeys: ['platforms', 'platform_notes', 'reported_by_platform'],
+                slideTypes: ['platform_comparison', 'platform_performance', 'platform_notes', 'platform_screenshot'],
             ),
             new ReportSection(
                 key: 'budget_pacing',
                 titleAr: 'الميزانية ووتيرة الصرف',
                 titleEn: 'Budget & pacing',
                 payloadKeys: ['budget'],
+                slideTypes: ['budget'],
             ),
             new ReportSection(
                 key: 'funnel',
                 titleAr: 'مسار التحويل',
                 titleEn: 'Funnel',
                 payloadKeys: ['funnel', 'funnel_spend', 'store_funnel'],
+                slideTypes: ['funnel'],
             ),
             new ReportSection(
                 key: 'content_performance',
@@ -97,18 +101,21 @@ final class ReportSectionRegistry
                     'ads', 'ads_level', 'ads_groups', 'ads_platform_groups', 'ads_roster', 'ads_weakest', 'ads_reading',
                     'ads_absent_reason', 'top_creatives', 'worst_creatives', 'creatives_in_scope', 'creatives_withheld', 'creative_level',
                 ],
+                slideTypes: ['ads', 'top_creatives'],
             ),
             new ReportSection(
                 key: 'recommendations',
                 titleAr: 'الملاحظات والتوصيات',
                 titleEn: 'Insights & recommendations',
                 payloadKeys: ['findings', 'observations', 'recommendations', 'next_steps'],
+                slideTypes: ['observations', 'recommendations', 'next_steps'],
             ),
             new ReportSection(
                 key: 'detailed_tables',
                 titleAr: 'الجداول التفصيلية',
                 titleEn: 'Detailed tables',
                 payloadKeys: ['platforms', 'campaigns', 'ad_sets'],
+                slideTypes: ['campaigns'],
                 clientDefault: false,
             ),
             new ReportSection(
@@ -128,6 +135,7 @@ final class ReportSectionRegistry
                 titleAr: 'التقسيم المتقدم',
                 titleEn: 'Advanced segmentation',
                 payloadKeys: ['objective_performance', 'objective_performance_previous', 'business_streams'],
+                slideTypes: ['objective_performance'],
                 clientDefault: false,
                 breakdown: true,
             ),
@@ -159,13 +167,18 @@ final class ReportSectionRegistry
         ) !== [] || is_array($c->value('store_funnel')));
 
         /*
-         * «No metric ranks ads honestly for this objective» is the objective not supporting the
-         * section, which is a different fact from «no ad ran» — so it is a SUPPORT predicate.
+         * «No metric ranks ads honestly for this objective» with nothing else to list is the objective
+         * not supporting the section, which is a different fact from «no ad ran» — so it is a SUPPORT
+         * predicate. Where the unranked roster exists, the section still has something true to show.
          */
-        $this->supportWhen('content_performance', 'objective_has_a_ranking_metric', static fn (SectionContext $c): bool => $c->value('ads_absent_reason') !== 'no_rankable_metric_for_this_objective');
-        $this->availableWhen('content_performance', 'has_content', static fn (SectionContext $c): bool => $c->rows('ads') !== [] || $c->rows('ads_roster') !== []);
+        $this->supportWhen('content_performance', 'objective_has_a_ranking_metric', static fn (SectionContext $c): bool => $c->value('ads_absent_reason') !== 'no_rankable_metric_for_this_objective'
+            // The ranking is unsupported, but the roster of what ran still stands on its own.
+            || $c->rows('ads_roster') !== []);
+        $this->availableWhen('content_performance', 'has_content', static fn (SectionContext $c): bool => $c->rows('ads') !== [] || $c->rows('ads_roster') !== []
+            // A summary withholds the list and states the count; the count alone is still the section.
+            || (int) ($c->value('creatives_in_scope') ?? 0) > 0);
 
-        $this->availableWhen('recommendations', 'has_an_insight', static fn (SectionContext $c): bool => $c->rows('recommendations') !== [] || $c->rows('findings') !== [] || $c->rows('next_steps') !== []);
+        $this->availableWhen('recommendations', 'has_an_insight', static fn (SectionContext $c): bool => $c->rows('recommendations') !== [] || $c->rows('findings') !== [] || $c->rows('observations') !== [] || $c->rows('next_steps') !== []);
 
         $this->availableWhen('detailed_tables', 'has_rows', static fn (SectionContext $c): bool => $c->rows('platforms') !== [] || $c->rows('campaigns') !== []);
 
