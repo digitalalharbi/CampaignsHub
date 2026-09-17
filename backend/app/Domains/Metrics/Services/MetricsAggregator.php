@@ -188,21 +188,68 @@ final class MetricsAggregator
      * @param  array<string,bool>  $reported
      * @return array<string,bool>
      */
-    private function withReachReported(array $reported, mixed $query): array
+    private function withReachReported(array $reported, mixed $query, ?Carbon $from = null, ?Carbon $to = null): array
     {
         if (($reported['reach'] ?? false) !== true) {
             return $reported;
         }
 
-        $row = (array) $query->selectRaw(implode(', ', array_map(
+        $row = (array) (clone $query)->selectRaw(implode(', ', array_map(
             static fn ($e, $a) => "{$e} AS {$a}",
-            self::REACH_TRUTH,
-            array_keys(self::REACH_TRUTH),
+            [...self::REACH_TRUTH, 'impressions' => "COALESCE(SUM(value) FILTER (WHERE metric_key = 'impressions'), 0)"],
+            [...array_keys(self::REACH_TRUTH), 'impressions'],
         )))->first();
 
-        $reported['reach'] = self::reachIsProviderDeduplicated($row);
+        $reported['reach'] = self::reachIsProviderDeduplicated($row)
+            // REACH-PERIOD-001 — or the provider answered for exactly this window.
+            || ($from !== null && $to !== null
+                && app(PeriodReachReader::class)->forScope($this->delivery(clone $query), (float) ($row['impressions'] ?? 0), $from, $to) !== null);
 
         return $reported;
+    }
+
+    /**
+     * REACH-PERIOD-001 — where the stored rows cannot give reach, the provider's answer for the WINDOW.
+     *
+     * #494 left reach null wherever a group spans more than one provider grain, which is nearly every
+     * real window. Several providers answer «how many people did this reach between these dates» with
+     * one deduplicated figure, and `PeriodReachReader` holds those answers per exact window. It is
+     * consulted only when the group's delivery is described by one of them — one campaign, or one whole
+     * ad account — so the figure shown is never a sum and never an approximation. Frequency is the
+     * group's impressions ÷ that reach.
+     *
+     * @param  array<string,mixed>  $out  a derived row
+     * @param  mixed  $group  the bounded query for exactly this row's rows
+     * @return array<string,mixed>
+     */
+    private function withPeriodReach(array $out, mixed $group, Carbon $from, Carbon $to): array
+    {
+        if (($out['reach'] ?? null) !== null) {
+            return $out;
+        }
+
+        $found = app(PeriodReachReader::class)->forScope($this->delivery($group), (float) ($out['impressions'] ?? 0), $from, $to);
+
+        if ($found !== null) {
+            $out['reach'] = $found['reach'];
+            $out['frequency'] = $found['frequency'];
+        }
+
+        return $out;
+    }
+
+    /** @return list<array{account: string, campaign: string|null}> */
+    private function delivery(mixed $group): array
+    {
+        return $group
+            ->select('daily_metrics.external_account_id', 'daily_metrics.external_campaign_id')
+            ->distinct()
+            ->get()
+            ->map(static fn ($r): array => [
+                'account' => (string) $r->external_account_id,
+                'campaign' => $r->external_campaign_id === null ? null : (string) $r->external_campaign_id,
+            ])
+            ->all();
     }
 
     private const MONEY_TRUTH = [
@@ -604,7 +651,7 @@ final class MetricsAggregator
             array_keys($select),
         )))->first();
 
-        $out = $this->withDerived((array) $row);
+        $out = $this->withPeriodReach($this->withDerived((array) $row), $this->base($from, $to), $from, $to);
 
         /*
          * AGGREGATION-TRUTH-001 — the figures above are a SUM of what arrived. This says whether what
@@ -732,7 +779,7 @@ final class MetricsAggregator
             $out[$key] = in_array($key, $present, true);
         }
 
-        return $this->withReachReported($out, $this->base($from, $to));
+        return $this->withReachReported($out, $this->base($from, $to), $from, $to);
     }
 
     /**
@@ -766,7 +813,7 @@ final class MetricsAggregator
             foreach (array_keys(self::PIVOT) as $key) {
                 $out[$campaign][$key] = $present[$key] ?? false;
             }
-            $out[$campaign] = $this->withReachReported($out[$campaign], $this->base($from, $to)->where('daily_metrics.unified_campaign_id', $campaign));
+            $out[$campaign] = $this->withReachReported($out[$campaign], $this->base($from, $to)->where('daily_metrics.unified_campaign_id', $campaign), $from, $to);
         }
 
         return $out;
@@ -797,7 +844,7 @@ final class MetricsAggregator
             foreach (array_keys(self::PIVOT) as $key) {
                 $out[$provider][$key] = $present[$key] ?? false;
             }
-            $out[$provider] = $this->withReachReported($out[$provider], $this->base($from, $to)->where('daily_metrics.provider', $provider));
+            $out[$provider] = $this->withReachReported($out[$provider], $this->base($from, $to)->where('daily_metrics.provider', $provider), $from, $to);
         }
 
         return $out;
@@ -918,7 +965,12 @@ final class MetricsAggregator
             )))
             ->groupBy('provider')
             ->get()
-            ->map(fn ($r) => ['provider' => $r->provider] + $this->withDerived((array) $r))
+            ->map(fn ($r) => ['provider' => $r->provider] + $this->withPeriodReach(
+                $this->withDerived((array) $r),
+                $this->base($from, $to)->where('daily_metrics.provider', $r->provider),
+                $from,
+                $to,
+            ))
             ->all();
 
         /*
@@ -991,7 +1043,12 @@ final class MetricsAggregator
              * still real and still has to be shown somewhere.
              */
             'account_name' => $r->account_id === null ? null : ($names[$r->account_id] ?? null),
-        ] + $this->withDerived((array) $r))->all();
+        ] + $this->withPeriodReach(
+            $this->withDerived((array) $r),
+            $this->base($from, $to)->where('daily_metrics.external_account_id', $r->account_id)->where('daily_metrics.provider', $r->provider),
+            $from,
+            $to,
+        ))->all();
 
         /*
          * ENTITY-RELEVANCE-ORDERING-001 — this returned rows in NO stated order at all.
@@ -1516,7 +1573,12 @@ final class MetricsAggregator
                 'status' => $r->status === null ? null : CampaignStatus::tryFrom((string) $r->status)?->value,
                 'last_active_on' => $r->last_active_on === null ? null : Carbon::parse((string) $r->last_active_on)->toDateString(),
                 'provider' => $r->provider,
-            ] + $this->withDerived((array) $r))
+            ] + $this->withPeriodReach(
+                $this->withDerived((array) $r),
+                $this->base($from, $to)->where('daily_metrics.unified_campaign_id', $r->campaign_id),
+                $from,
+                $to,
+            ))
             ->all();
 
         return self::orderCampaignRows($rows);
