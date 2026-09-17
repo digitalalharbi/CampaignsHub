@@ -161,21 +161,21 @@ final class CrossProviderTotalsAreTruthfulTest extends TestCase
     }
 
     /**
-     * Reach is summed, and it is NOT a count of unique people.
+     * Reach across platforms is NOT summed — REACH-DEDUP-001.
      *
-     * 800 + 7,000 = 7,800 is «what the platforms each reported», and the same person on both
-     * platforms is in it twice. There is no shared identifier that could deduplicate them, so the
-     * figure is the only one available and the product may not call it unique. This holds the
-     * ARITHMETIC; the labelling is held on the surfaces that render it.
+     * This test pinned 800 + 7,000 = 7,800 as «what the platforms each reported» and the frequency
+     * divided by it. That figure counts somebody reached on both platforms twice and is not reach; the
+     * frequency over it understates exposure by the same overcount. A cross-platform total has no
+     * deduplicated reach anywhere — no platform knows who another reached — so both are null and read
+     * «—» / not reported. The platforms' own figures remain on the per-platform rows.
      */
-    public function test_reach_is_the_sum_the_platforms_reported_and_frequency_follows_it(): void
+    public function test_reach_across_platforms_is_not_summed_and_frequency_is_not_divided_by_a_sum(): void
     {
         $t = $this->totals();
 
-        $this->assertSame(7800.0, (float) $t['reach']);
-
-        // Frequency is impressions ÷ reach on the same scope: 10,000 / 7,800 = 1.28.
-        $this->assertEqualsWithDelta(1.28, (float) $t['frequency'], 0.01);
+        $this->assertNull($t['reach'], '7,800 is two platforms\' reach added, not reach');
+        $this->assertNull($t['frequency']);
+        $this->assertFalse($this->aggregator()->reportedKeys($this->windowStart(), $this->windowEnd())['reach']);
     }
 
     /** @return array<string,mixed> */
