@@ -124,10 +124,31 @@ describe('MetaCandidatePage (META-CANDIDATE-001)', () => {
     expect(promoteMetaCandidate).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByTestId('meta-candidate-promote'))
-    await waitFor(() => expect(promoteMetaCandidate).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(promoteMetaCandidate).toHaveBeenCalledWith(false))
 
     fireEvent.click(screen.getByTestId('meta-candidate-rollback'))
     await waitFor(() => expect(rollbackMetaLive).toHaveBeenCalledTimes(1))
+    confirm.mockRestore()
+  })
+
+  it('will not promote a scope-narrowing candidate until the named checkbox is ticked', async () => {
+    vi.mocked(fetchMetaCandidate).mockResolvedValue({
+      ...state(),
+      promotion: { eligible: true, reason: null, dropped_scopes: ['ads_management', 'business_management'], rollback_available: false },
+    })
+    vi.mocked(promoteMetaCandidate).mockResolvedValue(state())
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderWithProviders(<MetaCandidatePage />, { locale: 'en' })
+
+    const promote = await screen.findByTestId('meta-candidate-promote')
+    expect(promote).toBeDisabled()
+    const box = screen.getByTestId('meta-candidate-confirm-narrow-scopes')
+    expect(box).toHaveAttribute('name', 'confirm_narrow_scopes')
+    expect(box.closest('label')).toHaveTextContent('ads_management, business_management')
+
+    fireEvent.click(box)
+    fireEvent.click(promote)
+    await waitFor(() => expect(promoteMetaCandidate).toHaveBeenCalledWith(true))
     confirm.mockRestore()
   })
 

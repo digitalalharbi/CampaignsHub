@@ -43,6 +43,7 @@ const COPY = {
     } as Record<MetaCandidateStepKey, string>,
     promotion: 'الاعتماد بدل التطبيق الحالي',
     promotionNote: 'يستبدل هوية تطبيق ميتا الحالي (App ID والسر والإعداد والصلاحيات) بالمرشّح، ويحفظ السابق للتراجع خطوة واحدة. لا يمس أي ربط عميل ولا رموزه ولا يطلب إعادة ربط. الرموز مرتبطة بالتطبيق: الربط القائم يعمل ما دام التطبيق القديم صالحًا، ويحتاج إعادة ربط عند اقتراب انتهاء رمزه.',
+    narrowScopes: 'أؤكد تضييق الصلاحيات: سيتوقف التطبيق الحالي عن طلب',
     promote: 'اعتماد المرشّح كتطبيق حالي', rollback: 'التراجع إلى التطبيق السابق',
     confirmPromote: 'اعتماد تطبيق ميتا المرشّح بدل الحالي؟', confirmRollback: 'التراجع إلى تطبيق ميتا السابق؟',
     notEligible: 'غير متاح', reasons: {
@@ -73,6 +74,7 @@ const COPY = {
     } as Record<MetaCandidateStepKey, string>,
     promotion: 'Promote to Live',
     promotionNote: 'Replaces the Live Meta app identity (App ID, secret, configuration, scopes) with the candidate and keeps the previous one for a one-step rollback. It touches no customer connection or token and forces no reconnect. Tokens are app-scoped: an existing connection keeps working while the old app stays valid, and needs a reconnect when its token nears expiry.',
+    narrowScopes: 'I confirm narrowing the scopes: Live will stop requesting',
     promote: 'Promote candidate to Live', rollback: 'Roll back to the previous Live app',
     confirmPromote: 'Promote the Candidate Meta app to Live?', confirmRollback: 'Roll back to the previous Live Meta app?',
     notEligible: 'Not available', reasons: {
@@ -223,7 +225,10 @@ export function MetaCandidatePage() {
 function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidateState['promotion']>; copy: Copy }) {
   const qc = useQueryClient()
   const onSuccess = (data: MetaCandidateState) => qc.setQueryData(['admin', 'meta-candidate'], data)
-  const promote = useMutation({ mutationFn: promoteMetaCandidate, onSuccess })
+  const [narrowConfirmed, setNarrowConfirmed] = useState(false)
+  const dropped = promotion.dropped_scopes ?? []
+  const narrows = dropped.length > 0
+  const promote = useMutation({ mutationFn: () => promoteMetaCandidate(narrows && narrowConfirmed), onSuccess })
   const rollback = useMutation({ mutationFn: rollbackMetaLive, onSuccess })
   const error = promote.error ?? rollback.error
 
@@ -236,11 +241,23 @@ function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidat
           {c.notEligible}: {c.reasons[promotion.reason] ?? promotion.reason}
         </p>
       )}
+      {promotion.eligible && narrows && (
+        <label className="mt-3 flex items-start gap-2 text-xs text-text-primary">
+          <input
+            type="checkbox"
+            name="confirm_narrow_scopes"
+            data-testid="meta-candidate-confirm-narrow-scopes"
+            checked={narrowConfirmed}
+            onChange={(e) => setNarrowConfirmed(e.target.checked)}
+          />
+          <span>{c.narrowScopes} <span dir="ltr" className="font-mono">{dropped.join(', ')}</span></span>
+        </label>
+      )}
       <div className="mt-3 flex flex-wrap gap-2">
         <Button
           data-testid="meta-candidate-promote"
           variant="danger"
-          disabled={!promotion.eligible}
+          disabled={!promotion.eligible || (narrows && !narrowConfirmed)}
           loading={promote.isPending}
           onClick={() => { if (window.confirm(c.confirmPromote)) promote.mutate() }}
         >
