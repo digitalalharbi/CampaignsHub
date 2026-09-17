@@ -104,8 +104,15 @@ final class LiveReportAccountCeilingTest extends TestCase
             'project_id' => $this->project->id, 'name' => 'R', 'type' => 'executive', 'status' => 'completed',
             'currency' => 'SAR', 'period_start' => '2026-07-01', 'period_end' => '2026-07-31',
             'data' => ['kpis' => ['spend' => 100]],
-            // The objective split is advanced segmentation, which a client report only carries when enabled.
-            'section_settings' => ['sections' => ['advanced_segmentation' => true]],
+            /*
+             * REPORT-SECTION-STREAMS-001 — a client link no longer carries the objective split; its
+             * segmentation is the operator's business streams. One stream mapped to BOTH platforms is
+             * the section that must still stop at the account ceiling.
+             */
+            'section_settings' => [
+                'sections' => ['advanced_segmentation' => true],
+                'streams' => [['label' => 'كل المنصات', 'providers' => ['meta', 'tiktok']]],
+            ],
         ]);
 
         app(ProjectContext::class)->forget();
@@ -149,16 +156,12 @@ final class LiveReportAccountCeilingTest extends TestCase
         return $raw;
     }
 
-    /** @param array<string,mixed> $objective */
-    private function objectiveSpend(array $objective): float
+    /** @param array<string,mixed>|null $payload */
+    private function streamSpend(?array $payload): float
     {
-        $spend = 0.0;
+        $this->assertArrayNotHasKey('objective_performance', (array) $payload, 'Direct/Blended reached a client link');
 
-        foreach ($objective['paths'] ?? [] as $path) {
-            $spend += (float) ($path['spend'] ?? 0);
-        }
-
-        return $spend;
+        return (float) collect($payload['business_streams'] ?? [])->sum(fn (array $s): float => (float) ($s['figures']['spend'] ?? 0));
     }
 
     public function test_the_platform_section_honours_the_account_ceiling(): void
@@ -176,7 +179,7 @@ final class LiveReportAccountCeilingTest extends TestCase
 
         $this->assertSame(
             100.0,
-            $this->objectiveSpend($res->json('data.objective_performance') ?? []),
+            $this->streamSpend($res->json('data')),
             'The objective split reported spend from an ad account this link was never scoped to.',
         );
     }
@@ -188,7 +191,7 @@ final class LiveReportAccountCeilingTest extends TestCase
 
         $this->assertSame(
             (float) collect($res->json('data.platforms'))->sum('spend'),
-            $this->objectiveSpend($res->json('data.objective_performance') ?? []),
+            $this->streamSpend($res->json('data')),
         );
     }
 
@@ -253,7 +256,7 @@ final class LiveReportAccountCeilingTest extends TestCase
         $this->assertSame(0.0, $platforms, 'The engine no longer fails closed on an empty campaign ceiling.');
         $this->assertSame(
             $platforms,
-            $this->objectiveSpend($res->json('data.objective_performance') ?? []),
+            $this->streamSpend($res->json('data')),
             'The objective split reported campaigns the link named none of.',
         );
     }

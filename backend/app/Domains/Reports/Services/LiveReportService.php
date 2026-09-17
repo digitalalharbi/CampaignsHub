@@ -15,6 +15,7 @@ use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Sections\BusinessStreams;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\ContentCopy;
@@ -550,6 +551,11 @@ final class LiveReportService
              * drift into disagreeing about which links are too narrow.
              */
             'sections' => $share->visibleSections(),
+            /*
+             * REPORT-SECTION-STREAMS-001 — the operator's business streams, computed only where the
+             * report can show them: advanced segmentation on, and at least one stream defined.
+             */
+            'business_streams' => $this->businessStreams($share, $engine, $applied, $scope, $from, $to, $totals),
             'store_funnel' => $this->storeFunnel($share, $scope['project_id'], $from, $to),
             'freshness' => $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers']),
             /*
@@ -647,6 +653,39 @@ final class LiveReportService
         }
 
         return $payload;
+    }
+
+    /**
+     * @param  array{from: string, to: string, providers: list<string>, campaigns: list<string>}  $applied
+     * @param  array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}  $scope
+     * @param  array<string, mixed>  $totals
+     * @return list<array<string, mixed>>
+     */
+    private function businessStreams(ReportShare $share, MetricsAggregator $engine, array $applied, array $scope, Carbon $from, Carbon $to, array $totals): array
+    {
+        $report = Report::withoutGlobalScopes()->find($share->report_id);
+        if ($report === null) {
+            return [];
+        }
+
+        $sections = app(ReportSectionSurfaces::class);
+        $settings = $sections->settingsFor($report, $share);
+        if ($settings->streams() === [] || ! $sections->operatorAllows('advanced_segmentation', $report, $share)) {
+            return [];
+        }
+
+        $providers = $applied['providers'] !== [] ? $applied['providers'] : $scope['providers'];
+        $accounts = array_values(array_filter((array) ($share->scope['account_ids'] ?? []), 'is_string'));
+
+        return app(BusinessStreams::class)->build(
+            $engine,
+            $settings->streams(),
+            $providers === [] ? null : $providers,
+            $accounts === [] ? null : $accounts,
+            $from,
+            $to,
+            is_numeric($totals['spend'] ?? null) ? (float) $totals['spend'] : null,
+        );
     }
 
     /**
