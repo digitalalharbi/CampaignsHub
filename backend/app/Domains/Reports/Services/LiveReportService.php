@@ -19,6 +19,7 @@ use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\ContentKey;
+use App\Domains\Reports\Support\ReportBreakdowns;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -105,6 +106,9 @@ final class LiveReportService
      */
     public function content(ReportShare $share, string $key, array $requested): ?array
     {
+        // The client path is platform → content: a drill-down never narrows by campaign (see `platform()`).
+        unset($requested['campaigns']);
+
         $scope = $this->ceiling($share);
         $applied = $this->intersect($scope, $requested);
 
@@ -316,9 +320,7 @@ final class LiveReportService
         $from = Carbon::parse($applied['from']);
         $to = Carbon::parse($applied['to']);
 
-        $engine = $this->metrics
-            ->forCampaigns($scope['campaign_ids'])
-            ->forProviders($applied['providers']);
+        $engine = $this->scopedEngine($share, $scope, $applied['providers']);
 
         /*
          * The ceiling's OTHER axes (§14.5) — accounts, objectives, marketing paths, ad sets and ads.
@@ -371,15 +373,6 @@ final class LiveReportService
         $campaignCeiling = $scope['campaign_ids'];
 
         $accountCeiling = ($share->scope['account_ids'] ?? []) ?: null;
-
-        $engine = ReportScope::fromArray([
-            'campaign_ids' => $scope['campaign_ids'],
-            'account_ids' => $share->scope['account_ids'] ?? [],
-            'objectives' => $share->scope['objectives'] ?? [],
-            'paths' => $share->scope['paths'] ?? [],
-            'ad_set_ids' => $share->scope['ad_set_ids'] ?? [],
-            'ad_ids' => $share->scope['ad_ids'] ?? [],
-        ])->applyTo($engine);
 
         // A narrowed campaign set is applied on top of the ceiling, never instead of it.
         if ($applied['campaigns'] !== []) {
@@ -550,6 +543,8 @@ final class LiveReportService
              * drift into disagreeing about which links are too narrow.
              */
             'sections' => $share->visibleSections(),
+            // REPORT-DRILLDOWN-001 — which optional breakdowns this link offers; off here means no control is drawn.
+            'breakdowns' => ReportBreakdowns::forShare($share),
             'store_funnel' => $this->storeFunnel($share, $scope['project_id'], $from, $to),
             'freshness' => $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers']),
             /*
@@ -653,6 +648,193 @@ final class LiveReportService
         $payload['outline'] = (new ReportStructure)->sections($payload, composesNarrative: false);
 
         return $payload;
+    }
+
+    /**
+     * REPORT-DRILLDOWN-001 — one platform, opened from the comparison.
+     *
+     * Its objective KPIs, its trend, its share of spend against its share of the outcome, and its
+     * strongest and weakest content — everything a reader needs to answer «how did THIS channel do»
+     * without the default dashboard having to carry it.
+     *
+     * ## The client path is platform → content, and nothing in between
+     *
+     * `campaigns` is dropped from the request before anything reads it. The live link accepts a
+     * campaign narrowing for historical reasons, inside its ceiling; a drill-down does not, because a
+     * drill-down that answered «this platform, for that campaign» would be a campaign drill-down with
+     * the name removed. Nothing here returns a campaign, an ad set, or a count that would let one be
+     * reconstructed: the objective blocks carry the path, never its campaigns.
+     *
+     * ## Null, not an empty drawer
+     *
+     * A platform outside the link's ceiling, or one with no figures in the window, answers null and the
+     * controller answers 404 — the same answer for both, so the endpoint cannot be used to learn which
+     * platforms a project buys on beyond the ones the link already shows.
+     *
+     * Shares are ratios of SUMS over the same scoped engine the comparison table reads, so the drawer
+     * and the row it was opened from cannot disagree. A total of zero is a null share, never 0%.
+     *
+     * @param  array<string, mixed>  $requested
+     * @return array<string, mixed>|null
+     */
+    public function platform(ReportShare $share, string $provider, array $requested): ?array
+    {
+        unset($requested['campaigns'], $requested['providers']);
+
+        $scope = $this->ceiling($share);
+        if ($scope['providers'] !== [] && ! in_array($provider, $scope['providers'], true)) {
+            return null;
+        }
+
+        $applied = $this->intersect($scope, $requested);
+        $applied['providers'] = [$provider];
+
+        $this->tenants->setTenantId((string) $share->tenant_id);
+        $this->projects->setProjectId($scope['project_id'] === '' ? ReportScope::IMPOSSIBLE : $scope['project_id']);
+
+        $from = Carbon::parse($applied['from']);
+        $to = Carbon::parse($applied['to']);
+
+        $whole = $this->scopedEngine($share, $scope, [])->byProvider($from, $to);
+        $row = collect($whole)->firstWhere('provider', $provider);
+        if ($row === null) {
+            return null;
+        }
+
+        $engine = $this->scopedEngine($share, $scope, [$provider]);
+        $lens = new ReportObjectiveLens((string) ($share->report->campaign_objective ?? 'custom'));
+        $outcome = $this->outcomeMetric($lens, $share);
+
+        $sum = static fn (string $key): float => array_sum(array_map(static fn (array $r): float => (float) ($r[$key] ?? 0), $whole));
+        $shareOf = static fn (float $value, float $total): ?float => $total > 0 ? round($value / $total, 4) : null;
+
+        $sections = $share->visibleSections();
+        $content = ReportBreakdowns::allows($share, ReportBreakdowns::CONTENT)
+            ? $this->adsFor($share, ['campaigns' => [], 'providers' => [$provider]] + $applied, $scope, $from, $to)
+            : null;
+
+        $objectives = (new ObjectivePerformance(
+            projectIds: $scope['project_id'] === '' ? null : [$scope['project_id']],
+            campaignIds: $scope['campaign_ids'],
+            providers: [$provider],
+            accountIds: ($share->scope['account_ids'] ?? []) ?: null,
+        ))->build($from, $to);
+
+        $totals = ClientEntityBoundary::coverage($engine->totals($from, $to));
+
+        $payload = [
+            'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => $from->diffInDays($to) + 1],
+            'provider' => $provider,
+            'objective' => ['key' => $lens->value(), 'ranking' => $lens->rankingMetric()['key']],
+            'objectives' => ($sections['objective_breakdown'] ?? true) ? $this->objectiveBlocks($objectives, $totals) : [],
+            'totals' => $totals,
+            'timeseries' => $engine->timeseries($from, $to),
+            'shares' => [
+                'spend' => $share->hide_spend ? null : [
+                    'value' => (float) ($row['spend'] ?? 0),
+                    'total' => $sum('spend'),
+                    'share' => $shareOf((float) ($row['spend'] ?? 0), $sum('spend')),
+                ],
+                'outcome' => [
+                    'metric' => $outcome,
+                    'value' => (float) ($row[$outcome] ?? 0),
+                    'total' => $sum($outcome),
+                    'share' => $shareOf((float) ($row[$outcome] ?? 0), $sum($outcome)),
+                ],
+            ],
+            'ads' => $content['ads'] ?? [],
+            'ads_weakest' => $content['ads_weakest'] ?? [],
+            'breakdowns' => ReportBreakdowns::forShare($share),
+        ];
+
+        return ReportComposition::for($this->formFor($share))->apply($payload);
+    }
+
+    /**
+     * The objective blocks of one platform — the paths it spent on, each with its own headline metrics.
+     *
+     * SEAM — lane `report-objective-analytics` is building the canonical objective → metric mapping
+     * around `ObjectivePerformance`. Until it lands, the mapping is `MarketingPath::headlineMetrics()`
+     * as `ObjectivePerformance` already derives it; a metric that service does not compute is left
+     * out rather than printed as «—», because it is not unavailable — it is not asked here. Swap this
+     * method's body for that service and the payload shape stays.
+     *
+     * Campaign lists are never read: only the path, its labels and its figures leave this method.
+     *
+     * @param  array<string, mixed>  $objectives
+     * @param  array<string, mixed>  $totals
+     * @return list<array<string, mixed>>
+     */
+    private function objectiveBlocks(array $objectives, array $totals): array
+    {
+        /*
+         * MONEY-TRUTH — a path's money is a sum of CONVERTED rows, and `ObjectivePerformance` does not
+         * carry which of them were withheld for want of a rate. Where the platform's own totals say
+         * some were, every figure built on that money is unavailable here («—»), never the converted
+         * subset presented as the whole.
+         */
+        $unavailable = array_merge(
+            (int) ($totals['spend_withheld_rows'] ?? 0) > 0 ? ['spend', 'cpa', 'cpc', 'cpm', 'cost_per_lpv', 'roas'] : [],
+            (int) ($totals['revenue_withheld_rows'] ?? 0) > 0 ? ['revenue', 'roas', 'aov'] : [],
+        );
+
+        $blocks = [];
+        foreach ((array) ($objectives['paths'] ?? []) as $path) {
+            if ((float) ($path['spend'] ?? 0) <= 0 && (float) ($path['impressions'] ?? 0) <= 0) {
+                continue;
+            }
+            $metrics = [];
+            foreach ((array) ($path['headline_metrics'] ?? []) as $key) {
+                if (array_key_exists($key, $path)) {
+                    $metrics[$key] = in_array($key, $unavailable, true) ? null : $path[$key];
+                }
+            }
+            $blocks[] = [
+                'path' => $path['path'],
+                'label_ar' => $path['label_ar'],
+                'label_en' => $path['label_en'],
+                'metrics' => $metrics,
+            ];
+        }
+
+        return $blocks;
+    }
+
+    /**
+     * What «the outcome» is for this report's objective — the figure a platform's share is read on.
+     *
+     * Revenue for sales, unless the link hides revenue: then results, because a share of hidden
+     * revenue discloses its distribution. Reach-type objectives are read on what they buy.
+     */
+    private function outcomeMetric(ReportObjectiveLens $lens, ReportShare $share): string
+    {
+        return match ($lens->rankingMetric()['key']) {
+            'roas' => $share->hide_revenue ? 'conversions' : 'revenue',
+            'cpc' => 'clicks',
+            'cpm' => 'impressions',
+            default => 'conversions',
+        };
+    }
+
+    /**
+     * The link's engine: its campaign ceiling, its other axes (§14.5), and a platform set.
+     *
+     * One construction for the whole payload and for the platform drill-down, so the drawer and the
+     * comparison row it is opened from are read through the same bounds — see `build()` for why each
+     * axis is applied from the share alone and never from the query string.
+     *
+     * @param  list<string>  $providers
+     */
+    private function scopedEngine(ReportShare $share, array $scope, array $providers): MetricsAggregator
+    {
+        return ReportScope::fromArray([
+            'campaign_ids' => $scope['campaign_ids'],
+            'account_ids' => $share->scope['account_ids'] ?? [],
+            'objectives' => $share->scope['objectives'] ?? [],
+            'paths' => $share->scope['paths'] ?? [],
+            'ad_set_ids' => $share->scope['ad_set_ids'] ?? [],
+            'ad_ids' => $share->scope['ad_ids'] ?? [],
+        ])->applyTo($this->metrics->forCampaigns($scope['campaign_ids'])->forProviders($providers));
     }
 
     /**

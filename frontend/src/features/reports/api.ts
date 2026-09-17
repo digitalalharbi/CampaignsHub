@@ -312,6 +312,12 @@ export interface LivePayload {
     funnel_store?: boolean
     previous_comparison?: boolean
   }
+  /**
+   * REPORT-DRILLDOWN-001 — the optional breakdowns this link offers. An absent key means on (older
+   * payloads); the server refuses a switched-off breakdown anyway, so this only decides whether a
+   * control is drawn at all.
+   */
+  breakdowns?: { platform_drilldown?: boolean; content_drilldown?: boolean }
   store_funnel: StoreFunnelPayload | null
   /**
    * CLIENT-FACING-PRESENTATION-001 — «what needs attention», which the link never carried.
@@ -419,6 +425,52 @@ export async function fetchLiveContent(
   })
   const body = await res.json().catch(() => ({}))
   return { status: res.status, envelope: body as { data?: LiveContentPayload; message?: string } }
+}
+
+/** REPORT-DRILLDOWN-001 — one objective path a platform spent on, with that path's own headline metrics. */
+export interface LiveObjectiveBlock {
+  path: 'awareness' | 'traffic' | 'conversion'
+  label_ar: string
+  label_en: string
+  metrics: Record<string, number | null>
+}
+
+/** A share of the whole link: `share` is null when the total is zero — nothing to take a share of. */
+export interface LiveShare {
+  value: number
+  total: number
+  share: number | null
+}
+
+/** REPORT-DRILLDOWN-001 — one platform of a live link, opened from its comparison. Never a campaign. */
+export interface LivePlatformPayload {
+  period: { from: string; to: string; days: number }
+  provider: string
+  objective: { key: string; ranking: string }
+  objectives: LiveObjectiveBlock[]
+  totals: Record<string, number | null>
+  timeseries: Array<Record<string, unknown>>
+  /** `spend` is null when the link hides spend: a share of hidden money discloses its distribution. */
+  shares: { spend: LiveShare | null; outcome: LiveShare & { metric: string } }
+  ads: ReportAd[]
+  ads_weakest: ReportAd[]
+  breakdowns: { platform_drilldown: boolean; content_drilldown: boolean }
+}
+
+export async function fetchLivePlatform(
+  token: string,
+  provider: string,
+  opts: { from: string; to: string; password?: string },
+) {
+  const qs = new URLSearchParams({ from: opts.from, to: opts.to })
+  const res = await fetch(`/api/v1/reports/shared/${token}/live/platform/${encodeURIComponent(provider)}?${qs.toString()}`, {
+    headers: {
+      Accept: 'application/json',
+      ...(opts.password ? { 'X-Report-Password': opts.password } : {}),
+    },
+  })
+  const body = await res.json().catch(() => ({}))
+  return { status: res.status, envelope: body as { data?: LivePlatformPayload; message?: string } }
 }
 
 // ---- Recommendation approval (report annotations) ----------------------------------------------
