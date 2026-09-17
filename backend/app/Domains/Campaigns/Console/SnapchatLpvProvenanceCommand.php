@@ -65,7 +65,9 @@ final class SnapchatLpvProvenanceCommand extends Command
                 .'COUNT(*) FILTER (WHERE page_views IS NOT NULL AND landing_page_views = page_views) AS equals_page_views, '
                 // 0 = 0 is a real day with no views as often as it is the old mapping; only a POSITIVE match is evidence.
                 .'COUNT(*) FILTER (WHERE page_views > 0 AND landing_page_views = page_views) AS equals_positive, '
-                .'COUNT(*) FILTER (WHERE updated_at < ?) AS unwritten_24h', [Carbon::now()->subDay()->toDateTimeString()])
+                .'COUNT(*) FILTER (WHERE updated_at < ?) AS unwritten_24h, '
+                // The positive old-signature rows the sweep did NOT rewrite: stale pixel values, not a coincidence.
+                .'COUNT(*) FILTER (WHERE page_views > 0 AND landing_page_views = page_views AND updated_at < ?) AS positive_unwritten', [$cutoff = Carbon::now()->subDay()->toDateTimeString(), $cutoff])
             ->groupBy('entity_type', 'month')
             ->orderBy('entity_type')
             ->orderBy('month')
@@ -85,13 +87,14 @@ final class SnapchatLpvProvenanceCommand extends Command
 
         foreach ($rows as $row) {
             $this->line(sprintf(
-                '  %-8s %-8s %8d %22d %12d %18d %12s %12s',
+                '  %-8s %-8s %8d %22d %12d %18d %20d %12s %12s',
                 (string) $row->entity_type,
                 (string) $row->month,
                 (int) $row->rows_found,
                 (int) $row->equals_page_views,
                 (int) $row->equals_positive,
                 (int) $row->unwritten_24h,
+                (int) $row->positive_unwritten,
                 Carbon::parse((string) $row->first_day)->toDateString(),
                 Carbon::parse((string) $row->last_day)->toDateString(),
             ));
