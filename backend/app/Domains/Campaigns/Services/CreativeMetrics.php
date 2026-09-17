@@ -96,7 +96,11 @@ final class CreativeMetrics
     ];
 
     /**
-     * Averaged COLUMNS, which are not derived — carried over from CONTENT-KPI-COLLAPSE-001.
+     * Single-row COLUMNS, which are not derived — carried over from CONTENT-KPI-COLLAPSE-001.
+     *
+     * REACH-DEDUP-001: `frequency` is no longer averaged. It is the provider's own figure where a
+     * window holds exactly one row, and null otherwise — the mean of daily frequencies is not a
+     * frequency. `video_avg_watch_seconds` is still averaged; it is not a reach-derived figure.
      *
      * `frequency` and `video_avg_watch_seconds` sat in {@see self::DERIVED}, and nothing in
      * {@see self::derive()} has ever computed either. They are columns, read as an AVG rather than a
@@ -110,8 +114,8 @@ final class CreativeMetrics
      * corrected so the SHAPE is right when no row is in hand.
      *
      * Deriving frequency instead was considered and refused: it is impressions ÷ reach, and `reach`
-     * is summed across days, so daily uniques added together over-count the people actually reached
-     * and the quotient would be a lower bound presented as a measurement.
+     * is per day, so daily uniques added together over-count the people actually reached and the
+     * quotient would be a lower bound presented as a measurement. Summed reach is no longer shown at all.
      *
      * Both stay in the payload — `shape()` still reads them — so a provider that DOES report them at
      * creative grain is not thrown away. What stops is the headline PROMISING them.
@@ -428,11 +432,17 @@ final class CreativeMetrics
 
         $select = ['creative_id'];
         foreach (self::SUMS as $alias => $column) {
-            $select[] = "SUM({$column}) AS {$alias}";
+            /*
+             * REACH-DEDUP-001 — reach is the provider's figure for ONE row or nothing. A row is one
+             * creative on one day; `SUM(reach)` over days counts a returning person once per day.
+             */
+            $select[] = $alias === 'reach'
+                ? 'CASE WHEN COUNT(*) = 1 THEN MAX(reach) END AS reach'
+                : "SUM({$column}) AS {$alias}";
         }
-        // Frequency is an average of a ratio, not a sum: adding daily frequencies would produce a
-        // number that grows with the length of the window and means nothing.
-        $select[] = 'AVG(frequency) AS frequency';
+        // Frequency likewise: the mean of daily frequencies weights a quiet day like a busy one and
+        // describes no audience, so only a single row's own frequency is shown.
+        $select[] = 'CASE WHEN COUNT(*) = 1 THEN MAX(frequency) END AS frequency';
         $select[] = 'AVG(video_avg_watch_seconds) AS video_avg_watch_seconds';
         $select[] = 'COUNT(DISTINCT metric_date) AS active_days';
 
@@ -558,12 +568,15 @@ final class CreativeMetrics
 
         foreach ([...self::SUMS, ...self::AD_GRAIN_SUMS] as $alias => $column) {
             if (in_array($column, $entityColumns, true)) {
-                $select[] = "SUM(entity_daily_metrics.{$column}) AS {$alias}";
+                // REACH-DEDUP-001 — one ad row's own reach, or none; see `fromCreativeGrain()`.
+                $select[] = $alias === 'reach'
+                    ? 'CASE WHEN COUNT(*) = 1 THEN MAX(entity_daily_metrics.reach) END AS reach'
+                    : "SUM(entity_daily_metrics.{$column}) AS {$alias}";
             }
         }
 
         if (in_array('frequency', $entityColumns, true)) {
-            $select[] = 'AVG(entity_daily_metrics.frequency) AS frequency';
+            $select[] = 'CASE WHEN COUNT(*) = 1 THEN MAX(entity_daily_metrics.frequency) END AS frequency';
         }
 
         $select[] = 'COUNT(DISTINCT entity_daily_metrics.metric_date) AS active_days';
@@ -899,6 +912,14 @@ final class CreativeMetrics
                     $total = ($total ?? 0.0) + (float) $set[$key];
                 }
             }
+            /*
+             * REACH-DEDUP-001 — two creatives' reach added is not the group's reach: somebody who saw
+             * both is counted twice. A group of one is that creative's own figure; any larger group has
+             * no reach.
+             */
+            if ($key === 'reach' && count($sets) !== 1) {
+                $total = null;
+            }
             $figures[$key] = $total;
             $reported[$key] = $total !== null;
         }
@@ -910,7 +931,12 @@ final class CreativeMetrics
          * hundred do not average to five: the plain mean lets a rounding error of a creative dominate
          * the figure that is supposed to describe the audience's exposure.
          */
-        $figures['frequency'] = $this->weightedMean($sets, 'frequency', 'impressions');
+        /*
+         * REACH-DEDUP-001 — …and not a weighted mean either. Weighting creatives' frequencies by
+         * impressions still describes no audience: the people who saw two creatives are counted in
+         * both. Only a group of one carries a frequency — that creative's own.
+         */
+        $figures['frequency'] = count($sets) === 1 && is_numeric($sets[0]['frequency'] ?? null) ? (float) $sets[0]['frequency'] : null;
         $figures['video_avg_watch_seconds'] = $this->weightedMean($sets, 'video_avg_watch_seconds', 'video_views');
         $reported['frequency'] = $figures['frequency'] !== null;
         $reported['video_avg_watch_seconds'] = $figures['video_avg_watch_seconds'] !== null;
