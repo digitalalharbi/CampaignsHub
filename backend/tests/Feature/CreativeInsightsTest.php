@@ -327,18 +327,24 @@ final class CreativeInsightsTest extends TestCase
         foreach ([$spending, $stopped] as $creative) {
             for ($d = 40; $d >= 31; $d--) {
                 $this->day($creative, now()->subDays($d)->toDateString(), [
-                    'spend' => 300, 'impressions' => 40000, 'clicks' => 1200, 'frequency' => 1.4,
+                    'spend' => 300, 'impressions' => 40000, 'clicks' => 1200, 'conversions' => 60, 'frequency' => 1.4,
                 ]);
             }
         }
 
-        // Ten active days in the window, with click-through collapsing and frequency climbing.
+        /*
+         * Ten active days in the window, with click-through and conversions collapsing.
+         *
+         * REACH-DEDUP-001 — the climbing daily frequency no longer counts toward the verdict: a
+         * ten-day window has no frequency, only ten daily ones, and their mean is not a signal. The
+         * fixture carries the conversion collapse so the verdict rests on figures that ARE the window's.
+         */
         for ($d = 12; $d >= 3; $d--) {
             $this->day($spending, now()->subDays($d)->toDateString(), [
-                'spend' => 300, 'impressions' => 40000, 'clicks' => 400, 'frequency' => 4.6,
+                'spend' => 300, 'impressions' => 40000, 'clicks' => 400, 'conversions' => 10, 'frequency' => 4.6,
             ]);
             $this->day($stopped, now()->subDays($d)->toDateString(), [
-                'spend' => 0, 'impressions' => 40000, 'clicks' => 400, 'frequency' => 4.6,
+                'spend' => 0, 'impressions' => 40000, 'clicks' => 400, 'conversions' => 10, 'frequency' => 4.6,
             ]);
         }
 

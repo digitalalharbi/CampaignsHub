@@ -52,6 +52,19 @@ final class EntityMetricsAggregator
      * The same keys `MetricsAggregator` and `CreativeMetrics` emit, so `lib/money/contract.ts`
      * renders an ad squad's spend through the identical reader it uses for a dashboard KPI.
      */
+    /**
+     * REACH-DEDUP-001 — reach and frequency are the provider's figures for ONE row, or nothing.
+     *
+     * A row is one entity on one day (per attribution window), and the provider deduplicated its reach
+     * for that day. `SUM(reach)` over a window counts a person reached on two days twice, and
+     * `AVG(frequency)` weights a day of a hundred impressions equally with a day of a hundred thousand
+     * — neither is a measurement of the window. Where the group is exactly one row the provider's own
+     * figure stands; otherwise both are null, which every reader already renders as «—».
+     */
+    private const SINGLE_ROW_REACH = 'CASE WHEN COUNT(*) = 1 THEN MAX(reach) END AS reach';
+
+    private const SINGLE_ROW_FREQUENCY = 'CASE WHEN COUNT(*) = 1 THEN MAX(frequency) END AS frequency';
+
     private const MONEY_TRUTH = [
         'spend_withheld_rows' => 'COUNT(*) FILTER (WHERE spend IS NULL AND spend_original IS NOT NULL)',
         'spend_original' => 'SUM(spend_original) FILTER (WHERE spend IS NULL AND spend_original IS NOT NULL)',
@@ -79,12 +92,10 @@ final class EntityMetricsAggregator
         $select = ['entity_id', 'external_entity_id', 'external_campaign_id', 'external_ad_set_id'];
 
         foreach (self::SUMS as $column) {
-            $select[] = "SUM({$column}) AS {$column}";
+            $select[] = $column === 'reach' ? self::SINGLE_ROW_REACH : "SUM({$column}) AS {$column}";
         }
 
-        // Frequency is an average of a ratio, never a sum: adding daily frequencies produces a
-        // number that grows with the length of the window and means nothing.
-        $select[] = 'AVG(frequency) AS frequency';
+        $select[] = self::SINGLE_ROW_FREQUENCY;
         $select[] = 'COUNT(DISTINCT metric_date) AS active_days';
         $select[] = 'MAX(metric_date) AS last_active_on';
 
