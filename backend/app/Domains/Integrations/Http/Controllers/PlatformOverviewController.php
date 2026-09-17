@@ -127,7 +127,9 @@ final class PlatformOverviewController extends Controller
         $campaignCounts = ExternalCampaign::query()
             ->select('provider')->selectRaw('COUNT(*) AS c, COUNT(unified_campaign_id) AS linked')
             ->groupBy('provider')->get()->keyBy('provider');
+        // The last run of an account this project still selects — never a deselected account's.
         $lastRuns = MetricSyncRun::query()
+            ->whereIn('external_account_id', $assigned->pluck('id')->all())
             ->orderByDesc('started_at')->orderByDesc('created_at')
             ->get()->groupBy('provider');
 
