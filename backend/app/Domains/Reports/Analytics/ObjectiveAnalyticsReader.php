@@ -73,6 +73,12 @@ final class ObjectiveAnalyticsReader
 
         $query->groupBy($groupBy)->select($select);
 
+        /*
+         * How many provider grains — one campaign, on one platform, on one day — the group holds. Reach
+         * is deduplicated per grain and only per grain, so a group of more than one has no reach.
+         */
+        $query->selectRaw('COUNT(DISTINCT (daily_metrics.unified_campaign_id, daily_metrics.provider, daily_metrics.metric_date)) AS grains');
+
         foreach (ObjectiveMetricFamilies::BASE as $key) {
             $query->selectRaw("SUM(daily_metrics.value) FILTER (WHERE daily_metrics.metric_key = '{$key}' AND daily_metrics.value IS NOT NULL) AS {$key}");
             $query->selectRaw("COUNT(*) FILTER (WHERE daily_metrics.metric_key = '{$key}' AND (daily_metrics.value IS NOT NULL OR daily_metrics.original_amount IS NOT NULL)) AS {$key}_rows");
