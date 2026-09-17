@@ -156,6 +156,55 @@ final class MetricsAggregator
      * for the difference: 3,465.33 USD of real Snapchat spend rendered as «0» under a label saying
      * «لم ترسله المنصة», when the platform had sent it and we withheld it.
      */
+    /**
+     * REACH-DEDUP-001 — whether a group's reach is a PROVIDER's reach, or a sum of several.
+     *
+     * A platform deduplicates reach for the grain it was asked about, and what this product stores is
+     * one reach per external campaign, per platform, per day. Adding two of those counts a person who
+     * came back on Tuesday twice — or a person reached on Meta and on Snapchat twice — so the `SUM` in
+     * `PIVOT` is not reach whenever it spans more than one of them. Frequency divided impressions by
+     * that sum, and was understated by exactly the overcount.
+     *
+     * So each aggregate also says how many reach rows it added and how many provider grains it spans.
+     * Exactly one of each is the provider's own deduplicated figure for the grain and period being
+     * shown; anything else is «not reported» (see `withDerived()`), because a deduplicated reach for
+     * that period was never sent. Kept out of `PIVOT` for the reason `MONEY_TRUTH` is: `PIVOT` is also
+     * the list of keys the connectors are asked to fetch.
+     */
+    private const REACH_TRUTH = [
+        'reach_rows' => "COUNT(*) FILTER (WHERE daily_metrics.metric_key = 'reach' AND daily_metrics.value IS NOT NULL)",
+        'reach_grains' => 'COUNT(DISTINCT (daily_metrics.external_campaign_id, daily_metrics.provider, daily_metrics.metric_date))',
+    ];
+
+    /** @param array<string,mixed> $row an aggregate carrying `REACH_TRUTH` */
+    private static function reachIsProviderDeduplicated(array $row): bool
+    {
+        return (int) ($row['reach_rows'] ?? 0) === 1 && (int) ($row['reach_grains'] ?? 0) === 1;
+    }
+
+    /**
+     * Correct the reported map for reach: it was «sent» only where one provider grain carries it.
+     *
+     * @param  array<string,bool>  $reported
+     * @return array<string,bool>
+     */
+    private function withReachReported(array $reported, mixed $query): array
+    {
+        if (($reported['reach'] ?? false) !== true) {
+            return $reported;
+        }
+
+        $row = (array) $query->selectRaw(implode(', ', array_map(
+            static fn ($e, $a) => "{$e} AS {$a}",
+            self::REACH_TRUTH,
+            array_keys(self::REACH_TRUTH),
+        )))->first();
+
+        $reported['reach'] = self::reachIsProviderDeduplicated($row);
+
+        return $reported;
+    }
+
     private const MONEY_TRUTH = [
         'spend_withheld_rows' => "COUNT(*) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL)",
         'spend_original' => "COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL), 0)",
@@ -547,7 +596,7 @@ final class MetricsAggregator
 
     public function totals(Carbon $from, Carbon $to): array
     {
-        $select = array_merge(self::PIVOT, self::MONEY_TRUTH);
+        $select = array_merge(self::PIVOT, self::MONEY_TRUTH, self::REACH_TRUTH);
 
         $row = $this->base($from, $to)->selectRaw(implode(', ', array_map(
             fn ($expr, $alias) => "{$expr} AS {$alias}",
@@ -683,7 +732,7 @@ final class MetricsAggregator
             $out[$key] = in_array($key, $present, true);
         }
 
-        return $out;
+        return $this->withReachReported($out, $this->base($from, $to));
     }
 
     /**
@@ -717,6 +766,7 @@ final class MetricsAggregator
             foreach (array_keys(self::PIVOT) as $key) {
                 $out[$campaign][$key] = $present[$key] ?? false;
             }
+            $out[$campaign] = $this->withReachReported($out[$campaign], $this->base($from, $to)->where('daily_metrics.unified_campaign_id', $campaign));
         }
 
         return $out;
@@ -747,6 +797,7 @@ final class MetricsAggregator
             foreach (array_keys(self::PIVOT) as $key) {
                 $out[$provider][$key] = $present[$key] ?? false;
             }
+            $out[$provider] = $this->withReachReported($out[$provider], $this->base($from, $to)->where('daily_metrics.provider', $provider));
         }
 
         return $out;
@@ -862,8 +913,8 @@ final class MetricsAggregator
              */
             ->selectRaw(implode(', ', array_map(
                 fn ($e, $a) => "{$e} AS {$a}",
-                array_merge(self::PIVOT, self::MONEY_TRUTH),
-                array_keys(array_merge(self::PIVOT, self::MONEY_TRUTH)),
+                array_merge(self::PIVOT, self::MONEY_TRUTH, self::REACH_TRUTH),
+                array_keys(array_merge(self::PIVOT, self::MONEY_TRUTH, self::REACH_TRUTH)),
             )))
             ->groupBy('provider')
             ->get()
@@ -915,7 +966,7 @@ final class MetricsAggregator
      */
     public function byAccount(Carbon $from, Carbon $to): array
     {
-        $select = array_merge(self::PIVOT, self::MONEY_TRUTH);
+        $select = array_merge(self::PIVOT, self::MONEY_TRUTH, self::REACH_TRUTH);
 
         $rows = $this->base($from, $to)
             ->select('daily_metrics.external_account_id as account_id', 'daily_metrics.provider')
@@ -985,13 +1036,13 @@ final class MetricsAggregator
 
         $totals = $this->base($from, $to)->whereIn('daily_metrics.unified_campaign_id', $ids)
             ->select('daily_metrics.unified_campaign_id as campaign_id')
-            ->selectRaw(implode(', ', array_map(fn ($e, $a) => "{$e} AS {$a}", self::PIVOT, array_keys(self::PIVOT))))
+            ->selectRaw(implode(', ', array_map(fn ($e, $a) => "{$e} AS {$a}", array_merge(self::PIVOT, self::REACH_TRUTH), array_keys(array_merge(self::PIVOT, self::REACH_TRUTH)))))
             ->groupBy('daily_metrics.unified_campaign_id')
             ->get()->keyBy('campaign_id');
 
         $series = $this->base($from, $to)->whereIn('daily_metrics.unified_campaign_id', $ids)
             ->select('daily_metrics.unified_campaign_id as campaign_id', 'metric_date')
-            ->selectRaw(implode(', ', array_map(fn ($e, $a) => "{$e} AS {$a}", self::PIVOT, array_keys(self::PIVOT))))
+            ->selectRaw(implode(', ', array_map(fn ($e, $a) => "{$e} AS {$a}", array_merge(self::PIVOT, self::REACH_TRUTH), array_keys(array_merge(self::PIVOT, self::REACH_TRUTH)))))
             ->groupBy('daily_metrics.unified_campaign_id', 'metric_date')
             ->orderBy('metric_date')
             ->get()->groupBy('campaign_id');
@@ -1367,8 +1418,8 @@ final class MetricsAggregator
 
                     return $e." AS {$a}";
                 },
-                array_merge(self::PIVOT, self::MONEY_TRUTH),
-                array_keys(array_merge(self::PIVOT, self::MONEY_TRUTH)),
+                array_merge(self::PIVOT, self::MONEY_TRUTH, self::REACH_TRUTH),
+                array_keys(array_merge(self::PIVOT, self::MONEY_TRUTH, self::REACH_TRUTH)),
             )))
             /*
              * `objective` joins the grouping because a report has to know what each campaign's money
@@ -1543,7 +1594,7 @@ final class MetricsAggregator
     {
         $series = $this->base($from, $to)
             ->select('metric_date')
-            ->selectRaw(implode(', ', array_map(fn ($e, $a) => "{$e} AS {$a}", self::PIVOT, array_keys(self::PIVOT))))
+            ->selectRaw(implode(', ', array_map(fn ($e, $a) => "{$e} AS {$a}", array_merge(self::PIVOT, self::REACH_TRUTH), array_keys(array_merge(self::PIVOT, self::REACH_TRUTH)))))
             ->groupBy('metric_date')
             ->orderBy('metric_date')
             ->get()
@@ -1591,7 +1642,7 @@ final class MetricsAggregator
     {
         $rows = $this->base($from, $to)
             ->select('provider', 'metric_date')
-            ->selectRaw(implode(', ', array_map(fn ($e, $a) => "{$e} AS {$a}", self::PIVOT, array_keys(self::PIVOT))))
+            ->selectRaw(implode(', ', array_map(fn ($e, $a) => "{$e} AS {$a}", array_merge(self::PIVOT, self::REACH_TRUTH), array_keys(array_merge(self::PIVOT, self::REACH_TRUTH)))))
             ->groupBy('provider', 'metric_date')
             ->orderBy('metric_date')
             ->get();
@@ -2244,6 +2295,8 @@ final class MetricsAggregator
         $spend = (float) ($row['spend'] ?? 0);
         $revenue = (float) ($row['revenue'] ?? 0);
         $reach = (float) ($row['reach'] ?? 0);
+        // REACH-DEDUP-001 — a sum of several provider reaches is not reach; see `REACH_TRUTH`.
+        $reachDeduplicated = self::reachIsProviderDeduplicated($row);
         $videoViews = (float) ($row['video_views'] ?? 0);
         $videoCompletions = (float) ($row['video_completions'] ?? 0);
         $lpv = (float) ($row['landing_page_views'] ?? 0);
@@ -2274,7 +2327,7 @@ final class MetricsAggregator
             'revenue_original' => round((float) ($row['revenue_original'] ?? 0), 2),
             'money_original_currency' => $row['money_original_currency'] ?? null,
             'money_original_currencies' => (int) ($row['money_original_currencies'] ?? 0),
-            'reach' => round($reach, 2),
+            'reach' => $reachDeduplicated ? round($reach, 2) : null,
             'video_views' => round($videoViews, 2),
             'video_completions' => round($videoCompletions, 2),
             'landing_page_views' => round($lpv, 2),
@@ -2291,7 +2344,8 @@ final class MetricsAggregator
             'ctr' => $impr > 0 ? round($clicks / $impr, 5) : null,
             'cpc' => $clicks > 0 ? round($spend / $clicks, 3) : null,
             'cpm' => $impr > 0 ? round($spend / $impr * 1000, 2) : null,
-            'frequency' => $reach > 0 ? round($impr / $reach, 2) : null,
+            // Only over the provider's own deduplicated reach — never over a sum of reaches.
+            'frequency' => $reachDeduplicated && $reach > 0 ? round($impr / $reach, 2) : null,
             'cpl' => $leads > 0 ? round($spend / $leads, 2) : null,
             'cpi' => $installs > 0 ? round($spend / $installs, 2) : null,
             'cpe' => $engagements > 0 ? round($spend / $engagements, 3) : null,
