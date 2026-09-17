@@ -21,6 +21,7 @@ use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Taxonomy\Services\TaxonomyService;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -446,7 +447,12 @@ final class UnifiedCampaignController extends Controller
             'confirm' => ['sometimes', 'boolean'],
         ]);
 
-        $external = ExternalCampaign::find($validated['external_campaign_id']);
+        // ACCOUNT-SCOPE-ISOLATION-001 — a campaign of a deselected account is hidden from this project,
+        // and what a project does not show it does not link. Unlinking stays open: removing is safe.
+        $external = ExternalCampaign::query()
+            ->whereKey($validated['external_campaign_id'])
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'external_campaigns'))
+            ->first();
         abort_if($external === null, 404, 'External campaign not found in this project.');
 
         $result = $linker->link($model, $external, (bool) ($validated['confirm'] ?? false), $request->user()->id);
