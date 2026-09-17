@@ -120,7 +120,11 @@ final class MetaCandidateAppController extends Controller
      */
     public function promote(Request $request): JsonResponse
     {
-        $request->validate(['confirm' => ['required', 'accepted']]);
+        $validated = $request->validate([
+            'confirm' => ['required', 'accepted'],
+            // A SEPARATE, named confirmation — the general `confirm` never implies it.
+            'confirm_narrow_scopes' => ['sometimes', 'boolean'],
+        ]);
 
         $eligibility = $this->promotion->eligibility();
 
@@ -128,6 +132,17 @@ final class MetaCandidateAppController extends Controller
             return ApiResponse::error(
                 message: 'The Candidate app cannot be promoted.',
                 errors: ['promotion' => [$eligibility['reason']]],
+                status: 409,
+            );
+        }
+
+        $dropped = $this->promotion->droppedScopes();
+        $narrowingConfirmed = (bool) ($validated['confirm_narrow_scopes'] ?? false);
+
+        if ($dropped !== [] && ! $narrowingConfirmed) {
+            return ApiResponse::error(
+                message: 'Promotion would stop requesting scopes the Live app requests today. Confirm narrowing the scopes to continue.',
+                errors: ['promotion' => ['scopes_would_narrow'], 'dropped_scopes' => $dropped],
                 status: 409,
             );
         }
@@ -140,7 +155,12 @@ final class MetaCandidateAppController extends Controller
             entityId: 'meta',
             // Four-character hints only: which app replaced which, never a value.
             before: ['app_id_hint' => $result['previous_app_id_hint']],
-            after: ['app_id_hint' => $result['new_app_id_hint'], 'run_id' => MetaCandidateConnection::latestRun()?->id],
+            after: [
+                'app_id_hint' => $result['new_app_id_hint'],
+                'run_id' => MetaCandidateConnection::latestRun()?->id,
+                'dropped_scopes' => $dropped,
+                'scope_narrowing_confirmed' => $dropped !== [] && $narrowingConfirmed,
+            ],
         );
 
         return ApiResponse::success($this->payload(), 'Candidate promoted to Live.');
@@ -179,6 +199,7 @@ final class MetaCandidateAppController extends Controller
             'latest_run' => MetaCandidateConnection::latestRun()?->toReport(),
             'promotion' => [
                 ...$this->promotion->eligibility(),
+                'dropped_scopes' => $this->promotion->droppedScopes(),
                 'rollback_available' => $this->promotion->rollbackAvailable(),
             ],
         ];
