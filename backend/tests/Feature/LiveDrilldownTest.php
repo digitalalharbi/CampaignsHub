@@ -20,6 +20,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ClientReportContentValidator;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\ContentKey;
 use App\Domains\Reports\Support\ReportBreakdowns;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -295,6 +296,32 @@ final class LiveDrilldownTest extends TestCase
 
         [$share] = $this->share();
         $this->assertSame([ReportBreakdowns::PLATFORM => false, ReportBreakdowns::CONTENT => false], ReportBreakdowns::forShare($share, 'pdf'));
+    }
+
+    /**
+     * An executive summary is the short product: no drill-down unless the operator enables it on that link.
+     */
+    public function test_a_summary_link_offers_no_drilldown_unless_the_operator_enables_it(): void
+    {
+        [, $detailedRaw] = $this->share(['form' => 'detailed']);
+        $key = collect($this->live($detailedRaw)['ads_roster'])->firstWhere('provider', 'meta')['content_key'];
+        $this->platform($detailedRaw, 'meta');
+
+        [$summary, $raw] = $this->share(['form' => 'executive_summary']);
+        $summaryKey = ContentKey::for($summary, (string) ExternalCreative::withoutGlobalScopes()->where('name', 'Meta Summer creative')->value('id'));
+        $this->assertNotSame($key, $summaryKey);
+
+        $this->assertSame([ReportBreakdowns::PLATFORM => false, ReportBreakdowns::CONTENT => false], $this->live($raw)['breakdowns']);
+        $this->getJson("/api/v1/reports/shared/{$raw}/live/platform/meta".self::WINDOW)->assertNotFound();
+        $this->getJson("/api/v1/reports/shared/{$raw}/live/content/{$summaryKey}".self::WINDOW)->assertNotFound();
+        $this->actingAs($this->operator, 'sanctum')->getJson($this->operatorUrl($summary, 'platform/meta'))->assertNotFound();
+        $this->app['auth']->forgetGuards();
+
+        $summary->settings = ['breakdowns' => ['live' => [ReportBreakdowns::PLATFORM => true, ReportBreakdowns::CONTENT => true]]];
+        $summary->save();
+        $this->assertTrue($this->live($raw)['breakdowns'][ReportBreakdowns::PLATFORM]);
+        $this->platform($raw, 'meta');
+        $this->getJson("/api/v1/reports/shared/{$raw}/live/content/{$summaryKey}".self::WINDOW)->assertOk();
     }
 
     public function test_hidden_money_stays_hidden_one_level_down(): void
