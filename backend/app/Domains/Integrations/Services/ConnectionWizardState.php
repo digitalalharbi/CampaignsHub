@@ -125,7 +125,12 @@ final class ConnectionWizardState
 
         // A real sync, not a discovery: `last_synced_at` is only written when data actually arrives
         // (DISCOVERY-NOT-SYNC-001), so this counts accounts that have genuinely produced something.
-        $synced = (clone $accounts)->whereNotNull('last_synced_at')->count();
+        // Only accounts that are SELECTED: a deselected account that once synced must not make a
+        // never-synced selection read as active (ACCOUNT-SCOPE-ISOLATION-001).
+        $synced = (clone $accounts)
+            ->whereNotNull('last_synced_at')
+            ->whereIn('id', ProjectIntegrationBinding::withoutGlobalScopes()->where('is_active', true)->select('external_account_id'))
+            ->count();
 
         $state = match (true) {
             in_array($connection->status, ['revoked', 'disconnected', 'error'], true) => self::ACCESS_REVOKED,
@@ -170,6 +175,8 @@ final class ConnectionWizardState
             $state === self::NEEDS_SELECTION => self::USER_ACCOUNT_SELECTION_REQUIRED,
             ($health['needs_attention'] ?? 0) > 0 => self::USER_ATTENTION_REQUIRED,
             $state === self::FIRST_SYNC_PENDING => self::USER_SYNCING,
+            // Nothing selected has produced data yet: still syncing, not «working».
+            ($health['healthy'] ?? 0) === 0 && ($health['pending_first_sync'] ?? 0) > 0 => self::USER_SYNCING,
             default => self::USER_HEALTHY,
         };
 

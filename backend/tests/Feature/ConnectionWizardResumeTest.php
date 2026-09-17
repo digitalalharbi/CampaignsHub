@@ -11,7 +11,9 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\Services\ConnectionWizardState;
+use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -351,6 +353,65 @@ final class ConnectionWizardResumeTest extends TestCase
         $state = app(ConnectionWizardState::class)->for($connection);
 
         $this->assertSame(ConnectionWizardState::USER_ATTENTION_REQUIRED, $state['user_state']);
+    }
+
+    // ── ACCOUNT-SCOPE-ISOLATION-001 — status speaks for the SELECTED accounts only ─────────────
+
+    public function test_a_deselected_account_that_once_synced_does_not_make_a_new_selection_read_as_working(): void
+    {
+        $connection = $this->connection('snapchat');
+        $this->discover($connection, 2);
+        [$old, $new] = ExternalAccount::withoutGlobalScopes()->orderBy('external_id')->get()->all();
+
+        $this->assign($old);
+        $old->forceFill(['last_synced_at' => now()])->save();
+        ProjectIntegrationBinding::withoutGlobalScopes()->where('external_account_id', $old->id)->update(['is_active' => false]);
+        $this->assign($new);
+
+        $state = app(ConnectionWizardState::class)->for($connection);
+
+        $this->assertSame(ConnectionWizardState::FIRST_SYNC_PENDING, $state['state'], 'a deselected account\'s sync made the connection active');
+        $this->assertSame(ConnectionWizardState::USER_SYNCING, $state['user_state']);
+    }
+
+    public function test_the_card_counts_and_dates_only_the_selected_accounts_and_an_error_outranks_a_running_sync(): void
+    {
+        foreach (PlatformCredentials::for('meta')->requires() as $key) {
+            config()->set("ad_platforms.platforms.meta.{$key}", "test-{$key}");
+        }
+
+        $connection = $this->connection('meta');
+        $this->discover($connection, 2);
+        [$selected, $deselected] = ExternalAccount::withoutGlobalScopes()->orderBy('external_id')->get()->all();
+
+        $this->assign($selected);
+        $selected->forceFill(['last_synced_at' => now()->subDays(3)])->save();
+        $this->assign($deselected);
+        ProjectIntegrationBinding::withoutGlobalScopes()->where('external_account_id', $deselected->id)->update(['is_active' => false]);
+        $deselected->forceFill(['last_synced_at' => now()])->save();
+
+        $card = collect($this->actingAs($this->operator, 'sanctum')->getJson('/api/v1/integrations')->assertOk()->json('data'))
+            ->firstWhere('key', 'meta');
+
+        $this->assertSame(1, $card['accounts'], 'a deselected account is still counted on the card');
+        $this->assertSame(
+            $selected->last_synced_at->toIso8601String(),
+            $card['data_last_synced_at'],
+            'the card took «last synced» from a deselected account',
+        );
+
+        MetricSyncRun::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => ProjectIntegrationBinding::withoutGlobalScopes()->where('external_account_id', $selected->id)->value('project_id'),
+            'external_account_id' => $selected->id, 'provider' => 'meta', 'status' => 'running',
+            'window_start' => now()->subDay(), 'window_end' => now(), 'started_at' => now(),
+        ]);
+        $connection->update(['status' => 'error']);
+
+        $card = collect($this->actingAs($this->operator, 'sanctum')->getJson('/api/v1/integrations')->assertOk()->json('data'))
+            ->firstWhere('key', 'meta');
+
+        $this->assertSame('error', $card['state'], 'a running sync hid a broken authorisation');
     }
 
     private function connection(string $provider, ?Tenant $tenant = null): ProviderConnection
