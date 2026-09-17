@@ -354,7 +354,7 @@ final class ContentDefectCensusTest extends TestCase
 
         // CONTENT-C-REPORTED-ZERO: withheld rows summing to exactly zero are a reported 0, so the card
         // states Spend 0 and the creative is no longer in C.
-        $this->assertStringNotContainsString((string) $creative->getKey(), $this->census());
+        $this->assertStringNotContainsString((string) $creative->getKey(), $this->section('C'));
 
         Artisan::call('content:census', ['--project' => (string) $this->project->getKey(), '--raw' => true]);
         $output = Artisan::output();
