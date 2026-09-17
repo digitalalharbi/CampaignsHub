@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\CRM\Access;
 
 use App\Domains\CRM\Models\Lead;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Models\ProjectMembership;
@@ -106,6 +107,8 @@ final class LeadVisibility
             return $query->whereRaw('1 = 0');
         }
 
+        self::boundToItsProject($query);
+
         /*
          * With a project in hand the question is simple: identities without the pipeline is an agent.
          *
@@ -140,6 +143,30 @@ final class LeadVisibility
      * half of a question that would otherwise need a lookup per lead; the expensive half, per-row
      * identity, is memoised by `ProjectAbilities` for exactly the same reason.
      */
+    /**
+     * ACCOUNT-SCOPE-ISOLATION-001 — a lead from an account not selected for its project is not that project's.
+     *
+     * The same rule as every figure: while the account that produced the lead is deselected, or
+     * selected for another project, the lead is neither listed nor actionable here. It is never
+     * deleted, and it comes back the moment the account is selected again. A lead typed in by a
+     * person carries no account and is untouched.
+     *
+     * @template T of Builder
+     *
+     * @param  T  $query
+     * @return T
+     */
+    public static function boundToItsProject(Builder $query): Builder
+    {
+        return BoundAccountVisibility::apply($query, $query->getModel()->getTable());
+    }
+
+    /** Whether this one lead is visible under the selection rule — the check behind every action. */
+    public static function isBoundToItsProject(Lead $lead): bool
+    {
+        return self::boundToItsProject(Lead::withoutGlobalScopes()->whereKey($lead->getKey()))->exists();
+    }
+
     private function isAgentSomewhere(User $user): bool
     {
         $projectIds = ProjectMembership::withoutGlobalScopes()
