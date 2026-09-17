@@ -160,17 +160,37 @@ for (const [label, flags, money] of [
     for (const mode of ['snapshot', 'live'] as const) {
       const open = await link({ mode, allow_download: true })
       collect(await (await page.request.get(`/api/v1/reports/shared/${open}`, { headers: API_HEADERS })).json(), [...money], figures, others)
-      if (mode === 'live') collect(await (await page.request.get(`/api/v1/reports/shared/${open}/live`, { headers: API_HEADERS })).json(), [...money], figures, others)
+      if (mode === 'live') {
+        const live = await (await page.request.get(`/api/v1/reports/shared/${open}/live`, { headers: API_HEADERS })).json()
+        collect(live, [...money], figures, others)
+        /*
+         * The drill-down too, and not only for what it discloses: it is where `conversion_rate` and the
+         * other per-day figures live. A number the open link publishes under a figure this link does NOT
+         * hide is excluded below, and collecting it from every endpoint the hidden run reads is what
+         * keeps a conversion rate that happens to equal a ROAS from reading as a leak.
+         */
+        for (const key of ((live?.data?.ads_roster ?? []) as Array<{ content_key?: string }>).map((r) => r.content_key).filter(Boolean).slice(0, 5)) {
+          collect(await (await page.request.get(`/api/v1/reports/shared/${open}/live/content/${key}`, { headers: API_HEADERS })).json(), [...money], figures, others)
+        }
+      }
     }
     const innocent = new Set([...others].flatMap((v) => [...spellings(v), ...spellings(v * 100)]))
     const wanted = [...figures].filter((v) => Math.abs(v) >= 1).flatMap(spellings).filter((s) => !innocent.has(s))
     expect(wanted.length, 'the open link carries almost no money, so the hidden link proves nothing').toBeGreaterThan(10)
 
     const leaks: string[] = []
+    /*
+     * Spellings the HIDING link is entitled to print.
+     *
+     * A figure it publishes under a key it does not hide cannot be evidence: a conversion rate of 1.25 is
+     * not the ROAS of 1.25 the open link reports. Filled from the hiding link's own API payloads before
+     * the hunt, which is where those innocent numbers actually live.
+     */
+    const innocentHere = new Set<string>()
     const hunt = (where: string, raw: string) => {
       // Identifiers are not figures: content keys, request ids and uuids are hex that happens to hold digits.
       const text = raw.replace(/\b[0-9a-f]{16,}\b|req_[0-9a-z]+|[0-9a-f]{8}-[0-9a-f-]{27}/gi, ' ')
-      for (const s of new Set(wanted)) {
+      for (const s of [...new Set(wanted)].filter((x) => !innocentHere.has(x))) {
         // «397» inside «397K», or «3.28» inside «3.28%», is a different figure.
         const m = new RegExp(`(?<![\\d.,])${s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\dKM%]|\\.\\d)`).exec(text)
         if (m) leaks.push(`${where}: «${s}» … ${text.slice(Math.max(0, m.index - 70), m.index + 40).replace(/\s+/g, ' ')}`)
@@ -179,12 +199,45 @@ for (const [label, flags, money] of [
 
     for (const mode of ['snapshot', 'live'] as const) {
       const token = await link({ mode, allow_download: true, ...flags })
+
+      const hiddenOthers = new Set<number>()
+      const hiddenFigures = new Set<number>()
+      collect(await (await page.request.get(`/api/v1/reports/shared/${token}`, { headers: API_HEADERS })).json(), [...money], hiddenFigures, hiddenOthers)
+      if (mode === 'live') {
+        const live = await (await page.request.get(`/api/v1/reports/shared/${token}/live`, { headers: API_HEADERS })).json()
+        collect(live, [...money], hiddenFigures, hiddenOthers)
+        for (const key of ((live?.data?.ads_roster ?? []) as Array<{ content_key?: string }>).map((r) => r.content_key).filter(Boolean).slice(0, 5)) {
+          collect(await (await page.request.get(`/api/v1/reports/shared/${token}/live/content/${key}`, { headers: API_HEADERS })).json(), [...money], hiddenFigures, hiddenOthers)
+        }
+      }
+      /** Whatever this link publishes under a key it does not hide is not evidence against it. */
+      const noteInnocent = (body: string) => {
+        const others = new Set<number>()
+        const figures = new Set<number>()
+        try {
+          collect(JSON.parse(body), [...money], figures, others)
+        } catch {
+          return
+        }
+        for (const v of others) {
+          for (const s of [...spellings(v), ...spellings(v * 100)]) innocentHere.add(s)
+        }
+      }
+      for (const v of hiddenOthers) {
+        for (const s of [...spellings(v), ...spellings(v * 100)]) innocentHere.add(s)
+      }
+
       const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } })
       const client = await ctx.newPage()
       const pending: Promise<void>[] = []
       client.on('response', (r) => {
         if (r.url().includes('/api/v1/reports/shared/') && !r.url().includes('/download/')) {
-          pending.push(r.text().then((t) => hunt(`${mode} response ${new URL(r.url()).pathname.split('/').slice(-2).join('/')}`, t)).catch(() => {}))
+          pending.push(r.text().then((t) => {
+            // Read what this response is entitled to show BEFORE hunting it: a drill-down the page opened
+            // carries per-day counts and rates this link never hid.
+            noteInnocent(t)
+            hunt(`${mode} response ${new URL(r.url()).pathname.split('/').slice(-2).join('/')}`, t)
+          }).catch(() => {}))
         }
       })
 
