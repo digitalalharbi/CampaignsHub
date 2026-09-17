@@ -80,4 +80,24 @@ describe('the platforms panel on a project', () => {
     expect(await screen.findByText('Feeding this project')).toBeInTheDocument()
     expect(screen.getByText('Healthy')).toBeInTheDocument()
   })
+
+  /** ACCOUNT-SCOPE-ISOLATION-001 — a linked account behind a failed token refresh feeds nothing. */
+  it('does not say «feeding this project» over a broken authorisation', async () => {
+    vi.mocked(getData).mockResolvedValue({
+      platforms: [platform({
+        connections: [{ id: 'c1', name: 'meta', status: 'error', last_health_check_at: null, last_successful_sync_at: null, last_error: 'refresh failed' }],
+        accounts: [{
+          id: 'a1', provider: 'meta', account_type: 'ad_account', name: 'Riyadh', external_id: 'act-1',
+          parent_name: null, parent_external_id: null, currency: 'SAR', timezone: null, status: 'active',
+          health: 'revoked', last_synced_at: null,
+        }],
+      })],
+      summary: { total: 6, with_credentials: 1, with_accounts: 1, discovered_campaigns: 0 },
+    } as never)
+
+    renderWithProviders(<PlatformIntegrationsPanel projectId="p1" />, { locale: 'en' })
+
+    expect(await screen.findByText('Needs reconnecting')).toBeInTheDocument()
+    expect(screen.queryByText('Feeding this project')).not.toBeInTheDocument()
+  })
 })
