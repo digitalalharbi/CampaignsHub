@@ -7,9 +7,10 @@ import { AdPreviewDialog } from './AdPreviewDialog'
 import { creativeDialogFigures } from './creativeDialogFigures'
 import { CreativeTrend } from './CreativeTrend'
 import { CreativeCompare } from './CreativeCompare'
-import { besideSpend, metricLabel } from './metrics'
+import { metricLabel } from './metrics'
+import { canonicalFigureKeys } from './canonicalFigures'
 import { creativeGrainMissing, emptyReason, noDisplayableMetrics, type EmptyReason, type MetricsAvailability } from './availability'
-import { absenceLabel, aspectClass, previewShape, readPreview } from './adPreview'
+import { absenceLabel, aspectClass, posterSource, previewShape, readPreview } from './adPreview'
 import { imageLoading } from './format'
 import { creativeFigureText, creativeMoney } from './creativeMoney'
 import { VideoPoster } from './VideoPoster'
@@ -93,6 +94,16 @@ import { Num } from '@/components/ui/Num'
  * streams would cost a phone tens of megabytes to open a page.
  */
 
+/**
+ * How many figures a card draws before the reader asks for the rest.
+ *
+ * A LAYOUT number, and only that: `canonicalFigureKeys` decides which figures exist, the card folds
+ * the remainder behind «+N», and nothing is dropped on the way. This used to be a cap on the list
+ * itself — three, in the page, and four again on the server — which is how figures the platform
+ * reported disappeared between one surface and the next.
+ */
+const CARD_FIGURES = 3
+
 const COPY = {
   ar: {
     title: 'مكتبة المحتويات',
@@ -146,6 +157,7 @@ const COPY = {
     prev: 'السابق',
     next: 'التالي',
     open: 'فتح المعاينة',
+    fewerMetrics: 'عرض أقل',
     preview: 'المعاينة',
     name: 'الاسم',
     result: 'النتيجة',
@@ -223,6 +235,7 @@ const COPY = {
     prev: 'Previous',
     next: 'Next',
     open: 'Open preview',
+    fewerMetrics: 'Show fewer',
     preview: 'Preview',
     name: 'Name',
     result: 'Result',
@@ -1077,16 +1090,26 @@ export function CreativesPage() {
               {creatives.map((creative, index) => {
                 const resultKey = primaryResultKey(creative.headline_metrics)
                 const efficiencyKey = primaryEfficiencyKey(creative.headline_metrics)
-                const poster = creative.preview.thumbnail_url ?? creative.preview.image_url
+                /*
+                 * OWNER CONTENT P0 — the row asks the CANONICAL reader, like every other surface.
+                 *
+                 * It read `thumbnail_url ?? image_url` straight off the envelope, which skips the two
+                 * decisions `readPreview` exists to make: the STATE (an expired link still carries the
+                 * old thumbnail, and drawing it presents a dead asset as the live ad) and the SHAPE (a
+                 * collection's hero is `image_url`, and taking the thumbnail first is a second opinion
+                 * about which frame the ad is). The owner met the result on production: a picture on
+                 * the list and «no cover» on the creative one click away, about one creative.
+                 */
+                const reading = readPreview(creative.preview, ar)
+                const poster = posterSource(reading)
                 /*
                  * CONTENT-PREVIEW-VIDEO-001 — a video with no poster is not «no preview».
                  *
                  * Snapchat returns a video creative's file as `video_url` and frequently supplies no
-                 * separate thumbnail. This row derived its poster from `thumbnail_url ?? image_url`
-                 * only, so a creative with a perfectly good video asset rendered «لا توجد معاينة» —
-                 * the product claiming to have nothing while holding the thing itself.
+                 * separate thumbnail, so a creative with a perfectly good video asset rendered «لا
+                 * توجد معاينة» — the product claiming to have nothing while holding the thing itself.
                  */
-                const video = poster === null ? creative.preview.video_url : null
+                const video = poster === null && reading.kind === 'video' ? reading.src : null
 
                 return (
                   <tr
@@ -1318,7 +1341,16 @@ function CreativeGridCard({
   detailsTo: string
 }) {
   const preview = creative.preview
-  const poster = preview.thumbnail_url ?? preview.image_url
+  /*
+   * OWNER CONTENT P0 — ONE preview decision, and the card no longer has its own.
+   *
+   * `thumbnail_url ?? image_url` read the envelope's columns directly, so the card could draw a frame
+   * the canonical reader refuses — an expired link keeps its thumbnail by design — and could prefer a
+   * different frame from the popup for the same collection. `readPreview` + `posterSource` is what
+   * every other surface in the product already asks, including the popup this card opens.
+   */
+  const reading = readPreview(preview, ar)
+  const poster = posterSource(reading)
   /*
    * CONTENT-PREVIEW-VIDEO-001 — a video with no poster is not «no preview».
    *
@@ -1344,10 +1376,22 @@ function CreativeGridCard({
    * When the poster fails the card asks the same question it asks when there was never a poster: is
    * there a film here instead? So a video creative whose cover has expired still shows the film.
    */
+  /*
+   * OWNER CONTENT P0 — the figures this creative can state, decided in ONE place for every surface.
+   *
+   * `canonicalFigureKeys` is what the popup's own list is built from, so the card cannot show fewer
+   * figures than the panel it opens. Spend is not among them here: the fixed cell above already
+   * carries it, through the money contract, which is the only reader that can state a withheld amount.
+   */
+  const [moreShown, setMoreShown] = useState(false)
+  const figureKeys = canonicalFigureKeys(creative.headline_metrics ?? [], creative.metrics ?? undefined, currency, ar)
+    .filter((key) => key !== 'spend')
+  const shownKeys = moreShown ? figureKeys : figureKeys.slice(0, CARD_FIGURES)
+  const hiddenKeys = figureKeys.slice(CARD_FIGURES)
   const [brokenPoster, setBrokenPoster] = useState(false)
   useEffect(() => setBrokenPoster(false), [poster])
   const usablePoster = brokenPoster ? null : poster
-  const video = usablePoster === null && !brokenVideo ? preview.video_url : null
+  const video = usablePoster === null && !brokenVideo && reading.kind === 'video' ? reading.src : null
   const note = ar ? preview.note_ar : preview.note_en
 
   return (
@@ -1568,7 +1612,7 @@ function CreativeGridCard({
                 </dd>
               </div>
 
-              {besideSpend(creative.headline_metrics)
+              {shownKeys
                 .map((key) => (
                   <div key={key} className="flex flex-col">
                     <dt className="text-text-secondary">{metricLabel(key, locale)}</dt>
@@ -1601,7 +1645,31 @@ function CreativeGridCard({
                 literally. Measured after the list the grid actually draws, which is the only number
                 that can answer «is there anything beside the price».
             */}
-            {besideSpend(creative.headline_metrics).length === 0 && (
+            {/*
+                OWNER CONTENT P0 — folded, never dropped.
+
+                The card used to draw three figures and stop, so a creative whose objective filled
+                those three lost every universal figure the platform reported for it — while the popup
+                one click away showed them. The whole set is here; the card opens with the objective's
+                own verdict and reveals the rest in place, which is a LAYOUT decision and can be, so
+                long as nothing is lost by making it.
+            */}
+            {hiddenKeys.length > 0 && (
+              <button
+                type="button"
+                data-testid="creative-card-more-metrics"
+                aria-expanded={moreShown}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setMoreShown((v) => !v)
+                }}
+                className="self-start rounded px-1 text-[11px] text-text-secondary underline-offset-2 hover:underline"
+              >
+                {moreShown ? t.fewerMetrics : `+${hiddenKeys.length}`}
+              </button>
+            )}
+
+            {figureKeys.length === 0 && (
               <EmptyReasonPanel reason={noDisplayableMetrics(locale)} />
             )}
           </div>

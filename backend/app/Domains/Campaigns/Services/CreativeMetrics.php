@@ -1270,8 +1270,28 @@ final class CreativeMetrics
          * genuinely reported four figures shows four, and one that reported two shows two rather than
          * two figures and two apologies.
          */
-        foreach (ObjectiveFamily::Unknown->headlineMetrics() as $universal) {
-            if (count($kept) >= self::HEADLINE_MINIMUM) {
+        foreach (self::universal() as $universal) {
+            /*
+             * OWNER CONTENT P0 — the cap is a LAYOUT decision, and it was deciding the payload.
+             *
+             * This stopped at four. On the owner's own production reading a sales creative filled all
+             * four cells with its family's own metrics, so impressions, clicks, CTR, CPC and CPM —
+             * every one of them reported by the platform for that creative and that window — never
+             * reached the list at all. The popup one click away read them straight off the row and
+             * showed them, so the same creative answered one question on the card and a larger one in
+             * the panel, which is the owner's «the KPIs appear in one place and disappear in another»
+             * in its simplest form.
+             *
+             * Four surfaces read this list — card, popup, Content Analytics, report — so a number
+             * chosen for a two-column grid was silently deciding what all four could say. With figures
+             * in hand the list is now everything this row can actually answer, and the CARD decides how
+             * many to draw at once (it draws the objective's own first and reveals the rest in place).
+             *
+             * Without figures — a creative being DESCRIBED rather than rendered — the promise is still
+             * «about this many cells», so the minimum is kept: a list of every metric a family might
+             * one day answer is not a description of anything.
+             */
+            if ($figures === null && count($kept) >= self::HEADLINE_MINIMUM) {
                 break;
             }
 
@@ -1294,6 +1314,21 @@ final class CreativeMetrics
         }
 
         return $kept;
+    }
+
+    /**
+     * The figures true of every campaign, whatever it was bought to do — the canonical top-up.
+     *
+     * `ObjectiveFamily::Unknown` names them, plus `cpc`: a cost per click is universal in exactly the
+     * way the rest of that list is, and the creative popup has always shown it. Leaving it out here
+     * would keep one figure visible in the panel and absent from the card, which is the divergence
+     * this whole change exists to close.
+     *
+     * @return list<string>
+     */
+    private static function universal(): array
+    {
+        return array_values(array_unique([...ObjectiveFamily::Unknown->headlineMetrics(), 'cpc']));
     }
 
     /** The family whose KPIs this objective is judged by — see {@see CampaignObjective::family()}. */
