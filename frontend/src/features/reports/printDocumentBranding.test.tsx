@@ -85,4 +85,18 @@ describe('the document PDF’s cover', () => {
     expect(screen.getByTestId('print-document-logo')).toHaveAttribute('src', '/l/client')
     expect(screen.getByTestId('print-document-agency-logo')).toHaveAttribute('src', '/l/agency')
   })
+
+  it('names the platforms the report covers, not «undefined»', () => {
+    renderWithProviders(
+      <PrintDocument
+        data={{ period: { from: '2026-08-01', to: '2026-08-31' }, platforms: [{ provider: 'snapchat' }, { provider: 'meta' }], objective: 'Sales' } as never}
+        reportName="August" currency="SAR"
+      />,
+      { locale: 'en' },
+    )
+    const facts = document.querySelector('.doc-facts')?.textContent ?? ''
+    expect(facts).not.toMatch(/undefined/)
+    expect(facts).toMatch(/snapchat/i)
+    expect(facts).toMatch(/meta/i)
+  })
 })

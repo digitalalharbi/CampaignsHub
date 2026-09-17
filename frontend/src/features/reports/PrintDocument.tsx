@@ -409,7 +409,7 @@ export function PrintDocument({
           <div><dt>Period</dt><dd>{dateFmt(data.period?.from)} → {dateFmt(data.period?.to)}</dd></div>
           <div><dt>Currency</dt><dd>{currency}</dd></div>
           <div><dt>Objective</dt><dd>{data.objective ?? '—'}</dd></div>
-          <div><dt>Platforms</dt><dd>{(data.platforms ?? []).map((p: Row) => String(p.platform ?? p.name)).join(', ') || '—'}</dd></div>
+          <div><dt>Platforms</dt><dd>{(data.platforms ?? []).map((p: Row) => String(p.provider ?? p.platform ?? p.name ?? '')).filter(Boolean).join(', ') || '—'}</dd></div>
         </dl>
       </header>
 
