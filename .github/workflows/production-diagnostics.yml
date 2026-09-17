@@ -410,7 +410,8 @@ jobs:
         uses: appleboy/ssh-action@v1.2.2
         env:
           # `all` is the estate; anything else is a project id. Still a VALUE into a fixed flag.
-          PROJECT: ${{ inputs.scope_audit == 'all' && '' || inputs.scope_audit }}
+          # GitHub expressions: `cond && '' || x` always yields x, because '' is falsy. Invert it.
+          PROJECT: ${{ inputs.scope_audit != 'all' && inputs.scope_audit || '' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
