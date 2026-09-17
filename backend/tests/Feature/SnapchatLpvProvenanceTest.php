@@ -83,6 +83,20 @@ final class SnapchatLpvProvenanceTest extends TestCase
         $this->entityRow('2026-08-22', lpv: 40, pageViews: 90);   // outside reach, delivery mapping
         $this->entityRow('2026-08-23', lpv: null, pageViews: 90); // no LPV at all — not counted
 
+        // Written under another project with an account no binding names: «written elsewhere», not «not written».
+        $elsewhere = Project::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'client_workspace_id' => $this->project->client_workspace_id,
+            'name' => 'Other', 'status' => 'active',
+        ]);
+        $unboundAccount = (string) Str::uuid();
+        DB::table('entity_daily_metrics')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->getKey(), 'project_id' => $elsewhere->getKey(),
+            'provider' => 'snapchat', 'entity_type' => 'ad_set', 'entity_id' => (string) Str::uuid(),
+            'external_entity_id' => 'sq-1', 'external_account_id' => $unboundAccount, 'metric_date' => '2026-09-14',
+            'attribution_window' => 'default', 'landing_page_views' => null, 'page_views' => 4,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
         $before = $this->digest();
 
         Artisan::call('content:lpv-provenance');
@@ -96,7 +110,8 @@ final class SnapchatLpvProvenanceTest extends TestCase
         $this->assertStringContainsString('bodies read: 1', $output);
         $this->assertMatchesRegularExpression('/status success\\s+ad sets 0\\s+ads 0\\s+refusal Snapchat could not return ad stats: denied \\[path: \\/v1\\/campaigns\\/<id>\\/stats\\]/', $output);
         $this->assertStringNotContainsString('8f3ace06', $output);
-        $this->assertMatchesRegularExpression('/ad\\s+rows 1, carrying landing_page_views 1, carrying page_views 1/', $output);
+        $this->assertMatchesRegularExpression('/project '.$elsewhere->getKey().'  account '.$unboundAccount.' \\(NOT bound to this project\\)  ad_set\\s+rows 1, carrying landing_page_views 0, carrying page_views 1/', $output);
+        $this->assertMatchesRegularExpression('/project '.$this->project->getKey().'  account none \\(no account\\)  ad\\s+rows 1, carrying landing_page_views 1, carrying page_views 1/', $output);
         $this->assertMatchesRegularExpression('/ad\\s+landing_page_views\\s+key absent 1, JSON null 1, zero 0, positive 0/', $output);
         $this->assertMatchesRegularExpression('/ad\\s+conversion_page_views\\s+key absent 0, JSON null 0, zero 1, positive 1/', $output);
         $this->assertMatchesRegularExpression('/ad\s+2026-08\s+3\s+2\s+2026-08-20\s+2026-08-22/', $output);

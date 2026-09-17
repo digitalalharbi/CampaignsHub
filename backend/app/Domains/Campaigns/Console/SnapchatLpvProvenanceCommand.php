@@ -254,15 +254,25 @@ final class SnapchatLpvProvenanceCommand extends Command
             return;
         }
 
-        $inside = DB::table('entity_daily_metrics')
-            ->where('provider', 'snapchat')
-            ->where('metric_date', '>=', $earliest)
-            ->selectRaw('entity_type, COUNT(*) AS rows_found, COUNT(landing_page_views) AS with_lpv, COUNT(page_views) AS with_page_views, MAX(updated_at) AS last_written')
-            ->groupBy('entity_type')
-            ->orderBy('entity_type')
+        /*
+         * Estate-wide, by (project, account, grain): «not written» and «written under another project
+         * or an account the project is not bound to» look identical from one project's side.
+         */
+        $inside = DB::table('entity_daily_metrics AS m')
+            ->leftJoin('project_integration_bindings AS b', function ($join): void {
+                $join->on('b.project_id', '=', 'm.project_id')
+                    ->on('b.external_account_id', '=', 'm.external_account_id')
+                    ->where('b.is_active', '=', true);
+            })
+            ->where('m.provider', 'snapchat')
+            ->where('m.metric_date', '>=', $earliest)
+            ->selectRaw('m.project_id, m.external_account_id, m.entity_type, (b.id IS NOT NULL) AS bound, '
+                .'COUNT(*) AS rows_found, COUNT(m.landing_page_views) AS with_lpv, COUNT(m.page_views) AS with_page_views, MAX(m.updated_at) AS last_written')
+            ->groupBy('m.project_id', 'm.external_account_id', 'm.entity_type', 'b.id')
+            ->orderBy('m.project_id')->orderBy('m.external_account_id')->orderBy('m.entity_type')
             ->get();
 
-        $this->line(sprintf('  stored entity rows ON or AFTER %s:', $earliest));
+        $this->line(sprintf('  stored entity rows ON or AFTER %s, estate-wide by project · account · grain:', $earliest));
 
         if ($inside->isEmpty()) {
             $this->line('    none');
@@ -270,7 +280,10 @@ final class SnapchatLpvProvenanceCommand extends Command
 
         foreach ($inside as $row) {
             $this->line(sprintf(
-                '    %-8s rows %d, carrying landing_page_views %d, carrying page_views %d, last written %s',
+                '    project %s  account %s (%s)  %-6s rows %d, carrying landing_page_views %d, carrying page_views %d, last written %s',
+                (string) $row->project_id,
+                $row->external_account_id === null ? 'none' : (string) $row->external_account_id,
+                $row->external_account_id === null ? 'no account' : ((bool) $row->bound ? 'bound to this project' : 'NOT bound to this project'),
                 (string) $row->entity_type,
                 (int) $row->rows_found,
                 (int) $row->with_lpv,
