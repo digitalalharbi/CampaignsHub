@@ -13,7 +13,7 @@ import { ensureCsrfCookie, getData, postData, putData } from '@/lib/api/client'
  * a setup that has not happened, the other a decision that has.
  */
 export type PlatformState =
-  | 'connected' | 'syncing' | 'error' | 'awaiting_credentials' | 'unavailable' | 'disconnected'
+  | 'connected' | 'syncing' | 'error' | 'awaiting_credentials' | 'unavailable' | 'disconnected' | 'revoked'
 
 export interface Connector {
   key: string
@@ -131,7 +131,7 @@ export interface ConnectionWizard {
    * three surfaces cannot invent three vocabularies for one connection. Optional so a payload
    * written before it existed still renders.
    */
-  user_state?: 'NOT_CONNECTED' | 'AUTH_REQUIRED' | 'ACCOUNT_SELECTION_REQUIRED' | 'SYNCING' | 'HEALTHY' | 'ATTENTION_REQUIRED' | 'REAUTH_REQUIRED'
+  user_state?: 'NOT_CONNECTED' | 'AUTH_REQUIRED' | 'ACCOUNT_SELECTION_REQUIRED' | 'SYNCING' | 'HEALTHY' | 'NO_DATA' | 'ATTENTION_REQUIRED' | 'REAUTH_REQUIRED'
   /** What this connection's accounts add up to, so the card can stop claiming one state for all of them. */
   health?: ConnectionHealthSummary
 }

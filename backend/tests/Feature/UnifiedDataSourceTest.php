@@ -15,6 +15,7 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
@@ -244,6 +245,52 @@ final class UnifiedDataSourceTest extends TestCase
 
         $this->assertSame('fresh', $states['snapchat']);
         $this->assertSame('awaiting_credentials', $states['tiktok']);
+    }
+
+    /** ACCOUNT-SCOPE-ISOLATION-001 — a deselected account's failed run is not this project's failure. */
+    public function test_a_deselected_accounts_failed_run_does_not_fail_the_projects_freshness(): void
+    {
+        $this->seedMetrics(Carbon::today()->toDateString(), spend: 100, revenue: 300);
+        $this->seedSuccessfulRun('snapchat', Carbon::now()->subHour());
+
+        $old = $this->account('snapchat', 'old_ad_account');
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $old->getKey(),
+            'provider' => 'snapchat', 'purpose' => 'advertising', 'is_active' => false,
+        ]);
+        MetricSyncRun::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $old->getKey(),
+            'provider' => 'snapchat', 'status' => 'failed', 'window_start' => Carbon::today(), 'window_end' => Carbon::today(),
+            'attempts' => 1, 'started_at' => Carbon::now(), 'finished_at' => Carbon::now(),
+        ]);
+
+        $sources = app(DataFreshnessService::class)->sources((string) $this->tenant->id, [(string) $this->project->id], ['snapchat']);
+
+        $this->assertSame('fresh', collect($sources)->firstWhere('provider', 'snapchat')['state']);
+    }
+
+    /** A partial sync is not fresh, and the source says which grain it did not deliver. */
+    public function test_a_partial_sync_is_not_fresh_and_names_the_missing_grain(): void
+    {
+        $this->seedMetrics(Carbon::today()->toDateString(), spend: 100, revenue: 300);
+        $this->seedSuccessfulRun('snapchat', Carbon::now()->subHour());
+        MetricSyncRun::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $this->adAccount->getKey(),
+            'provider' => 'snapchat', 'status' => 'partial_mapping', 'window_start' => Carbon::today(), 'window_end' => Carbon::today(),
+            'metrics_upserted' => 3, 'attempts' => 1, 'started_at' => Carbon::now(), 'finished_at' => Carbon::now(),
+            'meta' => ['entity_ad_sets_failure' => 'refused', 'entity_ads_failure' => 'refused'],
+        ]);
+
+        $sources = app(DataFreshnessService::class)->sources((string) $this->tenant->id, [(string) $this->project->id], ['snapchat']);
+        $row = collect($sources)->firstWhere('provider', 'snapchat');
+
+        $this->assertSame('partial', $row['state'], 'a partial sync read as fresh');
+        $this->assertSame('ad_set', $row['missing_grain']);
+
+        $state = app(DataFreshnessService::class)->state(
+            (string) $this->tenant->id, [(string) $this->project->id], Carbon::today(), Carbon::today(), ['snapchat'],
+        );
+        $this->assertSame('partial', $state['state']);
     }
 
     /**
