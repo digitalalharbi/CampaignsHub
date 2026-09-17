@@ -1270,7 +1270,19 @@ final class DiagnoseSyncCommand extends Command
             $this->line('  last sweep wrote          : '.(int) $meta['entity_ad_sets'].' ad-set row(s), '
                 .(int) ($meta['entity_ads'] ?? 0).' ad row(s)');
 
-            if (($meta['entity_failure'] ?? null) !== null) {
+            if (array_key_exists('entity_ad_sets_fetched', $meta)) {
+                $this->line('  last sweep asked          : '.(int) ($meta['entity_parents_asked'] ?? 0).' campaign(s); came back '
+                    .(int) $meta['entity_ad_sets_fetched'].' ad-set row(s) ('.(int) ($meta['entity_ad_sets_skipped'] ?? 0).' matched nothing), '
+                    .(int) ($meta['entity_ads_fetched'] ?? 0).' ad row(s) ('.(int) ($meta['entity_ads_skipped'] ?? 0).' matched nothing)');
+            }
+
+            foreach (['entity_ad_sets_failure' => 'ad-set grain failed', 'entity_ads_failure' => 'ad grain failed'] as $key => $label) {
+                if (($meta[$key] ?? null) !== null) {
+                    $this->warn(sprintf('  %-25s : %s', $label, $meta[$key]));
+                }
+            }
+
+            if (($meta['entity_failure'] ?? null) !== null && ! array_key_exists('entity_ad_sets_failure', $meta)) {
                 $this->warn('  the platform refused     : '.$meta['entity_failure']);
             }
         } else {
