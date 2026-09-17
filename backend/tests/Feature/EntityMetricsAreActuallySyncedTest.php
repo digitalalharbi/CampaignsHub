@@ -224,6 +224,30 @@ final class EntityMetricsAreActuallySyncedTest extends TestCase
         });
     }
 
+    /**
+     * ENTITY-GRAIN-ASKS-NOTHING-001 — an imported campaign carries a `raw` body with no `sandbox` key.
+     *
+     * The sandbox exclusion compiled to `NOT (raw->'sandbox') @> 'true'`, which is NULL for such a row,
+     * so every real campaign was excluded and Production's sweep asked about none.
+     */
+    public function test_an_imported_campaign_with_a_raw_body_is_still_asked_for_its_ad_sets_and_ads(): void
+    {
+        $this->seed(MetricDefinitionSeeder::class);
+        [$account] = $this->liveSnapchatAccount();
+
+        ExternalCampaign::withoutGlobalScopes()->where('external_account_id', $account->id)->update([
+            'raw' => json_encode(['id' => 'cmp-1', 'objective' => 'WEB_CONVERSION']),
+        ]);
+
+        $this->fakeSnapchatStats();
+
+        $run = app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-02'));
+
+        Http::assertSent(fn ($request): bool => str_contains($request->url(), 'campaigns/cmp-1/stats'));
+        $this->assertSame(1, (int) ($run->meta['entity_parents_asked'] ?? 0), 'the sweep asked about no campaign');
+        $this->assertGreaterThan(0, DB::table('entity_daily_metrics')->count());
+    }
+
     public function test_a_sandbox_campaign_is_never_asked_of_the_live_provider(): void
     {
         $this->seed(MetricDefinitionSeeder::class);

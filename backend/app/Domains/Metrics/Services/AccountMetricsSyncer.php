@@ -463,9 +463,17 @@ final class AccountMetricsSyncer
          */
         $campaigns = ExternalCampaign::withoutGlobalScopes()
             ->where('external_account_id', $account->id)
-            ->where(function ($q): void {
-                $q->whereNull('raw')->orWhereJsonDoesntContain('raw->sandbox', true);
-            })
+            /*
+             * ENTITY-GRAIN-ASKS-NOTHING-001 — «not a sandbox row» must be TRUE for a row with no marker.
+             *
+             * This read `whereNull('raw')->orWhereJsonDoesntContain('raw->sandbox', true)`, which on
+             * Postgres is `NOT (raw->'sandbox') @> 'true'` — NULL, not true, when the key is absent. Every
+             * campaign the structure sweep imports carries a `raw` body without a `sandbox` key, so every
+             * real campaign was excluded and the ad-set/ad sweep asked about none: Production recorded
+             * «asked 0 campaign(s)» while 3,979 ad and ad-set rows stopped being rewritten on 2026-09-06.
+             * The tests passed because their campaigns had `raw = null`.
+             */
+            ->whereRaw("COALESCE((raw->>'sandbox')::boolean, false) = false")
             ->pluck('external_id', 'id');
 
         $squadThrown = null;
