@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { inflateRawSync } from 'node:zlib'
 import { API_HEADERS, AUTH, csrfHeaders } from './helpers'
+import { buildGeneratedClientReport } from './report-builder'
 
 /**
  * SHARED-PDF-HIDE-FLAGS-001 — the browser guard: a link hiding spend or revenue shows neither, nor
@@ -109,16 +110,35 @@ function xlsxText(buf: Buffer): string {
   return text
 }
 
+/**
+ * A completed CLIENT report with money in it, which is what a link can be made from.
+ *
+ * An existing one is reused where the seed has one — it is the cheapest path and it is what a client
+ * link is normally made from. A report whose audience is `internal` is NOT one: sharing it answers 422
+ * («this report must be converted to a client version»), which is what a seed without a client report
+ * did to this spec on the gate while passing locally. With none to reuse, one is generated through the
+ * product's own builder, exactly as `report-pdf-download.spec.ts` does.
+ */
 async function reportWithMoney(page: Page) {
+  const hasMoney = (detail: { audience?: string; data?: { kpis?: Record<string, unknown> } } | undefined) =>
+    (detail?.audience ?? 'client') !== 'internal'
+    && Number(detail?.data?.kpis?.spend ?? 0) > 0
+    && Number(detail?.data?.kpis?.revenue ?? 0) > 0
+
   const projects = (await (await page.request.get('/api/v1/projects', { headers: API_HEADERS })).json()).data as Array<{ id: string }>
   for (const p of projects) {
     const reports = ((await (await page.request.get(`/api/v1/projects/${p.id}/reports`, { headers: API_HEADERS })).json()).data?.reports ?? []) as Array<{ id: string; status: string }>
     for (const r of reports.filter((x) => x.status === 'completed')) {
       const detail = (await (await page.request.get(`/api/v1/projects/${p.id}/reports/${r.id}`, { headers: API_HEADERS })).json()).data
-      if (Number(detail?.data?.kpis?.spend ?? 0) > 0 && Number(detail?.data?.kpis?.revenue ?? 0) > 0) return { project: p.id, report: r.id }
+      if (hasMoney(detail)) return { project: p.id, report: r.id }
     }
   }
-  throw new Error('no generated report with spend and revenue to share, so this proves nothing')
+
+  const built = await buildGeneratedClientReport(page, `E2E hidden money ${Date.now()}`)
+  const detail = (await (await page.request.get(`/api/v1/projects/${built.projectId}/reports/${built.reportId}`, { headers: API_HEADERS })).json()).data
+  expect(hasMoney(detail), 'the generated client report carries no spend and revenue, so this proves nothing').toBe(true)
+
+  return { project: built.projectId, report: built.reportId }
 }
 
 for (const [label, flags, money] of [
