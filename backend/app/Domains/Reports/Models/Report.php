@@ -44,4 +44,18 @@ final class Report extends Model
     {
         return $this->hasMany(ReportRecipient::class);
     }
+
+    /**
+     * The language the report is written in — `config.locale`, Arabic unless the report says English.
+     *
+     * One reader for it: the exporter, the shared link and the print payload all title the report in
+     * its own language, and three copies of «ar unless en» is how one of them comes to answer
+     * differently.
+     */
+    public function reportLocale(): string
+    {
+        $locale = ($this->config ?? [])['locale'] ?? null;
+
+        return in_array($locale, ['ar', 'en'], true) ? $locale : 'ar';
+    }
 }

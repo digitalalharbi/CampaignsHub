@@ -105,6 +105,9 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
      */
     Route::get('/reports/shared/{token}/branding', [PublicReportController::class, 'sharedBranding'])->name('reports.shared.branding');
     Route::get('/reports/shared/{token}/branding/logo', [PublicReportController::class, 'sharedBrandingLogo'])->name('reports.shared.branding.logo');
+    // The two named marks — a ROLE, never an id: which layer's logo, of this share's own tenant.
+    Route::get('/reports/shared/{token}/branding/logo/{role}', [PublicReportController::class, 'sharedBrandingLogo'])
+        ->whereIn('role', ['agency', 'client'])->name('reports.shared.branding.logo.role');
 
     /*
      * §15.12 — the creative sections of a client's report.
@@ -124,6 +127,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     Route::get('/reports/print/{token}', [ReportPrintController::class, 'data'])->name('reports.print.data');
     // The mark that document carries, behind the same short-lived token — no asset id in the path.
     Route::get('/reports/print/{token}/logo', [ReportPrintController::class, 'logo'])->name('reports.print.logo');
+    Route::get('/reports/print/{token}/logo/{role}', [ReportPrintController::class, 'logo'])
+        ->whereIn('role', ['agency', 'client'])->name('reports.print.logo.role');
 
     // Public brand/domain identity, consumed by the SPA and marketing site.
     Route::get('/brand', fn () => ApiResponse::success([
