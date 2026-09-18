@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Reports\Analytics\ObjectiveReportAnalytics;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Support\CreativeVisibility;
@@ -294,6 +295,14 @@ final class ShareService
                 }
                 unset($row);
             }
+        }
+
+        /* REPORT-OBJECTIVE-ANALYTICS-001 — its figures are a list of keyed KPIs, so it is redacted by key. */
+        if (is_array($data['objective_analytics'] ?? null)) {
+            $data['objective_analytics'] = ObjectiveReportAnalytics::redact($data['objective_analytics'], array_merge(
+                $share->hide_spend ? CreativeVisibility::COST_METRICS : [],
+                $share->hide_revenue ? CreativeVisibility::REVENUE_METRICS : [],
+            ));
         }
 
         /* The wrapper-shaped section that was on no list — see the live path's note. */
@@ -615,6 +624,10 @@ final class ShareService
             }
 
             $payload['objective_performance'] = $objective;
+        }
+
+        if (is_array($payload['objective_analytics'] ?? null)) {
+            $payload['objective_analytics'] = ObjectiveReportAnalytics::redact($payload['objective_analytics'], $money);
         }
 
         /* The same rung down the snapshot path walks — see the note there. */
