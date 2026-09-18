@@ -13,11 +13,11 @@ use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAnnotation;
+use App\Domains\Reports\Sections\BusinessStreams;
+use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Services\Attention\ObjectivePerformanceFigures;
 use App\Domains\Reports\Services\Attention\ReportAttention;
-use App\Domains\Reports\Sections\BusinessStreams;
-use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
@@ -344,6 +344,7 @@ final class ReportGenerator
                 accountIds: $scope->accountIds === [] ? null : $scope->accountIds,
                 content: array_values($ads['roster']),
             )),
+            /*
              * REPORT-SECTION-STREAMS-001 — the operator's business streams, when the report can show
              * them. Frozen with the snapshot like every other figure; changing a stream regenerates.
              */

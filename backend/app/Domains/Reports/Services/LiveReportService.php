@@ -804,11 +804,8 @@ final class LiveReportService
             'ad_set_ids' => $share->scope['ad_set_ids'] ?? [],
             'ad_ids' => $share->scope['ad_ids'] ?? [],
         ])->applyTo($this->metrics->forCampaigns($scope['campaign_ids'])->forProviders($providers));
-     * @param  array{from: string, to: string, providers: list<string>, campaigns: list<string>}  $applied
-     * @param  array{project_id: string, campaign_ids: list<string>, providers: list<string>, earliest: string, latest: string}  $scope
-     * @param  array<string, mixed>  $totals
-     * @return list<array<string, mixed>>
-     */
+    }
+
     /** @return list<array{key: string, label: string, providers: list<string>, account_ids: list<string>}> */
     private function streamSettings(ReportShare $share): array
     {
