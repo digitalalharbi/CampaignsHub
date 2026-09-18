@@ -307,10 +307,30 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                  * «composite» carrying no known word — is at least reported as what Snapchat called
                  * it rather than as something it is not.
                  */
+                /*
+                 * CONTENT-PREVIEW-SHAPES-001 — a DYNAMIC collection is a different shape from a static one.
+                 *
+                 * Production: four promoted collections came back from this edge with no
+                 * `top_snap_media_id` at all, so the media sweep had nothing to ask for and each one
+                 * reached the reader as «the platform exposes the tiles; this product does not fetch
+                 * them yet» — our gap, stated about a platform that is not withholding anything.
+                 *
+                 * Snapchat's Dynamic Collection Ads guide says what those rows are: a collection may be
+                 * rendered dynamically, and then the top snap is «a product picked dynamically based on
+                 * the Product Catalog (product_set)». Such a creative carries `render_type: DYNAMIC`
+                 * and `dynamic_render_properties`, and carries NO top snap — there is no file that
+                 * could have been sent, exactly as for a catalog ad.
+                 *
+                 * The platform's own word is kept, so the surfaces can tell «composed per product»
+                 * from «nobody asked». `CreativeKind` still reads this as a collection — the shape is
+                 * unchanged — and nothing is fetched or invented for it.
+                 */
                 'format' => match ($type = strtoupper((string) ($c['type'] ?? ''))) {
                     'SNAP_AD', 'LONGFORM_VIDEO' => 'video',
                     'WEB_VIEW', 'APP_INSTALL' => 'image',
-                    'COLLECTION' => 'collection',
+                    'COLLECTION' => strtoupper((string) ($c['render_type'] ?? '')) === 'DYNAMIC'
+                        ? 'collection_dynamic'
+                        : 'collection',
                     '' => null,
                     default => strtolower($type),
                 },
