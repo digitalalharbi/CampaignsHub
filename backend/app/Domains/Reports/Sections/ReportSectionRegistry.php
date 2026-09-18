@@ -115,7 +115,9 @@ final class ReportSectionRegistry
                 key: 'objective_breakdown',
                 titleAr: 'التفصيل حسب الهدف',
                 titleEn: 'Breakdown by objective',
-                payloadKeys: ['objective_leaders'],
+                // REPORT-OBJECTIVE-ANALYTICS-001 — KPI blocks per objective family, leaders, trend
+                // and contribution; the per-path leaders stay for payloads built before it.
+                payloadKeys: ['objective_leaders', 'objective_analytics'],
                 breakdown: true,
             ),
             /*
@@ -171,8 +173,10 @@ final class ReportSectionRegistry
 
         $this->availableWhen('objective_breakdown', 'has_paths', static function (SectionContext $c): bool {
             $leaders = $c->value('objective_leaders');
+            $analytics = $c->value('objective_analytics');
 
-            return is_array($leaders) && is_array($leaders['paths'] ?? null) && $leaders['paths'] !== [];
+            return (is_array($leaders) && is_array($leaders['paths'] ?? null) && $leaders['paths'] !== [])
+                || (is_array($analytics) && is_array($analytics['families'] ?? null) && $analytics['families'] !== []);
         });
 
         $this->availableWhen('advanced_segmentation', 'has_segments', static function (SectionContext $c): bool {

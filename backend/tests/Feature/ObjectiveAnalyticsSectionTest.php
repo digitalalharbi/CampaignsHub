@@ -185,7 +185,7 @@ final class ObjectiveAnalyticsSectionTest extends TestCase
             }
         }
 
-        $read = fn (string $from, string $to) => $this->family((new ObjectiveAnalyticsSection)->build(new ReportSectionInput(
+        $read = fn (string $from, string $to) => $this->family((new ObjectiveAnalyticsSection)->build(new ObjectiveAnalyticsInput(
             from: Carbon::parse($from), to: Carbon::parse($to), projectIds: [(string) $this->project->id], accountIds: [$this->accountInside],
         )), 'awareness');
 
