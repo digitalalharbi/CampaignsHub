@@ -233,6 +233,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::put('reports/scope-templates/{template}/sections', [ReportSectionController::class, 'updateTemplate'])->middleware('project.can:reports.manage')->name('reports.scope-templates.sections.update');
     Route::get('reports/{report}/sections', [ReportSectionController::class, 'show'])->middleware('project.can:reports.view')->name('reports.sections.show');
     Route::put('reports/{report}/sections', [ReportSectionController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.sections.update');
+    // A link's own section switches: the same registry, off-only on top of the report.
+    Route::get('reports/{report}/shares/{share}/sections', [ReportSectionController::class, 'showShare'])->middleware('project.can:reports.view')->name('reports.shares.sections.show');
+    Route::put('reports/{report}/shares/{share}/sections', [ReportSectionController::class, 'updateShare'])->middleware('project.can:reports.manage')->name('reports.shares.sections.update');
     /*
      * Both report creates are capped, and `regenerate` deliberately is not: regenerating writes no
      * new row, so charging a monthly slot for it would bill the customer for the platform's retry.

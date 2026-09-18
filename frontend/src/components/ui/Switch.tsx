@@ -4,14 +4,16 @@ interface SwitchProps {
   label?: string
   disabled?: boolean
   id?: string
+  testId?: string
 }
 
 /** Accessible toggle switch (role=switch, keyboard-operable via the underlying button). */
-export function Switch({ checked, onCheckedChange, label, disabled, id }: SwitchProps) {
+export function Switch({ checked, onCheckedChange, label, disabled, id, testId }: SwitchProps) {
   return (
     <label htmlFor={id} className="inline-flex cursor-pointer items-center gap-2 text-sm text-text-primary">
       <button
         id={id}
+        data-testid={testId}
         type="button"
         role="switch"
         aria-checked={checked}

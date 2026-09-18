@@ -23,7 +23,7 @@ final class ReportSectionSurfaces
      * sections it names. `previous_comparison` is not here — it trims the deltas inside the KPIs and
      * is not a section of its own. `attribution` is a disclosure with its own endpoint.
      */
-    private const SHARE_FLAGS = [
+    public const SHARE_FLAGS = [
         'platform_comparison' => ['platform_comparison'],
         'objective_breakdown' => ['objective_breakdown', 'advanced_segmentation'],
         'creatives' => ['content_performance'],
@@ -45,16 +45,32 @@ final class ReportSectionSurfaces
             return $settings;
         }
 
+        return $settings->narrowedBy(array_fill_keys(array_keys($this->hiddenByLink($share)), false), $this->registry);
+    }
+
+    /**
+     * The sections a link hides of its own accord: its older display flags and its section overrides,
+     * read as one list.
+     *
+     * @return array<string, true>
+     */
+    public function hiddenByLink(ReportShare $share): array
+    {
         $off = [];
-        foreach ($share->visibleSections() as $flag => $on) {
-            foreach (self::SHARE_FLAGS[$flag] ?? [] as $section) {
-                if ($on === false) {
-                    $off[$section] = false;
+        foreach ($share->sectionVisibility()->toArray() as $flag => $on) {
+            if ($on === false) {
+                foreach (self::SHARE_FLAGS[$flag] ?? [] as $section) {
+                    $off[$section] = true;
                 }
             }
         }
+        foreach ($share->sectionOverrides() as $section) {
+            if ($this->registry->has($section)) {
+                $off[$section] = true;
+            }
+        }
 
-        return $settings->narrowedBy($off, $this->registry);
+        return $off;
     }
 
     /**

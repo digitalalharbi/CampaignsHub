@@ -7,9 +7,10 @@ vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
   liveBuilderOptions: vi.fn(),
   createLiveLink: vi.fn(),
+  reportSectionRegistry: vi.fn(),
 }))
 
-import { createLiveLink, liveBuilderOptions } from './api'
+import { createLiveLink, liveBuilderOptions, reportSectionRegistry } from './api'
 
 /**
  * REPORT-CREATION-UX-001 — the choices reach the link, and their consequence is visible first.
@@ -36,6 +37,15 @@ describe('building a live client link', () => {
     vi.clearAllMocks()
     signInWith(['reports.view', 'reports.create'])
     vi.mocked(liveBuilderOptions).mockResolvedValue(OPTIONS as never)
+    vi.mocked(reportSectionRegistry).mockResolvedValue({
+      sections: [
+        { key: 'kpis', title_ar: 'المؤشرات الرئيسية', title_en: 'Key metrics', breakdown: false, default_client: true, default_internal: true },
+        { key: 'budget_pacing', title_ar: 'الميزانية', title_en: 'Budget & pacing', breakdown: false, default_client: true, default_internal: true },
+        { key: 'funnel', title_ar: 'مسار التحويل', title_en: 'Funnel', breakdown: false, default_client: true, default_internal: true },
+        { key: 'detailed_tables', title_ar: 'الجداول التفصيلية', title_en: 'Detailed tables', breakdown: false, default_client: false, default_internal: true },
+      ],
+      reasons: [],
+    } as never)
     vi.mocked(createLiveLink).mockResolvedValue({
       report_id: 'r-1', share_id: 's-1', url: 'https://campaignshub.io/r/tok', token: 'tok',
     } as never)
@@ -99,5 +109,22 @@ describe('building a live client link', () => {
 
     expect(summary).toHaveTextContent('Detailed report')
     expect(summary).toHaveTextContent('without spend')
+  })
+
+  /**
+   * Coordinator decision — the link's switches are the report-section registry's list, off-only.
+   * A section a client report hides by default is shown as hidden by the report, not as a switch.
+   */
+  it('lists the registry sections and sends the ones switched off as section overrides', async () => {
+    await build()
+
+    fireEvent.click(await screen.findByTestId('live-link-section-budget_pacing'))
+    expect(screen.getByTestId('live-link-section-row-detailed_tables')).toHaveTextContent('Hidden by the report')
+    expect(screen.queryByTestId('live-link-section-detailed_tables')).toBeNull()
+    fireEvent.click(screen.getByTestId('live-link-create'))
+
+    await waitFor(() => expect(createLiveLink).toHaveBeenCalled())
+    expect(sent().section_overrides).toEqual(['budget_pacing'])
+    expect(sent().sections).toBeUndefined()
   })
 })
