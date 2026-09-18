@@ -156,6 +156,7 @@ export function ReportAdDetail({
             name={ad.name ?? ''}
             className="h-72 w-full bg-surface-secondary object-contain"
             testid="report-ad-detail-poster"
+            forClient
           />
         )}
 
