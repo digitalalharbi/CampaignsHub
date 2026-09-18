@@ -81,7 +81,13 @@ test('export button → queue → download → the downloaded Arabic PDF is a va
 
   // 6. Assert on the downloaded bytes themselves.
   expect(bytes.subarray(0, 5).toString('latin1')).toBe('%PDF-')
-  expect(bytes.length).toBeGreaterThan(200_000)                     // Chromium file, not a tiny Dompdf one
+  /*
+   * Chromium file, not a tiny Dompdf one. The font and renderer checks below are the proof; this is a
+   * floor. It was 200 KB until REPORT-SECTION-SURFACES-001 took the Direct/Blended page and the
+   * detailed tables out of a client's default deck (≈190 KB now) — a Dompdf text file is an order of
+   * magnitude smaller, so 100 KB still separates the two.
+   */
+  expect(bytes.length).toBeGreaterThan(100_000)
   const raw = bytes.toString('latin1')
   expect(raw).toContain('IBMPlexSansArabic')                        // Arabic font embedded
   expect(raw.toLowerCase()).not.toContain('dompdf')                 // NOT the legacy renderer

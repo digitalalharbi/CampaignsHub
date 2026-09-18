@@ -7,6 +7,7 @@ namespace App\Domains\Reports\Http\Controllers;
 use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Services\ClientReportView;
 use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Domains\Reports\Services\ShareService;
@@ -65,6 +66,7 @@ final class ReportPrintController extends Controller
         // internal fields (checksum/tenant/project) are removed from the BODY, so CSS can never be the
         // only thing hiding them. Provenance stays only in the response envelope for PDF /Title metadata.
         $body = $report->data ?? [];
+        $share = null;
 
         /*
          * SHARED-PDF-HIDE-FLAGS-001 — a shared link's PDF prints that link's document, not the report's.
@@ -88,6 +90,8 @@ final class ReportPrintController extends Controller
         } elseif ($audience === 'executive') {
             $body = app(ClientReportView::class)->executive($body);
         }
+        // REPORT-SECTION-SURFACES-001 — the PDF carries exactly the sections the page does.
+        $body = app(ReportSectionSurfaces::class)->apply($body, $report, $share, 'print', audience: (string) $audience);
 
         return ApiResponse::success([
             'report_id' => (string) $report->id,
