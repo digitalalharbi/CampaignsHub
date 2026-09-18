@@ -47,6 +47,7 @@ import {
 import { ProvenanceBadge, type Provenance } from '@/features/analytics/components'
 import { InteractiveReport } from './InteractiveReport'
 import { AnnotationsPanel } from './AnnotationsPanel'
+import { AttentionDecisionsPanel } from './AttentionDecisionsPanel'
 import { useProject } from '@/stores/project'
 import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
@@ -870,6 +871,7 @@ function ReportPreview({ projectId, id, onClose }: { projectId: string; id: stri
       ) : (
         <div className="max-h-[76vh] space-y-4 overflow-y-auto">
           <AnnotationsPanel projectId={projectId} reportId={id} />
+          <AttentionDecisionsPanel projectId={projectId} reportId={id} ar={ar} />
           <InteractiveReport
             data={r.data as never}
             meta={{ reportName: r.name, platforms, isDemo: r.is_demo, agencyName: productName(ar ? 'ar' : 'en') }}

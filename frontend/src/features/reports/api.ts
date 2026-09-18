@@ -4,6 +4,7 @@ import type { ObjectivePerformance } from './InteractiveReport'
 import type { PathLeaders } from '@/features/analytics/api'
 
 import { getData, postData, putData } from '@/lib/api/client'
+import type { AttentionItem } from './attention'
 import type { SharedBranding } from './sharedBranding'
 import { api } from '@/lib/api/client'
 
@@ -305,6 +306,11 @@ export interface LivePayload {
     funnel_store?: boolean
     previous_comparison?: boolean
   }
+  /**
+   * REPORT-RECOMMENDATION-BLOCKS-001 — already the client cut: operator-internal items are not in it
+   * unless the operator approved them. `null` when the report's `recommendations` section is off.
+   */
+  attention?: AttentionItem[] | null
   store_funnel: StoreFunnelPayload | null
   /**
    * CLIENT-FACING-PRESENTATION-001 — «what needs attention», which the link never carried.
@@ -604,3 +610,11 @@ export const createScopeTemplate = (p: string, body: { name: string; description
   postData<ScopeTemplate>(`${base(p)}/scope-templates`, body)
 
 export const deleteScopeTemplate = (p: string, id: string) => api.delete(`${base(p)}/scope-templates/${id}`)
+
+/** REPORT-RECOMMENDATION-BLOCKS-001 — every attention item for a report's own window, with audience and decision. */
+export const fetchAttention = (p: string, reportId: string) =>
+  getData<{ items: AttentionItem[]; period: { from: string; to: string } }>(`${base(p)}/${reportId}/attention`)
+
+/** Approve or hide one item for THIS report and period only; `null` clears the decision. */
+export const decideAttention = (p: string, reportId: string, key: string, decision: 'approved' | 'hidden' | null) =>
+  putData<{ item_key: string; decision: string | null }>(`${base(p)}/${reportId}/attention/${key}`, { decision })

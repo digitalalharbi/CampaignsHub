@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Services;
 
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\HiddenMoney;
 use App\Support\Frontend;
@@ -410,6 +411,18 @@ final class ShareService
                 // A note ABOUT one campaign is nothing once the campaign cannot be named.
                 fn ($note) => ($note['scope']['type'] ?? '') !== 'campaign',
             ));
+        }
+
+        /*
+         * REPORT-RECOMMENDATION-BLOCKS-001 — the snapshot link honours the same money flags as the
+         * live link. The section switch was applied by `ClientReportView` from the section registry;
+         * this runs after it, so the list here is already the client cut.
+         */
+        if (array_key_exists('attention', $data)) {
+            $data['attention'] = is_array($data['attention'])
+                ? AttentionAudience::redact($data['attention'], (bool) $share->hide_spend, (bool) $share->hide_revenue)
+                : null;
+            $data = ReportStructure::refresh($data, 'recommendations');
         }
 
         // SHARED-PDF-HIDE-FLAGS-001 — the one definition, at any depth, and the prose that states it.
