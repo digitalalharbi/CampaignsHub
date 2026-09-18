@@ -412,13 +412,25 @@ final class ObjectivePerformanceTest extends TestCase
             );
         }
 
-        // …and it survives into the five-page summary a client is sent, which is the version that
-        // gets forwarded and quoted with no per-platform pages behind it to argue with.
+        /*
+         * REPORT-SECTION-MODEL-001 (Owner, 2026-09-17) — on the CLIENT's link the split is advanced
+         * segmentation, which is off for a client report unless an operator enables it. The section
+         * model and the payload agree: off means the slide and the block are absent, not emptied.
+         */
         [, $token] = app(ShareService::class)->create($report, [], $this->operator->id);
         $shared = $this->getJson("/api/v1/reports/shared/{$token}")->assertOk();
 
-        $this->assertContains('objective_performance', array_column($shared->json('data.data.slides'), 'type'));
-        $this->assertSame(20.0, (float) $shared->json('data.data.objective_performance.direct.cpa'));
+        $this->assertNotContains('advanced_segmentation', $shared->json('data.data.report_sections'));
+        $this->assertNotContains('objective_performance', array_column($shared->json('data.data.slides'), 'type'));
+        $this->assertNull($shared->json('data.data.objective_performance'));
+
+        // …and an operator who enables it gets the same split the snapshot holds, unchanged.
+        $report->update(['section_settings' => ['sections' => ['advanced_segmentation' => true]]]);
+        $enabled = $this->getJson("/api/v1/reports/shared/{$token}")->assertOk();
+
+        $this->assertContains('advanced_segmentation', $enabled->json('data.data.report_sections'));
+        $this->assertContains('objective_performance', array_column($enabled->json('data.data.slides'), 'type'));
+        $this->assertSame(20.0, (float) $enabled->json('data.data.objective_performance.direct.cpa'));
     }
 
     /** Every objective in the catalogue lands in exactly one path — no case falls through. */
