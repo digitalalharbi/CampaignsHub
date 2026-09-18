@@ -336,9 +336,15 @@ describe('reach never claims to be distinct people', () => {
     }
   })
 
-  /** ...and it says what the figure actually is when more than one platform is in scope. */
-  it('states that platform figures are added rather than de-duplicated', () => {
-    expect(SPECS.reach.hint.en).toMatch(/not de-duplicated|counted twice/i)
-    expect(SPECS.reach.hint.ar).toMatch(/لا يُطرح المكرَّر|يُحسب مرتين/)
+  /**
+   * REACH-DEDUP-001 — ...and it says a summed reach is not shown at all.
+   *
+   * This used to pin a hint explaining that reach across platforms is ADDED. The aggregator no longer
+   * adds it: reach is the platform's own figure or «—», so the hint says that instead.
+   */
+  it('states that reach added across days, campaigns or platforms is not shown', () => {
+    expect(SPECS.reach.hint.en).toMatch(/not shown/i)
+    expect(SPECS.reach.hint.ar).toMatch(/فلا يُعرض/)
+    expect(SPECS.reach.hint.en).not.toMatch(/figures are added/i)
   })
 })
