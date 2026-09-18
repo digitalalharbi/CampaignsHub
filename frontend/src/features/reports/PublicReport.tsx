@@ -22,6 +22,8 @@ interface Shared {
   currency: string
   is_demo: boolean
   generated_at: string | null
+  /** The period the report's downloads cover — on a live link it can differ from the window on screen. */
+  period?: { from: string | null; to: string | null }
   /** LIVEREP-001 — `live` renders the filterable dashboard; `snapshot` renders the generated document. */
   mode?: 'live' | 'snapshot'
   /**
@@ -90,6 +92,7 @@ export function PublicReport() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
+  const filesPeriod = report?.period?.from && report.period.to ? `${report.period.from} → ${report.period.to}` : null
   const platforms = ((report?.data?.platforms as Array<Record<string, unknown>>) ?? []).map((p) => String(p.provider))
 
   /*
@@ -166,9 +169,19 @@ export function PublicReport() {
             <div className="flex shrink-0 items-center gap-2">
               {report.is_demo && <span className="rounded-full bg-[var(--warning-background)] px-2 py-0.5 text-xs font-semibold text-warning">Demo</span>}
               {report.settings.allow_download && state === 'ready' && (
-                <div className="flex gap-1">
+                <div className="flex items-center gap-1">
+                  {/*
+                    A live link's figures follow the window the client picks; its files are the saved
+                    report for the report's own period. Said beside the buttons, so a spend that
+                    differs between the page and the file is explained where the file is taken.
+                  */}
+                  {filesPeriod && report.mode === 'live' && (
+                    <span data-testid="shared-report-download-period" className="tnum hidden text-[11px] text-text-muted sm:inline">
+                      {locale === 'ar' ? 'الملفات:' : 'Files:'} <bdi dir="ltr">{filesPeriod}</bdi>
+                    </span>
+                  )}
                   {(['pdf', 'xlsx', 'csv'] as ReportFormat[]).map((f) => (
-                    <a key={f} href={sharedDownloadUrl(token, f)} aria-label={`${locale === 'ar' ? 'تنزيل' : 'Download'} ${f.toUpperCase()}`} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold hover:bg-surface-hover">
+                    <a key={f} href={sharedDownloadUrl(token, f)} title={filesPeriod ?? undefined} aria-label={`${locale === 'ar' ? 'تنزيل' : 'Download'} ${f.toUpperCase()}${filesPeriod ? ` — ${filesPeriod}` : ''}`} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold hover:bg-surface-hover">
                       <Download size={12} aria-hidden /> <span className="hidden sm:inline">{f.toUpperCase()}</span>
                     </a>
                   ))}

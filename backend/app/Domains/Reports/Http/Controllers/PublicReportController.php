@@ -119,6 +119,15 @@ final class PublicReportController extends Controller
             'is_demo' => $report->is_demo,
             'generated_at' => $report->generated_at?->toIso8601String(),
             /*
+             * The period the report's FILES cover. A live link's page follows the window the client
+             * picks, while its downloads render the saved report — so the page states which period a
+             * download holds, and needs it here because a live link is sent no document.
+             */
+            'period' => [
+                'from' => $report->period_start?->toDateString(),
+                'to' => $report->period_end?->toDateString(),
+            ],
+            /*
              * Two independent facts, and the client page needs both: `form` is what the report is,
              * `mode` is where its numbers come from. A summary can be live and a detailed report can
              * be a snapshot — the contract asks for all four combinations.

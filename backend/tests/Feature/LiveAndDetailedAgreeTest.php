@@ -13,6 +13,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Reports\Services\ReportGenerator;
+use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -122,6 +123,53 @@ final class LiveAndDetailedAgreeTest extends TestCase
     }
 
     /** And the platform breakdown beneath the headline, which each builder queries for itself. */
+    /**
+     * A LIVE link's headline and the file its download button delivers agree for the report's period.
+     *
+     * #444 reconciles a snapshot link's page with its file. A live link is the other case: the page
+     * reads `/live` and the download renders the saved document, two paths through two services.
+     * Asked over the report's own period — the window the file covers — they must state one spend.
+     */
+    public function test_a_live_links_headline_and_its_downloaded_file_agree_for_the_reports_period(): void
+    {
+        $report = $this->report();
+        $report->update(['status' => 'completed', 'data' => app(ReportGenerator::class)->generate($report)]);
+
+        [, $raw] = app(ShareService::class)->create($report, [
+            'allow_download' => true,
+            'scope' => [
+                'project_id' => (string) $this->project->getKey(),
+                'campaign_ids' => [(string) $this->campaign->getKey()],
+                'earliest' => Carbon::today()->subDays(30)->toDateString(),
+                'latest' => Carbon::today()->toDateString(),
+            ],
+        ], null);
+
+        app(ProjectContext::class)->forget();
+        app(TenantContext::class)->forget();
+
+        $from = $report->period_start->toDateString();
+        $to = $report->period_end->toDateString();
+        $onThePage = $this->getJson("/api/v1/reports/shared/{$raw}/live?from={$from}&to={$to}")
+            ->assertOk()->json('data.totals.spend');
+        $this->assertSame(self::SPEND, (float) $onThePage, 'the live link did not state the fixture spend');
+
+        // The page is told which period the file covers, because its own window may be another.
+        $this->assertSame(
+            ['from' => $from, 'to' => $to],
+            $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk()->json('data.period'),
+            'the live link does not say which period its downloads cover',
+        );
+
+        $csv = $this->get("/api/v1/reports/shared/{$raw}/download/csv")->assertOk()->streamedContent();
+
+        $this->assertMatchesRegularExpression(
+            '/^spend,'.preg_quote((string) (float) $onThePage, '/').'(\.0+)?$/m',
+            $csv,
+            'a client reads one spend on the live link and a different one in the file it downloads, for the same period',
+        );
+    }
+
     public function test_both_name_the_same_platforms_with_the_same_spend(): void
     {
         $spendByProvider = static function (array $payload): array {
