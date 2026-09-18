@@ -257,6 +257,7 @@ export function DashboardView({ payload, reader, currency, locale, onOpenContent
               reading={payload.ads_reading}
               locale={locale}
               onOpen={onOpenContent}
+              restWhere={{ ar: '«المحتوى»', en: 'Content' }}
             />
           </div>
           <ContentStrip
