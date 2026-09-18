@@ -4,7 +4,7 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, Copy, Download, FileText, LayoutGrid, Link2, Loader2, Plus, RefreshCw, Rows3, Send, Share2, Trash2, SlidersHorizontal } from 'lucide-react'
+import { AlertTriangle, Check, Copy, Download, FileText, Layers, LayoutGrid, Link2, Loader2, Plus, RefreshCw, Rows3, Send, Share2, Trash2, SlidersHorizontal } from 'lucide-react'
 import { productName } from '@/lib/brand'
 import {
   createReport,
@@ -15,6 +15,7 @@ import {
   deleteReport,
   downloadUrl,
   exportReport,
+  setReportPdfBreakdowns,
   getReport,
   listReports,
   listShares,
@@ -142,6 +143,7 @@ export function ReportsPage() {
   const invalidate = () => qc.invalidateQueries({ queryKey: ['reports', currentProjectId] })
   const regen = useMutation({ mutationFn: (id: string) => regenerateReport(currentProjectId!, id), onSuccess: invalidate })
   const del = useMutation({ mutationFn: (id: string) => deleteReport(currentProjectId!, id), onSuccess: invalidate })
+  const drill = useMutation({ mutationFn: ({ id, on }: { id: string; on: boolean }) => setReportPdfBreakdowns(currentProjectId!, id, { platform_drilldown: on }), onSuccess: invalidate })
   const exp = useMutation({
     mutationFn: ({ id, format }: { id: string; format: ReportFormat }) => exportReport(currentProjectId!, id, format),
     // Straight away: the row now holds a `processing` export, which is what keeps the poll above alive.
@@ -394,6 +396,7 @@ export function ReportsPage() {
                     onScope={() => setScopeId(r.id)}
                     onRegenerate={() => regen.mutate(r.id)}
                     onExport={(f) => exp.mutate({ id: r.id, format: f })}
+                    onTogglePdfDrilldown={(on) => drill.mutate({ id: r.id, on })}
                     onSend={() => {
                       const emails = window.prompt(ar ? 'البريد الإلكتروني للمستلمين (مفصولة بفواصل):' : 'Recipient emails (comma separated):')
                       if (emails) send.mutate({ id: r.id, emails: emails.split(',').map((e) => e.trim()).filter(Boolean) })
@@ -489,6 +492,7 @@ function ReportRowView({
   onScope,
   onRegenerate,
   onExport,
+  onTogglePdfDrilldown,
   onSend,
   onDelete,
 }: {
@@ -499,6 +503,8 @@ function ReportRowView({
   onScope: () => void
   onRegenerate: () => void
   onExport: (f: ReportFormat) => void
+  /** REPORT-DRILLDOWN-001 — the PDF's optional per-platform section; off by default. */
+  onTogglePdfDrilldown: (on: boolean) => void
   onSend: () => void
   onDelete: () => void
 }) {
@@ -605,6 +611,23 @@ function ReportRowView({
                   </button>
                 )
               })}
+              {(() => {
+                const on = report.config?.breakdowns?.pdf?.platform_drilldown === true
+                return (
+                  <button
+                    type="button"
+                    data-testid={`pdf-drilldown-${report.id}`}
+                    aria-pressed={on}
+                    onClick={() => onTogglePdfDrilldown(!on)}
+                    title={ar
+                      ? (on ? 'ملف PDF يتضمن تفصيل كل منصة — اضغط للإيقاف، ثم أعد التصدير' : 'إضافة تفصيل كل منصة إلى ملف PDF — ثم أعد التصدير')
+                      : (on ? 'The PDF includes each platform in detail — click to turn off, then export again' : 'Add each platform in detail to the PDF — then export again')}
+                    className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold hover:bg-surface-hover ${on ? 'border-brand-500 text-brand-600' : 'border-border text-text-muted'}`}
+                  >
+                    <Layers size={12} /> {ar ? 'تفصيل المنصات' : 'Platform detail'}
+                  </button>
+                )
+              })()}
               <IconBtn title={ar ? 'مشاركة رابط آمن' : 'Share a secure link'} onClick={onShare}><Share2 size={15} /></IconBtn>
               <IconBtn title={ar ? 'إرسال' : 'Send'} onClick={onSend}><Send size={15} /></IconBtn>
             </>

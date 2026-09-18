@@ -37,6 +37,8 @@ export interface ReportRow {
   created_at: string | null
   error: string | null
   exports: ReportExportRow[]
+  /** REPORT-DRILLDOWN-001 — only the part of the config this list reads: the PDF's optional sections. */
+  config?: { breakdowns?: { pdf?: { platform_drilldown?: boolean } } } | null
 }
 export interface ReportsIndex {
   reports: ReportRow[]
@@ -69,6 +71,9 @@ export const createReport = (p: string, body: Record<string, unknown>) => postDa
 export const regenerateReport = (p: string, id: string) => postData<ReportRow>(`${base(p)}/${id}/regenerate`)
 export const exportReport = (p: string, id: string, format: ReportFormat) =>
   postData<{ id: string; format: string; status: string }>(`${base(p)}/${id}/export`, { format })
+/** REPORT-DRILLDOWN-001 — switch a report's optional PDF drill-down section on or off (reports.manage). */
+export const setReportPdfBreakdowns = (p: string, id: string, pdf: { platform_drilldown: boolean }) =>
+  putData<{ pdf: { platform_drilldown: boolean; content_drilldown: boolean } }>(`${base(p)}/${id}/breakdowns`, { pdf })
 export const sendReport = (p: string, id: string, recipients: string[]) =>
   postData<{ sent_to: number }>(`${base(p)}/${id}/send`, { recipients })
 export const deleteReport = (p: string, id: string) => api.delete(`${base(p)}/${id}`)

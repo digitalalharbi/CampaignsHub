@@ -5,6 +5,7 @@ import { mixedResultsNote, type ResultPart } from './reportMetrics'
 import { brand, productName } from '@/lib/brand'
 import { ReportWatermark } from './ReportWatermark'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
+import { PrintPlatformDrilldowns } from './PrintPlatformDrilldowns'
 
 /**
  * English, LTR, A4-portrait DOCUMENT rendering of a report (distinct from the RTL 16:9 slide
@@ -432,6 +433,14 @@ export function PrintDocument({
         </section>
       )}
       <Absent sectionKey="objectives" fallback="Nothing was spent on any objective in this window." />
+
+      {/* REPORT-DRILLDOWN-001 — each platform in detail, only when the operator enabled the section. */}
+      {(data.platform_drilldowns?.length ?? 0) > 0 && (
+        <section className="doc-section">
+          <h2>Platforms in Detail</h2>
+          <PrintPlatformDrilldowns blocks={data.platform_drilldowns} locale="en" currency={currency} />
+        </section>
+      )}
 
       {/*
         CLIENT-REPORT-ENTITY-BOUNDARY-001 — the campaign table is gone from the printed document.
