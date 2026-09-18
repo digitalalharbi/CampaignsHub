@@ -165,6 +165,8 @@ final class ImportExternalStructure
             [
                 'project_id' => $campaign->project_id,
                 'provider' => $account->provider,
+                // CREATIVE-ACCOUNT-IDENTITY-001 — two accounts reporting one creative id are two creatives.
+                'external_account_id' => $account->getKey(),
                 'external_creative_id' => (string) $creative['external_id'],
             ],
             [
