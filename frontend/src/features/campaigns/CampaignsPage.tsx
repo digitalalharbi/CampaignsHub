@@ -1118,8 +1118,8 @@ export function CampaignsPage() {
                 title={ar ? 'لم تُقيَّم الحملات بعد' : 'The campaigns have not been judged yet'}
                 description={metricCampaigns.isError
                   ? (ar
-                      ? 'تعذّر قراءة مؤشرات الفترة، فلا يمكن قول أي حملة تحتاج تدخلًا. أعد المحاولة أو راجع صلاحياتك.'
-                      : 'This period’s figures could not be read, so which campaigns need attention cannot be said. Retry, or check your access.')
+                      ? 'تعذّر قراءة مؤشرات الفترة، فلا يمكن تحديد الحملات التي تحتاج تدخلًا. أعد المحاولة أو راجع صلاحياتك.'
+                      : 'This period’s figures could not be read, so the campaigns that need attention cannot be identified. Retry, or check your access.')
                   : (ar
                       ? 'ما إن تصل مؤشرات الفترة حتى تُعرض الحملات التي تحتاج تدخلًا وأسبابها.'
                       : 'Once this period’s figures arrive, the campaigns that need attention will be listed with their reasons.')}
