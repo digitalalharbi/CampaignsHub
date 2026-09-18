@@ -94,7 +94,8 @@ final class ReportStructure
          */
         'not_composed_for_a_live_link' => ['ar' => 'هذا رابط مباشر يعيد حساب الأرقام عند كل فتح، ولا تُكتب فيه النتائج والتوصيات — تُكتب عند إصدار التقرير.', 'en' => 'This is a live link: it recomputes the figures on every open and composes no written analysis. Findings and recommendations are written when a report is generated.'],
         'no_finding_the_figures_support' => ['ar' => 'لا نتيجة تدعمها الأرقام في هذه الفترة.', 'en' => 'No finding is supported by the figures in this period.'],
-        'not_published_on_this_link' => ['ar' => 'هذا القسم غير منشور في هذا الرابط.', 'en' => 'This section is not published on this link.'],
+        // The section registry's own reason code (#486) — the operator switched the section off.
+        'disabled_by_operator' => ['ar' => 'هذا القسم غير منشور في هذا التقرير.', 'en' => 'This section is not published in this report.'],
         'no_recommendation_the_figures_support' => ['ar' => 'لا توصية تدعمها الأرقام في هذه الفترة.', 'en' => 'No recommendation is supported by the figures in this period.'],
     ];
 
@@ -167,7 +168,7 @@ final class ReportStructure
              * figures were examined; a null list is a section this link does not publish.
              */
             'recommendations' => match (true) {
-                array_key_exists('attention', $data) && $data['attention'] === null => 'not_published_on_this_link',
+                array_key_exists('attention', $data) && $data['attention'] === null => 'disabled_by_operator',
                 $composesNarrative, is_array($data['attention'] ?? null) => 'no_recommendation_the_figures_support',
                 default => 'not_composed_for_a_live_link',
             },

@@ -423,12 +423,12 @@ final class ShareService
         }
 
         /*
-         * REPORT-RECOMMENDATION-BLOCKS-001 — the snapshot link honours the same section switch and
-         * the same money flags as the live link. Runs after `ClientReportView`, so the list here is
-         * already the client cut.
+         * REPORT-RECOMMENDATION-BLOCKS-001 — the snapshot link honours the same money flags as the
+         * live link. The section switch was applied by `ClientReportView` from the section registry;
+         * this runs after it, so the list here is already the client cut.
          */
         if (array_key_exists('attention', $data)) {
-            $data['attention'] = ($share->visibleSections()['recommendations'] ?? true) && is_array($data['attention'])
+            $data['attention'] = is_array($data['attention'])
                 ? AttentionAudience::redact($data['attention'], (bool) $share->hide_spend, (bool) $share->hide_revenue)
                 : null;
             $data = ReportStructure::refresh($data, 'recommendations');

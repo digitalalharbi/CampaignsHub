@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Services\Attention\ReportAttention;
 
@@ -73,7 +74,12 @@ final class ClientReportView
          */
         if (array_key_exists('attention', $data)) {
             $decisions = $this->attention->decisions((string) ($data['tenant_id'] ?? ''), (string) ($data['report_id'] ?? ''), $data['period']['from'] ?? null, $data['period']['to'] ?? null);
-            $out['attention'] = AttentionAudience::forClient($data['attention'], $decisions);
+            $reportId = (string) ($data['report_id'] ?? '');
+            $report = $reportId === '' ? null : Report::withoutGlobalScopes()->find($reportId);
+            // The ONE switch — the registry's `recommendations` section, saved on the report.
+            $out['attention'] = $this->attention->published($report)
+                ? AttentionAudience::forClient($data['attention'], $decisions)
+                : null;
             $out = ReportStructure::refresh($out, 'recommendations');
         }
 
