@@ -17,7 +17,6 @@ export type MetricMeta = {
   ar: string
   en: string
   invertGood?: boolean
-  spark?: boolean
   format: (
     t: LivePayload['totals'],
     p: LivePayload,
@@ -102,11 +101,11 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     // PARTIAL-WITHHELD-001 — a client link is the one place the reader has no other view, so money
     // goes through the contract: partial/mixed ⇒ «—», withheld ⇒ the original in its own currency,
     // never the coalesced 0 or the converted subset.
-    spend: { ar: 'الإنفاق', en: 'Spend', invertGood: true, spark: true, format: (t, p) => asReading(moneyFromTotals(t as MoneyTotals, 'spend', ar, p.currency)) },
-    impressions: { ar: 'الظهور', en: 'Impressions', spark: true, format: (t, _p, _m, count) => count(t.impressions) },
-    clicks: { ar: 'النقرات', en: 'Clicks', spark: true, format: (t, _p, _m, count) => count(t.clicks) },
+    spend: { ar: 'الإنفاق', en: 'Spend', invertGood: true, format: (t, p) => asReading(moneyFromTotals(t as MoneyTotals, 'spend', ar, p.currency)) },
+    impressions: { ar: 'الظهور', en: 'Impressions', format: (t, _p, _m, count) => count(t.impressions) },
+    clicks: { ar: 'النقرات', en: 'Clicks', format: (t, _p, _m, count) => count(t.clicks) },
     ctr: { ar: 'نسبة النقر', en: 'CTR', format: (t) => plain(t.ctr === null || t.ctr === undefined ? '—' : `${(t.ctr * 100).toFixed(2)}%`) },
-    conversions: { ar: 'النتائج', en: 'Results', spark: true, format: (t, _p, _m, count) => count(t.conversions) },
+    conversions: { ar: 'النتائج', en: 'Results', format: (t, _p, _m, count) => count(t.conversions) },
     // Add-to-cart is a funnel stage rather than a total, so it is read from where it actually lives.
     add_to_cart: { ar: 'الإضافات للسلة', en: 'Add to cart', format: (_t, p, _m, count) => count(p.funnel.find((f) => f.stage === 'add_to_cart')?.count) },
     purchases: { ar: 'المشتريات', en: 'Purchases', format: (t, _p, _m, count) => count(t.purchases) },
@@ -125,7 +124,7 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     frequency: { ar: 'التكرار', en: 'Frequency', format: (t) => plain(t.frequency === null || t.frequency === undefined ? '—' : ratio(t.frequency)) },
     cpm: { ar: 'تكلفة الألف ظهور', en: 'CPM', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpm', (Number(t.impressions ?? 0)) / 1000, p.currency, ar), (v) => asExactMoney(v))) },
     cpc: { ar: 'تكلفة النقرة', en: 'CPC', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpc', 'clicks', p.currency, ar), (v) => asExactMoney(v))) },
-    leads: { ar: 'العملاء المحتملون', en: 'Leads', spark: true, format: (t, _p, _m, count) => count(t.leads) },
+    leads: { ar: 'العملاء المحتملون', en: 'Leads', format: (t, _p, _m, count) => count(t.leads) },
     cpl: { ar: 'تكلفة العميل المحتمل', en: 'CPL', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpl', 'leads', p.currency, ar), (v) => asExactMoney(v))) },
     installs: { ar: 'التثبيتات', en: 'Installs', format: (t, _p, _m, count) => count(t.installs) },
     cpi: { ar: 'تكلفة التثبيت', en: 'CPI', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpi', 'installs', p.currency, ar), (v) => asExactMoney(v))) },
