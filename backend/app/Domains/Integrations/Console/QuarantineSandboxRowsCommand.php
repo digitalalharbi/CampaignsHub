@@ -73,7 +73,8 @@ final class QuarantineSandboxRowsCommand extends Command
             $found += $rows->count();
 
             $this->line('');
-            $this->line(sprintf('  %s  [%s]  %s', $account->name ?: '(unnamed)', $account->provider, $account->external_id));
+            // Ids only: this runs from a workflow whose log is not a place for an advertiser's name.
+            $this->line(sprintf('  ours=%s  [%s]  provider=%s', $account->id, $account->provider, $account->external_id));
 
             /*
              * The total is printed beside the contaminated count, so the ratio is visible before
@@ -85,7 +86,7 @@ final class QuarantineSandboxRowsCommand extends Command
             $this->line(sprintf('    contaminated %d of %d stored campaign(s)', $rows->count(), $total));
 
             foreach ($rows as $row) {
-                $this->line(sprintf('      · %s  %s', $row->external_id, $row->name ?: '(unnamed)'));
+                $this->line(sprintf('      · %s  ours=%s', $row->external_id, $row->id));
             }
 
             if (! $this->option('apply')) {
