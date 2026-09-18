@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Role;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Services\ClientReportContentValidator;
+use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\ReportBreakdowns;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;
@@ -146,5 +147,39 @@ final class PdfPlatformDrilldownTest extends TestCase
         $this->actingAs($this->operator, 'sanctum')->putJson($url, ['pdf' => [ReportBreakdowns::PLATFORM => 'yes']])->assertUnprocessable();
         $this->actingAs($this->operator, 'sanctum')->putJson($url, ['pdf' => ['campaign_drilldown' => true]])->assertUnprocessable();
         $this->assertSame([], $this->printData()['platform_drilldowns'] ?? []);
+    }
+
+    /**
+     * A shared link's PDF prints the drill-down under that link's hide flags — SHARED-PDF-HIDE-FLAGS-001.
+     *
+     * The section is built from metrics, not from the share-filtered document, so it has to be told
+     * which figures the link hides: a link hiding spend must not print a platform's spend, its spend
+     * share, its cost per result or its ROAS one section below the page that hid them.
+     */
+    public function test_a_shared_pdf_prints_the_drilldown_without_what_the_link_hides(): void
+    {
+        $this->enable();
+        [$share] = app(ShareService::class)->create($this->report, ['allow_download' => true, 'hide_spend' => true], null);
+
+        $token = 'drill-share-'.uniqid();
+        Cache::put('report-print:'.hash('sha256', $token), [
+            'report_id' => (string) $this->report->id, 'type' => 'document', 'theme' => 'light', 'audience' => 'client', 'share_id' => (string) $share->id,
+        ], 300);
+        $blocks = $this->getJson("/api/v1/reports/print/{$token}")->assertOk()->json('data.data.platform_drilldowns');
+
+        $this->assertNotEmpty($blocks, 'the shared PDF lost the section the operator enabled');
+        $meta = collect($blocks)->firstWhere('provider', 'meta');
+        $this->assertNull($meta['totals']['spend']);
+        $this->assertNull($meta['shares']['spend'], 'a spend share of hidden spend discloses its distribution');
+        foreach (['spend', 'cpa', 'roas', 'cpc', 'cpm'] as $money) {
+            foreach ($meta['objectives'] as $block) {
+                $this->assertNull($block['metrics'][$money] ?? null, "objective block printed hidden {$money}");
+            }
+        }
+        foreach ([...$meta['timeseries'], ...$meta['ads'], ...$meta['ads_weakest']] as $row) {
+            $this->assertNull($row['spend'] ?? null);
+            $this->assertNull($row['roas'] ?? null);
+        }
+        $this->assertStringNotContainsString('300', (string) json_encode($meta['totals']['spend'] ?? null));
     }
 }
