@@ -8,6 +8,8 @@ use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Support\HiddenMoney;
 use App\Domains\Reports\Support\ReportBreakdowns;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportScope;
@@ -43,9 +45,11 @@ final class ReportPlatformDrilldowns
 
     /**
      * @param  array<string, mixed>  $data  the client-filtered document the print route is about to send
+     * @param  ReportShare|null  $share  the link a shared PDF was downloaded through — its hide flags bind
+     *                                   this section too (SHARED-PDF-HIDE-FLAGS-001)
      * @return list<array<string, mixed>>
      */
-    public function forPrint(Report $report, array $data): array
+    public function forPrint(Report $report, array $data, ?ReportShare $share = null): array
     {
         $breakdowns = ReportBreakdowns::forReport($report, 'pdf');
         if (! $breakdowns[ReportBreakdowns::PLATFORM]) {
@@ -98,8 +102,8 @@ final class ReportPlatformDrilldowns
                 lens: $lens,
                 from: $from,
                 to: $to,
-                hideSpend: false,
-                hideRevenue: false,
+                hideSpend: (bool) ($share->hide_spend ?? false),
+                hideRevenue: (bool) ($share->hide_revenue ?? false),
             ) + [
                 'ads' => ClientEntityBoundary::ads(array_slice($content['ads'] ?? [], 0, self::CONTENT_PER_LIST)),
                 'ads_weakest' => ClientEntityBoundary::ads(array_slice($content['worst'] ?? [], 0, self::CONTENT_PER_LIST)),
@@ -116,6 +120,12 @@ final class ReportPlatformDrilldowns
             return [];
         }
 
-        return $blocks;
+        /*
+         * The section is built from metrics, not from the link's filtered document, so the link's hide
+         * flags are applied to it here, through the ONE definition both sanitisers use.
+         */
+        return $share === null
+            ? $blocks
+            : HiddenMoney::redact(['platform_drilldowns' => $blocks], (bool) $share->hide_spend, (bool) $share->hide_revenue)['platform_drilldowns'];
     }
 }
