@@ -135,4 +135,40 @@ final class ClientReportMoneyRedactionTest extends TestCase
         $this->assertSame($this->row()['metrics'], $out['metrics']);
         $this->assertSame($this->row()['previous'], $out['previous']);
     }
+
+    /**
+     * FATIGUE-REAL-SIGNALS-001 — a CPM rebuilt for each half of the window is still spend.
+     *
+     * The decay halves carry a CPM, and a fatigue signal carries the two values it compared. With spend
+     * hidden, both would hand back what the operator hid: spend over impressions printed beside them.
+     */
+    #[Test]
+    public function a_hidden_spend_takes_the_decay_cpm_and_the_cost_signals_values_with_it(): void
+    {
+        $row = $this->row();
+        $row['metrics']['decay'] = [
+            'days_per_half' => 4,
+            'early' => ['impressions' => 40000, 'ctr' => 0.02, 'cpm' => 10.0],
+            'late' => ['impressions' => 40000, 'ctr' => 0.01, 'cpm' => 13.0],
+        ];
+        $row['fatigue'] = ['status' => 'watch', 'signals' => [
+            ['key' => 'cpm_decay', 'direction' => 'worse', 'change' => 0.3, 'current' => 13.0, 'previous' => 10.0],
+            ['key' => 'cpc', 'direction' => 'worse', 'change' => 0.2, 'current' => 1.2, 'previous' => 1.0],
+            ['key' => 'ctr_decay', 'direction' => 'worse', 'change' => -0.5, 'current' => 0.01, 'previous' => 0.02],
+            ['key' => 'spend_without_results', 'direction' => 'worse', 'change' => 0.4, 'current' => 1400.0, 'previous' => 1000.0],
+        ]];
+
+        $out = app(SharedCreativeView::class)->redactRow($row, $this->visibility());
+
+        $this->assertArrayNotHasKey('cpm', $out['metrics']['decay']['early']);
+        $this->assertArrayNotHasKey('cpm', $out['metrics']['decay']['late']);
+        $this->assertSame(0.02, $out['metrics']['decay']['early']['ctr'], 'delivery is not money and stays');
+
+        $signals = array_column($out['fatigue']['signals'], null, 'key');
+        $this->assertNull($signals['cpm_decay']['current']);
+        $this->assertNull($signals['cpm_decay']['previous']);
+        $this->assertNull($signals['cpc']['current']);
+        $this->assertSame(0.01, $signals['ctr_decay']['current']);
+        $this->assertNull($signals['spend_without_results']['current'], 'its values are the two periods\' spend');
+    }
 }

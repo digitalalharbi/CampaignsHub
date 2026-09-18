@@ -291,7 +291,105 @@ final class CreativeMetrics
                 : $figures;
         }
 
+        return $this->withDecay($out, $from, $to);
+    }
+
+    /**
+     * FATIGUE-REAL-SIGNALS-001 — the creative's own earlier and later active days, as two sums.
+     *
+     * Fatigue lost its frequency signal when an averaged frequency stopped being shown (#496). What a
+     * creative's rows DO hold is how its own CTR and CPM moved across the window, so the window is cut
+     * into two equal counts of its own active days — the middle day of an odd count belongs to
+     * neither — and each half's CTR and CPM are rebuilt from that half's summed clicks, impressions and
+     * spend. Averaging daily ratios would let one tiny day swing the verdict.
+     *
+     * Read from the grain the figures came from, so the halves describe the same rows as the totals.
+     * A half whose spend was withheld by FX-001 has no CPM rather than a CPM over part of its money.
+     *
+     * @param  array<string, array<string, mixed>>  $out
+     * @return array<string, array<string, mixed>>
+     */
+    private function withDecay(array $out, Carbon $from, Carbon $to): array
+    {
+        $byGrain = ['creative' => [], 'ad' => []];
+        foreach ($out as $id => $figures) {
+            $byGrain[($figures['grain'] ?? null) === 'ad' ? 'ad' : 'creative'][] = (string) $id;
+        }
+
+        $days = [];
+
+        if ($byGrain['creative'] !== []) {
+            DB::table('creative_daily_metrics')
+                ->whereIn('creative_id', $byGrain['creative'])
+                ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+                ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'creative_daily_metrics', app(ProjectContext::class)->projectId()))
+                ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign(
+                    $q,
+                    '(select cr.external_campaign_id from external_creatives cr where cr.id = creative_daily_metrics.creative_id)',
+                    'creative_daily_metrics.project_id',
+                ))
+                ->groupBy('creative_id', 'metric_date')
+                ->selectRaw('creative_id, metric_date, SUM(impressions) AS impressions, SUM(clicks) AS clicks, SUM(spend) AS spend, COUNT(*) FILTER (WHERE spend IS NULL AND spend_original IS NOT NULL) AS withheld')
+                ->get()
+                ->each(function ($r) use (&$days): void {
+                    $days[(string) $r->creative_id][(string) $r->metric_date] = (array) $r;
+                });
+        }
+
+        if ($byGrain['ad'] !== []) {
+            DB::table('entity_daily_metrics')
+                ->join('external_ads', 'external_ads.id', '=', 'entity_daily_metrics.entity_id')
+                ->where('entity_daily_metrics.entity_type', 'ad')
+                ->whereIn('external_ads.creative_id', $byGrain['ad'])
+                ->tap(fn ($q) => BoundAccountVisibility::applyToEntityMetrics($q, 'entity_daily_metrics'))
+                ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'entity_daily_metrics', app(ProjectContext::class)->projectId()))
+                ->whereBetween('entity_daily_metrics.metric_date', [$from->toDateString(), $to->toDateString()])
+                ->groupBy('external_ads.creative_id', 'entity_daily_metrics.metric_date')
+                ->selectRaw('external_ads.creative_id AS creative_id, entity_daily_metrics.metric_date AS metric_date, SUM(entity_daily_metrics.impressions) AS impressions, SUM(entity_daily_metrics.clicks) AS clicks, SUM(entity_daily_metrics.spend) AS spend, COUNT(*) FILTER (WHERE entity_daily_metrics.spend IS NULL AND entity_daily_metrics.spend_original IS NOT NULL) AS withheld')
+                ->get()
+                ->each(function ($r) use (&$days): void {
+                    $days[(string) $r->creative_id][(string) $r->metric_date] = (array) $r;
+                });
+        }
+
+        foreach ($out as $id => $figures) {
+            $rows = $days[(string) $id] ?? [];
+            ksort($rows);
+            $rows = array_values($rows);
+            $half = intdiv(count($rows), 2);
+
+            $out[$id]['decay'] = $half === 0 ? null : [
+                'days_per_half' => $half,
+                'early' => self::halfFigures(array_slice($rows, 0, $half)),
+                'late' => self::halfFigures(array_slice($rows, count($rows) - $half)),
+            ];
+        }
+
         return $out;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{impressions: ?float, ctr: ?float, cpm: ?float}
+     */
+    private static function halfFigures(array $rows): array
+    {
+        $sum = static function (string $key) use ($rows): ?float {
+            $values = array_filter(array_column($rows, $key), static fn ($v): bool => $v !== null);
+
+            return $values === [] ? null : (float) array_sum($values);
+        };
+
+        $impressions = $sum('impressions');
+        $clicks = $sum('clicks');
+        $spend = $sum('spend');
+        $withheld = (int) array_sum(array_column($rows, 'withheld'));
+
+        return [
+            'impressions' => $impressions,
+            'ctr' => $impressions !== null && $impressions > 0 && $clicks !== null ? $clicks / $impressions : null,
+            'cpm' => $impressions !== null && $impressions > 0 && $spend !== null && $withheld === 0 ? $spend / $impressions * 1000 : null,
+        ];
     }
 
     /**
