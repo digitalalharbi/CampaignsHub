@@ -1,5 +1,5 @@
 import { StatCard } from '@/components/ui/StatCard'
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
 import { ErrorState, Skeleton } from '@/components/ui/States'
@@ -88,6 +88,13 @@ export function KpiCard({
   hint?: string
   accent?: string
 }) {
+  /*
+   * The gradient's id is the card's own, not its label: a label with a space («Cost per result») made
+   * `url(#sp-Cost per result)` an invalid reference, and the browser painted the area solid black.
+   * `useId` is unique per card and stripped to characters an SVG reference accepts everywhere.
+   */
+  const gradientId = `sp-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
+
   return (
     <StatCard
       label={<span title={hint}>{label}</span>}
@@ -99,12 +106,12 @@ export function KpiCard({
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={spark.map((v, i) => ({ i, v }))} margin={{ top: 4, bottom: 0, left: 0, right: 0 }}>
               <defs>
-                <linearGradient id={`sp-${label}`} x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={accent} stopOpacity={0.35} />
                   <stop offset="100%" stopColor={accent} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <Area type="monotone" dataKey="v" stroke={accent} strokeWidth={2} fill={`url(#sp-${label})`} isAnimationActive={false} />
+              <Area type="monotone" dataKey="v" stroke={accent} strokeWidth={2} fill={`url(#${gradientId})`} isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
