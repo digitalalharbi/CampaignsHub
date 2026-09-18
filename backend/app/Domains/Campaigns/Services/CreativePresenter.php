@@ -8,6 +8,8 @@ use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Support\CreativeKind;
+use App\Domains\Campaigns\Support\PresentationAudience;
+use App\Domains\Campaigns\Support\RefusedCreativeAccess;
 
 /**
  * What a creative may safely show, and what it must admit it cannot (§15.1, §15.15).
@@ -176,6 +178,32 @@ final class CreativePresenter
     }
 
     /**
+     * The expired note — and, for an OPERATOR only, whose door is closed.
+     *
+     * «needs a fresh sync» is false when the platform refuses the account: no sync will help until
+     * the owner re-authorises. That sentence names a connection problem, so it is given only when the
+     * request's audience is an operator; every client surface keeps the neutral note.
+     *
+     * @return array{note_ar: string, note_en: string, access_refused?: true}
+     */
+    private function expiredNote(ExternalCreative $creative): array
+    {
+        if (app(PresentationAudience::class)->isOperator()
+            && app(RefusedCreativeAccess::class)->refuses($creative->external_campaign_id)) {
+            return [
+                'note_ar' => 'انتهت صلاحية رابط المنصة — والحساب الإعلاني يرفض الوصول، فلن يتجدد حتى يُعاد التفويض.',
+                'note_en' => 'The platform link has expired — the ad account refuses access, so it cannot refresh until it is re-authorised.',
+                'access_refused' => true,
+            ];
+        }
+
+        return [
+            'note_ar' => 'انتهت صلاحية رابط المنصة — يحتاج مزامنة جديدة.',
+            'note_en' => 'The platform link has expired — it needs a fresh sync.',
+        ];
+    }
+
+    /**
      * What the browser may load for this creative, and why when it may not.
      *
      * @return array{
@@ -265,8 +293,7 @@ final class CreativePresenter
                 'image_url' => null, 'video_url' => null,
                 'thumbnail_url' => $thumb,
                 'expires_at' => $creative->asset_expires_at?->toIso8601String(),
-                'note_ar' => 'انتهت صلاحية رابط المنصة — يحتاج مزامنة جديدة.',
-                'note_en' => 'The platform link has expired — it needs a fresh sync.',
+                ...$this->expiredNote($creative),
             ],
             /*
              * AD-MEDIA-RECOVERY-001 — «never fetched» is not «the platform refused».
