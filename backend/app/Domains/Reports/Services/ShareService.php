@@ -7,6 +7,7 @@ namespace App\Domains\Reports\Services;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Support\CreativeVisibility;
+use App\Domains\Reports\Support\HiddenMoney;
 use App\Support\Frontend;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -208,6 +209,27 @@ final class ShareService
         return array_merge($config, ['watermark' => (bool) $share->watermark]);
     }
 
+    /**
+     * The document a shared link's FILES are made from — SHARED-PDF-HIDE-FLAGS-001.
+     *
+     * Media resolved now (REPORT-CREATIVE-MEDIA-001), then this link's hide flags, then the creative
+     * rows the link may show, already redacted by `SharedCreativeView`. The download controller and the
+     * print route both call this, so the spreadsheet and the PDF of one link cannot say different things.
+     *
+     * @return array<string, mixed>
+     */
+    public function downloadDocument(Report $report, ReportShare $share): array
+    {
+        $data = $this->sanitize(app(ReportCreativeMedia::class)->refresh($report->data ?? []), $share);
+
+        // §15.12 — the creative rows reach the file only if the link may show them.
+        if ($share->creativeVisibility()->creatives) {
+            $data['creatives'] = app(SharedCreativeView::class)->library($share, ['per_page' => 48])['creatives'];
+        }
+
+        return $data;
+    }
+
     public function sanitize(array $data, ReportShare $share): array
     {
         /*
@@ -223,11 +245,7 @@ final class ShareService
          * leaving `spend_original` shipped the withheld figure exactly.
          */
         $stripMoney = function (array &$row) use ($share): void {
-            $keys = array_merge(
-                $share->hide_spend ? array_merge(CreativeVisibility::COST_METRICS, CreativeVisibility::MONEY_COMPANIONS['spend']) : [],
-                $share->hide_revenue ? array_merge(CreativeVisibility::REVENUE_METRICS, CreativeVisibility::MONEY_COMPANIONS['revenue']) : [],
-                $share->hide_spend && $share->hide_revenue ? CreativeVisibility::MONEY_CURRENCY_KEYS : [],
-            );
+            $keys = HiddenMoney::keys((bool) $share->hide_spend, (bool) $share->hide_revenue);
 
             foreach ($keys as $k) {
                 if (array_key_exists($k, $row)) {
@@ -279,6 +297,26 @@ final class ShareService
         }
 
         /* The wrapper-shaped section that was on no list — see the live path's note. */
+        /*
+         * SHARED-PDF-HIDE-FLAGS-001 — the per-platform series the deck's platform charts draw from.
+         *
+         * Keyed by provider rather than a list, so the section loop above never reached it: a link
+         * hiding spend still published every platform's daily spend under `platform_series`.
+         */
+        if (! empty($data['platform_series']) && is_array($data['platform_series'])) {
+            foreach ($data['platform_series'] as &$series) {
+                if (is_array($series)) {
+                    foreach ($series as &$point) {
+                        if (is_array($point)) {
+                            $stripMoney($point);
+                        }
+                    }
+                    unset($point);
+                }
+            }
+            unset($series);
+        }
+
         if (! empty($data['objective_performance']) && is_array($data['objective_performance'])) {
             if (! empty($data['objective_performance']['paths']) && is_array($data['objective_performance']['paths'])) {
                 foreach ($data['objective_performance']['paths'] as &$path) {
@@ -374,7 +412,8 @@ final class ShareService
             ));
         }
 
-        return $data;
+        // SHARED-PDF-HIDE-FLAGS-001 — the one definition, at any depth, and the prose that states it.
+        return HiddenMoney::redact($data, (bool) $share->hide_spend, (bool) $share->hide_revenue);
     }
 
     /**
@@ -460,11 +499,7 @@ final class ShareService
         }
 
         /* The same one list the snapshot path reads — see `sanitize()` and the constant itself. */
-        $money = array_merge(
-            $share->hide_spend ? array_merge(CreativeVisibility::COST_METRICS, CreativeVisibility::MONEY_COMPANIONS['spend']) : [],
-            $share->hide_revenue ? array_merge(CreativeVisibility::REVENUE_METRICS, CreativeVisibility::MONEY_COMPANIONS['revenue']) : [],
-            $share->hide_spend && $share->hide_revenue ? CreativeVisibility::MONEY_CURRENCY_KEYS : [],
-        );
+        $money = HiddenMoney::keys((bool) $share->hide_spend, (bool) $share->hide_revenue);
 
         $strip = function (array $row) use ($money, $share): array {
             foreach ($money as $key) {
@@ -634,6 +669,7 @@ final class ShareService
             ));
         }
 
-        return $payload;
+        // SHARED-PDF-HIDE-FLAGS-001 — the one definition, at any depth, and the prose that states it.
+        return HiddenMoney::redact($payload, (bool) $share->hide_spend, (bool) $share->hide_revenue);
     }
 }
