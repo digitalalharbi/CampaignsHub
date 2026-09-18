@@ -190,6 +190,46 @@ final class SignedMediaUrlTest extends TestCase
     }
 
     /**
+     * A DYNAMIC collection is missing nothing — the platform composes its top snap per product.
+     *
+     * Production (runs 35289582816, 35289616877, 35289734718, 35289766267): four promoted Snapchat
+     * collections come back from the creatives edge with no `top_snap_media_id` at all, and each one
+     * read «the platform does expose the tiles; this product does not fetch them yet». That sentence
+     * is honest about a STATIC collection and false about these: Snapchat's Dynamic Collection Ads
+     * guide states that a dynamically rendered collection's top snap is «a product picked dynamically
+     * based on the Product Catalog», so there is no file anyone could fetch — the same truth a
+     * catalog ad has, one shape over.
+     *
+     * The state is `available`, because nothing is absent, and the note says what the reader is
+     * looking at. No media is invented, and a STATIC collection keeps the sentence above unchanged.
+     */
+    public function test_a_dynamically_rendered_collection_is_composed_per_product_rather_than_missing(): void
+    {
+        $creative = ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $this->project->id,
+            'provider' => 'snapchat',
+            'external_creative_id' => 'cr-'.Str::random(8),
+            'name' => 'Dynamic collection',
+            'format' => 'collection_dynamic',
+            'source_type' => 'api',
+        ]);
+
+        $preview = app(CreativePresenter::class)->preview($creative);
+
+        $this->assertSame('available', $preview['state'], 'nothing is missing from a collection the platform composes per product');
+        $this->assertSame('collection', $preview['kind'], 'the SHAPE is still a collection');
+        $this->assertNull($preview['image_url']);
+        $this->assertNull($preview['video_url']);
+        $this->assertNull($preview['thumbnail_url']);
+
+        // It says what it is, and it does not accuse anybody of a gap.
+        $this->assertStringContainsString('per product', (string) $preview['note_en']);
+        $this->assertStringNotContainsString('does not fetch them yet', (string) $preview['note_en']);
+        $this->assertStringContainsString('لكل منتج', (string) $preview['note_ar']);
+    }
+
+    /**
      * ...and every OTHER assetless shape still says what it always said.
      *
      * The new state is narrow on purpose. A plain image ad the platform sent nothing for is a real

@@ -435,7 +435,30 @@ final class ReconcileContentMetricsCommand extends Command
 
         ksort($adStatuses);
         $this->line('    in the creatives edge : yes — type '.self::enum($found['type'] ?? null));
-        $this->line('    body keys             : '.implode(', ', $keys));
+        /*
+         * The two words that decide a collection with no top snap.
+         *
+         * Production: four promoted collections carry no `top_snap_media_id`, and Snapchat's Dynamic
+         * Collection Ads guide says a dynamically rendered collection has none — its top snap is «a
+         * product picked dynamically based on the Product Catalog». `render_type` is the platform's
+         * own answer to «is this one of those», and `ad_product` says which product line it belongs
+         * to. Both are enums, printed through the same guard as every other value here.
+         */
+        $this->line('    render_type           : '.self::enum($found['render_type'] ?? null));
+        $this->line('    ad_product            : '.self::enum($found['ad_product'] ?? null));
+        $this->line('    dynamic render        : '.(is_array($found['dynamic_render_properties'] ?? null)
+            // Sorted: `jsonb` does not preserve the platform's key order, and an unstable line is not evidence.
+            ? 'present — keys: '.implode(', ', self::sorted(array_keys($found['dynamic_render_properties'])))
+            : 'absent'));
+
+        /*
+         * Wrapped rather than one long line — a workflow log truncates, and a truncated key list is
+         * exactly the evidence this rung exists to hand over.
+         */
+        foreach (array_chunk($keys, 6) as $index => $chunk) {
+            $this->line(($index === 0 ? '    body keys             : ' : '                            ').implode(', ', $chunk));
+        }
+
         $this->line('    top_snap_media_id     : '.($mediaId === null ? 'absent' : 'present'));
         $this->line('    ads naming it         : '.array_sum($adStatuses).($adStatuses === [] ? '' : ' ('.implode(', ', array_map(
             static fn (string $s, int $n): string => $s.' '.$n, array_keys($adStatuses), $adStatuses,
@@ -457,6 +480,21 @@ final class ReconcileContentMetricsCommand extends Command
                 $entry['type'], $entry['media_status'], $entry['sub_request_status'], $entry['link'],
             ),
         });
+    }
+
+    /**
+     * Key names, sorted — `jsonb` stores an object without its order, so the platform's own order is
+     * not something this rung ever held.
+     *
+     * @param  array<int, mixed>  $keys
+     * @return list<string>
+     */
+    private static function sorted(array $keys): array
+    {
+        $out = array_map(strval(...), $keys);
+        sort($out);
+
+        return $out;
     }
 
     /** A platform enum as printed: upper-case words only, anything else is not echoed. */
