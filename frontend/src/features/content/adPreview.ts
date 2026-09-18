@@ -323,3 +323,36 @@ export function previewShape(width?: number | null, height?: number | null, aspe
 
   return 'unknown'
 }
+
+/**
+ * A missing picture as a CLIENT reads it — CLIENT-DIAGNOSTIC-SEPARATION-001.
+ *
+ * `absenceLabel` / `absenceShort` keep the four operator states apart, because each is a different
+ * next move for whoever runs the sync. A client has no such move, and «لم يُجلب» on their report is
+ * our fetching described to them. So the `none` reasons fold to what is true for the reader: this
+ * link does not show it (withheld), the preview is unavailable for now (expired), or there is none.
+ * The server's note is never used here — it is written for the operator. Shape readings (a video
+ * without a cover, a catalog ad, a collection without a hero) describe the ad itself and keep their
+ * sentences.
+ */
+export function clientAbsence(reading: PreviewReading, ar: boolean): { short: string; sentence: string } {
+  if (reading.kind !== 'none') {
+    return { short: absenceShort(reading, ar), sentence: absenceLabel(reading, ar) }
+  }
+
+  if (reading.reason === 'withheld') {
+    return ar
+      ? { short: 'غير معروضة في هذا الرابط', sentence: 'معاينة هذا المحتوى غير معروضة في هذا الرابط.' }
+      : { short: 'Not shown on this link', sentence: 'This content’s preview is not shown on this link.' }
+  }
+
+  if (reading.reason === 'expired') {
+    return ar
+      ? { short: 'المعاينة غير متاحة حاليًا', sentence: 'معاينة هذا المحتوى غير متاحة حاليًا.' }
+      : { short: 'Preview unavailable for now', sentence: 'This content’s preview is not available right now.' }
+  }
+
+  return ar
+    ? { short: 'لا تتوفر معاينة', sentence: 'لا تتوفر معاينة لهذا المحتوى.' }
+    : { short: 'No preview available', sentence: 'No preview is available for this content.' }
+}
