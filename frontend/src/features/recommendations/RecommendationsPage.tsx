@@ -6,7 +6,10 @@ import { Link } from 'react-router-dom'
 import { setRecommendationStatus, type RecommendationStatus, listRecommendations, type Recommendation, type RecommendationPriority } from './api'
 import { Badge } from '@/components/ui/Badge'
 import { buildActionCentre } from './actionCenter'
-import { OperationalSignals } from './OperationalSignals'
+import { FindingsBoard, type SourceKey } from './FindingsBoard'
+import { buildFindings } from './findings'
+import { lastNDays, useCampaigns, useSummary } from '@/features/analytics/api'
+import { usePortalPath } from '@/app/portalPath'
 import { listAlertEvents } from '@/features/alerts/api'
 import { useSpendLimits } from '@/features/budget/spendLimitsApi'
 import { getCreativePulse } from '@/features/content/pulse'
@@ -109,14 +112,43 @@ export function RecommendationsPage() {
     retry: false,
   })
 
-  const signals = useMemo(
-    () => buildActionCentre({
-      alerts: alerts.data?.events,
-      limits: limits.data?.limits,
-      fatigued: pulse.data?.fatigue.fatigued.items,
-    }),
-    [alerts.data, limits.data, pulse.data],
+  /*
+   * RECOMMENDATIONS-VISUAL-001 — two reads for context, never for figures.
+   *
+   * The alert engine measured its windows in the project's reporting currency; the summary over the
+   * same fortnight is where that currency is stated. The campaign breakdown names the campaigns the
+   * alerts point at by id. Neither is used to compute anything a card shows.
+   */
+  const window14 = useMemo(() => lastNDays(14), [])
+  const summary = useSummary(currentProjectId ?? null, window14)
+  const campaigns = useCampaigns(currentProjectId ?? null, useMemo(() => lastNDays(30), []))
+
+  const findings = useMemo(
+    () => buildFindings(
+      buildActionCentre({
+        alerts: alerts.data?.events,
+        limits: limits.data?.limits,
+        fatigued: pulse.data?.fatigue?.fatigued?.items,
+        fatigueAlerts: pulse.data?.fatigue?.alerts?.items,
+        rising: pulse.data?.fastest_growing?.items,
+        declining: pulse.data?.declining?.items,
+      }),
+      {
+        projectId: currentProjectId ?? '',
+        currency: summary.data?.currency ?? null,
+        creativeCurrency: pulse.data?.currency ?? null,
+        campaigns: new Map((campaigns.data ?? []).map((c) => [c.campaign_id, { name: c.campaign_name, provider: c.provider }])),
+      },
+    ),
+    [alerts.data, limits.data, pulse.data, summary.data, campaigns.data, currentProjectId],
   )
+
+  const failed: SourceKey[] = [
+    ...(alerts.isError ? ['alerts' as const] : []),
+    ...(limits.isError ? ['limits' as const] : []),
+    ...(pulse.isError ? ['creatives' as const] : []),
+  ]
+  const signalsLoading = alerts.isLoading || limits.isLoading || pulse.isLoading
 
   /** How many are waiting on somebody, by urgency — the reason to open this page at all. */
   const counts = useMemo(() => {
@@ -160,7 +192,16 @@ export function RecommendationsPage() {
         Every source fails independently and silently. An action centre that shows nothing because
         one of three sidecars is down is a worse outcome than one that shows two of them.
       */}
-      <OperationalSignals items={signals} locale={ar ? 'ar' : 'en'} />
+      <FindingsBoard
+        findings={findings}
+        loading={signalsLoading}
+        failed={failed}
+        projectId={currentProjectId}
+        currency={summary.data?.currency ?? null}
+        ar={ar}
+      />
+
+      <h2 className="pt-2 text-base font-bold text-text-primary">{ar ? 'توصيات كتبها الفريق' : 'Recommendations the team wrote'}</h2>
 
       <FilterBar
         id="recommendations"
@@ -215,6 +256,7 @@ function RecommendationRow({ rec, t, projectId }: { rec: Recommendation; t: Reco
    * boundary — `CampaignAnnotationController::update()` is.
    */
   const qc = useQueryClient()
+  const portalTo = usePortalPath()
   const canDecide = useAuth((s) => s.hasPermission('reports.approve'))
 
   const decide = useMutation({
@@ -234,7 +276,7 @@ function RecommendationRow({ rec, t, projectId }: { rec: Recommendation; t: Reco
           <h2 className="text-sm font-bold text-text-primary">{rec.title}</h2>
           <p className="mt-0.5 text-xs text-text-secondary">
             {rec.campaign_name && (
-              <Link to={`/app/campaigns/${rec.campaign_id}`} className="font-semibold hover:text-text-primary">
+              <Link to={portalTo(`/campaigns/${projectId}/${rec.campaign_id}`)} className="font-semibold hover:text-text-primary">
                 {rec.campaign_name}
               </Link>
             )}
