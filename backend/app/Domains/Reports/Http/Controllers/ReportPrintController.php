@@ -74,6 +74,7 @@ final class ReportPrintController extends Controller
          * trusted: a link revoked, expired or closed to downloads between the click and Chromium's
          * fetch serves nothing, and a share of another report never borrows this one.
          */
+        $share = null;
         if (($ctx['share_id'] ?? null) !== null) {
             $share = ReportShare::withoutGlobalScopes()->find($ctx['share_id']);
             abort_if(
@@ -95,7 +96,7 @@ final class ReportPrintController extends Controller
          * enabled it on this report. Attached AFTER the client filter and built client-safe itself, so
          * the filter has nothing of it to miss.
          */
-        $drilldowns = app(ReportPlatformDrilldowns::class)->forPrint($report, $body);
+        $drilldowns = app(ReportPlatformDrilldowns::class)->forPrint($report, $body, $share);
         if ($drilldowns !== []) {
             $body['platform_drilldowns'] = $drilldowns;
         }
