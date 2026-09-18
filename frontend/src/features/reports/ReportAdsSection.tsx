@@ -167,6 +167,7 @@ export function ReportAdsSection({
   reading,
   paged = false,
   onOpen,
+  restWhere,
 }: {
   ads: ReportAd[] | undefined
   /**
@@ -208,6 +209,12 @@ export function ReportAdsSection({
   reading?: AdsReading
   /** Opens this ad's own detail. Absent on surfaces that cannot open one, e.g. the printed page. */
   onOpen?: (ad: ReportAd) => void
+  /**
+   * Where the rest of a cut list can be found, when it is not the roster below. A live link's
+   * dashboard draws no roster — the rest are in its Content mode — and pointing a client «below» at a
+   * table that is not there reads as a page that failed to load.
+   */
+  restWhere?: { ar: string; en: string }
 }) {
   const ar = locale === 'ar'
   const rows = (ads ?? []).slice(0, limit)
@@ -276,6 +283,7 @@ export function ReportAdsSection({
                 currency={currency ?? null}
                 limit={limit}
                 onOpen={onOpen}
+                restWhere={restWhere}
               />
             ))}
             {/*
@@ -324,7 +332,9 @@ function AdGroupBlock({
   limit,
   onOpen,
   testidPrefix = 'report-ads',
+  restWhere,
 }: {
+  restWhere?: { ar: string; en: string }
   group: AdGroup
   locale: Locale
   currency: string | null
@@ -360,9 +370,13 @@ function AdGroupBlock({
         </span>
         {truncated && (
           <span data-testid={`${testidPrefix}-of-${group.family}`} className="text-[11px] text-text-muted">
-            {ar
-              ? `— ${shown.length} من ${total} إعلانًا، وبقيتها في جدول الإعلانات أدناه`
-              : `— ${shown.length} of ${total}; the rest are in the creative roster below`}
+            {restWhere
+              ? (ar
+                  ? `— ${shown.length} من ${total} إعلانًا، وبقيتها في ${restWhere.ar}`
+                  : `— ${shown.length} of ${total}; the rest are under ${restWhere.en}`)
+              : (ar
+                  ? `— ${shown.length} من ${total} إعلانًا، وبقيتها في جدول الإعلانات أدناه`
+                  : `— ${shown.length} of ${total}; the rest are in the creative roster below`)}
           </span>
         )}
       </div>
