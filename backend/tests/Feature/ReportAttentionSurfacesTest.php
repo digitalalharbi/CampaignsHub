@@ -17,8 +17,10 @@ use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Sections\ReportSectionRegistry;
 use App\Domains\Reports\Services\ReportGenerator;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\ShareSections;
 use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\DTOs\MembershipGrant;
 use App\Domains\Tenancy\Enums\Portal;
@@ -197,16 +199,29 @@ final class ReportAttentionSurfacesTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_a_section_switched_off_leaves_every_client_surface_cleanly(): void
+    /**
+     * The switch is the `recommendations` section of the ONE section registry (#486), saved on the
+     * report — not a link flag of its own. Off there, it is off on the live link, the shared snapshot
+     * and the client PDF alike, and the outline says the operator switched it off.
+     */
+    public function test_a_section_switched_off_in_the_registry_leaves_every_client_surface_cleanly(): void
     {
         $report = $this->generate();
+        $report->update(['section_settings' => ['sections' => ['recommendations' => false]]]);
 
-        foreach ($this->clientSurfaces($report, ['sections' => ['recommendations' => false]], skipPrint: true) as $surface => $payload) {
-            $this->assertNull($payload['attention'], "{$surface}: a switched-off section still travels");
+        foreach ($this->clientSurfaces($report->refresh()) as $surface => $payload) {
+            $this->assertNull($payload['attention'] ?? null, "{$surface}: a switched-off section still travels");
             $outline = $this->outline($payload);
-            $this->assertFalse($outline['present']);
-            $this->assertSame('not_published_on_this_link', $outline['absent_reason'], $surface);
+            $this->assertFalse($outline['present'], $surface);
+            $this->assertSame('disabled_by_operator', $outline['absent_reason'], $surface);
         }
+    }
+
+    /** A link flag of the old shape no longer governs the section: there is one switch, not two. */
+    public function test_there_is_no_second_switch_on_the_link(): void
+    {
+        $this->assertNotContains('recommendations', ShareSections::FLAGS);
+        $this->assertContains('attention', app(ReportSectionRegistry::class)->get('recommendations')->payloadKeys);
     }
 
     public function test_a_link_that_hides_spend_carries_no_cost_block(): void

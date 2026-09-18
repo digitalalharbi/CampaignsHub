@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services\Attention;
 
+use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAttentionDecision;
+use App\Domains\Reports\Sections\ReportSectionRegistry;
 use Illuminate\Support\Carbon;
 
 /**
@@ -16,6 +18,18 @@ use Illuminate\Support\Carbon;
  */
 final class ReportAttention
 {
+    public function __construct(private readonly ReportSectionRegistry $sections) {}
+
+    /**
+     * Whether the report publishes the `recommendations` section — the ONE switch, in the section
+     * registry (#486), saved on the report. A report that cannot be found publishes nothing.
+     */
+    public function published(?Report $report, string $audience = 'client'): bool
+    {
+        return $report !== null
+            && $report->sectionSettings()->enabled($this->sections->get('recommendations'), $audience);
+    }
+
     /**
      * Every finding for the window, judged against the previous window of equal length.
      *

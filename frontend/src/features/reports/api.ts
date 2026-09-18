@@ -317,8 +317,6 @@ export interface LivePayload {
     budget?: boolean
     funnel_store?: boolean
     previous_comparison?: boolean
-    /** REPORT-RECOMMENDATION-BLOCKS-001 — «what needs attention». Absent means on. */
-    recommendations?: boolean
   }
   /**
    * REPORT-DRILLDOWN-001 — the optional breakdowns this link offers. An absent key means on (older
@@ -326,8 +324,9 @@ export interface LivePayload {
    * control is drawn at all.
    */
   breakdowns?: { platform_drilldown?: boolean; content_drilldown?: boolean }
+  /**
    * REPORT-RECOMMENDATION-BLOCKS-001 — already the client cut: operator-internal items are not in it
-   * unless the operator approved them. `null` when the link does not publish the section.
+   * unless the operator approved them. `null` when the report's `recommendations` section is off.
    */
   attention?: AttentionItem[] | null
   store_funnel: StoreFunnelPayload | null
