@@ -7,6 +7,7 @@ namespace App\Domains\Notifications\Services;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Services\FollowUpWorkspace;
 use App\Domains\Metrics\Models\SpendLimit;
@@ -200,7 +201,8 @@ final class DailyDigest
         $scope = Lead::query()
             ->withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
-            ->where('project_id', $projectId);
+            ->where('project_id', $projectId)
+            ->tap(fn ($q) => LeadVisibility::boundToItsProject($q));
 
         if (! (clone $scope)->exists()) {
             return null;
