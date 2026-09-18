@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Models;
 
+use App\Domains\Reports\Sections\ReportSectionRegistry;
+use App\Domains\Reports\Sections\SectionSettings;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
@@ -23,12 +25,19 @@ final class ReportScopeTemplate extends Model
     use HasUuidKey;
 
     protected $fillable = [
-        'tenant_id', 'project_id', 'name', 'description', 'scope', 'created_by',
+        'tenant_id', 'project_id', 'name', 'description', 'scope', 'section_settings', 'created_by',
     ];
 
     protected $casts = [
         'scope' => 'array',
+        'section_settings' => 'array',
     ];
+
+    /** The section choices a report built from this template starts with. */
+    public function sectionSettings(): SectionSettings
+    {
+        return SectionSettings::fromArray($this->section_settings, app(ReportSectionRegistry::class));
+    }
 
     /** The stored shape as the object every surface reads. */
     public function toScope(): ReportScope

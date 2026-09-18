@@ -20,6 +20,7 @@ use App\Domains\Reports\Http\Controllers\ReportController;
 use App\Domains\Reports\Http\Controllers\ReportPrintController;
 use App\Domains\Reports\Http\Controllers\ReportScheduleController;
 use App\Domains\Reports\Http\Controllers\ReportScopeController;
+use App\Domains\Reports\Http\Controllers\ReportSectionController;
 use App\Domains\Reports\Http\Controllers\ReportShareController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use App\Domains\Tasks\Http\Controllers\TaskController;
@@ -223,6 +224,15 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::post('reports/scope-templates', [ReportScopeController::class, 'storeTemplate'])->middleware('project.can:reports.manage')->name('reports.scope-templates.store');
     Route::match(['put', 'patch'], 'reports/scope-templates/{template}', [ReportScopeController::class, 'updateTemplate'])->middleware('project.can:reports.manage')->name('reports.scope-templates.update');
     Route::delete('reports/scope-templates/{template}', [ReportScopeController::class, 'destroyTemplate'])->middleware('project.can:reports.manage')->name('reports.scope-templates.destroy');
+    /*
+     * REPORT-SECTION-MODEL-001 — which sections a report or template shows. Reading is `reports.view`;
+     * changing is `reports.manage`, and the controller checks it again rather than trusting the route.
+     */
+    Route::get('reports/sections', [ReportSectionController::class, 'registry'])->middleware('project.can:reports.view')->name('reports.sections.registry');
+    Route::get('reports/scope-templates/{template}/sections', [ReportSectionController::class, 'showTemplate'])->middleware('project.can:reports.view')->name('reports.scope-templates.sections.show');
+    Route::put('reports/scope-templates/{template}/sections', [ReportSectionController::class, 'updateTemplate'])->middleware('project.can:reports.manage')->name('reports.scope-templates.sections.update');
+    Route::get('reports/{report}/sections', [ReportSectionController::class, 'show'])->middleware('project.can:reports.view')->name('reports.sections.show');
+    Route::put('reports/{report}/sections', [ReportSectionController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.sections.update');
     /*
      * Both report creates are capped, and `regenerate` deliberately is not: regenerating writes no
      * new row, so charging a monthly slot for it would bill the customer for the platform's retry.

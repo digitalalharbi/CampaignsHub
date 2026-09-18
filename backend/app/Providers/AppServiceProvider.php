@@ -20,6 +20,7 @@ use App\Domains\Ops\Listeners\RecordScheduledRun;
 use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Reports\Sections\ReportSectionRegistry;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Subscriptions\Observers\SubscriptionAuditObserver;
@@ -63,6 +64,11 @@ class AppServiceProvider extends ServiceProvider
          * is visible — everything still «works», it just quietly forgets.
          */
         $this->app->singleton(ScheduledRunRows::class);
+        /*
+         * REPORT-SECTION-MODEL-001 — one registry per process, so a predicate another domain registers
+         * is the one every surface's resolver consults.
+         */
+        $this->app->singleton(ReportSectionRegistry::class);
         // Shared per-request tenant context — the authority on "current tenant".
         /*
          * Scope contexts are SCOPED, not singletons: every service inside one request shares the
