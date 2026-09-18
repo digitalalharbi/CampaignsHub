@@ -477,6 +477,30 @@ final class CreativeDetailPageTest extends TestCase
         $this->assertSame(0, $preview['cards_withheld']);
     }
 
+    /**
+     * Meta stores a carousel child's copy as `name` / `description` (MetaConnector), and the card read
+     * only `headline` / `body` — every Meta card arrived with no copy although the sync held it.
+     */
+    public function test_a_meta_carousel_cards_copy_is_read_under_the_platforms_own_keys(): void
+    {
+        $creative = $this->creative([
+            'name' => 'Meta carousel',
+            'format' => 'carousel',
+            'cards' => [
+                ['image_url' => 'https://cdn.example.com/a.jpg', 'name' => 'Summer bundle', 'description' => 'Two for one', 'destination_url' => 'https://shop.example.com/a'],
+                ['image_url' => 'https://cdn.example.com/b.jpg', 'name' => 'Winter bundle', 'destination_url' => 'https://shop.example.com/b'],
+            ],
+        ]);
+        $this->day($creative, now()->subDay()->toDateString(), ['spend' => 100, 'impressions' => 5000]);
+
+        $cards = $this->open($creative)->assertOk()->json('data.creative.preview.cards');
+
+        $this->assertSame('Summer bundle', $cards[0]['headline']);
+        $this->assertSame('Two for one', $cards[0]['body']);
+        $this->assertSame('Winter bundle', $cards[1]['headline']);
+        $this->assertNull($cards[1]['body']);
+    }
+
     /** «This platform sent no card breakdown» is not «this carousel has no cards». */
     public function test_a_creative_with_no_card_breakdown_says_so_rather_than_showing_an_empty_carousel(): void
     {
