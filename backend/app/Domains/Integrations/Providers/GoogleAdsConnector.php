@@ -9,6 +9,7 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Support\PlatformHttp;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Carbon;
 
 /**
  * Google Ads API (REST).
@@ -24,7 +25,7 @@ use Illuminate\Http\Client\Response;
  * Awaiting credentials — and note that the OAuth client is not enough: Google Ads refuses every call
  * without an approved developer token, which is why it is in the platform's `requires`.
  */
-final class GoogleAdsConnector extends ApiAdvertisingConnector implements ReportsEntityGrains
+final class GoogleAdsConnector extends ApiAdvertisingConnector implements ReportsEntityGrains, ReportsPeriodReach
 {
     private const MICRO = 1_000_000;
 
@@ -795,5 +796,61 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector implements Report
         }
 
         return SyncResult::of($out);
+    }
+
+    /** REACH-PERIOD-001 — Google documents `metrics.unique_users` for date ranges of at most 92 days. */
+    private const UNIQUE_USERS_MAX_DAYS = 92;
+
+    /*
+     * REACH-PERIOD-001 — `metrics.unique_users` is Google's deduplicated reach for a date range, and it
+     * «cannot be aggregated». It exists for Display, Video, Discovery and App campaigns only, so the
+     * customer grain is not offered — a customer figure would describe only some of its campaigns —
+     * and a campaign of another type answers nothing and stays not reported. The query selects no
+     * `segments.date`, so the figure is one for the range, not a row per day.
+     */
+    public function periodReachGrains(): array
+    {
+        return [ReportsPeriodReach::CAMPAIGN];
+    }
+
+    public function periodReachWindowSupported(string $from, string $to): bool
+    {
+        return Carbon::parse($from)->diffInDays(Carbon::parse($to)) + 1 <= self::UNIQUE_USERS_MAX_DAYS;
+    }
+
+    public function periodReach(string $adAccountId, string $grain, string $from, string $to): array
+    {
+        if ($grain !== ReportsPeriodReach::CAMPAIGN) {
+            return [];
+        }
+
+        $reported = $this->stream($this->tokens(), $adAccountId, <<<GAQL
+            SELECT campaign.id, metrics.unique_users, metrics.average_impression_frequency_per_user, metrics.impressions
+            FROM campaign
+            WHERE segments.date BETWEEN '{$from}' AND '{$to}'
+            GAQL);
+
+        $rows = [];
+
+        foreach ($reported as $row) {
+            $metrics = (array) ($row['metrics'] ?? []);
+            $id = (string) (((array) ($row['campaign'] ?? []))['id'] ?? '');
+
+            if ($id === '') {
+                continue;
+            }
+
+            $users = is_numeric($metrics['uniqueUsers'] ?? null) ? (float) $metrics['uniqueUsers'] : null;
+
+            $rows[] = [
+                'external_id' => $id,
+                // Zero unique users over delivered impressions is a campaign type without the metric.
+                'reach' => $users !== null && $users > 0 ? $users : null,
+                'impressions' => is_numeric($metrics['impressions'] ?? null) ? (float) $metrics['impressions'] : null,
+                'frequency' => is_numeric($metrics['averageImpressionFrequencyPerUser'] ?? null) ? (float) $metrics['averageImpressionFrequencyPerUser'] : null,
+            ];
+        }
+
+        return $rows;
     }
 }

@@ -9,6 +9,7 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Reporting\ReportingWindow;
 use App\Domains\Integrations\Support\AssetExpiry;
 use App\Domains\Integrations\ValueObjects\SyncResult;
+use Illuminate\Support\Carbon;
 
 /**
  * Snapchat Marketing API (`adsapi.snapchat.com/v1`).
@@ -21,7 +22,7 @@ use App\Domains\Integrations\ValueObjects\SyncResult;
  *
  * Awaiting credentials on this install — no round trip has been made against a real organisation.
  */
-final class SnapchatConnector extends ApiAdvertisingConnector implements ReportsCreativeInsights, ReportsEntityGrains
+final class SnapchatConnector extends ApiAdvertisingConnector implements ReportsCreativeInsights, ReportsEntityGrains, ReportsPeriodReach
 {
     /** Snapchat states money in millionths. */
     private const MICRO = 1_000_000;
@@ -1263,5 +1264,72 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             ->value('timezone');
 
         return is_string($timezone) && $timezone !== '' ? $timezone : null;
+    }
+
+    /*
+     * REACH-PERIOD-001 — Snapchat returns `uniques` deduplicated over a `granularity=TOTAL` window for
+     * campaigns, ad squads and ads. The AD ACCOUNT entity reports spend only, so the account grain is
+     * not offered: an account-wide reach would have to be a sum of campaigns, which is not reach.
+     */
+    public function periodReachGrains(): array
+    {
+        return [ReportsPeriodReach::CAMPAIGN];
+    }
+
+    public function periodReachWindowSupported(string $from, string $to): bool
+    {
+        // TOTAL uniques exist from 1 January 2021; Snapchat states no maximum TOTAL range.
+        return Carbon::parse($from)->greaterThanOrEqualTo(Carbon::parse('2021-01-01'));
+    }
+
+    public function periodReach(string $adAccountId, string $grain, string $from, string $to): array
+    {
+        if ($grain !== ReportsPeriodReach::CAMPAIGN) {
+            return [];
+        }
+
+        $tokens = $this->tokens();
+        $window = ReportingWindow::localDays($this->accountTimezone($adAccountId), $from, $to);
+
+        $url = $this->url("adaccounts/{$adAccountId}/stats").'?'.http_build_query([
+            'granularity' => 'TOTAL',
+            'breakdown' => 'campaign',
+            'fields' => 'uniques,frequency,impressions',
+            'start_time' => $window->startIso(),
+            'end_time' => $window->endIso(),
+            'limit' => self::STATS_PAGE_SIZE,
+        ]);
+
+        $rows = [];
+
+        for ($page = 0; $page < self::MAX_PAGES && $url !== null; $page++) {
+            $body = $this->read($this->api($tokens)->get($url), 'period reach');
+
+            foreach ((array) ($body['total_stats'] ?? []) as $wrapper) {
+                $total = (array) (((array) $wrapper)['total_stat'] ?? []);
+
+                foreach ((array) (((array) ($total['breakdown_stats'] ?? []))['campaign'] ?? []) as $entry) {
+                    $entry = (array) $entry;
+                    $stats = (array) ($entry['stats'] ?? []);
+                    $id = (string) ($entry['id'] ?? '');
+
+                    if ($id === '') {
+                        continue;
+                    }
+
+                    $rows[] = [
+                        'external_id' => $id,
+                        'reach' => is_numeric($stats['uniques'] ?? null) ? (float) $stats['uniques'] : null,
+                        'impressions' => is_numeric($stats['impressions'] ?? null) ? (float) $stats['impressions'] : null,
+                        'frequency' => is_numeric($stats['frequency'] ?? null) ? (float) $stats['frequency'] : null,
+                    ];
+                }
+            }
+
+            $next = $body['paging']['next_link'] ?? null;
+            $url = is_string($next) && $next !== '' ? $next : null;
+        }
+
+        return $rows;
     }
 }

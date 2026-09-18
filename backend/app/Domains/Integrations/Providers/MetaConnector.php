@@ -23,7 +23,7 @@ use App\Domains\Integrations\ValueObjects\SyncResult;
  *
  * Awaiting credentials on this install.
  */
-final class MetaConnector extends ApiAdvertisingConnector implements ReportsEntityGrains
+final class MetaConnector extends ApiAdvertisingConnector implements ReportsEntityGrains, ReportsPeriodReach
 {
     /**
      * A ceiling on paging, so a wrong `paging.next` cannot become an unbounded loop.
@@ -674,5 +674,53 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsEnti
         }
 
         return $total;
+    }
+
+    /*
+     * REACH-PERIOD-001 — Meta deduplicates `reach` over the requested `time_range` when the insights are
+     * NOT split by day (`time_increment=all_days`), at every `level`. Asked at account and campaign: the
+     * two grains a report card describes. No breakdowns are sent, because a breakdown query starting more
+     * than 13 months back omits reach entirely.
+     */
+    public function periodReachGrains(): array
+    {
+        return [ReportsPeriodReach::ACCOUNT, ReportsPeriodReach::CAMPAIGN];
+    }
+
+    public function periodReachWindowSupported(string $from, string $to): bool
+    {
+        return true;
+    }
+
+    public function periodReach(string $adAccountId, string $grain, string $from, string $to): array
+    {
+        $account = $grain === ReportsPeriodReach::ACCOUNT;
+
+        $reported = $this->readAll($this->tokens(), "{$adAccountId}/insights", 'period reach', [
+            'level' => $account ? 'account' : 'campaign',
+            'time_increment' => 'all_days',
+            'fields' => ($account ? 'account_id' : 'campaign_id').',reach,frequency,impressions',
+            'time_range' => json_encode(['since' => $from, 'until' => $to], JSON_THROW_ON_ERROR),
+            'limit' => 500,
+        ]);
+
+        $rows = [];
+
+        foreach ($reported as $row) {
+            $id = $account ? $adAccountId : (string) ($row['campaign_id'] ?? '');
+
+            if ($id === '') {
+                continue;
+            }
+
+            $rows[] = [
+                'external_id' => $id,
+                'reach' => is_numeric($row['reach'] ?? null) ? (float) $row['reach'] : null,
+                'impressions' => is_numeric($row['impressions'] ?? null) ? (float) $row['impressions'] : null,
+                'frequency' => is_numeric($row['frequency'] ?? null) ? (float) $row['frequency'] : null,
+            ];
+        }
+
+        return $rows;
     }
 }
