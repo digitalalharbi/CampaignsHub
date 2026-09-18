@@ -311,6 +311,32 @@ final class CreativePresenter
              * way. The `catalog` kind keeps its own separate wording in the UI — a catalog ad is not
              * missing anything, it simply has no fixed asset — so only `collection` lands here.
              */
+            /*
+             * CONTENT-PREVIEW-SHAPES-001 — a DYNAMIC collection is missing nothing.
+             *
+             * Production: four promoted Snapchat collections came back from the creatives edge with no
+             * `top_snap_media_id`, and each read «the platform does expose the tiles; this product does
+             * not fetch them yet» — true of a static collection, false of these. Snapchat's Dynamic
+             * Collection Ads guide says their top snap is «a product picked dynamically based on the
+             * Product Catalog», so no file exists to fetch, exactly as for a catalog ad. The connector
+             * keeps the platform's own `render_type` in the format, which is what makes the two
+             * tellable apart here rather than guessed at.
+             *
+             * `available`, because nothing is absent — the same judgement the catalog arm below makes,
+             * for the same reason. The note says what the reader is looking at, and no asset is
+             * invented: a dynamic collection that DID resolve a hero keeps it, because this arm is
+             * reached only when the row holds nothing.
+             */
+            str_contains(strtolower((string) $creative->format), 'collection_dynamic')
+                && $image === null && $video === null && $thumb === null && $creative->cards === null => [
+                    'state' => 'available',
+                    'kind' => $kind,
+                    'aspect' => $aspect,
+                    'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
+                    'expires_at' => null,
+                    'note_ar' => 'إعلان تشكيلة ديناميكية — تختار المنصة صورته الرئيسية من كتالوج المنتجات لكل منتج عند العرض، فلا يوجد ملف واحد له.',
+                    'note_en' => 'A dynamic collection ad — the platform picks its top snap from the product catalogue per product at delivery, so it has no single file.',
+                ],
             $kind === 'collection' && $image === null && $video === null && $thumb === null
                 && $creative->cards === null => [
                     'state' => 'shape_not_fetched',

@@ -51,7 +51,15 @@ export type PreviewReading =
    * That is NOT an absence — nothing is missing, and «no media» would send an operator looking for
    * a sync fault that does not exist.
    */
-  | { kind: 'collection'; src: string | null; note: null }
+  /**
+   * A collection carries the platform's own note, because a collection with no hero has two readings.
+   *
+   * A STATIC collection whose top snap never arrived is missing a file. A DYNAMIC one is missing
+   * nothing: Snapchat picks its top snap from the product catalogue per product at delivery, so there
+   * is no file to have sent. The server tells them apart — it keeps the platform's `render_type` — and
+   * says which in the note, so the surfaces state a provider FACT instead of accusing it of a gap.
+   */
+  | { kind: 'collection'; src: string | null; note: string | null }
   | { kind: 'catalog'; note: null }
 
 /**
@@ -114,7 +122,7 @@ export function readPreview(preview: CreativePreview | null | undefined, ar: boo
   }
 
   if (preview.kind === 'collection') {
-    return { kind: 'collection', src: preview.image_url ?? preview.thumbnail_url ?? null, note: null }
+    return { kind: 'collection', src: preview.image_url ?? preview.thumbnail_url ?? null, note: note(preview) }
   }
 
   if (preview.kind === 'video' && preview.video_url) {
@@ -186,9 +194,16 @@ export function absenceLabel(reading: PreviewReading, ar: boolean): string {
    * over tiles and only the hero is missing, which is a smaller and more specific claim.
    */
   if (reading.kind === 'collection' && reading.src === null) {
-    return ar
+    /*
+     * The platform's own sentence wins where the server composed one — it is the more specific truth.
+     *
+     * A dynamic collection has no top snap by design, and «the platform sent no hero frame» reads as
+     * a fault and sends an operator looking for a sync problem that does not exist. The generic
+     * sentence stays for the collection that really is missing one.
+     */
+    return reading.note ?? (ar
       ? 'إعلان مجموعة — لم ترسل المنصة صورة الغلاف. البلاطات تحتها ليست ملفًا واحدًا.'
-      : 'A collection ad — the platform sent no hero frame. The tiles beneath it are not one file.'
+      : 'A collection ad — the platform sent no hero frame. The tiles beneath it are not one file.')
   }
 
   if (reading.kind !== 'none') {
@@ -265,7 +280,10 @@ export function absenceShort(reading: PreviewReading, ar: boolean): string {
   }
 
   if (reading.kind === 'collection' && reading.src === null) {
-    return ar ? 'تشكيلة بلا غلاف' : 'Collection, no hero'
+    /* Composed, not absent — the long sentence's short form, and the same distinction. */
+    return reading.note !== null
+      ? (ar ? 'تُركَّب لكل منتج' : 'Composed per product')
+      : (ar ? 'تشكيلة بلا غلاف' : 'Collection, no hero')
   }
 
   if (reading.kind !== 'none') {
