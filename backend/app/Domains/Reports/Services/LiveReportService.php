@@ -13,6 +13,7 @@ use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Services\Attention\ObjectivePerformanceFigures;
@@ -557,7 +558,7 @@ final class LiveReportService
              * platform on the SAME bounds as the objective split above. Built only when the section is
              * published; cut to what a client may read before this method returns.
              */
-            'attention' => ($share->visibleSections()['recommendations'] ?? true)
+            'attention' => $this->attention->published(Report::withoutGlobalScopes()->find($share->report_id))
                 ? $this->attention->items(new ObjectivePerformanceFigures(new ObjectivePerformance(
                     projectIds: $scope['project_id'] === '' ? null : [$scope['project_id']],
                     campaignIds: $applied['campaigns'] !== [] ? $applied['campaigns'] : $campaignCeiling,
@@ -708,8 +709,6 @@ final class LiveReportService
              * comparison, which is what the switch is called.
              */
             'previous_comparison' => ['deltas' => [], 'previous' => null, 'objective_performance_previous' => null],
-            // Null, not `[]`: «not published on this link» is a different fact from «nothing qualified».
-            'recommendations' => ['attention' => null],
         ];
 
         foreach ($owned as $flag => $keys) {

@@ -189,7 +189,6 @@ function splitDiffers(payload: LivePayload): boolean {
  * client cut, drawn as blocks. The drill-down opens a piece of content this link already carries.
  */
 function LiveAttention({ payload, ar, onOpenContent }: { payload: LivePayload; ar: boolean; onOpenContent: (content: ReportAd) => void }) {
-  if (!sectionOn(payload, 'recommendations')) return null
   const open = (key: string) => {
     const ad = (payload.ads ?? []).find((a) => a.content_key === key)
     if (ad) onOpenContent(ad)
