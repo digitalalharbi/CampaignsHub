@@ -10,6 +10,7 @@ import { CreativeInsightCard } from './CreativeInsightCard'
 import { CreativeCarousel } from './CreativeCarousel'
 import { formatMetric, metricLabel, metricState } from './metrics'
 import { formatBytes, imageLoading } from './format'
+import { absenceLabel, posterSource, readPreview } from './adPreview'
 import { getCreativeInReach, type CreativeMetrics, type FunnelStage } from './api'
 import { ConversionFunnelChart, MetricLineChart } from '@/features/analytics/charts'
 import { DateField } from '@/components/ui/DateField'
@@ -320,9 +321,21 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
   }
 
   const preview = creative.preview
-  const note = ar ? preview.note_ar : preview.note_en
-  const showing: 'video' | 'image' | 'none' =
-    preview.state !== 'available' ? 'none' : preview.video_url ? 'video' : preview.image_url ? 'image' : 'none'
+  /*
+   * OWNER CONTENT P0 — ONE preview decision, the one the card and the popup read.
+   *
+   * This page decided on its own: state by hand, then `image_url` and nothing else. So a Meta video
+   * creative holding only its thumbnail said «no preview» here while the card drew that picture, and
+   * a collection whose hero arrived as a thumbnail was a picture on the card and in the popup and an
+   * absence on its own page. #505 moved the card and its table row onto `readPreview()`; this is the
+   * last surface that had a decision of its own. The reader also refuses what it must — an expired
+   * link keeps its thumbnail by design, and drawing it presents a dead asset as the live ad.
+   */
+  const reading = readPreview(preview, ar)
+  const still = posterSource(reading)
+  const film = reading.kind === 'video' ? reading.src : null
+  const showing: 'video' | 'image' | 'none' = film ? 'video' : still ? 'image' : 'none'
+  const absence = absenceLabel(reading, ar)
 
   return (
     <div className="space-y-6">
@@ -383,29 +396,29 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
       {/* ---- the asset itself ---------------------------------------------------------------- */}
       <section className="rounded-lg border border-border bg-surface p-4">
         <div className="flex min-h-64 items-center justify-center overflow-auto rounded-md bg-surface-secondary p-3">
-          {showing === 'video' && preview.video_url ? (
+          {showing === 'video' && film ? (
             <CreativeVideoPlayer
               /* Keyed by the CREATIVE, not the file: two creatives sharing one asset produce an
                  identical url key, and React would reuse the player across a navigation — landing
                  the reader on a new creative already mid-play. */
               key={creative.id}
-              src={preview.video_url}
-              poster={preview.thumbnail_url}
+              src={film}
+              poster={reading.kind === 'video' ? reading.poster : null}
               // The shape the ad ran in — a story is 9:16, not a letterboxed landscape frame.
               aspect={preview.aspect ?? null}
               durationHint={creative.duration_seconds}
               className="w-full max-w-3xl"
             />
-          ) : showing === 'image' && preview.image_url ? (
+          ) : showing === 'image' && still ? (
             <img
-              src={preview.image_url}
+              src={still}
               alt={creative.name}
-              loading={imageLoading(preview.image_url)}
+              loading={imageLoading(still)}
               decoding="async"
               style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
               className="max-h-[60vh] max-w-full object-contain transition-transform"
             />
-          ) : preview.kind === 'catalog' ? (
+          ) : reading.kind === 'catalog' ? (
             /*
              * CONTENT-PREVIEW-SHAPES-001 — a catalog ad is NOT a missing asset.
              *
@@ -427,7 +440,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
               <p className="font-medium">{t.noPreview}</p>
               {/* The REASON, not a shrug: «expired» and «the platform does not expose this» call for
                   completely different actions, and one grey box asks for neither. */}
-              {note && <p className="mt-2 text-xs">{note}</p>}
+              {absence && <p className="mt-2 text-xs">{absence}</p>}
             </div>
           )}
         </div>
