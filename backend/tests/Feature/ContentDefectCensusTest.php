@@ -239,6 +239,9 @@ final class ContentDefectCensusTest extends TestCase
             'cdn.test/ok-signature.png' => Http::response($png, 200, ['Content-Type' => 'image/png']),
             'cdn.test/forbidden-signature.jpg' => Http::response('denied', 403, ['Content-Type' => 'text/plain']),
             'cdn.test/page-signature.jpg' => Http::response('<html></html>', 200, ['Content-Type' => 'text/html; charset=utf-8']),
+            // Production: a Snapchat collection still declared `multipart/form-data`. The bytes decide.
+            'cdn.test/mislabelled-signature.png' => Http::response($png, 200, ['Content-Type' => 'multipart/form-data']),
+            'cdn.test/envelope-signature.jpg' => Http::response("--b1\r\nContent-Type: text/plain\r\n\r\nhello\r\n--b1--\r\n", 200, ['Content-Type' => 'multipart/form-data; boundary=b1']),
             'cdn.test/film-signature.mp4' => Http::response('....', 206, ['Content-Type' => 'video/mp4']),
             '*' => Http::response('unexpected', 500),
         ]);
@@ -252,6 +255,12 @@ final class ContentDefectCensusTest extends TestCase
         $page = $this->spendOnlyCreative();
         $page->forceFill(['asset_url' => 'https://cdn.test/page-signature.jpg'])->save();
 
+        $mislabelled = $this->spendOnlyCreative();
+        $mislabelled->forceFill(['asset_url' => 'https://cdn.test/mislabelled-signature.png'])->save();
+
+        $envelope = $this->spendOnlyCreative();
+        $envelope->forceFill(['asset_url' => 'https://cdn.test/envelope-signature.jpg'])->save();
+
         // Never delivered in the window: not what a reader is looking at, so not loaded at all.
         $idle = $this->creative(['asset_url' => 'https://cdn.test/idle-signature.jpg']);
 
@@ -261,11 +270,13 @@ final class ContentDefectCensusTest extends TestCase
 
         $this->assertStringContainsString('still  http 403', $section);
         $this->assertStringContainsString((string) $forbidden->getKey(), $section);
-        $this->assertStringContainsString('not an image (content type text/html)', $section);
+        $this->assertStringContainsString('not an image (content type text/html; bytes: unrecognised, first bytes ', $section);
         $this->assertStringContainsString((string) $page->getKey(), $section);
         $this->assertStringNotContainsString((string) $ok->getKey(), $section, 'a loaded image and a playable film were reported as broken');
-        // Four assets: the working creative's still AND its film, and one still each for the two broken ones.
-        $this->assertStringContainsString('4 asset(s), 2 loaded', $output);
+        // Six assets: the working creative's still AND its film, and one still each for the four broken ones.
+        $this->assertStringContainsString('not an image (content type multipart/form-data; bytes: png image that decodes)', $section);
+        $this->assertStringContainsString('not an image (content type multipart/form-data; bytes: multipart envelope, parts in prefix: text/plain=not an image)', $section);
+        $this->assertStringContainsString('6 asset(s), 2 loaded', $output);
 
         Http::assertNotSent(static fn ($request): bool => str_contains((string) $request->url(), 'idle-signature'));
         $this->assertStringNotContainsString('signature', $output);
@@ -316,27 +327,30 @@ final class ContentDefectCensusTest extends TestCase
      */
     public function test_raw_evidence_says_how_the_provider_sent_a_zero_original_spend(): void
     {
+        $run = (string) Str::uuid();
+        $emptyRun = (string) Str::uuid();
+
         $creative = $this->creative(['provider' => 'snapchat', 'campaign_id' => $this->unified('sales')->getKey()]);
         $this->adRow($creative, [
             'spend' => null, 'spend_original' => 0.0, 'original_currency' => 'USD',
-            'impressions' => 500, 'clicks' => 9, 'conversions' => 3,
+            'impressions' => 500, 'clicks' => 9, 'conversions' => 3, 'sync_run_id' => $run,
         ]);
-        $adId = (string) ExternalAd::withoutGlobalScopes()->where('creative_id', $creative->getKey())->value('external_id');
+        $ad = ExternalAd::withoutGlobalScopes()->where('creative_id', $creative->getKey())->firstOrFail();
+        $adId = (string) $ad->external_id;
 
-        DB::table('project_integration_bindings')->insert([
-            'id' => (string) Str::uuid(),
-            'tenant_id' => $this->tenant->getKey(),
-            'project_id' => $this->project->getKey(),
-            'external_account_id' => $this->account->getKey(),
-            'provider' => 'snapchat',
-            'purpose' => 'ads',
-            'created_at' => now(),
-            'updated_at' => now(),
+        // A second stored zero for the same ad, written by a run that retained no body for it.
+        DB::table('entity_daily_metrics')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
+            'provider' => 'snapchat', 'entity_type' => 'ad', 'entity_id' => $ad->getKey(), 'external_entity_id' => $adId,
+            'external_campaign_id' => $this->campaign->getKey(), 'metric_date' => Carbon::today()->subDays(3)->toDateString(),
+            'attribution_window' => 'default', 'spend' => null, 'spend_original' => 0.0, 'original_currency' => 'USD',
+            'impressions' => 0, 'sync_run_id' => $emptyRun, 'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        IntegrationRawPayload::withoutGlobalScopes()->create([
+        $body = fn (string $runId, mixed $spend): IntegrationRawPayload => IntegrationRawPayload::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->getKey(),
             'external_account_id' => $this->account->getKey(),
+            'sync_run_id' => $runId,
             'provider' => 'snapchat',
             'resource' => 'insights',
             'window_start' => Carbon::today()->subDays(7)->toDateString(),
@@ -346,11 +360,16 @@ final class ContentDefectCensusTest extends TestCase
             'payload' => ['timeseries_stats' => [['timeseries_stat' => [
                 'id' => $adId, 'type' => 'AD',
                 'timeseries' => [
-                    ['start_time' => Carbon::today()->subDay()->toDateString().'T00:00:00.000+03:00', 'stats' => ['spend' => null, 'impressions' => 500]],
+                    ['start_time' => Carbon::today()->subDay()->toDateString().'T00:00:00.000+03:00', 'stats' => ['spend' => $spend, 'impressions' => 500]],
+                    // A day with no stored zero row: not part of the question, never counted.
                     ['start_time' => Carbon::today()->subDays(2)->toDateString().'T00:00:00.000+03:00', 'stats' => ['spend' => 0, 'impressions' => 0]],
                 ],
             ]]]],
         ]);
+
+        $body($run, null);
+        // The same ad named by a DIFFERENT run's body: not what wrote the stored row, so not read.
+        $body((string) Str::uuid(), 4_200_000);
 
         $this->assertStringContainsString('original of ZERO', $this->section('C'));
 
@@ -358,7 +377,11 @@ final class ContentDefectCensusTest extends TestCase
         $output = Artisan::output();
 
         $this->assertStringContainsString('C EVIDENCE', $output);
-        $this->assertStringContainsString((string) $creative->getKey().'  ads in bodies 1, day-points 2 — spend: key absent 0, JSON null 1, zero 1, positive 0; delivered impressions on 1', $output);
+        $this->assertStringContainsString(
+            (string) $creative->getKey()."  stored withheld rows 2 — in the body of the run that wrote them: spend key absent 0, JSON null 1, zero 0, positive 0; delivered impressions on 1; not in that run's bodies 1; run unrecorded 0; bodies unreadable 0",
+            $output,
+        );
+        $this->assertLessThan(strpos($output, 'C EVIDENCE'), strpos($output, 'D — '), 'the sections must be printed before the raw read, so a failed read cannot take them down');
     }
 
     // ── fixtures ─────────────────────────────────────────────────────────────────────────────────
