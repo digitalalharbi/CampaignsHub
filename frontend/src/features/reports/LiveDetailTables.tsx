@@ -411,6 +411,7 @@ export function LiveDetailTables({
         cost per order it was never asked to produce. `result_metrics_apply` is the payload's own flag
         for that, and a «—» here is the report declining to rank a brand campaign on a sales metric.
       */}
+      {payload.objective_performance !== undefined && (
       <Section
         title={t.objectives}
         testid="live-detail-objectives"
@@ -425,6 +426,7 @@ export function LiveDetailTables({
           initialSort={{ column: 1, dir: 'desc' }}
         />
       </Section>
+      )}
     </div>
   )
 }

@@ -11,6 +11,8 @@ use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAnnotation;
+use App\Domains\Reports\Sections\BusinessStreams;
+use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
@@ -322,6 +324,13 @@ final class ReportGenerator
              * is partly an artefact of which campaigns each figure counted.
              */
             'objective_performance_previous' => ClientEntityBoundary::objectivePerformance($scope->objectivePerformance()->build($prevFrom, $prevTo)),
+            /*
+             * REPORT-SECTION-STREAMS-001 — the operator's business streams, when the report can show
+             * them. Frozen with the snapshot like every other figure; changing a stream regenerates.
+             */
+            'business_streams' => $this->businessStreams($report, $agg, $scope, $from, $to, $totals),
+            'business_streams_cover_total' => $report->sectionSettings()->streams() !== []
+                && app(BusinessStreams::class)->coversTotal($agg, $report->sectionSettings()->streams(), $from, $to),
             'summary' => $this->executiveSummary($lens, $totals, $delta, $platforms, $campaigns, $currency ?? ''),
             /*
              * The professional analysis — §14.7.
@@ -450,6 +459,30 @@ final class ReportGenerator
      *
      * @return array<string,mixed>
      */
+    /**
+     * @param  array<string, mixed>  $totals
+     * @return list<array<string, mixed>>
+     */
+    private function businessStreams(Report $report, MetricsAggregator $agg, ReportScope $scope, Carbon $from, Carbon $to, array $totals): array
+    {
+        $settings = $report->sectionSettings();
+        $surfaces = app(ReportSectionSurfaces::class);
+
+        if ($settings->streams() === [] || ! $surfaces->operatorAllows('advanced_segmentation', $report, null)) {
+            return [];
+        }
+
+        return app(BusinessStreams::class)->build(
+            $agg,
+            $settings->streams(),
+            $scope->providers === [] ? null : $scope->providers,
+            $scope->accountIds === [] ? null : $scope->accountIds,
+            $from,
+            $to,
+            is_numeric($totals['spend'] ?? null) ? (float) $totals['spend'] : null,
+        );
+    }
+
     private function freshnessFor(Report $report, Carbon $from, Carbon $to): array
     {
         $state = $this->freshness->state(

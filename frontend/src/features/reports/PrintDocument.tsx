@@ -446,6 +446,23 @@ export function PrintDocument({
       )}
       <Absent sectionKey="objectives" fallback="Nothing was spent on any objective in this window." />
 
+      {/* REPORT-SECTION-STREAMS-001 — advanced segmentation, in the operator's own stream names. */}
+      {shown('advanced_segmentation') && (data.business_streams ?? []).length > 0 && (
+        <section className="doc-section">
+          <h2>Performance by Business Stream</h2>
+          <Table
+            head={['Stream', 'Spend', 'Results', 'Share of spend']}
+            rows={(data.business_streams ?? []).map((s) => [
+              s.label,
+              moneyExact(typeof s.figures.spend === 'number' ? s.figures.spend : null, currency),
+              typeof s.figures.conversions === 'number' ? s.figures.conversions.toLocaleString('en-US') : '—',
+              s.share_of_spend === null ? '—' : `${Math.round(s.share_of_spend * 100)}%`,
+            ])}
+          />
+          <p>{data.business_streams_cover_total ? 'The streams add up to the total spend.' : 'The streams do not cover every account, so their sum is not the total spend.'}</p>
+        </section>
+      )}
+
       {/*
         CLIENT-REPORT-ENTITY-BOUNDARY-001 — the campaign table is gone from the printed document.
 

@@ -424,13 +424,16 @@ final class ObjectivePerformanceTest extends TestCase
         $this->assertNotContains('objective_performance', array_column($shared->json('data.data.slides'), 'type'));
         $this->assertNull($shared->json('data.data.objective_performance'));
 
-        // …and an operator who enables it gets the same split the snapshot holds, unchanged.
+        /*
+         * REPORT-SECTION-STREAMS-001 — and enabling advanced segmentation does not bring it back for
+         * a client: Direct/Blended is buying methodology, so a client's segmentation is the
+         * operator's business streams. The snapshot above keeps the split for internal use.
+         */
         $report->update(['section_settings' => ['sections' => ['advanced_segmentation' => true]]]);
         $enabled = $this->getJson("/api/v1/reports/shared/{$token}")->assertOk();
 
-        $this->assertContains('advanced_segmentation', $enabled->json('data.data.report_sections'));
-        $this->assertContains('objective_performance', array_column($enabled->json('data.data.slides'), 'type'));
-        $this->assertSame(20.0, (float) $enabled->json('data.data.objective_performance.direct.cpa'));
+        $this->assertNotContains('objective_performance', array_column($enabled->json('data.data.slides'), 'type'));
+        $this->assertNull($enabled->json('data.data.objective_performance'));
     }
 
     /** Every objective in the catalogue lands in exactly one path — no case falls through. */
