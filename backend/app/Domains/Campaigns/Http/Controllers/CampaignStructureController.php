@@ -12,6 +12,7 @@ use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Jobs\SyncAccountStructureJob;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -133,14 +134,19 @@ final class CampaignStructureController extends Controller
         // something the operator already knows from the integrations page.
         $connected = ProviderConnection::query()->where('status', 'connected')->pluck('id');
 
+        // ACCOUNT-SCOPE-ISOLATION-001 — a deselected account, or one now selected for another project,
+        // keeps its old campaign rows here; pressing this button must not fetch for it.
+        $assignment = app(AccountAssignment::class);
         $accounts = ExternalAccount::query()
             ->whereIn('id', $accountIds)
             ->whereIn('provider_connection_id', $connected)
-            ->get(['id', 'provider']);
+            ->get()
+            ->filter(fn (ExternalAccount $account): bool => $assignment->isActivelyAssignedTo($account, $project))
+            ->values();
 
         if ($accounts->isEmpty()) {
             return ApiResponse::error(
-                'None of the linked accounts has a connected authorisation. Reconnect the platform first.',
+                'None of the linked accounts is connected and selected for this project. Reconnect or select it first.',
                 meta: ['queued' => 0],
                 status: 422,
             );

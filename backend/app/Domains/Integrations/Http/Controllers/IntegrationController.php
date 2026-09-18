@@ -14,6 +14,7 @@ use App\Domains\Integrations\Models\Integration;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Http\Controllers\Controller;
 use App\Support\AdPlatforms;
@@ -256,6 +257,23 @@ final class IntegrationController extends Controller
 
         $integration = Integration::where('connector_key', $key)->first();
         abort_if($integration === null || $integration->ad_account_id === null, 422, 'Connector is not connected.');
+
+        /*
+         * ACCOUNT-SCOPE-ISOLATION-001 — this was the one provider call in the product that asked no
+         * binding question: it fetched whatever `ad_account_id` the legacy row named, selected or not.
+         * The account must be one this tenant discovered AND actively selected for a project. The local
+         * `sandbox` fake is the one exception: it discovers no account row, and the registry does not
+         * offer it in production.
+         */
+        $account = ExternalAccount::query()
+            ->where('provider', $key)
+            ->where('external_id', (string) $integration->ad_account_id)
+            ->first();
+        abort_if(
+            $key !== 'sandbox' && ($account === null || ! app(AccountAssignment::class)->isActivelyAssigned($account)),
+            409,
+            'That ad account is not selected for any project, so nothing is fetched for it.',
+        );
 
         $result = $connector->syncCampaigns($integration->ad_account_id);
 
