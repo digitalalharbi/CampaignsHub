@@ -117,10 +117,12 @@ final class ObjectiveReportAnalytics
             'cross_family_blend' => false,
             // Spend on campaigns whose objective nobody classified has no family to be judged under.
             'unclassified_present' => $unclassified,
-            'minimum_volume' => array_map(
-                static fn (array $rule): array => ['volume' => $rule[0], 'minimum' => $rule[1]],
-                ObjectiveMetricFamilies::MINIMUM_VOLUME,
-            ),
+            /*
+             * The minimum-volume rules are NOT shipped in the payload. No surface draws them, and a
+             * client payload carries figures, not configuration: a bare «300» beside a hidden spend of
+             * 300 is indistinguishable, to a reader or to the hidden-money guard, from the spend itself.
+             * Each ranking already states the volume it rested on and why it declined when it did.
+             */
         ];
     }
 
