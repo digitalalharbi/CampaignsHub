@@ -137,7 +137,9 @@ describe('opening an ad from a report', () => {
       <ReportAdDetail ad={withheld} currency="USD" locale="en" onClose={() => {}} />, { locale: 'en' },
     )
 
-    expect(screen.getByTestId('report-ad-detail-poster-absent')).toHaveTextContent(/credential/i)
+    // Said to the client in their words: the link does not show it — not how our link carries a credential.
+    expect(screen.getByTestId('report-ad-detail-poster-absent')).toHaveTextContent('Not shown on this link')
+    expect(screen.getByTestId('report-ad-detail-poster-absent')).not.toHaveTextContent(/credential/i)
     expect(screen.queryByTestId('report-ad-detail-poster')).not.toBeInTheDocument()
   })
 
