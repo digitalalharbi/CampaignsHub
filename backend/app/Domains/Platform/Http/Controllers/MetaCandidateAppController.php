@@ -8,6 +8,7 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateConnection;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateRoundTrip;
+use App\Domains\Integrations\MetaCandidate\MetaProfilePromotion;
 use App\Domains\Integrations\Models\ProviderConfiguration;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -28,6 +29,7 @@ final class MetaCandidateAppController extends Controller
         private readonly MetaCandidateCredentials $credentials,
         private readonly MetaCandidateRoundTrip $roundTrip,
         private readonly AuditLogger $audit,
+        private readonly MetaProfilePromotion $promotion,
     ) {}
 
     /** GET /admin/settings/integrations/meta-candidate */
@@ -110,12 +112,96 @@ final class MetaCandidateAppController extends Controller
         ], 'Authorization URL issued.');
     }
 
+    /**
+     * POST /admin/settings/integrations/meta-candidate/promote
+     *
+     * Candidate → Live. Refused unless the latest round trip succeeded with the credentials configured
+     * NOW. Switches only the Live app identity; no customer connection, token or account is touched.
+     */
+    public function promote(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'confirm' => ['required', 'accepted'],
+            // A SEPARATE, named confirmation — the general `confirm` never implies it.
+            'confirm_narrow_scopes' => ['sometimes', 'boolean'],
+        ]);
+
+        $eligibility = $this->promotion->eligibility();
+
+        if (! $eligibility['eligible']) {
+            return ApiResponse::error(
+                message: 'The Candidate app cannot be promoted.',
+                errors: ['promotion' => [$eligibility['reason']]],
+                status: 409,
+            );
+        }
+
+        $dropped = $this->promotion->droppedScopes();
+        $narrowingConfirmed = (bool) ($validated['confirm_narrow_scopes'] ?? false);
+
+        if ($dropped !== [] && ! $narrowingConfirmed) {
+            return ApiResponse::error(
+                message: 'Promotion would stop requesting scopes the Live app requests today. Confirm narrowing the scopes to continue.',
+                errors: ['promotion' => ['scopes_would_narrow'], 'dropped_scopes' => $dropped],
+                status: 409,
+            );
+        }
+
+        $result = $this->promotion->promote($request->user()?->getKey());
+
+        $this->audit->log(
+            action: 'platform.integration.meta.promoted',
+            entityType: ProviderConfiguration::class,
+            entityId: 'meta',
+            // Four-character hints only: which app replaced which, never a value.
+            before: ['app_id_hint' => $result['previous_app_id_hint']],
+            after: [
+                'app_id_hint' => $result['new_app_id_hint'],
+                'run_id' => MetaCandidateConnection::latestRun()?->id,
+                'dropped_scopes' => $dropped,
+                'scope_narrowing_confirmed' => $dropped !== [] && $narrowingConfirmed,
+            ],
+        );
+
+        return ApiResponse::success($this->payload(), 'Candidate promoted to Live.');
+    }
+
+    /** POST /admin/settings/integrations/meta-candidate/rollback — one step back to the previous Live app. */
+    public function rollback(Request $request): JsonResponse
+    {
+        $request->validate(['confirm' => ['required', 'accepted']]);
+
+        $result = $this->promotion->rollback($request->user()?->getKey());
+
+        if ($result === null) {
+            return ApiResponse::error(
+                message: 'There is no previous Live app to roll back to.',
+                errors: ['rollback' => ['no_previous_live']],
+                status: 409,
+            );
+        }
+
+        $this->audit->log(
+            action: 'platform.integration.meta.rolled_back',
+            entityType: ProviderConfiguration::class,
+            entityId: 'meta',
+            after: ['app_id_hint' => $result['restored_app_id_hint']],
+        );
+
+        return ApiResponse::success($this->payload(), 'Live Meta app rolled back.');
+    }
+
     /** @return array<string,mixed> */
     private function payload(): array
     {
         return [
             'credentials' => $this->credentials->summary(),
             'latest_run' => MetaCandidateConnection::latestRun()?->toReport(),
+            'promotion' => [
+                ...$this->promotion->eligibility(),
+                'dropped_scopes' => $this->promotion->droppedScopes(),
+                'rollback_available' => $this->promotion->rollbackAvailable(),
+            ],
         ];
     }
 }

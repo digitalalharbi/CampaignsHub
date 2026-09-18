@@ -762,6 +762,8 @@ export interface MetaCandidateState {
     configured_at: string | null
   }
   latest_run: MetaCandidateRun | null
+  /** Present once promotion exists server-side. `reason` names why it is refused. */
+  promotion?: { eligible: boolean; reason: string | null; dropped_scopes?: string[]; rollback_available: boolean }
 }
 
 export function fetchMetaCandidate(): Promise<MetaCandidateState> {
@@ -780,6 +782,20 @@ export function forgetMetaCandidateCredential(key: string): Promise<MetaCandidat
 /** Starts a round trip: the browser is sent to Meta's dialog and returns to this page. */
 export function startMetaCandidateTest(): Promise<{ run: MetaCandidateRun; authorization_url: string; expires_in_minutes: number }> {
   return postData('/admin/settings/integrations/meta-candidate/test', {})
+}
+
+/** Candidate → Live. Refused (409) unless the latest round trip passed with today's credentials. */
+export function promoteMetaCandidate(confirmNarrowScopes = false): Promise<MetaCandidateState> {
+  return postData('/admin/settings/integrations/meta-candidate/promote', {
+    confirm: true,
+    // A separate, named confirmation: Live would stop requesting `dropped_scopes`.
+    confirm_narrow_scopes: confirmNarrowScopes,
+  })
+}
+
+/** One step back to the previous Live Meta app. */
+export function rollbackMetaLive(): Promise<MetaCandidateState> {
+  return postData('/admin/settings/integrations/meta-candidate/rollback', { confirm: true })
 }
 
 // ---- Email operations (MAIL-014) -----------------------------------------------------------------

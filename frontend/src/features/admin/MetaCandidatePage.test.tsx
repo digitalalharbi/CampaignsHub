@@ -11,11 +11,13 @@ vi.mock('./api', async (orig) => {
     fetchMetaCandidate: vi.fn(),
     saveMetaCandidate: vi.fn(),
     startMetaCandidateTest: vi.fn(),
+    promoteMetaCandidate: vi.fn(),
+    rollbackMetaLive: vi.fn(),
     forgetMetaCandidateCredential: vi.fn(),
   }
 })
 
-import { fetchMetaCandidate, saveMetaCandidate, startMetaCandidateTest } from './api'
+import { fetchMetaCandidate, promoteMetaCandidate, rollbackMetaLive, saveMetaCandidate, startMetaCandidateTest } from './api'
 
 const state = (over: Partial<MetaCandidateState['credentials']> = {}, run: MetaCandidateRun | null = null): MetaCandidateState => ({
   credentials: {
@@ -91,6 +93,63 @@ describe('MetaCandidatePage (META-CANDIDATE-001)', () => {
     expect(run).toBeDisabled()
     fireEvent.click(run)
     await waitFor(() => expect(startMetaCandidateTest).not.toHaveBeenCalled())
+  })
+
+  it('refuses promotion with the server reason and offers no rollback when none exists', async () => {
+    vi.mocked(fetchMetaCandidate).mockResolvedValue({
+      ...state({}, failedRun),
+      promotion: { eligible: false, reason: 'latest_round_trip_not_succeeded', rollback_available: false },
+    })
+    renderWithProviders(<MetaCandidatePage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('meta-candidate-promote')).toBeDisabled()
+    expect(screen.getByTestId('meta-candidate-rollback')).toBeDisabled()
+    expect(screen.getByTestId('meta-candidate-promotion-reason')).toHaveTextContent('did not pass end to end')
+    fireEvent.click(screen.getByTestId('meta-candidate-promote'))
+    expect(promoteMetaCandidate).not.toHaveBeenCalled()
+  })
+
+  it('promotes and rolls back only after an explicit confirmation', async () => {
+    vi.mocked(fetchMetaCandidate).mockResolvedValue({
+      ...state(),
+      promotion: { eligible: true, reason: null, rollback_available: true },
+    })
+    const after = { ...state(), promotion: { eligible: false, reason: 'candidate_already_live', rollback_available: true } }
+    vi.mocked(promoteMetaCandidate).mockResolvedValue(after)
+    vi.mocked(rollbackMetaLive).mockResolvedValue(after)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValue(true)
+    renderWithProviders(<MetaCandidatePage />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('meta-candidate-promote'))
+    expect(promoteMetaCandidate).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByTestId('meta-candidate-promote'))
+    await waitFor(() => expect(promoteMetaCandidate).toHaveBeenCalledWith(false))
+
+    fireEvent.click(screen.getByTestId('meta-candidate-rollback'))
+    await waitFor(() => expect(rollbackMetaLive).toHaveBeenCalledTimes(1))
+    confirm.mockRestore()
+  })
+
+  it('will not promote a scope-narrowing candidate until the named checkbox is ticked', async () => {
+    vi.mocked(fetchMetaCandidate).mockResolvedValue({
+      ...state(),
+      promotion: { eligible: true, reason: null, dropped_scopes: ['ads_management', 'business_management'], rollback_available: false },
+    })
+    vi.mocked(promoteMetaCandidate).mockResolvedValue(state())
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderWithProviders(<MetaCandidatePage />, { locale: 'en' })
+
+    const promote = await screen.findByTestId('meta-candidate-promote')
+    expect(promote).toBeDisabled()
+    const box = screen.getByTestId('meta-candidate-confirm-narrow-scopes')
+    expect(box).toHaveAttribute('name', 'confirm_narrow_scopes')
+    expect(box.closest('label')).toHaveTextContent('ads_management, business_management')
+
+    fireEvent.click(box)
+    fireEvent.click(promote)
+    await waitFor(() => expect(promoteMetaCandidate).toHaveBeenCalledWith(true))
+    confirm.mockRestore()
   })
 
   it('saves only the fields that were typed', async () => {
