@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Campaigns\Models\CreativeGroup;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
@@ -17,6 +18,7 @@ use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
@@ -699,5 +701,53 @@ final class SharedReportCreativesTest extends TestCase
 
         $this->assertNull($card['video_url'], 'the player was still fed on a link that hides video');
         $this->assertNotNull($card['thumbnail_url']);
+    }
+
+    /**
+     * OWNER CONTENT P0 — the client's report judges a creative on the same set the content card does.
+     *
+     * `CreativeMetrics::headline()` answers two different questions. Handed the creative's figures it
+     * returns what THIS row, in THIS window, can answer; handed none it returns what the objective's
+     * family wants of any creative. The client report detail once asked the second: the same creative,
+     * over the same period, was judged on `cpa` and `aov` in the report — blank, because it recorded
+     * no conversions — while the content card judged it on the impressions, clicks and CTR it really
+     * reported. Two pages, one creative, two verdicts.
+     *
+     * The shape here is the ordinary one that exposes it: a SALES creative that ran and converted
+     * nothing. Its family wants a cost per order; the row cannot answer one; and every surface has to
+     * agree about that. `OneCanonicalHeadlineSetTest` guards the call sites; this reads the answer off
+     * the client's own endpoint.
+     */
+    public function test_the_client_report_judges_a_creative_on_what_it_can_answer_not_on_its_family(): void
+    {
+        $creative = $this->creative(['name' => 'No orders']);
+        $this->figures($creative, ['spend' => 500, 'impressions' => 40000, 'clicks' => 900]);
+
+        [$token] = $this->link($this->everything());
+
+        $detail = $this->open($token, '/creatives/'.$creative->getKey())->assertOk()->json('data.creative');
+        $headline = $detail['headline_metrics'];
+
+        // What it reported is what it is judged on.
+        $this->assertContains('impressions', $headline);
+        $this->assertContains('clicks', $headline);
+        $this->assertContains('ctr', $headline);
+
+        // And a cost per order it never had is not a slot the client is shown.
+        $this->assertNotContains('cpa', $headline, 'the report headlined a cost per order over no orders');
+        $this->assertNotContains('aov', $headline, 'the report headlined an average order value over no orders');
+
+        // The canonical set, asked of the service every surface asks: identical, key for key and in order.
+        $figures = app(CreativeMetrics::class)->forCreatives(
+            [(string) $creative->getKey()],
+            Carbon::parse($this->report->period_start),
+            Carbon::parse($this->report->period_end),
+        )[(string) $creative->getKey()] ?? null;
+
+        $this->assertSame(
+            app(CreativeMetrics::class)->headline('sales', $figures),
+            $headline,
+            'the client report resolved a different set from the one every content surface resolves',
+        );
     }
 }

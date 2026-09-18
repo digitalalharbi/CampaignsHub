@@ -310,6 +310,73 @@ final class ContentReconcileWalkTest extends TestCase
     }
 
     /**
+     * RUNG 8 compares SURFACES, not two ways of calling one service — Production run 35289582816.
+     *
+     * The walk reported: «The same creative is judged on [spend, orders, revenue, roas,
+     * conversion_rate, impressions, clicks, ctr, cpm, cpc] by the content surfaces and on [spend,
+     * orders, cpa, revenue, roas, …] by the client report.» The first list is `headline($objective,
+     * $figures)`; the second is `headline($objective)` — the FAMILY's list, before this creative's own
+     * availability is applied. It differs whenever a family metric this row cannot answer is struck,
+     * which for a sales creative that recorded no conversions is `cpa` and `aov` — the ordinary,
+     * correct case.
+     *
+     * No surface asks the second question about a creative any more. `CreativeRows`,
+     * `CreativeAnalysisController` and `SharedCreativeView` all pass the figures; the last of them was
+     * the «client report detail» this line was named after, and it was fixed. So the instrument was
+     * reporting a divergence between the product and a call nobody makes — a defect of its own, on
+     * every creative whose family wants more than it can answer, which is most of a real account.
+     *
+     * The rung now compares what the surfaces ACTUALLY resolve, and the family's list stays printed as
+     * context and labelled as context.
+     */
+    public function test_a_creative_whose_family_wants_more_than_it_can_answer_still_reconciles(): void
+    {
+        $creative = $this->salesCreativeThatReportedNoConversions();
+
+        $this->artisan('content:reconcile', ['creative' => (string) $creative->getKey(), '--strict' => true])
+            ->expectsOutputToContain('RUNG 8 — the canonical set, as each surface resolves it')
+            ->expectsOutputToContain('the CARD')
+            ->expectsOutputToContain('Content Analytics, client report detail')
+            ->expectsOutputToContain('context, not a surface')
+            ->expectsOutputToContain('RECONCILED')
+            ->doesntExpectOutputToContain('by the client report')
+            ->assertExitCode(0);
+    }
+
+    /** A sales creative that ran and recorded no conversions: its family wants `cpa`, the row cannot. */
+    private function salesCreativeThatReportedNoConversions(): ExternalCreative
+    {
+        $campaign = UnifiedCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'client_workspace_id' => Project::withoutGlobalScopes()->whereKey($this->project->getKey())->value('client_workspace_id'),
+            'name' => 'Sale', 'objective' => 'sales', 'status' => 'active',
+        ]);
+
+        $creative = ExternalCreative::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'campaign_id' => $campaign->getKey(),
+            'provider' => 'snapchat',
+            'external_creative_id' => 'cr-no-conversions',
+            'name' => 'Sales creative', 'format' => 'image', 'status' => 'active', 'source_type' => 'api',
+        ]);
+
+        DB::table('creative_daily_metrics')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $this->project->getKey(),
+            'creative_id' => $creative->getKey(),
+            'campaign_id' => $campaign->getKey(),
+            'metric_date' => Carbon::today()->subDay()->toDateString(),
+            'spend' => 500, 'impressions' => 40000, 'clicks' => 900,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        return $creative;
+    }
+
+    /**
      * A diagnosis that changes the thing it diagnoses is not one.
      *
      * ## This guard was VACUOUS for the write that matters, and an injection proved it
