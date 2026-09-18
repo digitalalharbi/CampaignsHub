@@ -289,6 +289,19 @@ final class SharedLinkHiddenMoneyGuardTest extends TestCase
         return array_values(array_unique(array_filter($s, static fn (string $x): bool => strlen(ltrim(preg_replace('/\D/', '', $x) ?? '', '0')) >= 3)));
     }
 
+    /**
+     * The pattern that decides whether a figure is STATED in a surface.
+     *
+     * The digits may not sit inside a longer word. They used to be bounded by digits alone, so the
+     * figure 526 matched the middle of the content key `8b455ba5ebce6e61c6aa526b` and the guard
+     * reported a leak that was a hexadecimal id — a detector bug, and one that fires only when a
+     * random id happens to contain the digits, which is the worst kind of red.
+     */
+    private function statement(string $spelling): string
+    {
+        return '/(?<![\w.,])'.preg_quote($spelling, '/').'(?![\w]|\.\d)/u';
+    }
+
     /** @param list<string> $money */
     private function assertHides(array $flags, array $money): void
     {
@@ -309,7 +322,7 @@ final class SharedLinkHiddenMoneyGuardTest extends TestCase
         foreach ($this->surfaces($snapshot, $live) as $name => $text) {
             foreach ($figures as $figure) {
                 foreach ($this->spellings($figure) as $spelling) {
-                    if (preg_match('/(?<![\d.,])'.preg_quote($spelling, '/').'(?![\d]|\.\d)/u', $text, $m, PREG_OFFSET_CAPTURE)) {
+                    if (preg_match($this->statement($spelling), $text, $m, PREG_OFFSET_CAPTURE)) {
                         $at = $m[0][1];
                         $leaks[] = "{$name}: «{$spelling}» … ".substr($text, max(0, $at - 90), 130);
                         break;
@@ -319,6 +332,20 @@ final class SharedLinkHiddenMoneyGuardTest extends TestCase
         }
 
         $this->assertSame([], array_values(array_unique($leaks)), 'a hidden figure reached a client surface');
+    }
+
+    /** The guard reads a figure that is STATED, and digits inside an id state nothing. */
+    public function test_digits_inside_an_identifier_are_not_read_as_a_stated_figure(): void
+    {
+        $inAnId = '{"content_key":"8b455ba5ebce6e61c6aa526b","name":"Burn tiktok A"}';
+
+        $this->assertSame(0, preg_match($this->statement('526'), $inAnId), 'a hexadecimal id was read as a money figure');
+        $this->assertSame(0, preg_match($this->statement('526'), '{"token":"x526y"}'));
+
+        // …and a figure the reader can actually see is still caught, in both scripts.
+        $this->assertSame(1, preg_match($this->statement('526'), '{"kpi":"الإيرادات","value":"526 SAR"}'));
+        $this->assertSame(1, preg_match($this->statement('526'), 'الإيرادات 526 ريال'));
+        $this->assertSame(1, preg_match($this->statement('1,526.00'), 'Revenue: 1,526.00 SAR'));
     }
 
     public function test_a_link_hiding_spend_discloses_no_spend_or_anything_derived_from_it_anywhere(): void
