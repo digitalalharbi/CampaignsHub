@@ -223,6 +223,72 @@ final class SnapchatCreativeAssetsTest extends TestCase
     }
 
     /**
+     * A FULLY DYNAMIC collection has no top snap to fetch, and the row says which shape it is.
+     *
+     * Production, runs 35289582816 / 35289616877 / 35289734718 / 35289766267: four promoted Snapchat
+     * collections come back from the creatives edge with `top_snap_media_id` ABSENT, so the media
+     * sweep has nothing to ask for and every one of them reached the reader as «the platform exposes
+     * the tiles; this product does not fetch them yet» — a statement about OUR gap that is false here.
+     *
+     * Snapchat's own guide says why: a Collection creative may be rendered dynamically, and then «the
+     * top snap is a product picked dynamically based on the Product Catalog (product_set)». Its
+     * documented body carries `render_type: DYNAMIC` and `dynamic_render_properties`, and carries no
+     * `top_snap_media_id` at all — there is no file to have sent.
+     *
+     * So the platform's own word is kept: the format names the shape AND its render. Nothing is
+     * fetched, nothing is invented, and the surfaces can tell «composed per product» from «we did not
+     * ask», which is the whole difference between a provider fact and a defect of ours.
+     *
+     * @see https://developers.snap.com/api/marketing-api/Ads-API/dynamic-collections-ads
+     */
+    public function test_a_dynamically_rendered_collection_is_named_as_one_and_asks_for_no_media(): void
+    {
+        Http::fake([
+            '*/creatives*' => Http::response(['creatives' => [
+                ['creative' => [
+                    'id' => 'cr-dynamic',
+                    'name' => 'Dynamic collection',
+                    'type' => 'COLLECTION',
+                    'render_type' => 'DYNAMIC',
+                    'ad_product' => 'SNAP_AD',
+                    'dynamic_render_properties' => [
+                        'dynamic_template_id' => 'tpl-1',
+                        'product_set_id' => 'ps-1',
+                    ],
+                    'collection_properties' => [
+                        'interaction_zone_id' => 'zone-1',
+                        'default_fallback_interaction_type' => 'WEB_VIEW',
+                    ],
+                ]],
+                ['creative' => [
+                    'id' => 'cr-static',
+                    'name' => 'Static collection',
+                    'type' => 'COLLECTION',
+                    'render_type' => 'STATIC',
+                    'top_snap_media_id' => 'me-1',
+                ]],
+            ]], 200),
+            '*get_media_by_ids*' => Http::response(['media' => [
+                ['media' => ['id' => 'me-1', 'type' => 'IMAGE', 'download_link' => 'https://cf.snapchat.com/hero.jpg']],
+            ]], 200),
+            '*' => Http::response([], 200),
+        ]);
+
+        $creatives = $this->creatives();
+
+        $this->assertSame('collection_dynamic', $creatives['cr-dynamic']['format'], 'the platform said this collection is composed per product, and the row did not keep it');
+        $this->assertArrayNotHasKey('asset_url', $creatives['cr-dynamic'], 'a dynamic collection has no hero, and none may be invented for it');
+        $this->assertArrayNotHasKey('video_url', $creatives['cr-dynamic']);
+
+        // A STATIC collection is untouched: it has a top snap, and it is fetched exactly as before.
+        $this->assertSame('collection', $creatives['cr-static']['format']);
+        $this->assertSame('https://cf.snapchat.com/hero.jpg', $creatives['cr-static']['asset_url'] ?? null);
+
+        // Nothing was asked for the dynamic one — there is no media id to ask about.
+        Http::assertNotSent(static fn ($r): bool => str_contains((string) $r->body(), 'cr-dynamic'));
+    }
+
+    /**
      * A type this `match` does not know is KEPT, not discarded.
      *
      * `default => null` threw the platform's answer away, and `ImportExternalStructure` then wrote

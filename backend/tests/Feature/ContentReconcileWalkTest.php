@@ -139,7 +139,10 @@ final class ContentReconcileWalkTest extends TestCase
             ['creative' => ['id' => 'cr-other', 'type' => 'SNAP_AD', 'top_snap_media_id' => 'media-secret-2']],
             ['creative' => [
                 'id' => 'cr-collection', 'name' => 'CONFIDENTIAL NAME', 'type' => 'COLLECTION',
+                'render_type' => 'DYNAMIC',
+                'ad_product' => 'SNAP_AD',
                 'top_snap_media_id' => 'media-secret-1',
+                'dynamic_render_properties' => ['dynamic_template_id' => 'tpl-secret', 'product_set_id' => 'ps-secret'],
                 'collection_properties' => ['interaction_zone_id' => 'zone-secret'],
             ]],
         ]], '2026-09-16 00:00:00');
@@ -160,11 +163,20 @@ final class ContentReconcileWalkTest extends TestCase
         $this->artisan('content:reconcile', ['creative' => (string) $creative->getKey()])
             ->expectsOutputToContain('RUNG 11')
             ->expectsOutputToContain('in the creatives edge : yes — type COLLECTION')
+            /*
+             * The two words that decide a collection with no top snap: Snapchat renders some of them
+             * dynamically, and those have no hero to fetch at all. The key list is wrapped, because a
+             * workflow log truncates a long line and that list is the evidence.
+             */
+            ->expectsOutputToContain('render_type           : DYNAMIC')
+            ->expectsOutputToContain('ad_product            : SNAP_AD')
+            ->expectsOutputToContain('dynamic render        : present — keys: dynamic_template_id, product_set_id')
             ->expectsOutputToContain('top_snap_media_id     : present')
             ->expectsOutputToContain('collection_properties.interaction_zone_id')
             ->expectsOutputToContain('ads naming it         : 1 (ACTIVE 1)')
             ->expectsOutputToContain('media lookup          : answered for this snap — type IMAGE, media_status PENDING_UPLOAD, sub_request_status SUCCESS, download_link absent')
             ->doesntExpectOutputToContain('media-secret')
+            ->doesntExpectOutputToContain('ps-secret')
             ->doesntExpectOutputToContain('zone-secret')
             ->doesntExpectOutputToContain('CONFIDENTIAL NAME')
             ->doesntExpectOutputToContain('cf.test')
