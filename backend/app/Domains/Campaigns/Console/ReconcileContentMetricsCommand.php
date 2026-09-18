@@ -49,9 +49,10 @@ use Illuminate\Support\Facades\DB;
  *                  and any key it drops is a key those surfaces cannot show.
  *   CARD           `CreativeRows::present()` — `headline_metrics` plus the row.
  *   ROSTER         `CreativeRows::lean()` — the report's own row for the same creative.
- *   HEADLINE       `headline($objective, $figures)` against `headline($objective)`. The card passes
- *                  the figures and the client report does not, so the same creative is promised two
- *                  different metric sets one surface apart.
+ *   HEADLINE       the CARD's list, built by `CreativeRows`, against the one `CreativeAnalysisController`
+ *                  and `SharedCreativeView` both build from `CreativeMetrics`. Two surfaces, one
+ *                  creative, one window — and the family's own list printed beside them as the context
+ *                  that explains which metrics the row's availability struck.
  *
  * ## The one thing it must never do
  *
@@ -177,9 +178,33 @@ final class ReconcileContentMetricsCommand extends Command
         $this->line('    answered   : '.(is_array($roster['metrics'] ?? null) ? $this->answered($roster['metrics']) : 'no figures'));
 
         $this->line('');
-        $this->line('RUNG 8 — headline(), asked the two ways the product asks it');
-        $this->line('    with this row\'s figures (content surfaces) : '.implode(', ', $withFigures));
-        $this->line('    without them (client report detail)         : '.implode(', ', $withoutFigures));
+        /*
+         * OWNER CONTENT P0 — this rung compares SURFACES, and for a while it compared two ways of
+         * calling one service.
+         *
+         * It read `headline($objective, $figures)` against `headline($objective)` and called the
+         * second «the client report detail». That was true once and has not been for some time:
+         * `SharedCreativeView` passes the figures, and so do `CreativeRows` and
+         * `CreativeAnalysisController` — every surface that judges a creative. The figure-less call
+         * survives in one place only, `ContentIntelligence::comparableMetric()`, which is choosing a
+         * metric to compare FORMATS by and checks availability itself.
+         *
+         * So the difference the rung reported was the availability filter doing its job: a sales
+         * creative that recorded no conversions cannot answer `cpa` or `aov`, the family wants both,
+         * and the card correctly drops them. On Production it fired for creative aff30ee3 and reads
+         * as a cross-surface defect, which is the one thing this instrument must never invent.
+         *
+         * What is compared now is what the surfaces actually resolve: the CARD's list, built by
+         * `CreativeRows`, against the list `CreativeAnalysisController` and `SharedCreativeView` both
+         * build from `CreativeMetrics`. The family's own list is still printed, because it explains
+         * WHY a metric is missing — and it is labelled as the context it is.
+         */
+        $cardHeadline = array_values(array_map(strval(...), (array) ($card['headline_metrics'] ?? [])));
+
+        $this->line('RUNG 8 — the canonical set, as each surface resolves it');
+        $this->line('    the CARD (CreativeRows)                     : '.implode(', ', $cardHeadline));
+        $this->line('    Content Analytics, client report detail     : '.implode(', ', $withFigures));
+        $this->line('    the family\'s own list, before this row\'s availability (context, not a surface): '.implode(', ', $withoutFigures));
 
         $preview = app(CreativePresenter::class)->preview($creative);
         $this->line('');
@@ -266,9 +291,20 @@ final class ReconcileContentMetricsCommand extends Command
             }
         }
 
-        if ($withFigures !== $withoutFigures) {
-            $this->divergences[] = 'The same creative is judged on ['.implode(', ', $withFigures).'] by the '
-                .'content surfaces and on ['.implode(', ', $withoutFigures).'] by the client report (RUNG 8).';
+        /*
+         * A divergence is two SURFACES disagreeing, and nothing else.
+         *
+         * The card's list is built by `CreativeRows` and the detail surfaces' by `CreativeMetrics`,
+         * from the same figures over the same window — so they can only differ if one of those paths
+         * has drifted, which is exactly what this instrument is for. Comparing either of them with
+         * the family's own list reports the availability filter as a defect, on most of a real
+         * account.
+         */
+        $cardHeadline = array_values(array_map(strval(...), (array) ($card['headline_metrics'] ?? [])));
+
+        if ($cardHeadline !== $withFigures) {
+            $this->divergences[] = 'The CARD judges this creative on ['.implode(', ', $cardHeadline).'] while Content '
+                .'Analytics and the client report detail judge it on ['.implode(', ', $withFigures).'] (RUNG 8).';
         }
 
         $headline = array_values(array_filter(
