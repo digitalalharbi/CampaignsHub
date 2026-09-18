@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Analytics;
 
-
 /**
  * REPORT-OBJECTIVE-ANALYTICS-001 — objective-aware KPI blocks, best/weakest platform and content,
  * trend and contribution, as one report section.
