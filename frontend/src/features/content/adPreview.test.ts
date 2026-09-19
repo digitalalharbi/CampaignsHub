@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { absenceLabel, aspectClass, frameAspect, posterSource, previewShape, readPreview } from './adPreview'
+import { absenceLabel, absenceShort, aspectClass, frameAspect, posterSource, previewShape, readPreview } from './adPreview'
 import type { CreativePreview } from './api'
 
 /**
@@ -321,5 +321,53 @@ describe('the frame an ad is drawn in', () => {
       expect(already, `«${state}» and «${already}» are the same sentence — a silence lost its meaning`).toBeUndefined()
       said.set(sentence, state)
     }
+  })
+})
+
+describe('a dynamic collection is composed per product, not missing a hero', () => {
+  /**
+   * Production: four promoted Snapchat collections carry no top snap at all, because Snapchat renders
+   * them dynamically — «a product picked dynamically based on the Product Catalog». The server now
+   * says so in the envelope's note, with the state `available`, because nothing is absent.
+   *
+   * The reading has to CARRY that sentence: the generic «the platform sent no hero frame» is a claim
+   * about a missing file, and for these there is no file to miss.
+   */
+  const dynamic = {
+    kind: 'collection',
+    state: 'available',
+    image_url: null,
+    thumbnail_url: null,
+    video_url: null,
+    aspect: null,
+    expires_at: null,
+    note_ar: 'إعلان تشكيلة ديناميكية — تختار المنصة صورته الرئيسية من كتالوج المنتجات لكل منتج عند العرض، فلا يوجد ملف واحد له.',
+    note_en: 'A dynamic collection ad — the platform picks its top snap from the product catalogue per product at delivery, so it has no single file.',
+    cards: null,
+    cards_reported: false,
+    cards_withheld: 0,
+  } as unknown as CreativePreview
+
+  it('states the platform’s own sentence rather than a missing hero', () => {
+    const reading = readPreview(dynamic, false)
+
+    expect(reading.kind).toBe('collection')
+    expect(posterSource(reading)).toBeNull()
+    expect(absenceLabel(reading, false)).toContain('per product')
+    expect(absenceLabel(reading, false)).not.toContain('sent no hero frame')
+    // The reading picks the language's own note, so the Arabic one is read from an Arabic reading.
+    expect(absenceLabel(readPreview(dynamic, true), true)).toContain('لكل منتج')
+  })
+
+  it('has a short label that says it is composed rather than absent', () => {
+    expect(absenceShort(readPreview(dynamic, false), false)).toBe('Composed per product')
+  })
+
+  /** And a collection the platform simply did not send a hero for keeps its own, narrower sentence. */
+  it('leaves a collection with no note saying exactly what it said before', () => {
+    const silent = { ...dynamic, note_ar: null, note_en: null } as unknown as CreativePreview
+
+    expect(absenceLabel(readPreview(silent, false), false)).toContain('sent no hero frame')
+    expect(absenceShort(readPreview(silent, false), false)).toBe('Collection, no hero')
   })
 })
