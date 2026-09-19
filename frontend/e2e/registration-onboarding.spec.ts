@@ -118,9 +118,80 @@ async function registerAndVerify(
    * different fixes, and the failure could not tell them apart. Now it can.
    */
   const loginAnswers: string[] = []
+
+  /*
+   * The cookie the sign-in is SUPPOSED to replace, and the one it actually issued.
+   *
+   * `login()` calls `session()->regenerate()`, so a sign-in that worked always answers with a
+   * `Set-Cookie` carrying a NEW session id. Two different defects both end as «a session cookie is
+   * present and /auth/me answers 401», and they need opposite fixes: the browser never adopted the
+   * new id — the `Set-Cookie` was dropped, so the jar still holds the guest session it arrived
+   * with — or it adopted an id whose record the store does not hold, because the session is written
+   * in `terminate()`, after the response has already gone. Only the VALUE tells those apart, and the
+   * value was never recorded, so every occurrence so far could be read either way.
+   *
+   * A fingerprint, never the cookie: a session id in a CI log is a working credential.
+   *
+   * A DIGEST of the whole value rather than its first characters. The cookie is an encrypted
+   * payload, so every one of them begins `eyJpdi` — the first version printed that prefix and read
+   * «identical before and after» on a sign-in that had worked perfectly, which is the one answer
+   * this field must never give by construction.
+   */
+  const sessionFingerprint = async (): Promise<string> => {
+    const held = (await page.context().cookies()).find((c) => /session/i.test(c.name))
+    if (held === undefined) return 'none'
+
+    let digest = 5381
+    for (const ch of held.value) digest = ((digest * 33) ^ ch.charCodeAt(0)) >>> 0
+
+    return `#${digest.toString(16)}(${held.value.length} chars)`
+  }
+  const cookieBeforeLogin = await sessionFingerprint()
+  const loginSetCookie: string[] = []
+
+  /*
+   * `/switch` is the CATCH-ALL `resolvePostAuthOutcome` falls to when `/auth/memberships` THROWS.
+   * It is NOT «this account holds several workspaces», and this ledger has read it the second way
+   * twice and diagnosed from there. What that call answered is the fact that separates them, and
+   * nothing was recording it.
+   */
+  const membershipAnswers: string[] = []
+
+  /*
+   * A request that never got an answer is not a status code — and it is what the dev server does
+   * under load. A local run of this very file logged «http proxy error: /api/v1/plans — socket hang
+   * up» while all 21 tests passed. A hung-up `/auth/memberships` lands on `/switch` with nothing
+   * wrong with the session at all, which is a reading this failure could not previously offer.
+   */
+  const apiFailures: string[] = []
+
   page.on('response', (r) => {
-    if (r.url().includes('/auth/login')) {
-      loginAnswers.push(`${r.request().method()} ${r.status()}`)
+    const url = r.url()
+
+    if (url.includes('/auth/memberships')) {
+      membershipAnswers.push(`${r.request().method()} ${r.status()}`)
+    }
+
+    if (! url.includes('/auth/login')) {
+      return
+    }
+
+    loginAnswers.push(`${r.request().method()} ${r.status()}`)
+    void r
+      .headersArray()
+      .then((headers) => {
+        for (const header of headers) {
+          if (header.name.toLowerCase() !== 'set-cookie') continue
+          // The name and its ATTRIBUTES. The value is cut out rather than shortened, because this
+          // string is printed into a log anybody with the repository can read.
+          loginSetCookie.push(header.value.replace(/=[^;]*/, '=<redacted>').replace(/\s+/g, ' '))
+        }
+      })
+      .catch(() => {})
+  })
+  page.on('requestfailed', (r) => {
+    if (r.url().includes('/api/')) {
+      apiFailures.push(`${new URL(r.url()).pathname} ${r.failure()?.errorText ?? 'failed'}`)
     }
   })
 
@@ -206,7 +277,12 @@ async function registerAndVerify(
     expect(
       url,
       `signed in and landed on ${url} rather than the wizard; the account reports ${state}; `
-        + `login answered [${loginAnswers.join(', ') || 'no /auth/login response seen'}]; cookies: ${cookie}`,
+        + `login answered [${loginAnswers.join(', ') || 'no /auth/login response seen'}]; `
+        + `login set-cookie [${loginSetCookie.join(' | ') || 'none — the sign-in issued no cookie'}]; `
+        + `session cookie before login ${cookieBeforeLogin}, now ${await sessionFingerprint()}; `
+        + `/auth/memberships answered [${membershipAnswers.join(', ') || 'never asked'}] `
+        + `(a landing on /switch means this call FAILED, not that the account holds several workspaces); `
+        + `api requests with no answer [${apiFailures.join(', ') || 'none'}]; cookies: ${cookie}`,
     ).toMatch(/\/onboarding/)
   }).toPass({ timeout: 20000 })
 }
