@@ -9,6 +9,8 @@ use App\Domains\Integrations\Catalogue\ProviderDisplayName;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
+use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAnnotation;
 use App\Domains\Reports\Support\ReportScope;
@@ -322,6 +324,20 @@ final class ReportGenerator
              * is partly an artefact of which campaigns each figure counted.
              */
             'objective_performance_previous' => ClientEntityBoundary::objectivePerformance($scope->objectivePerformance()->build($prevFrom, $prevTo)),
+            /*
+             * REPORT-OBJECTIVE-ANALYTICS-001 — KPI blocks per objective family, best/weakest platform
+             * and content above a minimum volume, trend and contribution. The live link builds the
+             * same section with the same class; the PDF renders this snapshot, so all three agree.
+             */
+            ObjectiveAnalyticsSection::KEY => (new ObjectiveAnalyticsSection)->build(new ObjectiveAnalyticsInput(
+                from: $from,
+                to: $to,
+                projectIds: $scope->projectIds === [] ? null : $scope->projectIds,
+                campaignIds: $scope->resolvedCampaignIds(),
+                providers: $scope->providers === [] ? null : $scope->providers,
+                accountIds: $scope->accountIds === [] ? null : $scope->accountIds,
+                content: array_values($ads['roster']),
+            )),
             'summary' => $this->executiveSummary($lens, $totals, $delta, $platforms, $campaigns, $currency ?? ''),
             /*
              * The professional analysis — §14.7.

@@ -31,6 +31,8 @@ import { SPECS } from '@/features/analytics/metricCatalog'
 import { type ReportMetric, type ResultPart, creativeReadings, mixedResultsNote, previousReading, reportMetrics, trendSeries } from './reportMetrics'
 import { useUi } from '@/stores/ui'
 import { ReportOutline } from './ReportOutline'
+import { ObjectiveAnalyticsSection } from './ObjectiveAnalyticsSection'
+import type { ObjectiveAnalytics } from './objectiveAnalytics'
 import { Num } from '@/components/ui/Num'
 
 export interface Slide { id: string; type: string; platform?: string; order: number; visible: boolean }
@@ -184,6 +186,8 @@ export interface ReportData {
    * one heading, and the gap between them is not a change in performance.
    */
   objective_performance_previous?: ObjectivePerformance
+  /** REPORT-OBJECTIVE-ANALYTICS-001 — KPI blocks per objective family, leaders and contribution. */
+  objective_analytics?: ObjectiveAnalytics | null
   slides?: Slide[]
   disclaimer?: ResolvedDisclaimer | null
   mode?: string
@@ -1215,6 +1219,7 @@ function NextStepsSlide({ data }: { data: ReportData }) {
  * spend produced it rather than having to trust it.
  */
 function ObjectiveSplitSlide({ data }: { data: ReportData }) {
+  const ar = useUi((st) => st.locale) === 'ar'
   const op = data.objective_performance
   if (!op) {
     return (
@@ -1320,6 +1325,11 @@ function ObjectiveSplitSlide({ data }: { data: ReportData }) {
           </p>
         </div>
       )}
+
+      {/* REPORT-OBJECTIVE-ANALYTICS-001 — the same section the live link and the PDF carry. */}
+      <div className="mt-5">
+        <ObjectiveAnalyticsSection section={data.objective_analytics} currency={c} ar={ar} />
+      </div>
     </div>
   )
 }

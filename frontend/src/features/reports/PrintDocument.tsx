@@ -4,6 +4,7 @@ import { moneyExact } from '@/features/analytics/format'
 import { mixedResultsNote, type ResultPart } from './reportMetrics'
 import { brand, productName } from '@/lib/brand'
 import { ReportWatermark } from './ReportWatermark'
+import { drawableFamilies, formatKpi, formatRankingValue, rankingMetricLabel, type ObjectiveRanking, type RankingEnd } from './objectiveAnalytics'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 
 /**
@@ -432,6 +433,42 @@ export function PrintDocument({
         </section>
       )}
       <Absent sectionKey="objectives" fallback="Nothing was spent on any objective in this window." />
+      {/*
+        REPORT-OBJECTIVE-ANALYTICS-001 — one block per objective family, from the same snapshot section
+        the screen draws: its own KPIs, strongest and weakest platform and content above a minimum
+        volume, and each platform's share of the family's outcome. No figure spans two families.
+      */}
+      {section('objectives')?.present !== false && drawableFamilies(data.objective_analytics).map((block) => {
+        const tiles = block.kpis
+        const ends = (ranking: ObjectiveRanking | null | undefined, content: boolean): string | null => {
+          if (!ranking?.best || !ranking.weakest) return null
+          const who = (e: RankingEnd) => content
+            ? `${e.name || 'Content'} (${String(e.provider ?? '')})`
+            : String(e.provider ?? '')
+          const metric = rankingMetricLabel(ranking.metric, false)
+
+          return `Strongest: ${who(ranking.best)} — ${metric} ${formatRankingValue(ranking.metric, ranking.best.value, currency)} · `
+            + `Weakest: ${who(ranking.weakest)} — ${metric} ${formatRankingValue(ranking.metric, ranking.weakest.value, currency)}`
+        }
+        const platformEnds = ends(block.platform_ranking, false)
+        const contentEnds = ends(block.content_ranking, true)
+        const contribution = block.contribution && block.contribution.rows.some((r) => r.share !== null) ? block.contribution : null
+
+        return (
+          <section key={block.family} className="doc-section" data-testid={`print-objective-family-${block.family}`}>
+            <h3>{block.label_en}</h3>
+            <Table head={tiles.map((k) => k.label_en)} rows={[tiles.map((k) => formatKpi(k, currency))]} />
+            {platformEnds && <p>Platforms — {platformEnds}</p>}
+            {contentEnds && <p>Content — {contentEnds}</p>}
+            {contribution && (
+              <Table
+                head={['Platform', `Share of ${contribution.label_en.toLowerCase()}`]}
+                rows={contribution.rows.map((r) => [r.provider, r.share === null ? '—' : `${(r.share * 100).toFixed(1)}%`])}
+              />
+            )}
+          </section>
+        )
+      })}
 
       {/*
         CLIENT-REPORT-ENTITY-BOUNDARY-001 — the campaign table is gone from the printed document.
