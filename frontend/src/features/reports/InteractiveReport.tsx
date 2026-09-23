@@ -34,9 +34,15 @@ import { ReportOutline } from './ReportOutline'
 import { ObjectiveAnalyticsSection } from './ObjectiveAnalyticsSection'
 import type { ObjectiveAnalytics } from './objectiveAnalytics'
 import { Num } from '@/components/ui/Num'
+import { AttentionBlocks } from './AttentionBlocks'
+import type { AttentionItem } from './attention'
 import { hideBrokenLogo } from './sharedBranding'
 
-export interface Slide { id: string; type: string; platform?: string; order: number; visible: boolean }
+export interface Slide {
+  id: string; type: string; platform?: string; order: number; visible: boolean
+  /** `__attention` on a fixed printed page only: which slice of the items this page carries. */
+  range?: [number, number]
+}
 type Row = Record<string, number | string | null>
 export interface ReportSection {
   key: string
@@ -53,6 +59,8 @@ export interface ReportSection {
 }
 
 export interface ReportData {
+  /** REPORT-RECOMMENDATION-BLOCKS-001 — «what needs attention», already cut for this reader by the server. */
+  attention?: AttentionItem[] | null
   period: { from: string; to: string }
   /** REPORT-DRILLDOWN-001 — the PDF's optional platform drill-down; sent only when the operator enabled it. */
   platform_drilldowns?: import('./PrintPlatformDrilldowns').PrintPlatformDrilldown[]
@@ -358,10 +366,14 @@ export function SlideBody({ slide, data, meta, paged = false }: {
         : <DataQualitySlide data={data} />
     case 'budget': return <BudgetSlide data={data} />
     case 'next_steps': return <NextStepsSlide data={data} />
+    case '__attention': return <AttentionBlocks items={slide.range ? (data.attention ?? []).slice(...slide.range) : data.attention} ar />
     case '__methodology': return <PerformanceNotice data={data.disclaimer} variant="methodology" objective={data.objective} />
     default: return null
   }
 }
+
+/** REPORT-RECOMMENDATION-BLOCKS-001 — the attention page, placed after every template slide. */
+export const ATTENTION_SLIDE: Slide = { id: '__attention', type: '__attention', order: 9998, visible: true }
 
 const OBJECTIVE_LABEL: Record<string, string> = {
   sales: 'المبيعات', awareness: 'الوعي', traffic: 'الزيارات', leads: 'العملاء المحتملون', app_installs: 'تثبيت التطبيق', video: 'الفيديو', custom: 'مخصص',
@@ -382,11 +394,13 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
       // Drop the Next Steps slide entirely when there are no approved steps (never show it empty).
       .filter((s) => s.type !== 'next_steps' || (data.next_steps?.length ?? 0) > 0)
       .sort((a, b) => a.order - b.order)
+    // The story ends with what needs attention — a page only when the server sent something to show.
+    if ((data.attention?.length ?? 0) > 0) visible.push(ATTENTION_SLIDE)
     if (data.disclaimer) {
       visible.push({ id: '__methodology', type: '__methodology', order: 9999, visible: true })
     }
     return visible
-  }, [data.slides, data.disclaimer, data.next_steps])
+  }, [data.slides, data.disclaimer, data.next_steps, data.attention])
   const cur = slides[i]
 
   const render = (s: Slide) => <SlideBody slide={s} data={data} meta={meta} />

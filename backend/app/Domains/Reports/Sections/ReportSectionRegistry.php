@@ -102,7 +102,8 @@ final class ReportSectionRegistry
                 key: 'recommendations',
                 titleAr: 'الملاحظات والتوصيات',
                 titleEn: 'Insights & recommendations',
-                payloadKeys: ['findings', 'observations', 'recommendations', 'next_steps'],
+                // REPORT-RECOMMENDATION-BLOCKS-001 — `attention` is the «what needs attention» blocks.
+                payloadKeys: ['findings', 'observations', 'recommendations', 'next_steps', 'attention'],
             ),
             new ReportSection(
                 key: 'detailed_tables',
@@ -167,7 +168,7 @@ final class ReportSectionRegistry
         $this->supportWhen('content_performance', 'objective_has_a_ranking_metric', static fn (SectionContext $c): bool => $c->value('ads_absent_reason') !== 'no_rankable_metric_for_this_objective');
         $this->availableWhen('content_performance', 'has_content', static fn (SectionContext $c): bool => $c->rows('ads') !== [] || $c->rows('ads_roster') !== []);
 
-        $this->availableWhen('recommendations', 'has_an_insight', static fn (SectionContext $c): bool => $c->rows('recommendations') !== [] || $c->rows('findings') !== [] || $c->rows('next_steps') !== []);
+        $this->availableWhen('recommendations', 'has_an_insight', static fn (SectionContext $c): bool => $c->rows('recommendations') !== [] || $c->rows('findings') !== [] || $c->rows('next_steps') !== [] || $c->rows('attention') !== []);
 
         $this->availableWhen('detailed_tables', 'has_rows', static fn (SectionContext $c): bool => $c->rows('platforms') !== [] || $c->rows('campaigns') !== []);
 

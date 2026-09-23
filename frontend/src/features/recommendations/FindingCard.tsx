@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Minus } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { usePortalPath } from '@/app/portalPath'
 import { Badge } from '@/components/ui/Badge'
 import { Num } from '@/components/ui/Num'
@@ -7,13 +7,12 @@ import { MetricLineChart, ProgressRing } from '@/features/analytics/charts'
 import { platformColor } from '@/features/analytics/components'
 import { lastNDays, useTimeseries } from '@/features/analytics/api'
 import { moneyExact, num, percent, ratio } from '@/features/analytics/format'
-import { metricLabel } from '@/features/analytics/metricLabels'
-import { SPECS } from '@/features/analytics/metricCatalog'
+import { FindingKpiTile as KpiTile, metricName as nameOf } from './FindingKpiTile'
 import { providerLabel } from '@/features/campaigns/labels'
 import type { ActionSeverity } from './actionCenter'
-import { relativeChange, type Finding, type FindingKpi, type FindingNature } from './findings'
+import type { Finding, FindingNature } from './findings'
 import {
-  actionLabel, evidenceLabel, extraMetricLabel, factLabel, headline, impactBasis, impactLabel, natureLabel, severityLabel,
+  actionLabel, evidenceLabel, factLabel, headline, impactBasis, impactLabel, natureLabel, severityLabel,
 } from './findingCopy'
 
 /**
@@ -111,60 +110,6 @@ export function FindingCard({ finding, projectId, ar, currency }: { finding: Fin
         </Link>
       </footer>
     </article>
-  )
-}
-
-/** The catalogue's name first — it carries CPA, ROAS and CTR — then the shorter label map. */
-function nameOf(key: string, ar: boolean): string {
-  const spec = SPECS[key]
-  return extraMetricLabel(key, ar) ?? (spec ? (ar ? spec.label.ar : spec.label.en) : metricLabel(key, ar))
-}
-
-function formatKpi(k: FindingKpi, v: number | null): string {
-  if (v === null) return '—'
-  if (k.kind === 'money') return moneyExact(v, k.currency ?? null)
-  if (k.kind === 'ratio') return ratio(v)
-  if (k.kind === 'percent') return percent(v, 2)
-  return num(v)
-}
-
-/**
- * A figure before and now, with the direction coloured by what is GOOD for that metric — a CPA that
- * fell is green. Where there is no before, only the current figure is shown: an arrow from nothing
- * would claim a movement nobody measured.
- */
-function KpiTile({ kpi, ar }: { kpi: FindingKpi; ar: boolean }) {
-  const change = relativeChange(kpi)
-  const better = change === null || change === 0 ? null : (change > 0) === kpi.higherIsBetter
-  const Icon = change === null || change === 0 ? Minus : change > 0 ? ArrowUpRight : ArrowDownRight
-  const max = Math.max(Math.abs(kpi.before ?? 0), Math.abs(kpi.current ?? 0))
-
-  return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-border p-2.5" data-testid={`kpi-${kpi.key}`}>
-      <dt className="truncate text-[11px] text-text-muted">{nameOf(kpi.key, ar)}</dt>
-      <dd className="flex flex-wrap items-baseline gap-x-2">
-        <span className="text-base font-extrabold text-text-primary" data-testid="kpi-current"><Num>{formatKpi(kpi, kpi.current)}</Num></span>
-        {change !== null && change !== 0 && (
-          <span className={`inline-flex items-center text-xs font-bold ${better ? 'text-success' : 'text-danger'}`} data-testid="kpi-change">
-            <Icon size={12} aria-hidden />
-            <Num>{percent(Math.abs(change), 0)}</Num>
-          </span>
-        )}
-      </dd>
-      {kpi.before !== null && (
-        <>
-          <dd className="text-[11px] text-text-muted" data-testid="kpi-before">
-            {ar ? 'قبل' : 'Before'}: <Num>{formatKpi(kpi, kpi.before)}</Num>
-          </dd>
-          {max > 0 && kpi.current !== null && (
-            <dd className="flex flex-col gap-1" aria-hidden>
-              <span className="h-1.5 rounded-full bg-text-muted/40" style={{ width: `${(Math.abs(kpi.before) / max) * 100}%` }} />
-              <span className={`h-1.5 rounded-full ${better === false ? 'bg-danger' : better ? 'bg-success' : 'bg-brand-600'}`} style={{ width: `${(Math.abs(kpi.current) / max) * 100}%` }} />
-            </dd>
-          )}
-        </>
-      )}
-    </div>
   )
 }
 

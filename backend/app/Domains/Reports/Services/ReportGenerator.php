@@ -13,6 +13,9 @@ use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAnnotation;
+use App\Domains\Reports\Services\Attention\AttentionAudience;
+use App\Domains\Reports\Services\Attention\ObjectivePerformanceFigures;
+use App\Domains\Reports\Services\Attention\ReportAttention;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
@@ -42,6 +45,7 @@ final class ReportGenerator
         private readonly DataFreshnessService $freshness,
         private readonly ReportStructure $structure,
         private readonly ReportAds $reportAds,
+        private readonly ReportAttention $attention,
     ) {}
 
     public function generate(Report $report): array
@@ -354,6 +358,19 @@ final class ReportGenerator
             // Client "Next Steps" — built ONLY from approved recommendations (action/priority/owner/due).
             'next_steps' => $this->nextSteps($recs),
             /*
+             * REPORT-RECOMMENDATION-BLOCKS-001 — what needs attention, as figures, per objective family
+             * and platform, on the report's own scope. Stored with the operator's view (audience and
+             * decision at generation); every client surface re-cuts it against the CURRENT decisions
+             * in `ClientReportView`, so approving or hiding an item needs no regeneration.
+             */
+            'attention' => AttentionAudience::forOperator(
+                AttentionAudience::withEvidence(
+                    $this->attention->items(new ObjectivePerformanceFigures($scope->objectivePerformance()), $from, $to, (string) ($currency ?? '')),
+                    $ads['ads'],
+                ),
+                $this->attention->decisions((string) $report->tenant_id, (string) $report->id, $from->toDateString(), $to->toDateString()),
+            ),
+            /*
              * How old these figures are, travelling WITH them (§14.7, §14.10).
              *
              * A report that quotes a month of spend from a source that stopped syncing four days
@@ -443,6 +460,8 @@ final class ReportGenerator
         $data['data_version'] = self::DATA_VERSION;
         $data['tenant_id'] = (string) $report->tenant_id;
         $data['project_id'] = (string) $report->project_id;
+        // Which report these figures are, so a served client copy reads THIS report's attention decisions.
+        $data['report_id'] = (string) $report->id;
         $data['timezone'] = $report->timezone;
         $data['attribution_window'] = $report->attribution_window;
         $data['data_source'] = $report->data_source;
