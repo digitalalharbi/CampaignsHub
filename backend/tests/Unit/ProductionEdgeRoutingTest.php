@@ -50,6 +50,37 @@ final class ProductionEdgeRoutingTest extends TestCase
         );
     }
 
+    /**
+     * AD-MEDIA-RECOVERY-001 — the app's own media reaches Laravel, not the SPA fallback.
+     *
+     * `CreativePresenter::safe()` stores an asset this product hosts as a root-relative path, on the
+     * stated assumption that «in production the SPA and the API share an origin». They do not: the
+     * SPA is campaignshub.io and Laravel is api.campaignshub.io. Without a block here `/demo/…` fell
+     * to the history fallback and Production answered a video request with `index.html`:
+     *
+     *   GET https://campaignshub.io/demo/creative-sample.mp4 → 200, text/html, 6512 bytes
+     *
+     * The player then reports a network or decode error and the card is blank — the owner's «no real
+     * preview», and the same shape as the short-link defect above.
+     */
+    public function test_app_hosted_media_is_routed_to_the_backend(): void
+    {
+        $this->assertMatchesRegularExpression(
+            '~location\s+/demo/\s*\{~',
+            $this->conf,
+            'without a /demo/ block the SPA fallback answers a media request with index.html',
+        );
+
+        $block = (string) preg_replace('~^.*location\s+/demo/\s*\{~s', '', $this->conf);
+        $block = (string) preg_replace('~\}.*$~s', '', $block);
+
+        $this->assertStringContainsString(
+            'proxy_pass http://backend:8000',
+            $block,
+            'the media block must reach the compose service, as /api/ and /l/ do',
+        );
+    }
+
     public function test_the_short_link_hop_is_routed_to_the_backend(): void
     {
         $this->assertMatchesRegularExpression(
