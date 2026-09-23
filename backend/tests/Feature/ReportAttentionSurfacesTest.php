@@ -141,7 +141,8 @@ final class ReportAttentionSurfacesTest extends TestCase
         $this->decide($report, $keys['cpl_rise'], 'hidden')->assertOk();
         $this->decide($report, $keys['cpc_rise'], null)->assertOk();
         foreach ($this->clientSurfaces($report) as $surface => $payload) {
-            $this->assertSame([], $payload['attention'], "{$surface}: a hidden or un-approved item reached a client");
+            // Absent (the section resolved to nothing to show) or present and empty: both mean no item reached a client.
+            $this->assertSame([], $payload['attention'] ?? [], "{$surface}: a hidden or un-approved item reached a client");
             $outline = $this->outline($payload);
             $this->assertFalse($outline['present'], "{$surface}: the outline promises an emptied section");
         }
@@ -202,7 +203,12 @@ final class ReportAttentionSurfacesTest extends TestCase
     /**
      * The switch is the `recommendations` section of the ONE section registry (#486), saved on the
      * report — not a link flag of its own. Off there, it is off on the live link, the shared snapshot
-     * and the client PDF alike, and the outline says the operator switched it off.
+     * and the client PDF alike, and the contents list does not name it at all.
+     *
+     * REPORT-SECTION-SURFACES-001 removes a switched-off section from the outline rather than listing
+     * it with a reason — «a section disappears cleanly», the Owner's own wording. This asserted the
+     * intermediate shape (`present: false` plus `absent_reason`) and now asserts the final one: the
+     * data does not travel AND the contents list never promises the reader a section they cannot see.
      */
     public function test_a_section_switched_off_in_the_registry_leaves_every_client_surface_cleanly(): void
     {
@@ -211,9 +217,12 @@ final class ReportAttentionSurfacesTest extends TestCase
 
         foreach ($this->clientSurfaces($report->refresh()) as $surface => $payload) {
             $this->assertNull($payload['attention'] ?? null, "{$surface}: a switched-off section still travels");
-            $outline = $this->outline($payload);
-            $this->assertFalse($outline['present'], $surface);
-            $this->assertSame('disabled_by_operator', $outline['absent_reason'], $surface);
+            $this->assertFalse($this->outline($payload)['present'] ?? true, "{$surface}: the outline promises a switched-off section");
+            $this->assertArrayNotHasKey(
+                'recommendations',
+                array_column($payload['outline'], null, 'key'),
+                "{$surface}: a switched-off section is still named in the contents list",
+            );
         }
     }
 
@@ -229,7 +238,7 @@ final class ReportAttentionSurfacesTest extends TestCase
         $report = $this->generate();
 
         foreach ($this->clientSurfaces($report, hideSpend: true, skipPrint: true) as $surface => $payload) {
-            $this->assertSame([], $payload['attention'], "{$surface}: a cost reached a link that hides spend");
+            $this->assertSame([], $payload['attention'] ?? [], "{$surface}: a cost reached a link that hides spend");
         }
     }
 
@@ -296,10 +305,19 @@ final class ReportAttentionSurfacesTest extends TestCase
         return $out;
     }
 
-    /** @return array<string,mixed> */
+    /**
+     * The outline's own row for this section, or «not published» when there is none.
+     *
+     * REPORT-SECTION-SURFACES-001 removes a hidden section from the outline entirely rather than
+     * listing it as empty — «a section disappears cleanly», which is the same promise this test was
+     * written to hold and a stronger form of it. Either shape answers the only question here: does
+     * the contents list promise a reader a section they will not be given.
+     *
+     * @return array<string,mixed>
+     */
     private function outline(array $payload): array
     {
-        return array_column($payload['outline'], null, 'key')['recommendations'];
+        return array_column($payload['outline'], null, 'key')['recommendations'] ?? ['present' => false];
     }
 
     /** @param list<string> $permissions */
