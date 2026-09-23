@@ -150,8 +150,14 @@ final class LiveDrilldownTest extends TestCase
         $narrowed = $this->platform($raw, 'meta', '&campaigns[]='.$this->campaigns[1]);
         $this->assertEqualsWithDelta($whole['totals']['spend'], $narrowed['totals']['spend'], 0.0001, 'a campaign parameter narrowed a client drill-down');
 
+        /*
+         * REPORT-SECTION-SURFACES-001 — a section the client link does not show is ABSENT from the
+         * payload, not emptied, so this key may not be there at all. Either way the guarantee is the
+         * same and this still fails if a single campaign row ever reaches a client: no rows, whether
+         * the key is missing or present and empty.
+         */
         $live = $this->live($raw);
-        $this->assertSame([], $live['campaigns']);
+        $this->assertSame([], $live['campaigns'] ?? []);
     }
 
     public function test_the_platform_drilldown_stays_inside_the_links_scope(): void
