@@ -17,6 +17,7 @@ use App\Domains\Projects\Http\Controllers\ProjectOverviewController;
 use App\Domains\Reports\Http\Controllers\LiveDrilldownController;
 use App\Domains\Reports\Http\Controllers\LiveReportBuilderController;
 use App\Domains\Reports\Http\Controllers\ReportAnnotationController;
+use App\Domains\Reports\Http\Controllers\ReportBreakdownController;
 use App\Domains\Reports\Http\Controllers\ReportController;
 use App\Domains\Reports\Http\Controllers\ReportPrintController;
 use App\Domains\Reports\Http\Controllers\ReportScheduleController;
@@ -243,6 +244,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('reports/{report}', [ReportController::class, 'show'])->middleware('project.can:reports.view')->name('reports.show');
     Route::match(['put', 'patch'], 'reports/{report}', [ReportController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.update');
     Route::post('reports/{report}/regenerate', [ReportController::class, 'regenerate'])->middleware('project.can:reports.manage')->name('reports.regenerate');
+    // REPORT-DRILLDOWN-001 — the optional drill-down sections a report's PDF carries (off by default).
+    Route::put('reports/{report}/breakdowns', [ReportBreakdownController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.breakdowns.update')->whereUuid('report');
     Route::get('reports/{report}/scope', [ReportScopeController::class, 'show'])->middleware('project.can:reports.view')->name('reports.scope.show');
     Route::match(['put', 'patch'], 'reports/{report}/scope', [ReportScopeController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.scope.update');
     Route::get('reports/{report}/annotations', [ReportAnnotationController::class, 'index'])->middleware('project.can:reports.view')->name('reports.annotations.index');

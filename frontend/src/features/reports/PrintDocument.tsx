@@ -6,6 +6,7 @@ import { brand } from '@/lib/brand'
 import { ReportWatermark } from './ReportWatermark'
 import { drawableFamilies, formatKpi, formatRankingValue, rankingMetricLabel, type ObjectiveRanking, type RankingEnd } from './objectiveAnalytics'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
+import { PrintPlatformDrilldowns } from './PrintPlatformDrilldowns'
 import { reportPageTitle } from './sharedBranding'
 
 /**
@@ -481,6 +482,14 @@ export function PrintDocument({
           </section>
         )
       })}
+
+      {/* REPORT-DRILLDOWN-001 — each platform in detail, only when the operator enabled the section. */}
+      {(data.platform_drilldowns?.length ?? 0) > 0 && (
+        <section className="doc-section">
+          <h2>Platforms in Detail</h2>
+          <PrintPlatformDrilldowns blocks={data.platform_drilldowns} locale="en" currency={currency} />
+        </section>
+      )}
 
       {/*
         CLIENT-REPORT-ENTITY-BOUNDARY-001 — the campaign table is gone from the printed document.
