@@ -232,6 +232,16 @@ jobs:
       # would mean the gate exercises a different code path than a developer's machine does.
       - name: Arabic text-layer toolchain
         run: python3 -m pip install --quiet pikepdf
+      # GATE-BUILT-APP-001 — build once, then serve `dist/` for the run.
+      #
+      # The gate has no test parallelism to blame (`workers: 1`, `retries: 0`) and still loses
+      # exactly one test per full-suite run on firefox and webkit, never on chromium. The dev server
+      # is the remaining moving part: it compiles a route on first visit and re-optimises its graph
+      # when it meets an unseen dependency, and that churn is the documented mechanism behind
+      # GATE-VITE-001 and GATE-WK-001. A built bundle has neither.
+      - name: Build the app the gate will serve
+        working-directory: frontend
+        run: npm run build
       - name: Gate — ${{ matrix.browser }}
         working-directory: frontend
         env:
@@ -243,6 +253,8 @@ jobs:
           REDIS_CLIENT: phpredis
           # The default is all three; a job that runs one names it.
           GATE_BROWSERS: ${{ matrix.browser }}
+          # Serve the built app rather than the dev server — GATE-BUILT-APP-001.
+          E2E_BUILT: '1'
         # No `continue-on-error`, no retry wrapper: the script exits with the first non-zero code it
         # saw, and that code is the gate's verdict.
         run: npm run gate
