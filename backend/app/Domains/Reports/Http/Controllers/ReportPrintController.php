@@ -98,6 +98,7 @@ final class ReportPrintController extends Controller
             // Read from the minted context, not from the request — see ChromiumPdfRenderer::issueToken.
             'watermark' => (bool) ($ctx['watermark'] ?? false),
             'currency' => $report->currency,
+            'locale' => $report->reportLocale(),
             'is_demo' => (bool) $report->is_demo,
             'checksum' => $report->data['checksum'] ?? null,
             'data_version' => $report->data['data_version'] ?? null,
@@ -114,7 +115,7 @@ final class ReportPrintController extends Controller
             'branding' => $branding->forReport(
                 $report,
                 (string) $report->tenant_id,
-                fn (): string => url("/api/v1/reports/print/{$token}/logo"),
+                fn (?string $role = null): string => url("/api/v1/reports/print/{$token}/logo".($role === null ? '' : "/{$role}")),
             ),
         ], 'Print data.');
     }
@@ -127,7 +128,7 @@ final class ReportPrintController extends Controller
      * deliberate: the payload already said `logo_url: null`, and a placeholder would put a mark on a
      * document that carries none.
      */
-    public function logo(string $token, SharedLinkBranding $branding): mixed
+    public function logo(string $token, SharedLinkBranding $branding, ?string $role = null): mixed
     {
         $ctx = Cache::get($this->key($token));
         abort_if($ctx === null, 404, 'Print token invalid or expired.');
@@ -135,7 +136,7 @@ final class ReportPrintController extends Controller
         $report = Report::withoutGlobalScopes()->find($ctx['report_id']);
         abort_if($report === null, 404);
 
-        $file = $branding->logoFor($report, (string) $report->tenant_id);
+        $file = $branding->logoFor($report, (string) $report->tenant_id, $role);
         abort_unless($file !== null, 404);
 
         return $file;

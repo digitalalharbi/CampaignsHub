@@ -72,7 +72,7 @@ final class SharedLinkBranding
     }
 
     /**
-     * @return array{name: string, logo_url: ?string, logo_source: string, by: ?string}
+     * @return array{name: string, logo_url: ?string, logo_source: string, by: ?string, agency: array{name: string, logo_url: ?string}, client: ?array{name: string, logo_url: ?string}}
      */
     public function forShare(ReportShare $share, string $rawToken, ?Report $report = null): array
     {
@@ -85,22 +85,29 @@ final class SharedLinkBranding
          * report whose config carries no branding at all, which rendered a blank header and is the
          * «never a blank header» clause of BRANDING-HIERARCHY-001.
          */
+        $resolved = $this->forReport(
+            $report,
+            (string) $share->tenant_id,
+            fn (?string $role = null): string => $this->tokenUrl(
+                "/api/v1/reports/shared/{$rawToken}/branding/logo".($role === null ? '' : "/{$role}"),
+            ),
+        );
+
         $config = (array) ($report === null ? [] : ($report->config ?? []));
         $frozen = (array) ($config['branding'] ?? []);
         if (($frozen['name'] ?? null) !== null || ($frozen['logo_url'] ?? null) !== null) {
+            // The frozen identity keeps the name and mark it was shared under; the two marks beside it still resolve.
             return [
                 'name' => (string) ($frozen['name'] ?? 'CampaignsHub'),
                 'logo_url' => $frozen['logo_url'] ?? null,
                 'logo_source' => 'report',
                 'by' => null,
+                'agency' => $resolved['agency'],
+                'client' => $resolved['client'],
             ];
         }
 
-        return $this->forReport(
-            $report,
-            (string) $share->tenant_id,
-            fn (): string => $this->tokenUrl("/api/v1/reports/shared/{$rawToken}/branding/logo"),
-        );
+        return $resolved;
     }
 
     /**
@@ -114,8 +121,8 @@ final class SharedLinkBranding
      * One resolver for both surfaces: the only thing that differs is how the logo is addressed, which
      * is why that is a callable rather than a second copy of this method.
      *
-     * @param  callable(): string  $logoUrl
-     * @return array{name: string, logo_url: ?string, logo_source: string, by: ?string}
+     * @param  callable(?string=): string  $logoUrl  given `agency` or `client`, the URL of that mark; given nothing, the nearest one
+     * @return array{name: string, logo_url: ?string, logo_source: string, by: ?string, agency: array{name: string, logo_url: ?string}, client: ?array{name: string, logo_url: ?string}}
      */
     public function forReport(?Report $report, string $tenantId, callable $logoUrl): array
     {
@@ -131,8 +138,23 @@ final class SharedLinkBranding
             : ['tenant', null];
 
         $asset = $this->inTenant($tenantId, fn () => $this->pickLogo($scope, $scopeId));
+        $agencyMark = $this->markFor('agency', $client, $tenantId);
+        $clientMark = $client === null ? null : $this->markFor('client', $client, $tenantId);
 
         return [
+            /*
+             * REPORT BRANDING — the two marks a client report carries, side by side: the agency that
+             * issued it and the client it is about. Each is its OWN layer's logo or none — never the
+             * nearest one — so the agency's is not the platform's and the client's is not the agency's.
+             */
+            'agency' => [
+                'name' => (string) ($tenant->name ?? 'CampaignsHub'),
+                'logo_url' => $agencyMark === null ? null : $logoUrl('agency'),
+            ],
+            'client' => $client === null ? null : [
+                'name' => (string) $client->name,
+                'logo_url' => $clientMark === null ? null : $logoUrl('client'),
+            ],
             /*
              * client → agency → CampaignsHub. `ClientWorkspace` has no separate display name — that
              * column lives on `UnifiedCampaign`, and reading it here returned null on every row until
@@ -209,18 +231,54 @@ final class SharedLinkBranding
      * named. Null rather than a placeholder: a report with no logo has no logo, and inventing an
      * image would put a brand on a document that carries none.
      */
-    public function logoFor(?Report $report, string $tenantId): ?StreamedResponse
+    public function logoFor(?Report $report, string $tenantId, ?string $role = null): ?StreamedResponse
     {
         $client = $this->clientOfReport($report, $tenantId);
-        [$scope, $scopeId] = $client !== null ? ['client', (string) $client->id] : ['tenant', null];
 
-        $asset = $this->inTenant($tenantId, fn () => $this->pickLogo($scope, $scopeId));
+        if ($role !== null) {
+            $asset = $role === 'client' && $client === null ? null : $this->markFor($role, $client, $tenantId);
+        } else {
+            [$scope, $scopeId] = $client !== null ? ['client', (string) $client->id] : ['tenant', null];
+            $asset = $this->inTenant($tenantId, fn () => $this->pickLogo($scope, $scopeId));
+        }
 
         if ($asset === null || ! Storage::disk($asset->disk)->exists($asset->path)) {
             return null;
         }
 
         return Storage::disk($asset->disk)->response($asset->path, null, ['Cache-Control' => 'private, max-age=300']);
+    }
+
+    /**
+     * One ROLE's own mark — `agency` is the tenant layer, `client` the client layer — or null.
+     *
+     * `resolve()` falls back through the layers, which is right for «the nearest logo» and wrong for a
+     * named mark: the agency's slot filled with CampaignsHub's, or the client's with the agency's, puts
+     * one identity where the report says another. Only an asset from the role's own layer counts.
+     */
+    private function markFor(string $role, ?ClientWorkspace $client, string $tenantId): mixed
+    {
+        [$scope, $scopeId] = match ($role) {
+            'agency' => ['tenant', null],
+            'client' => ['client', $client === null ? null : (string) $client->id],
+            default => [null, null],
+        };
+        if ($scope === null || ($scope === 'client' && $scopeId === null)) {
+            return null;
+        }
+
+        $assets = $this->inTenant($tenantId, fn () => $this->branding->resolve($scope, $scopeId));
+
+        // Each kind in preference order, but only the role's own layer: a nearer kind resolved from
+        // another layer must not hide this layer's own logo of a later kind.
+        foreach (self::kinds() as $kind) {
+            $asset = $assets[$kind] ?? null;
+            if ($asset !== null && $asset->scope === $scope && $asset->scope_id === $scopeId) {
+                return $asset;
+            }
+        }
+
+        return null;
     }
 
     /** The nearest logo for a scope, in this surface's preference order. */
