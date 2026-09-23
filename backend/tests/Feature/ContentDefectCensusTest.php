@@ -274,9 +274,12 @@ final class ContentDefectCensusTest extends TestCase
         $this->assertStringContainsString((string) $page->getKey(), $section);
         $this->assertStringNotContainsString((string) $ok->getKey(), $section, 'a loaded image and a playable film were reported as broken');
         // Six assets: the working creative's still AND its film, and one still each for the four broken ones.
-        $this->assertStringContainsString('not an image (content type multipart/form-data; bytes: png image that decodes)', $section);
+        // A real image under a wrong type LOADS in every browser: not a blank, said apart.
+        $this->assertStringNotContainsString((string) $mislabelled->getKey(), strstr($section, 'NOT A DEFECT', true) ?: $section);
+        $this->assertStringContainsString('NOT A DEFECT — a still that LOADS although its declared content type is wrong', $output);
+        $this->assertStringContainsString((string) $mislabelled->getKey(), $output);
         $this->assertStringContainsString('not an image (content type multipart/form-data; bytes: multipart envelope, parts in prefix: text/plain=not an image)', $section);
-        $this->assertStringContainsString('6 asset(s), 2 loaded', $output);
+        $this->assertStringContainsString('6 asset(s), 3 loaded', $output);
 
         Http::assertNotSent(static fn ($request): bool => str_contains((string) $request->url(), 'idle-signature'));
         $this->assertStringNotContainsString('signature', $output);
@@ -567,5 +570,26 @@ final class ContentDefectCensusTest extends TestCase
         }
 
         return $digests;
+    }
+
+    /**
+     * «none to read» had two readings, and Production hit the one nobody wanted — run 35478164776.
+     *
+     * The line printed the same five words whether C was EMPTY or whether C held creatives whose
+     * spend was refused and no retained body could explain them. The first is «nothing to explain»;
+     * the second is «we cannot tell», and it is the one that would decide whether a refused zero is
+     * released as a reported 0. A reader — or a lane deciding from the log — could not tell which had
+     * happened, and on that run C was 0 and the line read as missing evidence.
+     */
+    public function test_the_raw_evidence_says_which_silence_it_is(): void
+    {
+        $this->creativeRow($this->creative(['name' => 'Ordinary']), ['spend' => 100, 'impressions' => 1000, 'clicks' => 10]);
+
+        Artisan::call('content:census', ['--project' => (string) $this->project->getKey(), '--raw' => true]);
+        $output = Artisan::output();
+
+        $this->assertStringContainsString('C — PERFORMANCE INDICATORS SHOWN, NO SPEND — 0', $output);
+        $this->assertStringContainsString('no creative is in C for this window — nothing to explain', $output);
+        $this->assertStringNotContainsString('none to read', $output);
     }
 }

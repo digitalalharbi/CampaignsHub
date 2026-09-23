@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativeRows;
+use App\Domains\Campaigns\Support\DrawableImage;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Console\Command;
@@ -81,6 +82,9 @@ final class ContentDefectCensusCommand extends Command
 
     /** How much of an asset is read to judge it: enough for a still's header, never the file. */
     private const PREFIX_BYTES = 262_144;
+
+    /** @var list<string> stills that load in a browser although their declared type is wrong */
+    private array $mislabelled = [];
 
     public function handle(): int
     {
@@ -316,6 +320,17 @@ final class ContentDefectCensusCommand extends Command
             }
         }
 
+        if ($this->mislabelled !== []) {
+            $this->line('');
+            $this->line('NOT A DEFECT — a still that LOADS although its declared content type is wrong (browsers draw by bytes) — '.count($this->mislabelled));
+
+            foreach ($this->mislabelled as $line) {
+                $this->line('      '.$line);
+            }
+        }
+
+        $this->mislabelled = [];
+
         if ($overZero !== []) {
             $this->line('');
             $this->line('NOT A DEFECT — a ratio over a denominator the card\'s own grain REPORTED as zero (cost per nothing; «—» is truthful)');
@@ -341,8 +356,22 @@ final class ContentDefectCensusCommand extends Command
                 $this->line('    the lookup failed ('.class_basename($e).' '.$e->getCode().') — no evidence read');
             }
 
-            if ($evidence === [] && $zeroOriginal === []) {
-                $this->line('    none to read');
+            /*
+             * «none to read» had two readings, and Production hit the one nobody wanted (run
+             * 35478164776): C was EMPTY, and the line read as «the bodies could not explain C».
+             *
+             * «Nothing to explain» and «we cannot tell» are different answers, and the second is the
+             * one a decision about releasing a refused zero as a reported 0 would rest on. So the line
+             * says which silence it is, counted from what the census itself just listed.
+             */
+            if ($evidence === []) {
+                $inC = array_sum(array_map('count', $findings['C']));
+
+                $this->line('    '.match (true) {
+                    $inC === 0 => 'no creative is in C for this window — nothing to explain',
+                    default => 'C holds '.$inC.' creative(s), none of them refused as a zero original — '
+                        .'their spend is absent for the reason each row states above, which these bodies cannot add to',
+                });
             }
 
             foreach ($evidence as $creativeId => $line) {
@@ -690,13 +719,7 @@ final class ContentDefectCensusCommand extends Command
      */
     private function signature(string $bytes): string
     {
-        $sniff = static fn (string $b): ?string => match (true) {
-            str_starts_with($b, "\xFF\xD8\xFF") => 'jpeg',
-            str_starts_with($b, "\x89PNG\r\n\x1A\n") => 'png',
-            str_starts_with($b, 'GIF87a') || str_starts_with($b, 'GIF89a') => 'gif',
-            str_starts_with($b, 'RIFF') && substr($b, 8, 4) === 'WEBP' => 'webp',
-            default => null,
-        };
+        $sniff = DrawableImage::sniff(...);
 
         if ($bytes === '') {
             return 'empty';
@@ -738,8 +761,21 @@ final class ContentDefectCensusCommand extends Command
         }
 
         if (! str_starts_with($type, 'image/')) {
+            $bytes = $this->prefix($response);
+
+            /*
+             * Browsers draw an <img> by its bytes, not its declared type — measured on chromium, firefox
+             * and webkit, with and without `nosniff`. An allow-listed image that decodes therefore LOADS
+             * on the card; it is recorded as mislabelled, not as a blank. Anything else is still a blank.
+             */
+            if (DrawableImage::draws($bytes) && ($kind = DrawableImage::sniff($bytes)) !== null) {
+                $this->mislabelled[] = $item['tag'].'  declared '.($type === '' ? 'none' : $type).', bytes '.$kind;
+
+                return null;
+            }
+
             // The declared type is not the evidence — the bytes are. Say what they actually are.
-            return 'not an image (content type '.($type === '' ? 'none' : $type).'; bytes: '.$this->signature($this->prefix($response)).')';
+            return 'not an image (content type '.($type === '' ? 'none' : $type).'; bytes: '.$this->signature($bytes).')';
         }
 
         return @getimagesizefromstring($this->prefix($response)) === false ? 'an image that does not decode' : null;
