@@ -94,6 +94,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     Route::get('/reports/shared/{token}/live', [PublicReportController::class, 'live'])->name('reports.shared.live');
     // The platform → content drilldown: one creative by its share-bound key, inside the same ceiling.
     Route::get('/reports/shared/{token}/live/content/{key}', [PublicReportController::class, 'liveContent'])->name('reports.shared.live.content');
+    // REPORT-DRILLDOWN-001 — one platform of the link, opened from its comparison. Never a campaign.
+    Route::get('/reports/shared/{token}/live/platform/{provider}', [PublicReportController::class, 'livePlatform'])->name('reports.shared.live.platform')->where('provider', '[a-z_]{2,32}');
     Route::get('/reports/shared/{token}/download/{format}', [PublicReportController::class, 'download'])->name('reports.shared.download');
     /*
      * BRANDING-HIERARCHY-001 — the identity this link carries, addressed by the TOKEN alone.

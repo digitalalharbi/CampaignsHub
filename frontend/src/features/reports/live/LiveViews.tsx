@@ -223,7 +223,19 @@ export function SummaryView({ payload, reader, currency, locale, onOpenContent }
 
 /* ─────────────────────────────── B — Performance dashboard ─────────────────────────────── */
 
-export function DashboardView({ payload, reader, currency, locale, onOpenContent, goTo }: Common & { goTo: (mode: 'content' | 'platforms', platform?: string) => void }) {
+export function DashboardView({
+  payload,
+  reader,
+  currency,
+  locale,
+  onOpenContent,
+  goTo,
+  onOpenPlatform,
+}: Common & {
+  goTo: (mode: 'content' | 'platforms', platform?: string) => void
+  /** REPORT-DRILLDOWN-001 — the comparison's rows open a platform drawer where the link offers it. */
+  onOpenPlatform?: (provider: string) => void
+}) {
   const ar = locale === 'ar'
 
   return (
@@ -236,7 +248,12 @@ export function DashboardView({ payload, reader, currency, locale, onOpenContent
       <TrendAndDistribution payload={payload} ar={ar} currency={currency} />
       {sectionOn(payload, 'platform_comparison') && (
         <div>
-          <LivePlatformComparison payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />
+          <LivePlatformComparison
+            payload={payload}
+            currency={currency}
+            locale={ar ? 'ar' : 'en'}
+            onOpenPlatform={payload.breakdowns?.platform_drilldown === false ? undefined : onOpenPlatform}
+          />
           <div className="mt-1 flex justify-end">
             <GoTo testid="live-goto-platforms" ar={ar} label={ar ? 'كل منصة على حدة' : 'Each platform on its own'} onClick={() => goTo('platforms')} />
           </div>
