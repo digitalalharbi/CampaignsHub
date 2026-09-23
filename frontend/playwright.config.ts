@@ -23,6 +23,26 @@ import { E2E_API_TARGET, E2E_BACKEND_ENV, E2E_BACKEND_PORT, E2E_FRONTEND_PORT, E
  */
 const EVIDENCE_OUT = process.env.EVIDENCE === '1' ? /$^/ : /@evidence/
 
+/*
+ * GATE-BUILT-APP-001 — in CI the gate serves a BUILT app, not a dev server.
+ *
+ * `workers: 1`, `retries: 0`, a two-core runner: the gate has no test parallelism to blame, and yet
+ * it loses exactly one test per full-suite run on firefox and webkit and never on chromium (Owner
+ * defect 99). The dev server is the remaining moving part. It compiles a route's modules the first
+ * time a test visits it and re-optimises the graph when it meets a dependency it has not seen, and
+ * BOTH failure shapes that churn produces are already written up in this file: GATE-VITE-001 (two
+ * servers sharing one cache; «Load failed», a 502 at the proxy, a `page.goto` that never fires
+ * `load`) and GATE-WK-001 (four webkit hangs on the print server's graph). A built bundle has no
+ * optimiser and no on-demand compile: every asset is on disk before the first test runs.
+ *
+ * Off by default so a developer still gets HMR; `E2E_BUILT=1` in CI, where the build is one step.
+ */
+const BUILT = process.env.E2E_BUILT === '1'
+const frontendCommand = (port: number): string =>
+  BUILT
+    ? `npx vite preview --port ${port} --strictPort`
+    : `npm run dev -- --port ${port}`
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
@@ -117,7 +137,7 @@ export default defineConfig({
        * above would be bypassed silently, with a green run to show for it. A port nothing else uses
        * makes that impossible instead of merely unlikely.
        */
-      command: `npm run dev -- --port ${E2E_FRONTEND_PORT}`,
+      command: frontendCommand(E2E_FRONTEND_PORT),
       url: E2E_ORIGIN,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
@@ -155,7 +175,7 @@ export default defineConfig({
        * Two servers rather than one switch: switching Chromium printing off also removes the proof
        * that the exported Arabic PDF is a real Chromium file, which this product had to fix once.
        */
-      command: `npm run dev -- --port ${E2E_PRINT_PORT}`,
+      command: frontendCommand(E2E_PRINT_PORT),
       url: E2E_PRINT_ORIGIN,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
