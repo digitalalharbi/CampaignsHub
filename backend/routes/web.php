@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\Campaigns\Http\Controllers\AppMediaController;
 use App\Domains\Influencers\Http\Controllers\AttributionController;
 use App\Domains\Reports\Http\Controllers\SharePreviewController;
 use App\Domains\ShortLinks\Http\Controllers\ShortLinkHopController;
@@ -35,6 +36,16 @@ Route::get('/t/{code}', [AttributionController::class, 'redirect'])
 Route::get('/r/{token}', [SharePreviewController::class, 'show'])
     ->where('token', '[A-Za-z0-9]{16,64}')
     ->name('reports.share.preview');
+
+/*
+ * AD-MEDIA-RECOVERY-001 — the app's own media, served by the app so a film can be SEEKED.
+ *
+ * `where` keeps the whole remaining path in one parameter (a nested file is still one file), and the
+ * controller resolves it inside `storage/app/media` before reading anything.
+ */
+Route::get('/demo/{path}', [AppMediaController::class, 'show'])
+    ->where('path', '.*')
+    ->name('app-media.show');
 
 /*
  * SHORT-LINKS-001 — the hop a stranger follows.
