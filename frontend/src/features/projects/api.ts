@@ -91,6 +91,55 @@ export async function archiveProject(projectId: string): Promise<Project> {
   return projectAction(projectId, 'archive')
 }
 
+/**
+ * PROJECT-DELETE-001 — what «حذف المشروع» will reach, asked before anything is reached.
+ *
+ * A confirmation dialog that can only say «Are you sure?» is asking a question nobody can answer
+ * about a project: the interesting part is which of the rungs around it move with it, and two of
+ * those rungs — the authorisation and the advertising account — are SHARED with other clients. The
+ * server counts what it is about to touch and states the two guarantees it keeps, so the dialog
+ * describes the code rather than a translator's belief about it.
+ */
+export interface ProjectDeletionImpact {
+  project: { id: string; name: string; status: string; client: string | null }
+  counts: {
+    integration_bindings: number
+    campaigns: number
+    ad_sets: number
+    ads: number
+    creatives: number
+    reports: number
+    report_exports: number
+    tasks: number
+    team_members: number
+    metric_rows: number
+    report_schedules: number
+    active_shares: number
+  }
+  /** Always false — deleting one consumer of an authorisation must not revoke it for the others. */
+  revokes_provider_authorisation: boolean
+  /** Always false — the ad account belongs to the platform and to the tenant's inventory, never here. */
+  deletes_advertising_accounts: boolean
+}
+
+export function fetchProjectDeletionImpact(projectId: string): Promise<ProjectDeletionImpact> {
+  return getData<ProjectDeletionImpact>(`/projects/${projectId}/deletion-impact`)
+}
+
+/**
+ * Delete a project, naming it.
+ *
+ * The typed name travels to the SERVER and is checked there. A confirmation the browser enforces is
+ * a confirmation an API call skips, and this is the request that cannot be taken back.
+ */
+export async function deleteProject(projectId: string, confirmName: string): Promise<ProjectDeletionImpact> {
+  await ensureCsrfCookie()
+  const res = await api.delete<ApiEnvelope<ProjectDeletionImpact>>(`/projects/${projectId}`, {
+    data: { confirm_name: confirmName },
+  })
+  return res.data.data
+}
+
 export interface TenantUser {
   id: number
   name: string

@@ -50,6 +50,17 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('proj
         ->middleware(EnsureWithinPlanLimit::class.':projects');
     Route::post('{project}/pause', [ProjectController::class, 'pause'])->name('pause');
     Route::post('{project}/resume', [ProjectController::class, 'resume'])->name('resume');
+
+    /*
+     * PROJECT-DELETE-001 — «حذف المشروع», which the product did not have.
+     *
+     * Deliberately beside archive rather than inside the project-context group: this is management
+     * OF a project, not work done INSIDE one, and it is the same reach check the other lifecycle
+     * routes use. The impact read is a GET because a confirmation dialog must be able to ask what
+     * will happen without anything happening.
+     */
+    Route::get('{project}/deletion-impact', [ProjectController::class, 'deletionImpact'])->name('deletion-impact');
+    Route::delete('{project}', [ProjectController::class, 'destroy'])->name('destroy');
 });
 
 // DASH-010-E: saved dashboard views (persisted per user + tenant; not project-scoped).
