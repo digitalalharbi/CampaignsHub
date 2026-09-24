@@ -12,6 +12,7 @@ import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import type { LivePayload } from '../api'
 import { AttentionBlocks } from '../AttentionBlocks'
 import { ClientAttention } from '../ClientAttention'
+import { BusinessStreamsSection } from '../BusinessStreamsSection'
 import { LiveDetailTables, LivePlatformComparison } from '../LiveDetailTables'
 import { ReportAdsSection, type ReportAd } from '../ReportAdsSection'
 import { ObjectiveAnalyticsSection } from '../ObjectiveAnalyticsSection'
@@ -299,6 +300,7 @@ export function DashboardView({
       {sectionOn(payload, 'objective_breakdown') && (payload.objective_analytics
         ? <ObjectiveAnalyticsSection section={payload.objective_analytics} currency={currency} ar={ar} showContent={sectionOn(payload, 'content_performance')} />
         : <ObjectiveLeaders payload={payload} ar={ar} reader={reader} />)}
+      {sectionOn(payload, 'advanced_segmentation') && <BusinessStreamsSection streams={payload.business_streams} coverTotal={payload.business_streams_cover_total === true} currency={currency} ar={ar} />}
       {sectionOn(payload, 'content_performance') && (
         <section className="flex flex-col gap-5">
           <div>

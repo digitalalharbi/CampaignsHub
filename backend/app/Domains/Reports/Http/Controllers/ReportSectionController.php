@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Access\ProjectAbilities;
+use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportScopeTemplate;
 use App\Domains\Reports\Models\ReportShare;
@@ -75,13 +78,24 @@ final class ReportSectionController extends Controller
         $base = null;
         if ($request->filled('template_id')) {
             $request->validate(['template_id' => ['uuid']]);
-            $base = $this->findTemplate($project, (string) $request->input('template_id'))->sectionSettings()->toArray()['sections'];
+            $base = $this->findTemplate($project, (string) $request->input('template_id'))->sectionSettings()->toArray();
         }
 
-        $sections = $this->validatedSections($request, $base ?? $before['sections']);
+        $sections = $this->validatedSections($request, ($base ?? $before)['sections']);
+        $streams = $this->validatedStreams($request, $project, ($base ?? $before)['streams'] ?? []);
 
-        $model->section_settings = ['sections' => $sections];
+        $model->section_settings = SectionSettings::fromArray(['sections' => $sections, 'streams' => $streams], $this->registry)->toArray();
         $model->save();
+
+        /*
+         * A generated snapshot holds its stream figures from generation time, so a changed stream
+         * definition regenerates it — the same rule the scope editor follows. A live report computes
+         * them on every open and needs nothing.
+         */
+        if (($before['streams'] ?? []) !== ($model->section_settings['streams'] ?? []) && ! $this->isLive($model)) {
+            $model->forceFill(['status' => 'processing', 'error' => null])->save();
+            GenerateReportJob::dispatch((string) $model->getKey());
+        }
 
         $audit->log(
             action: 'report.sections_updated',
@@ -200,7 +214,10 @@ final class ReportSectionController extends Controller
         $model = $this->findTemplate($project, $template);
         $before = $model->sectionSettings()->toArray();
 
-        $model->section_settings = ['sections' => $this->validatedSections($request, $before['sections'])];
+        $model->section_settings = SectionSettings::fromArray([
+            'sections' => $this->validatedSections($request, $before['sections']),
+            'streams' => $this->validatedStreams($request, $project, $before['streams'] ?? []),
+        ], $this->registry)->toArray();
         $model->save();
 
         $audit->log(
@@ -244,6 +261,109 @@ final class ReportSectionController extends Controller
         return SectionSettings::fromArray(['sections' => $merged], $this->registry)->toArray()['sections'];
     }
 
+    /**
+     * The submitted business streams, or the stored ones when none were sent.
+     *
+     * An account id this project has no figures for is dropped rather than stored: a stream mapped to
+     * another client's account would be a way to read that account's spend through this report.
+     *
+     * @param  list<array<string, mixed>>  $current
+     * @return list<array<string, mixed>>
+     */
+    private function validatedStreams(Request $request, string $project, array $current): array
+    {
+        if (! $request->has('streams')) {
+            return $current;
+        }
+
+        $request->validate([
+            'streams' => ['present', 'array', 'max:'.SectionSettings::MAX_STREAMS],
+            'streams.*.label' => ['required', 'string', 'max:60'],
+            'streams.*.providers' => ['sometimes', 'array'],
+            'streams.*.providers.*' => ['string', 'max:40'],
+            'streams.*.account_ids' => ['sometimes', 'array'],
+            'streams.*.account_ids.*' => ['string', 'max:64'],
+        ]);
+
+        $known = DailyMetric::query()
+            ->where('project_id', $project)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->whereNotNull('external_account_id')
+            ->distinct()
+            ->pluck('external_account_id')
+            ->map(fn ($id): string => (string) $id)
+            ->all();
+
+        $streams = array_map(static function (array $stream) use ($known): array {
+            $stream['account_ids'] = array_values(array_intersect((array) ($stream['account_ids'] ?? []), $known));
+
+            return $stream;
+        }, array_values((array) $request->input('streams', [])));
+
+        $this->refuseOverlaps($streams, $project);
+
+        return $streams;
+    }
+
+    /**
+     * Coordinator decision — a platform or an ad account belongs to at most ONE stream.
+     *
+     * Overlapping streams count the same spend twice, so they could never be read side by side, let
+     * alone summed. An account also overlaps a stream that holds its whole platform. Refused with the
+     * conflicting platform or account named, never silently resolved.
+     *
+     * @param  list<array<string, mixed>>  $streams
+     */
+    private function refuseOverlaps(array $streams, string $project): void
+    {
+        $providerOf = DailyMetric::query()
+            ->where('project_id', $project)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->whereNotNull('external_account_id')
+            ->distinct()
+            ->pluck('provider', 'external_account_id')
+            ->mapWithKeys(fn ($provider, $id): array => [(string) $id => (string) $provider])
+            ->all();
+
+        $providerOwner = [];
+        $accountOwner = [];
+        $conflicts = [];
+
+        foreach ($streams as $i => $stream) {
+            $label = (string) ($stream['label'] ?? '#'.($i + 1));
+            foreach (array_unique((array) ($stream['providers'] ?? [])) as $provider) {
+                if (isset($providerOwner[$provider]) && $providerOwner[$provider] !== $i) {
+                    $conflicts[] = "platform {$provider} is in «{$streams[$providerOwner[$provider]]['label']}» and «{$label}»";
+                }
+                $providerOwner[$provider] ??= $i;
+            }
+        }
+
+        foreach ($streams as $i => $stream) {
+            $label = (string) ($stream['label'] ?? '#'.($i + 1));
+            foreach (array_unique((array) ($stream['account_ids'] ?? [])) as $account) {
+                if (isset($accountOwner[$account]) && $accountOwner[$account] !== $i) {
+                    $conflicts[] = "ad account {$account} is in «{$streams[$accountOwner[$account]]['label']}» and «{$label}»";
+                }
+                $accountOwner[$account] ??= $i;
+
+                $provider = $providerOf[$account] ?? null;
+                if ($provider !== null && isset($providerOwner[$provider]) && $providerOwner[$provider] !== $i) {
+                    $conflicts[] = "ad account {$account} ({$provider}) is in «{$label}» while platform {$provider} is in «{$streams[$providerOwner[$provider]]['label']}»";
+                }
+            }
+        }
+
+        if ($conflicts !== []) {
+            throw ValidationException::withMessages(['streams' => array_values(array_unique($conflicts))]);
+        }
+    }
+
+    private function isLive(Report $report): bool
+    {
+        return $report->type === 'live' || (bool) (($report->config ?? [])['live'] ?? false);
+    }
+
     private function findTemplate(string $project, string $template): ReportScopeTemplate
     {
         return ReportScopeTemplate::query()
@@ -271,6 +391,7 @@ final class ReportSectionController extends Controller
             'report_id' => (string) $report->getKey(),
             'audience' => $audience,
             'chosen' => $settings->toArray()['sections'],
+            'streams' => $settings->streams(),
             'effective' => $settings->effective($this->registry, $audience),
             'resolved' => $resolved->toArray(),
             'visible' => $resolved->visible(),
@@ -290,6 +411,7 @@ final class ReportSectionController extends Controller
         return [
             'template_id' => (string) $template->getKey(),
             'chosen' => $settings->toArray()['sections'],
+            'streams' => $settings->streams(),
             'effective' => [
                 'client' => $settings->effective($this->registry, 'client'),
                 'internal' => $settings->effective($this->registry, 'internal'),

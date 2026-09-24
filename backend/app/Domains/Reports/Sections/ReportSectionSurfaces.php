@@ -109,7 +109,41 @@ final class ReportSectionSurfaces
      */
     public function apply(array $payload, Report $report, ?ReportShare $share, string $surface, ?string $audience = null, ?string $form = null): array
     {
-        return $this->resolve($report, $share, $surface, $payload, $audience, $form)->apply($payload);
+        $context = $this->contextFor($report, $share, $surface, $audience, $form);
+        $payload = $this->resolve($report, $share, $surface, $payload, $audience, $form)->apply($payload);
+
+        return $context->isClientFacing() ? self::withoutBuyingMethodology($payload) : $payload;
+    }
+
+    /**
+     * REPORT-SECTION-STREAMS-001 — Direct against Blended never reaches a client, in any section.
+     *
+     * The split is the agency's buying methodology. On a client-facing document advanced
+     * segmentation carries the operator's neutral business streams instead, so the split's blocks,
+     * its slide and its outline entry leave the payload whatever the section switches say.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public static function withoutBuyingMethodology(array $payload): array
+    {
+        unset($payload['objective_performance'], $payload['objective_performance_previous']);
+
+        if (is_array($payload['slides'] ?? null)) {
+            $payload['slides'] = array_values(array_filter(
+                $payload['slides'],
+                static fn ($slide): bool => ! (is_array($slide) && ($slide['type'] ?? null) === 'objective_performance'),
+            ));
+        }
+
+        if (is_array($payload['outline'] ?? null)) {
+            $payload['outline'] = array_values(array_filter(
+                $payload['outline'],
+                static fn ($entry): bool => ! (is_array($entry) && ($entry['key'] ?? null) === 'objectives'),
+            ));
+        }
+
+        return $payload;
     }
 
     /** Whether the operator (report, then link) lets a section be shown at all — for endpoints that serve one section. */

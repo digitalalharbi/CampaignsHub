@@ -137,7 +137,7 @@ final class ReportSectionRegistry
                 key: 'advanced_segmentation',
                 titleAr: 'التقسيم المتقدم',
                 titleEn: 'Advanced segmentation',
-                payloadKeys: ['objective_performance', 'objective_performance_previous', 'business_streams'],
+                payloadKeys: ['objective_performance', 'objective_performance_previous', 'business_streams', 'business_streams_cover_total'],
                 slideTypes: ['objective_performance'],
                 clientDefault: false,
                 breakdown: true,
@@ -195,6 +195,11 @@ final class ReportSectionRegistry
 
         $this->availableWhen('advanced_segmentation', 'has_segments', static function (SectionContext $c): bool {
             $split = $c->value('objective_performance');
+
+            // A client's segmentation is the operator's business streams and nothing else.
+            if ($c->isClientFacing()) {
+                return $c->rows('business_streams') !== [];
+            }
 
             return $c->rows('business_streams') !== []
                 || (is_array($split) && is_array($split['paths'] ?? null) && $split['paths'] !== []);
