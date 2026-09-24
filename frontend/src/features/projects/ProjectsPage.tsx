@@ -2,7 +2,7 @@ import { StatCard } from '@/components/ui/StatCard'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, Copy, FolderKanban, Pause, Pencil, Play, Plus, RotateCcw, Search, Trash2, Users } from 'lucide-react'
+import { AlertTriangle, Clock, Copy, FolderKanban, Pause, Pencil, Play, Plug, Plus, RotateCcw, Search, Trash2, Users } from 'lucide-react'
 import {
   archiveProject,
   createProject,
@@ -27,8 +27,9 @@ import { ErrorSummary, type FieldError } from '@/components/forms'
 import { toApiError } from '@/lib/api/client'
 import { usePortalPath } from '@/app/portalPath'
 import { useT } from '@/lib/i18n'
+import { adAccounts, days as countedDays, hours as countedHours, members } from '@/lib/counted'
 import { useAuth } from '@/stores/auth'
-import { useUi } from '@/stores/ui'
+import { useUi, type Locale } from '@/stores/ui'
 
 const STATUSES = ['draft', 'onboarding', 'active', 'paused', 'completed', 'archived']
 
@@ -107,6 +108,59 @@ const PROJ_IMPACT_LABELS: Array<{ key: string; ar: string; en: string }> = [
   { key: 'team_members', ar: 'أعضاء الفريق', en: 'Team members' },
 ]
 
+/**
+ * PROJECT-LIST-SURFACE-001 §10 — what the card says about a project's data.
+ *
+ * Three attention states and no score. A badge meaning «something about this client is worse than it
+ * was» is a badge people learn not to see; each of these names a thing to go and do, so the words
+ * are the action and not the symptom.
+ */
+const PROJ_SURFACE = {
+  ar: {
+    synced: 'آخر بيانات',
+    never: 'لم تصل بيانات بعد',
+    attention: {
+      no_accounts: 'لا حسابات مربوطة',
+      never_synced: 'لم تصل بيانات',
+      stale: 'البيانات متأخرة',
+    },
+  },
+  en: {
+    synced: 'Last data',
+    never: 'No data yet',
+    attention: {
+      no_accounts: 'No linked accounts',
+      never_synced: 'No data received',
+      stale: 'Data is behind',
+    },
+  },
+} as const
+
+/** The six platforms, as their owners spell them. */
+const PROJ_PLATFORM_NAMES: Record<string, string> = {
+  snapchat: 'Snapchat', meta: 'Meta', tiktok: 'TikTok', google: 'Google', linkedin: 'LinkedIn', x: 'X',
+}
+
+/**
+ * «قبل 3 ساعات» without a date library, and without claiming precision the card does not need.
+ *
+ * A list is read for whether data is current, not for when exactly it arrived — the project's own
+ * pages answer that. The DIGITS stay Latin (the product's numeral rule) and the noun beside them
+ * comes from `lib/counted`, because «قبل 3 ساعة» and «قبل 11 ساعات» are what writing it here by hand
+ * produces: correct for the number in front of the author and wrong for every other one.
+ */
+function freshnessLabel(iso: string, locale: Locale): string {
+  const elapsed = Math.floor((Date.now() - Date.parse(iso)) / 3_600_000)
+  const ar = locale === 'ar'
+
+  if (!Number.isFinite(elapsed) || elapsed < 0) return ar ? 'الآن' : 'just now'
+  if (elapsed < 1) return ar ? 'خلال الساعة' : 'under an hour ago'
+  if (elapsed < 24) return ar ? `قبل ${countedHours(elapsed, locale)}` : `${countedHours(elapsed, locale)} ago`
+
+  const elapsedDays = Math.floor(elapsed / 24)
+  return ar ? `قبل ${countedDays(elapsedDays, locale)}` : `${countedDays(elapsedDays, locale)} ago`
+}
+
 /** PROJECT-DELETE-001 §34 — every lifecycle act says so, in one place, in the right words. */
 const PROJ_NOTICES = {
   ar: {
@@ -152,6 +206,7 @@ export function ProjectsPage() {
   const pc = PROJ_COPY[locale]
   const danger = PROJ_DANGER[locale]
   const notices = PROJ_NOTICES[locale]
+  const surface = PROJ_SURFACE[locale]
   const mayDelete = useAuth((s) => s.hasPermission('projects.delete'))
 
   const projects = useQuery({
@@ -363,7 +418,7 @@ export function ProjectsPage() {
             const archived = p.status === 'archived'
             const paused = p.status === 'paused'
             return (
-              <Card key={p.id}>
+              <Card key={p.id} data-testid={`project-card-${p.id}`}>
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2">
                     <FolderKanban size={18} className="text-brand-600" />
@@ -375,6 +430,63 @@ export function ProjectsPage() {
                 <span className="mt-1 block text-xs text-text-muted">
                   {t('setup')}: <span className="tnum">{p.setup_completion}%</span>
                 </span>
+
+                {/*
+                  PROJECT-LIST-SURFACE-001 §10 — the four facts a list of clients is asked for.
+
+                  Optional: `show` returns a project without a summary, and a card that throws on a
+                  missing field is a card that takes the page down the first time an older cached
+                  response is replayed.
+                */}
+                {p.summary && (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-secondary">
+                      {/*
+                        Counted through `lib/counted`, never written beside the number.
+
+                        Arabic changes the FORM of the noun on boundaries nobody remembers at a call
+                        site — «1 حساب إعلاني», «2 حسابان إعلانيان», «3 حسابات إعلانية», «11 حسابًا
+                        إعلانيًا» — and a card that types one of them gets the rest wrong for as long
+                        as nobody counts.
+                      */}
+                      <span data-testid="project-accounts" className="inline-flex items-center gap-1 tnum">
+                        <Plug size={12} aria-hidden />
+                        {adAccounts(p.summary.accounts, locale)}
+                      </span>
+                      <span data-testid="project-team" className="inline-flex items-center gap-1 tnum">
+                        <Users size={12} aria-hidden />
+                        {members(p.summary.team_members, locale)}
+                      </span>
+                      {/* Freshness, because «is this client current» is the other half of the question. */}
+                      <span className="inline-flex items-center gap-1 text-text-muted">
+                        <Clock size={12} aria-hidden />
+                        {p.summary.data_last_synced_at
+                          ? `${surface.synced}: ${freshnessLabel(p.summary.data_last_synced_at, locale)}`
+                          : surface.never}
+                      </span>
+                    </div>
+
+                    {p.summary.providers.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {p.summary.providers.map((key) => (
+                          <span key={key} className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+                            {PROJ_PLATFORM_NAMES[key] ?? key}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {p.summary.attention && (
+                      <p
+                        data-testid={`project-attention-${p.id}`}
+                        className="inline-flex items-center gap-1 rounded-lg border border-warning bg-warning-soft px-2 py-1 text-[11px] font-semibold text-warning"
+                      >
+                        <AlertTriangle size={12} aria-hidden />
+                        {surface.attention[p.summary.attention]}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border pt-3 text-xs">
                   <button type="button" onClick={() => openEdit(p)} className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary">

@@ -118,3 +118,23 @@ export function creatives(n: number, locale: Locale): string {
 
   return `${noun} ${Math.abs(Math.trunc(n)) === 2 ? 'إعلانيتان' : 'إعلانية'}`
 }
+
+/**
+ * «3 ساعات» · «1 hour» — PROJECT-LIST-SURFACE-001.
+ *
+ * A list says how old a project's data is, and «قبل 3 ساعة» is the hand-written form this module
+ * exists to stop. The accusative is «ساعةً» in full pointing and «ساعة» as the product writes it
+ * elsewhere, so the `many` form matches the house spelling rather than introducing a second one.
+ */
+export function hours(n: number, locale: Locale): string {
+  return locale === 'ar'
+    ? countedAr(n, { one: 'ساعة', two: 'ساعتان', few: 'ساعات', many: 'ساعة' })
+    : countedEn(n, 'hour', 'hours')
+}
+
+/** «3 أعضاء» · «1 member» — a project's team, counted on its card. */
+export function members(n: number, locale: Locale): string {
+  return locale === 'ar'
+    ? countedAr(n, { one: 'عضو', two: 'عضوان', few: 'أعضاء', many: 'عضوًا' })
+    : countedEn(n, 'member', 'members')
+}

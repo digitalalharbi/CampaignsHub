@@ -2,6 +2,27 @@ import { ensureCsrfCookie, getData, getEnvelope, postData } from '@/lib/api/clie
 import { api } from '@/lib/api/client'
 import type { ApiEnvelope } from '@/lib/api/types'
 
+/**
+ * PROJECT-LIST-SURFACE-001 §10 — the facts a card needs to be worth reading.
+ *
+ * Present on the LISTING only. `show` returns a project without one, so the field is optional and a
+ * consumer that has not asked for a list cannot mistake «not requested» for «nothing to report».
+ */
+export interface ProjectSummary {
+  /** Actively bound advertising accounts — never the tenant's whole inventory. */
+  accounts: number
+  /** The platforms this project actually reads, alphabetical so two loads agree. */
+  providers: string[]
+  /** The newest sync among THIS project's bound accounts, or null when none has ever reported. */
+  data_last_synced_at: string | null
+  team_members: number
+  /**
+   * Three named states, never a score: nothing bound, bound and never heard from, or quiet too long.
+   * Each one names something to go and do — which is what a badge has to do to stay worth seeing.
+   */
+  attention: 'no_accounts' | 'never_synced' | 'stale' | null
+}
+
 export interface Project {
   id: string
   client_workspace_id: string
@@ -10,6 +31,7 @@ export interface Project {
   setup_completion: number
   account_manager_id: number | null
   created_at: string | null
+  summary?: ProjectSummary
 }
 
 export interface ClientWorkspace {
