@@ -77,6 +77,15 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
     Route::get('connections/{connection}/accounts', [ConnectionWizardController::class, 'accounts'])->name('connections.accounts');
     Route::get('plan-usage', [ConnectionWizardController::class, 'planUsage'])->name('plan-usage');
     /*
+     * INTEGRATION-FIRST-SYNC-VISIBILITY-001 — what the confirmation's first sync has done so far.
+     *
+     * Polled while somebody waits, so it is a read and a cheap one. Its own throttle is generous
+     * rather than tight: a dialog asking every two seconds is the intended traffic, and refusing it
+     * would put the product back where it started — a customer who has to reload to find out.
+     */
+    Route::get('connections/{connection}/first-sync', [ConnectionWizardController::class, 'firstSync'])
+        ->middleware('throttle:120,1')->name('connections.first-sync');
+    /*
      * RUNTIME-100 §5 — re-read the catalogue with the token we already hold.
      *
      * A WRITE, so it sits with the wizard's reads only in the file. Throttled because it calls out
