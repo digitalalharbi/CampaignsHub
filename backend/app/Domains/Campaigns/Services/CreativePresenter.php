@@ -519,8 +519,13 @@ final class CreativePresenter
                 'image_url' => $image,
                 'video_url' => $video,
                 'thumbnail_url' => $thumb,
-                'headline' => $this->text($card['headline'] ?? null),
-                'body' => $this->text($card['body'] ?? null),
+                /*
+                 * Meta's carousel children carry `name` and `description` — the connector stores them
+                 * under the platform's own words — and this read only `headline` and `body`, so every
+                 * Meta card showed no copy although the sync had it. Either spelling is the card's copy.
+                 */
+                'headline' => $this->text($card['headline'] ?? null) ?? $this->text($card['name'] ?? null),
+                'body' => $this->text($card['body'] ?? null) ?? $this->text($card['description'] ?? null),
                 'cta' => $this->text($card['cta'] ?? null),
                 'destination_url' => $this->text($card['destination_url'] ?? null),
             ];
