@@ -60,11 +60,57 @@ describe('the projects list as a management surface', () => {
     renderWithProviders(<ProjectsPage />, { locale: 'ar' })
 
     const card = await screen.findByTestId('project-card-p1')
-    // Latin digits, the product's rule in every locale.
-    expect(within(card).getByTestId('project-accounts')).toHaveTextContent('3')
-    expect(within(card).getByTestId('project-team')).toHaveTextContent('4')
+    /*
+     * Latin digits and a COUNTED noun — 3 takes the plural, and the adjective agrees with it.
+     *
+     * Asserting the form rather than the digit is the point: «3 حسابات إعلانية» is what
+     * `lib/counted` produces and «3 حسابات إعلانية» typed beside the number would produce the same
+     * string here and the wrong one at 1, 2 and 11. Pinning the form is what keeps the card on the
+     * shared rule.
+     */
+    expect(within(card).getByTestId('project-accounts')).toHaveTextContent('3 حسابات إعلانية')
+    expect(within(card).getByTestId('project-team')).toHaveTextContent('4 أعضاء')
     expect(card.textContent).toContain('Meta')
     expect(card.textContent).toContain('Snapchat')
+  })
+
+  /** The boundaries a hand-written card gets wrong: one, two, and past ten. */
+  it.each([
+    [1, '1 حساب إعلاني', '1 عضو'],
+    [2, '2 حسابان إعلانيان', '2 عضوان'],
+    [11, '11 حسابًا إعلانيًا', '11 عضوًا'],
+  ])('agrees with the count at %s', async (n, accountsText, teamText) => {
+    vi.mocked(listProjects).mockResolvedValue([
+      {
+        ...base, id: 'p1', name: 'رزة أفينيو',
+        summary: { accounts: n, providers: [], data_last_synced_at: new Date().toISOString(), team_members: n, attention: null },
+      },
+    ] as never)
+
+    renderWithProviders(<ProjectsPage />, { locale: 'ar' })
+
+    const card = await screen.findByTestId('project-card-p1')
+    expect(within(card).getByTestId('project-accounts')).toHaveTextContent(accountsText)
+    expect(within(card).getByTestId('project-team')).toHaveTextContent(teamText)
+  })
+
+  /** And the freshness line counts its hours the same way. */
+  it('counts the hours since the last data', async () => {
+    vi.mocked(listProjects).mockResolvedValue([
+      {
+        ...base, id: 'p1', name: 'رزة أفينيو',
+        summary: {
+          accounts: 1, providers: [],
+          data_last_synced_at: new Date(Date.now() - 2 * 3600_000 - 60_000).toISOString(),
+          team_members: 1, attention: null,
+        },
+      },
+    ] as never)
+
+    renderWithProviders(<ProjectsPage />, { locale: 'ar' })
+
+    // Two hours takes the DUAL, which «قبل 2 ساعة» would not.
+    expect((await screen.findByTestId('project-card-p1')).textContent).toContain('قبل 2 ساعتان')
   })
 
   /** Each attention state reads as itself, and a healthy project wears no badge at all. */

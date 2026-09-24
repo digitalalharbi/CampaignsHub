@@ -27,8 +27,9 @@ import { ErrorSummary, type FieldError } from '@/components/forms'
 import { toApiError } from '@/lib/api/client'
 import { usePortalPath } from '@/app/portalPath'
 import { useT } from '@/lib/i18n'
+import { adAccounts, days as countedDays, hours as countedHours, members } from '@/lib/counted'
 import { useAuth } from '@/stores/auth'
-import { useUi } from '@/stores/ui'
+import { useUi, type Locale } from '@/stores/ui'
 
 const STATUSES = ['draft', 'onboarding', 'active', 'paused', 'completed', 'archived']
 
@@ -116,8 +117,6 @@ const PROJ_IMPACT_LABELS: Array<{ key: string; ar: string; en: string }> = [
  */
 const PROJ_SURFACE = {
   ar: {
-    accounts: 'حسابات إعلانية',
-    team: 'أعضاء',
     synced: 'آخر بيانات',
     never: 'لم تصل بيانات بعد',
     attention: {
@@ -127,8 +126,6 @@ const PROJ_SURFACE = {
     },
   },
   en: {
-    accounts: 'ad accounts',
-    team: 'members',
     synced: 'Last data',
     never: 'No data yet',
     attention: {
@@ -145,20 +142,23 @@ const PROJ_PLATFORM_NAMES: Record<string, string> = {
 }
 
 /**
- * «منذ ٣ ساعات» without a date library, and without claiming precision the card does not need.
+ * «قبل 3 ساعات» without a date library, and without claiming precision the card does not need.
  *
  * A list is read for whether data is current, not for when exactly it arrived — the project's own
- * pages answer that. Latin digits, per the product's numerals rule.
+ * pages answer that. The DIGITS stay Latin (the product's numeral rule) and the noun beside them
+ * comes from `lib/counted`, because «قبل 3 ساعة» and «قبل 11 ساعات» are what writing it here by hand
+ * produces: correct for the number in front of the author and wrong for every other one.
  */
-function freshnessLabel(iso: string, ar: boolean): string {
-  const hours = Math.floor((Date.now() - Date.parse(iso)) / 3_600_000)
+function freshnessLabel(iso: string, locale: Locale): string {
+  const elapsed = Math.floor((Date.now() - Date.parse(iso)) / 3_600_000)
+  const ar = locale === 'ar'
 
-  if (!Number.isFinite(hours) || hours < 0) return ar ? 'الآن' : 'just now'
-  if (hours < 1) return ar ? 'خلال الساعة' : 'under an hour ago'
-  if (hours < 24) return ar ? `قبل ${hours} ساعة` : `${hours}h ago`
+  if (!Number.isFinite(elapsed) || elapsed < 0) return ar ? 'الآن' : 'just now'
+  if (elapsed < 1) return ar ? 'خلال الساعة' : 'under an hour ago'
+  if (elapsed < 24) return ar ? `قبل ${countedHours(elapsed, locale)}` : `${countedHours(elapsed, locale)} ago`
 
-  const days = Math.floor(hours / 24)
-  return ar ? `قبل ${days} يوم` : `${days}d ago`
+  const elapsedDays = Math.floor(elapsed / 24)
+  return ar ? `قبل ${countedDays(elapsedDays, locale)}` : `${countedDays(elapsedDays, locale)} ago`
 }
 
 /** PROJECT-DELETE-001 §34 — every lifecycle act says so, in one place, in the right words. */
@@ -441,25 +441,27 @@ export function ProjectsPage() {
                 {p.summary && (
                   <div className="mt-3 space-y-2">
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-secondary">
-                      <span data-testid="project-accounts" className="inline-flex items-center gap-1">
+                      {/*
+                        Counted through `lib/counted`, never written beside the number.
+
+                        Arabic changes the FORM of the noun on boundaries nobody remembers at a call
+                        site — «1 حساب إعلاني», «2 حسابان إعلانيان», «3 حسابات إعلانية», «11 حسابًا
+                        إعلانيًا» — and a card that types one of them gets the rest wrong for as long
+                        as nobody counts.
+                      */}
+                      <span data-testid="project-accounts" className="inline-flex items-center gap-1 tnum">
                         <Plug size={12} aria-hidden />
-                        <span className="tnum font-semibold text-text-primary">
-                          {p.summary.accounts.toLocaleString('en-US')}
-                        </span>
-                        {surface.accounts}
+                        {adAccounts(p.summary.accounts, locale)}
                       </span>
-                      <span data-testid="project-team" className="inline-flex items-center gap-1">
+                      <span data-testid="project-team" className="inline-flex items-center gap-1 tnum">
                         <Users size={12} aria-hidden />
-                        <span className="tnum font-semibold text-text-primary">
-                          {p.summary.team_members.toLocaleString('en-US')}
-                        </span>
-                        {surface.team}
+                        {members(p.summary.team_members, locale)}
                       </span>
                       {/* Freshness, because «is this client current» is the other half of the question. */}
                       <span className="inline-flex items-center gap-1 text-text-muted">
                         <Clock size={12} aria-hidden />
                         {p.summary.data_last_synced_at
-                          ? `${surface.synced}: ${freshnessLabel(p.summary.data_last_synced_at, locale === 'ar')}`
+                          ? `${surface.synced}: ${freshnessLabel(p.summary.data_last_synced_at, locale)}`
                           : surface.never}
                       </span>
                     </div>
