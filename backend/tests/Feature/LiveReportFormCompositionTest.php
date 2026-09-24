@@ -204,7 +204,10 @@ final class LiveReportFormCompositionTest extends TestCase
             'totals' => 'complete KPI depth',
             'timeseries' => 'timeseries trends',
             'platforms' => 'platform-by-platform sections',
-            'objective_performance' => 'the objective breakdown',
+            // REPORT-OBJECTIVE-ANALYTICS-001 renamed this payload: `objective_analytics` is the section
+            // the owner asked for, and `objective_performance` is the older shape a report built before
+            // it still carries. Either satisfies row 96; neither being present does not.
+            'objective_analytics|objective_performance' => 'the objective breakdown',
             'budget' => 'budget and pacing',
             'funnel' => 'the funnel',
             'store_funnel' => 'the store reconciliation',
@@ -232,7 +235,53 @@ final class LiveReportFormCompositionTest extends TestCase
          */
         $trimmable = ['funnel'];
 
+        /*
+         * REPORT-SECTION-SURFACES-001 — «carries it» now has two honest shapes, and row 96 means the
+         * first of them.
+         *
+         * The section model omits a section's keys when that section is not visible, rather than
+         * sending them empty: «a section disappears cleanly». So a key can be absent for a reason the
+         * owner asked for — the section had nothing to show, or the operator switched it off — and an
+         * assertion that only accepts presence reads that deliberate silence as a regression.
+         *
+         * What row 96 forbids is the detailed form DROPPING a section the summary keeps, so the
+         * promise is checked against the section list the payload publishes: the key is there, or the
+         * section it belongs to is one this payload does not show and says so. A section that is
+         * visible and still missing its data fails, which is the case row 96 is about.
+         */
+        $sections = $detailed['report_sections'] ?? null;
+        $sectionOf = [
+            'objective_analytics|objective_performance' => 'objective_breakdown',
+            'budget' => 'budget_pacing',
+            'funnel' => 'funnel',
+            'store_funnel' => 'funnel',
+            'ads' => 'content_performance',
+            'ads_platform_groups' => 'content_performance',
+            'ads_roster' => 'content_performance',
+            'campaigns' => 'detailed_tables',
+        ];
+
         foreach ($promised as $key => $clause) {
+            // A promise naming alternatives is kept by any one of them — see the objective breakdown above.
+            $alternatives = explode('|', $key);
+            if (count($alternatives) > 1) {
+                foreach ($alternatives as $alternative) {
+                    if (array_key_exists($alternative, $detailed)) {
+                        continue 2;
+                    }
+                }
+            }
+
+            if (! array_key_exists($key, $detailed) && is_array($sections) && isset($sectionOf[$key])) {
+                $this->assertNotContains(
+                    $sectionOf[$key],
+                    $sections,
+                    "the detailed report dropped {$clause} while still publishing its section — row 96 names it as something this product must contain",
+                );
+
+                continue;
+            }
+
             $this->assertArrayHasKey(
                 $key,
                 $detailed,
