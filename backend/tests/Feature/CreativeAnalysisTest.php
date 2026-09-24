@@ -303,8 +303,13 @@ final class CreativeAnalysisTest extends TestCase
         $this->assertSame(CreativeFatigue::IMPROVING, $verdict['status']);
     }
 
-    /** Frequency is averaged across the window, not summed — a sum grows with the window and means nothing. */
-    public function test_frequency_is_averaged_across_the_window(): void
+    /**
+     * Frequency is neither summed NOR averaged across the window — REACH-DEDUP-001.
+     *
+     * This test used to pin the average (3.0). The mean of daily frequencies weights a quiet day like a
+     * busy one and describes no audience, so a two-day window has no frequency at all.
+     */
+    public function test_frequency_is_not_averaged_across_the_window(): void
     {
         $creative = $this->creative('Frequent', $this->awarenessCampaign);
         $this->day($creative, '2026-07-01', ['spend' => 10, 'impressions' => 1000, 'frequency' => 2.0]);
@@ -316,7 +321,8 @@ final class CreativeAnalysisTest extends TestCase
             Carbon::parse('2026-07-31'),
         )[(string) $creative->getKey()];
 
-        $this->assertEqualsWithDelta(3.0, $figures['frequency'], 0.01);
+        $this->assertNull($figures['frequency']);
+        $this->assertFalse($figures['reported']['frequency']);
         $this->assertSame(2, $figures['active_days']);
     }
 
@@ -359,21 +365,23 @@ final class CreativeAnalysisTest extends TestCase
     }
 
     /**
-     * Frequency across creatives is weighted by impressions, because an average is not a sum.
+     * Frequency across creatives is not a weighted mean either — REACH-DEDUP-001.
      *
-     * A creative shown twice to a hundred thousand people and one shown eight times to two hundred
-     * do not average to five. The plain mean would let the smaller creative dominate the figure that
-     * describes the audience's exposure.
+     * This used to pin an impression-weighted mean (2.012). Somebody who saw both creatives is counted
+     * in both frequencies, so no mean of them describes the group's audience: a group has no frequency,
+     * and a group of one keeps that creative's own.
      */
-    public function test_an_aggregate_weights_frequency_by_impressions(): void
+    public function test_an_aggregate_has_no_frequency_unless_it_is_one_creative(): void
     {
         $totals = app(CreativeMetrics::class)->aggregate([
             ['impressions' => 100000.0, 'frequency' => 2.0],
             ['impressions' => 200.0, 'frequency' => 8.0],
         ]);
 
-        $this->assertEqualsWithDelta(2.012, $totals['frequency'], 0.01);
-        $this->assertNotEqualsWithDelta(5.0, $totals['frequency'], 0.5, 'the plain mean of two averages was used');
+        $this->assertNull($totals['frequency']);
+
+        $one = app(CreativeMetrics::class)->aggregate([['impressions' => 100000.0, 'frequency' => 2.0]]);
+        $this->assertEqualsWithDelta(2.0, $one['frequency'], 0.001);
     }
 
     /** Nothing to add up is null — never a row of zeroes that reads as a measured result. */
