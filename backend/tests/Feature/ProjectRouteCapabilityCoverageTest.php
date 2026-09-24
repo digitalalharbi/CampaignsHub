@@ -63,6 +63,23 @@ final class ProjectRouteCapabilityCoverageTest extends TestCase
         'api.v1.projects.resume',
 
         /*
+         * PROJECT-DELETE-001 — destroying a client, and the read that tells you what that costs.
+         *
+         * Same layer as the lifecycle routes above and for the same reason: they act ON a project
+         * rather than inside one, so «what may this person do within THIS client» is the wrong
+         * question to ask about ending the client altogether.
+         *
+         * Filed here rather than waved through, because the exemption is a claim and this one is
+         * checked: `ProjectDeletionTest` holds all three guards the controller applies — the TENANT
+         * permission `projects.delete`, which the catalogue has always separated from
+         * `projects.update`; `authorizeReach`, so a member confined to one client cannot spend that
+         * permission on the neighbouring one with a UUID in hand; and the typed project name,
+         * enforced server-side so a confirmation the browser draws is not one an API call skips.
+         */
+        'api.v1.projects.deletion-impact',
+        'api.v1.projects.destroy',
+
+        /*
          * The capability SET itself — the endpoint a rail reads to decide what to draw.
          *
          * Every capability it could be gated on is one it exists to report on, so gating it would

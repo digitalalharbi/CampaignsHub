@@ -6,9 +6,11 @@ namespace App\Domains\Projects\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\ClientWorkspaces\Services\CanonicalWorkspace;
+use App\Domains\Projects\Actions\DeleteProject;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Projects\Resources\ProjectResource;
+use App\Domains\Projects\Services\ProjectDeletionImpact;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
@@ -183,6 +185,63 @@ final class ProjectController extends Controller
     public function resume(Request $request, string $project, AuditLogger $audit): JsonResponse
     {
         return $this->transition($request, $project, 'active', 'projects.update', 'project.resumed', $audit);
+    }
+
+    /**
+     * GET projects/{project}/deletion-impact — what «حذف المشروع» will reach, before it reaches it.
+     *
+     * PROJECT-DELETE-001 §7. A read, and the only reason the dialog can say anything more useful
+     * than «Are you sure?». It is served from the same measurement the deletion itself records, so
+     * the numbers a person agreed to are the numbers the audit trail keeps.
+     */
+    public function deletionImpact(Request $request, string $project, ProjectDeletionImpact $impact): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('projects.delete'), 403);
+        $model = $this->find($project);
+        $this->authorizeReach($request->user(), $model);
+
+        return ApiResponse::success($impact->for($model), 'Deletion impact.');
+    }
+
+    /**
+     * DELETE projects/{project} — the destructive action, separate from «أرشفة».
+     *
+     * PROJECT-DELETE-001. Three guards before anything is written, and each one is a different way
+     * this has gone wrong in products that shipped it carelessly:
+     *
+     *  - `projects.delete`, not `projects.update`. The catalogue already separated renaming a client
+     *    from destroying one; nothing read the second permission until now.
+     *  - reach. A member confined to one client may hold the permission for THEIR project and must
+     *    not be able to spend it on the neighbouring one with a UUID in hand.
+     *  - the typed name, checked HERE. A confirmation the browser enforces is a confirmation an API
+     *    call skips, and this is the request that cannot be taken back.
+     */
+    public function destroy(Request $request, string $project, DeleteProject $delete): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('projects.delete'), 403);
+        $model = $this->find($project);
+        $this->authorizeReach($request->user(), $model);
+
+        $request->validate([
+            'confirm_name' => ['required', 'string'],
+        ]);
+
+        /*
+         * Compared after trimming and only after trimming.
+         *
+         * Not case-folded and not normalised further: the field exists to prove the person read the
+         * name of the thing they are destroying, and «close enough» is the property it must not
+         * have. Trailing whitespace from a copy-paste is not a failure of attention.
+         */
+        if (trim((string) $request->input('confirm_name')) !== trim((string) $model->name)) {
+            throw ValidationException::withMessages([
+                'confirm_name' => [__('Type the project name exactly to confirm deletion.')],
+            ]);
+        }
+
+        $impact = $delete->handle($model, $request->user()?->id);
+
+        return ApiResponse::success($impact, 'Project deleted.');
     }
 
     private function transition(Request $request, string $project, string $status, string $permission, string $action, AuditLogger $audit): JsonResponse
