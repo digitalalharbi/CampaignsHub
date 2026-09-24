@@ -15,6 +15,13 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * A project inside a client workspace. Owns its own sources/campaigns/reports (bindings added by
  * their domains). Tenant-scoped and workspace-scoped.
+ *
+ * @property array<string,mixed>|null $list_summary
+ *                                                  PROJECT-LIST-SURFACE-001 — the listing's per-card facts, attached in memory by
+ *                                                  `ProjectController::index` and read by `ProjectResource`. TRANSIENT: there is no such column,
+ *                                                  it is absent from `$fillable` so nothing can mass-assign it, and a project read anywhere else
+ *                                                  simply does not carry it. Declared here because it is a real attribute at runtime and static
+ *                                                  analysis is entitled to know its type.
  */
 final class Project extends Model
 {

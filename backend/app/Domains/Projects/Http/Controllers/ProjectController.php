@@ -11,6 +11,7 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Projects\Resources\ProjectResource;
 use App\Domains\Projects\Services\ProjectDeletionImpact;
+use App\Domains\Projects\Services\ProjectListSummary;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
@@ -25,7 +26,7 @@ final class ProjectController extends Controller
 {
     private const STATUSES = ['draft', 'onboarding', 'active', 'paused', 'completed', 'archived'];
 
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, ProjectListSummary $summary): JsonResponse
     {
         $user = $request->user();
         abort_unless($user->hasPermission('projects.view'), 403);
@@ -47,7 +48,21 @@ final class ProjectController extends Controller
             $query->where('name', 'ilike', "%{$search}%");
         }
 
-        return ApiResponse::success(ProjectResource::collection($query->get()), 'Projects retrieved.');
+        $projects = $query->get();
+
+        /*
+         * PROJECT-LIST-SURFACE-001 §10 — the facts that make the list worth opening.
+         *
+         * Attached after the page is fetched, in ONE pass over the whole page rather than four
+         * queries per card: an agency's list is every client they run, and the page that suffers
+         * from an N+1 is the first one anybody sees.
+         */
+        $summaries = $summary->for($projects);
+        $projects->each(function (Project $project) use ($summaries): void {
+            $project->setAttribute('list_summary', $summaries[(string) $project->getKey()] ?? null);
+        });
+
+        return ApiResponse::success(ProjectResource::collection($projects), 'Projects retrieved.');
     }
 
     public function show(Request $request, string $project): JsonResponse

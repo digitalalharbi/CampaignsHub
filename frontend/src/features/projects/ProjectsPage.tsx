@@ -2,7 +2,7 @@ import { StatCard } from '@/components/ui/StatCard'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, Copy, FolderKanban, Pause, Pencil, Play, Plus, RotateCcw, Search, Trash2, Users } from 'lucide-react'
+import { AlertTriangle, Clock, Copy, FolderKanban, Pause, Pencil, Play, Plug, Plus, RotateCcw, Search, Trash2, Users } from 'lucide-react'
 import {
   archiveProject,
   createProject,
@@ -107,6 +107,60 @@ const PROJ_IMPACT_LABELS: Array<{ key: string; ar: string; en: string }> = [
   { key: 'team_members', ar: 'أعضاء الفريق', en: 'Team members' },
 ]
 
+/**
+ * PROJECT-LIST-SURFACE-001 §10 — what the card says about a project's data.
+ *
+ * Three attention states and no score. A badge meaning «something about this client is worse than it
+ * was» is a badge people learn not to see; each of these names a thing to go and do, so the words
+ * are the action and not the symptom.
+ */
+const PROJ_SURFACE = {
+  ar: {
+    accounts: 'حسابات إعلانية',
+    team: 'أعضاء',
+    synced: 'آخر بيانات',
+    never: 'لم تصل بيانات بعد',
+    attention: {
+      no_accounts: 'لا حسابات مربوطة',
+      never_synced: 'لم تصل بيانات',
+      stale: 'البيانات متأخرة',
+    },
+  },
+  en: {
+    accounts: 'ad accounts',
+    team: 'members',
+    synced: 'Last data',
+    never: 'No data yet',
+    attention: {
+      no_accounts: 'No linked accounts',
+      never_synced: 'No data received',
+      stale: 'Data is behind',
+    },
+  },
+} as const
+
+/** The six platforms, as their owners spell them. */
+const PROJ_PLATFORM_NAMES: Record<string, string> = {
+  snapchat: 'Snapchat', meta: 'Meta', tiktok: 'TikTok', google: 'Google', linkedin: 'LinkedIn', x: 'X',
+}
+
+/**
+ * «منذ ٣ ساعات» without a date library, and without claiming precision the card does not need.
+ *
+ * A list is read for whether data is current, not for when exactly it arrived — the project's own
+ * pages answer that. Latin digits, per the product's numerals rule.
+ */
+function freshnessLabel(iso: string, ar: boolean): string {
+  const hours = Math.floor((Date.now() - Date.parse(iso)) / 3_600_000)
+
+  if (!Number.isFinite(hours) || hours < 0) return ar ? 'الآن' : 'just now'
+  if (hours < 1) return ar ? 'خلال الساعة' : 'under an hour ago'
+  if (hours < 24) return ar ? `قبل ${hours} ساعة` : `${hours}h ago`
+
+  const days = Math.floor(hours / 24)
+  return ar ? `قبل ${days} يوم` : `${days}d ago`
+}
+
 /** PROJECT-DELETE-001 §34 — every lifecycle act says so, in one place, in the right words. */
 const PROJ_NOTICES = {
   ar: {
@@ -152,6 +206,7 @@ export function ProjectsPage() {
   const pc = PROJ_COPY[locale]
   const danger = PROJ_DANGER[locale]
   const notices = PROJ_NOTICES[locale]
+  const surface = PROJ_SURFACE[locale]
   const mayDelete = useAuth((s) => s.hasPermission('projects.delete'))
 
   const projects = useQuery({
@@ -363,7 +418,7 @@ export function ProjectsPage() {
             const archived = p.status === 'archived'
             const paused = p.status === 'paused'
             return (
-              <Card key={p.id}>
+              <Card key={p.id} data-testid={`project-card-${p.id}`}>
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2">
                     <FolderKanban size={18} className="text-brand-600" />
@@ -375,6 +430,61 @@ export function ProjectsPage() {
                 <span className="mt-1 block text-xs text-text-muted">
                   {t('setup')}: <span className="tnum">{p.setup_completion}%</span>
                 </span>
+
+                {/*
+                  PROJECT-LIST-SURFACE-001 §10 — the four facts a list of clients is asked for.
+
+                  Optional: `show` returns a project without a summary, and a card that throws on a
+                  missing field is a card that takes the page down the first time an older cached
+                  response is replayed.
+                */}
+                {p.summary && (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-secondary">
+                      <span data-testid="project-accounts" className="inline-flex items-center gap-1">
+                        <Plug size={12} aria-hidden />
+                        <span className="tnum font-semibold text-text-primary">
+                          {p.summary.accounts.toLocaleString('en-US')}
+                        </span>
+                        {surface.accounts}
+                      </span>
+                      <span data-testid="project-team" className="inline-flex items-center gap-1">
+                        <Users size={12} aria-hidden />
+                        <span className="tnum font-semibold text-text-primary">
+                          {p.summary.team_members.toLocaleString('en-US')}
+                        </span>
+                        {surface.team}
+                      </span>
+                      {/* Freshness, because «is this client current» is the other half of the question. */}
+                      <span className="inline-flex items-center gap-1 text-text-muted">
+                        <Clock size={12} aria-hidden />
+                        {p.summary.data_last_synced_at
+                          ? `${surface.synced}: ${freshnessLabel(p.summary.data_last_synced_at, locale === 'ar')}`
+                          : surface.never}
+                      </span>
+                    </div>
+
+                    {p.summary.providers.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {p.summary.providers.map((key) => (
+                          <span key={key} className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+                            {PROJ_PLATFORM_NAMES[key] ?? key}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {p.summary.attention && (
+                      <p
+                        data-testid={`project-attention-${p.id}`}
+                        className="inline-flex items-center gap-1 rounded-lg border border-warning bg-warning-soft px-2 py-1 text-[11px] font-semibold text-warning"
+                      >
+                        <AlertTriangle size={12} aria-hidden />
+                        {surface.attention[p.summary.attention]}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border pt-3 text-xs">
                   <button type="button" onClick={() => openEdit(p)} className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary">
