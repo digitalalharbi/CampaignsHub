@@ -615,7 +615,7 @@ const COST_PER_DENOMINATOR: Record<string, string | ((t: Record<string, number |
  * the window is missing — below that the remaining points still describe the shape honestly, and a
  * sparkline is a shape rather than a set of readings.
  */
-function sparkFor(
+export function sparkFor(
   key: string,
   series: readonly TimePoint[] | undefined,
   reported: Record<string, boolean> | undefined,
