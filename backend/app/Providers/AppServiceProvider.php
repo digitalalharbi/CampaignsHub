@@ -7,6 +7,8 @@ namespace App\Providers;
 use App\Domains\Accounts\Services\AccountGrants;
 use App\Domains\Audit\Listeners\RecordAuthAudit;
 use App\Domains\Campaigns\Support\CreativeDemoPolicy;
+use App\Domains\Campaigns\Support\PresentationAudience;
+use App\Domains\Campaigns\Support\RefusedCreativeAccess;
 use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Company;
 use App\Domains\CRM\Models\Lead;
@@ -53,6 +55,8 @@ class AppServiceProvider extends ServiceProvider
          * letting whichever scenario ran first pay for a check the second then read for free.
          */
         $this->app->scoped(CreativeDemoPolicy::class);
+        $this->app->scoped(PresentationAudience::class);
+        $this->app->scoped(RefusedCreativeAccess::class);
 
         /*
          * AUTOMATION-FIRST-OPERATIONS-001 — one counter per process, or the count never arrives.
