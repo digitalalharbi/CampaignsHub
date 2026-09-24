@@ -42,6 +42,10 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
         'Domains/Reports/Services/ReportAds.php' => 'narrowed by CreativeRows::applyFilters()',
         'Domains/Reports/Services/SharedCreativeView.php' => 'narrowed by CreativeRows::applyFilters()',
         'Domains/Integrations/Providers/MetaConnector.php' => 'connector',
+        // REACH-PERIOD-001 — decides whether an ad account's provider reach describes a scope, which
+        // requires every campaign the account delivered in ANY project; a narrower read would let an
+        // account figure stand for a scope that is only part of its audience. It returns no figure.
+        'Domains/Metrics/Services/PeriodReachReader.php' => 'checks the whole account\'s delivery before an account reach may be used',
         // Maintenance and diagnostics that must see the whole table to report or repair it.
         'Domains/Metrics/Console/RenormaliseReportingCurrency.php' => 'renormalises every stored row',
         'Domains/Metrics/Rates/CurrencyRateFeed.php' => 'which currencies exist, not whose figures',
