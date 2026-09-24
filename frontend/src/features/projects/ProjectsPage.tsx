@@ -2,10 +2,12 @@ import { StatCard } from '@/components/ui/StatCard'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Copy, FolderKanban, Pause, Pencil, Play, Plus, RotateCcw, Search, Users } from 'lucide-react'
+import { AlertTriangle, Copy, FolderKanban, Pause, Pencil, Play, Plus, RotateCcw, Search, Trash2, Users } from 'lucide-react'
 import {
   archiveProject,
   createProject,
+  deleteProject,
+  fetchProjectDeletionImpact,
   listClientWorkspaces,
   listProjects,
   projectAction,
@@ -25,6 +27,7 @@ import { ErrorSummary, type FieldError } from '@/components/forms'
 import { toApiError } from '@/lib/api/client'
 import { usePortalPath } from '@/app/portalPath'
 import { useT } from '@/lib/i18n'
+import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 
 const STATUSES = ['draft', 'onboarding', 'active', 'paused', 'completed', 'archived']
@@ -65,6 +68,67 @@ const PROJ_COPY = {
   ar: { search_ph: 'ابحث باسم المشروع…', all: 'الكل', total: 'إجمالي المشاريع', active: 'نشطة', paused: 'متوقفة', onboarding: 'قيد الإعداد', no_match: 'لا مشاريع تطابق البحث أو الفلتر.' },
   en: { search_ph: 'Search by project name…', all: 'All', total: 'Total projects', active: 'Active', paused: 'Paused', onboarding: 'Onboarding', no_match: 'No projects match your search or filter.' },
 } as const
+/**
+ * PROJECT-DELETE-001 §34–§35 — the destructive dialog's own words, and the notice after every act.
+ *
+ * Kept beside the page rather than in the shared dictionary for the same reason the rest of this
+ * file's copy is: these sentences are about THIS screen's decisions, and a deletion warning that
+ * drifts out of sight of the code it describes is how a dialog ends up promising something the
+ * server stopped doing.
+ */
+const PROJ_DANGER = {
+  ar: {
+    title: 'حذف المشروع',
+    lead: 'سيؤدي حذف المشروع إلى إزالة المشروع وبياناته المرتبطة من كامبينز هب. لن يؤدي ذلك إلى حذف الحساب الإعلاني من المنصة.',
+    keeps: 'لن يُلغى تفويض المنصة، ولن تُحذف الحسابات الإعلانية — قد تستخدمها مشاريع أخرى.',
+    type_name: 'اكتب اسم المشروع للتأكيد',
+    confirm: 'حذف المشروع نهائيًا',
+    reach: 'ما سيشمله الحذف',
+  },
+  en: {
+    title: 'Delete project',
+    lead: 'Deleting removes the project and its data from CampaignsHub. It does not delete the advertising account on the platform.',
+    keeps: 'The platform authorisation is not revoked and no advertising account is deleted — other projects may use them.',
+    type_name: 'Type the project name to confirm',
+    confirm: 'Delete project permanently',
+    reach: 'What deletion reaches',
+  },
+} as const
+
+/** What each impact count is called, in the order a person reads them. */
+const PROJ_IMPACT_LABELS: Array<{ key: string; ar: string; en: string }> = [
+  { key: 'integration_bindings', ar: 'الحسابات الإعلانية المرتبطة', en: 'Linked advertising accounts' },
+  { key: 'campaigns', ar: 'الحملات', en: 'Campaigns' },
+  { key: 'metric_rows', ar: 'صفوف البيانات', en: 'Measured rows' },
+  { key: 'reports', ar: 'التقارير', en: 'Reports' },
+  { key: 'active_shares', ar: 'روابط مشاركة نشطة', en: 'Active share links' },
+  { key: 'report_schedules', ar: 'جداول إرسال', en: 'Scheduled sends' },
+  { key: 'tasks', ar: 'المهام', en: 'Tasks' },
+  { key: 'team_members', ar: 'أعضاء الفريق', en: 'Team members' },
+]
+
+/** PROJECT-DELETE-001 §34 — every lifecycle act says so, in one place, in the right words. */
+const PROJ_NOTICES = {
+  ar: {
+    updated: 'تم تحديث المشروع',
+    archived: 'تمت أرشفة المشروع',
+    restored: 'تمت استعادة المشروع',
+    paused: 'تم إيقاف المشروع مؤقتًا',
+    resumed: 'تم استئناف المشروع',
+    cloned: 'تم نسخ المشروع',
+    deleted: 'تم حذف المشروع',
+  },
+  en: {
+    updated: 'Project updated',
+    archived: 'Project archived',
+    restored: 'Project restored',
+    paused: 'Project paused',
+    resumed: 'Project resumed',
+    cloned: 'Project cloned',
+    deleted: 'Project deleted',
+  },
+} as const
+
 const PROJ_CREATE_IDS: Record<string, string> = { name: 'proj-name', client_workspace_id: 'proj-workspace' }
 const PROJ_EDIT_IDS: Record<string, string> = { name: 'proj-edit-name', status: 'proj-edit-status' }
 
@@ -82,7 +146,13 @@ export function ProjectsPage() {
   const [showArchived, setShowArchived] = useState(false)
   const [term, setTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | string>('all')
+  const [deleting, setDeleting] = useState<Project | null>(null)
+  const [confirmName, setConfirmName] = useState('')
+  const [notice, setNotice] = useState<string | null>(null)
   const pc = PROJ_COPY[locale]
+  const danger = PROJ_DANGER[locale]
+  const notices = PROJ_NOTICES[locale]
+  const mayDelete = useAuth((s) => s.hasPermission('projects.delete'))
 
   const projects = useQuery({
     queryKey: ['projects', { showArchived }],
@@ -105,15 +175,57 @@ export function ProjectsPage() {
     mutationFn: ({ id, ...input }: { id: string; name: string; status: string }) => updateProject(id, input),
     onSuccess: () => {
       setEditing(null)
+      setNotice(notices.updated)
       invalidate()
     },
   })
   const actionMutation = useMutation({
     mutationFn: ({ id, action }: { id: string; action: 'clone' | 'restore' | 'pause' | 'resume' }) =>
       projectAction(id, action),
-    onSuccess: invalidate,
+    onSuccess: (_data, { action }) => {
+      setNotice(notices[action === 'clone' ? 'cloned' : action === 'restore' ? 'restored' : action === 'pause' ? 'paused' : 'resumed'])
+      invalidate()
+    },
   })
-  const archiveMutation = useMutation({ mutationFn: archiveProject, onSuccess: invalidate })
+  const archiveMutation = useMutation({
+    mutationFn: archiveProject,
+    onSuccess: () => {
+      setNotice(notices.archived)
+      invalidate()
+    },
+  })
+
+  /*
+   * PROJECT-DELETE-001 — the dialog asks the server what it is about to do, before it does it.
+   *
+   * Fetched when the dialog opens rather than with the list: it is one project's counts across a
+   * dozen tables, and computing it for every card on every render would make opening the page pay
+   * for a question almost nobody asks.
+   */
+  const impact = useQuery({
+    queryKey: ['project-deletion-impact', deleting?.id],
+    queryFn: () => fetchProjectDeletionImpact(deleting!.id),
+    enabled: deleting !== null,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteProject(deleting!.id, confirmName),
+    onSuccess: () => {
+      setDeleting(null)
+      setConfirmName('')
+      setNotice(notices.deleted)
+      /*
+       * Everything the deleted project fed, not just the list.
+       *
+       * A project that has gone still has its name in the switcher, its bindings in the integrations
+       * page and its figures in whatever was open behind this dialog. Invalidating only `projects`
+       * is how a deletion looks like it worked and then reappears on the next screen.
+       */
+      invalidate()
+      queryClient.invalidateQueries({ queryKey: ['client-workspaces'] })
+      queryClient.invalidateQueries({ queryKey: ['plan-usage'] })
+    },
+  })
 
   const openEdit = (p: Project) => {
     setEditing(p)
@@ -175,6 +287,26 @@ export function ProjectsPage() {
           </Button>
         </div>
       </div>
+
+      {/*
+        PROJECT-DELETE-001 §34 — no lifecycle act leaves the reader guessing whether it happened.
+
+        Archive, pause, resume, clone, rename and delete all landed silently before this: the card
+        changed if you happened to be looking at the right part of it, and otherwise the only way to
+        find out was to reload. `role="status"` so it is announced rather than merely drawn.
+      */}
+      {notice !== null && (
+        <div
+          role="status"
+          data-testid="project-action-notice"
+          className="flex items-center justify-between gap-3 rounded-xl border border-success bg-success-soft px-3 py-2 text-sm text-success"
+        >
+          <span>{notice}</span>
+          <button type="button" onClick={() => setNotice(null)} className="text-xs font-semibold opacity-80 hover:opacity-100">
+            {locale === 'ar' ? 'إغلاق' : 'Dismiss'}
+          </button>
+        </div>
+      )}
 
       {/* Summary — the portfolio at a glance. */}
       {!projects.isLoading && items.length > 0 && (
@@ -270,6 +402,26 @@ export function ProjectsPage() {
                     </button>
                   )}
                   {/*
+                    Destroying a client is not filed beside archiving them by accident.
+
+                    `projects.delete` is a permission the catalogue always had and nothing read; the
+                    server enforces it either way, and offering a button somebody will always be
+                    refused is its own small defect.
+                  */}
+                  {mayDelete && (
+                    <button
+                      type="button"
+                      data-testid={`project-delete-${p.id}`}
+                      onClick={() => {
+                        setDeleting(p)
+                        setConfirmName('')
+                      }}
+                      className="inline-flex items-center gap-1 text-text-muted hover:text-danger"
+                    >
+                      <Trash2 size={13} /> {danger.title}
+                    </button>
+                  )}
+                  {/*
                     Portal-relative, per ADR 0002's decision 2. These two were written as `/projects/…`
                     — which is not a route in ANY portal — so both were dead in `/app` and `/agency`
                     alike. Found by pressing them during a live review, not by a status check: a
@@ -310,6 +462,85 @@ export function ProjectsPage() {
           <Field label={t('name')} htmlFor="proj-name" required>
             <Input id="proj-name" value={name} onChange={(e) => setName(e.target.value)} data-autofocus />
           </Field>
+        </div>
+      </Modal>
+
+      {/*
+        PROJECT-DELETE-001 §35 — the danger dialog.
+
+        Three things it has that «Are you sure?» does not: what will go, what will NOT go, and a
+        field that makes the reader name the project before the button is live. The counts come from
+        the server, measured against the same rows the deletion will touch, so the dialog cannot
+        drift away from what happens next.
+      */}
+      <Modal
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        title={danger.title}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleting(null)}>{t('cancel')}</Button>
+            <Button
+              variant="danger"
+              data-testid="project-delete-confirm"
+              loading={deleteMutation.isPending}
+              disabled={
+                deleting === null
+                || deleteMutation.isPending
+                || confirmName.trim() !== deleting.name.trim()
+              }
+              onClick={() => deleteMutation.mutate()}
+            >
+              {danger.confirm}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3" data-testid="project-delete-dialog">
+          <p className="flex items-start gap-2 rounded-lg border border-danger bg-danger-soft p-3 text-sm text-danger">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <span>{danger.lead}</span>
+          </p>
+
+          {/* What survives, said plainly — the fact another client's advertising depends on. */}
+          <p data-testid="project-delete-keeps" className="rounded-lg border border-border bg-surface-secondary p-3 text-xs text-text-secondary">
+            {danger.keeps}
+          </p>
+
+          {impact.isLoading ? (
+            <Skeleton className="h-28 w-full" />
+          ) : impact.data ? (
+            <section className="rounded-lg border border-border">
+              <h3 className="border-b border-border px-3 py-2 text-xs font-bold text-text-secondary">{danger.reach}</h3>
+              <dl className="divide-y divide-border">
+                {PROJ_IMPACT_LABELS.map((row) => (
+                  <div key={row.key} className="flex items-center justify-between px-3 py-1.5 text-sm">
+                    <dt className="text-text-secondary">{locale === 'ar' ? row.ar : row.en}</dt>
+                    {/* Latin digits, grouped — the product's numerals rule, in every locale. */}
+                    <dd className="tnum font-semibold">
+                      {((impact.data.counts as Record<string, number>)[row.key] ?? 0).toLocaleString('en-US')}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ) : null}
+
+          <Field label={danger.type_name} htmlFor="proj-delete-name" required>
+            <Input
+              id="proj-delete-name"
+              data-testid="project-delete-name"
+              value={confirmName}
+              onChange={(e) => setConfirmName(e.target.value)}
+              data-autofocus
+            />
+          </Field>
+
+          {deleteMutation.isError && (
+            <p data-testid="project-delete-error" className="rounded-lg border border-danger bg-danger-soft p-3 text-sm text-danger">
+              {toApiError(deleteMutation.error).message}
+            </p>
+          )}
         </div>
       </Modal>
 
