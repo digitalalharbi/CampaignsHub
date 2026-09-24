@@ -213,6 +213,8 @@ export interface StoreFunnelPayload {
 }
 
 export interface LivePayload {
+  /** REPORT-SECTION-SURFACES-001 — the visible sections, in order; a hidden section's data is absent. */
+  report_sections?: string[]
   period: { from: string; to: string; days: number }
   currency: string
   totals: Record<string, number | null>

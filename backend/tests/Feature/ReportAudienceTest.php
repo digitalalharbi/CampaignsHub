@@ -270,7 +270,8 @@ final class ReportAudienceTest extends TestCase
         // Internal fields removed from the client body; draft rec dropped; internal name sanitised.
         $this->assertArrayNotHasKey('checksum', $body);
         $this->assertArrayNotHasKey('tenant_id', $body);
-        $this->assertCount(0, $body['recommendations']);
+        // With the draft dropped nothing is left, so the section is absent rather than an empty list.
+        $this->assertCount(0, $body['recommendations'] ?? []);
         $this->assertStringNotContainsStringIgnoringCase('burner', json_encode($body, JSON_UNESCAPED_UNICODE));
         // Content validator confirms a clean client body.
         $this->assertTrue(app(ClientReportContentValidator::class)->passes($body));

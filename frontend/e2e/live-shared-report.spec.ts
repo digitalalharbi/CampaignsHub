@@ -127,30 +127,21 @@ test.describe('a client opens their live report', () => {
   })
 
   /**
-   * REPORT-OBJECTIVE-003/004 — the client's own link states Direct against Blended.
+   * REPORT-SECTION-SURFACES-001 — Direct against Blended is not a client concept by default.
    *
-   * The headline above it rolls the whole scope together: its cost per order divides every
-   * campaign's spend by the orders the SALES campaigns produced. That is the right answer to «what
-   * did this programme cost» and the wrong one to «what does an order cost» — and this is the page
-   * where the second question is asked, by the person paying for it.
+   * It lives only inside advanced segmentation, which is off for a client-facing report unless an
+   * operator enables it. The headline stays the truthful overall figures, and neither the payload nor
+   * the page carries the split.
    */
-  test('the client’s link separates direct cost from blended wherever the two differ', async ({ page }) => {
+  test('the client’s link carries no direct-against-blended split by default', async ({ page }) => {
     const live = page.waitForResponse((r) => /\/reports\/shared\/[^/]+\/live(\?|$)/.test(r.url()) && r.ok())
     await page.goto(URL)
     const payload = (await (await live).json()).data
     await expect(page.getByTestId('live-kpis')).toBeVisible({ timeout: 20000 })
 
-    const direct = payload.objective_performance?.direct
-    const blended = payload.objective_performance?.blended
-    const differ = Number(direct?.spend ?? 0) !== Number(blended?.spend ?? 0) || (direct?.cpa ?? null) !== (blended?.blended_cpa ?? null)
-
-    if (differ) {
-      await expect(page.getByTestId('live-objective-direct')).toBeVisible()
-      await expect(page.getByTestId('live-objective-blended')).toBeVisible()
-    } else {
-      // No spend outside the sales path: the two are one figure, and a card printing it twice is padding.
-      await expect(page.getByTestId('live-objective-split')).toHaveCount(0)
-    }
+    expect(payload.objective_performance, 'the split travelled to the client').toBeUndefined()
+    expect(payload.report_sections).not.toContain('advanced_segmentation')
+    await expect(page.getByTestId('live-objective-split')).toHaveCount(0)
   })
 
   test('the link is marked as demo data rather than passing seeded figures off as real', async ({ page }) => {
