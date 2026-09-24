@@ -303,6 +303,64 @@ describe('CreativeDetailPage', () => {
     expect(container.querySelectorAll('video')).toHaveLength(0)
   })
 
+  /**
+   * The detail page reads the SAME preview decision as the card and the popup — `readPreview()`.
+   *
+   * #505 put the library card and its table row on the canonical reader; this page still read
+   * `image_url` alone and decided state by hand, so one creative could be a picture on the card, a
+   * picture in the popup and «no preview» on its own page. Three shapes, each a way the two
+   * decisions differed.
+   */
+  const withPreview = (preview: Record<string, unknown>) =>
+    detail({
+      creative: {
+        ...detail().creative,
+        preview: { state: 'available', kind: 'image', image_url: null, video_url: null, thumbnail_url: null, expires_at: null, note_ar: null, note_en: null, ...preview },
+      } as CreativeDetail['creative'],
+    })
+
+  /** A Meta video creative carries only a thumbnail: that picture is drawn, not «no preview». */
+  it('draws the thumbnail when the ad holds no image and no file', async () => {
+    mocked.mockResolvedValue(withPreview({ kind: 'video', thumbnail_url: 'https://cdn.example.com/meta-thumb.jpg' }))
+
+    const { container } = render()
+    await screen.findByText('Hero image')
+
+    expect(container.querySelector('img[src="https://cdn.example.com/meta-thumb.jpg"]')).not.toBeNull()
+  })
+
+  /** The owner's shape: a collection with an available hero and no tiles draws the hero here too. */
+  it('draws a collection’s hero, the same one the card and the popup draw', async () => {
+    mocked.mockResolvedValue(withPreview({
+      kind: 'collection', thumbnail_url: 'https://cdn.example.com/collection-hero.jpg',
+      cards: null, cards_reported: false, cards_withheld: 0,
+    }))
+
+    const { container } = render()
+    await screen.findByText('Hero image')
+
+    expect(container.querySelector('img[src="https://cdn.example.com/collection-hero.jpg"]')).not.toBeNull()
+  })
+
+  /**
+   * An EXPIRED link keeps its thumbnail in the payload, and this page may not draw it.
+   *
+   * A stale poster over a dead asset presents it as the live ad — the reason the canonical reader
+   * refuses it. The page states the expiry instead.
+   */
+  it('draws no stale thumbnail for an expired preview, and says why', async () => {
+    mocked.mockResolvedValue(withPreview({
+      state: 'expired', thumbnail_url: 'https://cdn.example.com/stale.jpg',
+      note_en: 'The platform link has expired — it needs a fresh sync.',
+    }))
+
+    const { container } = render()
+    await screen.findByText('Hero image')
+
+    expect(container.querySelector('img[src="https://cdn.example.com/stale.jpg"]')).toBeNull()
+    expect(screen.getByText(/has expired/)).toBeInTheDocument()
+  })
+
   /** A video arms nothing: metadata only, no autoplay, and the source is not fetched up front. */
   it('mounts a video with metadata only and no autoplay', async () => {
     mocked.mockResolvedValue(
