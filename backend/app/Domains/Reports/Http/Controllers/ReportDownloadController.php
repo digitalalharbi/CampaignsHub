@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Reports\Models\ReportExport;
-use App\Domains\Reports\Services\ReportExporter;
+use App\Domains\Reports\Support\ExportStaleness;
 use App\Domains\Reports\Support\ReportIdentity;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -51,22 +51,15 @@ final class ReportDownloadController extends Controller
     }
 
     /**
-     * A PDF export is stale if it was produced by a different engine version or template version than
-     * the current pipeline, if its validation did not pass, or if it predates provenance tracking
-     * (legacy row). Non-PDF (tabular) exports are exempt.
+     * Delegated to `ExportStaleness` — REPORT-EXPORT-STALE-DEADEND-001.
+     *
+     * This rule used to live here as a private method, which is exactly why the reports LIST could
+     * not ask it and ended up drawing a download link for a file this endpoint would refuse. Two
+     * callers need one answer; a second copy is how they would come to disagree about which files
+     * are downloadable.
      */
     private function isStale(ReportExport $export): bool
     {
-        if ($export->format !== 'pdf') {
-            return false;
-        }
-        if (($export->validation_status ?? 'unknown') !== 'passed') {
-            return true;
-        }
-        if ($export->renderer_version !== (string) config('reports.chromium.renderer_version', 'chromium-1228')) {
-            return true;
-        }
-
-        return $export->template_version !== ReportExporter::TEMPLATE_VERSION;
+        return ExportStaleness::isStale($export);
     }
 }
