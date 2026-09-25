@@ -74,6 +74,43 @@ final class DigestScope
     }
 
     /**
+     * Whether this person's own preference NARROWED the digest, and by how much.
+     *
+     * PROJECT-DIGEST-SCOPE-001. A digest covering three of somebody's twelve projects reads exactly
+     * like one covering all twelve: the same heading, the same «across your projects». So a reader
+     * whose client is missing cannot tell whether that project had no activity or whether they
+     * narrowed their own preference months ago and forgot.
+     *
+     * Null when nothing was narrowed, which is the ordinary case and needs no sentence — a caveat on
+     * every digest is a caveat nobody reads.
+     *
+     * Deliberately a separate, read-only question. `projectIdsFor()` decides who is SENT what and is
+     * not touched by this: the answer here changes a line of copy and never a recipient.
+     *
+     * @return array{chosen:int,ceiling:int}|null
+     */
+    public function narrowing(User $user, string $tenantId): ?array
+    {
+        $membership = Membership::query()
+            ->with('scopes')
+            ->where('tenant_id', $tenantId)
+            ->where('user_id', $user->getKey())
+            ->where('status', 'active')
+            ->first();
+
+        if ($membership === null) {
+            return null;
+        }
+
+        $ceiling = $this->ceilingFor($user, $membership, $tenantId);
+        $chosen = $this->narrowToPreference($ceiling, $user, $tenantId);
+
+        return count($chosen) < count($ceiling)
+            ? ['chosen' => count($chosen), 'ceiling' => count($ceiling)]
+            : null;
+    }
+
+    /**
      * The membership's own ceiling, before the user's preference narrows it.
      *
      * @return list<string>
