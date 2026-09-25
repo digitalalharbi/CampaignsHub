@@ -718,6 +718,23 @@ final class ProbeInsightsCommand extends Command
         return array_values(array_unique($out));
     }
 
+    /**
+     * The endpoint that was called, not the object it addressed.
+     *
+     * `StructureProbeTest` forbids this report from printing a zone id, and it is right to: the
+     * interaction zone is addressed by id in the PATH, so recording the call verbatim puts a
+     * client's object id in a workflow log. The ad-account id stays — it is the account the operator
+     * asked about and is already in the dispatch inputs — but the per-object ids the creative bodies
+     * name are not ours to publish.
+     *
+     * Redacting the segment rather than dropping the line keeps what the diagnostic is for: that the
+     * endpoint was reached, what it answered with, and how many times.
+     */
+    private static function redactObjectIds(string $url): string
+    {
+        return (string) preg_replace('#/(interaction_zones)/[^/?]+#', '/$1/…', $url);
+    }
+
     private function reportCalls(object $connector): void
     {
         if (! $connector instanceof ApiAdvertisingConnector) {
@@ -736,7 +753,7 @@ final class ProbeInsightsCommand extends Command
                 $call['status'],
                 $call['request_id'] ?? '—',
             ));
-            $this->line('      '.$call['url']);
+            $this->line('      '.self::redactObjectIds((string) $call['url']));
             // The response SHAPE, not its contents: the top-level keys say whether the platform
             // answered with a payload, an error envelope or an empty success.
             $this->line('      response keys: '.(implode(', ', $call['keys']) ?: '(none)'));
