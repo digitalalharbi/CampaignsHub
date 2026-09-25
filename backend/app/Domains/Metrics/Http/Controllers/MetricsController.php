@@ -1203,7 +1203,9 @@ final class MetricsController extends Controller
 
         $parents = $this->parentFilter($request);
 
-        $rows = app(EntityMetricsAggregator::class)->byEntity(
+        $aggregator = app(EntityMetricsAggregator::class);
+
+        $rows = $aggregator->byEntity(
             (string) $projectId,
             $level,
             $from,
@@ -1227,6 +1229,16 @@ final class MetricsController extends Controller
              */
             'entities' => $rows,
             'entity_type' => $level,
+            /*
+             * The pinned parents, named — so a RELOADED drill-down can still say which ad set it is
+             * narrowed to. The crumb used to be named from the row the reader clicked and held in
+             * memory, which a refresh throws away; the address survives and the name did not, so a
+             * bookmarked drill-down greeted its reader with a raw uuid.
+             *
+             * Only the parents this response was actually narrowed by, and only those belonging to
+             * this project — see `EntityMetricsAggregator::nameParents()`.
+             */
+            'parent_names' => $aggregator->nameParents((string) $projectId, $level, $parents ?? []),
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             // What the money on these rows is IN — the same statement every other surface makes.
             'currency' => $this->rangeCurrency($from, $to),
