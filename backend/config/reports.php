@@ -31,8 +31,14 @@ return [
 
         // Post-process step that rewrites the Arabic text layer (ToUnicode) from Chromium's
         // presentation-form glyphs to canonical base letters, so copy/search/screen-readers get
-        // real joinable Arabic. Visual glyphs are untouched. Best-effort: a failure never blocks
-        // the export (the visual PDF is already correct). Requires python3 + pikepdf.
+        // real joinable Arabic. Visual glyphs are untouched. Requires python3 + pikepdf.
+        //
+        // This gate is FAIL-CLOSED, not best-effort: ChromiumPdfRenderer::normalizeArabicTextLayer()
+        // throws when the script is missing, the interpreter cannot run it, or the pass cannot drive
+        // presentation forms to zero — and the export is marked failed with the code
+        // ExportFailureReason::TEXT_LAYER_FAILED rather than shipping a client PDF whose Arabic
+        // cannot be copied, searched or read aloud. Turning this switch off skips the pass entirely;
+        // it does not downgrade a failure to a warning.
         'arabic_textlayer_fix' => env('REPORTS_ARABIC_TEXTLAYER_FIX', true),
         'python_bin' => env('REPORTS_PYTHON_BIN', 'python3'),
         'textlayer_script' => base_path('scripts/fix-arabic-textlayer.py'),
