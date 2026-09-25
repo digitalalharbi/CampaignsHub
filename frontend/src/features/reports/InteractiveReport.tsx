@@ -35,7 +35,6 @@ import { useUi } from '@/stores/ui'
 import { ReportOutline } from './ReportOutline'
 import { ObjectiveAnalyticsSection } from './ObjectiveAnalyticsSection'
 import type { ObjectiveAnalytics } from './objectiveAnalytics'
-import { Num } from '@/components/ui/Num'
 import { AttentionBlocks } from './AttentionBlocks'
 import type { AttentionItem } from './attention'
 import { hideBrokenLogo } from './sharedBranding'
@@ -349,7 +348,7 @@ export function SlideBody({ slide, data, meta, paged = false }: {
     case 'ads': return <AdsSlide data={data} paged={paged} />
     case 'platform_notes': return <NotesSlide data={data} platform={slide.platform!} />
     case 'platform_comparison': return <ComparisonSlide data={data} />
-    case 'objective_performance': return <ObjectiveSplitSlide data={data} />
+    case 'objective_performance': return <GeneralPerformanceSlide data={data} />
     case 'funnel': return <FunnelSlide data={data} />
     case 'comparison': return <PeriodComparisonSlide data={data} />
     case 'campaigns': return <CampaignsSlide data={data} />
@@ -1254,87 +1253,102 @@ function NextStepsSlide({ data }: { data: ReportData }) {
 }
 
 /**
- * Direct against Blended, side by side, with what each one counted (REPORT-OBJECTIVE-003/004).
+ * REPORT-GENERAL-PERFORMANCE-001 — «الأداء العام», and each objective family answering for itself.
  *
- * The whole section exists to make one substitution impossible. `Total spend ÷ sales orders` is a
- * real figure and a legitimate question — «what did this programme cost per order?» — but it is not
- * the cost of an order, and a month with a large brand campaign makes the two differ by the entire
- * brand budget. Printing the second under the first's name is the critical defect §14.3 names.
+ * ## What this replaced
  *
- * So both are here, under names that cannot be confused, each with its formula printed beneath it
- * and the campaigns it counted named. A reader who disagrees with a number can see exactly which
- * spend produced it rather than having to trust it.
+ * Two blocks side by side: «الأداء المباشر» — the sales campaigns' own cost per order — and «الأداء
+ * المدمج», the whole programme's spend over the same orders. Both figures were right and the slide
+ * was careful to say they were not interchangeable.
+ *
+ * They are internal vocabulary on a page a client reads. «مدمج» describes how WE compute, not what
+ * happened to their money, and a reader who does not already hold the distinction meets two costs
+ * per order and concludes one of them is wrong. So the CONCEPT goes, not just the label.
+ *
+ * ## The shape that replaces it
+ *
+ * «الأداء العام» answers «what did the whole programme deliver» in figures that survive campaigns
+ * with different goals — spend, and the delivery the paths report. It carries no universal «results»
+ * number, because purchases plus visits plus impressions is not a quantity, and a portfolio headline
+ * that adds them is the most confident lie this page could tell.
+ *
+ * Underneath, each objective family answers for its own outcome against its own spend: orders and
+ * their cost inside المبيعات والتحويلات, cost per visit inside الزيارات, CPM inside الوعي. That is
+ * where the old «direct» figure belongs — beside the 600 that bought the orders, not beside the
+ * 1,000 the programme spent on three different goals.
+ *
+ * ## Old reports still render
+ *
+ * A report saved last quarter holds `objective_performance` with `direct` and `blended` keys. Those
+ * keys are its DATA; refusing them would break a client's archive. They are read exactly as before
+ * and only the presentation changed — `blended.spend` is the programme's total spend whatever it was
+ * once called, and `direct` is the sales family's own figures.
  */
-function ObjectiveSplitSlide({ data }: { data: ReportData }) {
+function GeneralPerformanceSlide({ data }: { data: ReportData }) {
   const ar = useUi((st) => st.locale) === 'ar'
   const op = data.objective_performance
   if (!op) {
     return (
       <div>
-        <Title sub="لم يُحتسب هذا القسم في هذه النسخة من التقرير">الأداء حسب هدف الحملة</Title>
-        <p className="text-sm text-text-muted">أعد توليد التقرير لعرض الفصل بين الأداء المباشر والمدمج.</p>
+        <Title sub="لم يُحتسب هذا القسم في هذه النسخة من التقرير">الأداء العام</Title>
+        <p className="text-sm text-text-muted">أعد توليد التقرير لعرض الأداء العام وأداء كل هدف.</p>
       </div>
     )
   }
 
   const c = data.currency
-  const excludedSpend = op.direct.excluded_spend ?? 0
+  /*
+   * The programme's whole spend. Read from the legacy `blended.spend` because that is where a saved
+   * report keeps it — the field's NAME was the problem, never the figure.
+   */
+  const programmeSpend = op.blended.spend
+  const nonSalesSpend = op.blended.includes_non_sales_spend ?? 0
 
   return (
-    <div data-testid="objective-split">
-      <Title sub="إنفاق حملات المبيعات وحدها مقابل إنفاق البرنامج كله — رقمان مختلفان لسؤالين مختلفين">
-        الأداء حسب هدف الحملة
+    <div data-testid="general-performance">
+      <Title sub="ما حققه البرنامج كله، ثم أداء كل هدف على حدة بمقاييسه هو">
+        الأداء العام
       </Title>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <div data-testid="direct-block" className="rounded-2xl border border-brand-500/40 bg-brand-500/5 p-4">
-          <h4 className="text-sm font-extrabold text-text-primary">{op.direct.label_ar}</h4>
-          <p className="mt-0.5 text-[11px] text-text-secondary">حملات المبيعات وحدها. هذا هو الرقم الذي يُقاس عليه القرار.</p>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <Highlight label="الإنفاق" value={money(op.direct.spend, c)} />
-            <Highlight label="CPA" value={moneyExact(op.direct.cpa, c ?? null)} />
-            <Highlight label="ROAS" value={ratio(op.direct.roas)} />
-          </div>
-          <p className="tnum mt-2 text-[11px] text-text-muted"><Num>{op.direct.formula.cpa}</Num></p>
-          <p className="tnum text-[11px] text-text-muted"><Num>{op.direct.formula.roas}</Num></p>
+      <div className="rounded-2xl border border-brand-500/40 bg-brand-500/5 p-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <Highlight label="الإنفاق" value={money(programmeSpend, c)} />
+          <Highlight label="عدد الأهداف" value={String(op.paths.length)} />
+          {/*
+            Deliberately no «النتائج» here. Purchases, visits and impressions are different things,
+            and a single figure over them would be the one number on this page nobody could check.
+          */}
         </div>
-
-        <div data-testid="blended-block" className="rounded-2xl border border-border bg-surface-secondary p-4">
-          <h4 className="text-sm font-extrabold text-text-primary">{op.blended.label_ar}</h4>
-          <p className="mt-0.5 text-[11px] text-text-secondary">
-            كل المسارات مقابل نفس الطلبات. يجيب عن «كم كلّفني البرنامج كله لكل طلب» — ولا يحل محل الرقم المباشر.
-          </p>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <Highlight label="الإنفاق" value={money(op.blended.spend, c)} />
-            <Highlight label="Blended CPA" value={money(op.blended.blended_cpa, c)} />
-            <Highlight label="Blended ROAS" value={ratio(op.blended.blended_roas)} />
-          </div>
-          <p className="mt-2 text-[11px] text-text-muted">
-            يشمل {money(op.blended.includes_non_sales_spend, c)} من إنفاق لا يستهدف المبيعات.
-          </p>
-        </div>
+        <p className="mt-2 text-[11px] text-text-secondary">
+          الحملات في هذا التقرير لها أهداف مختلفة، لذلك تُعرض نتيجة كل هدف داخل قسمه بدل جمعها في رقم واحد.
+        </p>
       </div>
 
-      {/* Every path, including the ones that were never meant to sell — where CPA is absent, not zero. */}
+      {/* Each family, judged by its own metric — where a cost per order does not apply, it is absent. */}
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         {op.paths.map((p) => (
-          <div key={p.path} data-testid={`path-${p.path}`} className="rounded-xl border border-border bg-surface p-3">
+          <div
+            key={p.path}
+            data-testid={`objective-family-${p.path}`}
+            className="rounded-xl border border-border bg-surface p-3"
+          >
             <div className="text-xs font-bold text-text-primary">{p.label_ar}</div>
             <div className="tnum mt-1 text-lg font-extrabold text-text-primary">{money(p.spend, c)}</div>
             <div className="mt-1 space-y-0.5 text-[11px] text-text-muted">
-              {p.path === 'awareness' && <div>CPM {p.cpm === null ? '—' : p.cpm}</div>}
-              {p.path === 'traffic' && <div>CPC {moneyExact(p.cpc, c ?? null)}</div>}
+              {p.path === 'awareness' && <div>تكلفة الألف ظهور {p.cpm === null ? '—' : p.cpm}</div>}
+              {p.path === 'traffic' && <div>تكلفة الزيارة {moneyExact(p.cpc, c ?? null)}</div>}
               {p.result_metrics_apply
-                ? <div>CPA {moneyExact(p.cpa, c ?? null)} · ROAS {ratio(p.roas)}</div>
-                : <div>لا تنطبق تكلفة الطلب على هذا المسار</div>}
+                ? (
+                  <div>
+                    تكلفة الطلب {moneyExact(p.cpa, c ?? null)} · العائد على الإنفاق {ratio(p.roas)}
+                  </div>
+                )
+                : <div>لا تنطبق تكلفة الطلب على هذا الهدف</div>}
               {/*
-                CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — the CPA above can be a blend, and says so.
-
-                Leads, app installs, add-to-cart, sales, conversions and purchases all file on the
-                conversion path, so this «CPA» could be a lead programme's price averaged with a
-                sale's. It always averages downwards, because leads are many and cheap — which is
-                the direction a client is least able to check. The sentence appears only when there
-                really is more than one kind; a warning under every honest cost per sale is noise.
+                CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — the cost above can be a blend of result types,
+                and says so. Leads, installs, add-to-cart and sales all file on the conversion path,
+                so this cost could be a lead programme's price averaged with a sale's. It always
+                averages downwards, which is the direction a client is least able to check.
               */}
               {p.cpa_mixes_result_types && mixedResultsNote(p.result_composition, true) !== null && (
                 <div data-testid={`path-${p.path}-mixed-results`} className="text-warning">
@@ -1342,11 +1356,8 @@ function ObjectiveSplitSlide({ data }: { data: ReportData }) {
                 </div>
               )}
               {/*
-                How many, never which — CLIENT-REPORT-ENTITY-BOUNDARY-001.
-
-                A count names nothing, and the digest email has always told a client «3 حملة» on a
-                path. Dropping it here would have left two client surfaces disagreeing about one
-                period in front of the same reader.
+                How many, never which — CLIENT-REPORT-ENTITY-BOUNDARY-001. A count names nothing, and
+                the digest email has always told a client «3 حملة» on a path.
               */}
               <div>{countedCampaigns(p.campaigns_count ?? p.campaigns.length, 'ar')}</div>
             </div>
@@ -1355,20 +1366,19 @@ function ObjectiveSplitSlide({ data }: { data: ReportData }) {
       </div>
 
       {/*
-        The gap between the two figures, stated — CLIENT-REPORT-ENTITY-BOUNDARY-001.
+        The spend that was never buying orders, stated without naming the old split.
 
-        This was a LIST of the excluded campaigns, by name and spend. What a reader needs from it is
-        why the direct spend is smaller than the programme's: it is this much money, and it was not
-        buying orders. The sum says that. The roster only said which of the agency's containers it
-        sat in, which is not a question the person paying is asking.
+        A reader comparing the sales family's spend with the programme's needs to know the difference
+        is real money doing other work — not a discrepancy, and not an exclusion from a calculation
+        they were never shown.
       */}
-      {excludedSpend > 0 && (
-        <div data-testid="excluded-spend" className="mt-3 rounded-xl border border-dashed border-border p-3">
-          <div className="text-xs font-bold text-text-primary">إنفاق خارج حساب الأداء المباشر</div>
+      {nonSalesSpend > 0 && (
+        <div data-testid="non-sales-spend" className="mt-3 rounded-xl border border-dashed border-border p-3">
+          <div className="text-xs font-bold text-text-primary">إنفاق لا يستهدف المبيعات</div>
           <p className="mt-0.5 text-[11px] text-text-secondary">
-            <span className="tnum" dir="ltr">{money(excludedSpend, c)}</span>
+            <span className="tnum" dir="ltr">{money(nonSalesSpend, c)}</span>
             {' — '}
-            إنفاق حقيقي ومحسوب في المدمج، ولا يدخل في تكلفة الطلب لأنه لم يكن يشتري طلبًا.
+            إنفاق حقيقي على أهداف أخرى، ولا يدخل في تكلفة الطلب لأنه لم يكن يشتري طلبًا.
           </p>
         </div>
       )}
