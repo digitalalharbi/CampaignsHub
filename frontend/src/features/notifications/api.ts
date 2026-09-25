@@ -8,6 +8,14 @@ export interface AppNotification {
   title: string
   message: string | null
   project_id: string | null
+  /**
+   * PROJECT-NOTIFICATION-SCOPE-001 — which SCOPE this message is about.
+   *
+   * `project` is about one client; `portfolio` is the agency's own plumbing — a token expiring, a
+   * connection erroring — which belongs to the whole team rather than to any one client. Stated by
+   * the server so four surfaces do not each re-derive it from a null check and drift.
+   */
+  scope: 'project' | 'portfolio'
   client_workspace_id: string | null
   action_url: string | null
   status: 'unread' | 'read' | 'snoozed' | 'resolved'

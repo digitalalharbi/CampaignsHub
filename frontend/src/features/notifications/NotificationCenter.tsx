@@ -77,7 +77,22 @@ export function NotificationCenter() {
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-semibold text-text-primary">{n.title}</span>
                         {n.message && <span className="block truncate text-xs text-text-secondary">{n.message}</span>}
-                        <span className="mt-0.5 block text-[11px] text-text-muted">{n.created_at ? new Date(n.created_at).toLocaleString('en-CA') : ''}</span>
+                        <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-muted">
+                          {/*
+                            PROJECT-NOTIFICATION-SCOPE-001 — the agency's own messages are marked.
+                            «انتهت صلاحية التفويض» is not about a client, and reading it in the same
+                            shape as «ارتفعت تكلفة الطلب» invites somebody to go looking for the
+                            client it is about. Only the portfolio case is chipped: inside a project
+                            almost everything is that project's, and a badge on every row is a badge
+                            nobody reads.
+                          */}
+                          {n.scope === 'portfolio' && (
+                            <span data-testid="notification-portfolio-chip" className="rounded bg-surface-hover px-1.5 py-0.5 font-semibold text-text-secondary">
+                              {ar ? 'على مستوى الوكالة' : 'Agency-wide'}
+                            </span>
+                          )}
+                          <span>{n.created_at ? new Date(n.created_at).toLocaleString('en-CA') : ''}</span>
+                        </span>
                       </span>
                     </button>
                   </li>
