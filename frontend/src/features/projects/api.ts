@@ -144,6 +144,52 @@ export interface ProjectDeletionImpact {
   deletes_advertising_accounts: boolean
 }
 
+/**
+ * PORTFOLIO-SCOPE-001 — the agency-wide answer, asked for by name.
+ *
+ * Its own endpoint, because choosing the portfolio is a decision and the URL is where that decision
+ * is recorded. A portfolio served from the project endpoint with the id left out would be the
+ * fallback the whole unit forbids: nobody would have chosen it, and no surface downstream — including
+ * the one drawing the heading — could tell it from a project nobody picked.
+ */
+export interface PortfolioOverview {
+  /** Always `portfolio`. Carried in the payload so a caller cannot draw it as one project's figures. */
+  scope: 'portfolio'
+  period: { from: string; to: string }
+  projects: {
+    total: number
+    by_status: Record<string, number>
+    items: Array<{
+      id: string
+      name: string
+      status: string
+      client_workspace_id: string
+      accounts: number
+      providers: string[]
+      data_last_synced_at: string | null
+      attention: 'no_accounts' | 'never_synced' | 'stale' | null
+    }>
+  }
+  spend: {
+    /** One entry per currency. There is deliberately no total — see `comparable`. */
+    by_currency: Array<{ currency: string; spend: number; projects: number }>
+    /**
+     * Whether a single total would mean anything.
+     *
+     * 100 SAR beside 100 USD is not 200, and the sum is worse than useless because it looks precise.
+     * The server offers no `total` key at all, so there is nothing here to print by accident.
+     */
+    comparable: boolean
+  }
+  attention: { total: number; by_state: Record<string, number> }
+}
+
+export function fetchPortfolioOverview(range?: { from: string; to: string }): Promise<PortfolioOverview> {
+  const qs = range ? `?from=${range.from}&to=${range.to}` : ''
+
+  return getData<PortfolioOverview>(`/portfolio/overview${qs}`)
+}
+
 export function fetchProjectDeletionImpact(projectId: string): Promise<ProjectDeletionImpact> {
   return getData<ProjectDeletionImpact>(`/projects/${projectId}/deletion-impact`)
 }
