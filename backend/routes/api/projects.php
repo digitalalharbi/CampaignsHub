@@ -10,6 +10,7 @@ use App\Domains\Metrics\Http\Controllers\SavedDashboardViewController;
 use App\Domains\Metrics\Http\Controllers\SpendLimitController;
 use App\Domains\Metrics\Http\Controllers\SyncRunController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
+use App\Domains\Projects\Http\Controllers\PortfolioController;
 use App\Domains\Projects\Http\Controllers\ProjectCapabilityController;
 use App\Domains\Projects\Http\Controllers\ProjectController;
 use App\Domains\Projects\Http\Controllers\ProjectMembershipController;
@@ -61,6 +62,17 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('proj
      */
     Route::get('{project}/deletion-impact', [ProjectController::class, 'deletionImpact'])->name('deletion-impact');
     Route::delete('{project}', [ProjectController::class, 'destroy'])->name('destroy');
+});
+
+/*
+ * PORTFOLIO-SCOPE-001 — «جميع المشاريع», asked for by name.
+ *
+ * Its own route on purpose. A portfolio served from the project endpoint with the id left out would
+ * be exactly the fallback this unit forbids: nobody would have chosen it, and no surface downstream
+ * could tell «the agency» from «a project nobody picked» — including the one drawing the heading.
+ */
+Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('portfolio')->name('portfolio.')->group(function (): void {
+    Route::get('overview', [PortfolioController::class, 'overview'])->name('overview');
 });
 
 // DASH-010-E: saved dashboard views (persisted per user + tenant; not project-scoped).
