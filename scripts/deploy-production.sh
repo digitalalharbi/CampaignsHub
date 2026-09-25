@@ -17,6 +17,13 @@ git fetch origin "$BRANCH"
 git checkout "$BRANCH"
 git reset --hard "origin/$BRANCH"
 
+# Before anything is built: does the server carry the keys this revision's contract declares?
+#
+# After the reset, deliberately — the example is the contract as of the revision being deployed, and
+# comparing against a stale checkout would answer about the wrong one. Existence was the only check
+# here before, and existence is what the PDF renderer passed while being switched off.
+bash scripts/env-contract.sh deploy/backend.production.env.example "$ENV_FILE"
+
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build --remove-orphans
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan migrate --force
 
