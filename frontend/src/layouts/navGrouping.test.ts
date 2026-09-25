@@ -58,6 +58,16 @@ const AGENCY_BEFORE = [
   '/agency/short-links',
   '/agency/integrations',
   /*
+   * ADDED by PORTFOLIO-SCOPE-001 §36, deliberately.
+   *
+   * «جميع المشاريع» is an agency-level scope, and an agency is the reader it was built for: how many
+   * clients are running, which need somebody today, what is being spent. The route exists in both
+   * portals; reachable only by typing the URL would leave «all projects» as something people arrive
+   * at by clearing a filter, which is the state that unit removes. Pinned here so the next addition
+   * is also a decision rather than a drift.
+   */
+  '/agency/portfolio',
+  /*
    * ADDED for the same reason, and just as deliberately.
    *
    * Every metrics route on the server is `portal:app,agency` and always has been — the API has never
