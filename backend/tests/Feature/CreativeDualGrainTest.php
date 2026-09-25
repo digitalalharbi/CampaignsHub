@@ -148,10 +148,33 @@ final class CreativeDualGrainTest extends TestCase
     }
 
     /**
-     * A ratio comes wholly from ONE grain. The ads' own CPA is 100 / 20 = 5. Dividing the ads' spend by
-     * the creative's conversions would state 10 — a ratio of two different measurements.
+     * A ratio comes wholly from one grain — AND from the grain whose figure the card shows beside it.
+     *
+     * ## This test used to assert the defect
+     *
+     * It expected `cpa = 5`: the ads' own 100 ÷ 20, whole and uncrossed, which satisfied «never
+     * recomputed across grains» exactly. But the card shows the CREATIVE grain's ten conversions, so
+     * a cost per result of 5 against 100 of spend claims a denominator of twenty, and the number
+     * printed next to it says ten. That is the owner's «Spend 38.36 · Orders 0 · Cost per result
+     * 12.79» in a milder costume, and the old expectation is why it shipped: the rule was about the
+     * ratio alone and never asked what it would be read against.
+     *
+     * CONTENT-RESULT-COST-ONE-GRAIN-001 strengthens it. The displayed denominator decides the
+     * ratio's grain, so a cost the displayed grain cannot state is «—» rather than a number from
+     * somewhere else.
+     *
+     * ## What each of the four says now
+     *
+     *  - `cpa` — denominator is the creative grain's ten, and that grain reported no spend, so there
+     *    is no truthful cost per result. Absent, not borrowed.
+     *  - `aov` — same denominator, same answer: 400 ÷ 20 beside «10 conversions» would imply the
+     *    revenue was earned on twenty.
+     *  - `roas` — denominator is SPEND, which came from the ads, so the ads' own 400 ÷ 100 is read
+     *    against the figure the card shows. Unchanged, and the reason this is a rule about
+     *    provenance rather than a rule about creative-grain-always.
+     *  - `ctr` — wholly the creative grain's, inputs and all. Unchanged.
      */
-    public function test_a_ratio_is_never_recomputed_across_the_two_grains(): void
+    public function test_a_ratio_comes_from_the_grain_whose_denominator_the_card_shows(): void
     {
         $creative = $this->creative('cr-dual-ratio');
         $this->creativeRow($creative, ['spend' => null, 'impressions' => 8_000, 'clicks' => 200, 'conversions' => 10]);
@@ -159,10 +182,11 @@ final class CreativeDualGrainTest extends TestCase
 
         $row = $this->figures($creative);
 
-        $this->assertSame(5.0, (float) $row['cpa'], 'CPA was divided across grains');
+        $this->assertSame(10.0, (float) $row['conversions'], 'the creative grain’s own result was overwritten');
+        $this->assertNull($row['cpa'], 'a cost per result was stated against a denominator the card does not show');
+        $this->assertNull($row['aov'], 'AOV was stated against the ads’ twenty while the card shows ten');
+
         $this->assertSame(4.0, (float) $row['roas'], 'ROAS did not come from the ads\' own spend and revenue');
-        $this->assertSame(20.0, (float) $row['aov'], 'AOV was divided across grains');
-        // The creative grain's own ratio, computed from its own inputs, is kept.
         $this->assertSame(round(200 / 8_000, 4), (float) $row['ctr']);
     }
 
