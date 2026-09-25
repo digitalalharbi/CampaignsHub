@@ -177,6 +177,59 @@ describe('IntegrationsPage — the four states', () => {
     ])
   })
 
+  /**
+   * INTEGRATION-SYNC-VISIBILITY-001 — «and it will update itself again at…».
+   *
+   * The card said when data LAST arrived and nothing about when more would, so the only way to tell
+   * a broken integration from one merely between runs was to press «Sync now» — a real provider
+   * call made by somebody who only wanted reassurance.
+   */
+  it('a connected platform says when it will next update itself', async () => {
+    rows.data = [connector({
+      key: 'snapchat', label: 'Snapchat Marketing API', state: 'connected',
+      accounts: 2, data_last_synced_at: '2026-08-05T06:30:00Z',
+      next_sync_at: new Date(Date.now() + 12 * 60_000).toISOString(),
+    })]
+
+    renderWithProviders(<IntegrationsPage />, { locale: 'en' })
+
+    const next = await screen.findByTestId('connector-next-sync-snapchat')
+    // Counted through `lib/counted`: «in 12 minutes», never «in 12 minute».
+    expect(next).toHaveTextContent('12 minutes')
+  })
+
+  /**
+   * **The refusal, which is the half worth testing.**
+   *
+   * A connection that cannot sync is still on the schedule in the sense that the command will run.
+   * It is not going to sync anything, and a countdown over one would be the most confident kind of
+   * wrong — so the server sends null and the card says nothing rather than promising.
+   */
+  it('promises nothing when the server states no next run', async () => {
+    rows.data = [connector({
+      key: 'snapchat', label: 'Snapchat Marketing API', state: 'connected',
+      accounts: 0, data_last_synced_at: null, next_sync_at: null,
+    })]
+
+    renderWithProviders(<IntegrationsPage />, { locale: 'en' })
+
+    await screen.findByTestId('connector-state-snapchat')
+    expect(screen.queryByTestId('connector-next-sync-snapchat')).not.toBeInTheDocument()
+  })
+
+  /** Past due is «due now», because a negative countdown reads as a fault. */
+  it('says due now rather than counting backwards', async () => {
+    rows.data = [connector({
+      key: 'snapchat', label: 'Snapchat Marketing API', state: 'connected',
+      accounts: 1, data_last_synced_at: '2026-08-05T06:30:00Z',
+      next_sync_at: new Date(Date.now() - 60_000).toISOString(),
+    })]
+
+    renderWithProviders(<IntegrationsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('connector-next-sync-snapchat')).toHaveTextContent('due now')
+  })
+
   /** The callback comes back through the URL, and a human needs it in words. */
   it('reports the outcome the OAuth callback redirected back with', async () => {
     rows.data = [connector({ key: 'meta', state: 'connected', accounts: 2 })]
