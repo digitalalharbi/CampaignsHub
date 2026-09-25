@@ -88,8 +88,17 @@ final class DigestScopeStatedTest extends TestCase
     public function test_naming_the_scope_does_not_change_who_is_sent_what(): void
     {
         $unchosen = app(DigestScope::class)->projectIdsFor($this->user, (string) $this->tenant->id);
+
+        /*
+         * Both sides sorted. The ids are uuids, so creation order is not sort order, and comparing a
+         * sorted actual against an unsorted expected passes or fails on which uuids were generated —
+         * which is how the first version of this assertion came to be flaky.
+         */
+        $expected = [(string) $this->first->id, (string) $this->second->id];
+        sort($expected);
         sort($unchosen);
-        $this->assertSame([(string) $this->first->id, (string) $this->second->id], $unchosen);
+
+        $this->assertSame($expected, $unchosen);
 
         $this->savePreference([(string) $this->second->id]);
 
@@ -98,6 +107,49 @@ final class DigestScopeStatedTest extends TestCase
             app(DigestScope::class)->projectIdsFor($this->user, (string) $this->tenant->id),
             'a narrowed preference stopped narrowing',
         );
+    }
+
+    /**
+     * The digest says so when it is not everything — and says nothing when it is.
+     *
+     * Without this a summary covering one of two projects reads exactly like one covering both, and
+     * the client that is missing looks like a client that was quiet rather than one the reader
+     * narrowed away months ago.
+     */
+    public function test_the_digest_states_a_narrowing_and_stays_quiet_otherwise(): void
+    {
+        $scope = app(DigestScope::class);
+
+        $this->assertNull(
+            $scope->narrowing($this->user, (string) $this->tenant->id),
+            'an unnarrowed digest claimed a narrowing',
+        );
+
+        $this->savePreference([(string) $this->second->id]);
+
+        $this->assertSame(
+            ['chosen' => 1, 'ceiling' => 2],
+            $scope->narrowing($this->user, (string) $this->tenant->id),
+        );
+    }
+
+    /**
+     * And asking the question does not change the answer to the other one.
+     *
+     * `narrowing()` is display-only: it reads the same preference `projectIdsFor()` reads and must
+     * not disturb it, because a line of copy is never worth moving a recipient.
+     */
+    public function test_asking_about_narrowing_does_not_change_who_is_sent_what(): void
+    {
+        $this->savePreference([(string) $this->second->id]);
+        $scope = app(DigestScope::class);
+
+        $before = $scope->projectIdsFor($this->user, (string) $this->tenant->id);
+        $scope->narrowing($this->user, (string) $this->tenant->id);
+        $after = $scope->projectIdsFor($this->user, (string) $this->tenant->id);
+
+        $this->assertSame($before, $after);
+        $this->assertSame([(string) $this->second->id], $after);
     }
 
     // ── fixtures ──────────────────────────────────────────────────────────────────────────────

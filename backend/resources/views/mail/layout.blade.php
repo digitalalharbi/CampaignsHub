@@ -71,6 +71,19 @@
                             <div style="font-family:{!! $font !!}; font-size:13px; color:#c6f0e9; padding-top:2px;">
                                 {{ $headerNote }}
                             </div>
+                            {{--
+                                PROJECT-DIGEST-SCOPE-001 — said only when the reader narrowed it.
+
+                                A summary covering three of twelve projects otherwise reads exactly
+                                like one covering all twelve, and the client that is missing looks
+                                like a client that was quiet. Absent in the ordinary case: a caveat on
+                                every digest is a caveat nobody reads.
+                            --}}
+                            @if (!empty($scopeNote ?? ''))
+                                <div style="font-family:{!! $font !!}; font-size:12px; color:#c6f0e9; padding-top:4px;">
+                                    {{ $scopeNote }}
+                                </div>
+                            @endif
                         </td>
                     </tr>
 
