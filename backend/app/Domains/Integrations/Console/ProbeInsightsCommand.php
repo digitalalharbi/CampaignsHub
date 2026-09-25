@@ -686,9 +686,13 @@ final class ProbeInsightsCommand extends Command
     /**
      * Key paths, two levels in and never a value.
      *
-     * Two levels because that is where a tile's own fields sit — a zone holds a list of tiles and a
-     * tile holds its media — and any deeper would start describing one client's catalogue rather
-     * than Snapchat's schema.
+     * Three levels, because the live shape put the zone one deeper than expected: the body is
+     * `interaction_zones[] → interaction_zone → {the zone's own fields}`, so two levels reported the
+     * ENVELOPE — `interaction_zones.interaction_zone` — and stopped exactly where the tiles begin.
+     *
+     * Still key names only, and still not deep enough to describe a catalogue: this reaches the
+     * zone's own field names and the shape of what it holds, which is what an ingestion has to be
+     * written against.
      *
      * @param  array<mixed>  $body
      * @return list<string>
@@ -700,7 +704,7 @@ final class ProbeInsightsCommand extends Command
         foreach ($body as $key => $value) {
             if (is_int($key)) {
                 // A list: describe its MEMBERS' shape, not its length.
-                if (is_array($value) && $depth < 2) {
+                if (is_array($value) && $depth < 3) {
                     $out = [...$out, ...$this->flatten($value, $prefix, $depth + 1)];
                 }
 
@@ -710,7 +714,7 @@ final class ProbeInsightsCommand extends Command
             $path = $prefix === '' ? (string) $key : $prefix.'.'.$key;
             $out[] = $path;
 
-            if (is_array($value) && $depth < 2) {
+            if (is_array($value) && $depth < 3) {
                 $out = [...$out, ...$this->flatten($value, $path, $depth + 1)];
             }
         }
