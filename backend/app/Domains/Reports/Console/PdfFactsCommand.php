@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Console;
 
+use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Reports\Models\ReportExport;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
@@ -33,7 +34,9 @@ use Throwable;
  */
 final class PdfFactsCommand extends Command
 {
-    protected $signature = 'reports:pdf-facts {--format=pdf : The export format to inspect}';
+    protected $signature = 'reports:pdf-facts
+        {--format=pdf : The export format to inspect}
+        {--allow-real : Measure a real report\'s export when no demo one exists. Structural facts only — see the note below}';
 
     protected $description = 'Measure the newest completed demo export: structure, fonts, text layer, numerals.';
 
@@ -41,8 +44,19 @@ final class PdfFactsCommand extends Command
     {
         $format = (string) $this->option('format');
 
+        /*
+         * `--allow-real` exists because a production box holds no demo reports.
+         *
+         * The default stays demo-only and the safeguard is the default for a reason: proving the
+         * pipeline must not mean reading somebody's figures. What makes the opt-in defensible is that
+         * this command prints NO CONTENT under either setting — page counts, byte sizes, font names
+         * and codepoint-RANGE counts. Nothing it emits could reconstruct a client's numbers, and the
+         * report's name, path and token are asserted absent by its tests.
+         */
+        $allowReal = (bool) $this->option('allow-real');
+
         $export = ReportExport::withoutGlobalScopes()
-            ->where('is_demo', true)
+            ->when(! $allowReal, fn ($q) => $q->where('is_demo', true))
             ->where('format', $format)
             ->where('status', 'completed')
             ->whereNotNull('path')
@@ -50,7 +64,9 @@ final class PdfFactsCommand extends Command
             ->first();
 
         if ($export === null) {
-            $this->error("No completed demo {$format} export to measure. Generate one first.");
+            $this->error($allowReal
+                ? "No completed {$format} export to measure at all. Generate one first."
+                : "No completed demo {$format} export to measure. Generate one first, or pass --allow-real.");
 
             return self::FAILURE;
         }
@@ -65,8 +81,38 @@ final class PdfFactsCommand extends Command
             'validation_status' => $export->validation_status,
             'locale' => $export->locale,
             'size' => $export->size,
+            'is_demo' => $export->is_demo ? 'yes' : 'no — real report, structural facts only',
         ] as $key => $value) {
             $this->line(sprintf('  %-18s %s', $key, $value === null ? '—' : (string) $value));
+        }
+
+        /*
+         * The branding this report is CONFIGURED with, so a measured logo count means something.
+         *
+         * `PrintDocument` renders a logo only when `logoUrl` is non-null, and its own docblock warns
+         * that «code containing `logo_url` is not the same thing as a logo rendering». Without the
+         * configuration beside the measurement, a file with no images is indistinguishable from a
+         * report that was never given a logo — and a branding check that cannot tell those apart
+         * passes vacuously, which is worse than not checking.
+         *
+         * The NAME is not printed. Whether a name and a logo exist, and where the logo came from, is
+         * all this needs to say.
+         */
+        try {
+            $report = $export->report()->withoutGlobalScopes()->first();
+            $branding = app(SharedLinkBranding::class)->forReport(
+                $report,
+                (string) $export->tenant_id,
+                static fn (): ?string => null,
+            );
+
+            $this->newLine();
+            $this->line('configured branding');
+            $this->line(sprintf('  %-18s %s', 'name', ($branding['name'] ?? '') !== '' ? 'present' : 'absent'));
+            $this->line(sprintf('  %-18s %s', 'logo', ($branding['logo_url'] ?? null) !== null ? 'configured' : 'none configured'));
+            $this->line(sprintf('  %-18s %s', 'logo_source', (string) ($branding['logo_source'] ?? '—')));
+        } catch (Throwable $e) {
+            $this->warn('  could not read the configured branding: '.$e->getMessage());
         }
 
         if (! Storage::disk((string) $export->disk)->exists((string) $export->path)) {
