@@ -681,6 +681,71 @@ final class ProbeInsightsCommand extends Command
         $names = array_keys($keys);
         sort($names);
         $this->line('      '.implode(', ', $names));
+
+        $this->reportCreativeElements($connector, $bodies);
+    }
+
+    /**
+     * CONTENT-COLLECTION-TILES-001 — the tiles a zone names, by KEY NAME.
+     *
+     * The zone answered `creative_element_ids`, so the tiles are one endpoint further on and their
+     * media field is the last unknown the ingestion needs. Reported here rather than guessed, for
+     * the same reason every other shape in this command is: three repairs in this tree were written
+     * against inferred shapes and each cost a round trip to discover it.
+     *
+     * Key names only. The values are a client's product names, headlines and deep links.
+     *
+     * @param  array<string,array<string,mixed>>  $zones
+     */
+    private function reportCreativeElements(object $connector, array $zones): void
+    {
+        if (! method_exists($connector, 'probeCreativeElements')) {
+            return;
+        }
+
+        $ids = [];
+        foreach ($zones as $body) {
+            foreach ((array) ($body['interaction_zones'] ?? []) as $wrapper) {
+                $zone = (array) (((array) $wrapper)['interaction_zone'] ?? []);
+                foreach ((array) ($zone['creative_element_ids'] ?? []) as $id) {
+                    if (is_string($id) && trim($id) !== '') {
+                        $ids[] = $id;
+                    }
+                }
+            }
+        }
+
+        if ($ids === []) {
+            $this->line('      (the zones named no creative elements)');
+
+            return;
+        }
+
+        $elements = $connector->probeCreativeElements($ids);
+
+        $this->line('');
+        $this->line(sprintf(
+            '  CREATIVE ELEMENT SHAPES — key names only, never values (%d named, %d read)',
+            count(array_unique($ids)),
+            count($elements),
+        ));
+
+        if ($elements === []) {
+            $this->line('      none readable');
+
+            return;
+        }
+
+        $keys = [];
+        foreach ($elements as $body) {
+            foreach ($this->flatten((array) $body) as $key) {
+                $keys[$key] = true;
+            }
+        }
+
+        $names = array_keys($keys);
+        sort($names);
+        $this->line('      '.implode(', ', $names));
     }
 
     /**
@@ -736,7 +801,7 @@ final class ProbeInsightsCommand extends Command
      */
     private static function redactObjectIds(string $url): string
     {
-        return (string) preg_replace('#/(interaction_zones)/[^/?]+#', '/$1/…', $url);
+        return (string) preg_replace('#/(interaction_zones|creativeelements)/[^/?]+#', '/$1/…', $url);
     }
 
     private function reportCalls(object $connector): void
