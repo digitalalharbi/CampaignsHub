@@ -1,0 +1,55 @@
+name: Production PDF Acceptance
+
+# REPORT-EXPORT-FUNCTIONAL-001 — take a real production PDF all the way and then look inside it.
+#
+# Everything else stops short of the bar. `production-export-diagnostics.yml` asks whether the
+# renderer COULD run and what recent attempts DID; the export row records that one ran. None of them
+# has opened the file. This drives the real chain on production — queue, Chromium, the fail-closed
+# Arabic text-layer validator, storage — and then measures the bytes that came out.
+#
+# NOT read-only, and the one place that matters is bounded: `reports:regenerate-demo-exports` writes
+# export rows and files for DEMO reports only, and `reports:pdf-facts` reads demo exports only. A real
+# client's report is never rendered, read or measured here. Proving the pipeline must not mean reading
+# somebody's figures, and demo reports travel the identical chain, so what passes is a statement about
+# the pipeline rather than about the data.
+#
+# It prints structural facts and provenance: no report name, no stored path, no signed token, and not
+# one word of content — the Arabic and Latin figures are counts of codepoint ranges in the text layer,
+# and identifiers are counted rather than named.
+#
+# Manual only. It has no inputs, so there is nothing to aim it at.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-pdf-acceptance
+  cancel-in-progress: false
+
+jobs:
+  accept:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Render a real production PDF and measure it
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 20m
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            COMPOSE="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
+
+            echo "== 1/3  can the renderer run here at all"
+            $COMPOSE exec -T backend php artisan reports:health
+
+            echo "== 2/3  render demo reports through the real chain"
+            $COMPOSE exec -T backend php artisan reports:regenerate-demo-exports --format=pdf
+
+            echo "== 3/3  look inside what it produced"
+            $COMPOSE exec -T backend php artisan reports:pdf-facts
