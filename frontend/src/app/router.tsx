@@ -57,6 +57,7 @@ import { InviteAcceptPage } from '@/features/onboarding/InviteAcceptPage'
 import { RequestsDashboardPage } from '@/features/requests/RequestsDashboardPage'
 import { RequestDetailPage } from '@/features/requests/RequestDetailPage'
 import { ClientsPortfolioPage } from '@/features/clients/ClientsPortfolioPage'
+import { PortfolioPage } from '@/features/projects/PortfolioPage'
 import { ClientCommandCenterPage } from '@/features/clients/ClientCommandCenterPage'
 import { AlertsPage } from '@/features/alerts/AlertsPage'
 import { SpendLimitsPage } from '@/features/budget/SpendLimitsPage'
@@ -324,6 +325,14 @@ export const router = createBrowserRouter(withErrorBoundary([
            */
           { path: 'recommendations', element: <RecommendationsPage /> },
           { path: 'system', element: <SystemStatusPage /> },
+          /*
+           * PORTFOLIO-SCOPE-001 §13 — «جميع المشاريع» has an ADDRESS, and that is the point.
+           *
+           * The agency scope is a decision somebody makes, and a decision with no URL cannot be
+           * deep-linked, bookmarked or arrived at by Back — which is how «all projects» ends up
+           * being inferred from an empty project selector instead of chosen.
+           */
+          { path: 'portfolio', element: <PortfolioPage /> },
           { path: 'projects', element: <ProjectsPage /> },
           { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
           { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
@@ -530,6 +539,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'clients/:clientId', element: <ClientCommandCenterPage /> },
             { path: 'requests', element: <RequestsDashboardPage /> },
             { path: 'requests/:requestId', element: <RequestDetailPage /> },
+            { path: 'portfolio', element: <PortfolioPage /> },
             { path: 'projects', element: <ProjectsPage /> },
             { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
             { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
