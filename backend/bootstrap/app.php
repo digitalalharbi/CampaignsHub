@@ -47,6 +47,7 @@ use App\Domains\Tenancy\Middleware\ResolveMembership;
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\CompressJsonResponses;
 use App\Http\Middleware\ConditionalThrottle;
+use App\Http\Middleware\NoStoreApiResponses;
 use App\Http\Middleware\SetLocale;
 use App\Support\ApiResponse;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -187,6 +188,20 @@ return Application::configure(basePath: dirname(__DIR__))
          * rate limiter, the auth gate and the account-suspension guard all produce customer-facing
          * messages, and each of them refuses before a controller is ever reached.
          */
+        /*
+         * AUTH-CACHE-NO-STORE-001 — every API answer is per-user until it says otherwise.
+         *
+         * GLOBAL, and that is the whole point of where it sits. Registered on the api group instead,
+         * it never saw a 401: `auth:sanctum` throws, the exception is rendered above the group, and the
+         * refusal went out with Laravel's default `no-cache, private` — which PERMITS storing and
+         * revalidating, and revalidating is the 304 a reproduced Firefox failure actually showed. A
+         * test written against the group placement passed on `/auth/me` and failed on the refusal,
+         * which is how the hole was found rather than reasoned about.
+         *
+         * It only touches `api/*`, and it leaves alone any response that stated its own caching.
+         */
+        $middleware->prepend(NoStoreApiResponses::class);
+
         $middleware->api(prepend: [
             AssignRequestId::class,
             SetLocale::class,
