@@ -1,0 +1,58 @@
+name: Production Export Diagnostics
+
+# REPORT-EXPORT-FUNCTIONAL-001 — the only way to ask production why a PDF did not arrive.
+#
+# `reports:health` answers two questions and both of them live on the VPS. First, whether the
+# renderer's runtime is actually present — Node, the print script, Playwright, a Chromium binary, the
+# print URL, an Arabic face, the text-layer normaliser, python, a writable disk, a queue. Second,
+# what the last exports actually DID: status, size, renderer version, whether the Arabic text layer
+# validated, and the reason a failure carried.
+#
+# The second question is the one that matters. Every check in the first can pass while every export
+# still fails, because a dependency present on the box is not a PDF in somebody's hands — which is
+# exactly the gap between «the image contains a browser» and the owner's «PDF export does not work».
+#
+# Its own workflow rather than an input on `production-diagnostics.yml`, which sits at GitHub's
+# 25-input ceiling and must not grow.
+#
+# READ-ONLY. It renders nothing, queues nothing and writes no row. Manual only: there is no push
+# trigger and no schedule.
+
+on:
+  workflow_dispatch:
+    inputs:
+      recent:
+        description: 'How many recent export attempts to list (0–50). Ids, statuses and reasons only — never a report name or a path.'
+        required: false
+        default: '15'
+
+concurrency:
+  group: production-export-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Ask production what the renderer can do, and what it did
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          RECENT: ${{ inputs.recent }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: RECENT
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            # Production runs in containers — there is no `php` on the host's PATH. The command goes
+            # where the application lives, exactly as the other production workflows do, and the
+            # input is passed as a VALUE to a fixed command. Nothing here builds a command from input.
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan reports:health --recent="${RECENT}"
