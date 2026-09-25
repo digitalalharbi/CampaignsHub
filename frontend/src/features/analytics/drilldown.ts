@@ -126,8 +126,36 @@ export function drillUpTo(path: DrillStep[], level: DrillLevel): DrillStep[] {
  */
 const NAMES = new Map<string, string>()
 
+/*
+ * A version counter and its listeners, so a crumb REDRAWS when a name arrives.
+ *
+ * Names used to arrive only from a row the reader had just clicked, during a render that was already
+ * happening — so a plain map was enough. They now also arrive from the server's `parent_names`, after
+ * the response lands, which is a moment no component is otherwise re-rendering for. Without this the
+ * name would be remembered correctly and shown one interaction late, which is the same uuid on screen
+ * for a reader who reloaded and then did nothing.
+ */
+let version = 0
+const listeners = new Set<() => void>()
+
+export function subscribeNames(listener: () => void): () => void {
+  listeners.add(listener)
+
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+export function namesVersion(): number {
+  return version
+}
+
 export function rememberName(id: string, name: string | null): void {
-  if (name !== null && name !== '') NAMES.set(id, name)
+  if (name === null || name === '' || NAMES.get(id) === name) return
+
+  NAMES.set(id, name)
+  version += 1
+  listeners.forEach((l) => l())
 }
 
 /** Fill in any name this session has seen, leaving the rest null. */

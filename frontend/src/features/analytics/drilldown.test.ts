@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  creativeScope, decodePath, drillInto, drillUpTo, encodePath, nextLevel, parentFor, stepLabel,
+  creativeScope, decodePath, drillInto, drillUpTo, encodePath, namesVersion, nextLevel, parentFor,
+  rememberName, stepLabel, subscribeNames, withNames,
   type DrillStep,
 } from './drilldown'
 
@@ -105,5 +106,54 @@ describe('the drill path', () => {
   it('shows an id rather than a dash for an entity that no longer has a name', () => {
     expect(stepLabel(step('ad_set', 's1', null))).toBe('s1')
     expect(stepLabel(step('ad_set', 's1', 'Summer'))).toBe('Summer')
+  })
+})
+
+/**
+ * A name that arrives from the SERVER arrives after the render that asked for it.
+ *
+ * `rememberName` used to be called only while drawing a row the reader had just clicked, so a plain
+ * map was enough — whoever needed the name was rendering anyway. `parent_names` lands with the
+ * response, when nothing is re-rendering, and a crumb that reads the map at that moment has already
+ * drawn the uuid. So the registry has to say that it changed.
+ */
+describe('the name registry', () => {
+  it('tells its listeners when a name it did not have arrives', () => {
+    let told = 0
+    const stop = subscribeNames(() => { told += 1 })
+    const before = namesVersion()
+
+    rememberName('s-notify', 'Riyadh · 18-34')
+
+    expect(told).toBe(1)
+    expect(namesVersion()).not.toBe(before)
+    expect(withNames([{ level: 'ad_set', id: 's-notify', name: null }])[0].name).toBe('Riyadh · 18-34')
+
+    stop()
+  })
+
+  /** Re-remembering the same name must not redraw the page on every response. */
+  it('says nothing when the name it is given is the one it already holds', () => {
+    rememberName('s-quiet', 'Jeddah')
+
+    let told = 0
+    const stop = subscribeNames(() => { told += 1 })
+
+    rememberName('s-quiet', 'Jeddah')
+    rememberName('s-quiet', null)
+    rememberName('s-quiet', '')
+
+    expect(told).toBe(0)
+
+    stop()
+  })
+
+  it('stops telling a listener that unsubscribed', () => {
+    let told = 0
+    subscribeNames(() => { told += 1 })()
+
+    rememberName('s-gone', 'Dammam')
+
+    expect(told).toBe(0)
   })
 })

@@ -145,6 +145,50 @@ final class EntityMetricsAggregator
     }
 
     /**
+     * The PINNED parents, named — HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN, «breadcrumb preserved».
+     *
+     * The breadcrumb used to be named from the row the reader clicked, held in memory. That is fine
+     * for as long as the tab stays open and wrong the moment it is not: reloading a drilled-in
+     * address, or opening a bookmarked one, left the crumb with nothing to name the parent from and
+     * it fell back to the raw uuid — «مجموعة: 70589c4f-e362-596f-8b12-2ea611ebc7b2» on a page whose
+     * whole job is to tell an operator which ad set they are looking at. A three-browser reload test
+     * found it; every unit guard passed, because a fixture hands the name over directly and nothing
+     * in a fixture is ever lost to a refresh.
+     *
+     * Named HERE rather than by the page, for the reason `named()` exists one method down: the server
+     * already knows which parent it narrowed to, so a second answer assembled from whatever rows the
+     * client happens to be holding could only drift from it.
+     *
+     * **Scoped to the project, unlike `named()`.** `named()` looks up ids that came out of this
+     * project's own metric rows, so they are already the reader's. These ids come from the URL, and a
+     * reader can type them: an unscoped lookup would answer a pasted foreign id with another
+     * project's ad-set name — a name disclosed beside a table that correctly showed no rows. Unknown
+     * ids are simply absent from the map and the page keeps its id fallback, which is the honest
+     * thing to show for a parent that cannot be named.
+     *
+     * @param  list<string>  $parentIds
+     * @return array<string, string> parent id => name, absent when unknown or unnamed
+     */
+    public function nameParents(string $projectId, string $level, array $parentIds): array
+    {
+        $ids = array_values(array_unique(array_filter($parentIds, static fn (string $id): bool => $id !== '')));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $query = $level === EntityDailyMetric::AD
+            ? ExternalAdSet::withoutGlobalScopes()->whereIn('id', $ids)
+            : ExternalCampaign::withoutGlobalScopes()->whereIn('id', $ids);
+
+        return $query->where('project_id', $projectId)
+            ->pluck('name', 'id')
+            ->filter(static fn ($name): bool => is_string($name) && trim($name) !== '')
+            ->map(static fn ($name): string => (string) $name)
+            ->all();
+    }
+
+    /**
      * The row's own name and status — REPORT-DETAIL-PARITY-001.
      *
      * This belonged to the operator's controller, and the client's shared report called the
