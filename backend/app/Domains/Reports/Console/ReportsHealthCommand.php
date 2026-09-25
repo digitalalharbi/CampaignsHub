@@ -58,10 +58,11 @@ final class ReportsHealthCommand extends Command
          * kind of problem.
          */
         $recent = $this->recentExports((int) $this->option('recent'));
+        $census = $this->census();
 
         if ($this->option('json')) {
             $this->line((string) json_encode(
-                ['ready' => $ready, 'checks' => $checks, 'recent_exports' => $recent],
+                ['ready' => $ready, 'checks' => $checks, 'census' => $census, 'recent_exports' => $recent],
                 JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES,
             ));
 
@@ -75,6 +76,18 @@ final class ReportsHealthCommand extends Command
         $ready
             ? $this->info('PDF Renderer: Chromium — Ready')
             : $this->error('PDF Renderer unavailable — client/executive exports are BLOCKED (fail-closed).');
+
+        /*
+         * The census, always — «no rows» and «I did not look» must not read the same.
+         *
+         * An acceptance run found the renderer ready and then rendered nothing, because a production
+         * box holds no demo reports. Neither half of this command could say so.
+         */
+        $this->newLine();
+        $this->line('  WHAT THIS INSTALLATION HOLDS — counts only, never a name');
+        foreach ($census as $key => $count) {
+            $this->line(sprintf('  %-26s %d', $key, $count));
+        }
 
         if ($recent !== []) {
             $this->newLine();
@@ -105,6 +118,35 @@ final class ReportsHealthCommand extends Command
      *
      * @return list<array<string,mixed>>
      */
+    /**
+     * What this installation actually HOLDS — REPORT-EXPORT-FUNCTIONAL-001.
+     *
+     * The acceptance run reached production, found the renderer ready, and then rendered nothing:
+     * «Regenerated 0 demo export(s), 0 failed.» There are no demo reports on a production box, which
+     * is correct and was not something either half of this command could say. `recentExports()` was
+     * silent too, because `report_exports` is empty — and «no rows» reads identically to «I did not
+     * look», which is the ambiguity that wasted a run.
+     *
+     * COUNTS ONLY. Not one report name, not one id, not one client. A census is what decides whether a
+     * pipeline can be proved on this box at all, and it needs no identifying detail to answer that.
+     *
+     * @return array<string, int>
+     */
+    private function census(): array
+    {
+        $reports = DB::table('reports');
+
+        return [
+            'reports' => (clone $reports)->count(),
+            'reports_completed' => (clone $reports)->where('status', 'completed')->count(),
+            'reports_with_a_snapshot' => (clone $reports)->whereNotNull('data')->count(),
+            'reports_demo' => (clone $reports)->where('is_demo', true)->count(),
+            'reports_renderable' => (clone $reports)->where('status', 'completed')->whereNotNull('data')->count(),
+            'exports' => DB::table('report_exports')->count(),
+            'exports_completed' => DB::table('report_exports')->where('status', 'completed')->count(),
+        ];
+    }
+
     private function recentExports(int $limit): array
     {
         if ($limit <= 0) {

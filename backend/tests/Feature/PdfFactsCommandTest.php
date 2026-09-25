@@ -171,6 +171,64 @@ PY;
     }
 
     /**
+     * The branding the report is CONFIGURED with, beside the file's measured images.
+     *
+     * `PrintDocument` renders a logo only when `logoUrl` is non-null, and its docblock warns that
+     * «code containing `logo_url` is not the same thing as a logo rendering». Without the
+     * configuration, a file with no images is indistinguishable from a report that was never given a
+     * logo — and a branding check that cannot tell those apart passes vacuously.
+     */
+    public function test_it_states_whether_a_logo_was_configured_at_all(): void
+    {
+        $this->requirePikepdf();
+        $pdf = $this->aRealPdf();
+
+        try {
+            $this->demoExport($pdf);
+
+            Artisan::call('reports:pdf-facts');
+            $out = Artisan::output();
+
+            self::assertStringContainsString('configured branding', $out);
+            self::assertStringContainsString('logo_source', $out);
+            // And it still never names the report.
+            self::assertStringNotContainsString('A NAME THAT MUST NOT BE LOGGED', $out);
+        } finally {
+            @unlink($pdf);
+        }
+    }
+
+    /**
+     * `--allow-real` reaches a real report's export, because a production box holds no demo ones —
+     * and it still prints nothing that could reconstruct a client's figures.
+     */
+    public function test_allow_real_reaches_a_real_export_without_printing_its_content(): void
+    {
+        $this->requirePikepdf();
+        $pdf = $this->aRealPdf();
+
+        try {
+            $export = $this->demoExport($pdf);
+            $export->forceFill(['is_demo' => false])->save();
+
+            // Default still refuses, and says how to proceed.
+            self::assertSame(1, Artisan::call('reports:pdf-facts'));
+            self::assertStringContainsString('--allow-real', Artisan::output());
+
+            self::assertSame(0, Artisan::call('reports:pdf-facts', ['--allow-real' => true]));
+            $out = Artisan::output();
+
+            self::assertStringContainsString('"pages": 1', $out);
+            self::assertStringContainsString('real report, structural facts only', $out);
+            self::assertStringNotContainsString('A NAME THAT MUST NOT BE LOGGED', $out);
+            self::assertStringNotContainsString('A-TOKEN-THAT-MUST-NOT-BE-LOGGED', $out);
+            self::assertStringNotContainsString((string) $export->path, $out);
+        } finally {
+            @unlink($pdf);
+        }
+    }
+
+    /**
      * A real client's export is not an acceptance fixture, and the filter is the only thing keeping
      * this command out of one.
      */
