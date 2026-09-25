@@ -296,6 +296,66 @@ final class ProjectIntegrationController extends Controller
      * that binds them, and re-consenting to an authorisation that is still valid is the cost this
      * endpoint exists to remove.
      */
+    /**
+     * PUT projects/{project}/integrations/primary — which project an account's data belongs to.
+     *
+     * ## Why this is not a preference
+     *
+     * `is_primary` reads like a cosmetic ordering flag and is not one. An external account can be
+     * bound to more than one project, and `AccountAssignment::projectIdFor()` decides which project
+     * OWNS its rows by `is_primary DESC, created_at ASC`. So the flag settles the account-scope
+     * chain for every sync that account feeds.
+     *
+     * It was written once, by the confirm step, and never again. An operator who confirmed without a
+     * primary — or chose the wrong one — had the account filed under the oldest binding for ever,
+     * with no way to say otherwise short of unbinding and rebinding, which throws the history away.
+     *
+     * ## One primary per ACCOUNT, not per project
+     *
+     * Setting this project's binding primary clears it on that account's other bindings, because the
+     * question it answers is «whose is this account», and two answers is the state the ordering
+     * exists to prevent. Done in one transaction so no window can exist where the account has two
+     * owners or none.
+     */
+    public function setPrimary(Request $request, string $project): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.connect'), 403);
+
+        $validated = $request->validate([
+            'external_account_id' => ['required', 'uuid'],
+        ]);
+
+        $projectId = (string) app(ProjectContext::class)->projectId();
+
+        $binding = ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('tenant_id', app(TenantContext::class)->tenantId())
+            ->where('project_id', $projectId)
+            ->where('external_account_id', $validated['external_account_id'])
+            ->where('is_active', true)
+            ->first();
+
+        /*
+         * 404 rather than 422 for an account this project does not actively hold. The route names a
+         * project, and «that account is not yours» is the same answer whether the binding belongs to
+         * a neighbour or does not exist — neither is this caller's business to tell apart.
+         */
+        abort_if($binding === null, 404, 'That account is not actively bound to this project.');
+
+        DB::transaction(function () use ($binding, $validated): void {
+            ProjectIntegrationBinding::withoutGlobalScopes()
+                ->where('external_account_id', $validated['external_account_id'])
+                ->where('is_active', true)
+                ->update(['is_primary' => false, 'updated_at' => now()]);
+
+            $binding->forceFill(['is_primary' => true])->save();
+        });
+
+        return ApiResponse::success(
+            ['external_account_id' => (string) $binding->external_account_id, 'project_id' => $projectId],
+            'Primary account updated.',
+        );
+    }
+
     public function applySelection(Request $request, ApplyAccountSelection $apply): JsonResponse
     {
         abort_unless($request->user()->hasPermission('integrations.connect'), 403);
