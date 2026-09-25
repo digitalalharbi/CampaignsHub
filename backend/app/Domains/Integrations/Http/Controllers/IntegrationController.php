@@ -16,6 +16,7 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Support\NextScheduledSync;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Http\Controllers\Controller;
 use App\Support\AdPlatforms;
@@ -220,6 +221,21 @@ final class IntegrationController extends Controller
             'connection_error' => $connection?->last_error,
             'token_expires_at' => $connection?->token_expires_at?->toIso8601String(),
             'data_last_synced_at' => $lastSynced === null ? null : Carbon::parse($lastSynced)->toIso8601String(),
+            /*
+             * INTEGRATION-SYNC-VISIBILITY-001 — «when will this update itself».
+             *
+             * The card said when data LAST arrived and nothing about when more would, so the only
+             * way to tell a broken integration from one merely between runs was to press «Sync now»
+             * — a real provider call made by somebody who only wanted reassurance.
+             *
+             * Stated only where it is TRUE. A connection that is revoked, erroring or has no bound
+             * account is still on the scheduler in the sense that the command will run; it is not
+             * going to sync anything, and «next sync in 12 minutes» over one of those is the most
+             * confident kind of wrong.
+             */
+            'next_sync_at' => NextScheduledSync::at(
+                in_array($state, ['connected', 'syncing'], true) && $accountIds->isNotEmpty(),
+            )?->toIso8601String(),
         ];
     }
 
