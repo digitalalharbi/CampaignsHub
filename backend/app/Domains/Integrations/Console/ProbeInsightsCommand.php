@@ -576,6 +576,8 @@ final class ProbeInsightsCommand extends Command
         $byType = [];
         /** @var array<string, int> $counts */
         $counts = [];
+        /** @var list<string> $zoneIds */
+        $zoneIds = [];
 
         foreach ($connector->peekRawResponses() as $body) {
             foreach ((array) ($body['creatives'] ?? []) as $wrapper) {
@@ -587,6 +589,15 @@ final class ProbeInsightsCommand extends Command
 
                 $type = strtoupper((string) ($creative['type'] ?? 'UNSTATED'));
                 $counts[$type] = ($counts[$type] ?? 0) + 1;
+
+                /*
+                 * The zone a collection names. Collected as a VALUE because it is an address we must
+                 * dial, and it is never printed — only the shape behind it is.
+                 */
+                $zone = ((array) ($creative['collection_properties'] ?? []))['interaction_zone_id'] ?? null;
+                if (is_string($zone) && trim($zone) !== '') {
+                    $zoneIds[] = $zone;
+                }
 
                 foreach ($creative as $key => $value) {
                     $byType[$type][(string) $key] = true;
@@ -619,6 +630,92 @@ final class ProbeInsightsCommand extends Command
             $this->line(sprintf('    %s  (%d)', $type, $count));
             $this->line('      '.implode(', ', $keys));
         }
+
+        $this->reportInteractionZones($connector, $zoneIds);
+    }
+
+    /**
+     * CONTENT-COLLECTION-TILES-001 — the tiles a collection ad is made of, by KEY NAME.
+     *
+     * A collection with no `top_snap_media_id` has its media nowhere else: the hero and the product
+     * grid live in the interaction zone the creative names, and this product has never asked for
+     * one. The card says so honestly today — «المنصة تتيح البطاقات، ولم يطلبها النظام بعد» — and an
+     * honest sentence is not a fix.
+     *
+     * The fetch that closes it must map a response nobody here has read, and this tree has already
+     * paid three times for a shape INFERRED rather than read. So the shape is reported first, from a
+     * live zone, and the ingestion is written against what actually comes back.
+     *
+     * Key names only. The values are a client's product names, headlines and deep links.
+     *
+     * @param  list<string>  $zoneIds
+     */
+    private function reportInteractionZones(object $connector, array $zoneIds): void
+    {
+        if ($zoneIds === [] || ! method_exists($connector, 'probeInteractionZones')) {
+            return;
+        }
+
+        $bodies = $connector->probeInteractionZones($zoneIds);
+
+        $this->line('');
+        $this->line(sprintf(
+            '  INTERACTION ZONE SHAPES — key names only, never values (%d named, %d read)',
+            count(array_unique($zoneIds)),
+            count($bodies),
+        ));
+
+        if ($bodies === []) {
+            $this->line('      none readable — the zones are named by the creatives and could not be fetched');
+
+            return;
+        }
+
+        $keys = [];
+        foreach ($bodies as $body) {
+            foreach ($this->flatten((array) $body) as $key) {
+                $keys[$key] = true;
+            }
+        }
+
+        $names = array_keys($keys);
+        sort($names);
+        $this->line('      '.implode(', ', $names));
+    }
+
+    /**
+     * Key paths, two levels in and never a value.
+     *
+     * Two levels because that is where a tile's own fields sit — a zone holds a list of tiles and a
+     * tile holds its media — and any deeper would start describing one client's catalogue rather
+     * than Snapchat's schema.
+     *
+     * @param  array<mixed>  $body
+     * @return list<string>
+     */
+    private function flatten(array $body, string $prefix = '', int $depth = 0): array
+    {
+        $out = [];
+
+        foreach ($body as $key => $value) {
+            if (is_int($key)) {
+                // A list: describe its MEMBERS' shape, not its length.
+                if (is_array($value) && $depth < 2) {
+                    $out = [...$out, ...$this->flatten($value, $prefix, $depth + 1)];
+                }
+
+                continue;
+            }
+
+            $path = $prefix === '' ? (string) $key : $prefix.'.'.$key;
+            $out[] = $path;
+
+            if (is_array($value) && $depth < 2) {
+                $out = [...$out, ...$this->flatten($value, $path, $depth + 1)];
+            }
+        }
+
+        return array_values(array_unique($out));
     }
 
     private function reportCalls(object $connector): void

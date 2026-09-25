@@ -58,6 +58,65 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
      *
      * @return list<array<string,mixed>> every wrapper object from `$key`, across all pages
      */
+    /**
+     * CONTENT-COLLECTION-TILES-001 — read the interaction zone's SHAPE, never its values.
+     *
+     * ## Why this exists at all
+     *
+     * A Snapchat collection ad is a hero over a grid of product tiles, and the tiles are the only
+     * media a collection without a `top_snap_media_id` has. A live census of 625 COLLECTION creatives
+     * on a production account shows every one of them carries
+     * `collection_properties.interaction_zone_id` — so the platform exposes the tiles and this
+     * product has never asked for them. That is our gap, not Snapchat's, and the card has been
+     * saying so in as many words.
+     *
+     * The fetch that closes it has to map a response nobody here has read. Three previous repairs in
+     * this tree were written against INFERRED shapes and each one deployed, changed nothing, and
+     * cost a round trip to discover it. So the shape is read first, by this method, and the mapping
+     * is written against what comes back.
+     *
+     * ## What it returns, and what it must never leak
+     *
+     * Raw bodies, for a caller that reports KEY NAMES. The values are product names, headlines and
+     * deep links belonging to a client, and no diagnostic prints them — `ProbeInsightsCommand`
+     * takes key names only, and this method's docblock is where that obligation is written down.
+     *
+     * Fail-closed and bounded: a zone that errors is skipped, and at most `$limit` are asked for.
+     * This is a diagnostic on a live account, not a sweep.
+     *
+     * @param  list<string>  $zoneIds
+     * @return array<string,array<string,mixed>> keyed by zone id
+     */
+    public function probeInteractionZones(array $zoneIds, int $limit = 3): array
+    {
+        $bodies = [];
+
+        try {
+            $tokens = $this->tokens();
+        } catch (\Throwable) {
+            // No usable authorisation is a fact about the connection, not about the zones.
+            return [];
+        }
+
+        foreach (array_slice(array_values(array_unique($zoneIds)), 0, max(0, $limit)) as $zoneId) {
+            if (! is_string($zoneId) || trim($zoneId) === '') {
+                continue;
+            }
+
+            try {
+                $bodies[$zoneId] = $this->read(
+                    $this->api($tokens)->get($this->url("interaction_zones/{$zoneId}")),
+                    'interaction zone',
+                );
+            } catch (\Throwable) {
+                // A zone we cannot read tells us nothing and must not stop the ones we can.
+                continue;
+            }
+        }
+
+        return $bodies;
+    }
+
     private function readAll(OAuthTokens $tokens, string $path, string $key, string $what): array
     {
         $url = $this->url($path);
