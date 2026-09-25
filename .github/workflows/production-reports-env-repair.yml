@@ -1,0 +1,49 @@
+name: Production Reports Env Repair
+
+# REPORT-EXPORT-FUNCTIONAL-001 — put the renderer block into the live production env, once.
+#
+# The production diagnostic reported four failures and they share one cause: the live
+# `deploy/backend.production.env` never gained the `REPORTS_*` block that
+# `deploy/backend.production.env.example` declares, so the switch resolved to its default of false and
+# `REPORTS_REQUIRE_BASE` pointed at a developer's `../frontend/package.json` that no server has. Every
+# client PDF failed, fail-closed and correctly, while the export button stayed on screen.
+#
+# THIS IS NOT A WAY TO EDIT PRODUCTION CONFIGURATION. There are no inputs — no key, no value, no
+# command. The seven keys and the seven values live in `scripts/repair-reports-env.sh`, taken verbatim
+# from the contract in git, and they are the only thing this can change. The script asserts that every
+# other line of the file is byte-for-byte what it was, restores its timestamped backup if it is not,
+# and prints no value out of the live file.
+#
+# Manual only: no push trigger and no schedule. It is one repair, not a mechanism.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Write the renderer block into the live env, and nothing else
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            # The same preamble the deploy runs, so the script and the contract are the ones from the
+            # revision being repaired against rather than whatever the box last checked out.
+            git fetch origin main
+            git checkout main
+            git reset --hard origin/main
+            bash scripts/repair-reports-env.sh \
+              deploy/backend.production.env \
+              deploy/backend.production.env.example
