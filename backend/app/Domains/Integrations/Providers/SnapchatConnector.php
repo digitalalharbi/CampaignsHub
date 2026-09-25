@@ -124,16 +124,34 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
      * `creative_element_ids`. The tiles are therefore one endpoint further on, and their media field
      * is the single thing still unknown — which is precisely what the ingestion has to map.
      *
-     * So this reads a handful of elements and the caller reports their KEY NAMES. Same obligations
-     * as the zone probe: values are a client's product names, headlines and deep links, and none of
-     * them is printed. Bounded and fail-closed — a element that errors is skipped.
+     * So this reads the elements and the caller reports their KEY NAMES. Same obligations as the zone
+     * probe: values are a client's product names, headlines and deep links, and none of them is
+     * printed. Bounded and fail-closed — anything that errors yields nothing.
      *
-     * @param  list<string>  $elementIds
+     * ## The endpoint, corrected by production rather than by reading documentation
+     *
+     * The first version asked `GET /v1/creativeelements/{id}`, one id at a time. Production answered
+     * **404 for every one of them** — four ids taken straight out of a zone that had just named them,
+     * so the ids were right and the ADDRESS was wrong. There is no singular read for a creative
+     * element; they are account-scoped, like every other creative object in this API, and the zone
+     * body hands over the `ad_account_id` needed to ask.
+     *
+     * That is the whole reason this probe exists before the ingestion: a mapping written against the
+     * address I assumed would have failed the same way, in a sync rather than in a diagnostic.
+     *
+     * @param  list<string>  $elementIds  the ids a zone named — used to FILTER the account's list
      * @return array<string,array<string,mixed>> keyed by element id
      */
-    public function probeCreativeElements(array $elementIds, int $limit = 4): array
+    public function probeCreativeElements(array $elementIds, string $adAccountId = '', int $limit = 4): array
     {
-        $bodies = [];
+        $wanted = array_values(array_unique(array_filter(
+            $elementIds,
+            static fn ($id): bool => is_string($id) && trim($id) !== '',
+        )));
+
+        if ($wanted === [] || trim($adAccountId) === '') {
+            return [];
+        }
 
         try {
             $tokens = $this->tokens();
@@ -141,18 +159,31 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             return [];
         }
 
-        foreach (array_slice(array_values(array_unique($elementIds)), 0, max(0, $limit)) as $id) {
-            if (! is_string($id) || trim($id) === '') {
+        try {
+            $elements = $this->readAll(
+                $tokens,
+                "adaccounts/{$adAccountId}/creativeelements",
+                'creativeelements',
+                'creative elements',
+            );
+        } catch (\Throwable) {
+            return [];
+        }
+
+        $bodies = [];
+
+        foreach ($elements as $wrapper) {
+            $element = (array) (((array) $wrapper)['creative_element'] ?? $wrapper);
+            $id = $element['id'] ?? null;
+
+            if (! is_string($id) || ! in_array($id, $wanted, true)) {
                 continue;
             }
 
-            try {
-                $bodies[$id] = $this->read(
-                    $this->api($tokens)->get($this->url("creativeelements/{$id}")),
-                    'creative element',
-                );
-            } catch (\Throwable) {
-                continue;
+            $bodies[$id] = $element;
+
+            if (count($bodies) >= max(1, $limit)) {
+                break;
             }
         }
 
