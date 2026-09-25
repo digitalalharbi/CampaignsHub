@@ -117,6 +117,48 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         return $bodies;
     }
 
+    /**
+     * CONTENT-COLLECTION-TILES-001 — the tiles themselves, by SHAPE.
+     *
+     * The zone probe answered, from 625 live collection creatives: an interaction zone carries
+     * `creative_element_ids`. The tiles are therefore one endpoint further on, and their media field
+     * is the single thing still unknown — which is precisely what the ingestion has to map.
+     *
+     * So this reads a handful of elements and the caller reports their KEY NAMES. Same obligations
+     * as the zone probe: values are a client's product names, headlines and deep links, and none of
+     * them is printed. Bounded and fail-closed — a element that errors is skipped.
+     *
+     * @param  list<string>  $elementIds
+     * @return array<string,array<string,mixed>> keyed by element id
+     */
+    public function probeCreativeElements(array $elementIds, int $limit = 4): array
+    {
+        $bodies = [];
+
+        try {
+            $tokens = $this->tokens();
+        } catch (\Throwable) {
+            return [];
+        }
+
+        foreach (array_slice(array_values(array_unique($elementIds)), 0, max(0, $limit)) as $id) {
+            if (! is_string($id) || trim($id) === '') {
+                continue;
+            }
+
+            try {
+                $bodies[$id] = $this->read(
+                    $this->api($tokens)->get($this->url("creativeelements/{$id}")),
+                    'creative element',
+                );
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+
+        return $bodies;
+    }
+
     private function readAll(OAuthTokens $tokens, string $path, string $key, string $what): array
     {
         $url = $this->url($path);
