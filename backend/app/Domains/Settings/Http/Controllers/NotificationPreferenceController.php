@@ -93,6 +93,21 @@ final class NotificationPreferenceController extends Controller
             'quiet_hours' => $row->quiet_hours ?? ['enabled' => false, 'start' => '22:00', 'end' => '08:00'],
             'frequency' => $row->frequency ?? 'realtime',
             'project_ids' => $row->project_ids,
+            /*
+             * PROJECT-DIGEST-SCOPE-001 — «all my projects» stated rather than inferred.
+             *
+             * `project_ids` empty has always meant «every project you may reach», and
+             * `DigestScope::narrowToPreference()` still reads it exactly that way — nobody's mail
+             * moves because of this line. What changes is that the CHOICE is now expressible: a
+             * settings screen can offer «جميع المشاريع» and «مشاريع محددة» as two answers instead of
+             * implying the first from an empty list, which is the same absent-means-everything
+             * shape the portfolio scope work removed elsewhere.
+             *
+             * Derived, not stored. The list already IS the fact, and a column repeating it would be
+             * a second thing to keep true — the first time they disagreed the digest and the screen
+             * would say different things about the same person.
+             */
+            'digest_scope' => $this->digestScopeOf($row->project_ids),
             'available_categories' => self::LEGACY_CATEGORIES,
             // `recommendations` defaults false beside the rest: a row stored before the setting
             // existed has no key, and an absent preference is not consent.
@@ -381,6 +396,19 @@ final class NotificationPreferenceController extends Controller
     }
 
     /** @return array<string, array<string,bool>> */
+    /**
+     * «All the projects I may reach», or «these ones».
+     *
+     * The stored shape is a JSON list; empty or absent has always meant the whole ceiling. This
+     * names that rather than changing it.
+     */
+    private function digestScopeOf(mixed $projectIds): string
+    {
+        $chosen = is_string($projectIds) ? json_decode($projectIds, true) : $projectIds;
+
+        return is_array($chosen) && $chosen !== [] ? 'selected' : 'all';
+    }
+
     private function defaultCategories(): array
     {
         $out = [];
