@@ -1,5 +1,5 @@
 import { Num } from '@/components/ui/Num'
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeftRight, Eye } from 'lucide-react'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
@@ -143,7 +143,7 @@ import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
 import { creativeDialogFigures, type DialogFigure } from '@/features/content/creativeDialogFigures'
 import { metricLabel } from '@/features/content/metrics'
 import { CreativeComparison, CreativeTrend } from '@/features/content/CreativeTrend'
-import { creativeScope, decodePath, drillInto, drillUpTo, encodePath, nextLevel, parentFor, rememberName,
+import { creativeScope, decodePath, drillInto, drillUpTo, encodePath, namesVersion, nextLevel, parentFor, rememberName, subscribeNames,
   stepLabel, withNames,
   type DrillLevel, type DrillStep,
 } from './drilldown'
@@ -2499,7 +2499,8 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
    * unnarrowed response must never answer a drilled-down question.
    */
   const [rawPath] = useUrlState('drill', '')
-  const path = useMemo(() => withNames(decodePath(rawPath)), [rawPath])
+  const seenNames = useSyncExternalStore(subscribeNames, namesVersion, namesVersion)
+  const path = useMemo(() => withNames(decodePath(rawPath)), [rawPath, seenNames])
   const scope = creativeScope(path)
   const write = useUrlWriter()
   const narrowed = scope.ad_ids !== undefined || scope.ad_set_ids !== undefined
@@ -2791,9 +2792,25 @@ function EntityTab({ projectId, range, filters, level }: TabProps & { level: 'ad
    * request, so a cached unfiltered response is never handed back for a drilled-down question.
    */
   const [rawPath] = useUrlState('drill', '')
-  const path = useMemo(() => withNames(decodePath(rawPath)), [rawPath])
+  const seenNames = useSyncExternalStore(subscribeNames, namesVersion, namesVersion)
+  const path = useMemo(() => withNames(decodePath(rawPath)), [rawPath, seenNames])
   const parent = parentFor(level, path)
   const q = useEntities(projectId, range, level, parent, filters)
+
+  /*
+   * The parents the SERVER named, handed to the same registry a clicked row fills.
+   *
+   * This is what survives a reload. `NAMES` is a session map and a refresh empties it, so a reader
+   * who bookmarked a drilled-in address — or simply pressed reload — met «مجموعة: 70589c4f-…» where
+   * the ad set's name had been. The id stays the linkable truth and the name stays out of the URL;
+   * only its SOURCE changes, from a row that may no longer be on screen to the response that was
+   * narrowed by it.
+   */
+  const parentNames = q.data?.parent_names
+  useEffect(() => {
+    if (!parentNames) return
+    Object.entries(parentNames).forEach(([id, name]) => rememberName(id, name))
+  }, [parentNames])
   /*
    * ENTITY-RELEVANCE-ORDERING-001 — «currently-serving ads must not be mixed with stopped historical
    * ads without clear grouping».
