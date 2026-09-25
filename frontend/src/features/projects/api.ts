@@ -1,4 +1,4 @@
-import { ensureCsrfCookie, getData, getEnvelope, postData } from '@/lib/api/client'
+import { ensureCsrfCookie, getData, getEnvelope, postData, putData } from '@/lib/api/client'
 import { api } from '@/lib/api/client'
 import type { ApiEnvelope } from '@/lib/api/types'
 
@@ -61,6 +61,22 @@ export interface Binding {
   is_active: boolean
   account: ExternalAccount | null
   created_at: string | null
+}
+
+/**
+ * INTEGRATION-PRIMARY-ACCOUNT-001 — say which project this account's data belongs to.
+ *
+ * `is_primary` is not a preference. An account can be bound to several projects, and the server
+ * decides which one OWNS its rows by that flag — so this is the control that settles the
+ * account-scope chain for every sync the account feeds.
+ *
+ * A PUT because it is idempotent: naming the same account twice is the same decision. The server
+ * clears the flag on the account's other bindings in the same transaction, so there is never a
+ * moment with two owners or none.
+ */
+export async function setPrimaryAccount(projectId: string, externalAccountId: string): Promise<void> {
+  await ensureCsrfCookie()
+  await putData(`/projects/${projectId}/integrations/primary`, { external_account_id: externalAccountId })
 }
 
 export interface ProjectTask {
