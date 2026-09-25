@@ -183,4 +183,29 @@ final class FailedExportSaysWhyTest extends TestCase
         self::assertSame(ExportFailureReason::UNKNOWN, ExportFailureReason::classify(null));
         self::assertSame(ExportFailureReason::UNKNOWN, ExportFailureReason::classify('   '));
     }
+
+    /**
+     * The Arabic text-layer pass is a FAIL-CLOSED gate: ChromiumPdfRenderer throws for BOTH of its
+     * failure modes rather than shipping a client PDF whose Arabic cannot be copied or read aloud.
+     * The validation throw is pinned above; the one that fires when the normaliser cannot be run at
+     * all was not, and it is the mode a deployment actually produces — a box without the script, or
+     * without python3/pikepdf, fails every Arabic export. Its wording is therefore part of the
+     * contract: rephrase it out of the classifier's reach and the operator loses «install the
+     * normaliser» and is told only «it failed».
+     */
+    public function test_a_normaliser_that_cannot_run_is_still_a_named_reason(): void
+    {
+        $thrown = 'Arabic text-layer normaliser missing: /var/www/backend/scripts/fix-arabic-textlayer.py';
+
+        self::assertSame(ExportFailureReason::TEXT_LAYER_FAILED, ExportFailureReason::classify($thrown));
+        self::assertNotSame(
+            ExportFailureReason::UNKNOWN,
+            ExportFailureReason::classify($thrown),
+            'A renderer failure the product can act on must never degrade to the unnamed reason.',
+        );
+
+        // Classification hands back a code, never the message — the stored text carries an absolute
+        // server path, and this table is read by an operator in the browser.
+        self::assertStringNotContainsString('/var/www', ExportFailureReason::classify($thrown));
+    }
 }
