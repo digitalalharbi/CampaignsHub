@@ -89,6 +89,7 @@ function firstSyncStatusFromRuns() {
   const rows = runs.reduce((sum, r) => sum + (r.metrics_imported ?? 0), 0)
 
   return {
+    connection: { id: 'conn-1', provider: 'snapchat' },
     since: new Date(Date.now() - 1000).toISOString(),
     accounts: [
       { id: 'acct-1', external_id: 'act-1', name: 'Riyadh Retail', state: settled ? (rows > 0 ? 'imported' : 'no_data') : 'queued', rows, error: null, last_synced_at: null },
@@ -100,10 +101,14 @@ function firstSyncStatusFromRuns() {
       running: 0,
       imported: settled && rows > 0 ? 2 : 0,
       no_data: settled && rows === 0 ? 2 : 0,
+      partial: 0,
       failed: 0,
+      awaiting_assignment: 0,
       rows,
       state: settled ? (rows > 0 ? 'imported' : 'no_data') : 'queued',
       settled,
+      succeeded: settled ? 2 : 0,
+      needs_attention: 0,
     },
   }
 }
