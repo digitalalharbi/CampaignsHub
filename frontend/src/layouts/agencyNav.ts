@@ -1,7 +1,7 @@
 import {
   Link2,
   BarChart3, BellRing, Building2, CreditCard, FolderKanban, FolderOpen, Images, Inbox,
-  LayoutDashboard, ListChecks, Megaphone, MessageSquare, Plug, Receipt, Settings, TrendingUp, Users,
+  Layers, LayoutDashboard, ListChecks, Megaphone, MessageSquare, Plug, Receipt, Settings, TrendingUp, Users,
 } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
@@ -59,6 +59,15 @@ export const agencyNavGroups: readonly NavGroup[] = [
     leaves: [
       { to: '/agency/clients', ar: 'العملاء', en: 'Clients', icon: Building2 },
       { to: '/agency/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban },
+      /*
+       * PORTFOLIO-SCOPE-001 §36 — the agency scope is ENTERED, not inferred.
+       *
+       * The route exists in this portal too, and an agency is the reader this view was built for:
+       * how many clients are running, which need somebody today, what is being spent. Reachable
+       * only by typing the URL would leave «all projects» as something people arrive at by clearing
+       * a filter, which is the state this whole unit removes.
+       */
+      { to: '/agency/portfolio', ar: 'جميع المشاريع', en: 'All projects', icon: Layers },
     ],
   },
   {
