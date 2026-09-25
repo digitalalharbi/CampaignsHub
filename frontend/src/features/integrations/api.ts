@@ -43,6 +43,14 @@ export interface Connector {
   token_expires_at?: string | null
   /** When DATA last arrived, which is the question a customer is actually asking. */
   data_last_synced_at?: string | null
+  /**
+   * INTEGRATION-SYNC-VISIBILITY-001 — when it will update itself next, or null.
+   *
+   * Null is not «unknown»: it means this connection is not going to sync — revoked, erroring, or
+   * with no account bound — and the card says which. A time here over a connection that needs
+   * re-authorising would be the most confident kind of wrong.
+   */
+  next_sync_at?: string | null
 }
 
 export function listConnectors(): Promise<Connector[]> {
