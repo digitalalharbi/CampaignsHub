@@ -26,6 +26,15 @@ export interface ReportExportRow {
    * Null while an export is healthy or still running.
    */
   failure_reason: string | null
+  /**
+   * REPORT-EXPORT-STALE-DEADEND-001 — why this file may no longer be handed over, or null.
+   *
+   * The download endpoint refuses a stale export with 409, and the list used to draw one as a plain
+   * link: a chip that looks ready, one click, and the browser navigating away to a JSON error body.
+   * The server states the reason here so the interface can offer «إعادة إنشاء» BEFORE anybody
+   * clicks. A code rather than a sentence, translated in `exportFailureCopy`.
+   */
+  stale_reason: 'validation_failed' | 'renderer_changed' | 'template_changed' | null
 }
 export interface ReportRow {
   id: string

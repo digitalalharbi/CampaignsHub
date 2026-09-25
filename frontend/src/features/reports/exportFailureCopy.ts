@@ -41,6 +41,35 @@ export const EXPORT_FAILURE_COPY: Record<string, { ar: string; en: string }> = {
  * A code with no sentence must still say something true, so an unknown code reads as the generic
  * failure rather than as an empty tooltip — the state this whole unit exists to remove.
  */
+/**
+ * REPORT-EXPORT-STALE-DEADEND-001 — why a stored PDF cannot be handed over, in the reader's words.
+ *
+ * Each of these says what to DO, because there is exactly one thing to do and the old interface said
+ * none of it: the file on disk was made by a pipeline this product has moved past, and the fix is to
+ * make a new one. «Stale» on its own reads as an accusation about the data rather than a fact about
+ * the file.
+ */
+const EXPORT_STALE_COPY: Record<string, { ar: string; en: string }> = {
+  validation_failed: {
+    ar: 'هذا الملف لم يجتز فحص النص العربي — أعد إنشاءه لتحصل على نسخة قابلة للبحث والقراءة.',
+    en: 'This file did not pass the Arabic text-layer check — regenerate it for a searchable, readable copy.',
+  },
+  renderer_changed: {
+    ar: 'أُنشئ هذا الملف بإصدار سابق من المُصيّر — أعد إنشاءه للحصول على النسخة الحالية.',
+    en: 'This file was produced by an earlier renderer — regenerate it to get the current version.',
+  },
+  template_changed: {
+    ar: 'تغيّر تصميم التقرير منذ إنشاء هذا الملف — أعد إنشاءه ليطابق التقرير الحالي.',
+    en: 'The report design changed after this file was made — regenerate it to match the current report.',
+  },
+}
+
+export function exportStaleCopy(reason: string | null | undefined, ar: boolean): string {
+  const entry = (reason && EXPORT_STALE_COPY[reason]) || EXPORT_STALE_COPY.renderer_changed
+
+  return ar ? entry.ar : entry.en
+}
+
 export function exportFailureCopy(reason: string | null | undefined, ar: boolean): string {
   const entry = (reason && EXPORT_FAILURE_COPY[reason]) || EXPORT_FAILURE_COPY.export_failed
   return ar ? entry.ar : entry.en
