@@ -145,6 +145,7 @@ final class DailyDigestMail extends Mailable
                     default => $ar ? 'ملخص أمس عبر مشاريعك ومنصاتك.' : 'Yesterday across your projects and platforms.',
                 },
                 'headerNote' => $this->headerNote($ar),
+                'scopeNote' => $this->scopeNote($ar),
                 // One place, because the two mailables already disagreed about the unsubscribe —
                 // and the one that was wrong resolved anyway, through a redirect (MAIL-008).
                 'urls' => MailLinks::footer(),
@@ -211,6 +212,32 @@ final class DailyDigestMail extends Mailable
             : ($ar ? 'الملخص الأسبوعي · ' : 'Weekly digest · ');
 
         return $label."{$from} → {$to}";
+    }
+
+    /**
+     * «هذا الملخص يغطي 3 من 12 مشروعًا اخترتها» — PROJECT-DIGEST-SCOPE-001.
+     *
+     * Only when the reader's own preference narrowed the digest. Without it a summary covering three
+     * of twelve projects is indistinguishable from one covering all twelve, and the client that is
+     * missing looks like a client that was quiet.
+     *
+     * Empty string when nothing was narrowed, so the template renders nothing rather than a caveat
+     * on every digest.
+     */
+    private function scopeNote(bool $ar): string
+    {
+        $n = $this->digest['narrowing'] ?? null;
+
+        if (! is_array($n)) {
+            return '';
+        }
+
+        $chosen = (int) ($n['chosen'] ?? 0);
+        $ceiling = (int) ($n['ceiling'] ?? 0);
+
+        return $ar
+            ? "هذا الملخص يغطي {$chosen} من {$ceiling} مشاريع تصل إليها، حسب اختيارك في الإعدادات."
+            : "This summary covers {$chosen} of the {$ceiling} projects you can reach, per your settings.";
     }
 
     /**
