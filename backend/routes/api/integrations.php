@@ -145,6 +145,16 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
          * the token that binds them.
          */
         Route::put('selection', [ProjectIntegrationController::class, 'applySelection'])->middleware('project.can:integrations.manage')->name('selection');
+        /*
+         * INTEGRATION-PRIMARY-ACCOUNT-001 — which project an account's data belongs to.
+         *
+         * `is_primary` decides that, through `AccountAssignment::projectIdFor()`, for every account
+         * bound to more than one project. It was written once by the confirm step and never again,
+         * so an operator who chose wrong had no way back that did not throw the history away.
+         *
+         * A PUT because it is idempotent: naming the same account primary twice is the same decision.
+         */
+        Route::put('primary', [ProjectIntegrationController::class, 'setPrimary'])->middleware('project.can:integrations.manage')->name('primary');
         Route::post('bindings/{binding}/sync', [ProjectIntegrationController::class, 'sync'])->middleware('project.can:integrations.manage')->name('sync');
         Route::delete('bindings/{binding}', [ProjectIntegrationController::class, 'detach'])->middleware('project.can:integrations.manage')->name('detach');
     });
