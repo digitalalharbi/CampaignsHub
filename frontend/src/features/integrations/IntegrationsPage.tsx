@@ -18,7 +18,7 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/Card'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useT, type TranslationKey } from '@/lib/i18n'
-import { accounts as accountsCounted, adAccounts, connectedAccounts } from '@/lib/counted'
+import { accounts as accountsCounted, adAccounts, connectedAccounts, minutes as countedMinutes } from '@/lib/counted'
 import { canonicalPlatform, sortByPlatform } from '@/lib/platforms'
 import { platformColor } from '@/features/analytics/components'
 import { useUi } from '@/stores/ui'
@@ -95,6 +95,34 @@ const LEGACY_META: Record<Connector['status'], { tone: 'success' | 'warning' | '
 }
 
 /** Latin digits in both languages, per the product's number rule. */
+/**
+ * INTEGRATION-SYNC-VISIBILITY-001 — «and it will update itself again at…».
+ *
+ * Paired with `whenSynced` deliberately. On its own «آخر مزامنة» leaves the reader to guess whether
+ * a quiet integration is broken or merely between runs, and the only way they had to find out was
+ * «Sync now» — a real provider call made for reassurance.
+ *
+ * Returns null rather than a placeholder when the server states no next run. That is not «unknown»:
+ * the connection is not going to sync, and the card already carries a sentence saying why. Printing
+ * a time there would be the most confident kind of wrong.
+ */
+function whenNextSync(iso: string | null | undefined, ar: boolean): string | null {
+  if (!iso) return null
+
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return null
+
+  const minutes = Math.round((at.getTime() - Date.now()) / 60_000)
+
+  // Past-due happens between the boundary and the worker picking the job up. «Due now» is the truth
+  // there; a negative countdown reads as a fault.
+  if (minutes <= 0) return ar ? 'المزامنة التالية: الآن' : 'Next sync: due now'
+
+  return ar
+    ? `المزامنة التالية: بعد ${countedMinutes(minutes, 'ar')}`
+    : `Next sync: in ${countedMinutes(minutes, 'en')}`
+}
+
 function whenSynced(iso: string | null | undefined, ar: boolean): string {
   if (!iso) return ar ? 'لم تصل بيانات بعد' : 'No data yet'
 
@@ -579,12 +607,18 @@ function ConnectorCard({
             )}
             {' · '}
             {whenSynced(c.data_last_synced_at, ar)}
+            {whenNextSync(c.next_sync_at, ar) !== null && (
+              <span data-testid={`connector-next-sync-${c.key}`}>{' · '}{whenNextSync(c.next_sync_at, ar)}</span>
+            )}
           </span>
         ) : state === 'connected' || state === 'syncing' ? (
           <span className="tnum" data-testid={`connector-synced-${c.key}`}>
             {adAccounts(c.accounts ?? 0, ar ? 'ar' : 'en')}
             {' · '}
             {whenSynced(c.data_last_synced_at, ar)}
+            {whenNextSync(c.next_sync_at, ar) !== null && (
+              <span data-testid={`connector-next-sync-${c.key}`}>{' · '}{whenNextSync(c.next_sync_at, ar)}</span>
+            )}
           </span>
         ) : state === 'revoked' ? (
           <span data-testid={`connector-revoked-${c.key}`}>
