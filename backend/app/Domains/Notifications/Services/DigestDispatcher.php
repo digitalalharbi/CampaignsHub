@@ -143,6 +143,19 @@ final class DigestDispatcher
             $projectIds = $this->scope->projectIdsFor($user, $tenantId);
             $digest = $this->daily->buildRange($user, $tenantId, $projectIds, $from, $to);
 
+            /*
+             * PROJECT-DIGEST-SCOPE-001 — say so when this is not everything.
+             *
+             * A digest covering three of somebody's twelve projects reads exactly like one covering
+             * all twelve, so a reader whose client is missing cannot tell «that project was quiet»
+             * from «I narrowed this months ago and forgot». Null in the ordinary case: a caveat on
+             * every digest is a caveat nobody reads.
+             *
+             * Display only. `projectIdsFor()` above already decided what is in this email, and this
+             * line cannot change it.
+             */
+            $digest['narrowing'] = $this->scope->narrowing($user, $tenantId);
+
             if (($digest['sendable'] ?? false) !== true) {
                 return $this->finish($user, $kind, $periodKey, 'skipped', (string) ($digest['reason'] ?? 'not_sendable'));
             }
