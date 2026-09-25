@@ -100,10 +100,19 @@ final class PdfFactsCommand extends Command
          */
         try {
             $report = $export->report()->withoutGlobalScopes()->first();
+            /*
+             * The url builder returns a SENTINEL, not a url — and that is the right answer here.
+             *
+             * `forReport()` takes the callback that would build a logo's address, and calls it only
+             * when an asset actually exists. This command needs to know whether one exists and does not
+             * want its address: a signed logo url in a workflow log is a url in a workflow log. So the
+             * callback returns a fixed word, `logo_url` becomes that word when a logo is configured and
+             * stays null when none is, and the distinction survives with nothing leaked.
+             */
             $branding = app(SharedLinkBranding::class)->forReport(
                 $report,
                 (string) $export->tenant_id,
-                static fn (): ?string => null,
+                static fn (?string $path = null): string => 'configured',
             );
 
             $this->newLine();
