@@ -415,15 +415,28 @@ final class CreativeMetrics
         $merged = $native;
         $filled = [];
 
+        /*
+         * Which grain supplied each merged column — CONTENT-RESULT-COST-ONE-GRAIN-001.
+         *
+         * This map is the whole fix. Without it the ratio loop below chose its source independently
+         * of the figure it would be read against, which is how «Orders 0» came to sit beside «Cost
+         * per result 12.79»: the zero was the creative grain's measurement and the cost was computed
+         * against the ad grain's three.
+         */
+        $from = [];
+
         // Raw columns and averaged columns: taken only where the creative grain reported nothing.
         foreach ([...array_keys(self::SUMS), ...array_keys(self::AD_GRAIN_SUMS), ...self::AVERAGED] as $key) {
             if (in_array($key, self::MONEY, true)) {
                 continue;
             }
 
+            $from[$key] = 'native';
+
             if (($native[$key] ?? null) === null && ($ads[$key] ?? null) !== null) {
                 $merged[$key] = $ads[$key];
                 $merged['reported'][$key] = true;
+                $from[$key] = 'ads';
                 $filled[] = $key;
             }
         }
@@ -442,6 +455,8 @@ final class CreativeMetrics
                 $filled[] = $key;
             }
         }
+
+        $from += $moneyFrom;
 
         // The original currency now describes whichever grain each withheld money figure came from.
         $currencies = [];
@@ -462,25 +477,66 @@ final class CreativeMetrics
         $merged['money_original_currency'] = count($currencies) === 1 && ! $several ? (string) array_key_first($currencies) : null;
         $merged['money_original_currencies'] = $several ? max(2, count($currencies)) : count($currencies);
 
-        // Ratios: the creative grain's own, else the ad grain's own — never recomputed across grains.
-        // The inputs travel with the choice, so an aggregate over this creative pools the same grain.
+        /*
+         * Ratios: from the grain that supplied the DENOMINATOR the card will show.
+         *
+         * CONTENT-RESULT-COST-ONE-GRAIN-001. This used to read «the creative grain's own, else the
+         * ad grain's own», which is a sentence about the ratio alone and never asked what it would
+         * be printed beside. The owner's row is what that produces: the creative grain measured zero
+         * conversions, so the card said 0; the creative grain has no `cpa`, so the ad grain's 12.79
+         * was adopted, computed against the ad grain's three. Both halves followed their own rule
+         * and together they stated something no measurement supports.
+         *
+         * A result and its cost now come from ONE grain or the cost is absent. «—» is the honest
+         * cell for a cost whose denominator the displayed grain measured as none — unavailable is
+         * not zero, and a zero stays a real zero.
+         */
         $merged['ratio_inputs'] = [];
         foreach ([...self::DERIVED, ...self::AD_GRAIN_DERIVED] as $key) {
-            $source = null;
+            $inputs = self::RATIO_INPUTS[$key] ?? null;
 
-            if (($native[$key] ?? null) !== null) {
-                $source = $native;
-            } elseif (($ads[$key] ?? null) !== null) {
+            if ($inputs === null) {
+                /*
+                 * A derived key with no stated inputs — `orders` — is a RENAME of a column rather
+                 * than a quotient, so it keeps the old fallback. There is no denominator for it to
+                 * disagree with.
+                 */
+                if (($native[$key] ?? null) !== null) {
+                    // keep the creative grain's own
+                } elseif (($ads[$key] ?? null) !== null) {
+                    $merged[$key] = $ads[$key];
+                    $filled[] = $key;
+                } else {
+                    $merged[$key] = null;
+                }
+
+                continue;
+            }
+
+            $denominatorKey = $inputs[1];
+            $grain = $from[$denominatorKey] ?? 'native';
+            $source = $grain === 'ads' ? $ads : $native;
+
+            /*
+             * The denominator as MERGED, not as the source holds it: those are the same number by
+             * construction — that is what `$from` guarantees — and reading the merged one is what
+             * makes the guarantee checkable rather than assumed.
+             */
+            $shown = $merged[$denominatorKey] ?? null;
+
+            if (! is_numeric($shown) || (float) $shown === 0.0 || ($source[$key] ?? null) === null) {
+                $merged[$key] = null;
+                $merged['ratio_inputs'][$key] = [null, null];
+
+                continue;
+            }
+
+            if ($grain === 'ads') {
                 $merged[$key] = $ads[$key];
                 $filled[] = $key;
-                $source = $ads;
-            } else {
-                $merged[$key] = null;
             }
 
-            if (isset(self::RATIO_INPUTS[$key])) {
-                $merged['ratio_inputs'][$key] = $source === null ? [null, null] : $this->ratioInputs($source, $key);
-            }
+            $merged['ratio_inputs'][$key] = $this->ratioInputs($source, $key);
         }
 
         $merged['reported']['orders'] = ($merged['conversions'] ?? null) !== null;
