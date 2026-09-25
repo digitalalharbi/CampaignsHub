@@ -73,8 +73,21 @@ describe('a shared report page', () => {
   it('draws no image where no mark exists, and still names both', async () => {
     open('ar', 'en', { ...both, logo_url: null, logo_source: 'none', agency: { name: 'Razah Agency', logo_url: null }, client: { name: 'Nakheel', logo_url: null } })
 
-    expect(await screen.findByTestId('shared-report-name')).toHaveTextContent('Nakheel')
-    expect(screen.getByTestId('shared-report-by')).toHaveTextContent('Razah Agency')
+    /*
+     * Wait for the CONTENT, not for the element.
+     *
+     * `findByTestId` resolves as soon as the node exists, and this node exists from the first paint
+     * carrying the platform's own fallback name — «كامبينز هب» — until `sharedBranding` resolves and
+     * the client's name replaces it. So asserting the text on the element's arrival is asserting
+     * that the branding fetch won a race against the first render, which it usually does and under
+     * CI load sometimes does not.
+     *
+     * Observed twice on unrelated pull requests, one of which changed no frontend file at all.
+     * Nothing here is weakened: «Nakheel» and «Razah Agency» are still required, and a page that
+     * never resolved them still fails.
+     */
+    await waitFor(() => expect(screen.getByTestId('shared-report-name')).toHaveTextContent('Nakheel'))
+    await waitFor(() => expect(screen.getByTestId('shared-report-by')).toHaveTextContent('Razah Agency'))
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
     await waitFor(() => expect(document.title).toBe('Monthly performance — CampaignsHub'))
   })
