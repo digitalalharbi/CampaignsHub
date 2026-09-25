@@ -7,6 +7,10 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -210,6 +214,35 @@ final class PortfolioScopeTest extends TestCase
         $this->assertNotContains('مشروع غريب', array_column($data['projects']['items'], 'name'));
     }
 
+    /**
+     * A deselected account's spend leaves the portfolio total — ACCOUNT-SCOPE-ISOLATION-001.
+     *
+     * This is the assertion that matters most on this endpoint, and my first version of it did not
+     * exist: `BoundAccountVisibilitySourceGuardTest` caught the missing rule in CI because the query
+     * read `daily_metrics` without it. The guard was right, and a guard is not a substitute for
+     * showing the behaviour — an agency's headline spend is exactly the number that must not quietly
+     * count money from an account somebody removed from the project.
+     *
+     * The rows are identical apart from the binding, so only the rule can explain the difference.
+     */
+    public function test_spend_from_a_deselected_account_is_not_in_the_portfolio(): void
+    {
+        $kept = $this->boundAccount($this->acmeProject, 'act-kept', active: true);
+        $removed = $this->boundAccount($this->acmeProject, 'act-removed', active: false);
+
+        $this->spend($this->acmeProject, 'SAR', 600.0, $kept);
+        $this->spend($this->acmeProject, 'SAR', 400.0, $removed);
+
+        $data = $this->portfolio($this->agencyWide);
+
+        $this->assertEqualsWithDelta(
+            600.0,
+            (float) $data['spend']['by_currency'][0]['spend'],
+            0.01,
+            'the portfolio counted spend from an account that was deselected from the project',
+        );
+    }
+
     // ── fixtures ──────────────────────────────────────────────────────────────────────────────
 
     /** @return array<string,mixed> */
@@ -235,6 +268,42 @@ final class PortfolioScopeTest extends TestCase
         return $user;
     }
 
+    /** An external account bound to a project, actively or not. Returns the account id. */
+    private function boundAccount(Project $project, string $externalId, bool $active): string
+    {
+        $credential = new IntegrationCredential([
+            'provider' => 'snapchat', 'credential_scope' => 'project_only',
+            'credential_type' => 'oauth', 'status' => 'active',
+        ]);
+        $credential->setPayload('t');
+        $credential->save();
+
+        $connection = ProviderConnection::create([
+            'tenant_id' => $this->tenant->id, 'credential_id' => $credential->id,
+            'provider' => 'snapchat', 'connection_name' => 'snapchat',
+            'scope' => 'project_only', 'status' => 'connected',
+        ]);
+
+        $account = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'provider_connection_id' => $connection->id,
+            'provider' => 'snapchat', 'account_type' => 'ad_account',
+            'external_id' => $externalId, 'name' => $externalId,
+            'status' => 'active', 'discovered_at' => now(),
+        ]);
+
+        ProjectIntegrationBinding::create([
+            'tenant_id' => $this->tenant->id,
+            'client_workspace_id' => $project->client_workspace_id,
+            'project_id' => $project->id,
+            'external_account_id' => $account->id,
+            'provider' => 'snapchat', 'purpose' => 'reporting',
+            'is_active' => $active,
+        ]);
+
+        return (string) $account->id;
+    }
+
     private function project(ClientWorkspace $client, string $name, string $status): Project
     {
         return Project::create([
@@ -245,7 +314,7 @@ final class PortfolioScopeTest extends TestCase
         ]);
     }
 
-    private function spend(Project $project, string $currency, float $amount): void
+    private function spend(Project $project, string $currency, float $amount, ?string $accountId = null): void
     {
         DB::table('daily_metrics')->insert([
             'id' => (string) Str::uuid(),
@@ -256,7 +325,7 @@ final class PortfolioScopeTest extends TestCase
              * The account and campaign are required columns and are not what this test is about —
              * a portfolio total is a fact about the PROJECT, so these are stable stand-ins.
              */
-            'external_account_id' => (string) Str::uuid(),
+            'external_account_id' => $accountId ?? (string) Str::uuid(),
             'external_campaign_id' => (string) Str::uuid(),
             'attribution_window' => 'default',
             'source_type' => 'api',
