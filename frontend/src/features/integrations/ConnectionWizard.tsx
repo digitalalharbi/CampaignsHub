@@ -3,16 +3,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, Loader2, Search } from 'lucide-react'
 import {
   applyAccountSelection, confirmAccountSelection, fetchConnectionHierarchy, fetchDiscoveredAccounts,
-  fetchPlanUsage, listProjectBindings, refreshDiscoveredAccounts,
-  type DiscoveredAccount, type ProjectBinding,
-  getAccountLogs,
+  fetchPlanUsage, fetchFirstSyncStatus, listProjectBindings, refreshDiscoveredAccounts,
+  type DiscoveredAccount, type FirstSyncStatus, type ProjectBinding,
 } from './api'
-import { firstSyncOutcome } from './firstSyncOutcome'
 import { createProject, listClientWorkspaces, listProjects } from '@/features/projects/api'
 import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { Refusal } from '@/lib/api/errors'
+import { useNavigate } from 'react-router-dom'
+import { usePortalPath } from '@/app/portalPath'
 import { useUi } from '@/stores/ui'
 import { accounts as countedAccounts } from '@/lib/counted'
 
@@ -93,6 +93,8 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
   const managing = manageProjectId !== null
   const ar = useUi((s) => s.locale) === 'ar'
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const portalPath = usePortalPath()
 
   const hierarchy = useQuery({
     queryKey: ['connection-hierarchy', connectionId],
@@ -220,21 +222,43 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
    * It stops on its own: `refetchInterval` returns false once the run has an answer, so a failed
    * sync does not keep a timer alive behind a closed dialog.
    */
-  const watchedAccount = [...selected][0] ?? null
-  const firstSyncRuns = useQuery({
-    queryKey: ['first-sync', watchedAccount, confirmedAt],
-    queryFn: () => getAccountLogs(watchedAccount!),
-    enabled: current === 'done' && watchedAccount !== null && confirmedAt !== null,
-    refetchInterval: (query) => {
-      const outcome = firstSyncOutcome(query.state.data?.runs, confirmedAt ?? 0)
-
-      return outcome.state === 'queued' || outcome.state === 'running' ? 2000 : false
-    },
-    // Ninety seconds of polling, then the panel says where to look instead of spinning for ever.
+  const watched = useMemo(() => [...selected], [selected])
+  const firstSyncQuery = useQuery({
+    queryKey: ['first-sync', connectionId, watched, confirmedAt],
+    queryFn: () => fetchFirstSyncStatus(connectionId, watched, new Date(confirmedAt!).toISOString()),
+    enabled: current === 'done' && watched.length > 0 && confirmedAt !== null,
+    refetchInterval: (query) => (query.state.data?.summary.settled ? false : 2000),
     retry: false,
   })
 
-  const firstSync = firstSyncOutcome(firstSyncRuns.data?.runs, confirmedAt ?? 0)
+  const firstSync = firstSyncQuery.data ?? null
+  const settled = firstSync?.summary.settled ?? false
+
+  /*
+   * INTEGRATION-FIRST-SYNC-VISIBILITY-001 — the moment the rest of the product has to be told.
+   *
+   * The confirmation already invalidates connectors, connection states and plan usage — at the
+   * instant the sync is QUEUED. That refetch truthfully returns the pre-sync world: no rows, no
+   * last-synced, an account not yet contributing. Then the run resolves a minute later and NOTHING
+   * invalidated those keys a second time, because the only thing watching it was this dialog,
+   * rendering its own sentence and telling nobody.
+   *
+   * So the page behind was not stale by accident. It was stale because the one moment worth
+   * refreshing it — when the answer arrives — was the one moment nothing refreshed.
+   *
+   * Keyed on `settled` so it fires ONCE per confirmation, on the transition, and never on every
+   * two-second poll.
+   */
+  useEffect(() => {
+    if (!settled) return
+
+    void queryClient.invalidateQueries({ queryKey: ['connectors'] })
+    void queryClient.invalidateQueries({ queryKey: ['connection-states'] })
+    void queryClient.invalidateQueries({ queryKey: ['accounts'] })
+    void queryClient.invalidateQueries({ queryKey: ['resumable-connections'] })
+    void queryClient.invalidateQueries({ queryKey: ['discovered-accounts', connectionId] })
+    if (projectId) void queryClient.invalidateQueries({ queryKey: ['project-bindings', projectId] })
+  }, [settled, queryClient, connectionId, projectId])
 
   const save = useMutation({
     // The previous answer is cleared before asking again, so a retry cannot show the last success
@@ -768,50 +792,112 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
       )}
 
       {current === 'done' && (
-        <section className="flex flex-col gap-2 rounded-lg border border-success bg-success-soft p-4" data-testid="wizard-step-done">
-          <p className="font-medium text-success">
-            {ar ? 'تم الربط. بدأت أول مزامنة.' : 'Connected. The first sync has started.'}
-          </p>
-          <p className="text-sm text-text-muted">
-            {ar
-              ? 'ستظهر الحملات والمقاييس داخل المشروع بعد اكتمال المزامنة الأولى.'
-              : 'Campaigns and metrics appear in the project once the first sync completes.'}
+        <section
+          className={`flex flex-col gap-3 rounded-lg border p-4 ${
+            settled && firstSync?.summary.needs_attention
+              ? 'border-warning bg-warning-soft'
+              : 'border-success bg-success-soft'
+          }`}
+          data-testid="wizard-step-done"
+        >
+          {/*
+            «تم الربط وبدأت المزامنة» until the run actually succeeds — never «تمت المزامنة بنجاح»
+            over a queue. Announcing success while the worker has not picked the job up is the lie
+            this whole unit exists to remove, so the headline is driven by `settled` and not by the
+            press that started it.
+          */}
+          <p className="font-medium" data-testid={`wizard-first-sync-${firstSync?.summary.state ?? 'queued'}`}>
+            {!settled
+              ? (ar ? 'تم الربط وبدأت المزامنة' : 'Connected. The first sync has started.')
+              : firstSync?.summary.state === 'failed'
+                ? (ar ? 'تم ربط الحساب، لكن تعذرت المزامنة' : 'Connected, but the sync did not complete')
+                : firstSync?.summary.needs_attention
+                  ? (ar ? 'تمت المزامنة جزئيًا' : 'Synced, with some accounts needing attention')
+                  : (ar ? 'تمت المزامنة بنجاح' : 'Synced successfully')}
           </p>
 
           {/*
-            And then what actually happened — see `firstSyncOutcome`.
-
-            A refusal shows the PROVIDER's own words, which the storage contract finally lets it
-            carry whole. The moment a person most needs to read «(#200) … has NOT grant ads_read» is
-            the moment they have just finished connecting.
+            The facts a person needs to believe it — provider, what was selected, what arrived, and
+            which project now holds it. A success dialog that states none of these is the same
+            sentence a failure would have shown.
           */}
-          <p className="flex items-start gap-2 text-sm" data-testid={`wizard-first-sync-${firstSync.state}`}>
-            {firstSync.state === 'queued' && (
-              <span className="text-text-muted">{ar ? 'في الطابور…' : 'Queued…'}</span>
-            )}
-            {firstSync.state === 'running' && (
-              <><Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-text-muted" aria-hidden />
-                <span className="text-text-muted">{ar ? 'تجري المزامنة…' : 'Syncing…'}</span></>
-            )}
-            {firstSync.state === 'imported' && (
-              <><Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
-                <span className="tnum text-success">
-                  {ar ? `اكتملت — ${firstSync.rows.toLocaleString('en-US')} صفًا` : `Done — ${firstSync.rows.toLocaleString('en-US')} rows imported`}
-                </span></>
-            )}
-            {/* Reported honestly: the platform answered, and it had nothing for this window. */}
-            {firstSync.state === 'no_data' && (
-              <span className="text-text-muted">
-                {ar ? 'اكتملت — لم تُبلِّغ المنصة بأي بيانات لهذه الفترة.' : 'Done — the platform reported no data for this window.'}
-              </span>
-            )}
-            {firstSync.state === 'failed' && (
-              <><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden />
-                <span className="text-danger">
-                  {firstSync.reason ?? (ar ? 'تعذّرت المزامنة الأولى.' : 'The first sync did not complete.')}
-                </span></>
-            )}
-          </p>
+          {firstSync && (
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm" data-testid="wizard-first-sync-facts">
+              <dt className="text-text-muted">{ar ? 'المنصة' : 'Provider'}</dt>
+              <dd className="font-medium">{h.connection.label_ar && ar ? h.connection.label_ar : h.connection.label}</dd>
+
+              <dt className="text-text-muted">{ar ? 'الحسابات' : 'Accounts'}</dt>
+              <dd className="tnum font-medium">
+                {firstSync.summary.total === 1
+                  ? firstSync.accounts[0]?.name
+                  : `${firstSync.summary.succeeded.toLocaleString('en-US')} / ${firstSync.summary.total.toLocaleString('en-US')}`}
+              </dd>
+
+              {/* Rows only where they are trustworthy: a settled run reported them. */}
+              {settled && firstSync.summary.rows > 0 && (
+                <>
+                  <dt className="text-text-muted">{ar ? 'الصفوف المستوردة' : 'Rows imported'}</dt>
+                  <dd className="tnum font-medium">{firstSync.summary.rows.toLocaleString('en-US')}</dd>
+                </>
+              )}
+
+              {projectName !== '' && (
+                <>
+                  <dt className="text-text-muted">{ar ? 'المشروع' : 'Project'}</dt>
+                  <dd className="font-medium">{projectName}</dd>
+                </>
+              )}
+            </dl>
+          )}
+
+          {/* Live state while it runs, so «بدأت» is visibly progressing rather than merely claimed. */}
+          {!settled && (
+            <p className="flex items-center gap-2 text-sm text-text-muted">
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+              {firstSync?.summary.running
+                ? (ar ? 'تجري المزامنة…' : 'Syncing…')
+                : (ar ? 'في الطابور…' : 'Queued…')}
+            </p>
+          )}
+
+          {/*
+            A refusal shows the PROVIDER's own words, per account. The moment a person most needs to
+            read «(#200) … has NOT grant ads_read» is the moment they have just finished connecting —
+            and a provider/request fault must not be dressed up as «reconnect», which sends somebody
+            to redo an authorisation that never lapsed.
+          */}
+          {settled && firstSync?.accounts.filter((a: FirstSyncStatus['accounts'][number]) => a.error !== null).map((a: FirstSyncStatus['accounts'][number]) => (
+            <p key={a.id} className="flex items-start gap-2 text-sm text-danger" data-testid="wizard-first-sync-error">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              <span><span className="font-medium">{a.name}</span> — {a.error}</span>
+            </p>
+          ))}
+
+          {settled && firstSync?.summary.state === 'no_data' && (
+            <p className="text-sm text-text-muted">
+              {ar
+                ? 'اكتملت — لم تُبلِّغ المنصة بأي بيانات لهذه الفترة.'
+                : 'Done — the platform reported no data for this window.'}
+            </p>
+          )}
+
+          {/* The actions the owner asked for, offered only once there is an outcome to act on. */}
+          {settled && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {projectId && (
+                <Button
+                  variant="secondary"
+                  data-testid="wizard-view-data"
+                  onClick={() => { onClose(); navigate(portalPath(`/projects/${projectId}/integrations`)) }}
+                >
+                  {ar ? 'عرض البيانات' : 'View data'}
+                </Button>
+              )}
+              <Button variant="ghost" data-testid="wizard-manage-accounts" onClick={() => setStep('accounts')}>
+                {ar ? 'إدارة الحسابات' : 'Manage accounts'}
+              </Button>
+            </div>
+          )}
         </section>
       )}
 
