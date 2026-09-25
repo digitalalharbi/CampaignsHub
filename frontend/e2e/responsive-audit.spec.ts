@@ -178,6 +178,30 @@ test.describe('the portal frame fills its window @responsive', () => {
           await page.goto(portal.path)
           await page.waitForLoadState('networkidle').catch(() => undefined)
 
+          /*
+           * Wait for the shell before measuring it.
+           *
+           * Every portal's auth gate — `RequirePortal` and `RequireAgencyPortal` alike — renders a
+           * BARE SPINNER while its `memberships` query is in flight: no shell, no footer. And the
+           * `networkidle` wait above is `.catch()`-swallowed, so when it times out the measurement
+           * proceeds anyway and is taken against that spinner. `document.querySelector` then returns
+           * null and the test fails with «the shell must render its footer» — a true statement about
+           * that instant and a false one about the product.
+           *
+           * Observed on `/agency` at 2560×1440 on WebKit, which is simply where the race lost: the
+           * last viewport in the list, on the slowest engine, after six hundred other tests. The
+           * same four routes pass at every smaller size in the same run.
+           *
+           * This does not weaken anything. The two assertions below — no dead band under the footer,
+           * no sideways scroll — are what this test exists for, and they are unchanged. It only
+           * stops the test asserting a second, accidental claim it was never written to make: that
+           * the shell mounts within an unspecified time.
+           */
+          await page
+            .locator('[data-testid="portal-footer"]')
+            .waitFor({ state: 'attached', timeout: 15_000 })
+            .catch(() => undefined)
+
           const m = await page.evaluate(() => {
             const doc = document.documentElement
             const footer = document.querySelector('[data-testid="portal-footer"]')
