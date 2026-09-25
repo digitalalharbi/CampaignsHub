@@ -32,9 +32,9 @@ final class ReportsHealthCommand extends Command
             'node' => $this->probe([config('reports.chromium.node_bin', 'node'), '--version']),
             'print_script' => $this->ok(is_file((string) config('reports.chromium.script')), (string) config('reports.chromium.script')),
             'playwright' => $this->ok($this->hasPlaywright(), 'playwright-core resolvable'),
-            'chromium_binary' => $this->ok($this->hasChromium(), 'Playwright Chromium installed'),
+            'chromium_binary' => $this->ok($this->hasChromium(), $this->chromiumLabel()),
             'print_url' => $this->reachable((string) config('reports.chromium.app_url')),
-            'arabic_font' => $this->ok($this->hasFont(), 'IBM Plex Sans Arabic (@fontsource)'),
+            'arabic_font' => $this->ok($this->hasFont(), 'an Arabic face (@fontsource package or a system font)'),
             'textlayer_normalizer' => $this->ok(is_file((string) config('reports.chromium.textlayer_script')), 'fix-arabic-textlayer.py'),
             'python' => $this->probe([config('reports.chromium.python_bin', 'python3'), '--version']),
             'storage' => $this->ok($this->storageWritable(), 'local disk writable'),
@@ -155,19 +155,125 @@ final class ReportsHealthCommand extends Command
         return $base !== '' && is_file(dirname($base).'/node_modules/playwright-core/package.json');
     }
 
-    private function hasChromium(): bool
+    /**
+     * Chromium, asked the way THIS install actually gets one.
+     *
+     * The first version looked in one place: `$HOME/Library/Caches/ms-playwright`. That is the macOS
+     * cache path, and this command exists to be run on a Linux server — so it reported «Chromium is
+     * not installed» on production whatever production held. A diagnostic that answers the wrong
+     * question is worse than no diagnostic: it sends somebody to install software that is already
+     * there, and it did, while the flag beneath it was the real problem.
+     *
+     * Two ways an install gets a browser, and the configured one is asked FIRST because it is the one
+     * this image uses: `REPORTS_CHROMIUM_PATH=/usr/bin/chromium`, the system package the Dockerfile
+     * installs, with no Playwright download anywhere. When a path is configured, that file IS the
+     * answer — a cache directory says nothing about whether the binary the renderer was told to spawn
+     * exists. Only when nothing is configured does Playwright's managed download apply, and then it is
+     * looked for where each platform keeps it rather than where one developer's laptop did.
+     */
+    /** Say WHICH browser was looked for, so a ❌ names something an operator can go and check. */
+    private function chromiumLabel(): string
     {
-        $home = getenv('HOME') ?: '';
+        $configured = trim((string) config('reports.chromium.chromium_path'));
 
-        return $home !== '' && is_dir($home.'/Library/Caches/ms-playwright')
-            && count(glob($home.'/Library/Caches/ms-playwright/chromium-*') ?: []) > 0;
+        return $configured !== '' ? $configured : 'Playwright Chromium (managed download)';
     }
 
+    private function hasChromium(): bool
+    {
+        $configured = trim((string) config('reports.chromium.chromium_path'));
+
+        if ($configured !== '') {
+            return is_file($configured);
+        }
+
+        foreach ($this->playwrightCaches() as $cache) {
+            if (is_dir($cache) && (glob($cache.'/chromium-*') ?: []) !== []) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Where Playwright keeps a managed browser, per platform and per override.
+     *
+     * @return list<string>
+     */
+    private function playwrightCaches(): array
+    {
+        $paths = [];
+
+        $override = trim((string) (getenv('PLAYWRIGHT_BROWSERS_PATH') ?: ''));
+        // `0` means «beside the package», which `hasPlaywright()` already answers for.
+        if ($override !== '' && $override !== '0') {
+            $paths[] = rtrim($override, '/');
+        }
+
+        $home = trim((string) (getenv('HOME') ?: ''));
+        if ($home !== '') {
+            $home = rtrim($home, '/');
+            $paths[] = $home.'/.cache/ms-playwright';
+            $paths[] = $home.'/Library/Caches/ms-playwright';
+        }
+
+        return $paths;
+    }
+
+    /**
+     * An Arabic face the renderer can actually draw with.
+     *
+     * This asked for `@fontsource/ibm-plex-sans-arabic` under the print runtime — a package NOTHING
+     * installs there. `npm install` in the image fetches `playwright-core` and nothing else, so the
+     * check could not pass on a correctly built server, and it reported a missing font beside a
+     * container that ships `font-noto-arabic` precisely so Arabic has a face.
+     *
+     * Either provision counts, because either one gives Chromium glyphs: the npm package if an
+     * install chooses to carry it, or a system Arabic face, which is what this image provides.
+     */
     private function hasFont(): bool
     {
         $base = (string) config('reports.chromium.require_base');
 
-        return $base !== '' && is_dir(dirname($base).'/node_modules/@fontsource/ibm-plex-sans-arabic');
+        if ($base !== '' && is_dir(dirname($base).'/node_modules/@fontsource/ibm-plex-sans-arabic')) {
+            return true;
+        }
+
+        return $this->hasSystemArabicFace();
+    }
+
+    /**
+     * A system font file whose name says it carries Arabic.
+     *
+     * By FILENAME rather than by parsing the face: `fc-list` is not guaranteed to be installed and
+     * reading font tables to answer «is there an Arabic face» would be a second, heavier thing to get
+     * wrong. Alpine's `font-noto-arabic` lands as `NotoSansArabic-*` / `NotoNaskhArabic-*`, which is
+     * what the image promises and what this looks for.
+     */
+    private function hasSystemArabicFace(): bool
+    {
+        $roots = ['/usr/share/fonts', '/usr/local/share/fonts', '/Library/Fonts', '/System/Library/Fonts'];
+
+        $home = trim((string) (getenv('HOME') ?: ''));
+        if ($home !== '') {
+            $roots[] = rtrim($home, '/').'/.fonts';
+            $roots[] = rtrim($home, '/').'/Library/Fonts';
+        }
+
+        foreach ($roots as $root) {
+            if (! is_dir($root)) {
+                continue;
+            }
+
+            foreach (['*Arabic*', '*/*Arabic*', '*/*/*Arabic*'] as $pattern) {
+                if ((glob($root.'/'.$pattern) ?: []) !== []) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function storageWritable(): bool

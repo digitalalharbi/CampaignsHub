@@ -48,6 +48,77 @@ final class ExportDiagnosticsTest extends TestCase
         app(TenantContext::class)->setTenantId($this->tenant->id);
     }
 
+    /**
+     * A diagnostic that answers the wrong question is worse than none — REPORT-EXPORT-FUNCTIONAL-001.
+     *
+     * Run against production, `chromium_binary` reported ❌ on a server that runs Chromium from
+     * `/usr/bin/chromium`, because the check looked only in `$HOME/Library/Caches/ms-playwright` —
+     * the macOS Playwright cache, on a Linux box. It would have sent somebody to install a browser
+     * the image already ships, while the flag beneath it was the actual fault.
+     *
+     * The configured path is asked FIRST because it is the one this image uses, and it is the binary
+     * the renderer was told to spawn: a cache directory says nothing about whether that file exists.
+     */
+    public function test_the_chromium_check_asks_for_the_binary_this_install_was_configured_to_spawn(): void
+    {
+        $real = tempnam(sys_get_temp_dir(), 'chromium_');
+        config()->set('reports.chromium.chromium_path', $real);
+
+        Artisan::call('reports:health');
+        self::assertStringContainsString($real, Artisan::output(), 'the check must name the binary it looked for');
+
+        @unlink($real);
+
+        config()->set('reports.chromium.chromium_path', $real);
+        Artisan::call('reports:health');
+        $gone = Artisan::output();
+
+        self::assertStringContainsString($real, $gone);
+        self::assertMatchesRegularExpression(
+            '/\x{274C}[^\n]*chromium_binary/u',
+            $gone,
+            'a configured path that does not exist is a failing check, not a passing one'
+        );
+    }
+
+    /**
+     * And the Arabic face check asked for a package nothing installs.
+     *
+     * It looked for `@fontsource/ibm-plex-sans-arabic` under the print runtime. The image's
+     * `npm install` fetches `playwright-core` and nothing else, so on a correctly built server the
+     * check could not pass — it reported a missing font beside a container that ships
+     * `font-noto-arabic` for exactly this purpose. Either provision counts now, because either one
+     * gives Chromium glyphs.
+     */
+    public function test_a_system_arabic_face_satisfies_the_font_check(): void
+    {
+        // No @fontsource package anywhere near this path, which is the production situation.
+        config()->set('reports.chromium.require_base', sys_get_temp_dir().'/nowhere-'.uniqid().'/package.json');
+
+        Artisan::call('reports:health');
+        $out = Artisan::output();
+
+        $hasSystemFace = false;
+        foreach (['/usr/share/fonts', '/Library/Fonts', '/System/Library/Fonts'] as $root) {
+            foreach (['*Arabic*', '*/*Arabic*', '*/*/*Arabic*'] as $pattern) {
+                if (is_dir($root) && (glob($root.'/'.$pattern) ?: []) !== []) {
+                    $hasSystemFace = true;
+                    break 2;
+                }
+            }
+        }
+
+        if (! $hasSystemFace) {
+            self::markTestSkipped('This host carries no system Arabic face, so there is nothing to recognise.');
+        }
+
+        self::assertMatchesRegularExpression(
+            '/\x{2705}[^\n]*arabic_font/u',
+            $out,
+            'a system Arabic face must satisfy the check — the npm package is one provision, not the only one'
+        );
+    }
+
     /** The reasons a renderer gives are ours, and they are what the diagnostic exists to surface. */
     public function test_it_reports_why_recent_exports_ended_as_they_did(): void
     {
