@@ -15,6 +15,7 @@ use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Domains\Reports\Services\ReportCreativeMedia;
 use App\Domains\Reports\Services\ReportDeliveryAudienceGuard;
 use App\Domains\Reports\Services\ReportTemplateEngine;
+use App\Domains\Reports\Support\ExportStaleness;
 use App\Domains\Reports\Support\ReportScope;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -273,6 +274,15 @@ final class ReportController extends Controller
                     'failure_reason' => $e->status === 'failed'
                         ? ExportFailureReason::classify($e->error)
                         : null,
+                    /*
+                     * REPORT-EXPORT-STALE-DEADEND-001 — say it BEFORE somebody clicks.
+                     *
+                     * The download endpoint refuses a stale export with 409, and the list drew one
+                     * as a plain link, so the sequence a customer met was: a chip that looks ready,
+                     * one click, and the browser navigating away to a JSON error body. The same rule
+                     * answers here, so the interface can offer «إعادة إنشاء» instead of a dead link.
+                     */
+                    'stale_reason' => ExportStaleness::reason($e),
                 ])->all()
                 : [],
         ];

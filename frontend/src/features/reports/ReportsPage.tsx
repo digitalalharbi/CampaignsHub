@@ -32,7 +32,7 @@ import { Modal } from '@/components/ui/Modal'
 import { DateField } from '@/components/ui/DateField'
 import { Skeleton } from '@/components/ui/States'
 import { ErrorSummary, SelectField, type FieldError } from '@/components/forms'
-import { exportFailureCopy } from './exportFailureCopy'
+import { exportFailureCopy, exportStaleCopy } from './exportFailureCopy'
 import { optionLabel } from '@/components/forms/types'
 import { toApiError } from '@/lib/api/client'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
@@ -560,72 +560,7 @@ function ReportRowView({
         <div className="flex items-center justify-end gap-1">
           {report.status === 'completed' && (
             <>
-              {(['pdf', 'xlsx', 'csv'] as ReportFormat[]).map((f) => {
-                const ready = report.exports.find((e) => e.format === f && e.status === 'completed' && e.token)
-                /*
-                 * REPORT-EXPORT-FUNCTIONAL-001 — the other two states an export can be in.
-                 *
-                 * Only `completed` was ever read here, so a render still in flight and a render that
-                 * FAILED drew the same thing: the export button again. The owner clicked PDF in
-                 * Production, the job failed with its reason sitting in the export row, and the
-                 * interface said nothing at all — which reads as «the button does not work».
-                 *
-                 * The newest row wins for a format that has been tried more than once, so a retry
-                 * that succeeded is never described by the attempt before it.
-                 */
-                const latest = [...report.exports].reverse().find((e) => e.format === f)
-                const running = !ready && latest?.status === 'processing'
-                const failed = !ready && latest?.status === 'failed' ? latest : null
-
-                if (running) {
-                  return (
-                    <span
-                      key={f}
-                      data-testid={`export-running-${f}-${report.id}`}
-                      className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold text-text-muted"
-                    >
-                      <Loader2 size={12} className="animate-spin" />
-                      {f.toUpperCase()}
-                    </span>
-                  )
-                }
-
-                if (failed) {
-                  return (
-                    <button
-                      key={f}
-                      onClick={() => onExport(f)}
-                      data-testid={`export-failed-${f}-${report.id}`}
-                      title={`${exportFailureCopy(failed.failure_reason, ar)} — ${ar ? 'إعادة المحاولة' : 'try again'}`}
-                      className="inline-flex items-center gap-1 rounded-lg border border-danger px-2 py-1 text-xs font-semibold text-danger hover:bg-surface-hover"
-                    >
-                      <AlertTriangle size={12} /> {f.toUpperCase()}
-                    </button>
-                  )
-                }
-
-                return ready ? (
-                  <a
-                    key={f}
-                    href={downloadUrl(ready.token!)}
-                    data-testid={`download-${f}-${report.id}`}
-                    className="rounded-lg border border-border px-2 py-1 text-xs font-semibold text-text-secondary hover:bg-surface-hover"
-                    title={ar ? `تنزيل ${f.toUpperCase()}` : `Download ${f.toUpperCase()}`}
-                  >
-                    {f.toUpperCase()}
-                  </a>
-                ) : (
-                  <button
-                    key={f}
-                    onClick={() => onExport(f)}
-                    data-testid={`export-${f}-${report.id}`}
-                    className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold text-text-muted hover:bg-surface-hover"
-                    title={ar ? `تصدير ${f.toUpperCase()}` : `Export ${f.toUpperCase()}`}
-                  >
-                    <Download size={12} /> {f.toUpperCase()}
-                  </button>
-                )
-              })}
+              <ExportChips report={report} ar={ar} onExport={onExport} />
               {(() => {
                 const on = report.config?.breakdowns?.pdf?.platform_drilldown === true
                 return (
@@ -1342,3 +1277,113 @@ function ReportCards({
     </div>
   )
 }
+
+/**
+ * REPORT-EXPORT-STALE-DEADEND-001 — the export chips, extracted so the offer can be tested.
+ *
+ * They were inline in the row, which is why nothing asserted the one thing that mattered: that the
+ * chip a customer sees matches what a click would actually get. A `completed` export whose renderer
+ * or template has moved on is refused by the download endpoint with 409, and a plain `<a href>` has
+ * nowhere to put that — the browser just navigates away to a JSON error body.
+ */
+export function ExportChips({ report, ar, onExport }: {
+  report: Pick<ReportRow, 'id' | 'exports'>
+  ar: boolean
+  onExport: (format: ReportFormat) => void
+}) {
+  return (
+    <>
+      {(['pdf', 'xlsx', 'csv'] as ReportFormat[]).map((f) => {
+        /*
+         * REPORT-EXPORT-STALE-DEADEND-001 — a completed export is not automatically one the
+         * server will hand over.
+         *
+         * `stale_reason` is the download endpoint's own rule, answered here so the offer
+         * matches what a click would actually get. Without it this found a «completed»
+         * export, drew a link, and the browser navigated away to a 409 JSON body.
+         */
+        const completed = report.exports.find((e) => e.format === f && e.status === 'completed' && e.token)
+        const stale = completed?.stale_reason ? completed : null
+        const ready = stale ? undefined : completed
+        /*
+         * REPORT-EXPORT-FUNCTIONAL-001 — the other two states an export can be in.
+         *
+         * Only `completed` was ever read here, so a render still in flight and a render that
+         * FAILED drew the same thing: the export button again. The owner clicked PDF in
+         * Production, the job failed with its reason sitting in the export row, and the
+         * interface said nothing at all — which reads as «the button does not work».
+         *
+         * The newest row wins for a format that has been tried more than once, so a retry
+         * that succeeded is never described by the attempt before it.
+         */
+        const latest = [...report.exports].reverse().find((e) => e.format === f)
+        const running = !ready && latest?.status === 'processing'
+        const failed = !ready && latest?.status === 'failed' ? latest : null
+
+        if (running) {
+          return (
+            <span
+              key={f}
+              data-testid={`export-running-${f}-${report.id}`}
+              className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold text-text-muted"
+            >
+              <Loader2 size={12} className="animate-spin" />
+              {f.toUpperCase()}
+            </span>
+          )
+        }
+
+        if (failed) {
+          return (
+            <button
+              key={f}
+              onClick={() => onExport(f)}
+              data-testid={`export-failed-${f}-${report.id}`}
+              title={`${exportFailureCopy(failed.failure_reason, ar)} — ${ar ? 'إعادة المحاولة' : 'try again'}`}
+              className="inline-flex items-center gap-1 rounded-lg border border-danger px-2 py-1 text-xs font-semibold text-danger hover:bg-surface-hover"
+            >
+              <AlertTriangle size={12} /> {f.toUpperCase()}
+            </button>
+          )
+        }
+
+        if (stale) {
+          return (
+            <button
+              key={f}
+              onClick={() => onExport(f)}
+              data-testid={`export-stale-${f}-${report.id}`}
+              title={`${exportStaleCopy(stale.stale_reason, ar)} — ${ar ? 'إعادة الإنشاء' : 'regenerate'}`}
+              className="inline-flex items-center gap-1 rounded-lg border border-warning px-2 py-1 text-xs font-semibold text-warning hover:bg-surface-hover"
+            >
+              <RefreshCw size={12} /> {f.toUpperCase()}
+            </button>
+          )
+        }
+
+        return ready ? (
+          <a
+            key={f}
+            href={downloadUrl(ready.token!)}
+            data-testid={`download-${f}-${report.id}`}
+            className="rounded-lg border border-border px-2 py-1 text-xs font-semibold text-text-secondary hover:bg-surface-hover"
+            title={ar ? `تنزيل ${f.toUpperCase()}` : `Download ${f.toUpperCase()}`}
+          >
+            {f.toUpperCase()}
+          </a>
+        ) : (
+          <button
+            key={f}
+            onClick={() => onExport(f)}
+            data-testid={`export-${f}-${report.id}`}
+            className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold text-text-muted hover:bg-surface-hover"
+            title={ar ? `تصدير ${f.toUpperCase()}` : `Export ${f.toUpperCase()}`}
+          >
+            <Download size={12} /> {f.toUpperCase()}
+          </button>
+        )
+      })}
+    </>
+  )
+}
+
