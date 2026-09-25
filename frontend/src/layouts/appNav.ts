@@ -1,4 +1,5 @@
 import {
+  Layers,
   Link2,
   BarChart3,
   BellRing,
@@ -46,6 +47,15 @@ export const appNavGroups: readonly NavGroup[] = [
     ar: 'العمل', en: 'Work', icon: Megaphone,
     leaves: [
       { to: '/app/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban, ent: 'projects' },
+      /*
+       * PORTFOLIO-SCOPE-001 §36 — the agency scope is ENTERED, not inferred.
+       *
+       * Beside «المشاريع» rather than inside it, and with its own icon, because it is not one of
+       * them: «جميع المشاريع» answers an agency question and a project answers a client's. Leaving
+       * it off the rail is what turns «all projects» into something people arrive at by clearing a
+       * filter — which is the state this whole unit exists to remove.
+       */
+      { to: '/app/portfolio', ar: 'جميع المشاريع', en: 'All projects', icon: Layers, ent: 'projects' },
       { to: '/app/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone, ent: 'campaigns' },
       { to: '/app/content', ar: 'المحتويات', en: 'Content', icon: Images, ent: 'content' },
       /*
