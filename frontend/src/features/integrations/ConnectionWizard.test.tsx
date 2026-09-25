@@ -29,7 +29,7 @@ const state = vi.hoisted(() => ({
   projects: [] as Array<{ id: string; name: string }>,
   parents: [] as Array<{ external_id: string; name: string | null; account_count: number }>,
   createError: null as unknown,
-  runs: [] as never[],
+  firstSync: null as unknown,
 }))
 
 vi.mock('@/features/projects/api', async (importOriginal) => ({
@@ -71,7 +71,8 @@ vi.mock('./api', async (importOriginal) => {
       calls.confirmed.push(input)
       return Promise.resolve({ connected: input.externalAccountIds.length })
     },
-    getAccountLogs: () => Promise.resolve({ account: { id: 'acct-1' }, runs: state.runs }),
+    getAccountLogs: () => Promise.resolve({ account: { id: 'acct-1' }, runs: [] }),
+    fetchFirstSyncStatus: () => Promise.resolve(state.firstSync),
     refreshDiscoveredAccounts: (id: string) => {
       calls.refreshed.push(id)
       return Promise.resolve({ discovered: 2, created: 0, named: 1, access_lost: 0 })
@@ -281,20 +282,30 @@ describe('ConnectionWizard — the organisation step is a question, not a formal
 })
 
 /**
- * INTEGRATION-FIRST-SYNC-OUTCOME-001 — the dialog stops going quiet after «the first sync started».
+ * INTEGRATION-FIRST-SYNC-VISIBILITY-001 — the dialog speaks for the SELECTION, and only once it knows.
  *
- * The refusal case is the one that matters: a provider that says no now carries its own words all
- * the way to the screen, and the moment a person most needs to read «(#200) … has NOT grant
- * ads_read» is the moment they have just finished connecting.
+ * It used to watch one account — the first of the selection — and report that one run as «the»
+ * outcome. For a single account it was right and for every other case it described a stranger, so
+ * the same confirmation read as a clean success or as a refusal depending on which account happened
+ * to be ticked first. The panel now reads one server answer about every account confirmed together.
+ *
+ * The refusal case still matters most: a provider that says no carries its own words to the screen,
+ * and the moment a person most needs to read «(#200) … has NOT grant ads_read» is the moment they
+ * have just finished connecting.
  */
 describe('what the wizard says the first sync did', () => {
-  const row = (over: Record<string, unknown>) => ({
-    id: 'r', provider: 'snapchat', status: 'success', trigger: 'automatic',
-    window_start: null, window_end: null, provider_rows: null, parsed_rows: null, mapped_rows: null,
-    metrics_imported: 0, duration_seconds: 1, attempts: 1,
-    // Ahead of the confirmation, which is what marks a run as this one's rather than history.
-    started_at: new Date(Date.now() + 5000).toISOString(), finished_at: null, error: null,
-    repeats: 1, repeats_since: null, ...over,
+  const status = (over: Record<string, unknown>) => ({
+    connection: { id: 'conn-1', provider: 'snapchat' },
+    since: new Date().toISOString(),
+    accounts: [
+      { id: 'acct-1', external_id: 'act-1', name: 'Riyadh Retail', state: 'queued', rows: 0, error: null, last_synced_at: null },
+      { id: 'acct-2', external_id: 'act-2', name: 'Jeddah Retail', state: 'queued', rows: 0, error: null, last_synced_at: null },
+    ],
+    summary: {
+      total: 2, queued: 2, running: 0, imported: 0, no_data: 0, partial: 0, failed: 0,
+      awaiting_assignment: 0, rows: 0, settled: false, state: 'queued', succeeded: 0, needs_attention: 0,
+    },
+    ...over,
   })
 
   const confirmInto = async () => {
@@ -305,28 +316,49 @@ describe('what the wizard says the first sync did', () => {
     fireEvent.click(await screen.findByTestId('wizard-confirm'))
   }
 
-  it('shows the provider’s own reason when the first sync is refused', async () => {
-    state.runs = [row({ status: 'failed', error: '(#200) Ad account owner has NOT grant ads_management or ads_read permission · code 200' })] as never[]
+  it('shows the provider’s own reason when an account is refused', async () => {
+    state.firstSync = status({
+      accounts: [
+        { id: 'acct-1', external_id: 'act-1', name: 'Riyadh Retail', state: 'failed', rows: 0, error: '(#200) Ad account owner has NOT grant ads_management or ads_read permission · code 200', last_synced_at: null },
+        { id: 'acct-2', external_id: 'act-2', name: 'Jeddah Retail', state: 'failed', rows: 0, error: 'token expired', last_synced_at: null },
+      ],
+      summary: { total: 2, queued: 0, running: 0, imported: 0, no_data: 0, partial: 0, failed: 2, awaiting_assignment: 0, rows: 0, settled: true, state: 'failed', succeeded: 0, needs_attention: 2 },
+    })
 
     await confirmInto()
 
-    expect(await screen.findByTestId('wizard-first-sync-failed')).toHaveTextContent('ads_read')
+    const errors = await screen.findAllByTestId('wizard-first-sync-error')
+    expect(errors[0]).toHaveTextContent('ads_read')
+    // A provider fault is NOT dressed up as «reconnect» — that sends somebody to redo a live consent.
+    expect(screen.getByTestId('wizard-step-done').textContent).toContain('the sync did not complete')
   })
 
-  it('states what was imported when the first sync succeeds', async () => {
-    state.runs = [row({ status: 'success', metrics_imported: 936 })] as never[]
+  it('states what the whole selection imported when the sync succeeds', async () => {
+    state.firstSync = status({
+      accounts: [
+        { id: 'acct-1', external_id: 'act-1', name: 'Riyadh Retail', state: 'imported', rows: 900, error: null, last_synced_at: null },
+        { id: 'acct-2', external_id: 'act-2', name: 'Jeddah Retail', state: 'imported', rows: 36, error: null, last_synced_at: null },
+      ],
+      summary: { total: 2, queued: 0, running: 0, imported: 2, no_data: 0, partial: 0, failed: 0, awaiting_assignment: 0, rows: 936, settled: true, state: 'imported', succeeded: 2, needs_attention: 0 },
+    })
 
     await confirmInto()
 
-    expect(await screen.findByTestId('wizard-first-sync-imported')).toHaveTextContent('936')
+    const facts = await screen.findByTestId('wizard-first-sync-facts')
+    // The SELECTION's rows — 900 + 36 — not whichever account was ticked first.
+    expect(facts).toHaveTextContent('936')
+    expect(screen.getByTestId('wizard-step-done').textContent).toContain('Synced successfully')
   })
 
-  /** Nothing yet is «queued» — never a success, and never a failure. */
-  it('says queued while no run has appeared', async () => {
-    state.runs = [] as never[]
+  /** Queued is never success. «تمت المزامنة بنجاح» over a worker that has not started is the lie. */
+  it('says the sync has started, not that it succeeded, while it is queued', async () => {
+    state.firstSync = status({})
 
     await confirmInto()
 
     expect(await screen.findByTestId('wizard-first-sync-queued')).toBeInTheDocument()
+    const done = screen.getByTestId('wizard-step-done').textContent ?? ''
+    expect(done).toContain('The first sync has started')
+    expect(done).not.toContain('Synced successfully')
   })
 })

@@ -14,6 +14,7 @@ use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\Services\AccountDiscovery;
 use App\Domains\Integrations\Services\AccountHealth;
 use App\Domains\Integrations\Services\ConnectionWizardState;
+use App\Domains\Integrations\Services\FirstSyncStatus;
 use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -21,6 +22,7 @@ use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Throwable;
 
 /**
@@ -384,6 +386,64 @@ final class ConnectionWizardController extends Controller
     }
 
     /** A connection this tenant owns, or a 404 that says nothing about whose it is. */
+    /**
+     * GET /integrations/connections/{connection}/first-sync — what the confirmation actually did.
+     *
+     * INTEGRATION-FIRST-SYNC-VISIBILITY-001. The wizard's last word used to be «بدأت أول مزامنة»,
+     * after which the product went quiet: the run finished, the accounts filled, and the only way to
+     * find out was to reload the browser. This is the question the dialog now keeps asking until it
+     * has an answer, and the answer covers the WHOLE selection rather than the first account of it.
+     *
+     * A read, and deliberately a cheap one — it is polled every couple of seconds while somebody
+     * waits. `accounts` is the selection that was confirmed; anything in it that does not belong to
+     * this connection is refused rather than quietly dropped, because a status answered about a
+     * different set of accounts is worse than no status.
+     */
+    public function firstSync(Request $request, string $connectionId, FirstSyncStatus $status): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.view'), 403);
+
+        $connection = $this->connectionOr404($connectionId);
+
+        $validated = $request->validate([
+            'accounts' => ['required', 'array', 'min:1', 'max:200'],
+            'accounts.*' => ['string', 'uuid'],
+            'since' => ['required', 'date'],
+        ]);
+
+        $ids = array_values(array_unique($validated['accounts']));
+
+        /*
+         * Scoped by tenant AND by this connection, then checked for completeness.
+         *
+         * The selection is the caller's claim about what it confirmed; the accounts are ours. An id
+         * that does not resolve under this connection means the two disagree, and continuing with
+         * the rows that did resolve would answer confidently about a smaller set than was asked for.
+         */
+        $accounts = ExternalAccount::withoutGlobalScopes()
+            ->where('tenant_id', $this->tenant->tenantId())
+            ->where('provider_connection_id', $connection->getKey())
+            ->whereIn('id', $ids)
+            ->get()
+            ->keyBy(fn (ExternalAccount $a): string => (string) $a->getKey());
+
+        abort_if($accounts->count() !== count($ids), 404, 'Account not found on this connection.');
+
+        // The caller's order is the order it drew, so the answer keeps it.
+        $ordered = array_map(static fn (string $id): ExternalAccount => $accounts[$id], $ids);
+
+        return ApiResponse::success(
+            [
+                'connection' => [
+                    'id' => (string) $connection->getKey(),
+                    'provider' => (string) $connection->provider,
+                ],
+                ...$status->for($ordered, Carbon::parse($validated['since']), (string) $this->tenant->tenantId()),
+            ],
+            __('api.ok'),
+        );
+    }
+
     private function connectionOr404(string $connectionId): ProviderConnection
     {
         $connection = ProviderConnection::withoutGlobalScopes()

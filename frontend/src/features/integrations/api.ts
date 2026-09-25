@@ -471,6 +471,69 @@ export function getAccountLogs(id: string): Promise<{
   return getData(`/accounts/${id}/logs`)
 }
 
+/**
+ * INTEGRATION-FIRST-SYNC-VISIBILITY-001 — what the confirmation's first sync has done, for the
+ * WHOLE selection.
+ *
+ * The dialog used to poll one account's log — the first of the selection — and say what that one run
+ * did. For a single account it was right; for every other case it was a sentence about a stranger:
+ * «اكتملت — ٩٣٦ صفًا» while the other four accounts of the same confirmation were still queued, or
+ * refused. Somebody who ticks five accounts and presses «تأكيد الربط» asked one question.
+ *
+ * One request rather than five polls every two seconds, because the server can apply the rules once
+ * and the browser cannot apply them at all without asking five times.
+ */
+export type FirstSyncAccountState =
+  | 'queued' | 'running' | 'imported' | 'no_data' | 'partial' | 'failed' | 'awaiting_assignment'
+
+export interface FirstSyncStatus {
+  connection: { id: string; provider: string }
+  since: string
+  accounts: Array<{
+    id: string
+    external_id: string
+    name: string
+    state: FirstSyncAccountState
+    rows: number
+    error: string | null
+    last_synced_at: string | null
+  }>
+  summary: {
+    total: number
+    queued: number
+    running: number
+    imported: number
+    no_data: number
+    partial: number
+    failed: number
+    awaiting_assignment: number
+    rows: number
+    /**
+     * The ONLY success signal a caller may act on.
+     *
+     * A selection with one account still queued is not finished however good the other four look,
+     * and refreshing the rest of the product on a premature `true` is the defect re-armed: the card
+     * refetches the pre-sync world and stays there.
+     */
+    settled: boolean
+    state: 'queued' | 'running' | 'imported' | 'no_data' | 'partial' | 'failed'
+    succeeded: number
+    needs_attention: number
+  }
+}
+
+export function fetchFirstSyncStatus(
+  connectionId: string,
+  accountIds: string[],
+  since: string,
+): Promise<FirstSyncStatus> {
+  const params = new URLSearchParams()
+  for (const id of accountIds) params.append('accounts[]', id)
+  params.append('since', since)
+
+  return getData<FirstSyncStatus>(`/connections/${connectionId}/first-sync?${params.toString()}`)
+}
+
 /** A window the scheduled sweep will never cover — refused for an account no project owns. */
 export async function backfillAccount(
   id: string,
