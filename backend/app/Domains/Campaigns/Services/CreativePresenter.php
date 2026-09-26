@@ -354,8 +354,31 @@ final class CreativePresenter
              * invented: a dynamic collection that DID resolve a hero keeps it, because this arm is
              * reached only when the row holds nothing.
              */
+            /*
+             * AND THE TILE FETCH TOOK THIS SENTENCE AWAY AGAIN — the regression this guard now names.
+             *
+             * The arm below used to require `cards === null`, which was correct while a collection's
+             * tiles were never fetched: null meant «nobody asked». CONTENT-COLLECTION-TILES-001 then
+             * taught the connector to read the interaction zone, and a dynamic collection's zone
+             * answers — with elements that carry a product's COPY and no asset link, because the
+             * picture is composed from the catalogue at delivery.
+             *
+             * So `cards` became a three-element array of nothing drawable, this arm stopped matching,
+             * the one below it stopped matching for the same reason, and the creative fell to
+             * `default`: state `available`, three null urls, and NO NOTE. Production says it plainly —
+             * `kind=collection state=available hero=no tiles=not fetched draws=stated absence`. The
+             * reader was left with an empty frame and no sentence, which is worse than the wrong
+             * sentence this row was opened to fix.
+             *
+             * The condition that matters was never «were tiles fetched». It is «is there anything to
+             * draw» — and `heroFromCards()` above has already answered it: it ran over these cards and
+             * promoted nothing. Proven against the live payload for
+             * `72f9ae37-c58c-4988-a021-0f9457a721c4`, whose body carries `render_type: DYNAMIC`,
+             * `dynamic_render_properties.product_set_id`, a `top_snap_crop_position` — and no
+             * `top_snap_media_id` at all. There is no file. There was never going to be one.
+             */
             str_contains(strtolower((string) $creative->format), 'collection_dynamic')
-                && $image === null && $video === null && $thumb === null && $creative->cards === null => [
+                && $image === null && $video === null && $thumb === null => [
                     'state' => 'available',
                     'kind' => $kind,
                     'aspect' => $aspect,
@@ -363,6 +386,27 @@ final class CreativePresenter
                     'expires_at' => null,
                     'note_ar' => 'إعلان تشكيلة ديناميكية — تختار المنصة صورته الرئيسية من كتالوج المنتجات لكل منتج عند العرض، فلا يوجد ملف واحد له.',
                     'note_en' => 'A dynamic collection ad — the platform picks its top snap from the product catalogue per product at delivery, so it has no single file.',
+                ],
+            /*
+             * A STATIC collection whose zone DID answer, and answered with nothing drawable.
+             *
+             * Distinct from both neighbours, and the distinction is the operator's next move. The arm
+             * above is «nothing is missing». The arm below is «we never asked» — which is a re-sync.
+             * This one is «we asked, the platform answered, and what it sent carries no picture»,
+             * which is neither: re-syncing it again will return the same elements.
+             *
+             * Reached only when `heroFromCards()` has already refused every card, so it cannot hide a
+             * collection that does have a tile to promote.
+             */
+            $kind === 'collection' && $image === null && $video === null && $thumb === null
+                && is_array($creative->cards) => [
+                    'state' => 'unavailable',
+                    'kind' => $kind,
+                    'aspect' => $aspect,
+                    'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
+                    'expires_at' => null,
+                    'note_ar' => 'إعلان تشكيلة — قرأ النظام منطقة التفاعل، والبطاقات التي أعادتها المنصة لا تحمل أي ملف صورة أو فيديو.',
+                    'note_en' => 'A collection ad — the interaction zone was read, and the tiles the platform returned carry no image or video file.',
                 ],
             $kind === 'collection' && $image === null && $video === null && $thumb === null
                 && $creative->cards === null => [

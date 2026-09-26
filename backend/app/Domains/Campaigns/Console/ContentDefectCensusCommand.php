@@ -153,6 +153,37 @@ final class ContentDefectCensusCommand extends Command
         $overZero = [];
         $promoted = 0;
         $judgedPreview = 0;
+        /**
+         * CONTENT-COLLECTION-TILES-001 — every shape, and how many of them actually DRAW.
+         *
+         * This command lists DEFECTS, which means a healthy shape is invisible in it. That sounds
+         * like a small omission and it cost three separate Production runs to work around: asked
+         * «does this account hold a STATIC collection, and does it draw», the defect list can only
+         * answer «none of the broken ones is static», which is not the same sentence and is not
+         * evidence of anything. The hierarchy command's own shape table answers it in SQL — and that
+         * table is the one this row proved untrustworthy, because a `cards` column full of tiles
+         * carrying no media reads there as «carries an asset link».
+         *
+         * So the inventory is taken HERE, where the judgement is the presenter's own `preview()` —
+         * the same call the library makes — and «draws» means the envelope offered a url a browser
+         * could load, not that a column was non-null.
+         *
+         * Counts and the platform's own format word. No ids, no names, no urls: the same bar as
+         * every other line this command prints.
+         *
+         * ## One example id per shape, because a count cannot be opened
+         *
+         * «439 collections and every one of them draws» is a number somebody still has to take on
+         * trust. The acceptance for CONTENT-COLLECTION-TILES-001 is a real Collection cover seen on
+         * `/app/content`, and that needs an ADDRESS — which of the 439 to open. So each shape carries
+         * the first id that draws and the first that does not, which is the smallest thing that turns
+         * this from a claim into somewhere to go.
+         *
+         * Ids only, which this command already prints for every defect it lists. No name, no url.
+         *
+         * @var array<string, array{total: int, draws: int, drew: ?string, blank: ?string}> $inventory
+         */
+        $inventory = [];
 
         foreach ($creatives as $creative) {
             $id = (string) $creative->getKey();
@@ -179,6 +210,16 @@ final class ContentDefectCensusCommand extends Command
             $drawable = ($preview['image_url'] ?? null) !== null
                 || ($preview['video_url'] ?? null) !== null
                 || ($preview['thumbnail_url'] ?? null) !== null;
+
+            $shape = (string) ($creative->format ?? 'none');
+            $inventory[$shape] ??= ['total' => 0, 'draws' => 0, 'drew' => null, 'blank' => null];
+            $inventory[$shape]['total']++;
+            if ($drawable) {
+                $inventory[$shape]['draws']++;
+                $inventory[$shape]['drew'] ??= $id;
+            } else {
+                $inventory[$shape]['blank'] ??= $id;
+            }
 
             if (in_array($state, self::ABSENCE_STATES, true)) {
                 $rung = $state === 'unavailable'
@@ -267,6 +308,34 @@ final class ContentDefectCensusCommand extends Command
             .'   at creative grain: '.count($grains['creative'])
             .'   at ad grain: '.count($grains['ad'])
             .'   BOTH grains: '.count(array_intersect_key($grains['creative'], $grains['ad'])));
+
+        if ($inventory !== []) {
+            uasort($inventory, static fn (array $a, array $b): int => $b['total'] <=> $a['total']);
+
+            $this->line('  LIBRARY INVENTORY — every shape the platform named, and how many DRAW (presenter\'s own envelope)');
+
+            foreach ($inventory as $shape => $counts) {
+                $blank = $counts['total'] - $counts['draws'];
+
+                $this->line(sprintf(
+                    '    %-22s: %5d   draws %d · draws nothing %d%s',
+                    $shape,
+                    $counts['total'],
+                    $counts['draws'],
+                    $blank,
+                    // Named rather than left to arithmetic: «0» in a column of numbers is easy to read past,
+                    // and «every one of these draws» is the sentence somebody is actually looking for.
+                    $blank === 0 ? '   ← every one of these draws' : '',
+                ));
+
+                $this->line(sprintf(
+                    '      %-20s  open one that draws: %s%s',
+                    '',
+                    $counts['drew'] ?? '— none of them draws',
+                    $counts['blank'] === null ? '' : '   · one that does not: '.$counts['blank'],
+                ));
+            }
+        }
 
         $loaded = 0;
         foreach ($this->fetch($toFetch) as [$item, $verdict]) {
