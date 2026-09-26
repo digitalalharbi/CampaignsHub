@@ -627,15 +627,40 @@ export function CoverSlide({ data, meta }: { data: ReportData; meta: Meta }) {
           {meta.clientLogoUrl && (
             <img src={meta.clientLogoUrl} alt="" data-testid="report-cover-client-logo" onError={hideBrokenLogo} className="h-9 w-auto max-w-[160px] rounded bg-white object-contain p-1" />
           )}
-          <span>{meta.clientName ?? 'تقرير الأداء'}</span>
+          <span>{meta.clientName ?? (ar ? 'تقرير الأداء' : 'Performance report')}</span>
         </div>
         <h1 className="mt-1 text-4xl font-extrabold sm:text-5xl">{meta.reportName}</h1>
-        <div className="mt-3 flex flex-wrap gap-2">{meta.platforms.map((p) => <span key={p} className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold">{providerLabel(canonicalPlatform(p), 'ar')}</span>)}</div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {/*
+            REPORT-SUMMARY-DECISION-001 — the cover says WHICH report this is.
+
+            An executive summary and a detailed report are different documents with different jobs, and
+            the cover was identical for both. A client receiving a five-page summary could not tell
+            whether they had been sent the short version or the whole thing, which is the first question
+            somebody asks of a forwarded PDF.
+          */}
+          {data.form && (
+            <span data-testid="report-cover-form" className="rounded-full bg-white/25 px-2.5 py-1 text-xs font-bold">
+              {data.form === 'executive_summary'
+                ? (ar ? 'ملخّص تنفيذي' : 'Executive summary')
+                : (ar ? 'تقرير تفصيلي' : 'Detailed report')}
+            </span>
+          )}
+          {meta.platforms.map((p) => <span key={p} className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold">{providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}</span>)}
+        </div>
       </div>
+      {/*
+        The cover's own labels were Arabic-only — «الفترة», «الهدف», «العملة» — on a surface that is sent
+        to clients in both languages. An English report opened with three Arabic words over its period
+        and currency, and the client-name fallback was Arabic too. The figures were always right; the
+        words around them were not, which on a cover is the first thing a reader sees.
+      */}
       <div className="flex flex-wrap gap-4 text-sm opacity-90">
-        <span>الفترة: <span className="tnum">{data.period.from} → {data.period.to}</span></span>
-        {data.objective && <span>الهدف: {OBJECTIVE_LABEL[data.objective] ?? data.objective}</span>}
-        <span>العملة: {data.currency}</span>
+        <span>
+          {ar ? 'الفترة' : 'Period'}: <span dir="ltr" className="tnum">{data.period.from} → {data.period.to}</span>
+        </span>
+        {data.objective && <span>{ar ? 'الهدف' : 'Objective'}: {OBJECTIVE_LABEL[data.objective] ?? data.objective}</span>}
+        <span>{ar ? 'العملة' : 'Currency'}: {data.currency}</span>
       </div>
     </div>
   )
