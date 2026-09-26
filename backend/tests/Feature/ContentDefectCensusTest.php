@@ -448,6 +448,38 @@ final class ContentDefectCensusTest extends TestCase
         $this->assertStringNotContainsString('one that does not:', $inventory);
     }
 
+    /**
+     * A COLLECTION whose only media is a video draws NOTHING, and the inventory must say so.
+     *
+     * Production caught this within minutes of the first run: creative `01de7a4a` is a static
+     * collection with `image: no  thumbnail: no  video: yes`, the inventory counted it among «439
+     * draw», and the one-creative walk reported `draws=stated absence` for the same row.
+     *
+     * The walk is right. `adPreview.ts` reads a collection as `src: image_url ?? thumbnail_url` and
+     * `posterSource()` paints that src — a collection's video_url is never drawn, because the frame
+     * a collection shows is its HERO still. A count built on «any url is set» reports a cover where
+     * the reader sees none, which is this requirement's failure mode appearing in the instrument
+     * written to detect it.
+     */
+    public function test_a_collection_with_only_a_video_is_not_counted_as_drawing(): void
+    {
+        $this->creative(['format' => 'collection', 'video_url' => 'https://cdn.test/film.mp4']);
+
+        $this->assertMatchesRegularExpression(
+            '/collection\s+:\s+1\s+draws 0 · draws nothing 1/',
+            $this->census(),
+            'a collection whose only media is a video was counted as drawing a cover',
+        );
+    }
+
+    /** A VIDEO creative with only a film still renders a player, so the wider rule stays for it. */
+    public function test_a_video_creative_with_only_a_film_still_counts_as_drawing(): void
+    {
+        $this->creative(['format' => 'video', 'video_url' => 'https://cdn.test/film.mp4']);
+
+        $this->assertMatchesRegularExpression('/video\s+:\s+1\s+draws 1 · draws nothing 0/', $this->census());
+    }
+
     /** «Every one of these draws» is the sentence somebody is looking for, so it is said rather than implied. */
     public function test_a_shape_with_nothing_blank_says_so_in_words(): void
     {
