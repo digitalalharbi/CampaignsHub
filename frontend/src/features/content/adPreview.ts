@@ -389,6 +389,32 @@ export function previewShape(width?: number | null, height?: number | null, aspe
  * sentences.
  */
 export function clientAbsence(reading: PreviewReading, ar: boolean): { short: string; sentence: string } {
+  /*
+   * A FILM WITH NO POSTER, on a surface that cannot play it.
+   *
+   * `absenceLabel` answers '' for a film, and rightly: where the player draws there is nothing to
+   * explain. The CLIENT surfaces are the other case — `PrintDocument` reads this sentence onto a page
+   * that cannot play anything, and `ReportAdsSection` shows it where no cover frame exists. Without
+   * an arm of its own, a collection whose hero is a video would arrive as an empty frame with no
+   * sentence beside it, on the one surface a client keeps.
+   *
+   * The wording holds on both: «no cover frame for it» is true of a page and of a screen. An earlier
+   * draft said «to print» and was false on the second — caught by `ReportAdsSection`'s own case.
+   *
+   * It became reachable when a collection carrying a film began resolving to a film reading instead
+   * of to `src: null`. Before that the collection arm answered here; the picture is better now and
+   * the sentence has to follow it.
+   */
+  if (reading.kind === 'video' && reading.poster === null) {
+    return {
+      // The established short label stands — `ReportAdsSection` reads it and a reader already knows it.
+      short: absenceShort(reading, ar),
+      sentence: ar
+        ? 'محتوى هذا الإعلان فيديو، ولم ترسل المنصة صورة غلاف له.'
+        : 'This ad’s content is a video, and the platform sent no cover frame for it.',
+    }
+  }
+
   if (reading.kind !== 'none') {
     return { short: absenceShort(reading, ar), sentence: absenceLabel(reading, ar) }
   }
