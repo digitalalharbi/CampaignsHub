@@ -159,11 +159,29 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             return [];
         }
 
+        /*
+         * The route, taken from the convention this API has ALREADY been proven to use here.
+         *
+         * Two candidates are now disproven against production, both 404:
+         * `GET /v1/creativeelements/{id}` and `GET /v1/adaccounts/{id}/creativeelements`. Rather than
+         * guess a third, this follows `get_media_by_ids` — the one batch read in this connector that
+         * production accepted — whose lesson is recorded two hundred lines below: the ad account id
+         * belongs IN the path (SNAP-MEDIA-URL-001) and the body is `entity_ids` with each entry an
+         * OBJECT (SNAP-MEDIA-BODY-001).
+         *
+         * And if this is wrong too, the NEXT run will say so in Snapchat's words rather than mine.
+         * That is the other half of the same lesson: the refusals above were told apart only because
+         * the provider's own message was recorded — «Request URL can not be correctly processed» became
+         * «Request BODY can not be correctly processed» the moment the route was right, and one word
+         * moved the search from the route to the payload. My probe was reporting «none readable» and
+         * throwing that sentence away, which is why the endpoint was guessed twice.
+         */
         try {
-            $elements = $this->readAll(
-                $tokens,
-                "adaccounts/{$adAccountId}/creativeelements",
-                'creativeelements',
+            $body = $this->read(
+                $this->api($tokens)->post(
+                    $this->url("adaccounts/{$adAccountId}/get_creativeelements_by_ids"),
+                    ['entity_ids' => array_map(static fn (string $id): array => ['id' => $id], $wanted)],
+                ),
                 'creative elements',
             );
         } catch (\Throwable) {
@@ -172,7 +190,7 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
 
         $bodies = [];
 
-        foreach ($elements as $wrapper) {
+        foreach ((array) ($body['creativeelements'] ?? $body['creative_elements'] ?? []) as $wrapper) {
             $element = (array) (((array) $wrapper)['creative_element'] ?? $wrapper);
             $id = $element['id'] ?? null;
 

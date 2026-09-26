@@ -101,6 +101,68 @@ final class SecretNeverInLoggedUrlTest extends TestCase
     }
 
     /**
+     * A refusal's receipt must carry WHAT THE PLATFORM SAID — the field it was missing.
+     *
+     * The receipt recorded url, status, request id and the response's top-level keys, and threw away
+     * the only part that names the fault. It cost two wrong guesses at one Snapchat route: the probe
+     * printed `response keys: …, debug_message, …` over a 404 and never the message, so «an error
+     * envelope arrived» was all anybody learned. This API tells a wrong ROUTE from a wrong BODY by
+     * that sentence alone — «Request URL can not be correctly processed» against «Request BODY can not
+     * be correctly processed» — which is how `get_media_by_ids` was eventually got right.
+     *
+     * Redacted like a stored error, because a provider's words can still quote a url or a token.
+     */
+    public function test_a_refusal_receipt_carries_the_platforms_own_sentence(): void
+    {
+        Http::fake([
+            'business-api.tiktok.com/open_api/*' => Http::response([
+                'code' => 40001,
+                'message' => 'Request URL can not be correctly processed',
+            ], 404),
+        ]);
+
+        $connector = new TikTokConnector;
+
+        try {
+            $connector->discoverAdAccounts(new OAuthTokens('AT'));
+        } catch (\Throwable) {
+            // The refusal is the subject; what it threw is not.
+        }
+
+        $log = $connector->takeCallLog();
+
+        $this->assertCount(1, $log, 'a refusal is recorded, not skipped');
+        $this->assertSame(404, $log[0]['status']);
+        $this->assertArrayHasKey('reason', $log[0], 'the receipt lost the platform\'s own sentence');
+        $this->assertNotNull($log[0]['reason']);
+        $this->assertStringContainsString('Request URL can not be correctly processed', (string) $log[0]['reason']);
+        $this->assertStringNotContainsString(self::SECRET, (string) $log[0]['reason']);
+    }
+
+    /** A success says nothing, so a reader never mistakes a healthy call for a reported problem. */
+    public function test_a_successful_receipt_carries_no_reason(): void
+    {
+        Http::fake([
+            'business-api.tiktok.com/open_api/*/oauth2/advertiser/get*' => Http::response([
+                'code' => 0,
+                'data' => ['list' => [['advertiser_id' => '777', 'advertiser_name' => 'A', 'currency' => 'SAR']]],
+            ]),
+        ]);
+
+        $connector = new TikTokConnector;
+        $connector->discoverAdAccounts(new OAuthTokens('AT'));
+
+        $log = $connector->takeCallLog();
+
+        $this->assertCount(1, $log);
+        // `array_key_exists`, not `??` — the latter cannot tell a null VALUE from an absent key, and
+        // the contract here is that the key is present and empty. This file's own sibling assertion
+        // says so about `failure_reason`, and the first version of this test fell for it anyway.
+        $this->assertArrayHasKey('reason', $log[0]);
+        $this->assertNull($log[0]['reason']);
+    }
+
+    /**
      * A credential is redacted by its VALUE as well as by its name.
      *
      * The name list catches `secret=`; it cannot catch the next platform that calls the same thing
