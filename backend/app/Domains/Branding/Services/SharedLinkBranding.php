@@ -233,6 +233,52 @@ final class SharedLinkBranding
      */
     public function logoFor(?Report $report, string $tenantId, ?string $role = null): ?StreamedResponse
     {
+        $asset = $this->logoAsset($report, $tenantId, $role);
+
+        if ($asset === null) {
+            return null;
+        }
+
+        return Storage::disk($asset->disk)->response($asset->path, null, ['Cache-Control' => 'private, max-age=300']);
+    }
+
+    /**
+     * The same logo as BYTES, for a caller that has to EMBED it rather than link to it.
+     *
+     * The link preview card is composed by headless Chromium from a page with no network of its own,
+     * so a mark reaches it as a data URI or not at all. Streaming is the wrong shape for that and
+     * re-resolving would be a second resolution: `logoAsset()` is the one both go through, so a card
+     * can never carry a different mark from the one the same link serves.
+     *
+     * Null covers every way there may be no mark — no asset, a disk that lost the file, an empty
+     * file. The caller's job is then to render a card with no logo, not to invent one.
+     */
+    public function logoBytes(?Report $report, string $tenantId, ?string $role = null): ?string
+    {
+        $asset = $this->logoAsset($report, $tenantId, $role);
+
+        if ($asset === null) {
+            return null;
+        }
+
+        $bytes = Storage::disk($asset->disk)->get($asset->path);
+
+        return is_string($bytes) && $bytes !== '' ? $bytes : null;
+    }
+
+    /**
+     * ONE resolution of «which stored mark belongs to this share», for every caller that needs it.
+     *
+     * Extracted rather than copied. Two callers each walking client → tenant is how a link's preview
+     * card ends up showing the agency's mark while the report header shows the client's — the exact
+     * disagreement this class exists to prevent — and the walk is not a line of code, it is
+     * `clientOfReport`, the role branch and the kind preference together.
+     *
+     * The existence check stays here too, so «the row says there is a logo» and «the disk has one»
+     * are answered in the same place.
+     */
+    private function logoAsset(?Report $report, string $tenantId, ?string $role): mixed
+    {
         $client = $this->clientOfReport($report, $tenantId);
 
         if ($role !== null) {
@@ -246,7 +292,7 @@ final class SharedLinkBranding
             return null;
         }
 
-        return Storage::disk($asset->disk)->response($asset->path, null, ['Cache-Control' => 'private, max-age=300']);
+        return $asset;
     }
 
     /**
