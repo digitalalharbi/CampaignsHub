@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { absenceLabel, absenceShort, aspectClass, frameAspect, posterSource, previewShape, readPreview } from './adPreview'
+import { absenceLabel, absenceShort, clientAbsence, aspectClass, frameAspect, posterSource, previewShape, readPreview } from './adPreview'
 import type { CreativePreview } from './api'
 
 /**
@@ -385,6 +385,25 @@ describe('a dynamic collection is composed per product, not missing a hero', () 
      */
     expect(absenceShort(reading, false)).toBe('Video, no cover')
     expect(posterSource(reading)).toBeNull()
+  })
+
+  /**
+   * A PRINTED page cannot play a film, so it must say so rather than print an empty frame.
+   *
+   * `PrintDocument` reads `clientAbsence().sentence`. `absenceLabel` answers '' for a film — right
+   * for the library, where the player draws — so without an arm of its own a collection whose hero
+   * is a video would print a blank rectangle with nothing beside it, on the one surface a client
+   * keeps. It became reachable the moment such a collection started resolving to a film.
+   */
+  it('tells a printed page that the hero is a film it cannot show', () => {
+    const film = { ...dynamic, image_url: null, thumbnail_url: null, video_url: 'https://cdn.test/hero.mp4' } as unknown as CreativePreview
+    const printed = clientAbsence(readPreview(film, false), false)
+
+    expect(printed.sentence).not.toBe('')
+    expect(printed.sentence).toContain('video')
+    expect(printed.sentence).toContain('no cover frame')
+    expect(printed.short).toBe('Video, no cover')
+    expect(clientAbsence(readPreview(film, true), true).sentence).toContain('فيديو')
   })
 
   /** A still still wins: the hero frame is what a collection shows when it has one. */
