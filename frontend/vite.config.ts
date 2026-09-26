@@ -100,6 +100,54 @@ export default defineConfig({
       '/demo': { target: API_TARGET, changeOrigin: true },
     },
   },
+  /*
+   * GATE-BUILT-APP-001 — the gate serves a BUILT app, and preview needs the same proxy.
+   *
+   * `vite preview` serves `dist/` with no module graph to optimise, which is the point: the dev
+   * server compiles on demand, and its optimiser rewriting the graph mid-run is the documented
+   * mechanism behind GATE-VITE-001 and the four `page.goto` hangs of GATE-WK-001. Preview has to
+   * proxy exactly what the dev server proxies, or every authenticated call in the gate 404s.
+   */
+  preview: {
+    proxy: {
+      /*
+       * Proxy API calls to the Laravel backend during development.
+       *
+       * The target is overridable because the E2E gate runs its own backend on :8100 against its own
+       * database (E2E-ISO-001). Hard-coding :8000 here would send the gate's requests to whatever
+       * dev server happened to be listening — i.e. to the development database, which is the exact
+       * leak that isolation removes. `playwright.config.ts` sets `VITE_API_TARGET`; a developer's
+       * `npm run dev` sets nothing and keeps the default.
+       */
+      '/api': { target: API_TARGET, changeOrigin: true },
+      '/sanctum': { target: API_TARGET, changeOrigin: true },
+      /*
+       * SHORT-LINK-PRODUCTION-001 — the hop belongs to Laravel here too.
+       *
+       * `/l/{slug}` is a web route. Without this the dev server answers it from the SPA fallback,
+       * which is EXACTLY the production defect — a minted link rendering the app's not-found page —
+       * and it would make the gate's hop test unable to tell a fixed edge from a broken one.
+       *
+       * The trailing slash is load-bearing. A Vite proxy key is a PREFIX, so `'/l'` also captures
+       * `/login` — every auth setup timed out on a sign-in page that was being proxied to Laravel.
+       */
+      '/l/': { target: API_TARGET, changeOrigin: true },
+      /*
+       * AD-MEDIA-RECOVERY-001 — the app's OWN media, served by the app.
+       *
+       * A creative asset we host is stored as a path so it survives a port, a host and a deploy
+       * (`AD-MEDIA-RECOVERY-001` in `CreativePresenter::safe()`). In production the SPA and the API
+       * share an origin and the path resolves to Laravel's `public/`. In development they do not, so
+       * without this the browser asked VITE for the file, Vite answered with the SPA shell — 200,
+       * `text/html`, three kilobytes — and the player failed with `DEMUXER_ERROR_COULD_NOT_OPEN`
+       * against a document pretending to be a video.
+       *
+       * That is the worst shape of this bug: every layer reports success and the user sees a dead
+       * player, which is why it survived unit tests that assert the payload and the markup.
+       */
+      '/demo': { target: API_TARGET, changeOrigin: true },
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,
