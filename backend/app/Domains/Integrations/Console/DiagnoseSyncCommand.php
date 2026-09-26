@@ -699,17 +699,44 @@ final class DiagnoseSyncCommand extends Command
          *
          * @var list<array{shape: string, total: int, drawing_nothing: int}> $shapes
          */
+        /*
+         * CONTENT-COLLECTION-TILES-001 — «carries an asset link» stopped meaning what it said.
+         *
+         * `drawing_nothing` counted a row as fine when ANY of asset_url, video_url, thumbnail_url or
+         * `cards` was set. That was true when nothing populated `cards`. The moment collection tiles
+         * began being ingested it became a different sentence: a collection with cards — including
+         * cards whose own urls are null, which is what a dynamic collection legitimately has — now
+         * counted as carrying an asset link, and the census reported «all 439 carry an asset link»
+         * over creatives that draw nothing on a card.
+         *
+         * That is the expensive direction for a diagnostic: it reported health, so the owner's «covers
+         * are still not appearing» had no instrument that agreed with them.
+         *
+         * Three counts now, because they are three different situations and only one of them is fine:
+         * a HERO of its own; no hero but at least one card carrying real media, which `heroFromCards()`
+         * promotes; and nothing drawable at all. A card list with no media in it is the third, not the
+         * second.
+         */
+        $hasCardMedia = "EXISTS (SELECT 1 FROM jsonb_array_elements(
+            CASE WHEN jsonb_typeof(cards::jsonb) = 'array' THEN cards::jsonb ELSE '[]'::jsonb END
+        ) AS card WHERE COALESCE(card->>'image_url', card->>'asset_url', card->>'video_url', card->>'thumbnail_url') IS NOT NULL)";
+
+        $hasHero = '(asset_url IS NOT NULL OR video_url IS NOT NULL OR thumbnail_url IS NOT NULL)';
+
         $shapes = (clone $creatives)
             ->toBase()
             ->selectRaw('COALESCE(format, \'—\') AS shape, COUNT(*) AS total')
-            ->selectRaw('COUNT(*) FILTER (WHERE asset_url IS NULL AND video_url IS NULL'
-                .' AND thumbnail_url IS NULL AND cards IS NULL) AS drawing_nothing')
+            ->selectRaw("COUNT(*) FILTER (WHERE {$hasHero}) AS with_hero")
+            ->selectRaw("COUNT(*) FILTER (WHERE NOT {$hasHero} AND {$hasCardMedia}) AS card_media_only")
+            ->selectRaw("COUNT(*) FILTER (WHERE NOT {$hasHero} AND NOT {$hasCardMedia}) AS drawing_nothing")
             ->groupBy('shape')
             ->orderByDesc('total')
             ->get()
             ->map(static fn (object $row): array => [
                 'shape' => (string) $row->shape,
                 'total' => (int) $row->total,
+                'with_hero' => (int) $row->with_hero,
+                'card_media_only' => (int) $row->card_media_only,
                 'drawing_nothing' => (int) $row->drawing_nothing,
             ])
             ->all();
@@ -719,13 +746,13 @@ final class DiagnoseSyncCommand extends Command
             $this->line('  CREATIVE SHAPES — the platform\'s own word, and how many draw nothing');
 
             foreach ($shapes as $shape) {
-                $empty = $shape['drawing_nothing'];
-
                 $this->line(sprintf(
-                    '  %-22s: %5d   %s',
+                    '  %-22s: %5d   hero %d · card media only %d · nothing to draw %d',
                     $shape['shape'],
                     $shape['total'],
-                    $empty === 0 ? 'all carry an asset link' : "{$empty} carry no asset link of any kind",
+                    $shape['with_hero'],
+                    $shape['card_media_only'],
+                    $shape['drawing_nothing'],
                 ));
             }
         }
