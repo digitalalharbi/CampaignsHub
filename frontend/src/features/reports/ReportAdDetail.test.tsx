@@ -206,8 +206,15 @@ describe('opening an ad from a report', () => {
     expect(screen.getByText('Collection products')).toBeInTheDocument()
   })
 
-  /** And when the tiles were never fetched, the client is told whose gap that is. */
-  it('names our own gap for a collection with no tiles', () => {
+  /**
+   * And when the tiles did not arrive, the client is told which absence it is.
+   *
+   * This said «this product does not fetch them yet». The tiles are fetched now
+   * (CONTENT-COLLECTION-TILES-001), so reaching this arm means the ad's interaction zone could not be
+   * read — and on a CLIENT report that distinction matters most: «we have not built it» and «one ad's
+   * tiles failed to sync» are different things to tell somebody paying for the campaign.
+   */
+  it('names the real absence for a collection with no tiles', () => {
     renderWithProviders(
       <ReportAdDetail
         ad={ad({ preview: preview({ kind: 'collection', cards: null, cards_reported: false }) })}
@@ -217,8 +224,9 @@ describe('opening an ad from a report', () => {
       />, { locale: 'en' },
     )
 
-    expect(screen.getByText(/the gap is ours/)).toBeInTheDocument()
+    expect(screen.getByText(/did not arrive in the last sync/)).toBeInTheDocument()
     expect(screen.queryByText(/sent no card breakdown/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/does not fetch them yet/)).not.toBeInTheDocument()
   })
 
 })
