@@ -31,14 +31,33 @@ async function openCardsView(page: import('@playwright/test').Page) {
 const SEEDED_PROJECT = 'Growth — Acquisition'
 
 /**
- * A campaign carrying real demo data, rather than whichever card happens to sort first.
+ * The campaign carrying real demo data, pinned BY NAME — the fifth time this file has needed it.
  *
  * The specs below read a campaign's PERFORMANCE and its linked platform campaigns, and the throwaway
- * campaigns this file creates have neither — they are brand new and connected to nothing. With the
- * project pinned, the only throwaways that can appear here are this file's own.
+ * campaigns this file creates have neither: they are brand new and connected to nothing.
+ *
+ * «Whichever card does not say E2E» was the selector, and it guessed. `SEEDED_PROJECT` above records
+ * the same lesson one rung up — «pinning by NAME makes each run independent of what has run before
+ * it… the fourth time this suite has outgrown a selector that guessed» — and this is the fifth, on
+ * the line directly below it.
+ *
+ * The failure: `campaigns.spec.ts:119` timed out for thirty seconds on firefox waiting for
+ * `campaign-card` filtered by `hasNotText: 'E2E '`, while the identical flow twenty lines above it
+ * passed in the same run. 609 other cases passed, no request 500'd, and the pull request it failed
+ * was purely additive — a new endpoint and its own UI, 592 insertions against two rewritten import
+ * lines, nothing that campaigns read. What differs between the two calls is how many
+ * `E2E Campaign <timestamp>` rows this file (and the ones before it) have left in the project by
+ * then, and whether the seeded card is still among the ones the view has rendered.
+ *
+ * So it is no longer a filter over what everything else has left behind. `Always-On — Sales` is the
+ * campaign `DemoAccountsSeeder` creates in `Growth — Acquisition`, with the platform bindings and the
+ * metrics these specs came for — and naming it means a spec that fails is telling us the seed
+ * changed, which is a fact worth being told, instead of telling us the suite got longer.
  */
+const SEEDED_CAMPAIGN = 'Always-On — Sales'
+
 function seededCampaignCard(page: import('@playwright/test').Page) {
-  return page.getByTestId('campaign-card').filter({ hasNotText: 'E2E ' }).first()
+  return page.getByTestId('campaign-card').filter({ hasText: SEEDED_CAMPAIGN }).first()
 }
 
 /*
