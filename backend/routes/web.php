@@ -38,6 +38,21 @@ Route::get('/r/{token}', [SharePreviewController::class, 'show'])
     ->name('reports.share.preview');
 
 /*
+ * SHARE-PREVIEW-CARD-001 — the picture that metadata points at.
+ *
+ * Beside the route above rather than under the API, for the same reason and the same audience: a
+ * crawler with no session, and then every recipient's own client fetching the image out of the
+ * message. `.png` is in the path deliberately — Slack and some mail clients decide whether to
+ * attempt an image from the URL before they have a response to read a content type off.
+ *
+ * Same token pattern as the metadata route, from the same alphabet `ShareService` mints, so a link
+ * that previews is a link whose picture resolves.
+ */
+Route::get('/r/{token}/preview.png', [SharePreviewController::class, 'image'])
+    ->where('token', '[A-Za-z0-9]{16,64}')
+    ->name('reports.share.preview.image');
+
+/*
  * AD-MEDIA-RECOVERY-001 — the app's own media, served by the app so a film can be SEEKED.
  *
  * `where` keeps the whole remaining path in one parameter (a nested file is still one file), and the
