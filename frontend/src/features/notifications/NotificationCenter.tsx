@@ -4,11 +4,38 @@ import { usePortalPath } from '@/app/portalPath'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bell, CheckCheck } from 'lucide-react'
 import { listNotifications, markAllNotificationsRead, markNotificationRead, type AppNotification } from './api'
+import {
+  bucketLabel,
+  groupByTime,
+  notificationScope,
+  scopeLabel,
+  severityLabel,
+  severityTone,
+} from './notificationPresentation'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 
-const severityDot: Record<AppNotification['severity'], string> = {
-  info: 'bg-info', success: 'bg-success', warning: 'bg-warning', critical: 'bg-danger',
+/*
+ * UX-NOTIFICATION-CARD-001 — severity as a RAIL, and it survives being read.
+ *
+ * The previous dot was set to `bg-transparent` once a row was read, so a read critical alert and a
+ * read info note were the same object on screen: the severity a system took the trouble to record
+ * lasted exactly until somebody looked at it. An operator scanning yesterday's list could not tell a
+ * failed sync from a finished report, which is that list's entire job.
+ *
+ * A rail rather than a dot because it reads at a glance down a column of twelve, and it keeps its
+ * colour after reading. What `read` costs a row is EMPHASIS — the background tint and the bolder
+ * title — not its identity.
+ */
+const SEVERITY_RAIL: Record<'info' | 'success' | 'warning' | 'danger', string> = {
+  info: 'bg-info', success: 'bg-success', warning: 'bg-warning', danger: 'bg-danger',
+}
+
+const SEVERITY_CHIP: Record<'info' | 'success' | 'warning' | 'danger', string> = {
+  info: 'text-info',
+  success: 'text-success',
+  warning: 'text-warning',
+  danger: 'text-danger',
 }
 
 export function NotificationCenter() {
@@ -70,16 +97,67 @@ export function NotificationCenter() {
               <p className="p-6 text-center text-sm text-text-muted">{t('nc_empty')}</p>
             ) : (
               <ul>
-                {items.map((n) => (
-                  <li key={n.id}>
-                    <button onClick={() => openItem(n)} className={`flex w-full items-start gap-2.5 border-b border-border/60 px-3 py-2.5 text-start last:border-0 hover:bg-surface-secondary ${n.status === 'unread' ? 'bg-brand-primary-soft/40' : ''}`}>
-                      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.status === 'unread' ? severityDot[n.severity] : 'bg-transparent'}`} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold text-text-primary">{n.title}</span>
-                        {n.message && <span className="block truncate text-xs text-text-secondary">{n.message}</span>}
-                        <span className="mt-0.5 block text-[11px] text-text-muted">{n.created_at ? new Date(n.created_at).toLocaleString('en-CA') : ''}</span>
-                      </span>
-                    </button>
+                {/*
+                  Grouped by day — the axis a reader actually scans.
+
+                  Every row previously carried a full timestamp, so a list of twelve showed twelve
+                  near-identical strings and the reader compared them character by character to find
+                  what was new. A heading answers that at a glance; the exact stamp stays on hover,
+                  where it costs nothing.
+                */}
+                {groupByTime(items).map((group) => (
+                  <li key={group.bucket}>
+                    <p className="sticky top-0 z-10 bg-surface/95 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-text-muted backdrop-blur">
+                      {bucketLabel(group.bucket, ar)}
+                    </p>
+                    <ul>
+                      {group.items.map((n) => {
+                        const tone = severityTone(n.severity)
+                        const scope = notificationScope(n)
+                        const isUnread = n.status === 'unread'
+
+                        return (
+                          <li key={n.id}>
+                            <button
+                              data-testid={`notification-${n.id}`}
+                              data-severity={tone}
+                              data-scope={scope}
+                              onClick={() => openItem(n)}
+                              className={`relative flex w-full items-start gap-2.5 border-b border-border/60 py-2.5 pe-3 ps-4 text-start transition-colors last:border-0 hover:bg-surface-secondary ${isUnread ? 'bg-brand-primary-soft/40' : ''}`}
+                            >
+                              {/* The rail keeps its colour whether the row has been read or not. */}
+                              <span
+                                aria-hidden
+                                className={`absolute bottom-0 start-0 top-0 w-1 ${SEVERITY_RAIL[tone]} ${isUnread ? '' : 'opacity-50'}`}
+                              />
+                              <span className="min-w-0 flex-1">
+                                <span className={`block truncate text-sm text-text-primary ${isUnread ? 'font-bold' : 'font-semibold'}`}>
+                                  {n.title}
+                                </span>
+                                {n.message && <span className="block truncate text-xs text-text-secondary">{n.message}</span>}
+                                <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-muted">
+                                  {/*
+                                    Scope, said rather than inferred. A notification is written for a
+                                    tenant whose readers work in different scopes, and `project_id === null`
+                                    means the whole portfolio — a distinction this product refuses to
+                                    blur everywhere else and the centre simply did not show.
+                                  */}
+                                  <span className="rounded-full bg-surface-secondary px-1.5 py-0.5 font-semibold">
+                                    {scopeLabel(scope, ar)}
+                                  </span>
+                                  <span className={`font-semibold ${SEVERITY_CHIP[tone]}`}>{severityLabel(n.severity, ar)}</span>
+                                  {n.created_at && (
+                                    <span dir="ltr" className="tnum" title={new Date(n.created_at).toLocaleString('en-CA')}>
+                                      {new Date(n.created_at).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  )}
+                                </span>
+                              </span>
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
                   </li>
                 ))}
                 {/*
