@@ -147,21 +147,28 @@ final class CollectionAbsenceSaysWhoseGapItIsTest extends TestCase
     }
 
     /**
-     * A STATIC collection whose zone answered with nothing drawable says so — and does not claim we
-     * never asked.
+     * A STATIC collection whose zone answered with nothing drawable names the ZONE.
      *
-     * «Its tiles did not arrive in the last sync» sends an operator to re-sync an ad that will return
-     * the same elements. The two sentences are different because the next move is different.
+     * A refinement rather than a repair, and the difference is worth stating precisely. This case
+     * already reached the general cards-present arm and read «this ad's cards were fetched and none
+     * of them carried a usable asset» — correct, and `unavailable` either way. What it did not say is
+     * HOW a collection's tiles are fetched, which is the fact that tells an operator a re-sync will
+     * return the same elements rather than a different answer.
+     *
+     * So the state is asserted as unchanged, and the sentence as more specific than the general one.
      */
-    public function test_a_static_collection_whose_zone_answered_with_nothing_says_that(): void
+    public function test_a_static_collection_whose_zone_answered_with_nothing_names_the_zone(): void
     {
         $preview = $this->preview($this->creative([
             'format' => 'collection',
             'cards' => [['headline' => 'Linen shirt'], ['headline' => 'Abaya']],
         ]));
 
-        $this->assertSame('unavailable', $preview['state']);
+        $this->assertSame('unavailable', $preview['state'], 'this reading was already unavailable and must stay so');
         $this->assertStringContainsString('interaction zone was read', (string) $preview['note_en']);
+        // Not the generic card sentence: a collection is read through its zone, and saying so is the point.
+        $this->assertStringNotContainsString('none of them carried a usable asset', (string) $preview['note_en']);
+        // And never the re-sync sentence, which belongs only to tiles nobody asked for.
         $this->assertStringNotContainsString('did not arrive', (string) $preview['note_en']);
     }
 
