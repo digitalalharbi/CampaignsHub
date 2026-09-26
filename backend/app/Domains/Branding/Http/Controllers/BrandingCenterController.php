@@ -262,7 +262,25 @@ final class BrandingCenterController extends Controller
             'height' => $asset->height,
             'bytes' => $asset->bytes,
             'checksum' => $asset->checksum,
-            'url' => route('branding.assets.file', ['brandingAsset' => $asset->id]),
+            /*
+             * The FULLY QUALIFIED name, and it has to be.
+             *
+             * These routes are registered inside the api group, which prefixes every name with
+             * `api.v1.` — so `branding.assets.file` matches nothing and `route()` throws
+             * `RouteNotFoundException`. Laravel renders that as a 500, and because `present()` is on
+             * the way OUT of both `upload()` and `assets()`, the whole Branding Center answered 500:
+             * an agency could not upload a logo, and could not list the ones it had.
+             *
+             * It had no test because every branding suite in this tree calls
+             * `BrandingService::storeAsset()` directly and never goes through the controller — which
+             * is this requirement's own warning, «code containing `logo_url` is not completion»,
+             * arriving one layer further out than it was written for. Found by driving the real
+             * endpoint from a browser.
+             *
+             * Same trap as `reports.download`, which was reported as an unreachable route for the
+             * same reason. `ApiRouteNamesResolveTest` now sweeps for it rather than remembering it.
+             */
+            'url' => route('api.v1.branding.assets.file', ['brandingAsset' => $asset->id]),
             'created_at' => $asset->created_at?->toIso8601String(),
         ];
     }
