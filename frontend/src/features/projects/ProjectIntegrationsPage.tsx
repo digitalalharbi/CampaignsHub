@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plug, RefreshCw, Unplug } from 'lucide-react'
 import {
   detachBinding,
+  setPrimaryAccount,
   listProjectBindings,
   listProjects,
   listProjectTasks,
@@ -65,6 +66,26 @@ export function ProjectIntegrationsPage() {
     mutationFn: (bindingId: string) => syncBinding(projectId, bindingId),
     onSuccess: invalidate,
   })
+  /*
+   * INTEGRATION-PRIMARY-ACCOUNT-001 — which project owns this account.
+   *
+   * The badge said «primary» and nothing could set it. An account bound to more than one project
+   * files its rows under whichever binding the server ranks first — `is_primary` DESC, then oldest —
+   * so without this an operator who confirmed the wrong one had to unbind and rebind, throwing the
+   * history away to change a flag.
+   */
+  const primaryMutation = useMutation({
+    mutationFn: (externalAccountId: string) => setPrimaryAccount(projectId, externalAccountId),
+    onSuccess: () => {
+      // This page's OWN key — `['project', projectId, 'integrations']` — via the helper, so the badge
+      // moves without a reload. Getting this wrong is precisely the defect #519 was about.
+      invalidate()
+      // The wizard's bindings list and the tenant-wide inventory both print the owning project.
+      void queryClient.invalidateQueries({ queryKey: ['project-bindings', projectId] })
+      void queryClient.invalidateQueries({ queryKey: ['accounts'] })
+    },
+  })
+
   const detachMutation = useMutation({
     mutationFn: (bindingId: string) => detachBinding(projectId, bindingId),
     onSuccess: invalidate,
@@ -194,6 +215,20 @@ export function ProjectIntegrationsPage() {
                   </span>
                 </div>
                 <div className="flex gap-2">
+                  {/*
+                    Offered only where it would change something: an account already primary here has
+                    nothing to set, and an inactive binding is not a claim on anything.
+                  */}
+                  {!b.is_primary && b.is_active && b.account?.id && (
+                    <Button
+                      variant="ghost"
+                      data-testid={`make-primary-${b.id}`}
+                      loading={primaryMutation.isPending && primaryMutation.variables === b.account.id}
+                      onClick={() => primaryMutation.mutate(b.account!.id)}
+                    >
+                      {lang === 'ar' ? 'اجعله الأساسي' : 'Make primary'}
+                    </Button>
+                  )}
                   <Button
                     variant="secondary"
                     loading={syncMutation.isPending && syncMutation.variables === b.id}

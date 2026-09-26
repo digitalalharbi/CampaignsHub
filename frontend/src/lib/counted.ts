@@ -138,3 +138,15 @@ export function members(n: number, locale: Locale): string {
     ? countedAr(n, { one: 'عضو', two: 'عضوان', few: 'أعضاء', many: 'عضوًا' })
     : countedEn(n, 'member', 'members')
 }
+
+/**
+ * «3 دقائق» · «1 minute» — INTEGRATION-SYNC-VISIBILITY-001.
+ *
+ * The integrations card counts down to the next scheduled sync, and «بعد 3 دقيقة» is exactly the
+ * hand-written form this module exists to stop.
+ */
+export function minutes(n: number, locale: Locale): string {
+  return locale === 'ar'
+    ? countedAr(n, { one: 'دقيقة', two: 'دقيقتان', few: 'دقائق', many: 'دقيقة' })
+    : countedEn(n, 'minute', 'minutes')
+}
