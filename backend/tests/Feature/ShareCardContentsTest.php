@@ -150,6 +150,38 @@ final class ShareCardContentsTest extends TestCase
     }
 
     /**
+     * The card takes the NEAREST mark, and that is deliberately not what the header does.
+     *
+     * `headerIdentity` gives the leading slot to the client's OWN mark and puts the agency's beside
+     * «بواسطة», because on a report page there are two slots and putting an agency's mark in the
+     * client's is a claim about whose report it is.
+     *
+     * A chat card has ONE slot. The alternative to the nearest mark is no mark — a card that shows
+     * an agency's own clients nothing simply because those clients have not uploaded a logo, which is
+     * the common case and the one this whole card exists for.
+     *
+     * So they differ on purpose, and this pins it: aligning the card to the header's two-slot rule
+     * would blank the picture for exactly the links that most need one.
+     */
+    public function test_the_card_falls_back_to_the_agency_mark_where_the_client_has_none(): void
+    {
+        app(TenantContext::class)->setTenantId($this->agency->id);
+        app(BrandingService::class)->storeAsset(
+            'tenant',
+            null,
+            'primary_horizontal',
+            'any',
+            UploadedFile::fake()->createWithContent('agency.png', $this->png()),
+        );
+        app(TenantContext::class)->forget();
+
+        $card = app(ShareCardRenderer::class)->contents($this->share, $this->report);
+
+        $this->assertIsString($card['logo'], 'the client has no mark, so the card showed nothing at all');
+        $this->assertStringStartsWith('data:image/png;base64,', $card['logo']);
+    }
+
+    /**
      * Bytes a browser would not draw are not a mark.
      *
      * `DrawableImage` decides, and it reads the leading bytes rather than the stored content type —
