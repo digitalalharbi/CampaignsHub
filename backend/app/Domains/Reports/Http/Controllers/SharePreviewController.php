@@ -54,6 +54,26 @@ final class SharePreviewController extends Controller
         $period = $this->period($report);
         $locale = $report->reportLocale();
 
+        /*
+         * DRAW IT HERE, so the tag is a picture we HAVE rather than one we hope to make.
+         *
+         * `available()` answers «is the renderer switched on», which is not the same promise as «this
+         * url will return an image». An install with the flag on and no working browser advertised
+         * `/r/{token}/preview.png` and answered 404 — and `SharedReportCrawlerMetadataTest` caught
+         * exactly that, because a crawler fetches this from its own servers and caches whatever comes
+         * back. A broken card then follows the link into every chat it is forwarded to, and nothing
+         * inside this product would ever show it: the product never fetches its own preview image.
+         *
+         * So the card is composed while the crawler is reading the document, and the tag names it
+         * only if it exists. The cost is one render on the first crawl of a link — every fetch after
+         * that is served from the cache — and a crawler waits seconds for HTML anyway.
+         *
+         * When it cannot be drawn, the agency's MARK is offered instead. A mark is not a preview
+         * image, which is why this card exists; but a real small picture is better than a promise
+         * that 404s, and `largeImage` below keeps it out of the layout that would crop it.
+         */
+        $drawn = $this->cards->png($share, $report);
+
         return view('reports.share-preview', [
             // The report's own language, and its title ends with the product's name in it (REPORT BRANDING).
             'lang' => $locale,
@@ -97,7 +117,10 @@ final class SharePreviewController extends Controller
              * there is no picture and the card below says `summary` — an ordinary card, which is
              * better than a large one pointing at a dead URL.
              */
-            'image' => $this->cards->available() ? url("/r/{$token}/preview.png") : null,
+            'image' => $drawn !== null ? url("/r/{$token}/preview.png") : $identity['logo_url'],
+            // The LARGE layout only for a picture composed for it. A mark under
+            // `summary_large_image` is the crop this card was built to stop.
+            'largeImage' => $drawn !== null,
             // From the same config the renderer draws at, so the declared size cannot drift from the file served.
             'imageWidth' => (int) config('reports.og.width', 1200),
             'imageHeight' => (int) config('reports.og.height', 630),

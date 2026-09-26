@@ -170,7 +170,7 @@ final class SharePreviewMetadataTest extends TestCase
      */
     public function test_the_large_image_is_the_drawn_card_and_not_the_uploaded_mark(): void
     {
-        config(['reports.chromium.enabled' => true]);
+        $this->rendererOrSkip();
 
         app(TenantContext::class)->setTenantId($this->agency->id);
         app(BrandingService::class)->storeAsset(
@@ -199,7 +199,7 @@ final class SharePreviewMetadataTest extends TestCase
      */
     public function test_the_card_declares_the_size_it_was_drawn_at(): void
     {
-        config(['reports.chromium.enabled' => true]);
+        $this->rendererOrSkip();
 
         $html = $this->preview();
 
@@ -211,7 +211,7 @@ final class SharePreviewMetadataTest extends TestCase
     /** And it carries an alt, for the reader who is told about the card rather than shown it. */
     public function test_the_picture_has_an_accessible_description(): void
     {
-        config(['reports.chromium.enabled' => true]);
+        $this->rendererOrSkip();
 
         $html = $this->preview();
 
@@ -228,7 +228,7 @@ final class SharePreviewMetadataTest extends TestCase
      */
     public function test_a_link_with_no_mark_still_gets_a_drawn_card(): void
     {
-        config(['reports.chromium.enabled' => true]);
+        $this->rendererOrSkip();
 
         $html = $this->preview();
 
@@ -259,6 +259,43 @@ final class SharePreviewMetadataTest extends TestCase
             $this->assertNull($this->meta($html, $property), "«{$property}» was emitted with no image");
         }
         $this->assertNull($this->metaName($html, 'twitter:image:alt'));
+    }
+
+    /**
+     * WITH NO RENDERER BUT A MARK, the mark is offered — because a 404 is worse than a small picture.
+     *
+     * `SharedReportCrawlerMetadataTest` is the reason this case exists. It fetches `og:image` exactly
+     * as a crawler does, with no session, and requires an image back: a crawler caches whatever it
+     * gets, so a dead url follows the link into every chat it is forwarded to, and nothing inside
+     * this product would ever show it.
+     *
+     * A mark is not a preview image — that is why the card exists — so it goes out under `summary`,
+     * never the large layout that would crop it, and without the size tags that describe a card it
+     * is not.
+     */
+    public function test_with_no_renderer_a_configured_mark_is_offered_rather_than_a_dead_url(): void
+    {
+        config(['reports.chromium.enabled' => false]);
+
+        app(TenantContext::class)->setTenantId($this->agency->id);
+        app(BrandingService::class)->storeAsset(
+            'client',
+            (string) $this->client->id,
+            'report_logo',
+            'any',
+            UploadedFile::fake()->createWithContent('logo.png', 'nakheel-bytes'),
+        );
+        app(TenantContext::class)->forget();
+
+        $html = $this->preview();
+
+        $image = (string) $this->meta($html, 'og:image');
+        $this->assertStringContainsString('branding/logo', $image, 'no picture at all was offered');
+        $this->assertSame('summary', $this->metaName($html, 'twitter:card'));
+
+        // Nothing describing a 1200x630 card, because this is not one.
+        $this->assertNull($this->meta($html, 'og:image:width'));
+        $this->assertNull($this->meta($html, 'og:image:type'));
     }
 
     /**
@@ -293,6 +330,23 @@ final class SharePreviewMetadataTest extends TestCase
 
         $this->assertStringContainsString('/r/'.$this->token, (string) $this->meta($html, 'og:url'));
         $this->assertStringContainsString('rel="canonical"', $html);
+    }
+
+    /**
+     * A DRAWN card needs a browser, and the `backend` job installs none.
+     *
+     * These cases are about the card, not about the fallback, and a test that quietly passed on a
+     * machine that cannot draw would be claiming the capability. Where there is no renderer the
+     * behaviour is covered by its own case below — the agency's mark is offered instead, and the
+     * layout stays `summary`.
+     */
+    private function rendererOrSkip(): void
+    {
+        config(['reports.chromium.enabled' => true]);
+
+        if (! is_file((string) config('reports.chromium.require_base'))) {
+            $this->markTestSkipped('no Playwright install to draw a card with on this machine');
+        }
     }
 
     // ---- helpers ---------------------------------------------------------------------------------
