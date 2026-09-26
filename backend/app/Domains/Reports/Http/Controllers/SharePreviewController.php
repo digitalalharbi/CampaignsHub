@@ -98,6 +98,9 @@ final class SharePreviewController extends Controller
              * better than a large one pointing at a dead URL.
              */
             'image' => $this->cards->available() ? url("/r/{$token}/preview.png") : null,
+            // From the same config the renderer draws at, so the declared size cannot drift from the file served.
+            'imageWidth' => (int) config('reports.og.width', 1200),
+            'imageHeight' => (int) config('reports.og.height', 630),
         ]);
     }
 
