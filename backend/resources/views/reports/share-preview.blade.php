@@ -39,13 +39,15 @@
   crawler to sniff it.
 --}}
 <meta property="og:image" content="{{ $image }}">
+@if ($largeImage)
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="{{ $imageWidth }}">
 <meta property="og:image:height" content="{{ $imageHeight }}">
+@endif
 <meta property="og:image:alt" content="{{ $description }}">
 @endif
 
-<meta name="twitter:card" content="{{ $image ? 'summary_large_image' : 'summary' }}">
+<meta name="twitter:card" content="{{ $largeImage ? 'summary_large_image' : 'summary' }}">
 <meta name="twitter:title" content="{{ $title }}">
 <meta name="twitter:description" content="{{ $description }}">
 @if ($image)
