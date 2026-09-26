@@ -190,6 +190,36 @@ final class SharePreviewMetadataTest extends TestCase
     }
 
     /**
+     * The card declares its SIZE, so a crawler can lay it out without fetching it first.
+     *
+     * Several of them give up rather than wait for an image whose dimensions they have to measure,
+     * and a card with an empty picture slot is the same outcome as having no image at all. The
+     * numbers come from the config the renderer draws at, so what is declared cannot drift from what
+     * is served — asserted here against the config rather than against two literals.
+     */
+    public function test_the_card_declares_the_size_it_was_drawn_at(): void
+    {
+        config(['reports.chromium.enabled' => true]);
+
+        $html = $this->preview();
+
+        $this->assertSame((string) config('reports.og.width'), $this->meta($html, 'og:image:width'));
+        $this->assertSame((string) config('reports.og.height'), $this->meta($html, 'og:image:height'));
+        $this->assertSame('image/png', $this->meta($html, 'og:image:type'));
+    }
+
+    /** And it carries an alt, for the reader who is told about the card rather than shown it. */
+    public function test_the_picture_has_an_accessible_description(): void
+    {
+        config(['reports.chromium.enabled' => true]);
+
+        $html = $this->preview();
+
+        $this->assertSame('Nakheel · 2026-07-01 — 2026-07-31', $this->meta($html, 'og:image:alt'));
+        $this->assertSame('Nakheel · 2026-07-01 — 2026-07-31', $this->metaName($html, 'twitter:image:alt'));
+    }
+
+    /**
      * The card is offered for a link with NO mark too, because it draws an identity rather than a logo.
      *
      * Under the old behaviour this link had no `og:image` at all: no upload, no picture. The agency
@@ -222,6 +252,13 @@ final class SharePreviewMetadataTest extends TestCase
 
         $this->assertNull($this->meta($html, 'og:image'), 'an image tag was emitted with no renderer to draw it');
         $this->assertSame('summary', $this->metaName($html, 'twitter:card'));
+
+        // And nothing ABOUT a picture that is not there. A size or an alt with no url is how a
+        // crawler is told to expect an image and then given none.
+        foreach (['og:image:width', 'og:image:height', 'og:image:type', 'og:image:alt'] as $property) {
+            $this->assertNull($this->meta($html, $property), "«{$property}» was emitted with no image");
+        }
+        $this->assertNull($this->metaName($html, 'twitter:image:alt'));
     }
 
     /**
