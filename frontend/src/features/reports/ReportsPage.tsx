@@ -1,4 +1,5 @@
 import { StatCard } from '@/components/ui/StatCard'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { useMemo, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
@@ -181,14 +182,30 @@ export function ReportsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{ar ? 'التقارير' : 'Reports'}</h1>
-            <ProvenanceBadge provenance={provenance} />
-          </div>
-          <p className="mt-1 text-sm text-text-secondary">{ar ? 'مستندات محفوظة قابلة للإنشاء والتصدير والإرسال' : 'Saved documents you can generate, export and send'}</p>
-        </div>
+      {/*
+        UX-PAGE-HERO-001 — the product's own header, not a third spelling of one.
+        This drew its own `<h1>` at `text-3xl` while the shared header is `PAGE_TITLE`, so Reports was
+        a different size from Analytics and Content for no reason anybody chose. The eyebrow is the
+        addition that matters here: a reader landing on «التقارير» could not tell whether they were
+        looking at one project's documents or every project's, and that is the first thing they need.
+      */}
+      <PageIntro
+        testid="reports-hero"
+        title={ar ? 'التقارير' : 'Reports'}
+        eyebrow={
+          /*
+            The scope, and the one distinction this product refuses to blur: no project selected is NOT
+            every project. A reader with nothing chosen is told so, rather than shown an empty list and
+            left to conclude their reports are missing.
+          */
+          currentProjectId
+            ? (ar ? 'تقارير المشروع الحالي' : 'This project’s reports')
+            : (ar ? 'لم يُحدَّد مشروع' : 'No project selected')
+        }
+        badges={<ProvenanceBadge provenance={provenance} />}
+        purpose={ar ? 'مستندات محفوظة قابلة للإنشاء والتصدير والإرسال' : 'Saved documents you can generate, export and send'}
+        actions={
+        <>
         {/*
           Two ways out of this page, and they are different things.
 
@@ -225,7 +242,9 @@ export function ReportsPage() {
             <Plus size={18} /> {ar ? 'تقرير محفوظ' : 'Saved report'}
           </Button>
         </div>
-      </div>
+        </>
+        }
+      />
 
       {!currentProjectId && (
         <p data-testid="reports-need-project" className="rounded-2xl border border-border bg-surface-secondary px-4 py-3 text-sm text-text-secondary">
