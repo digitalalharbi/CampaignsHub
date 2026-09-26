@@ -40,7 +40,7 @@ const COPY = {
     previous: 'البطاقة السابقة',
     next: 'البطاقة التالية',
     notReported: 'لم ترسل هذه المنصة تفاصيل بطاقات هذا الإعلان — المعروض أعلاه هو الأصل الوحيد المتاح.',
-    tilesNotFetched: 'هذا إعلان تشكيلة: صورة رئيسية فوق شبكة منتجات. المنصة تتيح البطاقات، ولم يطلبها النظام بعد — فالنقص عندنا لا عند المنصة.',
+    tilesNotFetched: 'هذا إعلان تشكيلة: صورة رئيسية فوق شبكة منتجات. لم تصل بطاقاته في آخر مزامنة — تُقرأ عادةً من منطقة التفاعل، وهذه لم يتمكن النظام من قراءتها.',
     withheld: (n: number) => `${n} من البطاقات تحمل روابط بيانات اعتماد، فلم تُعرض.`,
     empty: 'أرسلت المنصة قائمة بطاقات فارغة.',
     headline: 'العنوان',
@@ -57,7 +57,7 @@ const COPY = {
     previous: 'Previous card',
     next: 'Next card',
     notReported: 'This platform sent no card breakdown for this ad — the asset above is all it exposes.',
-    tilesNotFetched: 'This is a collection ad — a hero asset over a grid of product tiles. The platform does expose the tiles; this product does not fetch them yet, so the gap is ours, not the platform’s.',
+    tilesNotFetched: 'This is a collection ad — a hero asset over a grid of product tiles. Its tiles did not arrive in the last sync: they are read through the ad’s interaction zone, and this one could not be read.',
     withheld: (n: number) => `${n} card links carried a credential and were not shown.`,
     empty: 'The platform sent an empty card list.',
     headline: 'Headline',
@@ -114,16 +114,19 @@ export function CreativeCarousel({
           {heading}
         </h2>
         {/*
-          AD-MEDIA-RECOVERY-001 / CONTENT-PREVIEW-SHAPES-001 — whose gap it is.
+          AD-MEDIA-RECOVERY-001 / CONTENT-PREVIEW-SHAPES-001 / CONTENT-COLLECTION-TILES-001 — whose gap it is.
 
           `notReported` says «this platform sent no card breakdown … the asset above is all it
-          exposes». For a CAROUSEL that is true. For a COLLECTION both halves are false: Snapchat
-          does expose the tiles and this product does not fetch them yet, and a collection ad by
-          definition has products under its hero — so the sentence blamed the platform for our gap
-          and told the reader the hero was the whole ad. `CreativePresenter` has carried the correct
-          sentence for the no-hero case since the shape was added («the gap is ours, not the
-          platform’s»); a collection that DID arrive with a hero fell past that arm into the
-          ordinary «available» state and reached this line instead.
+          exposes». For a CAROUSEL that is true. For a COLLECTION both halves were false: Snapchat
+          does expose the tiles, and a collection ad by definition has products under its hero — so
+          the sentence blamed the platform for our gap and told the reader the hero was the whole ad.
+
+          The collection sentence then said «this product does not fetch them yet, so the gap is ours».
+          That was true when it was written and is not true now: the tiles ARE fetched — zone →
+          `creative_element_ids` → `creative_elements` → media. So reaching this arm no longer means
+          «we never ask»; it means we asked and this ad's zone could not be read, which is a different
+          fact and the one a reader needs. A sentence that outlives its own defect is the defect this
+          ledger spends most of its time removing.
         */}
         <p className="mt-2 text-sm text-text-secondary">{isCollection ? t.tilesNotFetched : t.notReported}</p>
       </section>

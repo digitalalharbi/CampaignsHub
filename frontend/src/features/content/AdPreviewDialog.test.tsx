@@ -189,8 +189,14 @@ describe('the in-place ad preview', () => {
     expect(screen.getByText('Collection products')).toBeInTheDocument()
   })
 
-  /** And when the tiles were never fetched, the panel says whose gap that is. */
-  it('names our own gap for a collection with no tiles', () => {
+  /**
+   * And when the tiles did not arrive, the panel says which absence it is.
+   *
+   * It used to say «this product does not fetch them yet». The tiles are fetched now
+   * (CONTENT-COLLECTION-TILES-001), so reaching this arm means the ad's interaction zone could not be
+   * read — a different fact, and the one worth telling.
+   */
+  it('names the real absence for a collection with no tiles', () => {
     renderWithProviders(
       <AdPreviewDialog
         creative={creative({ preview: preview({ kind: 'collection', cards: null, cards_reported: false } as Partial<CreativePreview>) })}
@@ -199,8 +205,9 @@ describe('the in-place ad preview', () => {
       />,
     )
 
-    expect(screen.getByText(/the gap is ours/)).toBeInTheDocument()
+    expect(screen.getByText(/did not arrive in the last sync/)).toBeInTheDocument()
     expect(screen.queryByText(/sent no card breakdown/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/does not fetch them yet/)).not.toBeInTheDocument()
   })
 
   /** A modal a keyboard cannot leave is a trap, and this one opens from a grid people tab through. */
