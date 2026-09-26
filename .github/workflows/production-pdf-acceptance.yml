@@ -56,6 +56,19 @@ jobs:
             # data exists. So: try it, and do not stop when there is nothing for it to do.
             $COMPOSE exec -T backend php artisan reports:regenerate-demo-exports --format=pdf || true
 
+            echo "== 2b/3  and if there was nothing demo to render, render ONE real report"
+            #
+            # The census settled this: fourteen real reports, five renderable, ZERO demo, and zero
+            # exports ever. So on production the demo path is correct to do nothing and proves nothing,
+            # and the bar this row is held to — a real PDF that opens — needs a file to exist.
+            #
+            # One report, the ordinary chain, the artisan spelling of clicking the export button on a
+            # report that already exists. It sends nothing, shares nothing and creates no link. Skipped
+            # when a demo export was just produced, because then there is already something to measure.
+            if ! $COMPOSE exec -T backend php artisan reports:pdf-facts >/dev/null 2>&1; then
+              $COMPOSE exec -T backend php artisan reports:render-acceptance --format=pdf --allow-real
+            fi
+
             echo "== 3/3  look inside what it produced"
             #
             # `--allow-real` because of the above. It is an opt-in and the default stays demo-only, and
