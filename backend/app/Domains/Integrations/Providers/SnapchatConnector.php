@@ -401,6 +401,16 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
     /** Snapchat takes up to 2,000 media ids per batch; chunked so a larger account is never truncated. */
     private const MEDIA_PER_REQUEST = 2000;
 
+    /**
+     * How many interaction zones one sync will read.
+     *
+     * A zone is one request each — there is no batch read for them — and an account can hold hundreds
+     * of collection creatives. Bounded so adding tiles cannot turn a working structure sweep into a
+     * throttled one, which is the same reason `MEDIA_PER_REQUEST` exists above. The elements and their
+     * media are then read in one call each, however many zones were covered.
+     */
+    private const ZONES_PER_SYNC = 40;
+
     /** How many media ids the last sweep asked about, and how many came back with a usable file. */
     private int $mediaAsked = 0;
 
@@ -512,13 +522,27 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                  * card says exactly what it says today — this can add a cover, and cannot invent one.
                  */
                 'media_id' => isset($c['top_snap_media_id']) ? (string) $c['top_snap_media_id'] : null,
+                /*
+                 * CONTENT-COLLECTION-TILES-001 — where a collection's tiles are named.
+                 *
+                 * A live census of 625 COLLECTION creatives found every one of them carrying
+                 * `collection_properties.interaction_zone_id`, and none carrying the tiles themselves.
+                 * The zone is the only route to them, so the id is kept here and resolved in one pass
+                 * below rather than per creative.
+                 */
+                'zone_id' => isset($c['collection_properties']['interaction_zone_id'])
+                    ? (string) $c['collection_properties']['interaction_zone_id']
+                    : null,
             ], static fn ($v) => $v !== null);
 
             /* Kept for the composite pass below, which needs the children the body names. */
             $bodies[(string) $c['id']] = $c;
         }
 
-        return $this->withMedia($tokens, $adAccountId, $this->coversForComposites($creatives, $bodies));
+        $creatives = $this->coversForComposites($creatives, $bodies);
+        $creatives = $this->withCollectionCards($tokens, $adAccountId, $creatives);
+
+        return $this->withMedia($tokens, $adAccountId, $creatives);
     }
 
     /**
@@ -595,22 +619,240 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         return $creatives;
     }
 
-    private function withMedia(OAuthTokens $tokens, string $adAccountId, array $creatives): array
+    /**
+     * CONTENT-COLLECTION-TILES-001 — a collection's tiles, resolved into the cards the product already reads.
+     *
+     * ## The chain, every link of it proven against production rather than assumed
+     *
+     * A COLLECTION creative carries no tiles and no `top_snap_media_id`; it carries
+     * `collection_properties.interaction_zone_id`. The zone answers with `creative_element_ids`. Each
+     * element carries the tile's copy and a MEDIA ID, and that id resolves through the same
+     * `get_media_by_ids` call the hero media already uses.
+     *
+     * ## The route cost three attempts and the fourth came from the contract
+     *
+     * `GET /v1/creativeelements/{id}` and `GET /v1/adaccounts/{id}/creativeelements` both answered 404,
+     * and so did `POST …/get_creativeelements_by_ids` — the last one saying «Resource can not be found»
+     * rather than «Request URL can not be correctly processed», which is the distinction this connector
+     * learned the hard way and the reason a refusal now records the platform's own sentence.
+     *
+     * Snapchat's published contract settles it: the entity is `creative_elements`, WITH the underscore
+     * (`POST /v1/adaccounts/{ad_account_id}/creative_elements` creates one), and the collection read
+     * follows `interaction_zones`, which is `GET /v1/adaccounts/{id}/interaction_zones`. Every earlier
+     * attempt spelled it `creativeelements`. One underscore, three probes.
+     *
+     * ## Fail-closed, and never a fabricated tile
+     *
+     * Any refusal leaves the creative exactly as it was: `cards` stays absent, which `CreativePresenter`
+     * already reads as «the platform reported nothing» rather than «there are none». A tile whose media
+     * id will not resolve is carried with null urls and counted by the presenter as withheld — it is
+     * never invented, and never silently dropped.
+     *
+     * @param  array<string,array<string,mixed>>  $creatives
+     * @return array<string,array<string,mixed>>
+     */
+    private function withCollectionCards(OAuthTokens $tokens, string $adAccountId, array $creatives): array
     {
-        $this->mediaAsked = 0;
-        $this->mediaResolved = 0;
-        $this->mediaFailure = null;
-
-        $mediaIds = array_values(array_unique(array_filter(
-            array_map(static fn (array $c): ?string => $c['media_id'] ?? null, $creatives),
+        $zoneIds = array_values(array_unique(array_filter(
+            array_map(static fn (array $c): ?string => $c['zone_id'] ?? null, $creatives),
         )));
 
-        $this->mediaAsked = count($mediaIds);
-
-        if ($mediaIds === []) {
+        if ($zoneIds === []) {
             return $creatives;
         }
 
+        // Elements per zone, and the zone's own ad account — a zone states the account its elements
+        // belong to, and scoping the read to anything else is what produced a «Resource can not be
+        // found» on an account that was otherwise answering perfectly.
+        $elementIdsByZone = [];
+        $zoneAccount = $adAccountId;
+
+        foreach (array_slice($zoneIds, 0, self::ZONES_PER_SYNC) as $zoneId) {
+            try {
+                $body = $this->read($this->api($tokens)->get($this->url("interaction_zones/{$zoneId}")), 'interaction zone');
+            } catch (\Throwable $e) {
+                $this->mediaFailure ??= $e->getMessage();
+
+                continue;
+            }
+
+            foreach ((array) ($body['interaction_zones'] ?? []) as $wrapper) {
+                $zone = (array) (((array) $wrapper)['interaction_zone'] ?? []);
+
+                if (is_string($zone['ad_account_id'] ?? null) && trim((string) $zone['ad_account_id']) !== '') {
+                    $zoneAccount = (string) $zone['ad_account_id'];
+                }
+
+                foreach ((array) ($zone['creative_element_ids'] ?? []) as $elementId) {
+                    if (is_string($elementId) && trim($elementId) !== '') {
+                        $elementIdsByZone[$zoneId][] = $elementId;
+                    }
+                }
+            }
+        }
+
+        if ($elementIdsByZone === []) {
+            return $creatives;
+        }
+
+        $elements = $this->creativeElements($tokens, $zoneAccount);
+
+        if ($elements === []) {
+            return $creatives;
+        }
+
+        // The tiles' own media, through the one call that resolves a Snapchat media id.
+        $mediaIds = [];
+        foreach ($elements as $element) {
+            $id = $this->elementMediaId($element);
+            if ($id !== null) {
+                $mediaIds[] = $id;
+            }
+        }
+
+        $media = $mediaIds === [] ? [] : $this->mediaByIds($tokens, $zoneAccount, array_values(array_unique($mediaIds)));
+
+        foreach ($creatives as $id => $creative) {
+            $zoneId = $creative['zone_id'] ?? null;
+
+            if (! is_string($zoneId) || ! isset($elementIdsByZone[$zoneId])) {
+                continue;
+            }
+
+            $cards = [];
+
+            foreach ($elementIdsByZone[$zoneId] as $index => $elementId) {
+                $element = $elements[$elementId] ?? null;
+
+                if ($element === null) {
+                    continue;
+                }
+
+                $mediaId = $this->elementMediaId($element);
+                $m = $mediaId === null ? null : ($media[$mediaId] ?? null);
+                $link = $m === null ? null : $this->safeAssetUrl($m['download_link'] ?? null);
+                $isVideo = $m !== null && strtoupper((string) ($m['type'] ?? '')) === 'VIDEO';
+
+                $cards[] = array_filter([
+                    'index' => $index,
+                    'headline' => $this->elementText($element, 'title'),
+                    'body' => $this->elementText($element, 'description'),
+                    'image_url' => $isVideo ? null : $link,
+                    'video_url' => $isVideo ? $link : null,
+                    'destination_url' => $this->elementDestination($element),
+                ], static fn ($v) => $v !== null);
+            }
+
+            if ($cards !== []) {
+                $creatives[$id] = [...$creative, 'cards' => $cards];
+            }
+        }
+
+        return $creatives;
+    }
+
+    /**
+     * The account's creative elements, keyed by id.
+     *
+     * `creative_elements` WITH the underscore — see the note on `withCollectionCards()`. Read as a
+     * collection because that is how `interaction_zones` is read, and filtered by the caller: a zone
+     * names a handful of elements and the account holds all of them.
+     *
+     * @return array<string,array<string,mixed>>
+     */
+    private function creativeElements(OAuthTokens $tokens, string $adAccountId): array
+    {
+        try {
+            $rows = $this->readAll($tokens, "adaccounts/{$adAccountId}/creative_elements", 'creative_elements', 'creative elements');
+        } catch (\Throwable $e) {
+            $this->mediaFailure ??= $e->getMessage();
+
+            return [];
+        }
+
+        $elements = [];
+
+        foreach ($rows as $wrapper) {
+            $element = (array) (((array) $wrapper)['creative_element'] ?? $wrapper);
+            $id = $element['id'] ?? null;
+
+            if (is_string($id) && trim($id) !== '') {
+                $elements[$id] = $element;
+            }
+        }
+
+        return $elements;
+    }
+
+    /**
+     * The tile's picture, wherever this element type keeps it.
+     *
+     * Snapchat's contract gives a creative element one of three property blocks by `interaction_type`,
+     * and each names its own media: a button's overlay, an app install's icon, a deep link's icon. Read
+     * in that order and never guessed — an element with none keeps a null, and the presenter then
+     * counts the tile as withheld rather than drawing a blank frame.
+     *
+     * @param  array<string,mixed>  $element
+     */
+    private function elementMediaId(array $element): ?string
+    {
+        foreach ([
+            ['button_properties', 'button_overlay_media_id'],
+            ['app_install_properties', 'icon_media_id'],
+            ['deep_link_properties', 'icon_media_id'],
+        ] as [$block, $key]) {
+            $value = $element[$block][$key] ?? null;
+
+            if (is_string($value) && trim($value) !== '') {
+                return $value;
+            }
+        }
+
+        return null;
+    }
+
+    /** @param array<string,mixed> $element */
+    private function elementText(array $element, string $key): ?string
+    {
+        $value = $element[$key] ?? null;
+
+        return is_string($value) && trim($value) !== '' ? trim($value) : null;
+    }
+
+    /**
+     * Where the tile sends a reader — a web view's url, or a deep link's uri.
+     *
+     * @param  array<string,mixed>  $element
+     */
+    private function elementDestination(array $element): ?string
+    {
+        foreach ([
+            ['web_view_properties', 'url'],
+            ['deep_link_properties', 'deep_link_uri'],
+        ] as [$block, $key]) {
+            $value = $element[$block][$key] ?? null;
+
+            if (is_string($value) && trim($value) !== '') {
+                return $value;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * One media-by-ids call, used by every caller that needs Snapchat to resolve a media id.
+     *
+     * Extracted rather than copied. The route and the body below were each got wrong once and fixed
+     * against production (SNAP-MEDIA-URL-001, SNAP-MEDIA-BODY-001), and a second copy of a call that
+     * expensive is a second place for it to drift back. The collection tiles need exactly this call
+     * for their own media ids, so they ask this.
+     *
+     * @param  list<string>  $mediaIds
+     * @return array<string,array<string,mixed>> keyed by media id
+     */
+    private function mediaByIds(OAuthTokens $tokens, string $adAccountId, array $mediaIds): array
+    {
         $media = [];
 
         foreach (array_chunk($mediaIds, self::MEDIA_PER_REQUEST) as $chunk) {
@@ -675,6 +917,29 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                 $media[(string) $m['id']] = $m;
             }
         }
+
+        return $media;
+    }
+
+    private function withMedia(OAuthTokens $tokens, string $adAccountId, array $creatives): array
+    {
+        $this->mediaAsked = 0;
+        $this->mediaResolved = 0;
+        $this->mediaFailure = null;
+
+        $mediaIds = array_values(array_unique(array_filter(
+            array_map(static fn (array $c): ?string => $c['media_id'] ?? null, $creatives),
+        )));
+
+        $this->mediaAsked = count($mediaIds);
+
+        if ($mediaIds === []) {
+            return $creatives;
+        }
+
+        $media = [];
+
+        $media = $this->mediaByIds($tokens, $adAccountId, $mediaIds);
 
         foreach ($creatives as $id => $creative) {
             $m = $media[$creative['media_id'] ?? ''] ?? null;
