@@ -26,7 +26,23 @@
 <meta property="og:description" content="{{ $description }}">
 <meta property="og:url" content="{{ $url }}">
 @if ($image)
+{{--
+  SHARE-PREVIEW-CARD-001 — the SIZE, beside the url.
+
+  A crawler that is not told the dimensions has to fetch and decode the image before it can decide
+  how to lay the card out, and several of them give up rather than wait — which renders as a card
+  with an empty picture slot, the same outcome as having no image at all. WhatsApp and X both read
+  these, and the numbers come from the config the renderer draws at, so they cannot drift from the
+  file that is actually served.
+
+  `og:image:type` for the same reason: the renderer writes PNG and says so, rather than leaving a
+  crawler to sniff it.
+--}}
 <meta property="og:image" content="{{ $image }}">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="{{ $imageWidth }}">
+<meta property="og:image:height" content="{{ $imageHeight }}">
+<meta property="og:image:alt" content="{{ $description }}">
 @endif
 
 <meta name="twitter:card" content="{{ $image ? 'summary_large_image' : 'summary' }}">
@@ -34,6 +50,8 @@
 <meta name="twitter:description" content="{{ $description }}">
 @if ($image)
 <meta name="twitter:image" content="{{ $image }}">
+{{-- The alt a screen reader announces where the card is read aloud rather than looked at. --}}
+<meta name="twitter:image:alt" content="{{ $description }}">
 @endif
 
 {{-- A human who somehow lands here still gets the report rather than this stub. --}}
