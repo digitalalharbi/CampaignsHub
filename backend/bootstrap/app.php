@@ -35,6 +35,7 @@ use App\Domains\Platform\Console\BackupCommand;
 use App\Domains\Projects\Middleware\RequireProjectCapability;
 use App\Domains\Projects\Middleware\ResolveProject;
 use App\Domains\Reports\Console\DispatchScheduledReports;
+use App\Domains\Reports\Console\DownloadCheckCommand;
 use App\Domains\Reports\Console\InvalidateLegacyExportsCommand;
 use App\Domains\Reports\Console\PdfFactsCommand;
 use App\Domains\Reports\Console\RegenerateDemoExportsCommand;
@@ -81,6 +82,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withCommands([
         InvalidateLegacyExportsCommand::class,
         RegenerateDemoExportsCommand::class,
+        DownloadCheckCommand::class,
         PdfFactsCommand::class,
         RenderAcceptanceExportCommand::class,
         ReportsHealthCommand::class,
