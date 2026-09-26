@@ -703,10 +703,25 @@ final class ProbeInsightsCommand extends Command
             return;
         }
 
+        /*
+         * The zone hands over the AD ACCOUNT as well as the ids, and both are needed.
+         *
+         * `GET /v1/creativeelements/{id}` answered 404 for four ids a zone had just named — so the ids
+         * were right and the address was wrong. Creative elements are account-scoped like every other
+         * creative object in this API, and the account to scope them to is stated right here in the
+         * zone body rather than assumed from context.
+         */
         $ids = [];
+        $adAccountId = '';
+
         foreach ($zones as $body) {
             foreach ((array) ($body['interaction_zones'] ?? []) as $wrapper) {
                 $zone = (array) (((array) $wrapper)['interaction_zone'] ?? []);
+
+                if ($adAccountId === '' && is_string($zone['ad_account_id'] ?? null)) {
+                    $adAccountId = (string) $zone['ad_account_id'];
+                }
+
                 foreach ((array) ($zone['creative_element_ids'] ?? []) as $id) {
                     if (is_string($id) && trim($id) !== '') {
                         $ids[] = $id;
@@ -721,7 +736,13 @@ final class ProbeInsightsCommand extends Command
             return;
         }
 
-        $elements = $connector->probeCreativeElements($ids);
+        if ($adAccountId === '') {
+            $this->line('      (the zones named elements but no ad account to scope them to)');
+
+            return;
+        }
+
+        $elements = $connector->probeCreativeElements($ids, $adAccountId);
 
         $this->line('');
         $this->line(sprintf(
