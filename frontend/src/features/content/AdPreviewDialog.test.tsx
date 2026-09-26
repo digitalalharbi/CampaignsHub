@@ -137,6 +137,46 @@ describe('the in-place ad preview', () => {
     expect(screen.queryByTestId('ad-preview-dialog-poster')).not.toBeInTheDocument()
   })
 
+  /**
+   * CONTENT-COLLECTION-TILES-001 — a COLLECTION whose hero is a film plays it here too.
+   *
+   * The reader used to resolve a collection to `image_url ?? thumbnail_url` and ignore its film, so
+   * opening one of these showed a stated absence on a panel that exists to show the ad. A Snapchat
+   * collection's top snap is usually a film, and 162 of 457 static collections in Production were in
+   * exactly this state.
+   *
+   * It reaches the player by the same route a `video` creative does — `readPreview` decides the
+   * shape and this dialog renders it — which is the point: no second branch was added here, so the
+   * panel cannot drift from the card.
+   */
+  it('plays the film of a collection whose hero is one', () => {
+    const { container } = renderWithProviders(
+      <AdPreviewDialog
+        creative={creative({
+          preview: preview({
+            kind: 'collection',
+            video_url: 'https://cdn.example/collection-hero.mp4',
+            image_url: null,
+            thumbnail_url: null,
+          }),
+        })}
+        locale="en"
+        onClose={() => {}}
+      />,
+    )
+
+    /*
+     * The PLAYER is mounted, which is the claim. Its `src` is deliberately absent until a gesture
+     * arms it — `CreativeVideoPlayer` does not attach a stream to an element nobody has asked to
+     * play — so asserting the url here would be asserting the opposite of the design.
+     */
+    expect(container.querySelector('video')).toBeInTheDocument()
+
+    // Never the absence panel: this surface exists to show the ad, and the ad has a hero.
+    expect(screen.queryByTestId('ad-preview-dialog-poster')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Collection, no hero|تشكيلة بلا غلاف/)).not.toBeInTheDocument()
+  })
+
   /** A carousel is paged, not reduced to whichever card came first. */
   it('pages a carousel instead of showing one card of it', () => {
     renderWithProviders(

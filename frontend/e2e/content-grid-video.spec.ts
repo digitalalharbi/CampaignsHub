@@ -27,7 +27,7 @@ import { API_HEADERS, AUTH, seededProject, selectProject } from './helpers'
  */
 const STORE_PROJECT = 'متجر تجريبي — Demo'
 
-type Row = { id: string; preview?: { video_url?: string | null; thumbnail_url?: string | null; image_url?: string | null } }
+type Row = { id: string; preview?: { kind?: string; video_url?: string | null; thumbnail_url?: string | null; image_url?: string | null } }
 
 /** The library the way the page asks for it — un-pinned, because a card carries no project id. */
 async function videoOnlyCreatives(request: APIRequestContext): Promise<Row[]> {
@@ -72,7 +72,19 @@ test.describe('the video previews on /app/content', () => {
      */
     test.skip(films.length === 0, 'the seed holds no film without a cover — the shape this tests cannot occur')
 
-    const poster = page.getByTestId('creative-video-poster').first()
+    /*
+     * PINNED TO ITS CARD, not `.first()`.
+     *
+     * The note below used to lean on «the seed holds exactly one coverless film», and that stopped
+     * being true the moment a coverless COLLECTION was seeded for the defect beneath this file. A
+     * selector whose correctness depends on the size of the fixture is the fifth lesson this suite
+     * has learned; the card carries `content-card-{id}` now, so it is asked for by name.
+     */
+    const film = films.find((r) => r.preview?.kind !== 'collection') ?? films[0]
+    const card = page.getByTestId(`content-card-${film?.id}`)
+    await card.scrollIntoViewIfNeeded()
+
+    const poster = card.getByTestId('creative-video-poster')
     await expect(poster, 'the grid mounted no video poster for a film with no cover').toBeVisible({ timeout: 30000 })
 
     /*
@@ -95,7 +107,7 @@ test.describe('the video previews on /app/content', () => {
     await expect
       .poll(
         async () => {
-          if ((await page.getByTestId('creative-video-poster').count()) === 0) return 'gave-up'
+          if ((await card.getByTestId('creative-video-poster').count()) === 0) return 'gave-up'
 
           return (await poster.getAttribute('data-painted')) === 'true' ? 'painted' : 'waiting'
         },
@@ -108,8 +120,8 @@ test.describe('the video previews on /app/content', () => {
      * a card that says «no cover» while still holding a blank player is the same rectangle with a
      * caption.
      */
-    if ((await page.getByTestId('creative-video-poster').count()) === 0) {
-      const absence = page.getByTestId('creative-absence-reason').first()
+    if ((await card.getByTestId('creative-video-poster').count()) === 0) {
+      const absence = card.getByTestId('creative-absence-reason').first()
 
       await expect(absence, 'the card gave up on the film and explained nothing').toBeVisible()
       await expect(absence).not.toHaveText(/^\s*$/)
@@ -182,5 +194,58 @@ test.describe('the video previews on /app/content', () => {
     expect(verdict.error, 'the browser could not decode the film').toBeNull()
     expect(verdict.width, 'the film decoded to no width').toBeGreaterThan(0)
     expect(verdict.height).toBeGreaterThan(0)
+  })
+})
+
+/**
+ * CONTENT-COLLECTION-TILES-001 — a COLLECTION whose hero is a film paints a frame too.
+ *
+ * The case above proves the drawing path for a `video` creative. This one proves a COLLECTION
+ * reaches it, which is the defect the owner reported: `readPreview` resolved a collection to
+ * `image_url ?? thumbnail_url` and never looked at its film, so 162 of 457 static collections in
+ * Production drew an empty frame under «Collection, no hero» — an ad that HAS a hero, being told it
+ * has none.
+ *
+ * Asserted on the card a person looks at, in a real browser, with an authenticated session: jsdom
+ * decodes no video, so «the element exists» was the only claim available and it was already true
+ * while the owner saw nothing.
+ *
+ * The same two acceptable answers as above: a browser that decodes the frame must show it, one that
+ * cannot must say so instead. A silent blank is the failure.
+ */
+test.describe('a collection whose hero is a film', () => {
+  test.use({ storageState: AUTH.owner })
+
+  test('paints a frame on the library card rather than claiming it has no hero', async ({ page, request }) => {
+    await openLibrary(page, request)
+
+    const films = await videoOnlyCreatives(request)
+    const collection = films.find((r) => r.preview?.kind === 'collection')
+
+    // Loud, never quiet: a seed without this shape would hide the very defect under test.
+    test.skip(
+      collection === undefined,
+      'the seed holds no collection with a film and no cover — the shape this tests cannot occur',
+    )
+
+    const card = page.getByTestId(`content-card-${collection?.id}`)
+    await card.scrollIntoViewIfNeeded()
+
+    const poster = card.getByTestId('creative-video-poster')
+    await expect(poster, 'the collection card mounted no video poster for its film').toBeVisible({ timeout: 30000 })
+
+    await expect
+      .poll(
+        async () => {
+          if ((await card.getByTestId('creative-video-poster').count()) === 0) return 'gave-up'
+
+          return (await poster.getAttribute('data-painted')) === 'true' ? 'painted' : 'waiting'
+        },
+        { timeout: 25000, message: 'the collection card neither painted a frame nor gave up and explained itself' },
+      )
+      .not.toBe('waiting')
+
+    // And it must never say the ad has no hero, which is the sentence this defect was made of.
+    await expect(card).not.toHaveText(/Collection, no hero|تشكيلة بلا غلاف/)
   })
 })

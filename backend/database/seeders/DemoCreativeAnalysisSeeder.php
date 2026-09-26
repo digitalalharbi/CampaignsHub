@@ -184,7 +184,18 @@ final class DemoCreativeAnalysisSeeder extends Seeder
                      * change the port, run a second lane, or open the app from any other origin and
                      * every demo video was dead. A path resolves against whoever serves the page.
                      */
-                    'video_url' => str_contains((string) $case['format'], 'video') ? self::SAMPLE_VIDEO : null,
+                    /*
+                     * `film` carries the video for a shape whose FORMAT does not say «video».
+                     *
+                     * A Snapchat collection's top snap is usually a film, and until the reader was
+                     * taught to draw one, 162 of 457 static collections in Production rendered a
+                     * blank frame. No fixture could reproduce that: the format test below is the only
+                     * way a row got a video_url, and no collection's format contains «video». So the
+                     * one shape the defect lived in was the one shape that could not be seeded.
+                     */
+                    'video_url' => str_contains((string) $case['format'], 'video') || ($case['film'] ?? false)
+                        ? self::SAMPLE_VIDEO
+                        : null,
                     'first_seen_at' => $today->copy()->subDays($case['age']),
                     'last_active_at' => $today->copy()->subDays($case['idle'] ?? 0),
                     'source_updated_at' => $today->copy()->subDay(),
@@ -293,6 +304,27 @@ final class DemoCreativeAnalysisSeeder extends Seeder
              * reason the carousel above is: a branch that has never rendered is a branch that has
              * never been checked.
              */
+            /*
+             * CONTENT-COLLECTION-TILES-001 — a collection whose hero is a FILM, which is the common
+             * Snapchat shape and the one that rendered blank.
+             *
+             * `no_cover` withholds the still and `film` keeps the video, exactly as the platform
+             * sends it. Without this row the library holds no video-only collection at all, and the
+             * branch that draws one — the card's fallback to a `<video>` that paints its first frame
+             * — can be asserted in jsdom and nowhere a browser can see it.
+             */
+            [
+                'key' => 'collection-film', 'name' => 'مجموعة الشتاء — فيديو بلا غلاف', 'format' => 'collection',
+                'objective' => 'sales', 'provider' => 'snapchat', 'tint' => '#25415f', 'age' => 17,
+                'width' => 1080, 'height' => 1920, 'aspect_ratio' => '9:16',
+                'headline' => 'تشكيلة الشتاء', 'cta' => 'SHOP_NOW',
+                'shape' => 'steady', 'video' => true, 'sales' => true,
+                'no_cover' => true, 'film' => true,
+                'cards' => [
+                    ['headline' => 'معطف صوفي', 'body' => 'ثلاثة ألوان.', 'cta' => 'SHOP_NOW', 'path' => '/wool-coat'],
+                    ['headline' => 'وشاح كشمير', 'body' => 'نسيج خفيف.', 'cta' => 'SHOP_NOW', 'path' => '/cashmere-scarf'],
+                ],
+            ],
             [
                 'key' => 'collection', 'name' => 'مجموعة الصيف — واجهة ومنتجات', 'format' => 'collection',
                 'objective' => 'sales', 'provider' => 'meta', 'tint' => '#1f5f4f', 'age' => 21,
