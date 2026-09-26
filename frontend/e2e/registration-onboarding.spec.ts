@@ -169,7 +169,36 @@ async function registerAndVerify(
     const url = r.url()
 
     if (url.includes('/auth/memberships')) {
-      membershipAnswers.push(`${r.request().method()} ${r.status()}`)
+      /*
+       * A 304 is recorded WITH the two facts that decide what it means — because without them the
+       * last one misled.
+       *
+       * AUTH-CACHE-NO-STORE-001 read a `GET 304` here as «the browser had STORED one user's
+       * membership list and revalidated against it», and shipped a global `no-store` on every
+       * `/api/*` answer. `ApiResponsesAreNotStoredTest` holds that header on this exact endpoint,
+       * on the 200 and on the 401. And a 304 was observed again afterwards, on webkit this time.
+       *
+       * So the original inference no longer follows, and «304» on its own cannot tell the next
+       * reader which of two different things happened: a browser that stored despite being told not
+       * to, or a 304 that never involved our cache headers at all. The request's own conditional
+       * headers answer the first — a revalidation MUST carry `if-none-match` or
+       * `if-modified-since`, so their absence rules a stored copy out — and the response's
+       * `cache-control` answers whether the rule even reached this call.
+       *
+       * Sync `headers()` rather than `allHeaders()`: this runs inside a response listener, and an
+       * await here loses the ordering that makes the sequence readable.
+       */
+      const sent = r.request().headers()
+      const conditional = ['if-none-match', 'if-modified-since']
+        .filter((h) => sent[h] !== undefined)
+        .join('+') || 'not-conditional'
+      const cacheControl = r.headers()['cache-control'] ?? 'no cache-control'
+
+      membershipAnswers.push(
+        r.status() === 304 || r.status() === 200
+          ? `${r.request().method()} ${r.status()} (${conditional}; answered «${cacheControl}»)`
+          : `${r.request().method()} ${r.status()}`,
+      )
     }
 
     if (! url.includes('/auth/login')) {
