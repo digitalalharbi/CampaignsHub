@@ -722,8 +722,48 @@ final class HierarchyCountsTest extends TestCase
 
         $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
             ->expectsOutputToContain('CREATIVE SHAPES')
-            ->expectsOutputToContain('collection            :     1   1 carry no asset link of any kind')
-            ->expectsOutputToContain('image                 :     1   all carry an asset link')
+            ->expectsOutputToContain('collection            :     1   hero 0 · card media only 0 · nothing to draw 1')
+            ->expectsOutputToContain('image                 :     1   hero 1 · card media only 0 · nothing to draw 0')
+            ->assertSuccessful();
+    }
+
+    /**
+     * CONTENT-COLLECTION-TILES-001 — a card list is not a cover, and the census said it was.
+     *
+     * `drawing_nothing` counted a row as fine when ANY of the four columns was set, and `cards` was one
+     * of them. That was true while nothing populated `cards`. The moment collection tiles began being
+     * ingested it became a different sentence: a collection whose cards carry NO media of their own —
+     * which is exactly what a dynamic collection legitimately has — started counting as «carries an
+     * asset link», and production duly reported «all 439 carry an asset link» over creatives that draw
+     * nothing on a card.
+     *
+     * That is the expensive direction for an instrument. The owner reported covers still missing and no
+     * diagnostic agreed with them, because this one had quietly started measuring something else.
+     *
+     * Three situations, and only the first two draw: a hero of its own; no hero but a card carrying real
+     * media, which `heroFromCards()` promotes; and nothing at all.
+     */
+    public function test_cards_with_no_media_are_not_counted_as_a_cover(): void
+    {
+        $campaign = $this->campaign('cmp-1');
+
+        // A dynamic collection's shape: tiles with copy and a destination, and no asset of their own.
+        $hollow = $this->creativeWith($campaign, 'cr-hollow', null);
+        $hollow->forceFill([
+            'format' => 'collection',
+            'cards' => [['index' => 0, 'headline' => 'Product', 'destination_url' => 'https://shop.example/p']],
+        ])->save();
+
+        // And one whose tile DOES carry media — the case `heroFromCards()` exists for.
+        $promotable = $this->creativeWith($campaign, 'cr-promotable', null);
+        $promotable->forceFill([
+            'format' => 'collection_dynamic',
+            'cards' => [['index' => 0, 'image_url' => 'https://cdn.example/tile.jpg']],
+        ])->save();
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('collection            :     1   hero 0 · card media only 0 · nothing to draw 1')
+            ->expectsOutputToContain('collection_dynamic    :     1   hero 0 · card media only 1 · nothing to draw 0')
             ->assertSuccessful();
     }
 
@@ -740,11 +780,11 @@ final class HierarchyCountsTest extends TestCase
         $this->creativeWith($campaign, 'cr-b', 'https://cdn.example/b.jpg');
 
         $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
-            ->expectsOutputToContain('image                 :     2   all carry an asset link')
+            ->expectsOutputToContain('image                 :     2   hero 2 · card media only 0 · nothing to draw 0')
             ->assertSuccessful();
 
         $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
-            ->doesntExpectOutputToContain('carry no asset link of any kind')
+            ->doesntExpectOutputToContain('nothing to draw 1')
             ->assertSuccessful();
     }
 
