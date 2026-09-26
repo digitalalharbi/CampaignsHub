@@ -171,7 +171,17 @@ final class ContentDefectCensusCommand extends Command
          * Counts and the platform's own format word. No ids, no names, no urls: the same bar as
          * every other line this command prints.
          *
-         * @var array<string, array{total: int, draws: int}> $inventory
+         * ## One example id per shape, because a count cannot be opened
+         *
+         * «439 collections and every one of them draws» is a number somebody still has to take on
+         * trust. The acceptance for CONTENT-COLLECTION-TILES-001 is a real Collection cover seen on
+         * `/app/content`, and that needs an ADDRESS — which of the 439 to open. So each shape carries
+         * the first id that draws and the first that does not, which is the smallest thing that turns
+         * this from a claim into somewhere to go.
+         *
+         * Ids only, which this command already prints for every defect it lists. No name, no url.
+         *
+         * @var array<string, array{total: int, draws: int, drew: ?string, blank: ?string}> $inventory
          */
         $inventory = [];
 
@@ -202,10 +212,13 @@ final class ContentDefectCensusCommand extends Command
                 || ($preview['thumbnail_url'] ?? null) !== null;
 
             $shape = (string) ($creative->format ?? 'none');
-            $inventory[$shape] ??= ['total' => 0, 'draws' => 0];
+            $inventory[$shape] ??= ['total' => 0, 'draws' => 0, 'drew' => null, 'blank' => null];
             $inventory[$shape]['total']++;
             if ($drawable) {
                 $inventory[$shape]['draws']++;
+                $inventory[$shape]['drew'] ??= $id;
+            } else {
+                $inventory[$shape]['blank'] ??= $id;
             }
 
             if (in_array($state, self::ABSENCE_STATES, true)) {
@@ -313,6 +326,13 @@ final class ContentDefectCensusCommand extends Command
                     // Named rather than left to arithmetic: «0» in a column of numbers is easy to read past,
                     // and «every one of these draws» is the sentence somebody is actually looking for.
                     $blank === 0 ? '   ← every one of these draws' : '',
+                ));
+
+                $this->line(sprintf(
+                    '      %-20s  open one that draws: %s%s',
+                    '',
+                    $counts['drew'] ?? '— none of them draws',
+                    $counts['blank'] === null ? '' : '   · one that does not: '.$counts['blank'],
                 ));
             }
         }
