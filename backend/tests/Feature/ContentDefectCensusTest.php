@@ -418,6 +418,36 @@ final class ContentDefectCensusTest extends TestCase
         );
     }
 
+    /**
+     * A count cannot be opened, so each shape carries an ADDRESS.
+     *
+     * The acceptance for CONTENT-COLLECTION-TILES-001 is a real Collection cover seen on
+     * `/app/content`. «439 of them draw» does not say which one to open, and a number nobody can
+     * check is the thing this census exists to stop producing.
+     */
+    public function test_each_shape_names_one_creative_to_open(): void
+    {
+        $drew = $this->creative(['format' => 'collection', 'asset_url' => 'https://cdn.test/hero.jpg']);
+        $blank = $this->creative(['format' => 'collection', 'cards' => [['headline' => 'Linen shirt']]]);
+
+        $inventory = $this->inventory();
+
+        $this->assertStringContainsString((string) $drew->getKey(), $inventory, 'no id was offered for a shape that draws');
+        $this->assertStringContainsString((string) $blank->getKey(), $inventory);
+        $this->assertStringContainsString('open one that draws:', $inventory);
+    }
+
+    /** A shape with nothing blank offers no second id, rather than an empty field. */
+    public function test_a_shape_with_nothing_blank_offers_only_the_one_that_draws(): void
+    {
+        $this->creative(['format' => 'video', 'video_url' => 'https://cdn.test/a.mp4']);
+
+        $inventory = $this->inventory();
+
+        $this->assertStringContainsString('open one that draws:', $inventory);
+        $this->assertStringNotContainsString('one that does not:', $inventory);
+    }
+
     /** «Every one of these draws» is the sentence somebody is looking for, so it is said rather than implied. */
     public function test_a_shape_with_nothing_blank_says_so_in_words(): void
     {
@@ -429,14 +459,22 @@ final class ContentDefectCensusTest extends TestCase
         $this->assertMatchesRegularExpression('/video\s+:\s+2\s+draws 2 · draws nothing 0\s+← every one of these draws/', $output);
     }
 
-    /** The inventory is counts and the platform's own word for the shape — never an id, a name or a url. */
-    public function test_the_inventory_names_no_creative(): void
+    /**
+     * The inventory carries counts, the platform's own word for the shape, and internal ids —
+     * never a NAME and never a URL.
+     *
+     * The id is deliberate and is the same bar the rest of this command already meets: every defect
+     * it lists is printed by internal id, because a log readable by everyone with repository access
+     * is not the same audience as the ad account. An id addresses a row in our own database; a
+     * creative's name is the client's copy and a url is a signed link to their asset.
+     */
+    public function test_the_inventory_carries_the_id_but_never_a_name_or_a_url(): void
     {
         $creative = $this->creative(['format' => 'collection', 'name' => 'Ramadan hero', 'asset_url' => 'https://cdn.test/x.jpg']);
 
         $inventory = $this->inventory();
 
-        $this->assertStringNotContainsString((string) $creative->getKey(), $inventory);
+        $this->assertStringContainsString((string) $creative->getKey(), $inventory);
         $this->assertStringNotContainsString('Ramadan hero', $inventory);
         $this->assertStringNotContainsString('cdn.test', $inventory);
     }
