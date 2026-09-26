@@ -38,6 +38,7 @@ use App\Domains\Reports\Console\DispatchScheduledReports;
 use App\Domains\Reports\Console\InvalidateLegacyExportsCommand;
 use App\Domains\Reports\Console\PdfFactsCommand;
 use App\Domains\Reports\Console\RegenerateDemoExportsCommand;
+use App\Domains\Reports\Console\RenderAcceptanceExportCommand;
 use App\Domains\Reports\Console\ReportsHealthCommand;
 use App\Domains\Requests\Console\EvaluateSla;
 use App\Domains\Requests\Console\PruneUploadSessions;
@@ -81,6 +82,7 @@ return Application::configure(basePath: dirname(__DIR__))
         InvalidateLegacyExportsCommand::class,
         RegenerateDemoExportsCommand::class,
         PdfFactsCommand::class,
+        RenderAcceptanceExportCommand::class,
         ReportsHealthCommand::class,
         DispatchScheduledReports::class,
         PruneUploadSessions::class,
