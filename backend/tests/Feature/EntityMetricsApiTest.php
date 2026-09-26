@@ -217,6 +217,119 @@ final class EntityMetricsApiTest extends TestCase
         $this->assertSame((string) $this->squad->getKey(), $row['ad_set_id'], 'Drill-down needs the parent on the row.');
     }
 
+    /**
+     * HIERARCHY-ENTITY-ANALYTICS-DRILLDOWN — isolation. The `parent` is supplied by the CALLER.
+     *
+     * Every other case here pins what the drill-down returns for a parent the reader owns. None
+     * pinned what it returns for one they do not, and that is the only parameter on this endpoint
+     * a reader can type: pasting another project's campaign id asks this project's table to list
+     * that campaign's ad sets. The project scope is what refuses it, and a scope nothing asserts is
+     * a scope somebody removes while chasing a «missing rows» bug.
+     *
+     * Same tenant deliberately — a different tenant is refused a rung earlier by the membership
+     * check, so it would prove the wrong guard. This is the case that reaches the query.
+     */
+    public function test_a_parent_from_another_project_lists_nothing_of_that_projects(): void
+    {
+        $neighbourProject = Project::create([
+            'tenant_id' => $this->tenant->getKey(),
+            'client_workspace_id' => $this->project->client_workspace_id,
+            'name' => 'Neighbour', 'status' => 'active',
+        ]);
+
+        $neighbourCampaign = ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'project_id' => $neighbourProject->getKey(),
+            'external_account_id' => $this->campaign->external_account_id,
+            'provider' => 'snapchat', 'external_id' => 'cmp-neighbour', 'name' => 'Neighbour', 'status' => 'active',
+        ]);
+
+        $neighbourSquad = ExternalAdSet::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'project_id' => $neighbourProject->getKey(),
+            'external_campaign_id' => $neighbourCampaign->getKey(), 'provider' => 'snapchat',
+            'external_id' => 'sq-neighbour', 'name' => 'Dammam · 25-44', 'status' => 'active',
+        ]);
+
+        // The neighbour's figures exist and are healthy; nothing about them is malformed. The only
+        // reason they must not appear is that they belong to a project this reader did not ask about.
+        (new EntityDailyMetric)->forceFill([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->getKey(),
+            'project_id' => $neighbourProject->getKey(),
+            'provider' => 'snapchat',
+            'entity_type' => EntityDailyMetric::AD_SET,
+            'entity_id' => $neighbourSquad->getKey(),
+            'external_entity_id' => 'sq-neighbour',
+            'external_campaign_id' => (string) $neighbourCampaign->getKey(),
+            'metric_date' => '2026-08-01',
+            'attribution_window' => 'default',
+            'is_demo' => false,
+            'impressions' => 9_999,
+        ])->save();
+
+        $this->metric($this->squad->getKey(), ['impressions' => 10], (string) $this->campaign->getKey());
+
+        $rows = $this->fetchLevel('ad_set', ['parent' => (string) $neighbourCampaign->getKey()]);
+
+        $names = array_column($rows, 'name');
+        $this->assertNotContains('Dammam · 25-44', $names, 'Another project\'s ad set reached this project\'s drill-down.');
+        $this->assertSame([], $rows, 'A parent this project does not own has no children here — not everything it does own.');
+    }
+
+    /**
+     * The breadcrumb's name has to come back after a REFRESH, and it used to come from memory.
+     *
+     * A three-browser reload proved the address survives and the NAME does not: the crumb read
+     * «مجموعة: 70589c4f-…» to an operator whose page exists to tell them which ad set they are in.
+     * The response names the parent now, so the page has something to render that a refresh cannot
+     * throw away.
+     */
+    public function test_the_response_names_the_parent_it_was_narrowed_by(): void
+    {
+        $ad = ExternalAd::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
+            'external_ad_set_id' => $this->squad->getKey(), 'external_campaign_id' => $this->campaign->getKey(),
+            'provider' => 'snapchat', 'external_id' => 'ad-1', 'name' => 'Swipe up', 'status' => 'active',
+        ]);
+
+        $this->metric($ad->getKey(), ['impressions' => 500], null, EntityDailyMetric::AD, (string) $this->squad->getKey(), 'ad-1');
+
+        $names = $this->actingAs($this->operator, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->project->getKey()}/metrics/entities/ad?from=2026-07-25&to=2026-08-10&parent={$this->squad->getKey()}")
+            ->assertOk()
+            ->json('data.parent_names');
+
+        $this->assertSame('Riyadh · 18-34', $names[(string) $this->squad->getKey()] ?? null);
+    }
+
+    /**
+     * And it must not name a parent belonging to somebody else.
+     *
+     * The ids reach this endpoint from the URL, so a reader can type one. The table already refuses
+     * to list another project's children — but a crumb naming that parent would disclose the name
+     * anyway, beside an empty table, which is the same leak wearing a label.
+     */
+    public function test_it_does_not_name_a_parent_from_another_project(): void
+    {
+        $neighbourProject = Project::create([
+            'tenant_id' => $this->tenant->getKey(),
+            'client_workspace_id' => $this->project->client_workspace_id,
+            'name' => 'Neighbour', 'status' => 'active',
+        ]);
+
+        $neighbourSquad = ExternalAdSet::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->getKey(), 'project_id' => $neighbourProject->getKey(),
+            'external_campaign_id' => $this->campaign->getKey(), 'provider' => 'snapchat',
+            'external_id' => 'sq-neighbour', 'name' => 'Dammam · 25-44', 'status' => 'active',
+        ]);
+
+        $names = $this->actingAs($this->operator, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->project->getKey()}/metrics/entities/ad?from=2026-07-25&to=2026-08-10&parent={$neighbourSquad->getKey()}")
+            ->assertOk()
+            ->json('data.parent_names');
+
+        $this->assertSame([], $names, "Another project's ad set was named in this project's breadcrumb.");
+    }
+
     /** An unknown level is refused — an empty list would read as «this level has no data». */
     public function test_an_unknown_level_is_refused_rather_than_answered_emptily(): void
     {

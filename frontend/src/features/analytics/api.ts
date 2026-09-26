@@ -687,6 +687,15 @@ export interface EntityPage {
   period: { from: string; to: string }
   currency: string | null
   attribution_window: string | null
+  /**
+   * The pinned parents, named by the server — so a RELOADED breadcrumb still knows what it is
+   * narrowed to. `NAMES` in `drilldown.ts` is a session map filled from clicked rows, and a refresh
+   * empties it: the address survived and the name did not, leaving the crumb showing a raw uuid.
+   *
+   * Still not in the URL, and still not part of any query: the id remains the linkable truth and the
+   * name remains a courtesy — this just gives the courtesy a source that outlives a reload.
+   */
+  parent_names?: Record<string, string>
 }
 
 /**
