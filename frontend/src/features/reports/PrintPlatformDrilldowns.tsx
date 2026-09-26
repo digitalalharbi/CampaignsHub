@@ -2,7 +2,7 @@ import { moneyExact } from '@/features/analytics/format'
 import { providerLabel } from '@/features/campaigns/labels'
 import { platformColor } from '@/features/analytics/components'
 import { canonicalPlatform } from '@/lib/platforms'
-import { absenceLabel, posterSource, readPreview, type PreviewReading } from '@/features/content/adPreview'
+import { clientAbsence, posterSource, readPreview, type PreviewReading } from '@/features/content/adPreview'
 import type { CreativePreview } from '@/features/content/api'
 import type { LiveObjectiveBlock, LivePlatformPayload, LiveShare } from './api'
 import type { ReportAd } from './ReportAdsSection'
@@ -61,11 +61,19 @@ function formatMetric(key: string, value: number | null | undefined, currency: s
  * ad itself and keep the library's own sentence.
  */
 export function printAbsence(reading: PreviewReading, ar: boolean): string {
-  if (reading.kind !== 'none') return absenceLabel(reading, ar)
-  if (reading.reason === 'withheld') return ar ? 'معاينة هذا المحتوى غير معروضة في هذا الرابط.' : 'This content’s preview is not shown on this link.'
-  if (reading.reason === 'expired') return ar ? 'معاينة هذا المحتوى غير متاحة حاليًا.' : 'This content’s preview is not available right now.'
-
-  return ar ? 'لا تتوفر معاينة لهذا المحتوى.' : 'No preview is available for this content.'
+  /*
+   * ONE rule, not a second copy of it.
+   *
+   * This was `clientAbsence` written out again — the same withheld, expired and default sentences,
+   * word for word, and the same delegation to `absenceLabel` above them. A rule kept in two places
+   * drifts, and this one had: `clientAbsence` grew an arm for a film with no cover frame and this
+   * copy did not, so a printed drilldown rendered its absence span EMPTY for exactly the ads the
+   * arm was written for — a blank rectangle with nothing beside it, on a page a client keeps.
+   *
+   * `clientAbsence` returns a short label as well; a drilldown row has space for the sentence, which
+   * is the half it takes.
+   */
+  return clientAbsence(reading, ar).sentence
 }
 
 function Trend({ points, color }: { points: Array<Record<string, unknown>>; color: string }) {
