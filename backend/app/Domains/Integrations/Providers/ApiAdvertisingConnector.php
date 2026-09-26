@@ -79,7 +79,7 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
      * removes a secret by name and by configured value and leaves everything else standing. A receipt
      * printed into a workflow log must never be the place a secret is read from.
      *
-     * @var list<array{url:string,status:int,request_id:?string,keys:list<string>}>
+     * @var list<array{url:string,status:int,request_id:?string,keys:list<string>,reason:?string}>
      */
     protected array $callLog = [];
 
@@ -475,6 +475,26 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
                 ? (string) $body['request_id']
                 : null,
             'keys' => array_map(strval(...), array_keys($body)),
+            /*
+             * The provider's OWN sentence, on a refusal — the field this receipt was missing.
+             *
+             * The docblock above says a refusal is the case a diagnosis most needs the receipt for,
+             * and then recorded everything about it except what the platform said. That cost two
+             * wrong guesses at one Snapchat route: the probe reported «none readable» over a 404 whose
+             * body carried `debug_message`, and the sentence that would have named the fault was
+             * thrown away with the exception.
+             *
+             * This API distinguishes a wrong ROUTE from a wrong BODY by that sentence and nothing
+             * else — «Request URL can not be correctly processed» against «Request BODY can not be
+             * correctly processed» — which is how `get_media_by_ids` was eventually got right.
+             *
+             * Only on a refusal, and through `forStorage()`, which is the same redaction a stored
+             * error goes through: a provider message is a provider's words, not a client's data, but
+             * it can still quote a url or a token and must not carry either.
+             */
+            'reason' => PlatformHttp::succeeded($response)
+                ? null
+                : ProviderErrorText::forStorage(PlatformHttp::reason($response)),
         ];
 
         if (! PlatformHttp::succeeded($response)) {
@@ -492,7 +512,7 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
      * Drained like the bodies and the row count, and for the same reason: one connector instance is
      * bound per sync, and a call carried into the next window would be attributed to it.
      *
-     * @return list<array{url:string,status:int,request_id:?string,keys:list<string>}>
+     * @return list<array{url:string,status:int,request_id:?string,keys:list<string>,reason:?string}>
      */
     public function takeCallLog(): array
     {

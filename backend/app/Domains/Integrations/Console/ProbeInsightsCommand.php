@@ -847,6 +847,18 @@ final class ProbeInsightsCommand extends Command
             // The response SHAPE, not its contents: the top-level keys say whether the platform
             // answered with a payload, an error envelope or an empty success.
             $this->line('      response keys: '.(implode(', ', $call['keys']) ?: '(none)'));
+
+            /*
+             * And on a refusal, WHAT IT SAID — the line that stops the next person guessing.
+             *
+             * Two Snapchat routes were guessed wrong for the creative-element read while this command
+             * printed `response keys: …, debug_message, …` and never the message itself. The keys said
+             * an error envelope had arrived; only the sentence says which half of the request was
+             * wrong, and this API tells route and body apart by that sentence alone.
+             */
+            if (($call['reason'] ?? null) !== null) {
+                $this->line('      it said: '.$call['reason']);
+            }
         }
     }
 
