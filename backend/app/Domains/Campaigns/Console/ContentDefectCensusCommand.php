@@ -212,33 +212,26 @@ final class ContentDefectCensusCommand extends Command
                 || ($preview['thumbnail_url'] ?? null) !== null;
 
             /*
-             * «Draws» has to mean what the SURFACE paints, and for a collection that is not the same
-             * set of columns as for everything else.
+             * «Draws» means what the SURFACE paints, and the surface changed — so this follows it.
              *
-             * `$drawable` above is «any of the three urls is set», which is the right question for
-             * the defect list below. It is the wrong question for the inventory, and Production said
-             * so within minutes of the first run: creative `01de7a4a` is a static COLLECTION whose
-             * only media is a VIDEO — `image: no  thumbnail: no  video: yes` — and the inventory
-             * counted it among «439 draw» while the one-creative walk reported
-             * `draws=stated absence` for the very same row.
+             * One commit ago this asked stills only for a collection, because `adPreview.ts` resolved
+             * a collection to `image_url ?? thumbnail_url` and ignored its film. That rule was right
+             * about the code as it stood, and it is what surfaced the defect: 162 of 457 static
+             * collections in Production counted as drawing nothing.
              *
-             * The walk is right. `adPreview.ts` reads a collection as
-             * `src: image_url ?? thumbnail_url`, and `posterSource()` paints that src — a collection's
-             * video_url is never drawn, because the frame a collection shows is its HERO still. So a
-             * count built on «any url» reports a cover where the reader sees none, which is this
-             * requirement's own failure mode in the instrument written to detect it.
+             * A collection carrying a film now resolves to a FILM, and the card falls back to a
+             * `<video>` that paints its first frame — the path `content-grid-video.spec.ts` already
+             * proves for films. So a collection with a video paints again, and the special case is
+             * gone rather than inverted: an instrument that kept it would now under-report exactly
+             * the ads this change repairs.
              *
-             * Every other kind keeps the wider rule: a video creative with only a `video_url` renders
-             * a player, which is something on the screen.
+             * Kept as one line with its history, because the next person to widen a preview reading
+             * has to know this count follows the reader and not the columns.
              */
-            $paints = $kind === 'collection'
-                ? (($preview['image_url'] ?? null) !== null || ($preview['thumbnail_url'] ?? null) !== null)
-                : $drawable;
-
             $shape = (string) ($creative->format ?? 'none');
             $inventory[$shape] ??= ['total' => 0, 'draws' => 0, 'drew' => null, 'blank' => null];
             $inventory[$shape]['total']++;
-            if ($paints) {
+            if ($drawable) {
                 $inventory[$shape]['draws']++;
                 $inventory[$shape]['drew'] ??= $id;
             } else {
