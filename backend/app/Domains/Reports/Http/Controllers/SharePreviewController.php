@@ -6,10 +6,12 @@ namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Services\ShareCardRenderer;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\ReportIdentity;
 use App\Http\Controllers\Controller;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
 
 /**
@@ -33,7 +35,10 @@ use Illuminate\Support\Carbon;
  */
 final class SharePreviewController extends Controller
 {
-    public function __construct(private readonly ShareService $shares) {}
+    public function __construct(
+        private readonly ShareService $shares,
+        private readonly ShareCardRenderer $cards,
+    ) {}
 
     public function show(string $token, SharedLinkBranding $branding): View
     {
@@ -76,7 +81,61 @@ final class SharePreviewController extends Controller
              */
             'siteName' => ReportIdentity::productName($locale),
             'url' => url("/r/{$token}"),
-            'image' => $identity['logo_url'],
+            /*
+             * SHARE-PREVIEW-CARD-001 — the DRAWN card, or no picture at all.
+             *
+             * This was `$identity['logo_url']`, and a mark is not a preview image. It is square or
+             * tall, often transparent, often a few hundred pixels — and the template below declared
+             * `summary_large_image` for it, which is the layout that crops hardest. A client's first
+             * sight of the product was a stretched logo or an empty rectangle.
+             *
+             * The route draws on demand and caches, so this stays a URL rather than a render: the
+             * crawler reads this document first and fetches the picture after, and holding the HTML
+             * open for a browser launch is how a crawler times out and shows nothing at all.
+             *
+             * `available()` rather than a drawn card, for the same reason. When the renderer is off
+             * there is no picture and the card below says `summary` — an ordinary card, which is
+             * better than a large one pointing at a dead URL.
+             */
+            'image' => $this->cards->available() ? url("/r/{$token}/preview.png") : null,
+        ]);
+    }
+
+    /**
+     * The preview card itself — a PNG, drawn once and then served from cache.
+     *
+     * Public and unauthenticated, exactly like the metadata above and under the same three rules: an
+     * invalid token is a 404 rather than a picture describing a report that may have been revoked,
+     * the card carries no figures, and its identity comes from the same resolver as the header the
+     * link opens.
+     *
+     * A card that cannot be drawn is a 404 rather than a placeholder. The crawler then renders the
+     * summary card it would have rendered anyway, and nobody is shown a picture of a report that
+     * failed to compose.
+     */
+    public function image(string $token): Response
+    {
+        $share = $this->shares->resolveActive($token);
+        abort_if($share === null, 404);
+
+        $report = Report::withoutGlobalScopes()->find($share->report_id);
+        abort_if($report === null, 404);
+
+        $png = $this->cards->png($share, $report);
+        abort_if($png === null, 404);
+
+        return response($png, 200, [
+            'Content-Type' => 'image/png',
+            /*
+             * PUBLIC, deliberately — the one response on this link that is.
+             *
+             * Everything else a share serves is `private`, because it carries the report. This
+             * carries an identity and a period and nothing else, and it is fetched by a crawler's
+             * cache and then by every recipient's client. Marking it private means each of them
+             * launches a browser on our server for a picture that is identical every time.
+             */
+            'Cache-Control' => 'public, max-age='.(int) config('reports.og.http_max_age', 86400),
+            'Content-Length' => (string) strlen($png),
         ]);
     }
 

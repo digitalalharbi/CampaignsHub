@@ -47,4 +47,45 @@ return [
         // is treated as stale and regenerated. Bump when the Chromium engine/pipeline changes.
         'renderer_version' => env('REPORTS_RENDERER_VERSION', 'chromium-1228'),
     ],
+
+    /*
+    |----------------------------------------------------------------------
+    | SHARE-PREVIEW-CARD-001 — the picture a pasted link renders as
+    |----------------------------------------------------------------------
+    | The same headless Chromium, pointed at a local 1200x630 document and
+    | asked for a PNG instead of a PDF. It needs a browser and nothing else:
+    | no app URL, no token, no network, because the card is composed from
+    | values the caller already resolved.
+    |
+    | There is no `enabled` switch of its own on purpose. The card can be
+    | drawn exactly when `chromium.enabled` is on and the binary is there,
+    | and a second switch would let an install be configured into the one
+    | state that is impossible to diagnose: a crawler pointed at an image
+    | route the server has decided not to answer.
+    */
+    'og' => [
+        'script' => base_path('scripts/og-card.mjs'),
+
+        // The frame WhatsApp, X, LinkedIn, Slack and Telegram all crop to.
+        'width' => 1200,
+        'height' => 630,
+
+        // Shorter than the PDF's. A crawler waits a few seconds and then shows
+        // the card without a picture, so a render that has not finished by then
+        // has already lost; holding the request open past that only delays the
+        // HTML the crawler is actually reading.
+        'timeout_ms' => (int) env('REPORTS_OG_TIMEOUT_MS', 20000),
+
+        // Where a drawn card is kept. A crawler fetches the image once per
+        // service and then again for every recipient who opens the message, so
+        // launching a browser per request would make a forwarded link a load
+        // test. Keyed by what the card DRAWS, so a rebrand supersedes it.
+        'cache_disk' => env('REPORTS_OG_CACHE_DISK', 'local'),
+        'cache_dir' => 'share-previews',
+
+        // How long a browser may serve the picture it already has. A day: the
+        // card carries an identity and a period, neither of which changes
+        // often, and a crawler's own cache is usually longer than ours anyway.
+        'http_max_age' => (int) env('REPORTS_OG_MAX_AGE', 86400),
+    ],
 ];
