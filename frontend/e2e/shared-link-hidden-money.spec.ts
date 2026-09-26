@@ -241,21 +241,51 @@ for (const [label, flags, money] of [
         }
       })
 
+      /*
+       * Everything this link is ENTITLED to show must be known before the page is accused of showing it.
+       *
+       * `noteInnocent` runs inside the response handler, asynchronously, and its promise goes into
+       * `pending` — which was awaited only after every view had already been hunted. So a page hunt
+       * could run while the response that establishes «revenue is not hidden here» was still being
+       * read, and the link's own legitimate revenue then matched a spelling of the hidden spend.
+       *
+       * It failed exactly that way on CI: webkit reported «a hidden spend figure reached a client»
+       * over a body reading `الإنفاق — —` (spend correctly withheld) and `الإيرادات 508K SAR` —
+       * revenue, under a key this link does not hide. Chromium and firefox passed the same run on the
+       * same data, and webkit passes locally: the accusation was a lost race, not a leak.
+       *
+       * Draining before each hunt is what makes the guard's two halves agree about WHEN they know
+       * something. It narrows nothing: every spelling still gets hunted in every surface, and a figure
+       * the link may not print is still a failure. What it removes is an accusation the evidence did
+       * not support — and a money guard that cries wolf is one somebody eventually overrides.
+       */
+      const settle = async () => {
+        // Twice, because draining can itself let a queued response arrive and enqueue another read.
+        for (let i = 0; i < 2; i++) {
+          const inFlight = [...pending]
+          if (inFlight.length === 0) return
+          await Promise.all(inFlight)
+        }
+      }
+
       const views = mode === 'live' ? ['', '?view=summary', '?view=platforms', '?view=content'] : ['']
       for (const view of views) {
         await client.goto(`/r/${token}${view}`)
         await expect(client.locator(mode === 'live' ? '[data-testid="live-report"]' : 'main, body').first()).toBeVisible({ timeout: 30_000 })
         await client.waitForLoadState('networkidle').catch(() => {})
+        await settle()
         hunt(`${mode} page ${view || 'default'}`, await client.locator('body').innerText())
         const tile = client.locator('[data-testid="live-content-tile"]').first()
         if (mode === 'live' && await tile.count()) {
           await tile.click()
           await client.waitForLoadState('networkidle').catch(() => {})
+          await settle()
           hunt(`${mode} content dialog ${view}`, await client.locator('body').innerText())
           await client.keyboard.press('Escape')
         }
       }
       if (mode === 'snapshot') {
+        await settle()
         for (let i = 0; i < 25; i++) {
           await client.keyboard.press('ArrowLeft').catch(() => {})
           hunt(`snapshot slide ${i}`, await client.locator('body').innerText())
