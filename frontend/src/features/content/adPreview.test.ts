@@ -76,7 +76,8 @@ describe('the silences, told apart', () => {
      * `unavailable` — «the platform exposed no file» — is the same false accusation `never_fetched`
      * exists to prevent, one shape over.
      */
-    ['shape_not_fetched' as const, 'does not fetch them yet'],
+    // CONTENT-COLLECTION-TILES-001 — the tiles ARE fetched now; this reason means one zone did not answer.
+    ['shape_not_fetched' as const, 'did not arrive in the last sync'],
   ])('%s says what happened', (state, expected) => {
     const reading = readPreview(preview({ state }), false)
 

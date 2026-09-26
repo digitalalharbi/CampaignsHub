@@ -101,17 +101,18 @@ describe('CreativeCarousel', () => {
   })
 
   /**
-   * AD-MEDIA-RECOVERY-001 — the same absence, and it is NOT the same sentence.
+   * AD-MEDIA-RECOVERY-001 / CONTENT-COLLECTION-TILES-001 — the same absence, and it is NOT the same sentence.
    *
    * A carousel with no breakdown is the platform's answer: it sent one asset and that is the ad. A
-   * COLLECTION with no tiles is ours: Snapchat exposes them, this product does not fetch them yet,
-   * and a collection ad by definition has products beneath its hero. Telling the reader «this
-   * platform sent no card breakdown — the asset above is all it exposes» is false twice over, and it
-   * sends an operator looking for a sync fault at Snapchat that does not exist.
+   * collection with no tiles is not — Snapchat exposes them, and a collection ad by definition has
+   * products beneath its hero. Telling the reader «this platform sent no card breakdown» is false
+   * twice over and sends an operator looking for a sync fault at Snapchat that does not exist.
    *
-   * `CreativePresenter` has said the true thing since the shape was added, but only for a collection
-   * that arrived with NO hero; one that has a hero reaches the ordinary «available» state and this
-   * component instead.
+   * The sentence used to continue «this product does not fetch them yet, so the gap is ours». That was
+   * true when it was written and is false now: the tiles ARE fetched — zone → `creative_element_ids`
+   * → `creative_elements` → media. So this arm no longer means «we never ask»; it means we asked and
+   * this ad's zone could not be read, which is the fact a reader needs. This test moved with it,
+   * because a guard pinning a sentence that has outlived its defect keeps the stale sentence alive.
    */
   it('says whose gap it is when a collection has no product tiles', async () => {
     renderWithProviders(
@@ -122,8 +123,11 @@ describe('CreativeCarousel', () => {
       { locale: 'en' },
     )
 
-    expect(await screen.findByText(/does expose the tiles/)).toBeInTheDocument()
-    expect(screen.getByText(/the gap is ours/)).toBeInTheDocument()
+    expect(await screen.findByText(/did not arrive in the last sync/)).toBeInTheDocument()
+    expect(screen.getByText(/interaction zone/)).toBeInTheDocument()
+
+    // And it no longer claims a gap the product has since closed.
+    expect(screen.queryByText(/does not fetch them yet/)).not.toBeInTheDocument()
 
     // The platform is not accused of a gap that is not its own.
     expect(screen.queryByText(/sent no card breakdown/)).not.toBeInTheDocument()
