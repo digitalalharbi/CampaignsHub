@@ -389,6 +389,70 @@ final class ContentDefectCensusTest extends TestCase
 
     // ── fixtures ─────────────────────────────────────────────────────────────────────────────────
 
+    /**
+     * CONTENT-COLLECTION-TILES-001 — the census can now state HEALTH, not only defects.
+     *
+     * Asked «does this account hold a static collection, and does it draw», a defect list can only
+     * answer «none of the broken ones is static» — which is a different sentence and is evidence of
+     * nothing. That gap cost three separate Production runs to work around.
+     *
+     * The inventory's judgement is the PRESENTER's envelope, which is the distinction that matters:
+     * the hierarchy command answers the same question in SQL, and a `cards` column full of tiles that
+     * carry no media reads there as «carries an asset link». Here a collection whose cards carry
+     * nothing counts as drawing nothing, because that is what a reader sees.
+     */
+    public function test_the_inventory_counts_what_draws_rather_than_what_has_a_column_set(): void
+    {
+        $this->creative(['format' => 'collection', 'asset_url' => 'https://cdn.test/hero.jpg']);
+        // The shape that lied in SQL: tiles fetched, none of them carrying a file.
+        $this->creative(['format' => 'collection', 'cards' => [['headline' => 'Linen shirt'], ['headline' => 'Abaya']]]);
+        // And one whose tile DOES carry a file, which the presenter promotes to the hero.
+        $this->creative(['format' => 'collection', 'cards' => [['image_url' => 'https://cdn.test/tile.jpg']]]);
+
+        $output = $this->census();
+
+        $this->assertMatchesRegularExpression(
+            '/collection\s+:\s+3\s+draws 2 · draws nothing 1/',
+            $output,
+            'a card list with no media in it was counted as drawing',
+        );
+    }
+
+    /** «Every one of these draws» is the sentence somebody is looking for, so it is said rather than implied. */
+    public function test_a_shape_with_nothing_blank_says_so_in_words(): void
+    {
+        $this->creative(['format' => 'video', 'video_url' => 'https://cdn.test/a.mp4']);
+        $this->creative(['format' => 'video', 'video_url' => 'https://cdn.test/b.mp4']);
+
+        $output = $this->census();
+
+        $this->assertMatchesRegularExpression('/video\s+:\s+2\s+draws 2 · draws nothing 0\s+← every one of these draws/', $output);
+    }
+
+    /** The inventory is counts and the platform's own word for the shape — never an id, a name or a url. */
+    public function test_the_inventory_names_no_creative(): void
+    {
+        $creative = $this->creative(['format' => 'collection', 'name' => 'Ramadan hero', 'asset_url' => 'https://cdn.test/x.jpg']);
+
+        $inventory = $this->inventory();
+
+        $this->assertStringNotContainsString((string) $creative->getKey(), $inventory);
+        $this->assertStringNotContainsString('Ramadan hero', $inventory);
+        $this->assertStringNotContainsString('cdn.test', $inventory);
+    }
+
+    /** The inventory block, up to the first defect category. */
+    private function inventory(?string $output = null): string
+    {
+        $output ??= $this->census();
+
+        if (preg_match('/LIBRARY INVENTORY.*?(?=^[A-E] — |\z)/ms', $output, $m) !== 1) {
+            $this->fail("The census printed no inventory:\n".$output);
+        }
+
+        return $m[0];
+    }
+
     private function census(): string
     {
         Artisan::call('content:census', ['--project' => (string) $this->project->getKey()]);
