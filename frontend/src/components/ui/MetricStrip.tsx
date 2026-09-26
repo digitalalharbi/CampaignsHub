@@ -1,6 +1,7 @@
 import { useId, useState, type ReactNode } from 'react'
+import { Delta } from '@/components/ui/Delta'
 import { Area, AreaChart, ResponsiveContainer } from 'recharts'
-import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Info, Minus } from 'lucide-react'
+import { ChevronDown, ChevronUp, Info } from 'lucide-react'
 import { QueryFailure } from './QueryFailure'
 import { TOUCH_CONTROL, TOUCH_TARGET } from './touch'
 import { Num } from './Num'
@@ -145,39 +146,6 @@ export function InfoHint({ text, label }: { text: string; label: string }) {
           {text}
         </span>
       )}
-    </span>
-  )
-}
-
-function Delta({
-  delta,
-  invertGood,
-  neutral,
-  ar,
-}: {
-  delta: number
-  invertGood?: boolean
-  neutral?: boolean
-  ar: boolean
-}) {
-  const flat = Math.abs(delta) < 0.0005
-  const up = delta > 0
-  const good = flat || neutral ? null : invertGood ? !up : up
-  const Icon = flat ? Minus : up ? ArrowUpRight : ArrowDownRight
-  const tone = good === null
-    ? 'text-text-muted bg-surface-secondary'
-    : good
-      ? 'text-success bg-[var(--positive-background)]'
-      : 'text-danger bg-[var(--negative-background)]'
-
-  return (
-    <span
-      dir="ltr"
-      className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-semibold ${tone}`}
-      aria-label={`${ar ? 'التغير' : 'Change'} ${(delta * 100).toFixed(0)}%`}
-    >
-      <Icon size={13} aria-hidden />
-      {`${Math.abs(delta * 100).toFixed(0)}%`}
     </span>
   )
 }
@@ -346,8 +314,22 @@ export function MetricCard({ item, ar, labelControl }: { item: MetricItem; ar: b
         A delta only where there is a figure to compare. «+12%» beside «Not provided» would be a
         comparison of two absences, printed as a change.
       */}
+      {/*
+        UX-DELTA-PRESENTATION-001 — the shared movement, not a private copy.
+
+        This file held the fifth implementation of «is this good news», and the only one whose pill
+        treatment was worth keeping — so the canonical component adopted the pill and this delegates to
+        it. The direction still comes from the item where the item states it, because a strip is
+        assembled from keys the catalogue does not always carry; where the item says nothing, the
+        catalogue answers, which is one fewer thing a caller can get wrong.
+      */}
       {!missing && item.delta !== null && item.delta !== undefined && (
-        <Delta delta={item.delta} invertGood={item.invertGood} neutral={item.neutral} ar={ar} />
+        <Delta
+          metric={item.key}
+          change={item.delta}
+          direction={{ invertGood: item.invertGood, neutral: item.neutral }}
+          ar={ar}
+        />
       )}
       </div>
 
