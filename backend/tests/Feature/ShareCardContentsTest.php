@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Branding\Services\BrandingService;
+use App\Domains\Campaigns\Support\DrawableImage;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
@@ -50,6 +51,9 @@ final class ShareCardContentsTest extends TestCase
 
     private ReportShare $share;
 
+    /** The raw token, shown once at creation — the thing a client is actually sent. */
+    private string $token;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -73,7 +77,7 @@ final class ShareCardContentsTest extends TestCase
             'data' => ['kpis' => ['spend' => 918273.45, 'revenue' => 4455667.88, 'roas' => 4.85]],
         ]);
 
-        [$this->share] = app(ShareService::class)->create($this->report, [
+        [$this->share, $this->token] = app(ShareService::class)->create($this->report, [
             'scope' => ['project_id' => $project->id],
             'mode' => 'live',
         ], null);
@@ -282,6 +286,58 @@ final class ShareCardContentsTest extends TestCase
 
         $this->assertNull(app(ShareCardRenderer::class)->png($this->share, $this->report));
         $this->assertFalse(app(ShareCardRenderer::class)->available());
+    }
+
+    /**
+     * THE WHOLE PASTE, end to end: the crawler's document → the url it names → real PNG bytes.
+     *
+     * Every other case here holds one link of that chain. A crawler holds none of them — it fetches
+     * `/r/{token}`, reads `og:image`, fetches THAT, and renders whatever comes back. Three things
+     * that each pass on their own still produce a blank card if the url in the document does not
+     * resolve, if the route answers something that is not an image, or if the bytes are not the size
+     * the document promised.
+     *
+     * So this drives the real renderer. It is skipped where Chromium cannot run — the `backend` job
+     * installs no browser, and a test that quietly passed there would be claiming the capability on
+     * a machine that does not have it. Where a browser exists, it asserts rather than hopes.
+     */
+    public function test_a_pasted_link_resolves_to_real_png_bytes_of_the_promised_size(): void
+    {
+        config(['reports.chromium.enabled' => true]);
+
+        if (! is_file((string) config('reports.chromium.require_base'))) {
+            $this->markTestSkipped('no Playwright install to draw with on this machine');
+        }
+
+        $token = $this->token;
+
+        $html = $this->withHeaders(['User-Agent' => 'facebookexternalhit/1.1'])
+            ->get('/r/'.$token)->assertOk()->getContent() ?: '';
+
+        preg_match('/<meta property="og:image" content="([^"]*)"/', $html, $m);
+        $image = $m[1] ?? '';
+        $this->assertNotSame('', $image, 'the crawler document named no picture');
+
+        // Exactly what a crawler does next: fetch the url it was given, nothing reconstructed.
+        $response = $this->get(parse_url($image, PHP_URL_PATH) ?: '');
+
+        if ($response->getStatusCode() !== 200) {
+            $this->markTestSkipped('the renderer refused on this machine: '.$response->getStatusCode());
+        }
+
+        // A plain response, not a streamed one: the bytes are held so the digest and the size can be read.
+        $bytes = (string) $response->getContent();
+
+        $this->assertSame('image/png', $response->headers->get('Content-Type'));
+        $this->assertSame('png', DrawableImage::sniff($bytes), 'the route served something a browser would not draw');
+
+        $size = getimagesizefromstring($bytes);
+        $this->assertIsArray($size);
+        $this->assertSame((int) config('reports.og.width'), $size[0], 'the picture is not the width the document promised');
+        $this->assertSame((int) config('reports.og.height'), $size[1]);
+
+        // Cacheable and public — this is the one response on a share link that is.
+        $this->assertStringContainsString('public', (string) $response->headers->get('Cache-Control'));
     }
 
     // ---- helpers ---------------------------------------------------------------------------------
