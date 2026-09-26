@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Delta } from '@/components/ui/Delta'
 import { useUi } from '@/stores/ui'
 import { CARD_GAP, CARD_PAD, METRIC_HINT, METRIC_LABEL, METRIC_VALUE_DENSE } from '@/styles/scale'
 
@@ -73,6 +74,7 @@ export function StatCard({
   tone = 'neutral',
   dot = false,
   trailing,
+  delta,
   spark,
   shape = 'auto',
   testid,
@@ -98,8 +100,20 @@ export function StatCard({
   tone?: StatTone
   /** The coloured dot some surfaces use to carry the tone next to the label. */
   dot?: boolean
-  /** A delta pill, a link, an icon — whatever the surface puts beside the label. */
+  /** A link, an icon — whatever the surface puts beside the label. For a movement, use `delta`. */
   trailing?: ReactNode
+  /**
+   * The figure's movement — UX-DELTA-PRESENTATION-001.
+   *
+   * A metric key and two numbers, NOT a rendered pill. `trailing` accepted anything, which is how
+   * four surfaces ended up with four opinions about whether a rising CPA is green. Passing the key
+   * hands that decision to the catalogue — `invertGood` for every cost-per, `neutral` where neither
+   * direction is news — so a caller cannot hold a different one, because it is never asked.
+   *
+   * Nothing is drawn without a measured baseline: an arrow from an absent or zero previous value
+   * claims a change nobody measured.
+   */
+  delta?: { metric: string; current: number | null | undefined; previous: number | null | undefined; since?: string }
   /**
    * A sparkline, drawn by the surface that has the series.
    *
@@ -156,7 +170,17 @@ export function StatCard({
           {dot && <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[tone]}`} aria-hidden />}
           {label}
         </span>
-        {trailing}
+        {delta ? (
+          <Delta
+            metric={delta.metric}
+            current={delta.current}
+            previous={delta.previous}
+            since={delta.since}
+            testid={testid ? `${testid}-delta` : undefined}
+          />
+        ) : (
+          trailing
+        )}
       </div>
 
       <span
