@@ -316,10 +316,36 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
    * had already saved into. The default view is applied once on arrival, exactly as before.
    */
   const savedViews = useSavedViews()
+  /*
+   * ONE write, and `filterUrlState` documents why in its own words:
+   *
+   *   «Two `useUrlState` setters called in the same handler do not compose: each functional update is
+   *   applied against the params of the render it was created in, so the second silently drops the
+   *   first's change.»
+   *
+   * This called THREE. So applying a saved view landed whichever setter ran last and quietly discarded
+   * the other two — a reader's default view restored one of its three filters — and the write it did
+   * land was built from the params of an earlier render, so anything the reader had changed in between
+   * was reverted with it.
+   *
+   * That is what made the ads-table gate intermittent. The saved views request resolves asynchronously;
+   * when it arrived AFTER a click on a tab, this handler rewrote the query string without the tab and
+   * the tab snapped back to its default — `aria-selected` stayed `false` while the click had certainly
+   * landed. A reader meets the same thing as «the page keeps losing my tab», and only on a slow
+   * connection, which is exactly when it is hardest to report.
+   *
+   * `useUrlWriter` exists for this and says so; this was the caller that needed it and did not use it.
+   */
+  const writeFilters = useUrlWriter()
   const applyView = (v: SavedView) => {
-    if (v.filters?.objective) setObjective(v.filters.objective as CanonicalObjectiveKey | 'all')
-    if (v.filters?.provider) setProviders(v.filters.provider)
-    if (v.date_range?.days) setDays(v.date_range.days)
+    const next: Record<string, { value: string; fallback: string }> = {}
+
+    if (v.filters?.objective) next.objective = { value: String(v.filters.objective), fallback: 'all' }
+    // A list is comma-joined, and empty means «every» by saying nothing — `useUrlList`'s own rule.
+    if (v.filters?.provider) next.provider = { value: v.filters.provider.join(','), fallback: '' }
+    if (v.date_range?.days) next.days = { value: String(v.date_range.days), fallback: '30' }
+
+    if (Object.keys(next).length > 0) writeFilters(next)
   }
   const appliedDefault = useRef(false)
   useEffect(() => {
