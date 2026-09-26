@@ -240,9 +240,17 @@ export function absenceLabel(reading: PreviewReading, ar: boolean): string {
      * No «coming soon»: a status line that promises a date ages into a lie, and this one is true
      * whatever happens next.
      */
+    /*
+     * CONTENT-COLLECTION-TILES-001 — the claim this sentence used to make is no longer true.
+     *
+     * It said «the platform exposes the tiles; this product does not fetch them yet». That was honest
+     * when written and is not now: the tiles are read through the ad's interaction zone. So this
+     * reason no longer means «we never ask» — it means we asked and this ad's zone did not answer,
+     * which is what tells an operator to re-sync rather than to wait for a feature.
+     */
     shape_not_fetched: [
-      'إعلان تشكيلة: صورة رئيسية فوق شبكة منتجات. المنصة تتيح البطاقات ولم يطلبها النظام بعد.',
-      'A collection ad — a hero over a grid of product tiles. The platform exposes the tiles; this product does not fetch them yet.',
+      'إعلان تشكيلة: لم تصل بطاقاته في آخر مزامنة — تُقرأ من منطقة التفاعل، وهذه لم تُقرأ.',
+      'A collection ad — its tiles did not arrive in the last sync. They are read through the ad’s interaction zone, and this one did not answer.',
     ],
     no_media: ['لم تُرسل المنصة ملفًا لهذا الإعلان.', 'The platform sent no file for this ad.'],
   }
@@ -257,8 +265,8 @@ export function absenceLabel(reading: PreviewReading, ar: boolean): string {
  *
  * ## Why a second label rather than a shorter one
  *
- * `absenceLabel` is right, and it is a SENTENCE — «A collection ad — the platform exposes the tiles;
- * this product does not fetch them yet.» In a 128-pixel poster box that sentence is eight lines of
+ * `absenceLabel` is right, and it is a SENTENCE — «A collection ad — its tiles did not arrive in the
+ * last sync.» In a 128-pixel poster box that sentence is eight lines of
  * 11px grey text where a picture belongs, repeated down a grid of twenty-four cards. The owner's
  * word for it was a «large explanatory paragraph occupying the creative image area», and they are
  * right that it reads worse than the absence it describes.
