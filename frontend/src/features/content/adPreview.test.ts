@@ -360,6 +360,42 @@ describe('a dynamic collection is composed per product, not missing a hero', () 
     expect(absenceLabel(readPreview(dynamic, true), true)).toContain('لكل منتج')
   })
 
+  /**
+   * CONTENT-COLLECTION-TILES-001 — a collection whose hero is a FILM draws the film.
+   *
+   * This module resolved a collection to `image_url ?? thumbnail_url` and never looked at
+   * `video_url`, so a collection whose top snap is a video — most of them on Snapchat — read as
+   * `src: null` and drew an empty frame under «Collection, no hero». The ad has a hero; nobody was
+   * drawing it.
+   *
+   * Measured on the live estate, not argued: of 457 static collections, 162 drew nothing, every one
+   * carrying a video and no still. None of them reached the defect census either, because that asks
+   * «is any url set» — the right question for a sync fault and the wrong one for a reader.
+   */
+  it('draws the film when a collection has one and no still', () => {
+    const film = { ...dynamic, image_url: null, thumbnail_url: null, video_url: 'https://cdn.test/hero.mp4' } as unknown as CreativePreview
+    const reading = readPreview(film, false)
+
+    expect(reading.kind).toBe('video')
+    expect(reading.kind === 'video' && reading.src).toBe('https://cdn.test/hero.mp4')
+    /*
+     * «Video, no cover» rather than «Collection, no hero», and the difference is the whole point:
+     * the first says there is a film to play and no poster frame for it, the second says the ad has
+     * nothing. One is a note about the frame; the other was a false statement about the ad.
+     */
+    expect(absenceShort(reading, false)).toBe('Video, no cover')
+    expect(posterSource(reading)).toBeNull()
+  })
+
+  /** A still still wins: the hero frame is what a collection shows when it has one. */
+  it('prefers the still over the film where both exist', () => {
+    const both = { ...dynamic, image_url: 'https://cdn.test/hero.jpg', video_url: 'https://cdn.test/hero.mp4' } as unknown as CreativePreview
+    const reading = readPreview(both, false)
+
+    expect(reading.kind).toBe('collection')
+    expect(posterSource(reading)).toBe('https://cdn.test/hero.jpg')
+  })
+
   it('has a short label that says it is composed rather than absent', () => {
     expect(absenceShort(readPreview(dynamic, false), false)).toBe('Composed per product')
   })

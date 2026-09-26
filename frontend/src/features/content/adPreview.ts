@@ -122,7 +122,34 @@ export function readPreview(preview: CreativePreview | null | undefined, ar: boo
   }
 
   if (preview.kind === 'collection') {
-    return { kind: 'collection', src: preview.image_url ?? preview.thumbnail_url ?? null, note: note(preview) }
+    const still = preview.image_url ?? preview.thumbnail_url ?? null
+
+    /*
+     * A COLLECTION'S HERO MAY BE A FILM, and this module used to assume it never was.
+     *
+     * The reading below resolves a collection to `image_url ?? thumbnail_url` and never looks at
+     * `video_url`, so a collection whose top snap is a video — which is most of them on Snapchat —
+     * resolved to `src: null` and drew an empty frame under «تشكيلة بلا غلاف / Collection, no hero».
+     * The ad has a hero. Nobody was drawing it.
+     *
+     * Measured on the live estate rather than argued: of 457 static collections, **162 drew
+     * nothing**, every one of them carrying a `video_url` and no still. They never reached the
+     * defect census either, because that asks «is any url set» — which is the right question for a
+     * sync fault and the wrong one for a reader, and is why this sat unseen behind a count that
+     * said the library was healthy.
+     *
+     * A film reading rather than a still, for the same reason `video` gets one: the player draws it,
+     * and a poster is only the frame shown before it does. The SHAPE is not lost — `CreativesPage`
+     * and `CreativeCarousel` both badge from `preview.kind` on the envelope, not from this reading,
+     * which is the separation this module's own video branch already relies on.
+     */
+    if (still === null && preview.video_url) {
+      // `note: null` like every other film: a hero that DRAWS has no absence to explain, and the
+      // video reading's type says so.
+      return { kind: 'video', src: preview.video_url, poster: null, note: null }
+    }
+
+    return { kind: 'collection', src: still, note: note(preview) }
   }
 
   if (preview.kind === 'video' && preview.video_url) {
