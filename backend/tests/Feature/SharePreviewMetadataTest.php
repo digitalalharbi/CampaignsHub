@@ -8,6 +8,7 @@ use App\Domains\Branding\Services\BrandingService;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Services\ShareCardRenderer;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -344,8 +345,21 @@ final class SharePreviewMetadataTest extends TestCase
     {
         config(['reports.chromium.enabled' => true]);
 
-        if (! is_file((string) config('reports.chromium.require_base'))) {
-            $this->markTestSkipped('no Playwright install to draw a card with on this machine');
+        /*
+         * ASK THE RENDERER, not the filesystem.
+         *
+         * A first cut looked for `require_base` — the frontend's package.json — and that file is in
+         * every checkout, including the `backend` CI job, which installs no browser. So it answered
+         * «yes» where nothing could draw, and the card cases failed there instead of skipping.
+         *
+         * Drawing one card is the only honest question, and it is cheap after the first: the answer
+         * is cached, so the case that follows serves it from disk rather than launching Chromium
+         * again.
+         */
+        $share = app(ShareService::class)->resolveActive($this->token);
+
+        if ($share === null || app(ShareCardRenderer::class)->png($share, $this->report) === null) {
+            $this->markTestSkipped('this machine cannot draw a card — no browser, or the renderer refused');
         }
     }
 
