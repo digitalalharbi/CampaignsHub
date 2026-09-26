@@ -76,3 +76,12 @@ jobs:
             # byte sizes, font names and codepoint-RANGE counts. It cannot emit a report's name, its
             # stored path, its token, or a figure from inside it, and its tests assert each of those.
             $COMPOSE exec -T backend php artisan reports:pdf-facts --allow-real
+
+            echo "== 4/4  and what a client's browser would actually receive"
+            #
+            # Measuring the stored file proves what the renderer WROTE, not what the route SERVES.
+            # Between them sit a token lookup, an expiry check, the staleness rule that 409s a
+            # renderer-version mismatch, a disk read, and a Content-Disposition filename that has to
+            # survive a mail server and an operating system. Every one has been wrong at least once
+            # here, and reading the blob exercises none of them.
+            $COMPOSE exec -T backend php artisan reports:download-check
