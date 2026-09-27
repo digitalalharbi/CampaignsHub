@@ -211,7 +211,14 @@ final class MessagingService
             'source' => 'messaging',
             'entity_type' => 'message_thread',
             'entity_id' => (string) $thread->getKey(),
-            'action_url' => '/app/messages/'.$thread->getKey(),
+            /*
+             * The client's command centre, where its «المحادثات» tab lives.
+             *
+             * This notification goes to the agency TEAM, and no agency-side `/messages` surface
+             * exists — `/portal/messages` is the client's own. The old target could not be reached
+             * by anyone who received this.
+             */
+            'action_url' => '/clients/'.$thread->client_workspace_id,
         ]);
     }
 

@@ -195,7 +195,11 @@ final class RequestJourneyTest extends TestCase
             'type' => 'request.journey.proposal_sent',
             'entity_type' => 'external_request',
             'entity_id' => $req->id,
-            'action_url' => "/app/requests/{$req->id}/journey/proposal_sent",
+            /*
+             * The request, not a `/journey/{stage}` path: that route has never existed in the
+             * router, so this assertion used to hold the 404 in place. The stage is in the title.
+             */
+            'action_url' => "/requests/{$req->id}",
         ]);
 
         // A non-notifiable transition (submitted) must NOT have produced its own notification.
