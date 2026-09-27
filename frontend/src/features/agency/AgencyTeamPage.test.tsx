@@ -143,4 +143,38 @@ describe('AgencyTeamPage', () => {
     expect(screen.queryByText('Add a client')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Remove Alpha')).not.toBeInTheDocument()
   })
+
+  /**
+   * The role reads as a name, not as the column's value.
+   *
+   * The chip printed `member.role` raw, so an otherwise Arabic page showed «member» beside
+   * «account_manager» — identifiers among sentences. A lookup against the `roles` table would not
+   * have helped: a membership stores `account_manager` while the Access role carrying that meaning
+   * is slugged `account-manager`, so the two never meet.
+   */
+  it('names the membership role instead of printing its slug', async () => {
+    vi.mocked(fetchAgencyTeam).mockResolvedValue(team({
+      members: [
+        member({ id: 'mem-1', role: 'member' }),
+        member({ id: 'mem-2', role: 'account_manager', user: { id: 'u2', name: 'Noor', email: 'noor@agency.dev' } }),
+      ],
+    }))
+
+    renderWithProviders(<AgencyTeamPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('team-member-role-mem-1')).toHaveTextContent('Member')
+    expect(screen.getByTestId('team-member-role-mem-2')).toHaveTextContent('Account manager')
+    expect(screen.queryByText('account_manager')).not.toBeInTheDocument()
+  })
+
+  /** A role the product does not know shows as itself — worth seeing, not worth hiding. */
+  it('shows an unrecognised role as itself', async () => {
+    vi.mocked(fetchAgencyTeam).mockResolvedValue(team({
+      members: [member({ id: 'mem-9', role: 'auditor' })],
+    }))
+
+    renderWithProviders(<AgencyTeamPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('team-member-role-mem-9')).toHaveTextContent('auditor')
+  })
 })
