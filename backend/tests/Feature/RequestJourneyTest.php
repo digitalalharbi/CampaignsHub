@@ -199,7 +199,7 @@ final class RequestJourneyTest extends TestCase
              * The request, not a `/journey/{stage}` path: that route has never existed in the
              * router, so this assertion used to hold the 404 in place. The stage is in the title.
              */
-            'action_url' => "/requests/{$req->id}",
+            'action_url' => "/agency/requests/{$req->id}",
         ]);
 
         // A non-notifiable transition (submitted) must NOT have produced its own notification.
