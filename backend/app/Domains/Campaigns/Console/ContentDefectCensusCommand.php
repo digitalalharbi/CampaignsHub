@@ -356,8 +356,22 @@ final class ContentDefectCensusCommand extends Command
                 $this->line('    the lookup failed ('.class_basename($e).' '.$e->getCode().') — no evidence read');
             }
 
-            if ($evidence === [] && $zeroOriginal === []) {
-                $this->line('    none to read');
+            /*
+             * «none to read» had two readings, and Production hit the one nobody wanted (run
+             * 35478164776): C was EMPTY, and the line read as «the bodies could not explain C».
+             *
+             * «Nothing to explain» and «we cannot tell» are different answers, and the second is the
+             * one a decision about releasing a refused zero as a reported 0 would rest on. So the line
+             * says which silence it is, counted from what the census itself just listed.
+             */
+            if ($evidence === []) {
+                $inC = array_sum(array_map('count', $findings['C']));
+
+                $this->line('    '.match (true) {
+                    $inC === 0 => 'no creative is in C for this window — nothing to explain',
+                    default => 'C holds '.$inC.' creative(s), none of them refused as a zero original — '
+                        .'their spend is absent for the reason each row states above, which these bodies cannot add to',
+                });
             }
 
             foreach ($evidence as $creativeId => $line) {
