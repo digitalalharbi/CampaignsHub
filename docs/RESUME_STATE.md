@@ -21,6 +21,51 @@ hero heading's own weight. `mergeStateStatus=BLOCKED`; `frontend` and `image` gr
 the three `gate` checks not reported. It belongs to the Marketing lane and **must not be absorbed
 into the Content or Reports closure branches.**
 
+## 2026-09-27 — the queue drained, and what it cost to drain it
+
+**Merged and deployed:** #558 (the builder asks which MODE a report is and states the sections its
+audience implies), #562 (the digests lane — subscribe to the monthly, choose the weekly and monthly
+day, name every message), #563 (demo request priority, a task row saying its status once), #565
+(Analytics says why it is empty, the team page names its roles). #565's first deploy failed on
+`dial tcp ***:***: i/o timeout` — the VPS SSH, not the build — and succeeded on re-run.
+
+**Two failures root-caused rather than retried.**
+
+`#563` failed on webkit only. The three tests after the failing one make the SAME assertion through
+the same helper and passed in the same run, which is what said the product renders and the helper
+was unreliable. Measured by watching the DOM after filling the first date: the scope picker unmounts
+and remounts — `from=GONE to=GONE`, then both back — so a fill landing in that window is typed into
+a field about to be torn down. The fix retries the ACTION; waiting longer cannot help because the
+keystrokes are already gone.
+
+`#565` failed on firefox, in the company-registration case. It does not reproduce: 12 consecutive
+local firefox runs on main pass. The signature is a session that answered `/auth/memberships` 200
+and then 401 — a session lost, not a credential rejected — and `fetchCurrentUser`'s own docblock
+already records a browser-dependent auth race in this area («Chromium happened to win the race and
+hid it»). Sessions are Redis-backed, which does not lock. Not fixed, and deliberately not papered
+over with a retry or a widened timeout; it is recorded here as the next thing to instrument.
+
+**A regression I introduced and caught.** #563's first fix pressed `Escape` between the two date
+fills. `Modal` closes on Escape (`Modal.tsx:48`) and the builder is a modal, so it shut the whole
+thing: the gates went from webkit-only red to webkit AND chromium red. #566 removes it. The lesson
+is in the PR: the gates are not required checks, so a green `backend`+`frontend` merged it anyway.
+
+**Measurements taken, so they need not be argued again:** card→popup parity exact on a real creative
+(30,514.05 SAR, 692 orders, 44.1 SAR, 235,280 SAR); cost-per-result = spend ÷ results across 17
+tiles, 0 mismatched; 24 content tiles, 13 drew media, 11 said why, 0 silent. The Analytics content
+tab deliberately does NOT match the card — it states its own grain rule on the surface — so parity
+is required only where the grain is the same.
+
+**Stale rows corrected, not trusted:** G-006, G-008 and G-011 closed against the code; G-010, G-012
+and G-014 corrected where they listed finished work as missing; G-001's failing assertion captured
+for the first time since it was opened.
+
+**What needs the Owner and nobody else,** beyond the Meta and Google items below: upload a mark in
+Production's Branding Center, then re-run Production PDF Acceptance — `logo` must become
+`configured` and `pages_with_images` non-zero. Today it reports `logo none configured` and
+`"pages_with_images": 0`, which is the CORRECT outcome of that configuration, not a defect. Until a
+mark exists there, `BRANDING-RENDER-EVIDENCE-001`'s Production half cannot be proven.
+
 ## 2026-09-17 — ACCOUNT-SCOPE ISOLATION, Owner P0 (defect 100)
 
 `ACCOUNT-SCOPE-ISOLATION-001`. The Owner observed data from accounts other than the exact selected
