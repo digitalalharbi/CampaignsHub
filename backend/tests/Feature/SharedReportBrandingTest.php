@@ -86,6 +86,48 @@ final class SharedReportBrandingTest extends TestCase
     }
 
     /**
+     * The operator chose the AGENCY's identity at creation, and the link carries it.
+     *
+     * REPORT-CREATION-UX-001's last clause. A report about a client resolves at the client layer by
+     * default — which is right for most client reports and wrong for an agency that wants its own
+     * mark on the document it issued, and until now there was no way to say so.
+     *
+     * What is stored is a LAYER, never an identity: a caller that could post a `logo_url` could put
+     * any agency's mark on any client's report, so `prefer` only says which of the two marks this
+     * resolver already computes should lead, and the resolver answers what that layer holds.
+     */
+    public function test_a_report_created_under_the_agencys_identity_carries_it(): void
+    {
+        $this->asset('client', (string) $this->client->id, 'Nakheel logo');
+        $this->asset('tenant', null, 'Agency logo');
+
+        $this->report->update(['config' => ['branding' => ['prefer' => 'agency']]]);
+
+        $body = $this->read();
+
+        $this->assertSame('Agency', $body['name'], 'the agency was chosen and the client still led');
+        $this->assertSame('tenant', $body['logo_source']);
+        /* The secondary line names the CLIENT once the agency leads — «Agency, by Agency» is a bug. */
+        $this->assertSame('Nakheel', $body['by']);
+    }
+
+    /** The client still leads when that is what was chosen, and when nothing was. */
+    public function test_the_client_leads_when_chosen_and_when_nothing_was_chosen(): void
+    {
+        $this->asset('client', (string) $this->client->id, 'Nakheel logo');
+
+        foreach ([['branding' => ['prefer' => 'client']], null] as $config) {
+            $this->report->update(['config' => $config]);
+
+            $body = $this->read();
+
+            $this->assertSame('Nakheel', $body['name']);
+            $this->assertSame('client', $body['logo_source']);
+            $this->assertSame('Agency', $body['by']);
+        }
+    }
+
+    /**
      * A link keeps the identity it was SHARED under, even after the agency rebrands.
      *
      * `PublicReportController` freezes `config['branding']` on purpose, with its own comment saying
