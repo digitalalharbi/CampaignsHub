@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { TasksPage } from './TasksPage'
 import type { Task, TaskPage } from './api'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
@@ -95,5 +95,50 @@ describe('the tasks page', () => {
 
     expect(await screen.findByText('Write the brief')).toBeInTheDocument()
     expect(screen.queryByTestId('tasks-pager')).toBeNull()
+  })
+
+  /**
+   * A task row says its status once.
+   *
+   * The row drew a status badge directly beside a status select whose chosen option carried the
+   * same word — «In progress» twice, a centimetre apart, on every row an operator can edit. The
+   * select is the half worth keeping: it states the status and is also the control that changes it.
+   *
+   * The badge remains for a reader who cannot change it, where it is the only thing saying what the
+   * status is — that is the second case below.
+   */
+  it('says a task’s status once for someone who can change it', async () => {
+    vi.mocked(listTasks).mockResolvedValue(page({ tasks: [task({ status: 'in_progress' })] }))
+
+    renderWithProviders(<TasksPage />, { locale: 'en' })
+
+    await screen.findByText('Write the brief')
+
+    /* The select carries it, as its value. */
+    const select = screen.getByLabelText('Status: Write the brief') as HTMLSelectElement
+    expect(select.value).toBe('in_progress')
+
+    /*
+     * And nothing ELSE in the row says it. Scoped to the row on purpose: the filter bar above holds
+     * an «In progress» option too, and counting those would measure the wrong thing.
+     */
+    const row = screen.getByText('Write the brief').closest('li') as HTMLElement
+    const saidInRow = within(row).getAllByText('In progress')
+    expect(saidInRow).toHaveLength(1)
+    expect(saidInRow[0].tagName).toBe('OPTION')
+  })
+
+  it('still names the status for a reader who cannot change it', async () => {
+    signOut()
+    signInWith(['tasks.view'])
+    vi.mocked(listTasks).mockResolvedValue(page({ tasks: [task({ status: 'in_progress' })] }))
+
+    renderWithProviders(<TasksPage />, { locale: 'en' })
+
+    await screen.findByText('Write the brief')
+
+    const row = screen.getByText('Write the brief').closest('li') as HTMLElement
+    expect(within(row).queryByLabelText('Status: Write the brief')).toBeNull()
+    expect(within(row).getByText('In progress')).toBeInTheDocument()
   })
 })
