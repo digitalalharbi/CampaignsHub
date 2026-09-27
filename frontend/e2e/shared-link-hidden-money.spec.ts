@@ -178,7 +178,28 @@ for (const [label, flags, money] of [
     const wanted = [...figures].filter((v) => Math.abs(v) >= 1).flatMap(spellings).filter((s) => !innocent.has(s))
     expect(wanted.length, 'the open link carries almost no money, so the hidden link proves nothing').toBeGreaterThan(10)
 
-    const leaks: string[] = []
+    /*
+     * An ACCUSATION is recorded with the spelling that produced it, and judged at the end.
+     *
+     * `innocentHere` is filled from the hiding link's own payloads as they arrive, so whether a
+     * figure was known to be innocent depended on whether its response had been read yet — and that
+     * ordering is the browser's to decide. Draining `pending` before each hunt narrowed the window
+     * and did not close it: `settle()` returns immediately when nothing is in flight, and "nothing
+     * in flight" is not "everything has arrived". A request the platforms view had not yet issued
+     * was not waited for at all.
+     *
+     * It failed that way twice on CI over the same body — webkit first, then firefox on #568 —
+     * reading `الإنفاق — —` (spend correctly withheld) beside `الإيرادات 508K SAR`: revenue, under
+     * a key this link does not hide, accused of being the spend because the response establishing
+     * it had not been read yet. Chromium passed the same commit both times.
+     *
+     * Every response is read before the assertion — `await Promise.all(pending)` — so by then the
+     * innocent set is complete however the browser ordered things. Judging there removes the race
+     * without narrowing the guard: the same spellings are hunted in the same surfaces, and a figure
+     * the link may not print still fails. A money guard that cries wolf is one somebody eventually
+     * overrides, and the next thing it waves through is real.
+     */
+    const accusations: Array<{ spelling: string; line: string }> = []
     /*
      * Spellings the HIDING link is entitled to print.
      *
@@ -207,7 +228,7 @@ for (const [label, flags, money] of [
          * so nothing is narrowed except the accusation the evidence never supported.
          */
         const m = new RegExp(`(?<![\\d.,])${s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\dKM%]|[.,]\\d)`).exec(text)
-        if (m) leaks.push(`${where}: «${s}» … ${text.slice(Math.max(0, m.index - 70), m.index + 40).replace(/\s+/g, ' ')}`)
+        if (m) accusations.push({ spelling: s, line: `${where}: «${s}» … ${text.slice(Math.max(0, m.index - 70), m.index + 40).replace(/\s+/g, ' ')}` })
       }
     }
 
@@ -319,6 +340,7 @@ for (const [label, flags, money] of [
       await ctx.close()
     }
 
+    const leaks = accusations.filter((a) => !innocentHere.has(a.spelling)).map((a) => a.line)
     expect([...new Set(leaks)], `a hidden ${label} figure reached a client`).toEqual([])
   })
 }
