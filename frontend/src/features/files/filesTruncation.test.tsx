@@ -65,4 +65,26 @@ describe('the files library', () => {
     expect(await screen.findByText('brief-a.pdf')).toBeInTheDocument()
     expect(screen.queryByTestId('files-withheld')).toBeNull()
   })
+
+  /**
+   * The line that identifies a file stays recoverable when it is cut.
+   *
+   * The card's second line holds the two things that say WHICH file this is — whose it is and what
+   * it belongs to — and `line-clamp-1` cuts it. At 1440 the card read «…emo Client ·
+   * REQ-DEMO-CLIENT-»: the client clipped at the front and the reference at the back, neither
+   * recoverable. The table view shows both in full, so the information exists; only this view lost
+   * it with no way back. The name above it already carried a `title` for exactly this reason.
+   */
+  it('keeps the client and the reference reachable on a card that truncates', async () => {
+    vi.mocked(getFilesLibrary).mockResolvedValue(library())
+
+    renderWithProviders(<FilesLibraryPage />, { locale: 'en' })
+
+    await screen.findByText('brief-a.pdf')
+
+    const line = screen.getAllByTitle('Acme · REQ-1')[0]
+    expect(line).toBeInTheDocument()
+    expect(line).toHaveTextContent('Acme')
+    expect(line).toHaveTextContent('REQ-1')
+  })
 })
