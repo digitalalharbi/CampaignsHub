@@ -9,6 +9,9 @@ use App\Domains\Access\Models\Role;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Requests\Models\ExternalRequest;
+use App\Domains\Requests\Models\RequestStatus;
+use App\Domains\Requests\Models\RequestType;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
@@ -99,5 +102,39 @@ final class ClientCommandCenterTest extends TestCase
     {
         $this->makeClient($this->tenant->id, 'Acme');
         $this->actingAs($this->viewer, 'sanctum')->getJson('/api/v1/app/clients')->assertForbidden();
+    }
+
+    /**
+     * A request row carries the WRITTEN name of its service and its stage, in both languages.
+     *
+     * This row sent `type->name_en` and the raw `status->key`, so an Arabic command centre listed
+     * «Launch a paid campaign» beside «under_review». Both taxonomy tables have carried `name_ar`
+     * next to `name_en` since the requests module was built — the payload simply never asked. The
+     * assertion names both languages because sending only Arabic would trade one broken reader for
+     * the other, and it names the raw key as absent because that is the actual defect.
+     */
+    public function test_a_request_row_names_its_service_and_stage_in_both_languages(): void
+    {
+        $c = $this->makeClient($this->tenant->id, 'Acme');
+        $type = RequestType::create([
+            'key' => 'paid_campaign_launch', 'module' => 'paid_media',
+            'name_ar' => 'إطلاق حملة إعلانية مدفوعة', 'name_en' => 'Launch a paid campaign',
+        ]);
+        $status = RequestStatus::create([
+            'key' => 'under_review', 'name_ar' => 'تحت المراجعة', 'name_en' => 'Under Review',
+        ]);
+        ExternalRequest::create([
+            'tenant_id' => $this->tenant->id, 'client_id' => $c->id, 'reference' => 'REQ-2026-000042',
+            'type_id' => $type->id, 'status_id' => $status->id,
+            'contact_name' => 'Buyer', 'contact_email' => 'buyer@acme.test',
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($this->owner, 'sanctum')->getJson("/api/v1/app/clients/{$c->id}")
+            ->assertOk()
+            ->assertJsonPath('data.requests.0.service', 'إطلاق حملة إعلانية مدفوعة')
+            ->assertJsonPath('data.requests.0.service_en', 'Launch a paid campaign')
+            ->assertJsonPath('data.requests.0.status_label', 'تحت المراجعة')
+            ->assertJsonPath('data.requests.0.status_label_en', 'Under Review');
     }
 }

@@ -175,7 +175,7 @@ export function ClientCommandCenterPage() {
               {d.requests.map((r) => (
                 <li key={r.id} className="flex items-center justify-between rounded-lg border border-border px-4 py-3 text-sm">
                   <Link to={portalTo(`/requests/${r.id}`)} className="font-mono font-semibold text-brand-600 hover:underline" dir="ltr">{r.reference}</Link>
-                  <span className="flex items-center gap-2 text-xs text-text-secondary">{r.service}<span className="rounded-full bg-surface-secondary px-2 py-0.5">{r.status}</span></span>
+                  <span className="flex items-center gap-2 text-xs text-text-secondary">{ar ? r.service : r.service_en}<span className="rounded-full bg-surface-secondary px-2 py-0.5">{ar ? r.status_label : r.status_label_en}</span></span>
                 </li>
               ))}
             </ul>
