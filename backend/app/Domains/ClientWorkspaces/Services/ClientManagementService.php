@@ -57,7 +57,7 @@ final class ClientManagementService
                 'source' => 'clients',
                 'entity_type' => 'client_workspace',
                 'entity_id' => $client->id,
-                'action_url' => "/app/clients/{$client->id}",
+                'action_url' => "/clients/{$client->id}",
                 'dedup_extra' => 'needs_attention',
             ]);
         }
