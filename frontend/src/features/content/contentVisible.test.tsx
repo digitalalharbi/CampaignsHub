@@ -224,4 +224,76 @@ describe('the grid names the shape it cannot draw', () => {
     expect(stated.textContent ?? '').toMatch(/كتالوج/)
     expect(stated.textContent ?? '').not.toMatch(/لا تتوفر معاينة/)
   })
+
+  /**
+   * The library printed the same sentence twice in one tile.
+   *
+   * `absenceLabel` prefers the server's note over its own wording — deliberately, it is the more
+   * specific truth — and the tile then printed `note` again on the line beneath it. So every
+   * derived row in the grid carried its explanation in duplicate, larger text above the identical
+   * smaller text, down twenty-four cards. The second line was written when the first was the
+   * generic «لا تتوفر معاينة», and it still earns its place whenever the two actually differ.
+   */
+  it('says a derived row’s reason once, not twice', async () => {
+    const derived = 'This row was derived from ad-level performance; the ad itself was never fetched.'
+
+    vi.mocked(listCreatives).mockResolvedValue(
+      page({
+        creatives: [card({ id: 'c0', name: 'Has a film' }), card({
+          id: 'c1',
+          preview: {
+            state: 'unavailable' as const,
+            kind: null,
+            image_url: null,
+            video_url: null,
+            thumbnail_url: null,
+            expires_at: null,
+            note_ar: 'هذا الصف مُستنتج من أداء الإعلان.',
+            note_en: derived,
+          },
+        })],
+      }) as never,
+    )
+
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+
+    await screen.findByText('Summer hero')
+
+    expect(screen.getAllByText(derived)).toHaveLength(1)
+  })
+
+  /** And a note that says something the panel did not is still printed. */
+  it('keeps a note that differs from the sentence above it', async () => {
+    /*
+     * A catalog ad is the case where the two genuinely differ: `absenceLabel` answers with its own
+     * catalog sentence and does not consult the note, so the note is additional information rather
+     * than an echo — which is what the second line was always for.
+     */
+    const note = 'Synced 2026-09-01; the feed has changed since.'
+
+    vi.mocked(listCreatives).mockResolvedValue(
+      page({
+        creatives: [card({ id: 'c0', name: 'Has a film' }), card({
+          id: 'c1',
+          preview: {
+            state: 'available' as const,
+            kind: 'catalog' as const,
+            image_url: null,
+            video_url: null,
+            thumbnail_url: null,
+            expires_at: null,
+            note_ar: 'ملاحظة مختلفة',
+            note_en: note,
+          },
+        })],
+      }) as never,
+    )
+
+    renderWithProviders(<CreativesPage />, { locale: 'en' })
+
+    await screen.findByText('Summer hero')
+
+    expect(screen.getByText(/composes its image per product/)).toBeInTheDocument()
+    expect(screen.getByText(note)).toBeInTheDocument()
+  })
 })
