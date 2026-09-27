@@ -281,6 +281,50 @@ final class StructureProbeTest extends TestCase
             ->assertSuccessful();
     }
 
+    /**
+     * PNG bytes under a WRONG content type are usable — Production run 35478164776.
+     *
+     * `content:census --fetch --raw` on three promoted Snapchat collection stills: «not an image
+     * (content type multipart/form-data; bytes: png image that decodes)». The files are real PNGs and
+     * every browser draws them, because an `<img>` is decoded from its leading BYTES and not from the
+     * header the CDN declares. This probe tested the header first, so it called three healthy stills
+     * unusable — the expensive direction of wrong, because an operator then goes looking for a sync
+     * fault that does not exist.
+     *
+     * The bytes decide, through `DrawableImage`, which is the same rule the census applies.
+     */
+    public function test_image_bytes_under_a_wrong_content_type_are_usable(): void
+    {
+        $this->creativeWith('https://cdn.example/mislabelled.png');
+
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
+
+        Http::fake(['cdn.example/*' => Http::response($png, 200, ['Content-Type' => 'multipart/form-data'])]);
+
+        $this->artisan('integrations:probe', ['account' => 'act_374140991630974', '--media' => true])
+            ->expectsOutputToContain('1x1')
+            ->expectsOutputToContain('usable stills    : 1')
+            ->expectsOutputToContain('unusable         : 0')
+            ->assertSuccessful();
+    }
+
+    /** ...and a genuine envelope under the same wrong type is still not an image. */
+    public function test_a_multipart_envelope_is_not_rescued_by_the_byte_check(): void
+    {
+        $this->creativeWith('https://cdn.example/envelope.png');
+
+        Http::fake(['cdn.example/*' => Http::response(
+            "--b1\r\nContent-Type: image/png\r\n\r\nnot-a-png\r\n--b1--\r\n",
+            200,
+            ['Content-Type' => 'multipart/form-data; boundary=b1'],
+        )]);
+
+        $this->artisan('integrations:probe', ['account' => 'act_374140991630974', '--media' => true])
+            ->expectsOutputToContain('did not decode')
+            ->expectsOutputToContain('usable stills    : 0')
+            ->assertSuccessful();
+    }
+
     /** A refused request is named as refused rather than counted as media. */
     public function test_a_refused_asset_is_counted_as_unusable(): void
     {

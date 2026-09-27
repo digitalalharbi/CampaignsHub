@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativePresenter;
 use App\Domains\Campaigns\Services\CreativeRows;
+use App\Domains\Campaigns\Support\DrawableImage;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Console\Command;
@@ -702,21 +703,9 @@ final class ContentDefectCensusCommand extends Command
      * What a body IS, from its leading bytes — never its content. A multipart envelope is described by
      * the content types its parts declare within the prefix, each re-sniffed.
      */
-    /** The allow-list: JPEG, PNG, GIF, WebP — by leading bytes only. */
-    private function sniffImage(string $b): ?string
-    {
-        return match (true) {
-            str_starts_with($b, "\xFF\xD8\xFF") => 'jpeg',
-            str_starts_with($b, "\x89PNG\r\n\x1A\n") => 'png',
-            str_starts_with($b, 'GIF87a') || str_starts_with($b, 'GIF89a') => 'gif',
-            str_starts_with($b, 'RIFF') && substr($b, 8, 4) === 'WEBP' => 'webp',
-            default => null,
-        };
-    }
-
     private function signature(string $bytes): string
     {
-        $sniff = fn (string $b): ?string => $this->sniffImage($b);
+        $sniff = DrawableImage::sniff(...);
 
         if ($bytes === '') {
             return 'empty';
@@ -765,7 +754,7 @@ final class ContentDefectCensusCommand extends Command
              * and webkit, with and without `nosniff`. An allow-listed image that decodes therefore LOADS
              * on the card; it is recorded as mislabelled, not as a blank. Anything else is still a blank.
              */
-            if (($kind = $this->sniffImage($bytes)) !== null && @getimagesizefromstring($bytes) !== false) {
+            if (DrawableImage::draws($bytes) && ($kind = DrawableImage::sniff($bytes)) !== null) {
                 $this->mislabelled[] = $item['tag'].'  declared '.($type === '' ? 'none' : $type).', bytes '.$kind;
 
                 return null;

@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Console;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativePresenter;
+use App\Domains\Campaigns\Support\DrawableImage;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
@@ -336,7 +337,19 @@ final class ProbeInsightsCommand extends Command
              * would mean the card is about to put an mp4 in an `<img>`, which draws nothing.
              */
             $decoded = is_array($size) ? sprintf('%dx%d', $size[0], $size[1]) : 'did not decode';
-            $usable = $response->successful() && str_starts_with($type, 'image/') && is_array($size);
+            /*
+             * The BYTES decide, not the declared type — Production run 35478164776.
+             *
+             * `content:census --fetch` found three promoted Snapchat collection stills served as
+             * `multipart/form-data` whose bytes are real PNGs that decode. Every browser draws them: an
+             * `<img>` is decoded from its leading bytes, and the header is not consulted. This check
+             * tested the header first and called three healthy stills unusable, which is the expensive
+             * direction — an operator then looks for a sync fault that does not exist.
+             *
+             * `DrawableImage` is the one place that rule lives, and the census applies the same one. A
+             * genuine envelope, or an HTML error page under a 200, still draws nothing and still fails.
+             */
+            $usable = $response->successful() && DrawableImage::draws($body);
 
             $usable ? $ok++ : $bad++;
 
