@@ -111,7 +111,7 @@ final class NotificationPreferenceController extends Controller
             'available_categories' => self::LEGACY_CATEGORIES,
             // `recommendations` defaults false beside the rest: a row stored before the setting
             // existed has no key, and an absent preference is not consent.
-            'digests' => ($row->digests ?? []) + ['daily' => false, 'weekly' => false, 'alerts' => false, 'recommendations' => false],
+            'digests' => ($row->digests ?? []) + ['daily' => false, 'weekly' => false, 'monthly' => false, 'alerts' => false, 'recommendations' => false],
             'available_digests' => self::DIGESTS,
             // The reader's own clock and language, which is what makes «daily» mean their morning.
             'timezone' => $row->timezone ?? 'Asia/Riyadh',
@@ -150,6 +150,15 @@ final class NotificationPreferenceController extends Controller
             'digests' => ['sometimes', 'nullable', 'array'],
             'digests.daily' => ['boolean'],
             'digests.weekly' => ['boolean'],
+            /*
+             * The monthly, which `self::DIGESTS` has advertised as available all along.
+             *
+             * `$request->validate()` returns only the attributes it has rules for, so without this
+             * line the key a client sent was dropped on the way in — the endpoint offered the
+             * switch, accepted the request, answered 200, and stored nothing. The sender has
+             * dispatched this digest since EMAIL-INTELLIGENCE-001 and nobody could subscribe.
+             */
+            'digests.monthly' => ['boolean'],
             'digests.alerts' => ['boolean'],
             /*
              * EMAIL-SETTINGS-DEPTH-001 — whether this person's digest carries approved recommendations.
