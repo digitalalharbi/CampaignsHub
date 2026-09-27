@@ -78,6 +78,46 @@ final class NotificationPreferenceDigestTest extends TestCase
         $this->assertSame(8, $body['digest_hour']);
     }
 
+    /**
+     * A person can subscribe to the MONTHLY digest, which the sender has always been able to send.
+     *
+     * `SendDailyDigests` dispatches it — on the first of the month, reporting the month that just
+     * finished, with the calendar month as its idempotency key — and `MessageCatalogue` names it,
+     * and the frontend's own `NotificationPreferences` type declares `digests.monthly`. The one
+     * place that did not know about it was the endpoint that SAVES the choice: `digests.monthly`
+     * had no validation rule, so it was dropped from the validated payload on the way in, and the
+     * response's defaults never mentioned it on the way out.
+     *
+     * So the switch was drawn, could be ticked, and did nothing at all.
+     */
+    public function test_a_person_can_subscribe_to_the_monthly_digest(): void
+    {
+        $body = $this->actingAs($this->user, 'sanctum')
+            ->putJson('/api/v1/settings/notifications', $this->payload([
+                'digests' => ['daily' => false, 'weekly' => false, 'monthly' => true],
+            ]))
+            ->assertOk()
+            ->json('data');
+
+        $this->assertTrue($body['digests']['monthly'], 'the monthly digest did not survive the save');
+
+        /* And it is on the row the scheduler reads, not only in the response. */
+        $row = DB::table('notification_preferences')->where('user_id', $this->user->id)->first();
+        $this->assertTrue((json_decode((string) $row->digests, true)['monthly'] ?? false));
+    }
+
+    /** Off by default, like every other digest: an opt-in that defaults to on is not an opt-in. */
+    public function test_the_monthly_digest_is_off_until_it_is_chosen(): void
+    {
+        $body = $this->actingAs($this->user, 'sanctum')
+            ->getJson('/api/v1/settings/notifications')
+            ->assertOk()
+            ->json('data');
+
+        $this->assertArrayHasKey('monthly', $body['digests'], 'the response never mentions the monthly digest');
+        $this->assertFalse($body['digests']['monthly']);
+    }
+
     /** What a person chooses is what comes back, and what the scheduler will read. */
     public function test_the_chosen_digest_hour_timezone_and_language_are_persisted(): void
     {
