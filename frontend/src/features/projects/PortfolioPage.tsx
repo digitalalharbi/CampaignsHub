@@ -170,11 +170,25 @@ export function PortfolioPage() {
             {data.projects.items.map((p) => (
               <Card key={p.id} data-testid={`portfolio-project-${p.id}`}>
                 <div className="flex items-start justify-between gap-2">
-                  <span className="flex items-center gap-2 text-sm font-bold">
-                    <FolderKanban size={16} className="text-brand-600" aria-hidden />
-                    {p.name}
+                  <span className="flex min-w-0 items-start gap-2 text-sm font-bold">
+                    <FolderKanban size={16} className="mt-0.5 shrink-0 text-brand-600" aria-hidden />
+                    <span className="min-w-0">
+                      {p.name}
+                      {/*
+                        Whose project this is, on the one view that crosses clients.
+                        Three projects named «Q3 Launch» are told apart by nothing else.
+                      */}
+                      {p.client_name !== null && (
+                        <span
+                          data-testid={`portfolio-project-client-${p.id}`}
+                          className="mt-0.5 block truncate text-xs font-normal text-text-secondary"
+                        >
+                          {p.client_name}
+                        </span>
+                      )}
+                    </span>
                   </span>
-                  <span className="text-xs text-text-muted">{projectStatusLabel(p.status, locale === 'ar')}</span>
+                  <span className="shrink-0 text-xs text-text-muted">{projectStatusLabel(p.status, locale === 'ar')}</span>
                 </div>
 
                 {p.attention && (
@@ -182,6 +196,23 @@ export function PortfolioPage() {
                     <AlertTriangle size={12} aria-hidden />
                     {t[ATTENTION_KEY[p.attention]]}
                   </p>
+                )}
+
+                {/*
+                  Platforms, from a key the payload already carried and the card used to discard.
+                  A client card shows them; the project card that decides where you go did not.
+                */}
+                {p.providers.length > 0 && (
+                  <div data-testid={`portfolio-project-providers-${p.id}`} className="mt-2 flex flex-wrap gap-1">
+                    {p.providers.map((provider) => (
+                      <span
+                        key={provider}
+                        className="rounded-md border border-border px-1.5 py-0.5 text-[11px] text-text-secondary"
+                      >
+                        {provider}
+                      </span>
+                    ))}
+                  </div>
                 )}
 
                 <div className="mt-3 border-t border-border pt-2 text-xs">
