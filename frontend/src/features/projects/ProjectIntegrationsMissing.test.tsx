@@ -1,15 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
+import { Route, Routes } from 'react-router-dom'
 import { ProjectIntegrationsPage } from './ProjectIntegrationsPage'
 import { renderWithProviders, signInWith } from '@/test/utils'
 
-vi.mock('react-router-dom', async (orig) => ({
-  ...(await orig<Record<string, unknown>>()),
-  useParams: () => ({ projectId: '00000000-0000-4000-8000-000000000000' }),
-}))
-
-vi.mock('@/lib/api/client', async (orig) => ({
-  ...(await orig<Record<string, unknown>>()),
+vi.mock('@/lib/api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api/client')>()),
   getData: vi.fn(),
   postData: vi.fn(),
 }))
@@ -24,9 +20,14 @@ import { getData } from '@/lib/api/client'
  * a «manage data sources» button. So the page said the item does not exist and, more prominently,
  * that it exists and has nothing bound to it. Those are different claims and only one is true.
  *
- * Reproduced in a browser against a UUID no row can hold, which is the fixture below.
+ * Reproduced in a browser against a UUID no row can hold, which is the route below.
+ *
+ * The param comes from a REAL route rather than a mocked `useParams`: replacing react-router-dom
+ * for one export made this file fail at import when the whole suite ran, while passing alone.
  */
-/* The axios envelope  reads — a bare Error with a status would reach its «unexpected» case. */
+const GONE = '00000000-0000-4000-8000-000000000000'
+
+/* The axios envelope `toApiError` reads — a bare Error with a status reaches its «unexpected» case. */
 const notFound = Object.assign(new Error('not found'), {
   isAxiosError: true,
   response: { status: 404, data: { message: 'not found' } },
@@ -40,7 +41,12 @@ describe('the project integrations page for a project that is not there', () => 
   })
 
   it('says the project does not exist, and does not also describe it', async () => {
-    renderWithProviders(<ProjectIntegrationsPage />, { locale: 'en' })
+    renderWithProviders(
+      <Routes>
+        <Route path="/projects/:projectId/integrations" element={<ProjectIntegrationsPage />} />
+      </Routes>,
+      { locale: 'en', route: `/projects/${GONE}/integrations` },
+    )
 
     expect(await screen.findByText('This project does not exist')).toBeInTheDocument()
 
