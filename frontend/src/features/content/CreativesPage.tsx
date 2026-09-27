@@ -1395,7 +1395,18 @@ function CreativeGridCard({
   const note = ar ? preview.note_ar : preview.note_en
 
   return (
-    <article className={`flex h-full flex-col overflow-hidden rounded-lg border bg-surface ${selected ? 'border-primary' : 'border-border'}`}>
+    /*
+     * Addressable by the creative's own id.
+     *
+     * The grid card had no handle, so a browser test could only reach it through `.first()` — which
+     * works exactly as long as the seed holds one row of the shape under test, and silently judges
+     * the wrong card the moment it holds two. `content-grid-video.spec.ts` says so in its own
+     * docblock, and the table view beside this one has carried `content-row-{id}` all along.
+     */
+    <article
+      data-testid={`content-card-${creative.id}`}
+      className={`flex h-full flex-col overflow-hidden rounded-lg border bg-surface ${selected ? 'border-primary' : 'border-border'}`}
+    >
       <div className="relative">
         <button
           type="button"

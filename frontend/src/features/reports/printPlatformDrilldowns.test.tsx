@@ -1,7 +1,9 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { PrintDocument } from './PrintDocument'
-import type { PrintPlatformDrilldown } from './PrintPlatformDrilldowns'
+import { printAbsence, type PrintPlatformDrilldown } from './PrintPlatformDrilldowns'
+import { readPreview } from '@/features/content/adPreview'
+import type { CreativePreview } from '@/features/content/api'
 
 /**
  * REPORT-DRILLDOWN-001 — the PDF's optional platform drill-down section.
@@ -65,5 +67,39 @@ describe('the PDF platform drill-down section', () => {
     render(<PrintDocument data={{ ...(base as object), platform_drilldowns: [{ ...block, shares: { ...block.shares, spend: null } }] } as never} reportName="R" currency="SAR" />)
     expect(screen.queryByTestId('print-drilldown-share-spend')).not.toBeInTheDocument()
     expect(screen.getByTestId('print-drilldown-share-outcome')).toBeInTheDocument()
+  })
+})
+
+/**
+ * A collection whose hero is a FILM must not print an empty absence span.
+ *
+ * `printAbsence` was `clientAbsence` written out a second time, and the copy had already drifted:
+ * `clientAbsence` grew an arm for a film with no cover frame and this one did not, so the drilldown
+ * rendered its absence span EMPTY for exactly the ads that arm was written for — a blank rectangle
+ * with nothing beside it, on a page a client keeps.
+ *
+ * It became reachable when a collection carrying a video started resolving to a film reading rather
+ * than to `src: null`.
+ */
+describe('a film with no cover frame, on a printed drilldown', () => {
+  const film = {
+    state: 'available',
+    kind: 'collection',
+    image_url: null,
+    thumbnail_url: null,
+    video_url: 'https://cdn.test/hero.mp4',
+    note_ar: null,
+    note_en: null,
+  } as unknown as CreativePreview
+
+  it('says what it is rather than printing nothing', () => {
+    const sentence = printAbsence(readPreview(film, false), false)
+
+    expect(sentence).not.toBe('')
+    expect(sentence).toContain('no cover frame')
+  })
+
+  it('says it in Arabic on an Arabic report', () => {
+    expect(printAbsence(readPreview(film, true), true)).toContain('فيديو')
   })
 })

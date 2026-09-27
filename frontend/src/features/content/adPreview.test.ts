@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { absenceLabel, absenceShort, aspectClass, frameAspect, posterSource, previewShape, readPreview } from './adPreview'
+import { absenceLabel, absenceShort, clientAbsence, aspectClass, frameAspect, posterSource, previewShape, readPreview } from './adPreview'
 import type { CreativePreview } from './api'
 
 /**
@@ -358,6 +358,61 @@ describe('a dynamic collection is composed per product, not missing a hero', () 
     expect(absenceLabel(reading, false)).not.toContain('sent no hero frame')
     // The reading picks the language's own note, so the Arabic one is read from an Arabic reading.
     expect(absenceLabel(readPreview(dynamic, true), true)).toContain('لكل منتج')
+  })
+
+  /**
+   * CONTENT-COLLECTION-TILES-001 — a collection whose hero is a FILM draws the film.
+   *
+   * This module resolved a collection to `image_url ?? thumbnail_url` and never looked at
+   * `video_url`, so a collection whose top snap is a video — most of them on Snapchat — read as
+   * `src: null` and drew an empty frame under «Collection, no hero». The ad has a hero; nobody was
+   * drawing it.
+   *
+   * Measured on the live estate, not argued: of 457 static collections, 162 drew nothing, every one
+   * carrying a video and no still. None of them reached the defect census either, because that asks
+   * «is any url set» — the right question for a sync fault and the wrong one for a reader.
+   */
+  it('draws the film when a collection has one and no still', () => {
+    const film = { ...dynamic, image_url: null, thumbnail_url: null, video_url: 'https://cdn.test/hero.mp4' } as unknown as CreativePreview
+    const reading = readPreview(film, false)
+
+    expect(reading.kind).toBe('video')
+    expect(reading.kind === 'video' && reading.src).toBe('https://cdn.test/hero.mp4')
+    /*
+     * «Video, no cover» rather than «Collection, no hero», and the difference is the whole point:
+     * the first says there is a film to play and no poster frame for it, the second says the ad has
+     * nothing. One is a note about the frame; the other was a false statement about the ad.
+     */
+    expect(absenceShort(reading, false)).toBe('Video, no cover')
+    expect(posterSource(reading)).toBeNull()
+  })
+
+  /**
+   * A PRINTED page cannot play a film, so it must say so rather than print an empty frame.
+   *
+   * `PrintDocument` reads `clientAbsence().sentence`. `absenceLabel` answers '' for a film — right
+   * for the library, where the player draws — so without an arm of its own a collection whose hero
+   * is a video would print a blank rectangle with nothing beside it, on the one surface a client
+   * keeps. It became reachable the moment such a collection started resolving to a film.
+   */
+  it('tells a printed page that the hero is a film it cannot show', () => {
+    const film = { ...dynamic, image_url: null, thumbnail_url: null, video_url: 'https://cdn.test/hero.mp4' } as unknown as CreativePreview
+    const printed = clientAbsence(readPreview(film, false), false)
+
+    expect(printed.sentence).not.toBe('')
+    expect(printed.sentence).toContain('video')
+    expect(printed.sentence).toContain('no cover frame')
+    expect(printed.short).toBe('Video, no cover')
+    expect(clientAbsence(readPreview(film, true), true).sentence).toContain('فيديو')
+  })
+
+  /** A still still wins: the hero frame is what a collection shows when it has one. */
+  it('prefers the still over the film where both exist', () => {
+    const both = { ...dynamic, image_url: 'https://cdn.test/hero.jpg', video_url: 'https://cdn.test/hero.mp4' } as unknown as CreativePreview
+    const reading = readPreview(both, false)
+
+    expect(reading.kind).toBe('collection')
+    expect(posterSource(reading)).toBe('https://cdn.test/hero.jpg')
   })
 
   it('has a short label that says it is composed rather than absent', () => {

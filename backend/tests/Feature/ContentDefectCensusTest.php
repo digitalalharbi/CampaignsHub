@@ -449,27 +449,34 @@ final class ContentDefectCensusTest extends TestCase
     }
 
     /**
-     * A COLLECTION whose only media is a video draws NOTHING, and the inventory must say so.
+     * A COLLECTION whose only media is a video PAINTS, because the card falls back to the film.
      *
-     * Production caught this within minutes of the first run: creative `01de7a4a` is a static
-     * collection with `image: no  thumbnail: no  video: yes`, the inventory counted it among «439
-     * draw», and the one-creative walk reported `draws=stated absence` for the same row.
+     * This assertion is the inverse of the one it replaces, and the history is the point. While
+     * `adPreview.ts` resolved a collection to `image_url ?? thumbnail_url` and ignored its film, this
+     * case asserted «draws 0» — correctly, and that is what surfaced 162 blank collections in
+     * Production.
      *
-     * The walk is right. `adPreview.ts` reads a collection as `src: image_url ?? thumbnail_url` and
-     * `posterSource()` paints that src — a collection's video_url is never drawn, because the frame
-     * a collection shows is its HERO still. A count built on «any url is set» reports a cover where
-     * the reader sees none, which is this requirement's failure mode appearing in the instrument
-     * written to detect it.
+     * A collection carrying a film now resolves to a FILM, and the card falls back to a `<video>`
+     * that paints its first frame. So the count follows the reader: an instrument still asserting
+     * «draws 0» would under-report exactly the ads that change repairs.
      */
-    public function test_a_collection_with_only_a_video_is_not_counted_as_drawing(): void
+    public function test_a_collection_whose_hero_is_a_film_counts_as_drawing(): void
     {
         $this->creative(['format' => 'collection', 'video_url' => 'https://cdn.test/film.mp4']);
 
         $this->assertMatchesRegularExpression(
-            '/collection\s+:\s+1\s+draws 0 · draws nothing 1/',
+            '/collection\s+:\s+1\s+draws 1 · draws nothing 0/',
             $this->census(),
-            'a collection whose only media is a video was counted as drawing a cover',
+            'a collection whose hero is a film was counted as drawing nothing',
         );
+    }
+
+    /** And one with no media at all still draws nothing — the rule follows the reader, not the kind. */
+    public function test_a_collection_with_no_media_at_all_still_draws_nothing(): void
+    {
+        $this->creative(['format' => 'collection', 'cards' => [['headline' => 'Linen shirt']]]);
+
+        $this->assertMatchesRegularExpression('/collection\s+:\s+1\s+draws 0 · draws nothing 1/', $this->census());
     }
 
     /** A VIDEO creative with only a film still renders a player, so the wider rule stays for it. */
