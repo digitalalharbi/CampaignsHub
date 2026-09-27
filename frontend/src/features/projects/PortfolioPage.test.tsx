@@ -38,9 +38,9 @@ const overview = (over: Record<string, unknown> = {}) => ({
     total: 3,
     by_status: { active: 2, paused: 1 },
     items: [
-      { id: 'p1', name: 'رزة أفينيو', status: 'active', client_workspace_id: 'w1', accounts: 2, providers: ['snapchat'], data_last_synced_at: new Date().toISOString(), attention: null },
-      { id: 'p2', name: 'عميل ثانٍ', status: 'active', client_workspace_id: 'w2', accounts: 0, providers: [], data_last_synced_at: null, attention: 'no_accounts' },
-      { id: 'p3', name: 'عميل ثالث', status: 'paused', client_workspace_id: 'w3', accounts: 1, providers: ['meta'], data_last_synced_at: null, attention: 'never_synced' },
+      { id: 'p1', name: 'رزة أفينيو', status: 'active', client_workspace_id: 'w1', client_name: 'وكالة الرزة', accounts: 2, providers: ['snapchat'], data_last_synced_at: new Date().toISOString(), attention: null },
+      { id: 'p2', name: 'عميل ثانٍ', status: 'active', client_workspace_id: 'w2', client_name: 'نوفا', accounts: 0, providers: [], data_last_synced_at: null, attention: 'no_accounts' },
+      { id: 'p3', name: 'عميل ثالث', status: 'paused', client_workspace_id: 'w3', client_name: 'أكمي', accounts: 1, providers: ['meta'], data_last_synced_at: null, attention: 'never_synced' },
     ],
   },
   spend: {
@@ -128,5 +128,41 @@ describe('the portfolio page', () => {
     renderWithProviders(<PortfolioPage />, { locale: 'ar' })
 
     expect(await screen.findByTestId('portfolio-empty')).toBeInTheDocument()
+  })
+
+  /*
+   * The defect this page shipped with: «جميع المشاريع» drew three cards reading «Q3 Launch — Demo»
+   * and nothing else, because the card printed the project name and dropped the client. On the one
+   * view that crosses clients by definition, whose project it is IS the identity — a
+   * `client_workspace_id` in the payload cannot do that job for a person reading the screen.
+   */
+  it('tells two projects with the same name apart by naming the client', async () => {
+    vi.mocked(fetchPortfolioOverview).mockResolvedValue(
+      overview({
+        projects: {
+          total: 2,
+          by_status: { active: 2 },
+          items: [
+            { id: 'a', name: 'Q3 Launch', status: 'active', client_workspace_id: 'w1', client_name: 'نوفا', accounts: 1, providers: ['meta'], data_last_synced_at: null, attention: null },
+            { id: 'b', name: 'Q3 Launch', status: 'active', client_workspace_id: 'w2', client_name: 'أكمي', accounts: 1, providers: ['tiktok'], data_last_synced_at: null, attention: null },
+          ],
+        },
+      }) as never,
+    )
+
+    renderWithProviders(<PortfolioPage />)
+
+    expect(await screen.findByTestId('portfolio-project-client-a')).toHaveTextContent('نوفا')
+    expect(screen.getByTestId('portfolio-project-client-b')).toHaveTextContent('أكمي')
+  })
+
+  /* The payload already carried `providers`; the card used to throw them away. */
+  it('draws the platforms the payload already carried', async () => {
+    vi.mocked(fetchPortfolioOverview).mockResolvedValue(overview() as never)
+
+    renderWithProviders(<PortfolioPage />)
+
+    expect(await screen.findByTestId('portfolio-project-providers-p1')).toHaveTextContent('snapchat')
+    expect(screen.queryByTestId('portfolio-project-providers-p2')).toBeNull()
   })
 })
