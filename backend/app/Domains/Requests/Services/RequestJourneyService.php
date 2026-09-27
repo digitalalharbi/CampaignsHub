@@ -137,7 +137,12 @@ final class RequestJourneyService
                     'source' => 'requests',
                     'entity_type' => 'external_request',
                     'entity_id' => $request->id,
-                    'action_url' => "/app/requests/{$request->id}/journey/{$to->value}",
+                    /*
+                     * The request itself. There has never been a `/journey/{stage}` route, so the
+                     * old target was a 404 dressed as a deep link — the stage is already named in
+                     * the title, and the detail page is where the reader can act on it.
+                     */
+                    'action_url' => "/requests/{$request->id}",
                     'dedup_extra' => $to->value,
                 ]);
             }
