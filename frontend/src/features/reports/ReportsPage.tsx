@@ -735,6 +735,14 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
   const [form, setForm] = useState<'executive_summary' | 'detailed'>('executive_summary')
   /* Snapshot stays the default: it is what every report made before this chooser existed was. */
   const [mode, setMode] = useState<'snapshot' | 'live'>('snapshot')
+  /*
+   * WHOSE identity the report carries — REPORT-CREATION-UX-001's last clause.
+   *
+   * `null` is «let the hierarchy decide», which is what every report made before this did, and
+   * what most client reports should keep doing. It is a deliberate third state rather than a
+   * default of «client»: sending a choice nobody made would freeze a decision on every report.
+   */
+  const [brandingIdentity, setBrandingIdentity] = useState<'client' | 'agency' | null>(null)
   const [audience, setAudience] = useState<string | null>('client')
   /*
    * What the report COVERS (§14.5) — chosen here, before it is generated.
@@ -773,6 +781,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
         type: type ?? 'executive',
         mode,
         form,
+        ...(brandingIdentity === null ? {} : { branding_identity: brandingIdentity }),
         audience: audience ?? 'client',
         period_start: from,
         period_end: to,
@@ -869,6 +878,48 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
                 onClick={() => setForm(o.key)}
                 className={`rounded-xl border p-3 text-start transition-colors ${
                   form === o.key ? 'border-brand-500 bg-brand-500/5' : 'border-border hover:border-border-strong'
+                }`}
+              >
+                <span className="block text-sm font-bold text-text-primary">{ar ? o.ar : o.en}</span>
+                <span className="mt-0.5 block text-[11px] text-text-secondary">{ar ? o.hintAr : o.hintEn}</span>
+              </button>
+            ))}
+          </div>
+        </Field>
+        {/*
+          REPORT-CREATION-UX-001 — WHOSE report this is, said at creation.
+
+          A report about a client resolves at the client layer: the client's name leads and the
+          client's mark is the one drawn, with the agency underneath as «بواسطة». That is right for
+          most client reports and wrong for an agency that wants its OWN mark on the document it
+          issued — and there was no way to say so, because nothing in this screen ever wrote
+          `config['branding']`, which every surface already reads.
+
+          «تلقائي» is a real third answer, not a disabled state: it leaves the hierarchy deciding,
+          which is what every report made before this one did.
+
+          What is sent is a LAYER, never an identity. The name and the mark are resolved on the
+          server by `SharedLinkBranding` — a screen that could post a `logo_url` could put any
+          agency's mark on any client's report.
+        */}
+        <Field label={ar ? 'هوية التقرير' : 'Report identity'}>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { key: null, ar: 'تلقائي', en: 'Automatic',
+                hintAr: 'العميل إن وُجد، وإلا الوكالة', hintEn: 'The client if there is one, else the agency' },
+              { key: 'client' as const, ar: 'هوية العميل', en: "The client's",
+                hintAr: 'اسم العميل وشعاره في المقدّمة', hintEn: 'Their name and mark lead' },
+              { key: 'agency' as const, ar: 'هوية الوكالة', en: "The agency's",
+                hintAr: 'اسمك وشعارك، والعميل تحتهما', hintEn: 'Yours lead, the client underneath' },
+            ]).map((o) => (
+              <button
+                key={o.key ?? 'auto'}
+                type="button"
+                data-testid={`rb-identity-${o.key ?? 'auto'}`}
+                aria-pressed={brandingIdentity === o.key}
+                onClick={() => setBrandingIdentity(o.key)}
+                className={`rounded-xl border p-3 text-start transition-colors ${
+                  brandingIdentity === o.key ? 'border-brand-500 bg-brand-500/5' : 'border-border hover:border-border-strong'
                 }`}
               >
                 <span className="block text-sm font-bold text-text-primary">{ar ? o.ar : o.en}</span>
