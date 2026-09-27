@@ -28,12 +28,21 @@ use Tests\TestCase;
 final class NotificationActionUrlGuardTest extends TestCase
 {
     /**
-     * Subscriptions has no agency-side surface; billing lives in the advertiser portal only.
-     * Adding a line here is a decision to send a reader out of their portal, and should read as one.
+     * Empty, and that is the point.
+     *
+     * It held one entry — `/app/subscriptions`, excused on the grounds that «billing has no
+     * agency-side surface». That was wrong: `router.tsx` spreads `subscriptionsRoutes` into the
+     * agency portal as well as the advertiser one, under a comment naming it «the agency's own plan
+     * with CampaignsHub». So the exception pinned an agency operator to /app for a page their own
+     * portal has, which is the exact defect this guard exists to prevent.
+     *
+     * Kept as a mechanism rather than deleted: a genuine cross-portal link is still possible, and
+     * `usePortalPath()` documents one as «rare, and always explicit». This is where explicit lives.
+     * A new entry should be hard to add without saying why, which an empty list makes it.
+     *
+     * @var array<string, string>
      */
-    private const CROSS_PORTAL_BY_DESIGN = [
-        'app/Domains/Subscriptions/Notifications/SubscriptionNotifier.php' => '/app/subscriptions',
-    ];
+    private const CROSS_PORTAL_BY_DESIGN = [];
 
     public function test_no_notification_links_a_reader_out_of_their_own_portal(): void
     {
