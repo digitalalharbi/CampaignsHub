@@ -43,6 +43,34 @@ final class DemoSeederGuardTest extends TestCase
     }
 
     /**
+     * No demo request carries a priority the product would refuse.
+     *
+     * `PublicRequestController` accepts `critical|high|medium|low`, the column defaults to `medium`,
+     * and `request.priority` seeds exactly those four. Two demo seeders wrote `normal`, which is
+     * none of them — so the agency inbox drew a raw `normal` chip beside «متوسطة» on the row that
+     * happened to be seeded correctly. `RequestLabels::priority()` falls back to the key it was
+     * given, which is the right behaviour for a value nobody defined and the reason the bad data
+     * was visible rather than silently mislabelled.
+     *
+     * It is demo data, so no customer's row was wrong — but the demo is what a prospect is shown.
+     */
+    public function test_every_demo_request_priority_is_one_the_product_accepts(): void
+    {
+        $this->app->detectEnvironment(fn () => 'local');
+
+        $this->artisan('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true])->assertSuccessful();
+
+        $strange = DB::table('external_requests')
+            ->whereNotIn('priority', ['critical', 'high', 'medium', 'low'])
+            ->distinct()
+            ->pluck('priority')
+            ->all();
+
+        $this->assertSame([], $strange, 'a demo request carries a priority the API would refuse: '
+            .implode(', ', array_map(static fn ($p): string => (string) $p, $strange)));
+    }
+
+    /**
      * No demo row claims a fraction of an event happened.
      *
      * An impression, a click, an order — each is something that occurred a whole number of times.
