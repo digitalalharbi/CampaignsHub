@@ -83,6 +83,31 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
   CampaignDetailPage 4/4 isolated. Close fully after 30+ clean runs with the mock in place, or reopen on any
   captured failure with a stack.
 
+- **Captured at last (2026-09-27).** This gap has said since it was opened that «the original failure
+  output was not captured, so the exact failing assertion is unknown», and asked to be reopened on a
+  captured failure. Two consecutive full-suite `vitest run`s on this machine each failed exactly one
+  test, and each time a DIFFERENT one:
+
+  ```
+  FAIL  src/features/campaigns/campaignsLedger.test.tsx > the campaigns ledger
+        > asks the server for the next page
+  FAIL  src/features/tasks/tasksLedger.test.tsx > the tasks page
+        > asks the server for the next page rather than slicing what it holds
+  ```
+
+  Both are `3,017 passed | 1 failed` runs, and both failing tests are **pagination** tests that assert
+  the server was ASKED for the next page — that is, they assert on a mocked call, not on rendered
+  output. Neither file fails on its own: `src/features/tasks` runs 7/7 in file order with the two
+  newest cases last, and the same holds for the campaigns file.
+- **What this narrows.** The leading hypothesis was an unmocked network call bleeding a timing warning
+  into a sibling file. These two data points are consistent with that and sharpen it: the tests that
+  break are the ones whose assertion is a CALL COUNT, which is precisely what a stray retry or a
+  late-resolving promise from another worker would disturb, while assertions about rendered text are
+  unaffected. It is still not proven.
+- **Not a regression, and checked rather than assumed:** CI ran the same full suite on the same commits
+  (`frontend` is green on #565, #566 and #567) — so this is load on a developer machine running other
+  work in parallel, not something the branch introduced.
+
 ## G-002 — Arabic PDF: English bold-heading text-layer extraction
 
 - **Severity:** Low
