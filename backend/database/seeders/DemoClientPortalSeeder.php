@@ -162,7 +162,7 @@ final class DemoClientPortalSeeder extends Seeder
                     'module' => 'requests',
                     'type_id' => $types[$type] ?? $types->first(),
                     'status_id' => $statuses[$status] ?? $statuses->first(),
-                    'priority' => $suffix === '1' ? 'high' : 'normal',
+                    'priority' => $suffix === '1' ? 'high' : 'medium',
                     'source' => 'portal',
                     'client_id' => $workspace->getKey(),
                     'project_id' => $project->getKey(),

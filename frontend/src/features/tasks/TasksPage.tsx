@@ -360,13 +360,29 @@ function TaskRow({ task, c, ar, canUpdate, onStatus, onOpen }: { task: Task; c: 
         {task.due_date ? <span className="text-[11px] text-text-muted">{c.due}: <span className="tnum" dir="ltr">{fmtDate(task.due_date)}</span></span> : null}
       </div>
       <div className="flex items-center gap-2">
-        <StatusBadge status={task.status} ar={ar} />
+        {/*
+          The status is said ONCE.
+
+          A badge reading «قيد التنفيذ» sat directly beside a select whose chosen option read «قيد
+          التنفيذ» — the same word twice, a centimetre apart, on every row an operator can edit. The
+          select is the better half to keep: it states the status AND is the control that changes
+          it, whereas the badge only stated it.
+
+          What the badge carried that a bare select did not is COLOUR, which is how a long list is
+          scanned — «متوقفة» red, «مكتملة» green. So the tone moves onto the select rather than
+          being dropped, and the badge stays for the reader who cannot change the status, where it
+          is the only thing saying what the status is.
+        */}
         {canUpdate ? (
           <select value={task.status} onChange={(e) => onStatus(e.target.value)}
-            className="rounded-lg border border-border bg-surface px-2 py-1 text-xs font-semibold text-text-secondary">
+            /* Named with the task, because «Status» alone repeated down a list identifies nothing. */
+            aria-label={`${c.status}: ${task.title}`}
+            className={`rounded-lg border border-border px-2 py-1 text-xs font-semibold ${STATUS_META[task.status]?.tone ?? 'bg-surface text-text-secondary'}`}>
             {statusOptions(task.status).map((s) => <option key={s} value={s}>{statusLabel(s, ar)}</option>)}
           </select>
-        ) : null}
+        ) : (
+          <StatusBadge status={task.status} ar={ar} />
+        )}
         {canUpdate && !done ? (
           <button onClick={() => onStatus('completed')} title={c.complete} aria-label={c.complete}
             className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold text-text-secondary hover:border-success hover:text-success">
