@@ -267,8 +267,16 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
   - **SLA Breach — Implemented and Tested** (c7dad71): scheduled `requests:evaluate-sla` (every 10 min), warning
     threshold, automatic breach detection, `sla_breached_at`/`sla_warned_at` persistence, in-app notification,
     idempotency markers, RequestSlaTest (3). Also fixed an app-wide pgsql/UTC timezone bug found here.
-  - **In-App Notifications — PARTIAL (still).** Present: AppNotification rows per event (unread status, action_url
-    deep link, tenant-level fallback). MISSING: read/unread UI, dedup, preferences, delivery log, quiet-hours.
+  - **In-App Notifications — re-read against the code 2026-09-27, and all five «MISSING» items exist.**
+    *read/unread UI*: `NotificationCenter` reads `unread`, draws the bell badge, and calls
+    `markRead.mutate(...)` when an unread item is opened. *dedup*: the dispatcher takes `dedup_extra`,
+    used by `ClientManagementService` and `RequestJourneyService` among others. *preferences*:
+    `NotificationPreferenceController` plus the settings tab — channels, categories, per-type rhythm,
+    digests, timezone and locale. *delivery log*: `settings/tabs/DeliveryLog.tsx`, and the alerts page
+    carries a «سجل التسليم» tab. *quiet-hours*: `quiet_hours` is validated and persisted by that same
+    controller and edited in that same tab.
+    Not claimed: none of this says a message was DELIVERED — that still needs provider credentials
+    (G-017), and this row should not be read as closing that.
 - **Remaining:** notification hardening (read/dedup/prefs/log); Table pagination refinement. **Next major:** transactional conversion → clients.
 
 ---
