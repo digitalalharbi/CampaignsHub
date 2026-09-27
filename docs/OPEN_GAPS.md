@@ -233,7 +233,15 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
   homepage CTAs are never dead. The dynamic intake form, attachments, confirmation, secure token tracking,
   and the requests data model/backend are the next phase (External Request Portal → Tracking → Dashboard).
 - **Progress:** intake form (f99a1ca), draft PII fix (57af700), secure uploads backend (546a6bc) done+tested.
-- **Next action:** attachments UI wired to uploads, real tracking UI, internal dashboard, SLA, conversion.
+- **Re-read against the code and the screen, 2026-09-27.** Three of the five things this «next action»
+  still asks for are built. `/agency/requests` renders a real internal dashboard — Table, Kanban and
+  Cards views, four counters, grouping by status and by service type, and a «الالتزام بالـSLA» panel
+  reading متجاوز / يستحق خلال 24 ساعة / ضمن المدة — with `sla_breached` carried per row in
+  `RequestsDashboardPage`, and `RequestDetailPage` and `RequestTrackPage` both exist as real pages.
+  Seen rendered at 1440×1000, not inferred from file names.
+- **What this row should now ask for**, having checked rather than trusted the prose: attachments UI
+  wired to uploads, and conversion. The dashboard, SLA and tracking UI are no longer outstanding.
+  Not claimed here: attachments and conversion were not exercised, so they stay open.
 
 ## G-013 — Homepage visual-regression baseline — CAPTURED (2026-07-27)
 
