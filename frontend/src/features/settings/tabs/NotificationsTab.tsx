@@ -11,6 +11,19 @@ import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 
+/**
+ * ISO-8601 weekday names, indexed by the number the API carries — 1 is Monday, 7 is Sunday.
+ *
+ * Indexed rather than a zero-based array, so the number in the payload is the index here and there
+ * is no arithmetic between the two to get wrong.
+ */
+const WEEKDAYS_AR: Record<number, string> = {
+  1: 'الاثنين', 2: 'الثلاثاء', 3: 'الأربعاء', 4: 'الخميس', 5: 'الجمعة', 6: 'السبت', 7: 'الأحد',
+}
+const WEEKDAYS_EN: Record<number, string> = {
+  1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday',
+}
+
 const FREQ = [
   { value: 'realtime', ar: 'فوري', en: 'Immediately' },
   { value: 'hourly', ar: 'كل ساعة', en: 'Hourly' },
@@ -91,6 +104,8 @@ export function NotificationsTab() {
       timezone: p.timezone,
       locale: p.locale,
       digest_hour: p.digest_hour,
+      digest_weekday: p.digest_weekday,
+      digest_monthday: p.digest_monthday,
     })
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
@@ -209,14 +224,21 @@ export function NotificationsTab() {
                               row — which the sender has dispatched since EMAIL-INTELLIGENCE-001 —
                               announced «Weekly, Monday morning»: a false statement about when a
                               reader's mail arrives, printed on the screen they opened to find out.
-                              The monthly day is chosen per recipient and does not reach this screen,
-                              so it is not named; what is stated is what is true of every recipient.
+                              Both days are now named, because both now reach this screen: the
+                              endpoint shows and accepts `digest_weekday` and `digest_monthday`,
+                              which the sender had been reading all along. The weekly line used to
+                              say «Monday morning» as a constant — true only while the column could
+                              not move off its default.
                             */}
                             {digest === 'daily'
                               ? (ar ? `يوميًا، الساعة ${p.digest_hour}:00` : `Daily, at ${p.digest_hour}:00`)
                               : digest === 'monthly'
-                                ? (ar ? 'شهريًا، عن الشهر المنتهي' : 'Monthly, for the finished month')
-                                : (ar ? 'أسبوعيًا، صباح الاثنين' : 'Weekly, Monday morning')}
+                                ? (ar
+                                  ? `شهريًا في اليوم ${p.digest_monthday}، عن الشهر المنتهي`
+                                  : `Monthly on day ${p.digest_monthday}, for the finished month`)
+                                : (ar
+                                  ? `أسبوعيًا، ${WEEKDAYS_AR[p.digest_weekday] ?? WEEKDAYS_AR[1]}`
+                                  : `Weekly, ${WEEKDAYS_EN[p.digest_weekday] ?? WEEKDAYS_EN[1]}`)}
                           </td>
                         </>
                       ) : (
@@ -328,6 +350,38 @@ export function NotificationsTab() {
               value={String(p.digest_hour)}
               onChange={(e) => setP({ ...p, digest_hour: Number(e.target.value) })}
               options={Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${h}:00` }))}
+            />
+          </Field>
+          {/*
+            The DAY, beside the hour, because they answer one question between them.
+
+            ISO-8601 numbering, so the value sent is the one `DigestSchedule` reads. Sunday is
+            offered like any other day and matters more here than the list order suggests: the
+            working week in this market runs Sunday to Thursday, and a weekly summary pinned to
+            Monday arrives after the week it is meant to open.
+          */}
+          <Field label={ar ? 'يوم الملخص الأسبوعي' : 'Weekly summary on'} htmlFor="digest-weekday">
+            <Select
+              id="digest-weekday"
+              value={String(p.digest_weekday)}
+              onChange={(e) => setP({ ...p, digest_weekday: Number(e.target.value) })}
+              options={[1, 2, 3, 4, 5, 6, 7].map((d) => ({
+                value: String(d),
+                label: ar ? WEEKDAYS_AR[d] : WEEKDAYS_EN[d],
+              }))}
+            />
+          </Field>
+          {/*
+            1–28 and no further, the same range the endpoint accepts: the 29th, 30th and 31st do
+            not exist in every month, so a summary set for one of them would skip February in
+            silence. A range that cannot express the mistake beats a message explaining it.
+          */}
+          <Field label={ar ? 'يوم الملخص الشهري' : 'Monthly summary on day'} htmlFor="digest-monthday">
+            <Select
+              id="digest-monthday"
+              value={String(p.digest_monthday)}
+              onChange={(e) => setP({ ...p, digest_monthday: Number(e.target.value) })}
+              options={Array.from({ length: 28 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))}
             />
           </Field>
           <Field label={ar ? 'المنطقة الزمنية' : 'Timezone'} htmlFor="tz">

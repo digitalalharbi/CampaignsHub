@@ -71,8 +71,17 @@ export const TYPE_LABELS: Record<string, Words> = {
   rising_cost: { ar: 'ارتفاع تكلفة النتيجة', en: 'Cost per result rising' },
   reallocation: { ar: 'إعادة توزيع الإنفاق', en: 'Spend worth reallocating' },
   budget_risk: { ar: 'تجاوز حدود الميزانية', en: 'Budget threshold crossed' },
+  /*
+   * Distinct from `budget_pace` in the line above, and the label has to carry the difference: that
+   * one is a platform budget the platform itself enforces, this one an internal ceiling nothing
+   * enforces. Unlabelled, it printed as «internal_spend_limit» among sentences.
+   */
+  internal_spend_limit: { ar: 'بلوغ حد الإنفاق الداخلي', en: 'Internal spend limit reached' },
   // المحتوى
   frequency_saturation: { ar: 'تشبّع تكرار الإعلان', en: 'Creative frequency saturated' },
+  // العمليات
+  /* Somebody waiting for the call they were sold. It printed as «lead_sla». */
+  lead_sla: { ar: 'تأخّر الرد على عميل محتمل', en: 'A lead has waited too long' },
   // التكاملات
   stale_data: { ar: 'بيانات لم تُحدَّث', en: 'Data has stopped updating' },
   data_gap: { ar: 'انقطاع في البيانات', en: 'A gap in the data' },
@@ -111,12 +120,20 @@ export const TYPE_NOTES: Record<string, Words> = {
     ar: 'ملخص أمس لكل مشروع تصل إليه، في الساعة التي تختارها.',
     en: 'Yesterday, for every project you can see, at the hour you choose.',
   },
-  weekly_digest: { ar: 'ملخص الأسبوع المنتهي، يصل صباح الاثنين.', en: 'The finished week, on Monday morning.' },
+  /*
+   * «On the day you choose», not «Monday»: `digest_weekday` is now shown and accepted by the
+   * settings endpoint, so the day is the reader's. This sentence is static and cannot name it —
+   * the row's own timing column does, from the chosen value.
+   */
+  weekly_digest: {
+    ar: 'ملخص الأسبوع المنتهي، في اليوم الذي تختاره.',
+    en: 'The finished week, on the day you choose.',
+  },
   /*
    * The month that FINISHED, not the one in progress: the sender reports the previous month, which
    * is the only arrangement where the figures are complete when they arrive. The day is chosen per
-   * recipient (`digest_monthday`) and does not reach this screen, so it is not stated — a sentence
-   * naming a day this screen cannot know would be a guess printed as a fact.
+   * recipient (`digest_monthday`) and IS now chosen on this screen, so the row's timing column
+   * states it. This sentence stays silent about the day because it is static and the day is not.
    */
   monthly_digest: {
     ar: 'ملخص الشهر المنتهي، بعد اكتمال أرقامه.',
