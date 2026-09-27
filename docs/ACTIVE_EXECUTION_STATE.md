@@ -2,6 +2,72 @@
 
 _Reconciled from Git on 2026-09-16. When this file and Git disagree, Git is right._
 
+## BRANDING's Production clause, and the one action that unblocks it
+
+`BRANDING-RENDER-EVIDENCE-001`'s bar is «the configured logo actually renders, proven per surface»,
+and its own warning is that «code containing `logo_url` is not completion».
+
+**Locally it is proven end to end.** `shared-report-branding.spec.ts` uploads a mark through the
+authenticated Branding Center, then opens the client's link with NO session at all and asserts the
+mark's decoded `naturalWidth` — not its visibility, because an `<img>` whose src 404s is still
+«visible» and draws a broken-image icon, which on a client's report reads as «this report failed».
+
+**On Production it cannot be proven yet, and the reason is not a defect.** Production PDF Acceptance
+run `36291959238` of 2026-09-27 reports:
+
+```
+configured branding
+  name               present
+  logo               none configured
+  logo_source        none
+...
+  "pages_with_images": 0,
+```
+
+Zero images in the PDF is the CORRECT outcome of that configuration: there is no mark to draw. The
+measurement is already in place and would catch a mark that failed to render — `PdfFactsCommand`
+prints what is configured precisely so that a measured logo count means something, and its docblock
+says why.
+
+**The single action that unblocks it:** upload a mark in Production's Branding Center, then re-run
+Production PDF Acceptance. `logo` becomes `configured` and `pages_with_images` must become non-zero;
+if it does not, that is the defect the row exists to catch. Until then this row's Production half is
+`BLOCKED_OPERATIONAL_EVIDENCE` — a credential-gated upload, not an engineering gap.
+
+## What landed on 2026-09-27, and how each one was found
+
+Every defect in this block was found the same way: by **rendering the page and reading it**. None
+of them failed a test, and none would have — each was a surface stating something untrue while
+every assertion about its data passed.
+
+| PR | Surface | What it said | What was true |
+|---|---|---|---|
+| #559 | `/agency/integrations` | chip «يحتاج اختيار حسابات» above body «هذه المنصة غير متاحة للربط حاليًا» | a stale wizard view outranked the platform state, telling a customer to do something impossible — on all six cards, with the same sentence three times per card |
+| #560 | every notification | four of six `action_url`s named routes that **do not exist** | every one of those notifications ended on «الصفحة غير موجودة», for every reader, in both portals |
+| #561 | `/agency/portfolio` | three cards reading «Q3 Launch — Demo» | the one view that crosses clients by definition did not name the client |
+| #561 | `/agency/content` | the absence sentence printed twice per tile | `absenceLabel` already returns the server's note; the tile printed it again |
+| #561 | `/portal/reports` | a bare `monthly` in an Arabic page | the type's Arabic label exists in a taxonomy the client's portal never asked |
+| #561 | `/agency/dashboard` | one finding seven times | the loudest rule took all twelve slots and **evicted** the others, while `total` kept counting them |
+
+### The pattern worth keeping
+
+Five of the six are the same defect: **a surface printing a value where a sentence belongs**, or
+printing one sentence twice. They are invisible to unit tests because the data is right — it is the
+presentation that lies — and invisible to code review because each looks correct in isolation. The
+only instrument that finds them is a rendered page and somebody reading it.
+
+Three of the six also had the answer already written **one route over**: `/agency/projects` names
+its client, `ClientCampaignsPage` translates its enums, `CampaignsPage` asks for a project. The
+product disagreeing with itself is a stronger signal than any lint rule, and cheaper to check.
+
+### What was NOT claimed
+
+The Production confirmation of these six is **Owner-gated**. Every one is behind authentication,
+`production-diagnostics.yml` accepts filters and never a command — deliberately, and correctly —
+and this environment holds no Production URL or credential. Each is therefore
+IMPLEMENTED + DEPLOYED with browser evidence on a local install, and its Production half is
+`BLOCKED_OPERATIONAL_EVIDENCE` until somebody with a session opens the page.
+
 ## Production verification, 2026-09-27 — the pasted link previews as a card
 
 Run **36291959238** (Production PDF Acceptance, step 5/5) on the live install, after `b053f8b`
