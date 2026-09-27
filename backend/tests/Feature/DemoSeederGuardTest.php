@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
+use App\Domains\Metrics\Enums\SyncRunStatus;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -124,5 +125,36 @@ final class DemoSeederGuardTest extends TestCase
                 static fn ($r): string => "{$r->metric_key}={$r->value}",
             )->implode(', '),
         );
+    }
+
+    /**
+     * No demo sync run speaks a status the pipeline retired.
+     *
+     * INTEG-RUNTIME §8 narrowed the vocabulary to the six words in `SyncRunStatus` and split
+     * `partial`, which had meant BOTH «the provider had nothing for this window» and «the provider
+     * answered and some rows could not be attached to a campaign». The migration re-labelled every
+     * historical row from its own error text; `DemoAnalyticsSeeder` kept writing the retired word.
+     *
+     * So the single non-green run a reader meets in this environment carried a status no enum case
+     * matches, and every surface that reads the vocabulary fell through to «unknown» for exactly the
+     * row a prospect is most likely to ask about. Asserted against the enum rather than a copied
+     * list, so a seventh word cannot be added in one place and missed here.
+     */
+    public function test_every_demo_sync_run_status_is_one_the_pipeline_defines(): void
+    {
+        $this->app->detectEnvironment(fn () => 'local');
+
+        $this->artisan('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true])->assertSuccessful();
+
+        foreach (['metric_sync_runs', 'integration_sync_runs'] as $table) {
+            $strange = DB::table($table)
+                ->whereNotIn('status', SyncRunStatus::values())
+                ->distinct()
+                ->pluck('status')
+                ->all();
+
+            $this->assertSame([], $strange, "a demo row in {$table} carries a status the pipeline does not define: "
+                .implode(', ', array_map(static fn ($s): string => (string) $s, $strange)));
+        }
     }
 }

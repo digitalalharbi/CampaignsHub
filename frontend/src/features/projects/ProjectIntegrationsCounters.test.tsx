@@ -7,10 +7,11 @@ import { renderWithProviders, signInWith } from '@/test/utils'
 vi.mock('@/lib/api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api/client')>()),
   getData: vi.fn(),
+  getEnvelope: vi.fn(),
   postData: vi.fn(),
 }))
 
-import { getData } from '@/lib/api/client'
+import { getData, getEnvelope } from '@/lib/api/client'
 
 /**
  * «المنصات» counts the platforms bound to this project, which is what its label claims.
@@ -39,6 +40,14 @@ describe('the project integrations counters', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     signInWith(['projects.view'])
+    /* `listProjectTasks` reads the envelope, not the data — the tasks card is fed here. */
+    vi.mocked(getEnvelope).mockResolvedValue({
+      data: [{
+        id: 't1', title: 'Prepare tracking — Demo', status: 'in_progress',
+        priority: 'high', due_date: null, is_overdue: false,
+      }],
+      meta: { total: 1 },
+    } as never)
     vi.mocked(getData).mockImplementation((path: string) => {
       /* `listProjectBindings` asks for `/projects/{id}/integrations` exactly. */
       if (path === `/projects/${PROJECT}/integrations`) return Promise.resolve([binding] as never)
@@ -50,6 +59,11 @@ describe('the project integrations counters', () => {
           platforms: [],
           summary: { total: 0, with_credentials: 0, with_accounts: 0, discovered_campaigns: 0 },
         } as never)
+      }
+
+      /* The sync log reads an OBJECT too — an array has no `runs`, and the panel would throw. */
+      if (path.endsWith('/sync-runs')) {
+        return Promise.resolve({ runs: [], summary: {}, runs_total: 0, runs_withheld: 0 } as never)
       }
 
       /* Everything else — campaigns, tasks — is empty, which is the state that exposed the defect. */
@@ -135,5 +149,27 @@ describe('the project integrations counters', () => {
     await screen.findByText(/Sandbox Ad Account/)
     expect(screen.queryByText('Access revoked')).toBeNull()
     expect(screen.queryByText('connected')).toBeNull()
+  })
+
+  /**
+   * A task's state and urgency are NAMED, not printed from the column.
+   *
+   * The card rendered `task.priority` and `task.status` verbatim, so «مهام هذا المشروع» listed
+   * «in_progress» and «high» in the middle of an Arabic page. `TasksPage` has named both all along
+   * — the map was simply private to that file — and the two surfaces must not end up with two
+   * different Arabic sentences for `waiting_client`, which is why the map moved rather than being
+   * copied.
+   */
+  it('names a task’s state and urgency instead of printing the column', async () => {
+    renderWithProviders(
+      <Routes><Route path="/projects/:projectId/integrations" element={<ProjectIntegrationsPage />} /></Routes>,
+      { route: `/projects/${PROJECT}/integrations`, locale: 'ar' },
+    )
+
+    expect(await screen.findByText('Prepare tracking — Demo')).toBeInTheDocument()
+    expect(screen.getByText('قيد التنفيذ')).toBeInTheDocument()
+    expect(screen.getByText(/عالية/)).toBeInTheDocument()
+    expect(screen.queryByText('in_progress')).not.toBeInTheDocument()
+    expect(screen.queryByText('high')).not.toBeInTheDocument()
   })
 })
