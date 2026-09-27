@@ -125,6 +125,19 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
 - Scope, stated so it is not over-read: page one at 1440×1200 on the demo dataset. It does not speak
   for production media, which is `BLOCKED_OPERATIONAL_EVIDENCE` behind an authenticated session.
 
+### «Results / CPA consistency» — measured the same way
+
+The same list asks for results/orders/CPA/CVR consistency. Taking every tile on that page that shows
+all three figures and testing whether the printed cost per result equals spend ÷ results:
+
+```
+CHECKED 17   MISMATCHED 0
+```
+
+Seventeen tiles, none off by more than 0.15 SAR — so the card's own arithmetic holds across the page,
+not only on the one creative that was opened for the card→popup comparison. Same scope caveat: demo
+dataset, page one.
+
 ## G-002 — Arabic PDF: English bold-heading text-layer extraction
 
 - **Severity:** Low
