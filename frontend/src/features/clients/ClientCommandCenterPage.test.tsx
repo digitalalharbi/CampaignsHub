@@ -104,7 +104,11 @@ describe('ClientCommandCenterPage — a client outside the caller’s scope', ()
         id: 'k1', project_id: 'p1', name: 'National Day', objective: 'sales',
         status: 'paused', budget: null, currency: 'SAR',
       }],
-      requests: [],
+      requests: [{
+        id: 'r1', reference: 'REQ-1042', service: 'إطلاق حملة إعلانية مدفوعة',
+        service_en: 'Launch a paid campaign', status: 'under_review',
+        status_label: 'تحت المراجعة', status_label_en: 'Under Review', submitted_at: null,
+      }],
     } as never)
 
     renderWithProviders(<ClientCommandCenterPage />, { locale: 'ar' })
@@ -133,5 +137,34 @@ describe('ClientCommandCenterPage — a client outside the caller’s scope', ()
     expect(await screen.findByText('National Day')).toBeInTheDocument()
     expect(screen.queryByText('paused')).not.toBeInTheDocument()
     expect(screen.queryByText('sales')).not.toBeInTheDocument()
+  })
+
+  /**
+   * A request names its service and its state in the reader's language, on both sides.
+   *
+   * The row the server sent carried `type->name_en` and the raw `status->key`, so the Arabic
+   * command centre listed «Launch a paid campaign» next to «under_review». Both tables have
+   * carried `name_ar` beside `name_en` since the requests dashboard was built — the payload
+   * simply never asked for them. Asserting both locales is what keeps the fix from being a
+   * swap that breaks the English reader instead.
+   */
+  it('names a request’s service and state in the reader’s language', async () => {
+    renderWithProviders(<ClientCommandCenterPage />, { locale: 'ar' })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'الطلبات' }))
+    expect(await screen.findByText('REQ-1042')).toBeInTheDocument()
+    expect(screen.getByText('تحت المراجعة')).toBeInTheDocument()
+    expect(screen.getByText('إطلاق حملة إعلانية مدفوعة')).toBeInTheDocument()
+    expect(screen.queryByText('under_review')).not.toBeInTheDocument()
+  })
+
+  it('names the same request in English for an English reader', async () => {
+    renderWithProviders(<ClientCommandCenterPage />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Requests' }))
+    expect(await screen.findByText('REQ-1042')).toBeInTheDocument()
+    expect(screen.getByText('Under Review')).toBeInTheDocument()
+    expect(screen.getByText('Launch a paid campaign')).toBeInTheDocument()
+    expect(screen.queryByText('under_review')).not.toBeInTheDocument()
   })
 })
