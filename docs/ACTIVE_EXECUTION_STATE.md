@@ -2,6 +2,38 @@
 
 _Reconciled from Git on 2026-09-16. When this file and Git disagree, Git is right._
 
+## Production verification, 2026-09-27 — the pasted link previews as a card
+
+Run **36291959238** (Production PDF Acceptance, step 5/5) on the live install, after `b053f8b`
+deployed. `reports:share-card-check` mints a temporary share, drives the crawler's two steps, and
+measures the picture:
+
+```
+✅ the crawler document is served
+✅ it names a picture
+✅ it carries no money figure
+✅ the picture is served
+✅ it is a png by its BYTES, not its header
+✅ a browser would draw it
+✅ it is the size the document promised
+✅ it may be cached publicly
+   card bytes        151808
+   ↺ the temporary link was revoked
+```
+
+This is what «the link previews as a real branded card in WhatsApp» means as a MEASUREMENT rather
+than as a claim: the document a crawler is served, the bytes it points at, and the fact that a
+decoder — not a file extension — says those bytes are a picture. «Carries no money figure» is the
+client-report rule holding on the one surface that is public by construction.
+
+The same run re-confirmed the download: served bytes 1,375,342 = stored bytes 1,375,342, http 200,
+body starts with `%PDF`, filename ascii and not the stored uuid.
+
+The temporary share is revoked in a `finally`, because a token is a credential and one left behind
+by a diagnostic is a credential left behind.
+
+Recorded as `SHARE-PREVIEW-CARD-001` in the traceability matrix, which had no row for it before.
+
 ## Where Git is (2026-09-16)
 
 `origin/main` = **`312a7572` (#433)**. Eleven merges landed since `288bc48d` (#422): #423, #424,
