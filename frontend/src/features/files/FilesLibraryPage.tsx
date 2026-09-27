@@ -194,7 +194,21 @@ export function FilesLibraryPage() {
               </div>
               <div className="flex flex-col gap-1 p-3">
                 <span className="line-clamp-1 text-sm font-semibold text-text-primary" title={f.name}>{f.name}</span>
-                <span className="line-clamp-1 text-[11px] text-text-muted">{f.client_name ?? '—'} · {f.related.label ?? srcLabel(f.source)}</span>
+                {/*
+                  The same `title` the name above already carries, for the same reason.
+
+                  This line holds the two things that identify the file — whose it is and what it
+                  belongs to — and `line-clamp-1` cuts it: at 1440 the card read «…emo Client ·
+                  REQ-DEMO-CLIENT-», with the client's name clipped at the front and the reference
+                  at the back, so neither was recoverable. The table view shows both in full, so the
+                  information exists; it was only this view that lost it with no way back.
+                */}
+                <span
+                  className="line-clamp-1 text-[11px] text-text-muted"
+                  title={`${f.client_name ?? '—'} · ${f.related.label ?? srcLabel(f.source)}`}
+                >
+                  {f.client_name ?? '—'} · {f.related.label ?? srcLabel(f.source)}
+                </span>
                 <div className="mt-1 flex items-center justify-between">
                   <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${f.visibility === 'internal' ? 'bg-surface-hover text-text-secondary' : 'bg-info/15 text-info'}`}>
                     {f.visibility === 'internal' ? c.vis_internal : c.vis_client}

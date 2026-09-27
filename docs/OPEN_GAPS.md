@@ -83,6 +83,61 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
   CampaignDetailPage 4/4 isolated. Close fully after 30+ clean runs with the mock in place, or reopen on any
   captured failure with a stack.
 
+- **Captured at last (2026-09-27).** This gap has said since it was opened that «the original failure
+  output was not captured, so the exact failing assertion is unknown», and asked to be reopened on a
+  captured failure. Two consecutive full-suite `vitest run`s on this machine each failed exactly one
+  test, and each time a DIFFERENT one:
+
+  ```
+  FAIL  src/features/campaigns/campaignsLedger.test.tsx > the campaigns ledger
+        > asks the server for the next page
+  FAIL  src/features/tasks/tasksLedger.test.tsx > the tasks page
+        > asks the server for the next page rather than slicing what it holds
+  ```
+
+  Both are `3,017 passed | 1 failed` runs, and both failing tests are **pagination** tests that assert
+  the server was ASKED for the next page — that is, they assert on a mocked call, not on rendered
+  output. Neither file fails on its own: `src/features/tasks` runs 7/7 in file order with the two
+  newest cases last, and the same holds for the campaigns file.
+- **What this narrows.** The leading hypothesis was an unmocked network call bleeding a timing warning
+  into a sibling file. These two data points are consistent with that and sharpen it: the tests that
+  break are the ones whose assertion is a CALL COUNT, which is precisely what a stray retry or a
+  late-resolving promise from another worker would disturb, while assertions about rendered text are
+  unaffected. It is still not proven.
+- **Not a regression, and checked rather than assumed:** CI ran the same full suite on the same commits
+  (`frontend` is green on #565, #566 and #567) — so this is load on a developer machine running other
+  work in parallel, not something the branch introduced.
+
+## «No unexplained blank preview» — MEASURED (2026-09-27)
+
+- **Severity:** n/a (acceptance measurement, kept here because this is where the evidence lives)
+- The Owner's CONTENT list asks for «no unexplained blank previews». Measured on the whole first page
+  of `/agency/content` rather than argued: for each of the 24 tiles, does it draw media (an `<img>`
+  with a non-zero `naturalWidth`, a `<video>` or a `<canvas>`), or does it carry a sentence?
+
+  ```
+  {"tiles":24,"drew":13,"said":11,"silent":[]}
+  ```
+
+- Thirteen draw the asset, eleven say why there is nothing to draw, and **none is silent**.
+  `naturalWidth` rather than presence, deliberately: an `<img>` whose src 404s still exists in the DOM
+  and the browser draws its broken-image icon, which is the outcome this requirement is about.
+- Scope, stated so it is not over-read: page one at 1440×1200 on the demo dataset. It does not speak
+  for production media, which is `BLOCKED_OPERATIONAL_EVIDENCE` behind an authenticated session.
+
+### «Results / CPA consistency» — measured the same way
+
+The same list asks for results/orders/CPA/CVR consistency. Taking every tile on that page that shows
+all three figures and testing whether the printed cost per result equals spend ÷ results:
+
+```
+CHECKED 17   MISMATCHED 0
+```
+
+Seventeen tiles, none off by more than 0.15 SAR — so the card's own arithmetic holds across the page,
+not only on the one creative that was opened for the card→popup comparison. Same scope caveat: demo
+dataset, page one.
+
 ## G-002 — Arabic PDF: English bold-heading text-layer extraction
 
 - **Severity:** Low
@@ -117,7 +172,15 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
 ## G-006 — No catch-all 404 route
 
 - **Severity:** Medium
-- **Status:** OPEN (observed 2026-07-27 during G-005 testing)
+- **Status:** **CLOSED (verified 2026-09-27).** The route exists — `router.tsx` ends with
+  `{ path: '*', element: <NotFoundPage />, errorElement: <NotFoundPage /> }`, last in the list so it
+  can only match what nothing else did, and it is wired as the `errorElement` too, which is what
+  replaces the dev ErrorBoundary this gap was opened against.
+  Seen rendered, not just read: opening `/agency/notifications` and `/agency/branding` (paths that
+  exist under `/app` but not under `/agency`) draws the product's own styled page — «الصفحة غير
+  موجودة / ربما تغيّر العنوان أو كُتب خطأ», the attempted path in a field, and a «العودة إلى الصفحة
+  الرئيسية» button — with the app's typography and dark ground, not «Hey developer».
+- **Was:** OPEN (observed 2026-07-27 during G-005 testing)
 - **Symptom:** Unknown paths (e.g. `/campaigns/42` — wrong shape) fall through to React Router's default
   ErrorBoundary ("Unexpected Application Error! 404 Not Found — Hey developer"), an un-styled dev screen.
 - **Next action:** add a styled `NotFound` element as a catch-all `{ path: '*' }` inside and outside the auth
@@ -149,8 +212,12 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
   production. However its component definition + the demo strings (`agency@campaignshub.io` / `password`)
   remain in the built JS as inert dead code (rollup keeps the same-module function). Values are non-secret
   public demo data, so this is cosmetic, not a leak.
-- **Next action (optional):** move `DemoCredentials` to its own module and dynamic-import only in dev to strip
-  it from the production chunk entirely.
+- **CLOSED (verified 2026-09-27).** There is no `DemoCredentials` component left in `frontend/src`, and
+  the demo strings this row is about — `agency@campaignshub.io` and its password — appear nowhere in the
+  source outside test files. Whatever removed the card removed the dead code with it, so the optional
+  next action below has no subject.
+- **Was (next action, optional):** move `DemoCredentials` to its own module and dynamic-import only in dev
+  to strip it from the production chunk entirely.
 
 ## Auth cross-browser acceptance — CLOSED (2026-07-27)
 
@@ -177,20 +244,31 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
 - **Severity:** Medium
 - **Status:** OPEN (phase 2 is NOT fully Completed — these are the open items)
 - Items, each honestly Not Started / partial:
-  - `/settings/preferences` — Not Started (route is a placeholder; overlaps profile locale/theme/number-format).
-  - `/settings/notifications` — Not Started (route is a placeholder; needs channel + per-type prefs backend).
+  - `/settings/preferences` — **BUILT (re-read 2026-09-27).** `/app/settings/preferences` now redirects to
+    `/account/preferences`, which renders a real `PreferencesPage`; personal settings moved under
+    `/account` and the old addresses were kept working rather than left as placeholders.
+  - `/settings/notifications` — **BUILT (re-read 2026-09-27), and this row understates it most.** It
+    redirects to `/account/notifications`, and the settings tab behind it is 490 lines carrying
+    channels, categories, per-type rhythm, the daily/weekly/monthly digests, the digest hour, the
+    weekly and monthly day, quiet hours, timezone and locale — all on real endpoints in
+    `NotificationPreferenceController`, not a placeholder. #562 was work INSIDE this page.
   - Avatar upload (`POST /api/me/avatar`) — Not Started (UserResource already exposes `avatar_url`).
   - Workspace-settings entitlement gate — In Progress (`/settings/workspace` renders org settings; owner-only
     gate not yet enforced on that route).
-- **Next action:** build preferences + notifications pages on the real endpoints; add avatar upload; gate
-  workspace settings by role/permission.
+- **Next action, corrected to what is actually left:** avatar upload — checked and genuinely absent, no
+  `POST` avatar route exists under `app/Domains/Access` or `app/Http` — and the owner-only gate on
+  `/settings/workspace`. The two pages this row asked for are built.
 
 ## G-011 — Account E2E only on Chromium
 
 - **Severity:** Low
 - **Status:** OPEN
-- **Detail:** `account-settings.spec.ts` runs on chromium only; auth specs already run on Firefox + WebKit.
-- **Next action:** extend the account journey run to Firefox + WebKit projects.
+- **CLOSED (verified 2026-09-27).** `playwright.config.ts` defines chromium, firefox and webkit as three
+  projects that each run the whole `e2e` directory; nothing restricts a spec to one browser. The only
+  exclusions are `grepInvert` on `@visual` (firefox and webkit) and on `@evidence`, and
+  `account-settings.spec.ts` carries neither tag — so the account journey already runs on all three.
+  Consistent with what the gates actually execute: the firefox gate on #565 reported `620 passed`.
+- **Was:** `account-settings.spec.ts` runs on chromium only; next action, extend it to Firefox + WebKit.
 
 ## G-012 — External request portal is stubbed (homepage CTAs live, portal pending)
 
@@ -200,7 +278,15 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
   homepage CTAs are never dead. The dynamic intake form, attachments, confirmation, secure token tracking,
   and the requests data model/backend are the next phase (External Request Portal → Tracking → Dashboard).
 - **Progress:** intake form (f99a1ca), draft PII fix (57af700), secure uploads backend (546a6bc) done+tested.
-- **Next action:** attachments UI wired to uploads, real tracking UI, internal dashboard, SLA, conversion.
+- **Re-read against the code and the screen, 2026-09-27.** Three of the five things this «next action»
+  still asks for are built. `/agency/requests` renders a real internal dashboard — Table, Kanban and
+  Cards views, four counters, grouping by status and by service type, and a «الالتزام بالـSLA» panel
+  reading متجاوز / يستحق خلال 24 ساعة / ضمن المدة — with `sla_breached` carried per row in
+  `RequestsDashboardPage`, and `RequestDetailPage` and `RequestTrackPage` both exist as real pages.
+  Seen rendered at 1440×1000, not inferred from file names.
+- **What this row should now ask for**, having checked rather than trusted the prose: attachments UI
+  wired to uploads, and conversion. The dashboard, SLA and tracking UI are no longer outstanding.
+  Not claimed here: attachments and conversion were not exercised, so they stay open.
 
 ## G-013 — Homepage visual-regression baseline — CAPTURED (2026-07-27)
 
@@ -218,8 +304,16 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
   - **SLA Breach — Implemented and Tested** (c7dad71): scheduled `requests:evaluate-sla` (every 10 min), warning
     threshold, automatic breach detection, `sla_breached_at`/`sla_warned_at` persistence, in-app notification,
     idempotency markers, RequestSlaTest (3). Also fixed an app-wide pgsql/UTC timezone bug found here.
-  - **In-App Notifications — PARTIAL (still).** Present: AppNotification rows per event (unread status, action_url
-    deep link, tenant-level fallback). MISSING: read/unread UI, dedup, preferences, delivery log, quiet-hours.
+  - **In-App Notifications — re-read against the code 2026-09-27, and all five «MISSING» items exist.**
+    *read/unread UI*: `NotificationCenter` reads `unread`, draws the bell badge, and calls
+    `markRead.mutate(...)` when an unread item is opened. *dedup*: the dispatcher takes `dedup_extra`,
+    used by `ClientManagementService` and `RequestJourneyService` among others. *preferences*:
+    `NotificationPreferenceController` plus the settings tab — channels, categories, per-type rhythm,
+    digests, timezone and locale. *delivery log*: `settings/tabs/DeliveryLog.tsx`, and the alerts page
+    carries a «سجل التسليم» tab. *quiet-hours*: `quiet_hours` is validated and persisted by that same
+    controller and edited in that same tab.
+    Not claimed: none of this says a message was DELIVERED — that still needs provider credentials
+    (G-017), and this row should not be read as closing that.
 - **Remaining:** notification hardening (read/dedup/prefs/log); Table pagination refinement. **Next major:** transactional conversion → clients.
 
 ---
