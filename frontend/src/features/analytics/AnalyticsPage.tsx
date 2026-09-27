@@ -132,6 +132,7 @@ import { accounts as countedAccounts, countedAr, countedEn, days as countedDays 
 import { readMetricValue } from '@/lib/metricValue'
 import { useUi } from '@/stores/ui'
 import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
+import { EmptyState } from '@/components/ui/States'
 import { useProject } from '@/stores/project'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { useQuery } from '@tanstack/react-query'
@@ -619,18 +620,42 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
       </div>
       )}
 
-      {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />}
-      {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />}
-      {tab === 'accounts' && <AccountsTab projectId={currentProjectId} range={range} filters={filters} />}
-      {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />}
-      {tab === 'ad_sets' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />}
-      {tab === 'ads' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />}
-      {tab === 'creative' && <CreativeTab projectId={currentProjectId} range={range} filters={filters} />}
-      {tab === 'objective' && <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />}
-      {tab === 'funnel' && <FunnelTab projectId={currentProjectId} range={range} filters={filters} />}
-      {tab === 'store' && <StoreFunnelTab projectId={currentProjectId} range={range} />}
-      {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} filters={filters} />}
-      {tab === 'quality' && <QualityTab projectId={currentProjectId} range={range} filters={filters} />}
+      {/*
+        Say WHY it is empty, and say the true reason.
+
+        Every metric query here is `enabled: Boolean(projectId)`, so with no project selected none
+        of them ever fires. The panels then drew their own empty states — «لا توجد بيانات لهذه
+        الفترة» — on a screen of a dozen blank cards, which blames the PERIOD for an absence the
+        period had nothing to do with. A reader's next move is to widen the range, and widening it
+        changes nothing, because the request was never made.
+
+        `CampaignsPage` and `RecommendationsPage` already answer this the honest way. The header,
+        the filter bar and the tab bar stay: this page carries its own project selector, so the
+        thing the sentence asks for is on screen beside it.
+      */}
+      {currentProjectId === null ? (
+        <EmptyState
+          title={ar ? 'اختر مشروعًا' : 'Select a project'}
+          description={ar
+            ? 'أرقام كل مشروع مستقلة — اختر مشروعًا من الأعلى لعرض تحليلاته.'
+            : 'Each project has its own figures — pick one above to see its analytics.'}
+        />
+      ) : (
+        <>
+        {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />}
+        {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />}
+        {tab === 'accounts' && <AccountsTab projectId={currentProjectId} range={range} filters={filters} />}
+        {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />}
+        {tab === 'ad_sets' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />}
+        {tab === 'ads' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />}
+        {tab === 'creative' && <CreativeTab projectId={currentProjectId} range={range} filters={filters} />}
+        {tab === 'objective' && <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />}
+        {tab === 'funnel' && <FunnelTab projectId={currentProjectId} range={range} filters={filters} />}
+        {tab === 'store' && <StoreFunnelTab projectId={currentProjectId} range={range} />}
+        {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} filters={filters} />}
+        {tab === 'quality' && <QualityTab projectId={currentProjectId} range={range} filters={filters} />}
+        </>
+      )}
 
       <LivePerformanceNotice variant="compact" />
     </div>
