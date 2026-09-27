@@ -5,6 +5,17 @@ import { ArrowLeft, Pencil } from 'lucide-react'
 import { getClient } from './api'
 import { CLIENT_STATUS_LABELS, INDUSTRY_LABELS, labelOf, PRIORITY_LABELS, SERVICE_LEVEL_LABELS } from './labels'
 import { ClassificationEditor } from './ClassificationEditor'
+/*
+ * The canonical labels, not a fourth copy of them.
+ *
+ * These three tabs printed `p.status`, `c.objective` and `c.status` verbatim, so an Arabic command
+ * centre listed «active», «sales», «paused» — the column values. Every one of them already has a
+ * written name elsewhere in the product: the portfolio card calls `projectStatusLabel`, and the
+ * campaigns feature owns `campaignStatusLabel` and `objectiveLabel`. Importing them is what keeps
+ * the two surfaces from drifting into different words for the same state.
+ */
+import { campaignStatusLabel, objectiveLabel } from '@/features/campaigns/labels'
+import { projectStatusLabel } from '@/features/projects/ProjectsPage'
 import { TabBilling } from './TabBilling'
 import { TabMessages } from './TabMessages'
 import { TabActivity } from './TabActivity'
@@ -25,6 +36,8 @@ export function ClientCommandCenterPage() {
   const portalTo = usePortalPath()
   const t = useT()
   const lang = useUi((s) => s.locale)
+  const ar = lang === 'ar'
+  const locale = lang
   const { clientId = '' } = useParams()
   const [tab, setTab] = useState<Tab>('overview')
   const [editing, setEditing] = useState(false)
@@ -135,7 +148,7 @@ export function ClientCommandCenterPage() {
               {d.projects.map((p) => (
                 <li key={p.id} className="flex items-center justify-between rounded-lg border border-border px-4 py-3 text-sm">
                   <span className="font-medium text-text-primary">{p.name}</span>
-                  <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs text-text-secondary">{p.status}</span>
+                  <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs text-text-secondary">{projectStatusLabel(p.status, ar)}</span>
                 </li>
               ))}
             </ul>
@@ -148,8 +161,8 @@ export function ClientCommandCenterPage() {
                 <li key={c.id} className="flex items-center justify-between rounded-lg border border-border px-4 py-3 text-sm">
                   <Link to={`/campaigns/${c.project_id}/${c.id}`} className="font-medium text-brand-600 hover:underline">{c.name}</Link>
                   <span className="flex items-center gap-2">
-                    <span className="text-xs text-text-secondary">{c.objective}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${c.status === 'draft' ? 'bg-surface-secondary text-text-muted' : 'bg-success/15 text-success'}`}>{c.status}</span>
+                    <span className="text-xs text-text-secondary">{objectiveLabel(c.objective, locale)}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${c.status === 'draft' ? 'bg-surface-secondary text-text-muted' : 'bg-success/15 text-success'}`}>{campaignStatusLabel(c.status, locale)}</span>
                   </span>
                 </li>
               ))}
