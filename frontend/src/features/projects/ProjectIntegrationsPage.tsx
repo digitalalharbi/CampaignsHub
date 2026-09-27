@@ -93,10 +93,39 @@ export function ProjectIntegrationsPage() {
 
   const bindError = detachMutation.isError ? toApiError(detachMutation.error) : null
 
+  /*
+   * A project that is not there gets ONE answer, not two.
+   *
+   * Opening `/projects/<gone>/integrations` drew «العنصر المطلوب غير موجود» from the platform panel
+   * and then carried on rendering the whole working surface underneath it — «الحسابات المرتبطة بهذا
+   * المشروع 0», «الحملات 0», an «إدارة مصادر البيانات» button — so the page said the item does not
+   * exist and, more prominently, that it exists and has nothing bound to it. Those are different
+   * claims and only one of them is true. Reproduced against a UUID no row can hold.
+   *
+   * The bindings query is the one to read: it is this page's own scope, and it answers 404 for a
+   * project this workspace cannot reach — which is the same answer for «deleted» and «another
+   * tenant's», deliberately, because telling a reader which would confirm the row exists.
+   */
+  const missing = bindings.isError && toApiError(bindings.error).status === 404
+
   const rows = bindings.data ?? []
   const providers = [...new Set((campaigns.data ?? []).map((c) => c.provider).filter(Boolean))]
   const lastSync = rows.map((b) => b.account?.last_synced_at).filter(Boolean).sort().at(-1) ?? null
   const discoveredCampaigns = campaigns.data?.length ?? 0
+
+  if (missing) {
+    return (
+      <section className="space-y-5">
+        <h1 className="font-[var(--font-heading)] text-3xl font-extrabold tracking-tight">{t('project_integrations')}</h1>
+        <EmptyState
+          title={lang === 'ar' ? 'هذا المشروع غير موجود' : 'This project does not exist'}
+          description={lang === 'ar'
+            ? 'ربما حُذف، أو أنه خارج مساحة العمل الحالية. اختر مشروعًا من القائمة الجانبية.'
+            : 'It may have been deleted, or it belongs to another workspace. Pick a project from the menu.'}
+        />
+      </section>
+    )
+  }
 
   return (
     <section className="space-y-5">
