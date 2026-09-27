@@ -522,6 +522,95 @@ describe('CreativePulseSection', () => {
    * the day the engine landed and this section drew none of them. An API without a UI is the same
    * defect as a page without data, and it is invisible in every test that only checks the cards.
    */
+  /**
+   * One card per FINDING, not per row that produced it.
+   *
+   * A rule that fires on many creatives produced one card each, and where their figures matched
+   * exactly — which happens whenever several ads share a name and a budget — the cards came out
+   * byte-identical: same title, same sentence, same dates, same link. Seven in a row on the demo
+   * tenant's dashboard. The finding is worth reading once; which creatives it covers is the part
+   * that differs, so that is what the card names.
+   */
+  it('draws one card for an identical finding and names the creatives it covers', async () => {
+    const finding = (id: string, name: string) => ({
+      id: `spend_without_evidence:${id}`,
+      key: 'spend_without_evidence',
+      severity: 'warning' as const,
+      comparison: 'previous_period' as const,
+      title_ar: 'إنفاق دون بيانات كافية للحكم',
+      title_en: 'Spending without enough data to judge',
+      detail_ar: 'أنفق 1,818.00 مقابل 666.00 ظهور.',
+      detail_en: 'Spent 1,818.00 for 666.00 impressions.',
+      action_ar: 'إمّا أن تمنحه ميزانية كافية أو توقفه.',
+      action_en: 'Give it enough budget to become measurable, or stop it.',
+      supporting_metrics: {}, previous_metrics: {}, movement: null,
+      confidence: 'insufficient_data' as const,
+      creative_id: id, creative_name: name,
+      objective: 'sales', path: 'conversion', provider: 'snapchat', campaign_name: 'Always-On',
+      period: { from: '2026-07-08', to: '2026-08-06', days: 30 },
+      previous_period: { from: '2026-06-08', to: '2026-07-07' },
+      generated_by: 'rules' as const, needs_human_review: false,
+    })
+
+    vi.mocked(getCreativePulse).mockResolvedValue(
+      pulse({
+        insights: {
+          items: [finding('cr-1', 'Teaser A'), finding('cr-2', 'Teaser B'), finding('cr-3', 'Teaser C')],
+          total: 3, shown: 3,
+          evidence: { min_impressions: 1000, min_change: 0.1 },
+          period: { from: '2026-07-08', to: '2026-08-06', days: 30 },
+          previous_period: { from: '2026-06-08', to: '2026-07-07' },
+        },
+      }) as never,
+    )
+
+    renderWithProviders(<CreativePulseSection libraryPath="/app/content" filters={{}} />, { locale: 'en' })
+
+    /* Said once, not three times. */
+    expect(await screen.findAllByText('Spending without enough data to judge')).toHaveLength(1)
+
+    /* And the two it also covers are named, because that is what differs between them. */
+    const also = screen.getByTestId('insight-also-named')
+    expect(also).toHaveTextContent('Also applies to 2 more')
+    expect(also).toHaveTextContent('Teaser B')
+    expect(also).toHaveTextContent('Teaser C')
+  })
+
+  /** Two creatives that trip the same rule with DIFFERENT figures say different things, and stay two cards. */
+  it('keeps findings apart when their figures differ', async () => {
+    const base = {
+      key: 'spend_without_evidence', severity: 'warning' as const, comparison: 'previous_period' as const,
+      title_ar: 'إنفاق دون بيانات كافية للحكم', title_en: 'Spending without enough data to judge',
+      action_ar: 'إمّا أن تمنحه ميزانية كافية أو توقفه.', action_en: 'Give it enough budget, or stop it.',
+      supporting_metrics: {}, previous_metrics: {}, movement: null, confidence: 'insufficient_data' as const,
+      objective: 'sales', path: 'conversion', provider: 'snapchat', campaign_name: 'Always-On',
+      period: { from: '2026-07-08', to: '2026-08-06', days: 30 },
+      previous_period: { from: '2026-06-08', to: '2026-07-07' },
+      generated_by: 'rules' as const, needs_human_review: false,
+    }
+
+    vi.mocked(getCreativePulse).mockResolvedValue(
+      pulse({
+        insights: {
+          items: [
+            { ...base, id: 'a', creative_id: 'cr-1', creative_name: 'A', detail_ar: 'أنفق 1,818.00', detail_en: 'Spent 1,818.00 for 666 impressions.' },
+            { ...base, id: 'b', creative_id: 'cr-2', creative_name: 'B', detail_ar: 'أنفق 9,000.00', detail_en: 'Spent 9,000.00 for 120 impressions.' },
+          ],
+          total: 2, shown: 2,
+          evidence: { min_impressions: 1000, min_change: 0.1 },
+          period: { from: '2026-07-08', to: '2026-08-06', days: 30 },
+          previous_period: { from: '2026-06-08', to: '2026-07-07' },
+        },
+      }) as never,
+    )
+
+    renderWithProviders(<CreativePulseSection libraryPath="/app/content" filters={{}} />, { locale: 'en' })
+
+    expect(await screen.findByText('Spent 1,818.00 for 666 impressions.')).toBeInTheDocument()
+    expect(screen.getByText('Spent 9,000.00 for 120 impressions.')).toBeInTheDocument()
+    expect(screen.queryByTestId('insight-also-named')).toBeNull()
+  })
+
   it('draws the findings its own endpoint returns, with their evidence', async () => {
     vi.mocked(getCreativePulse).mockResolvedValue(
       pulse({
