@@ -182,8 +182,12 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
   production. However its component definition + the demo strings (`agency@campaignshub.io` / `password`)
   remain in the built JS as inert dead code (rollup keeps the same-module function). Values are non-secret
   public demo data, so this is cosmetic, not a leak.
-- **Next action (optional):** move `DemoCredentials` to its own module and dynamic-import only in dev to strip
-  it from the production chunk entirely.
+- **CLOSED (verified 2026-09-27).** There is no `DemoCredentials` component left in `frontend/src`, and
+  the demo strings this row is about — `agency@campaignshub.io` and its password — appear nowhere in the
+  source outside test files. Whatever removed the card removed the dead code with it, so the optional
+  next action below has no subject.
+- **Was (next action, optional):** move `DemoCredentials` to its own module and dynamic-import only in dev
+  to strip it from the production chunk entirely.
 
 ## Auth cross-browser acceptance — CLOSED (2026-07-27)
 
