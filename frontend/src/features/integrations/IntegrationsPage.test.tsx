@@ -69,6 +69,9 @@ function connector(over: Partial<Connector> & Pick<Connector, 'key'>): Connector
 
 describe('IntegrationsPage — the four states', () => {
   afterEach(() => {
+    // The wizard states are module-level and shared; a test that sets one must not leak it.
+    wizardStates.connections = []
+    wizardStates.resumable = []
     rows.data = []
     started.calls = []
     workspaces.data = []
@@ -108,6 +111,48 @@ describe('IntegrationsPage — the four states', () => {
     expect(await screen.findByTestId('connector-state-meta')).toHaveTextContent('Currently unavailable')
     expect(screen.queryByTestId('connector-connect-meta')).not.toBeInTheDocument()
     expect(screen.getByTestId('connector-needs-operator-meta')).toBeInTheDocument()
+  })
+
+  /**
+   * A CARD MUST SAY ONE THING, and on the real page four of six said two at once.
+   *
+   * The wizard's view — «needs account selection» — used to win the chip outright, while the
+   * description beneath it said «this platform is not open for connecting yet». The chip is the part
+   * a reader scans, so the card sent a customer off to choose accounts on a platform that will not
+   * open until an operator does something they can neither see nor trigger.
+   *
+   * The platform's own state is the more fundamental fact: no amount of account-selecting reaches a
+   * provider whose credentials this install does not hold.
+   */
+  it('lets the platform state win the chip when a customer cannot act at all', async () => {
+    rows.data = [connector({ key: 'meta', label: 'Meta Marketing API', state: 'awaiting_credentials' })]
+    wizardStates.connections = [{
+      connection: { id: 'c-meta', provider: 'meta' },
+      user_state: 'ACCOUNT_SELECTION_REQUIRED',
+      state: 'needs_selection',
+    }]
+
+    renderWithProviders(<IntegrationsPage />, { locale: 'en' })
+
+    const chip = await screen.findByTestId('connector-state-meta')
+    expect(chip).toHaveTextContent('Awaiting credentials')
+    expect(chip, 'the chip asked for an action the platform cannot accept').not.toHaveTextContent('Needs account selection')
+    // And it still says why, once, in the description.
+    expect(screen.getByTestId('connector-needs-operator-meta')).toBeInTheDocument()
+  })
+
+  /** Where the platform IS open, the wizard's view is the useful one and still wins. */
+  it('keeps the wizard view on a platform a customer can act on', async () => {
+    rows.data = [connector({ key: 'meta', label: 'Meta Marketing API', state: 'connected' })]
+    wizardStates.connections = [{
+      connection: { id: 'c-meta', provider: 'meta' },
+      user_state: 'ACCOUNT_SELECTION_REQUIRED',
+      state: 'needs_selection',
+    }]
+
+    renderWithProviders(<IntegrationsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('connector-state-meta')).toHaveTextContent('Needs account selection')
   })
 
   /** …and a CONFIGURED platform nobody has authorised is the opposite: one clear action. */
