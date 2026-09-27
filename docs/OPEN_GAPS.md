@@ -108,6 +108,23 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
   (`frontend` is green on #565, #566 and #567) — so this is load on a developer machine running other
   work in parallel, not something the branch introduced.
 
+## «No unexplained blank preview» — MEASURED (2026-09-27)
+
+- **Severity:** n/a (acceptance measurement, kept here because this is where the evidence lives)
+- The Owner's CONTENT list asks for «no unexplained blank previews». Measured on the whole first page
+  of `/agency/content` rather than argued: for each of the 24 tiles, does it draw media (an `<img>`
+  with a non-zero `naturalWidth`, a `<video>` or a `<canvas>`), or does it carry a sentence?
+
+  ```
+  {"tiles":24,"drew":13,"said":11,"silent":[]}
+  ```
+
+- Thirteen draw the asset, eleven say why there is nothing to draw, and **none is silent**.
+  `naturalWidth` rather than presence, deliberately: an `<img>` whose src 404s still exists in the DOM
+  and the browser draws its broken-image icon, which is the outcome this requirement is about.
+- Scope, stated so it is not over-read: page one at 1440×1200 on the demo dataset. It does not speak
+  for production media, which is `BLOCKED_OPERATIONAL_EVIDENCE` behind an authenticated session.
+
 ## G-002 — Arabic PDF: English bold-heading text-layer extraction
 
 - **Severity:** Low
