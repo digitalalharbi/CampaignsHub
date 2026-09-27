@@ -500,7 +500,26 @@ function ConnectorCard({
    * has been chosen yet is a different question, and it is the one somebody opens this page to ask.
    */
   const userMeta = wizard?.user_state ? USER_STATE_META[wizard.user_state] : undefined
-  const meta = userMeta ?? (state ? STATE_META[state] : LEGACY_META[c.status])
+  /*
+   * A CARD MUST SAY ONE THING, and this one said two.
+   *
+   * `userMeta` is the wizard's view — «needs account selection», «needs authentication» — and it
+   * used to win outright. `state` is the PLATFORM's: whether this install can connect the provider
+   * at all. When the platform is one a customer cannot act on, the two disagree, and the card
+   * rendered both: a chip reading «يحتاج اختيار حسابات» above a paragraph reading «هذه المنصة غير
+   * متاحة للربط حاليًا».
+   *
+   * Seen on the real page, on four of the six ad platforms at once. The chip is the part a reader
+   * scans, so the card was telling a customer to go and choose accounts on a platform that will not
+   * open until an operator does something they cannot see or trigger.
+   *
+   * The platform's own state wins where it is one of those two. It is the more fundamental fact:
+   * no amount of account-selecting reaches a provider whose credentials this install does not hold.
+   */
+  const platformBlocks = state !== undefined && state !== null && NEEDS_OPERATOR.includes(state)
+  const meta = platformBlocks && state
+    ? STATE_META[state]
+    : userMeta ?? (state ? STATE_META[state] : LEGACY_META[c.status])
 
   /* The one runtime state in which re-authorising is the only thing that can succeed. */
   const needsReauth = wizard?.user_state === 'REAUTH_REQUIRED'
@@ -637,9 +656,22 @@ function ConnectorCard({
       */}
       <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-border pt-3">
         {state && NEEDS_OPERATOR.includes(state) ? (
-          /* Nothing to press: no button here can produce a connection, so none is offered. */
-          <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
-            <KeyRound size={13} /> {ar ? 'يحتاج إعدادًا من مشغّل المنصة' : 'Needs setup by the platform operator'}
+          /*
+           * Nothing to press: no button here can produce a connection, so none is offered — and
+           * nothing is SAID either, because the description above already says it.
+           *
+           * The card used to make this point three times: a chip, a paragraph, and this line. Six
+           * platforms in that state put the same two sentences on the screen twelve times, which is
+           * the «text-heavy» the grid is meant to be the cure for. The key icon carries the meaning
+           * on its own beside a paragraph that has just explained it, and its accessible name is
+           * where the words belong for a reader who cannot see it.
+           */
+          <span
+            className="inline-flex items-center gap-1.5 text-xs text-text-muted"
+            title={ar ? 'يحتاج إعدادًا من مشغّل المنصة' : 'Needs setup by the platform operator'}
+          >
+            <KeyRound size={13} aria-hidden />
+            <span className="sr-only">{ar ? 'يحتاج إعدادًا من مشغّل المنصة' : 'Needs setup by the platform operator'}</span>
           </span>
         ) : state === 'syncing' ? (
           <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
