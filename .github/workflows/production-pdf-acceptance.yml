@@ -85,3 +85,21 @@ jobs:
             # survive a mail server and an operating system. Every one has been wrong at least once
             # here, and reading the blob exercises none of them.
             $COMPOSE exec -T backend php artisan reports:download-check
+
+            echo ""
+            echo "== 5/5  and what a chat client would render when the link is PASTED"
+            #
+            # SHARE-PREVIEW-CARD-001. The unit suites prove the card composes and that the route
+            # serves it — on a machine with a browser the test itself configured. Whether this INSTALL
+            # can draw one is a property of the box: the renderer flag, the Chromium binary, the
+            # Arabic face, the cache disk and the crawler's own path through the metadata document.
+            #
+            # A card that cannot be drawn here is a link that previews as bare text in every chat it
+            # is forwarded to, and nothing inside the product would ever show it — the product never
+            # fetches its own preview image.
+            #
+            # The link it mints is TEMPORARY and is revoked before the command returns, including on
+            # failure. A share token is a credential; one left behind by a diagnostic would widen the
+            # surface the diagnostic exists to reassure somebody about. It prints assertions and
+            # sizes — never the token, never the url, never the client's name.
+            $COMPOSE exec -T backend php artisan reports:share-card-check
