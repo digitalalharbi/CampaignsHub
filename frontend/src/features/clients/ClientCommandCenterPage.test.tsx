@@ -81,4 +81,30 @@ describe('ClientCommandCenterPage — a client outside the caller’s scope', ()
     await waitFor(() => expect(screen.getByTestId('client-out-of-scope')).toBeInTheDocument())
     expect(screen.getByRole('link')).toHaveAttribute('href', '/agency/clients')
   })
+
+  /**
+   * Every counter on the overview is named in the reader's language.
+   *
+   * Three of the four went through `t(...)` and the fourth was the literal `'Draft'`, so an Arabic
+   * command centre read «المشاريع · حملات نشطة · Draft · طلبات مفتوحة». Seen on the rendered page
+   * at 1440 — it is the kind of thing that survives review because the line looks like its
+   * neighbours until you read the argument.
+   */
+  it('names every overview counter in the reader’s language', async () => {
+    vi.mocked(getClient).mockResolvedValue({
+      id: 'c1', name: 'Northwind', client_status: 'active', service_level: null,
+      industry: null, source: null, classification: {}, is_archived: false, archived_at: null,
+      can: {
+        update: false, manage_settings: false, manage_team: false, archive: false,
+        view_analytics: false, view_reports: false, manage_files: false,
+      },
+      overview: { projects: 0, active_campaigns: 0, draft_campaigns: 0, open_requests: 1 },
+      projects: [], campaigns: [], requests: [],
+    } as never)
+
+    renderWithProviders(<ClientCommandCenterPage />, { locale: 'ar' })
+
+    expect(await screen.findByText('حملات مسودة')).toBeInTheDocument()
+    expect(screen.queryByText('Draft')).not.toBeInTheDocument()
+  })
 })
