@@ -9,6 +9,7 @@ import { AlertTriangle, Check, Copy, Download, FileText, Layers, LayoutGrid, Lin
 import { productName } from '@/lib/brand'
 import {
   createReport,
+  listReportSections,
   updateReportScope,
   getReportScope,
   type ReportScopeShape,
@@ -732,6 +733,8 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
    * question.
    */
   const [form, setForm] = useState<'executive_summary' | 'detailed'>('executive_summary')
+  /* Snapshot stays the default: it is what every report made before this chooser existed was. */
+  const [mode, setMode] = useState<'snapshot' | 'live'>('snapshot')
   const [audience, setAudience] = useState<string | null>('client')
   /*
    * What the report COVERS (§14.5) — chosen here, before it is generated.
@@ -746,11 +749,29 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
   // the option keys are exactly the values ReportController::TYPES / the audience Rule::in already accept.
   const types = useTaxonomyOptions('report.type')
   const audiences = useTaxonomyOptions('report.audience')
+  /*
+   * Which sections this audience implies. Read once per project and never blocking: `enabled` keeps
+   * it off until there IS a project, and a failure leaves `sectionPreview` empty so the builder
+   * renders exactly as it did before.
+   */
+  const sectionRegistry = useQuery({
+    queryKey: ['report-sections', projectId],
+    queryFn: () => listReportSections(projectId),
+    enabled: Boolean(projectId),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  })
+  const sectionPreview = (sectionRegistry.data?.sections ?? []).filter((x) =>
+    // `defaultFor()` on the server splits internal from everyone else; an executive report is a
+    // client-shaped one, and this mirrors that rather than inventing a third answer.
+    audience === 'internal' ? x.default_internal : x.default_client,
+  )
   const create = useMutation({
     mutationFn: () =>
       createReport(projectId, {
         name: name || (ar ? 'تقرير' : 'Report'),
         type: type ?? 'executive',
+        mode,
         form,
         audience: audience ?? 'client',
         period_start: from,
@@ -795,6 +816,43 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
           onRetry={() => types.refetch()}
           clearable={false}
         />
+        {/*
+          REPORT-PRODUCT-MODEL-001 — the product is mode × form, and only one of them was being asked.
+
+          The backend has accepted `mode` since the model was written and defaults it to `snapshot`.
+          The builder never offered it, so EVERY report an operator created was a snapshot and the
+          live link — the dashboard a client filters, which the product sells as its own mode — could
+          not be reached from the one screen that makes reports.
+
+          Stated as a choice between two readers rather than two settings, because that is what it
+          is: a snapshot is the document that was signed off and cannot change underneath anybody, a
+          live link keeps answering as the numbers move. `LiveSharedReport`'s own note says folding
+          them together would force the page to mislabel one half of itself.
+        */}
+        <Field label={ar ? 'نوع الرابط' : 'Report mode'}>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { key: 'snapshot' as const, ar: 'لقطة ثابتة', en: 'Snapshot',
+                hintAr: 'أرقام محفوظة لا تتغيّر بعد الإصدار', hintEn: 'Figures frozen at issue, never move' },
+              { key: 'live' as const, ar: 'رابط حيّ', en: 'Live link',
+                hintAr: 'لوحة يفلترها العميل وتتحدّث', hintEn: 'A dashboard the client filters, kept current' },
+            ]).map((o) => (
+              <button
+                key={o.key}
+                type="button"
+                data-testid={`rb-mode-${o.key}`}
+                aria-pressed={mode === o.key}
+                onClick={() => setMode(o.key)}
+                className={`rounded-xl border p-3 text-start transition-colors ${
+                  mode === o.key ? 'border-brand-500 bg-brand-500/5' : 'border-border hover:border-border-strong'
+                }`}
+              >
+                <span className="block text-sm font-bold text-text-primary">{ar ? o.ar : o.en}</span>
+                <span className="mt-0.5 block text-[11px] text-text-secondary">{ar ? o.hintAr : o.hintEn}</span>
+              </button>
+            ))}
+          </div>
+        </Field>
         <Field label={ar ? 'شكل التقرير' : 'Report form'}>
           <div className="grid grid-cols-2 gap-2">
             {([
@@ -819,6 +877,33 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
             ))}
           </div>
         </Field>
+        {/*
+          REPORT-CREATION-UX-001 — the builder SAYS what it is about to make.
+
+          The audience already decides which sections a report carries — the registry holds a
+          `default_client` and a `default_internal` per section — and the builder chose one without
+          ever naming the consequence. An operator picked «client» and found out what that meant by
+          opening the finished report.
+
+          So the choice states its own result, in the reader's language, and says it can be changed
+          afterwards rather than implying this is the last chance. Nothing is editable here on
+          purpose: a full section picker inside a modal that already carries seven decisions would
+          trade one silence for a wall, and the sections panel on the report is where the fine
+          control belongs.
+
+          It fails QUIET. A registry that will not load leaves the builder exactly as it was; a
+          creation screen that blocked on a description of itself would be worse than one that says
+          nothing.
+        */}
+        {sectionPreview.length > 0 && (
+          <p data-testid="rb-section-preview" className="-mt-1 text-[11px] leading-relaxed text-text-secondary">
+            {ar ? 'سيتضمّن: ' : 'Will include: '}
+            <span className="font-semibold text-text-primary">
+              {sectionPreview.map((x) => (ar ? x.title_ar : x.title_en)).join(ar ? '، ' : ', ')}
+            </span>
+            {ar ? ' — يمكن تعديل الأقسام بعد الإنشاء.' : ' — sections can be changed after it is created.'}
+          </p>
+        )}
         <div data-testid="builder-audience">
         <SelectField
           label={ar ? 'هذا التقرير موجّه إلى' : 'This report is for'}
