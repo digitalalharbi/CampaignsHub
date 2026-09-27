@@ -166,6 +166,14 @@ export interface NotifPrefs {
   timezone: string
   locale: 'ar' | 'en'
   digest_hour: number
+  /**
+   * The day each summary lands on. ISO-8601 for the weekday, so 1 is Monday and 7 is Sunday.
+   *
+   * Both columns have been in the schema since «a weekly digest may choose its day» and read by the
+   * sender the whole time; the endpoint only began to show and accept them here.
+   */
+  digest_weekday: number
+  digest_monthday: number
   available_timezones: string[]
   available_categories: string[]
 }
@@ -178,7 +186,7 @@ export interface NotifPrefs {
  * server wrote them anyway from defaults — so saving a checkbox silently cleared somebody's digest.
  */
 export type NotifPrefsInput = Partial<
-  Pick<NotifPrefs, 'channels' | 'categories' | 'types' | 'quiet_hours' | 'frequency' | 'project_ids' | 'digests' | 'timezone' | 'locale' | 'digest_hour'>
+  Pick<NotifPrefs, 'channels' | 'categories' | 'types' | 'quiet_hours' | 'frequency' | 'project_ids' | 'digests' | 'timezone' | 'locale' | 'digest_hour' | 'digest_weekday' | 'digest_monthday'>
 >
 
 export function useNotifPrefs() {

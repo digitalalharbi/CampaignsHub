@@ -78,6 +78,102 @@ final class NotificationPreferenceDigestTest extends TestCase
         $this->assertSame(8, $body['digest_hour']);
     }
 
+    /**
+     * A person may choose the DAY their weekly and monthly summaries land on.
+     *
+     * `digest_weekday` and `digest_monthday` have been in the schema since «a weekly digest may
+     * choose its day», and `DigestSchedule` and `SendDailyDigests` have read them the whole time.
+     * No endpoint ever showed or accepted them, so every weekly digest in the product went out on
+     * Monday — and the settings screen stated «Weekly, Monday morning» as a constant, which was
+     * true only because the column could never move off its default.
+     *
+     * That default is also the wrong one for this market. The Saudi working week runs Sunday to
+     * Thursday, so a weekly summary pinned to Monday arrives after the week it is meant to open.
+     */
+    public function test_a_person_may_choose_the_day_their_weekly_and_monthly_summaries_land_on(): void
+    {
+        $body = $this->actingAs($this->user, 'sanctum')
+            ->putJson('/api/v1/settings/notifications', $this->payload([
+                'digest_weekday' => 7,   // Sunday, ISO-8601
+                'digest_monthday' => 3,
+            ]))
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame(7, $body['digest_weekday']);
+        $this->assertSame(3, $body['digest_monthday']);
+
+        /* On the row the SENDER reads, not only in the response it wrote back. */
+        $row = DB::table('notification_preferences')->where('user_id', $this->user->id)->first();
+        $this->assertSame(7, (int) $row->digest_weekday);
+        $this->assertSame(3, (int) $row->digest_monthday);
+    }
+
+    /**
+     * A month day past the 28th is refused where the person can be told.
+     *
+     * The 29th, 30th and 31st do not exist in every month, so a summary set for one of them would
+     * skip February in silence. The migration closed the range for that reason and the sender
+     * repairs an out-of-range value at send time; a rejection here is the same rule stated to
+     * somebody who can still change their answer.
+     */
+    public function test_a_month_day_that_does_not_exist_in_every_month_is_refused(): void
+    {
+        $this->actingAs($this->user, 'sanctum')
+            ->putJson('/api/v1/settings/notifications', $this->payload(['digest_monthday' => 30]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('digest_monthday');
+    }
+
+    /** And a weekday outside ISO-8601 is refused rather than quietly becoming Monday. */
+    public function test_a_weekday_outside_the_week_is_refused(): void
+    {
+        $this->actingAs($this->user, 'sanctum')
+            ->putJson('/api/v1/settings/notifications', $this->payload(['digest_weekday' => 9]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('digest_weekday');
+    }
+
+    /**
+     * A person can subscribe to the MONTHLY digest, which the sender has always been able to send.
+     *
+     * `SendDailyDigests` dispatches it — on the first of the month, reporting the month that just
+     * finished, with the calendar month as its idempotency key — and `MessageCatalogue` names it,
+     * and the frontend's own `NotificationPreferences` type declares `digests.monthly`. The one
+     * place that did not know about it was the endpoint that SAVES the choice: `digests.monthly`
+     * had no validation rule, so it was dropped from the validated payload on the way in, and the
+     * response's defaults never mentioned it on the way out.
+     *
+     * So the switch was drawn, could be ticked, and did nothing at all.
+     */
+    public function test_a_person_can_subscribe_to_the_monthly_digest(): void
+    {
+        $body = $this->actingAs($this->user, 'sanctum')
+            ->putJson('/api/v1/settings/notifications', $this->payload([
+                'digests' => ['daily' => false, 'weekly' => false, 'monthly' => true],
+            ]))
+            ->assertOk()
+            ->json('data');
+
+        $this->assertTrue($body['digests']['monthly'], 'the monthly digest did not survive the save');
+
+        /* And it is on the row the scheduler reads, not only in the response. */
+        $row = DB::table('notification_preferences')->where('user_id', $this->user->id)->first();
+        $this->assertTrue((json_decode((string) $row->digests, true)['monthly'] ?? false));
+    }
+
+    /** Off by default, like every other digest: an opt-in that defaults to on is not an opt-in. */
+    public function test_the_monthly_digest_is_off_until_it_is_chosen(): void
+    {
+        $body = $this->actingAs($this->user, 'sanctum')
+            ->getJson('/api/v1/settings/notifications')
+            ->assertOk()
+            ->json('data');
+
+        $this->assertArrayHasKey('monthly', $body['digests'], 'the response never mentions the monthly digest');
+        $this->assertFalse($body['digests']['monthly']);
+    }
+
     /** What a person chooses is what comes back, and what the scheduler will read. */
     public function test_the_chosen_digest_hour_timezone_and_language_are_persisted(): void
     {

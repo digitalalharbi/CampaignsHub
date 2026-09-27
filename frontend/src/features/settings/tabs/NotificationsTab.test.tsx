@@ -51,6 +51,8 @@ function prefs(over: Partial<NotifPrefs> = {}): NotifPrefs {
     ],
     digests: { daily: false, weekly: false, monthly: false, alerts: false, recommendations: false },
     available_digests: ['daily', 'weekly', 'monthly', 'alerts'],
+    digest_weekday: 1,
+    digest_monthday: 1,
     timezone: 'Asia/Riyadh',
     locale: 'ar',
     digest_hour: 8,
