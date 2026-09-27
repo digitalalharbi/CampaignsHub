@@ -90,7 +90,16 @@ export function CreativeInsightCard({
   const action = ar ? item.action_ar : item.action_en
 
   return (
-    <li className={`rounded-md border p-3 ${SEVERITY_TONE[item.severity] ?? 'border-border'}`}>
+    <li
+      /*
+       * How many findings this card accounts for beyond its own, as a number rather than a
+       * sentence. The panel's counter reports the findings the SERVER shows, and grouping means one
+       * card can stand for several — so anything checking that nothing was dropped has to be able
+       * to add them up without parsing «وينطبق أيضًا على 7 محتويات أخرى».
+       */
+      data-also-count={alsoNamed?.length ?? 0}
+      className={`rounded-md border p-3 ${SEVERITY_TONE[item.severity] ?? 'border-border'}`}
+    >
       <p className="text-sm font-semibold text-text-primary">{ar ? item.title_ar : item.title_en}</p>
       <p className="mt-1 text-sm text-text-secondary">{ar ? item.detail_ar : item.detail_en}</p>
       {action && (
