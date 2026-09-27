@@ -440,4 +440,34 @@ final class CreativeInsightsTest extends TestCase
         $this->assertLessThan(count($keys), count(array_unique($keys)));
         $this->assertSame(count($ids), count(array_unique($ids)), 'two findings share one id');
     }
+
+    /**
+     * One rule cannot take the whole feed and silently delete the others.
+     *
+     * `spend_without_evidence` fires on every creative that is below the impressions floor and still
+     * spending, which on a young account is most of them. The feed is ordered by severity and then
+     * by spend and then cut at twelve — so twelve thin creatives filled every slot with one
+     * sentence, and the falling click-through on the creative carrying real budget was not pushed
+     * down the page, it was GONE, while `total` went on counting it.
+     *
+     * Fourteen thin creatives here, each spending more than the tired banner, so every one of them
+     * outranks it on the old ordering and the banner falls off the end.
+     */
+    public function test_one_rule_firing_everywhere_does_not_push_every_other_finding_out(): void
+    {
+        foreach (range(1, 14) as $n) {
+            $thin = $this->creative(['name' => 'Thin '.$n]);
+            $this->now($thin, ['spend' => 9000 + $n, 'impressions' => 40]);
+        }
+
+        $banner = $this->creative(['name' => 'Tired banner']);
+        $this->before($banner, ['spend' => 1000, 'impressions' => 100000, 'clicks' => 3000]);
+        $this->now($banner, ['spend' => 1000, 'impressions' => 100000, 'clicks' => 2000]);
+
+        $items = $this->insights();
+        $keys = array_column($items, 'key');
+
+        $this->assertContains('ctr_decline', $keys, 'the feed was taken over by one rule');
+        $this->assertContains('spend_without_evidence', $keys, 'the loud rule still belongs in the feed');
+    }
 }
