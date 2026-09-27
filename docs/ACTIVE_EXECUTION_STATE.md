@@ -2,6 +2,40 @@
 
 _Reconciled from Git on 2026-09-16. When this file and Git disagree, Git is right._
 
+## What landed on 2026-09-27, and how each one was found
+
+Every defect in this block was found the same way: by **rendering the page and reading it**. None
+of them failed a test, and none would have — each was a surface stating something untrue while
+every assertion about its data passed.
+
+| PR | Surface | What it said | What was true |
+|---|---|---|---|
+| #559 | `/agency/integrations` | chip «يحتاج اختيار حسابات» above body «هذه المنصة غير متاحة للربط حاليًا» | a stale wizard view outranked the platform state, telling a customer to do something impossible — on all six cards, with the same sentence three times per card |
+| #560 | every notification | four of six `action_url`s named routes that **do not exist** | every one of those notifications ended on «الصفحة غير موجودة», for every reader, in both portals |
+| #561 | `/agency/portfolio` | three cards reading «Q3 Launch — Demo» | the one view that crosses clients by definition did not name the client |
+| #561 | `/agency/content` | the absence sentence printed twice per tile | `absenceLabel` already returns the server's note; the tile printed it again |
+| #561 | `/portal/reports` | a bare `monthly` in an Arabic page | the type's Arabic label exists in a taxonomy the client's portal never asked |
+| #561 | `/agency/dashboard` | one finding seven times | the loudest rule took all twelve slots and **evicted** the others, while `total` kept counting them |
+
+### The pattern worth keeping
+
+Five of the six are the same defect: **a surface printing a value where a sentence belongs**, or
+printing one sentence twice. They are invisible to unit tests because the data is right — it is the
+presentation that lies — and invisible to code review because each looks correct in isolation. The
+only instrument that finds them is a rendered page and somebody reading it.
+
+Three of the six also had the answer already written **one route over**: `/agency/projects` names
+its client, `ClientCampaignsPage` translates its enums, `CampaignsPage` asks for a project. The
+product disagreeing with itself is a stronger signal than any lint rule, and cheaper to check.
+
+### What was NOT claimed
+
+The Production confirmation of these six is **Owner-gated**. Every one is behind authentication,
+`production-diagnostics.yml` accepts filters and never a command — deliberately, and correctly —
+and this environment holds no Production URL or credential. Each is therefore
+IMPLEMENTED + DEPLOYED with browser evidence on a local install, and its Production half is
+`BLOCKED_OPERATIONAL_EVIDENCE` until somebody with a session opens the page.
+
 ## Production verification, 2026-09-27 — the pasted link previews as a card
 
 Run **36291959238** (Production PDF Acceptance, step 5/5) on the live install, after `b053f8b`
