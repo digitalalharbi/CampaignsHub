@@ -80,6 +80,18 @@ const base = (p: string) => `/projects/${p}/reports`
 export const listReports = (p: string, params = '') => getData<ReportsIndex>(`${base(p)}${params ? `?${params}` : ''}`)
 export const getReport = (p: string, id: string) => getData<ReportDetail>(`${base(p)}/${id}`)
 export const createReport = (p: string, body: Record<string, unknown>) => postData<ReportRow>(base(p), body)
+
+/** REPORT-CREATION-UX-001 — the sections an audience implies, so the builder can SAY what it is about to make. */
+export interface ReportSectionChoice {
+  key: string
+  title_ar: string
+  title_en: string
+  default_client: boolean
+  default_internal: boolean
+}
+
+export const listReportSections = (p: string) =>
+  getData<{ sections: ReportSectionChoice[] }>(`${base(p)}/sections`)
 export const regenerateReport = (p: string, id: string) => postData<ReportRow>(`${base(p)}/${id}/regenerate`)
 export const exportReport = (p: string, id: string, format: ReportFormat) =>
   postData<{ id: string; format: string; status: string }>(`${base(p)}/${id}/export`, { format })

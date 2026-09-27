@@ -9,6 +9,7 @@ import { AlertTriangle, Check, Copy, Download, FileText, Layers, LayoutGrid, Lin
 import { productName } from '@/lib/brand'
 import {
   createReport,
+  listReportSections,
   updateReportScope,
   getReportScope,
   type ReportScopeShape,
@@ -748,6 +749,23 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
   // the option keys are exactly the values ReportController::TYPES / the audience Rule::in already accept.
   const types = useTaxonomyOptions('report.type')
   const audiences = useTaxonomyOptions('report.audience')
+  /*
+   * Which sections this audience implies. Read once per project and never blocking: `enabled` keeps
+   * it off until there IS a project, and a failure leaves `sectionPreview` empty so the builder
+   * renders exactly as it did before.
+   */
+  const sectionRegistry = useQuery({
+    queryKey: ['report-sections', projectId],
+    queryFn: () => listReportSections(projectId),
+    enabled: Boolean(projectId),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  })
+  const sectionPreview = (sectionRegistry.data?.sections ?? []).filter((x) =>
+    // `defaultFor()` on the server splits internal from everyone else; an executive report is a
+    // client-shaped one, and this mirrors that rather than inventing a third answer.
+    audience === 'internal' ? x.default_internal : x.default_client,
+  )
   const create = useMutation({
     mutationFn: () =>
       createReport(projectId, {
@@ -859,6 +877,33 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
             ))}
           </div>
         </Field>
+        {/*
+          REPORT-CREATION-UX-001 — the builder SAYS what it is about to make.
+
+          The audience already decides which sections a report carries — the registry holds a
+          `default_client` and a `default_internal` per section — and the builder chose one without
+          ever naming the consequence. An operator picked «client» and found out what that meant by
+          opening the finished report.
+
+          So the choice states its own result, in the reader's language, and says it can be changed
+          afterwards rather than implying this is the last chance. Nothing is editable here on
+          purpose: a full section picker inside a modal that already carries seven decisions would
+          trade one silence for a wall, and the sections panel on the report is where the fine
+          control belongs.
+
+          It fails QUIET. A registry that will not load leaves the builder exactly as it was; a
+          creation screen that blocked on a description of itself would be worse than one that says
+          nothing.
+        */}
+        {sectionPreview.length > 0 && (
+          <p data-testid="rb-section-preview" className="-mt-1 text-[11px] leading-relaxed text-text-secondary">
+            {ar ? 'سيتضمّن: ' : 'Will include: '}
+            <span className="font-semibold text-text-primary">
+              {sectionPreview.map((x) => (ar ? x.title_ar : x.title_en)).join(ar ? '، ' : ', ')}
+            </span>
+            {ar ? ' — يمكن تعديل الأقسام بعد الإنشاء.' : ' — sections can be changed after it is created.'}
+          </p>
+        )}
         <div data-testid="builder-audience">
         <SelectField
           label={ar ? 'هذا التقرير موجّه إلى' : 'This report is for'}
