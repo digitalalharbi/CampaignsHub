@@ -76,6 +76,49 @@ describe('ReportsPage — engine-fed builder', () => {
     )
   })
 
+  /**
+   * REPORT-PRODUCT-MODEL-001 — the product is mode × form, and the builder asked only one of them.
+   *
+   * The backend has accepted `mode` since the model was written and defaults it to `snapshot`. The
+   * builder never offered it, so every report an operator made was a snapshot and the live link —
+   * the dashboard a client filters, which the product sells as its own mode — could not be reached
+   * from the one screen that makes reports.
+   */
+  it('offers the report mode and sends the chosen one', async () => {
+    vi.mocked(createReport).mockResolvedValue({} as never)
+    renderWithProviders(<ReportsPage />, { locale: 'en' })
+
+    fireEvent.click(screen.getByText(/تقرير محفوظ|Saved report/))
+    await screen.findByRole('combobox', { name: /نوع التقرير|Report type/ })
+
+    // Snapshot is pressed to begin with: it is what every report made before this chooser existed was.
+    expect(screen.getByTestId('rb-mode-snapshot')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('rb-mode-live')).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(screen.getByTestId('rb-mode-live'))
+    expect(screen.getByTestId('rb-mode-live')).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByText(/إنشاء وتوليد|Create and generate/))
+
+    await waitFor(() =>
+      expect(createReport).toHaveBeenCalledWith('p1', expect.objectContaining({ mode: 'live' })),
+    )
+  })
+
+  /** And the default still travels, so nothing an operator does not touch changes meaning. */
+  it('sends snapshot when the operator chooses nothing', async () => {
+    vi.mocked(createReport).mockResolvedValue({} as never)
+    renderWithProviders(<ReportsPage />, { locale: 'en' })
+
+    fireEvent.click(screen.getByText(/تقرير محفوظ|Saved report/))
+    await screen.findByRole('combobox', { name: /نوع التقرير|Report type/ })
+    fireEvent.click(screen.getByText(/إنشاء وتوليد|Create and generate/))
+
+    await waitFor(() =>
+      expect(createReport).toHaveBeenCalledWith('p1', expect.objectContaining({ mode: 'snapshot' })),
+    )
+  })
+
   it('surfaces a server validation error in the builder ErrorSummary', async () => {
     vi.mocked(createReport).mockRejectedValue({
       response: { status: 422, data: { message: 'Validation failed', errors: { period_end: ['The end date is invalid.'] } } },

@@ -732,6 +732,8 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
    * question.
    */
   const [form, setForm] = useState<'executive_summary' | 'detailed'>('executive_summary')
+  /* Snapshot stays the default: it is what every report made before this chooser existed was. */
+  const [mode, setMode] = useState<'snapshot' | 'live'>('snapshot')
   const [audience, setAudience] = useState<string | null>('client')
   /*
    * What the report COVERS (§14.5) — chosen here, before it is generated.
@@ -751,6 +753,7 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
       createReport(projectId, {
         name: name || (ar ? 'تقرير' : 'Report'),
         type: type ?? 'executive',
+        mode,
         form,
         audience: audience ?? 'client',
         period_start: from,
@@ -795,6 +798,43 @@ function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; o
           onRetry={() => types.refetch()}
           clearable={false}
         />
+        {/*
+          REPORT-PRODUCT-MODEL-001 — the product is mode × form, and only one of them was being asked.
+
+          The backend has accepted `mode` since the model was written and defaults it to `snapshot`.
+          The builder never offered it, so EVERY report an operator created was a snapshot and the
+          live link — the dashboard a client filters, which the product sells as its own mode — could
+          not be reached from the one screen that makes reports.
+
+          Stated as a choice between two readers rather than two settings, because that is what it
+          is: a snapshot is the document that was signed off and cannot change underneath anybody, a
+          live link keeps answering as the numbers move. `LiveSharedReport`'s own note says folding
+          them together would force the page to mislabel one half of itself.
+        */}
+        <Field label={ar ? 'نوع الرابط' : 'Report mode'}>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { key: 'snapshot' as const, ar: 'لقطة ثابتة', en: 'Snapshot',
+                hintAr: 'أرقام محفوظة لا تتغيّر بعد الإصدار', hintEn: 'Figures frozen at issue, never move' },
+              { key: 'live' as const, ar: 'رابط حيّ', en: 'Live link',
+                hintAr: 'لوحة يفلترها العميل وتتحدّث', hintEn: 'A dashboard the client filters, kept current' },
+            ]).map((o) => (
+              <button
+                key={o.key}
+                type="button"
+                data-testid={`rb-mode-${o.key}`}
+                aria-pressed={mode === o.key}
+                onClick={() => setMode(o.key)}
+                className={`rounded-xl border p-3 text-start transition-colors ${
+                  mode === o.key ? 'border-brand-500 bg-brand-500/5' : 'border-border hover:border-border-strong'
+                }`}
+              >
+                <span className="block text-sm font-bold text-text-primary">{ar ? o.ar : o.en}</span>
+                <span className="mt-0.5 block text-[11px] text-text-secondary">{ar ? o.hintAr : o.hintEn}</span>
+              </button>
+            ))}
+          </div>
+        </Field>
         <Field label={ar ? 'شكل التقرير' : 'Report form'}>
           <div className="grid grid-cols-2 gap-2">
             {([
