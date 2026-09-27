@@ -214,13 +214,20 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
 - **Severity:** Medium
 - **Status:** OPEN (phase 2 is NOT fully Completed — these are the open items)
 - Items, each honestly Not Started / partial:
-  - `/settings/preferences` — Not Started (route is a placeholder; overlaps profile locale/theme/number-format).
-  - `/settings/notifications` — Not Started (route is a placeholder; needs channel + per-type prefs backend).
+  - `/settings/preferences` — **BUILT (re-read 2026-09-27).** `/app/settings/preferences` now redirects to
+    `/account/preferences`, which renders a real `PreferencesPage`; personal settings moved under
+    `/account` and the old addresses were kept working rather than left as placeholders.
+  - `/settings/notifications` — **BUILT (re-read 2026-09-27), and this row understates it most.** It
+    redirects to `/account/notifications`, and the settings tab behind it is 490 lines carrying
+    channels, categories, per-type rhythm, the daily/weekly/monthly digests, the digest hour, the
+    weekly and monthly day, quiet hours, timezone and locale — all on real endpoints in
+    `NotificationPreferenceController`, not a placeholder. #562 was work INSIDE this page.
   - Avatar upload (`POST /api/me/avatar`) — Not Started (UserResource already exposes `avatar_url`).
   - Workspace-settings entitlement gate — In Progress (`/settings/workspace` renders org settings; owner-only
     gate not yet enforced on that route).
-- **Next action:** build preferences + notifications pages on the real endpoints; add avatar upload; gate
-  workspace settings by role/permission.
+- **Next action, corrected to what is actually left:** avatar upload — checked and genuinely absent, no
+  `POST` avatar route exists under `app/Domains/Access` or `app/Http` — and the owner-only gate on
+  `/settings/workspace`. The two pages this row asked for are built.
 
 ## G-011 — Account E2E only on Chromium
 
