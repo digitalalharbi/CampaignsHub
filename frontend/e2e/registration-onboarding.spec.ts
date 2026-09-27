@@ -194,10 +194,26 @@ async function registerAndVerify(
         .join('+') || 'not-conditional'
       const cacheControl = r.headers()['cache-control'] ?? 'no cache-control'
 
+      /*
+       * WHICH session each answer was given to — the one thing the last failure could not say.
+       *
+       * The firefox failure this instruments read `[GET 200, GET 401, GET 401, GET 401]`: a session
+       * that answered once and then stopped being recognised. A session REJECTED and a session
+       * REPLACED look identical from here, and they are opposite defects — the first is the server
+       * refusing a credential it was given, the second is the browser sending a different one. The
+       * cookie the request carried settles it, and nothing was recording it.
+       *
+       * Eight characters of the value, never the value: enough to see it change, useless to anyone
+       * who reads the log. Read from the request rather than the jar, because the jar is the state
+       * AFTER the sequence and the question is what each call actually sent.
+       */
+      const carried = /campaignshub-session=([^;]+)/.exec(sent['cookie'] ?? '')?.[1]
+      const session = carried === undefined ? 'no-session-cookie' : `#${carried.slice(0, 8)}`
+
       membershipAnswers.push(
         r.status() === 304 || r.status() === 200
-          ? `${r.request().method()} ${r.status()} (${conditional}; answered «${cacheControl}»)`
-          : `${r.request().method()} ${r.status()}`,
+          ? `${r.request().method()} ${r.status()} ${session} (${conditional}; answered «${cacheControl}»)`
+          : `${r.request().method()} ${r.status()} ${session}`,
       )
     }
 
