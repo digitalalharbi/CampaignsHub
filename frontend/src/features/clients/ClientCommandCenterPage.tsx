@@ -123,7 +123,7 @@ export function ClientCommandCenterPage() {
               design for a labelled number, on a page a reader reaches from the dashboard.
             */
             <StatGrid min="9rem">
-              {[[t('col_projects'), d.overview.projects], [t('col_active_campaigns'), d.overview.active_campaigns], ['Draft', d.overview.draft_campaigns], [t('col_open_requests'), d.overview.open_requests]].map(([label, val]) => (
+              {[[t('col_projects'), d.overview.projects], [t('col_active_campaigns'), d.overview.active_campaigns], [t('col_draft_campaigns'), d.overview.draft_campaigns], [t('col_open_requests'), d.overview.open_requests]].map(([label, val]) => (
                 <StatCard key={String(label)} label={label as string} value={val as number} />
               ))}
             </StatGrid>
