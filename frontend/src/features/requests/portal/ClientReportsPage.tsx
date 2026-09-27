@@ -49,14 +49,14 @@ export function ClientReportsPage() {
           <p className="flex items-center gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-xs text-text-secondary">
             <ShieldCheck size={14} className="text-brand-600" /> {t.shared_note}
           </p>
-          {rows.map((report) => <ReportCard key={report.id} report={report} t={t} />)}
+          {rows.map((report) => <ReportCard key={report.id} report={report} t={t} ar={ar} />)}
         </div>
       )}
     </PortalShell>
   )
 }
 
-function ReportCard({ report, t }: { report: PortalReport; t: typeof COPY.ar }) {
+function ReportCard({ report, t, ar }: { report: PortalReport; t: typeof COPY.ar; ar: boolean }) {
   const share = report.share
   const canDownload = share?.allow_download ?? false
 
@@ -70,7 +70,17 @@ function ReportCard({ report, t }: { report: PortalReport; t: typeof COPY.ar }) 
           </span>
           {report.generated_at && <span className="text-[11px] text-text-muted"><span className="tnum">{t.generated}: {formatDate(report.generated_at)}</span></span>}
         </div>
-        <span className="whitespace-nowrap rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] font-semibold text-text-secondary">{report.type}</span>
+        {/*
+          The type as a word. This pill printed `report.type` raw, so a client reading an entirely
+          Arabic page met a bare «monthly» in the middle of it. The raw key remains the fallback: an
+          unlabelled new type should read as itself rather than as an empty pill.
+        */}
+        <span
+          data-testid="portal-report-type"
+          className="whitespace-nowrap rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] font-semibold text-text-secondary"
+        >
+          {(ar ? report.type_label_ar : report.type_label_en) ?? report.type}
+        </span>
       </div>
 
       {/* Honest affordance: the backend never hands us a raw share link, so this is a status indicator,

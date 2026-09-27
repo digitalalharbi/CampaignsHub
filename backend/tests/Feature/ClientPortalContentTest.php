@@ -18,6 +18,7 @@ use App\Domains\Requests\Models\RequestType;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\RequestCatalogSeeder;
+use Database\Seeders\TaxonomyEngineSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -217,6 +218,34 @@ final class ClientPortalContentTest extends TestCase
         $this->assertStringNotContainsString('My Internal Report', $res->getContent());
         $this->assertStringNotContainsString('My Unshared Report', $res->getContent());
         $this->assertStringNotContainsString('Their Client Report', $res->getContent());
+    }
+
+    /**
+     * The report's type reaches the client as a WORD, in both languages.
+     *
+     * The portal printed `type` raw, so a client reading an entirely Arabic page met a bare
+     * «monthly» in the middle of it. The labels exist — `report.type` is a system taxonomy carrying
+     * `label_ar` and `label_en` for every key — but they are served by a TENANT endpoint, and the
+     * reader here is a client contact who is not a tenant operator. So the row carries them.
+     *
+     * Both languages, because the locale is the reader's, chosen in their browser: the server has
+     * no way to know which one this person is looking at.
+     */
+    public function test_a_report_type_reaches_the_client_as_a_word(): void
+    {
+        $this->seed(TaxonomyEngineSeeder::class);
+
+        $mine = $this->provisionClient('owner@x.test', '+966500000001');
+        $report = $this->addReport($mine, 'Monthly Performance', audience: 'client', shared: true);
+        $report->update(['type' => 'monthly']);
+
+        $token = $this->portalLogin('owner@x.test');
+
+        $this->getJson('/api/v1/client/reports', $this->auth($token))
+            ->assertOk()
+            ->assertJsonPath('data.reports.0.type', 'monthly')
+            ->assertJsonPath('data.reports.0.type_label_ar', 'تقرير شهري')
+            ->assertJsonPath('data.reports.0.type_label_en', 'Monthly');
     }
 
     public function test_cross_client_content_is_empty_for_a_client_with_no_content(): void

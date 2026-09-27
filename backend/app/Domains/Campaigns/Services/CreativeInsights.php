@@ -129,7 +129,7 @@ final class CreativeInsights
                 <=> [$rank[$b['severity']] ?? 3, -($b['spend'] ?? 0)];
         });
 
-        $shown = array_slice($items, 0, self::LIMIT);
+        $shown = $this->spread($items, self::LIMIT);
 
         return [
             'items' => $shown,
@@ -143,6 +143,63 @@ final class CreativeInsights
             'period' => $period,
             'previous_period' => $previousPeriod,
         ];
+    }
+
+    /**
+     * Fill the feed from every rule that fired, not from whichever one fired most.
+     *
+     * The sort above is correct about PRIORITY — warnings before opportunities, biggest spend first
+     * — and taking the first twelve of it was not. One rule can fire on every creative in the
+     * account: `spend_without_evidence` does exactly that on a young account, where most creatives
+     * are below the impressions floor and all of them are spending. The demo tenant already shows
+     * seven of the twelve slots carrying that one sentence, its figures the only thing that differs.
+     * At twelve such creatives it takes the feed entirely, and the falling click-through rate, the
+     * rising cost per click and the cross-platform findings are not pushed down the page — they are
+     * gone, while `total` still counts them.
+     *
+     * So the limit is shared. Severity bands are still exhausted in order, because a warning is
+     * money leaving and an opportunity is only money available; within a band each rule takes a turn
+     * before any rule takes a second, and within a rule the order it already had — biggest spend
+     * first — is untouched. A reader's first screenful becomes the RANGE of what the numbers said.
+     *
+     * @param  list<array<string, mixed>>  $items  Already ordered by severity, then spend.
+     * @return list<array<string, mixed>>
+     */
+    private function spread(array $items, int $limit): array
+    {
+        /** @var array<string, array<string, list<array<string, mixed>>>> $bands */
+        $bands = [];
+
+        foreach ($items as $item) {
+            $severity = (string) ($item['severity'] ?? 'positive');
+            $key = (string) ($item['key'] ?? '');
+            $bands[$severity][$key][] = $item;
+        }
+
+        $shown = [];
+
+        foreach ($bands as $byKey) {
+            while (count($shown) < $limit) {
+                $took = false;
+
+                foreach ($byKey as $key => $queue) {
+                    if ($queue === [] || count($shown) >= $limit) {
+                        continue;
+                    }
+
+                    $shown[] = array_shift($queue);
+                    $byKey[$key] = $queue;
+                    $took = true;
+                }
+
+                /* Every rule in this band is spent; move to the next band. */
+                if (! $took) {
+                    break;
+                }
+            }
+        }
+
+        return $shown;
     }
 
     // ---- the rules ----------------------------------------------------------------------------

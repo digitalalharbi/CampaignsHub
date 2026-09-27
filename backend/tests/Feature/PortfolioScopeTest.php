@@ -102,6 +102,34 @@ final class PortfolioScopeTest extends TestCase
     }
 
     /**
+     * The card has to name the client, so the payload has to carry it.
+     *
+     * «جميع المشاريع» is the one view that crosses clients by definition, and it shipped drawing
+     * three cards that all read «Q3 Launch — Demo». The project name is not an identity there;
+     * whose project it is, is. A `client_workspace_id` is in the payload already and cannot do that
+     * job for a person reading the screen, so the client's NAME travels with the item.
+     */
+    public function test_each_portfolio_item_names_the_client_it_belongs_to(): void
+    {
+        $this->project($this->acme, 'Q3 Launch', 'active');
+        $this->project($this->beta, 'Q3 Launch', 'active');
+
+        $data = $this->portfolio($this->userWith(['projects.view', 'projects.view.all']));
+
+        $sameName = array_values(array_filter(
+            $data['projects']['items'],
+            static fn (array $item): bool => $item['name'] === 'Q3 Launch',
+        ));
+
+        $this->assertCount(2, $sameName);
+
+        $clients = array_column($sameName, 'client_name');
+        sort($clients);
+
+        $this->assertSame(['Acme', 'Beta'], $clients);
+    }
+
+    /**
      * **The ceiling.** A member confined to one client learns nothing about the other.
      */
     public function test_a_reader_confined_to_one_client_sees_only_that_client(): void
