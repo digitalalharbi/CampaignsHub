@@ -30,7 +30,7 @@ final class RequestNotifier
             'source' => 'requests',
             'entity_type' => 'external_request',
             'entity_id' => $request->id,
-            'action_url' => "/app/requests/{$request->id}",
+            'action_url' => "/requests/{$request->id}",
         ]);
     }
 }
