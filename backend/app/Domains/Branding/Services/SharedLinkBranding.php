@@ -124,6 +124,14 @@ final class SharedLinkBranding
      * @param  callable(?string=): string  $logoUrl  given `agency` or `client`, the URL of that mark; given nothing, the nearest one
      * @return array{name: string, logo_url: ?string, logo_source: string, by: ?string, agency: array{name: string, logo_url: ?string}, client: ?array{name: string, logo_url: ?string}}
      */
+    /** Which layer the operator chose at creation, or null when they did not choose. */
+    private function preferredLayer(?Report $report): ?string
+    {
+        $prefer = ($report === null ? null : ((array) ($report->config ?? []))['branding']['prefer'] ?? null);
+
+        return in_array($prefer, ['client', 'agency'], true) ? (string) $prefer : null;
+    }
+
     public function forReport(?Report $report, string $tenantId, callable $logoUrl): array
     {
         $tenant = Tenant::withoutGlobalScopes()->find($tenantId);
@@ -133,7 +141,20 @@ final class SharedLinkBranding
          * The scope is derived, never supplied. A share bound to a client resolves at the client
          * layer; one without falls to the tenant, which `resolve()` then falls to the platform.
          */
-        [$scope, $scopeId] = $client !== null
+        /*
+         * The operator's choice at creation, where one was made — REPORT-CREATION-UX-001.
+         *
+         * `prefer` is a LAYER, not an identity: it says which of the two marks this resolver already
+         * computes should lead. Absent, the hierarchy decides exactly as it always has, so every
+         * report created before the choice existed keeps the identity it has been carrying.
+         *
+         * «agency» is the one that changes anything. A report about a client resolves at the client
+         * layer by default, and an agency that wants its OWN mark on the document it issued had no
+         * way to say so.
+         */
+        $prefer = $this->preferredLayer($report);
+
+        [$scope, $scopeId] = $client !== null && $prefer !== 'agency'
             ? ['client', (string) $client->id]
             : ['tenant', null];
 
@@ -160,7 +181,7 @@ final class SharedLinkBranding
              * column lives on `UnifiedCampaign`, and reading it here returned null on every row until
              * PHPStan named it.
              */
-            'name' => (string) ($client->name ?? $tenant->name ?? 'CampaignsHub'),
+            'name' => (string) (($prefer === 'agency' ? null : $client?->name) ?? $tenant->name ?? 'CampaignsHub'),
             'logo_url' => $asset === null ? null : $logoUrl(),
             /*
              * Where the LOGO came from — a separate question from whose NAME is shown.
@@ -176,7 +197,14 @@ final class SharedLinkBranding
              * client. Absent when the two are the same identity, because «Nakheel, by Nakheel» reads
              * as a bug.
              */
-            'by' => $client !== null && $tenant !== null ? (string) $tenant->name : null,
+            /*
+             * With the agency leading, the secondary line names the CLIENT: «by the agency» under
+             * the agency's own name reads as a bug, which is the same reason it is absent when the
+             * two identities are one.
+             */
+            'by' => $client === null || $tenant === null
+                ? null
+                : (string) ($prefer === 'agency' ? $client->name : $tenant->name),
         ];
     }
 

@@ -69,6 +69,32 @@ final class ReportController extends Controller
         ], 'Reports retrieved.');
     }
 
+    /**
+     * Record the operator's identity choice on the report, without recording an identity.
+     *
+     * `config['branding']` is the frozen-identity bag every surface already reads —
+     * `PublicReportController::branding()`, `SharedLinkBranding::forShare()`, the print route and
+     * the share card. `prefer` sits beside `name` and `logo_url` rather than replacing them: those
+     * two mean «this exact identity was frozen», and `forShare()` tests for them by name, so a
+     * preference cannot be mistaken for a frozen mark.
+     *
+     * @param  array<string, mixed>|null  $config
+     * @return array<string, mixed>|null
+     */
+    private static function withBrandingChoice(?array $config, ?string $identity): ?array
+    {
+        if ($identity === null) {
+            return $config;
+        }
+
+        $config ??= [];
+        $branding = (array) ($config['branding'] ?? []);
+        $branding['prefer'] = $identity;
+        $config['branding'] = $branding;
+
+        return $config;
+    }
+
     public function store(Request $request, AuditLogger $audit): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.view'), 403);
@@ -82,6 +108,18 @@ final class ReportController extends Controller
             'period_start' => ['nullable', 'date'],
             'period_end' => ['nullable', 'date'],
             'config' => ['nullable', 'array'],
+            /*
+             * WHOSE identity this report carries — REPORT-CREATION-UX-001's last clause.
+             *
+             * A choice, not an identity: the name and the mark are resolved server-side by
+             * `SharedLinkBranding`, because a caller that could post a `logo_url` could put any
+             * agency's mark on any client's report. What the operator picks is which LAYER leads,
+             * and the resolver answers what that layer actually holds.
+             *
+             * Absent means the hierarchy decides, which is what every report created before this
+             * did — so nothing that already exists changes meaning.
+             */
+            'branding_identity' => ['nullable', Rule::in(['client', 'agency'])],
             'scope' => ['nullable', 'array'],
         ]);
 
@@ -103,7 +141,7 @@ final class ReportController extends Controller
              * currency here would have printed USD totals under whatever three letters were sent.
              */
             'currency' => ReportingCurrency::DEFAULT,
-            'config' => $data['config'] ?? null,
+            'config' => self::withBrandingChoice($data['config'] ?? null, $data['branding_identity'] ?? null),
             /*
              * What the report covers, from the moment it is created (§14.5).
              *
