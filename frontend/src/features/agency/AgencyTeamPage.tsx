@@ -25,6 +25,31 @@ import { useUi } from '@/stores/ui'
  * access is a permission a member either holds or does not, and the rows say which.
  */
 
+/**
+ * The membership roles this product writes, as names.
+ *
+ * These five are the whole vocabulary — `owner`, `member`, `account_manager`, `client_viewer` and
+ * `creator` are every value written anywhere in the application — and none of them is
+ * customer-named: no endpoint validates or accepts a custom one, unlike a tenant's Access roles,
+ * which a customer may rename and which are therefore shown as the customer wrote them.
+ *
+ * A value not listed here shows as ITSELF rather than as a blank or a guess: a role the product does
+ * not recognise is worth seeing. `projectRoleLabel` makes the same choice for the same reason.
+ */
+const MEMBERSHIP_ROLE_LABELS: Record<string, { ar: string; en: string }> = {
+  owner: { ar: 'مالك', en: 'Owner' },
+  member: { ar: 'عضو', en: 'Member' },
+  account_manager: { ar: 'مدير الحساب', en: 'Account manager' },
+  client_viewer: { ar: 'مُطّلع من جهة العميل', en: 'Client viewer' },
+  creator: { ar: 'صانع محتوى', en: 'Creator' },
+}
+
+export function membershipRoleLabel(role: string, ar: boolean): string {
+  const label = MEMBERSHIP_ROLE_LABELS[role]
+
+  return label ? (ar ? label.ar : label.en) : role
+}
+
 export function AgencyTeamPage() {
   const ar = useUi((s) => s.locale) === 'ar'
   const qc = useQueryClient()
@@ -151,8 +176,24 @@ function MemberRow({
           <p className="font-heading text-[15px] font-bold text-text-primary">{member.user.name ?? '—'}</p>
           <p className="mt-0.5 truncate text-[13px] text-text-muted" dir="ltr">{member.user.email}</p>
         </div>
-        <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] font-semibold text-text-secondary">
-          {member.role}
+        {/*
+          The role as a name, not as the column's value.
+
+          This printed `member.role` raw, so an otherwise Arabic page showed «member» three times
+          and «account_manager» once — identifiers where every neighbouring word is a sentence.
+
+          A lookup against the `roles` table would not have helped: a membership stores
+          `account_manager` while the Access role carrying that meaning is slugged
+          `account-manager`, so the two do not meet. These five are the whole vocabulary written
+          anywhere in the product, and none is customer-named — nothing validates or accepts a
+          custom one — so they can be written properly. An unknown value still shows as itself, on
+          purpose: a role the product does not recognise is worth seeing rather than hiding.
+        */}
+        <span
+          data-testid={`team-member-role-${member.id}`}
+          className="rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] font-semibold text-text-secondary"
+        >
+          {membershipRoleLabel(member.role, ar)}
         </span>
       </div>
 
