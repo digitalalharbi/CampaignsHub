@@ -80,9 +80,32 @@ async function openCampaigns(page: Page, locale: 'ar' | 'en') {
   return box
 }
 
+/**
+ * Name the window, and PROVE it was named.
+ *
+ * `DateField` opens its calendar on focus, and `fill()` focuses — so filling «from» leaves a popover
+ * hanging directly over «to», and the second fill is then aiming at a control something else is
+ * covering. Escape closes it (`DateField` listens for it on `document`), so each field is reached
+ * with nothing in front of it.
+ *
+ * The value is asserted after each fill because this helper proved nothing about its own effect:
+ * `waitForLoadState('networkidle')` is a guarantee about the NETWORK, and a period that never
+ * reached React issues no request at all — so it resolved instantly and the test walked on with an
+ * unnamed window. That surfaced forty lines later as a missing «عملت في هذه الفترة», reading as «the
+ * grouping is broken» when what had actually happened is that nobody had asked for a period.
+ *
+ * Only the FIRST test in this file ever failed that way, and only on webkit: the three tests after
+ * it make the same assertion through the same helper and passed in the same run, which is what says
+ * the grouping renders and the helper is what was unreliable.
+ */
 async function setPeriod(page: Page) {
-  await page.locator('#scope-from').fill(day(30))
-  await page.locator('#scope-to').fill(day(1))
+  for (const [id, date] of [['#scope-from', day(30)], ['#scope-to', day(1)]] as const) {
+    const field = page.locator(id)
+    await field.fill(date)
+    await page.keyboard.press('Escape')
+    await expect(field, `${id} did not keep the date it was given`).toHaveValue(date)
+  }
+
   /* The options query is keyed on the period, so the list is re-fetched for the window just named. */
   await page.waitForLoadState('networkidle')
 }
