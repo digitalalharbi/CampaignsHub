@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { AxiosError, AxiosHeaders } from 'axios'
 import { ClientCommandCenterPage } from './ClientCommandCenterPage'
 import { renderWithProviders } from '@/test/utils'
@@ -99,12 +99,39 @@ describe('ClientCommandCenterPage — a client outside the caller’s scope', ()
         view_analytics: false, view_reports: false, manage_files: false,
       },
       overview: { projects: 0, active_campaigns: 0, draft_campaigns: 0, open_requests: 1 },
-      projects: [], campaigns: [], requests: [],
+      projects: [{ id: 'p1', name: 'Q3 Launch', status: 'active', created_at: null }],
+      campaigns: [{
+        id: 'k1', project_id: 'p1', name: 'National Day', objective: 'sales',
+        status: 'paused', budget: null, currency: 'SAR',
+      }],
+      requests: [],
     } as never)
 
     renderWithProviders(<ClientCommandCenterPage />, { locale: 'ar' })
 
     expect(await screen.findByText('حملات مسودة')).toBeInTheDocument()
     expect(screen.queryByText('Draft')).not.toBeInTheDocument()
+  })
+
+  /**
+   * The lists name their states, rather than printing the column.
+   *
+   * The projects tab rendered `p.status` and the campaigns tab `c.objective` and `c.status`
+   * verbatim, so an Arabic command centre listed «active», «sales», «paused». Every one of those
+   * already has a written name elsewhere: the portfolio card calls `projectStatusLabel`, and the
+   * campaigns feature owns `campaignStatusLabel` and `objectiveLabel`. Importing them is also what
+   * stops the two surfaces drifting into different words for the same state.
+   */
+  it('names a project’s and a campaign’s state instead of printing the column', async () => {
+    renderWithProviders(<ClientCommandCenterPage />, { locale: 'ar' })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'المشاريع' }))
+    expect(await screen.findByText('Q3 Launch')).toBeInTheDocument()
+    expect(screen.queryByText('active')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'الحملات' }))
+    expect(await screen.findByText('National Day')).toBeInTheDocument()
+    expect(screen.queryByText('paused')).not.toBeInTheDocument()
+    expect(screen.queryByText('sales')).not.toBeInTheDocument()
   })
 })
