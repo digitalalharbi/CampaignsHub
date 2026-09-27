@@ -62,7 +62,15 @@ test('an unfinished connection is surfaced with the way to finish it', async ({ 
    * would authorise a platform, never pick the accounts, and see a page that looks complete.
    */
   if (await unfinished.count() > 0) {
-    await expect(page.getByTestId('resume-connection')).toBeVisible()
+    /*
+     * A button PER unfinished authorisation, each naming its platform: the banner used to describe
+     * `unfinished[0]` alone and name no provider, so a workspace with four authorisations waiting
+     * for a selection was told about one. `.first()` rather than a fixed id because which platforms
+     * are mid-selection is the environment's business, not this test's.
+     */
+    const buttons = unfinished.getByRole('button')
+    await expect(buttons.first()).toBeVisible()
+    expect(await buttons.count(), 'an unfinished connection with no way to finish it').toBeGreaterThan(0)
   }
 })
 

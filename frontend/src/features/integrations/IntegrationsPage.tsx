@@ -353,20 +353,47 @@ export function AdPlatformsPanel() {
          * ORCH-100 §39 — somebody authorised and then closed the tab. The token is still valid and
          * the inventory is still there; asking them to authorise again would be a second consent for
          * an authorisation that never lapsed.
+         *
+         * ONE ROW PER UNFINISHED AUTHORISATION, each naming its platform.
+         *
+         * This rendered `unfinished[0]` alone and named no platform, so a workspace with four
+         * authorisations waiting for a selection — the demo tenant's own state: Meta, Google,
+         * Snapchat and TikTok — was told about one account, and «أكمل اختيار الحسابات» opened a
+         * wizard for whichever provider happened to sort first. Seen on a local install against the
+         * seeded data, beside a project page listing a bound account.
+         *
+         * The second clause was the worse half. «ولم يُربط أي حساب بمشروع بعد» is true of the
+         * connection it describes and reads as a statement about the workspace, which had an account
+         * bound and syncing. Per row it can say what it actually knows.
          */
         <div
           data-testid="unfinished-connection"
           role="status"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] bg-[var(--warning-background)] px-4 py-3 text-sm text-warning"
+          className="space-y-2 rounded-[12px] bg-[var(--warning-background)] px-4 py-3 text-sm text-warning"
         >
-          <span>
-            {ar
-              ? `لديك ربط غير مكتمل: ${accountsCounted(unfinished[0].discovered, 'ar')} متاح ولم يُربط أي حساب بمشروع بعد.`
-              : `You have an unfinished connection: ${accountsCounted(unfinished[0].discovered, 'en')} available, none connected to a project yet.`}
-          </span>
-          <Button size="sm" onClick={() => setWizardConnectionId(unfinished[0].connection.id)} data-testid="resume-connection">
-            {ar ? 'أكمل اختيار الحسابات' : 'Finish selecting accounts'}
-          </Button>
+          {unfinished.map((u) => {
+            const platform = canonicalPlatform(u.connection.provider)
+            /*
+             * The connection's own name — «سناب شات», not «Snapchat Marketing API». The endpoint
+             * sends both languages for exactly this, and the API label belongs on a card an operator
+             * is configuring, not in a sentence.
+             */
+            const named = (ar ? u.connection.label_ar : u.connection.label) || u.connection.provider
+
+            return (
+              <div key={u.connection.id} className="flex flex-wrap items-center justify-between gap-3">
+                <span>
+                  {ar
+                    ? `${named}: تمت المصادقة و${accountsCounted(u.discovered, 'ar')} متاح، ولم تختر أي حساب لهذا الربط بعد.`
+                    : `${named}: authorised, ${accountsCounted(u.discovered, 'en')} available, and no account chosen for it yet.`}
+                </span>
+                <Button size="sm" onClick={() => setWizardConnectionId(u.connection.id)} data-testid={`resume-connection-${platform}`}>
+                  {/* Short, and beside its own sentence: the platform is named there, once. */}
+                  {ar ? 'أكمل اختيار الحسابات' : 'Finish selecting accounts'}
+                </Button>
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -379,7 +406,13 @@ export function AdPlatformsPanel() {
       {clientChoices.length > 0 && (
         <label
           data-testid="connect-client-workspace"
-          className="flex flex-col gap-1.5 rounded-[12px] border border-border bg-surface p-3 sm:flex-row sm:items-center sm:gap-3"
+          /*
+            WRAPS rather than compresses. Three items on one row with no wrap means the browser meets
+            a width it cannot satisfy by taking every one of them down to min-content — at 768 this
+            row read as a vertical stack of single words: «الحسابات / التي / ستُكتشف / تخص», with the
+            hint beside it doing the same. Wrapping puts the hint on its own line instead.
+          */
+          className="flex flex-col gap-1.5 rounded-[12px] border border-border bg-surface p-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3"
         >
           <span className="text-sm font-bold text-text-primary">
             {ar ? 'الحسابات التي ستُكتشف تخص' : 'The accounts discovered belong to'}
@@ -546,8 +579,26 @@ function ConnectorCard({
           className="mt-0.5 h-9 w-1.5 shrink-0 rounded-full"
           style={{ background: platformColor(canonicalPlatform(c.key)) }}
         />
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
-          <div className="min-w-0">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-2">
+          {/*
+            The name keeps its min-content width and the ROW wraps — it does not get crushed.
+
+            This was `min-w-0`, so at the widths where the grid is multi-column but each column is
+            narrow the unshrinkable chip took the row and the name collapsed to fourteen pixels and
+            spilled out of the card: «…eta Marketing API» over three lines, unreadable. Measured in a
+            browser at 768 and 1024 in Arabic with the navigation expanded — h3 clientWidth 14
+            against scrollWidth 77, and 164/164 after — and correct at 390 and 1440, which are
+            exactly the two widths every sweep in this suite checks. A tablet, or a window at half a
+            screen, got the unreadable one.
+
+            NOT covered by a test, deliberately rather than by omission. The gate's own integrations
+            page does not reproduce it: probed at 640, 700, 768, 860, 960, 1024, 1100 and 1280 with
+            the unfixed code in place, zero names were crushed, its cards being wider than this
+            install's. A guard there would have passed against the defect — it did, on the first
+            attempt — and a test that cannot fail is worse than none, because the next reader trusts
+            it. The measurement above is the evidence.
+          */}
+          <div className="break-words">
             <CardTitle>{c.label}</CardTitle>
           </div>
           {/*

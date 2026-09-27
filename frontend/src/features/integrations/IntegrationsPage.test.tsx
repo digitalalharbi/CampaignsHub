@@ -418,7 +418,39 @@ describe('an authorisation with nothing selected yet', () => {
 
     const banner = await screen.findByTestId('unfinished-connection')
     expect(banner.textContent).toContain('309')
-    expect(screen.getByTestId('resume-connection')).toBeTruthy()
+    expect(screen.getByTestId('resume-connection-snapchat')).toBeTruthy()
+  })
+
+  /**
+   * EVERY unfinished authorisation is named, not just whichever sorted first.
+   *
+   * The banner described `unfinished[0]` and named no platform, so the demo tenant — four
+   * authorisations waiting for a selection: Meta, Google, Snapchat and TikTok — was told about one
+   * account, and «أكمل اختيار الحسابات» opened a wizard for a provider the reader had not chosen.
+   * Seen on a local install, beside a project page listing an account that WAS bound, which is what
+   * made the banner's "none connected to a project yet" read as a claim about the workspace.
+   */
+  it('names every authorisation still waiting for a selection, not only the first', async () => {
+    rows.data = [
+      connector({ key: 'snapchat', state: 'connected', accounts: 309 }),
+      connector({ key: 'meta', state: 'connected', accounts: 12 }),
+    ]
+    needsSelection()
+    const meta = {
+      connection: { id: 'conn-2', provider: 'meta', label: 'Meta', label_ar: 'ميتا', client_workspace_id: null },
+      state: 'needs_selection' as const,
+      discovered: 12, assigned: 0, synced: 0, has_parent: true, resumable: true, next_step: 'parent' as const,
+    }
+    wizardStates.connections = [...wizardStates.connections, meta]
+    wizardStates.resumable = [...wizardStates.resumable, meta]
+
+    renderWithProviders(<IntegrationsPage />, { route: '/app/integrations' })
+
+    const banner = await screen.findByTestId('unfinished-connection')
+    expect(banner.textContent).toContain('309')
+    expect(banner.textContent).toContain('12')
+    expect(screen.getByTestId('resume-connection-snapchat')).toBeTruthy()
+    expect(screen.getByTestId('resume-connection-meta')).toBeTruthy()
   })
 
   it('opens the wizard from the card', async () => {
