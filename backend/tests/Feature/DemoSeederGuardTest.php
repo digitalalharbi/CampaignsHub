@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Metrics\Enums\SyncRunStatus;
+use App\Domains\Notifications\Support\MessageCatalogue;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -41,6 +42,37 @@ final class DemoSeederGuardTest extends TestCase
 
         $this->assertDatabaseHas('users', ['email' => 'agency@campaignshub.io']);
         $this->assertDatabaseHas('users', ['email' => 'viewer@demo-agency.local']);
+    }
+
+    /**
+     * No demo notification carries a type the product does not define.
+     *
+     * `MessageCatalogue` is the list of types a person can subscribe to and the list
+     * `messageLabels.ts` names — a guard already keeps those two in step. A seeder that invents a
+     * type outside it produces a notification nobody could have asked for and nobody can name, so
+     * the centre falls back to the raw server title: `integration.disconnected` drew «Sandbox
+     * integration needs attention — Demo» in English beside Arabic rows, on the demo tenant, which
+     * is what a prospect is shown.
+     *
+     * The fallback itself is right — an unknown type keeps its real sentence rather than showing a
+     * blank — and it is exactly why this needed a test rather than a rendering fix.
+     */
+    public function test_every_demo_notification_type_is_one_the_product_defines(): void
+    {
+        $this->app->detectEnvironment(fn () => 'local');
+
+        $this->artisan('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true])->assertSuccessful();
+
+        $known = MessageCatalogue::keys();
+
+        $strange = DB::table('app_notifications')
+            ->whereNotIn('type', $known)
+            ->distinct()
+            ->pluck('type')
+            ->all();
+
+        $this->assertSame([], $strange, 'a demo notification carries a type MessageCatalogue does not define: '
+            .implode(', ', array_map(static fn ($t): string => (string) $t, $strange)));
     }
 
     /**

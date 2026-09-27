@@ -12,6 +12,7 @@ import {
   severityLabel,
   severityTone,
 } from './notificationPresentation'
+import { TYPE_LABELS, words } from '@/features/settings/messageLabels'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 
@@ -36,6 +37,19 @@ const SEVERITY_CHIP: Record<'info' | 'success' | 'warning' | 'danger', string> =
   success: 'text-success',
   warning: 'text-warning',
   danger: 'text-danger',
+}
+
+/**
+ * The type's name in the reader's language, or null when the product has no name for it.
+ *
+ * Null rather than a guess: an unknown type keeps the server's own title, which is a real sentence
+ * about a real event, and is better than a blank or a database key. `TYPE_LABELS` is the same map
+ * the settings screen decides from, and `EveryMessageTypeIsNamedTest` keeps it in step with
+ * `MessageCatalogue::keys()` — so a type that reaches here unnamed is a type nobody could subscribe
+ * to either, and that test fails first.
+ */
+function named(type: string, ar: boolean): string | null {
+  return TYPE_LABELS[type] ? words(TYPE_LABELS, type, ar) : null
 }
 
 export function NotificationCenter() {
@@ -131,10 +145,32 @@ export function NotificationCenter() {
                                 className={`absolute bottom-0 start-0 top-0 w-1 ${SEVERITY_RAIL[tone]} ${isUnread ? '' : 'opacity-50'}`}
                               />
                               <span className="min-w-0 flex-1">
-                                <span className={`block truncate text-sm text-text-primary ${isUnread ? 'font-bold' : 'font-semibold'}`}>
-                                  {n.title}
+                                {/*
+                                  The TITLE in the reader's language.
+                                  
+                                  Every notification's title is composed on the server as one English
+                                  string — «New client message», «Client needs attention: Acme» — so
+                                  an Arabic panel, whose own heading and chips are Arabic, listed
+                                  English sentences. `messageLabels` already holds the Arabic name of
+                                  every type for the settings screen, and a guard keeps that map in
+                                  step with `MessageCatalogue::keys()`, so the name exists; the panel
+                                  simply never asked for it.
+
+                                  The server's own string is not thrown away. It carries the
+                                  specifics — WHICH client needs attention — so when there is no
+                                  message beneath, it takes that line instead of being lost.
+                                */}
+                                <span
+                                  title={n.title}
+                                  className={`block truncate text-sm text-text-primary ${isUnread ? 'font-bold' : 'font-semibold'}`}
+                                >
+                                  {named(n.type, ar) ?? n.title}
                                 </span>
-                                {n.message && <span className="block truncate text-xs text-text-secondary">{n.message}</span>}
+                                {(n.message ?? (named(n.type, ar) === null ? null : n.title)) && (
+                                  <span className="block truncate text-xs text-text-secondary" title={n.message ?? n.title}>
+                                    {n.message ?? n.title}
+                                  </span>
+                                )}
                                 <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-muted">
                                   {/*
                                     Scope, said rather than inferred. A notification is written for a
