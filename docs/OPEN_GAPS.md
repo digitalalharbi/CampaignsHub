@@ -226,8 +226,12 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
 
 - **Severity:** Low
 - **Status:** OPEN
-- **Detail:** `account-settings.spec.ts` runs on chromium only; auth specs already run on Firefox + WebKit.
-- **Next action:** extend the account journey run to Firefox + WebKit projects.
+- **CLOSED (verified 2026-09-27).** `playwright.config.ts` defines chromium, firefox and webkit as three
+  projects that each run the whole `e2e` directory; nothing restricts a spec to one browser. The only
+  exclusions are `grepInvert` on `@visual` (firefox and webkit) and on `@evidence`, and
+  `account-settings.spec.ts` carries neither tag — so the account journey already runs on all three.
+  Consistent with what the gates actually execute: the firefox gate on #565 reported `620 passed`.
+- **Was:** `account-settings.spec.ts` runs on chromium only; next action, extend it to Firefox + WebKit.
 
 ## G-012 — External request portal is stubbed (homepage CTAs live, portal pending)
 
