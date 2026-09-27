@@ -114,7 +114,18 @@ final class ClientsController
 
         $requests = ExternalRequest::where('tenant_id', $this->tenant->tenantId())->where('client_id', $c->id)
             ->with(['type', 'status'])->orderByDesc('submitted_at')->get()
-            ->map(fn (ExternalRequest $r) => ['id' => $r->id, 'reference' => $r->reference, 'service' => $r->type->name_en, 'status' => $r->status->key, 'submitted_at' => optional($r->submitted_at)->toIso8601String()]);
+            // Both languages: the reader's is not knowable here, and this row previously sent
+            // name_en plus the raw status key, so an Arabic page listed English service names.
+            ->map(fn (ExternalRequest $r) => [
+                'id' => $r->id,
+                'reference' => $r->reference,
+                'service' => $r->type->name_ar,
+                'service_en' => $r->type->name_en,
+                'status' => $r->status->key,
+                'status_label' => $r->status->name_ar,
+                'status_label_en' => $r->status->name_en,
+                'submitted_at' => optional($r->submitted_at)->toIso8601String(),
+            ]);
 
         return response()->json(['data' => [
             'id' => $c->id,
