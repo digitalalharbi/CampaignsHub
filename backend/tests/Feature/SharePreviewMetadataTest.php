@@ -8,6 +8,7 @@ use App\Domains\Branding\Services\BrandingService;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Services\ShareCardRenderer;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -155,9 +156,128 @@ final class SharePreviewMetadataTest extends TestCase
         $this->assertStringNotContainsString('Nakheel', $response->getContent() ?: '');
     }
 
-    /** The identity is the shared resolver's, so the card cannot disagree with the page it opens. */
-    public function test_the_card_uses_the_clients_own_mark_when_one_is_set(): void
+    /**
+     * SHARE-PREVIEW-CARD-001 — the large image is the DRAWN CARD, and never the mark.
+     *
+     * This assertion changed, and the behaviour it used to describe was the defect. `og:image` was
+     * `$identity['logo_url']` — whatever file the agency uploaded to the Branding Center — beside a
+     * `summary_large_image` declaration. A mark is square or tall, frequently transparent, often a
+     * few hundred pixels; the slot is 1200×630 on a dark chat bubble. WhatsApp letterboxed it, X
+     * refuses anything under 300×157, and a transparent PNG arrived as an empty rectangle.
+     *
+     * So the picture is now composed for the slot, and the mark's job is to appear INSIDE it —
+     * asserted on the card's own contents in `ShareCardContentsTest`, where it can be checked
+     * without a browser.
+     */
+    public function test_the_large_image_is_the_drawn_card_and_not_the_uploaded_mark(): void
     {
+        $this->rendererOrSkip();
+
+        app(TenantContext::class)->setTenantId($this->agency->id);
+        app(BrandingService::class)->storeAsset(
+            'client',
+            (string) $this->client->id,
+            'report_logo',
+            'any',
+            UploadedFile::fake()->createWithContent('logo.png', 'nakheel-bytes'),
+        );
+        app(TenantContext::class)->forget();
+
+        $image = (string) $this->meta($this->preview(), 'og:image');
+
+        $this->assertStringContainsString('/r/'.$this->token.'/preview.png', $image);
+        $this->assertStringNotContainsString('branding/logo', $image, 'the mark is being sent as the preview image again');
+        $this->assertSame('summary_large_image', $this->metaName($this->preview(), 'twitter:card'));
+    }
+
+    /**
+     * The card declares its SIZE, so a crawler can lay it out without fetching it first.
+     *
+     * Several of them give up rather than wait for an image whose dimensions they have to measure,
+     * and a card with an empty picture slot is the same outcome as having no image at all. The
+     * numbers come from the config the renderer draws at, so what is declared cannot drift from what
+     * is served — asserted here against the config rather than against two literals.
+     */
+    public function test_the_card_declares_the_size_it_was_drawn_at(): void
+    {
+        $this->rendererOrSkip();
+
+        $html = $this->preview();
+
+        $this->assertSame((string) config('reports.og.width'), $this->meta($html, 'og:image:width'));
+        $this->assertSame((string) config('reports.og.height'), $this->meta($html, 'og:image:height'));
+        $this->assertSame('image/png', $this->meta($html, 'og:image:type'));
+    }
+
+    /** And it carries an alt, for the reader who is told about the card rather than shown it. */
+    public function test_the_picture_has_an_accessible_description(): void
+    {
+        $this->rendererOrSkip();
+
+        $html = $this->preview();
+
+        $this->assertSame('Nakheel · 2026-07-01 — 2026-07-31', $this->meta($html, 'og:image:alt'));
+        $this->assertSame('Nakheel · 2026-07-01 — 2026-07-31', $this->metaName($html, 'twitter:image:alt'));
+    }
+
+    /**
+     * The card is offered for a link with NO mark too, because it draws an identity rather than a logo.
+     *
+     * Under the old behaviour this link had no `og:image` at all: no upload, no picture. The agency
+     * that has not got round to uploading a mark is the common case, and it is the one whose links
+     * were previewing as bare text.
+     */
+    public function test_a_link_with_no_mark_still_gets_a_drawn_card(): void
+    {
+        $this->rendererOrSkip();
+
+        $html = $this->preview();
+
+        $this->assertStringContainsString('/r/'.$this->token.'/preview.png', (string) $this->meta($html, 'og:image'));
+        $this->assertSame('summary_large_image', $this->metaName($html, 'twitter:card'));
+    }
+
+    /**
+     * With no renderer, the card degrades to a text card rather than to a broken one.
+     *
+     * `summary_large_image` with no `og:image` is how a preview renders as an empty grey rectangle in
+     * WhatsApp — the chat-card spelling of the broken image BRANDING-HIERARCHY-001 forbids. And a
+     * large card pointing at an image route the server has decided not to answer is the same defect
+     * with an extra request in front of it.
+     */
+    public function test_without_a_renderer_the_card_is_a_text_card_not_a_broken_one(): void
+    {
+        config(['reports.chromium.enabled' => false]);
+
+        $html = $this->preview();
+
+        $this->assertNull($this->meta($html, 'og:image'), 'an image tag was emitted with no renderer to draw it');
+        $this->assertSame('summary', $this->metaName($html, 'twitter:card'));
+
+        // And nothing ABOUT a picture that is not there. A size or an alt with no url is how a
+        // crawler is told to expect an image and then given none.
+        foreach (['og:image:width', 'og:image:height', 'og:image:type', 'og:image:alt'] as $property) {
+            $this->assertNull($this->meta($html, $property), "«{$property}» was emitted with no image");
+        }
+        $this->assertNull($this->metaName($html, 'twitter:image:alt'));
+    }
+
+    /**
+     * WITH NO RENDERER BUT A MARK, the mark is offered — because a 404 is worse than a small picture.
+     *
+     * `SharedReportCrawlerMetadataTest` is the reason this case exists. It fetches `og:image` exactly
+     * as a crawler does, with no session, and requires an image back: a crawler caches whatever it
+     * gets, so a dead url follows the link into every chat it is forwarded to, and nothing inside
+     * this product would ever show it.
+     *
+     * A mark is not a preview image — that is why the card exists — so it goes out under `summary`,
+     * never the large layout that would crop it, and without the size tags that describe a card it
+     * is not.
+     */
+    public function test_with_no_renderer_a_configured_mark_is_offered_rather_than_a_dead_url(): void
+    {
+        config(['reports.chromium.enabled' => false]);
+
         app(TenantContext::class)->setTenantId($this->agency->id);
         app(BrandingService::class)->storeAsset(
             'client',
@@ -171,22 +291,37 @@ final class SharePreviewMetadataTest extends TestCase
         $html = $this->preview();
 
         $image = (string) $this->meta($html, 'og:image');
-        $this->assertNotSame('', $image, 'the card offered no image at all');
-        $this->assertSame('summary_large_image', $this->metaName($html, 'twitter:card'));
+        $this->assertStringContainsString('branding/logo', $image, 'no picture at all was offered');
+        $this->assertSame('summary', $this->metaName($html, 'twitter:card'));
+
+        // Nothing describing a 1200x630 card, because this is not one.
+        $this->assertNull($this->meta($html, 'og:image:width'));
+        $this->assertNull($this->meta($html, 'og:image:type'));
     }
 
     /**
-     * With no mark anywhere, the card degrades to a text card rather than to a broken one.
+     * And the image route itself refuses when it cannot draw — a 404, never a placeholder.
      *
-     * `summary_large_image` with no `og:image` is how a preview renders as an empty grey rectangle in
-     * WhatsApp — the chat-card spelling of the broken image BRANDING-HIERARCHY-001 forbids.
+     * A crawler that asked for the picture and got a redirect to a logo, or a 200 carrying an empty
+     * PNG, would cache that as the link's face. A refusal leaves it with the summary card it can
+     * always render.
      */
-    public function test_without_a_mark_the_card_is_a_text_card_not_a_broken_one(): void
+    public function test_the_image_route_refuses_rather_than_inventing_a_placeholder(): void
     {
-        $html = $this->preview();
+        config(['reports.chromium.enabled' => false]);
 
-        $this->assertNull($this->meta($html, 'og:image'), 'an image tag was emitted with no asset');
-        $this->assertSame('summary', $this->metaName($html, 'twitter:card'));
+        $this->get('/r/'.$this->token.'/preview.png')->assertNotFound();
+    }
+
+    /** An unknown token has no picture either, for the same reason it has no card. */
+    public function test_an_unknown_token_has_no_picture(): void
+    {
+        config(['reports.chromium.enabled' => true]);
+
+        $response = $this->get('/r/'.str_repeat('z', 22).'/preview.png');
+
+        $response->assertNotFound();
+        $this->assertStringNotContainsString('Nakheel', $response->getContent() ?: '');
     }
 
     /** The canonical URL is the link that was shared, so a crawler files the card under it. */
@@ -196,6 +331,36 @@ final class SharePreviewMetadataTest extends TestCase
 
         $this->assertStringContainsString('/r/'.$this->token, (string) $this->meta($html, 'og:url'));
         $this->assertStringContainsString('rel="canonical"', $html);
+    }
+
+    /**
+     * A DRAWN card needs a browser, and the `backend` job installs none.
+     *
+     * These cases are about the card, not about the fallback, and a test that quietly passed on a
+     * machine that cannot draw would be claiming the capability. Where there is no renderer the
+     * behaviour is covered by its own case below — the agency's mark is offered instead, and the
+     * layout stays `summary`.
+     */
+    private function rendererOrSkip(): void
+    {
+        config(['reports.chromium.enabled' => true]);
+
+        /*
+         * ASK THE RENDERER, not the filesystem.
+         *
+         * A first cut looked for `require_base` — the frontend's package.json — and that file is in
+         * every checkout, including the `backend` CI job, which installs no browser. So it answered
+         * «yes» where nothing could draw, and the card cases failed there instead of skipping.
+         *
+         * Drawing one card is the only honest question, and it is cheap after the first: the answer
+         * is cached, so the case that follows serves it from disk rather than launching Chromium
+         * again.
+         */
+        $share = app(ShareService::class)->resolveActive($this->token);
+
+        if ($share === null || app(ShareCardRenderer::class)->png($share, $this->report) === null) {
+            $this->markTestSkipped('this machine cannot draw a card — no browser, or the renderer refused');
+        }
     }
 
     // ---- helpers ---------------------------------------------------------------------------------
