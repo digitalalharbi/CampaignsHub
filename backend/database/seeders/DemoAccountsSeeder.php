@@ -271,7 +271,8 @@ final class DemoAccountsSeeder extends Seeder
                 'module' => 'paid_media',
                 'type_id' => $type->id,
                 'status_id' => $status->id,
-                'priority' => 'normal',
+                // `medium` is the product's own default and one of the four values the API accepts.
+                'priority' => 'medium',
                 'contact_name' => 'Demo Client',
                 'contact_email' => Str::lower(self::CLIENT_CONTACT_EMAIL),
                 'contact_phone' => self::CLIENT_CONTACT_PHONE,
