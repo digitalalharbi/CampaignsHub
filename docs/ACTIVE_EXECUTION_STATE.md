@@ -2,6 +2,38 @@
 
 _Reconciled from Git on 2026-09-16. When this file and Git disagree, Git is right._
 
+## BRANDING's Production clause, and the one action that unblocks it
+
+`BRANDING-RENDER-EVIDENCE-001`'s bar is «the configured logo actually renders, proven per surface»,
+and its own warning is that «code containing `logo_url` is not completion».
+
+**Locally it is proven end to end.** `shared-report-branding.spec.ts` uploads a mark through the
+authenticated Branding Center, then opens the client's link with NO session at all and asserts the
+mark's decoded `naturalWidth` — not its visibility, because an `<img>` whose src 404s is still
+«visible» and draws a broken-image icon, which on a client's report reads as «this report failed».
+
+**On Production it cannot be proven yet, and the reason is not a defect.** Production PDF Acceptance
+run `36291959238` of 2026-09-27 reports:
+
+```
+configured branding
+  name               present
+  logo               none configured
+  logo_source        none
+...
+  "pages_with_images": 0,
+```
+
+Zero images in the PDF is the CORRECT outcome of that configuration: there is no mark to draw. The
+measurement is already in place and would catch a mark that failed to render — `PdfFactsCommand`
+prints what is configured precisely so that a measured logo count means something, and its docblock
+says why.
+
+**The single action that unblocks it:** upload a mark in Production's Branding Center, then re-run
+Production PDF Acceptance. `logo` becomes `configured` and `pages_with_images` must become non-zero;
+if it does not, that is the defect the row exists to catch. Until then this row's Production half is
+`BLOCKED_OPERATIONAL_EVIDENCE` — a credential-gated upload, not an engineering gap.
+
 ## What landed on 2026-09-27, and how each one was found
 
 Every defect in this block was found the same way: by **rendering the page and reading it**. None
