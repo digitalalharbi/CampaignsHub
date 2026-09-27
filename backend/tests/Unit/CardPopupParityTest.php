@@ -153,6 +153,39 @@ final class CardPopupParityTest extends TestCase
     }
 
     /**
+     * A COLLECTION whose hero is a FILM draws the film — the third instrument to learn this.
+     *
+     * `$film` required `kind === 'video'`, which mirrored `adPreview.ts` while that module resolved a
+     * collection to `image_url ?? thumbnail_url` and ignored its video. The reader draws the film
+     * now, so this reported «stated absence» for a card that paints — and Production said so: the
+     * census counted `collection: 439 draws 439` while the one-creative walk still called
+     * `01de7a4a` a stated absence, on the same estate, minutes apart.
+     *
+     * An operator reading «stated absence» re-opens a defect that was fixed, which is the expensive
+     * direction for a diagnostic.
+     */
+    public function test_a_collection_whose_hero_is_a_film_draws_the_film(): void
+    {
+        $preview = $this->parity->preview($this->row([], [
+            'image_url' => null,
+            'thumbnail_url' => null,
+            'video_url' => 'https://cdn.test/hero.mp4',
+        ]));
+
+        $this->assertSame('collection', $preview['kind']);
+        $this->assertSame('film', $preview['card_draws']);
+        $this->assertSame('film', $preview['popup_draws']);
+    }
+
+    /** A hero FRAME still wins where a collection has one: the still is what it shows. */
+    public function test_a_collection_with_both_a_still_and_a_film_draws_the_still(): void
+    {
+        $preview = $this->parity->preview($this->row([], ['video_url' => 'https://cdn.test/hero.mp4']));
+
+        $this->assertSame('still', $preview['card_draws']);
+    }
+
+    /**
      * An EXPIRED link keeps its thumbnail in the payload, and neither surface may draw it.
      *
      * This is the rule the library card used to skip by reading `thumbnail_url ?? image_url` off the
