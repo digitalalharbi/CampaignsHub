@@ -146,7 +146,24 @@ final class CardPopupParity
             $kind === 'video' && $url('video_url') => $url('thumbnail_url') || $url('image_url'),
             default => $url('image_url') || $url('thumbnail_url'),
         };
-        $film = $available && $kind === 'video' && $url('video_url');
+        /*
+         * A COLLECTION's hero may be a film, and this instrument said otherwise.
+         *
+         * `$film` required `kind === 'video'`, which mirrored `adPreview.ts` while that module
+         * resolved a collection to `image_url ?? thumbnail_url` and ignored its video. The reader
+         * draws the film now — a collection with no still resolves to a film and the card falls back
+         * to a `<video>` that paints its first frame — so this reported `draws=stated absence` for a
+         * card that paints.
+         *
+         * That is the third instrument in this family to need the same correction, after the census
+         * and for the same reason: a diagnostic that judges media by columns rather than by what the
+         * surface paints will always drift the moment the surface improves, and an operator reading
+         * «stated absence» re-opens a defect that was fixed.
+         *
+         * `! $still` keeps the order the reader uses: where a collection has a hero frame, that frame
+         * is what it shows.
+         */
+        $film = $available && $url('video_url') && ($kind === 'video' || ($kind === 'collection' && ! $still));
 
         $draws = match (true) {
             $still => 'still',
