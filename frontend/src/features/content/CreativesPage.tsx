@@ -1393,6 +1393,11 @@ function CreativeGridCard({
   const usablePoster = brokenPoster ? null : poster
   const video = usablePoster === null && !brokenVideo && reading.kind === 'video' ? reading.src : null
   const note = ar ? preview.note_ar : preview.note_en
+  /*
+   * What the panel says. Resolved once, because the note below is only worth printing when it is
+   * NOT this — `absenceLabel` already prefers the server's note over its own wording.
+   */
+  const said = absenceLabel(readPreview(preview, ar), ar)
 
   return (
     /*
@@ -1491,8 +1496,17 @@ function CreativeGridCard({
               data-absence={preview.state}
               className="flex h-full flex-col items-center justify-center gap-1 p-3 text-center text-xs text-text-secondary"
             >
-              <span>{absenceLabel(readPreview(preview, ar), ar) || t.noPreview}</span>
-              {note && <span className="text-[11px] opacity-80">{note}</span>}
+              <span>{said || t.noPreview}</span>
+              {/*
+                The note, ONLY when it is not what the line above already said.
+
+                `absenceLabel` prefers the server's note over its own wording — deliberately, it is
+                the more specific truth — so once a note arrived, this second line printed the very
+                same sentence directly beneath the first. The grid drew every derived row twice.
+                This line was written when the line above was the generic «لا تتوفر معاينة», where a
+                note genuinely added something; it still does, whenever the two differ.
+              */}
+              {note && note !== said && <span className="text-[11px] opacity-80">{note}</span>}
             </span>
           ) : (
             /*
