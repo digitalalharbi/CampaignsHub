@@ -6,6 +6,7 @@ namespace App\Domains\Settings\Http\Controllers;
 
 use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Services\NotificationChoices;
+use App\Domains\Notifications\Support\DigestSchedule;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -117,6 +118,18 @@ final class NotificationPreferenceController extends Controller
             'timezone' => $row->timezone ?? 'Asia/Riyadh',
             'locale' => $row->locale ?? 'ar',
             'digest_hour' => (int) ($row->digest_hour ?? 8),
+            /*
+             * The DAY each summary lands on, which the schema has carried since
+             * «a weekly digest may choose its day» and no endpoint ever handed back.
+             *
+             * `DigestSchedule` and `SendDailyDigests` have read these columns all along; the screen
+             * could not show them, so it stated «Weekly, Monday morning» as a constant. That was
+             * true only because nothing could change the column from its default — which is a
+             * different thing from being the reader's choice, and a poor default in a market whose
+             * week starts on Sunday.
+             */
+            'digest_weekday' => DigestSchedule::weekday($row->digest_weekday ?? null),
+            'digest_monthday' => DigestSchedule::monthday($row->digest_monthday ?? null),
             'available_timezones' => timezone_identifiers_list(),
             // MAIL-011 — the catalogue, and this person's effective answer for every entry in it.
             'catalogue' => $this->catalogue(),
@@ -177,6 +190,14 @@ final class NotificationPreferenceController extends Controller
             'timezone' => ['sometimes', 'nullable', 'string', Rule::in(timezone_identifiers_list())],
             'locale' => ['sometimes', 'nullable', 'in:ar,en'],
             'digest_hour' => ['sometimes', 'nullable', 'integer', 'between:0,23'],
+            /* ISO-8601, so 1 is Monday and 7 is Sunday — the same numbering `DigestSchedule` reads. */
+            'digest_weekday' => ['sometimes', 'nullable', 'integer', 'between:1,7'],
+            /*
+             * 1–28 and no further. A monthly set for the 29th, 30th or 31st would skip February
+             * silently, which the migration refused for the same reason — so the range is closed
+             * here, where a person can be told, rather than being repaired out of sight at send time.
+             */
+            'digest_monthday' => ['sometimes', 'nullable', 'integer', 'between:1,28'],
         ]);
 
         if (array_key_exists('types', $data)) {
@@ -201,7 +222,7 @@ final class NotificationPreferenceController extends Controller
                 $write[$json] = $data[$json] === null ? null : json_encode($data[$json]);
             }
         }
-        foreach (['frequency', 'timezone', 'locale', 'digest_hour'] as $scalar) {
+        foreach (['frequency', 'timezone', 'locale', 'digest_hour', 'digest_weekday', 'digest_monthday'] as $scalar) {
             if (array_key_exists($scalar, $data) && $data[$scalar] !== null) {
                 $write[$scalar] = $data[$scalar];
             }
@@ -401,6 +422,7 @@ final class NotificationPreferenceController extends Controller
         return $row ?? (object) [
             'channels' => null, 'categories' => null, 'types' => null, 'quiet_hours' => null, 'frequency' => null,
             'project_ids' => null, 'digests' => null, 'timezone' => null, 'locale' => null, 'digest_hour' => null,
+            'digest_weekday' => null, 'digest_monthday' => null,
         ];
     }
 
