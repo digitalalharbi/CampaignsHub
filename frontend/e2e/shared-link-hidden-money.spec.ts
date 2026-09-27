@@ -191,8 +191,22 @@ for (const [label, flags, money] of [
       // Identifiers are not figures: content keys, request ids and uuids are hex that happens to hold digits.
       const text = raw.replace(/\b[0-9a-f]{16,}\b|req_[0-9a-z]+|[0-9a-f]{8}-[0-9a-f-]{27}/gi, ' ')
       for (const s of [...new Set(wanted)].filter((x) => !innocentHere.has(x))) {
-        // «397» inside «397K», or «3.28» inside «3.28%», is a different figure.
-        const m = new RegExp(`(?<![\\d.,])${s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\dKM%]|\\.\\d)`).exec(text)
+        /*
+         * «397» inside «397K», «3.28» inside «3.28%», and «2,735» inside «2,735,337» are all a
+         * DIFFERENT figure from the one being hunted.
+         *
+         * The last of those was missing and CI found it: a link hiding a spend of 2,735 was accused
+         * of leaking it by «الظهور بكسل المنصات 2,735,337» — the impressions, which this link
+         * publishes and is entitled to. The lookahead excluded a following digit, a K/M suffix, a
+         * percent and a decimal point, but not the GROUPING comma, so every hidden figure was also
+         * hunted as the prefix of every longer number on the page.
+         *
+         * That direction matters more than it looks. A money guard that cries wolf is one somebody
+         * eventually overrides, and the next thing it waves through is real. The exact spelling is
+         * still hunted — `2,735` in «الإنفاق 2,735» and `2,735.50` in «2,735.50» both still fail —
+         * so nothing is narrowed except the accusation the evidence never supported.
+         */
+        const m = new RegExp(`(?<![\\d.,])${s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\dKM%]|[.,]\\d)`).exec(text)
         if (m) leaks.push(`${where}: «${s}» … ${text.slice(Math.max(0, m.index - 70), m.index + 40).replace(/\s+/g, ' ')}`)
       }
     }
