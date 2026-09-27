@@ -244,7 +244,14 @@ final class DemoSeeder extends Seeder
 
             AppNotification::create([
                 'user_id' => $ownerUser->id,
-                'type' => 'integration.disconnected',
+                /*
+                 * A type the product actually defines. `integration.disconnected` existed in this
+                 * seeder and nowhere else — not in `MessageCatalogue`, so nobody could subscribe to
+                 * it and no label could name it, and the notification centre drew its raw English
+                 * title beside Arabic ones. `token_expiring` is the catalogue's word for an
+                 * integration that needs re-authorising, which is what this demo alert describes.
+                 */
+                'type' => 'token_expiring',
                 'severity' => 'warning',
                 'title' => 'Sandbox integration needs attention — Demo',
                 'message' => 'Simulated alert for the demo tour.',
