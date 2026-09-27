@@ -109,7 +109,18 @@ export function ProjectIntegrationsPage() {
   const missing = bindings.isError && toApiError(bindings.error).status === 404
 
   const rows = bindings.data ?? []
-  const providers = [...new Set((campaigns.data ?? []).map((c) => c.provider).filter(Boolean))]
+  /*
+   * The platforms BOUND to this project, which is what the counter beneath claims to count.
+   *
+   * It read them off the discovered CAMPAIGNS instead, so a project with an account bound and
+   * nothing synced yet drew «المنصات 0» directly above a list naming that very platform — on the
+   * one panel whose title is «الحسابات المرتبطة بهذا المشروع». Zero is not a smaller version of
+   * one here; it is a different claim, and the false one is the one that looks like data.
+   *
+   * Bindings are the right source for the same reason the account count beside it uses them: both
+   * answer «what is attached to this project», and only «الحملات» answers «what has arrived».
+   */
+  const providers = [...new Set(rows.map((b) => b.provider).filter(Boolean))]
   const lastSync = rows.map((b) => b.account?.last_synced_at).filter(Boolean).sort().at(-1) ?? null
   const discoveredCampaigns = campaigns.data?.length ?? 0
 
