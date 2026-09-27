@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, LayoutGrid, ListChecks, Plus, Rows3, X } from 'lucide-react'
 import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { QueryFailure } from '@/components/ui/QueryFailure'
+import { PRIORITY_META, STATUS_META, priorityLabel, statusLabel } from './labels'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { DateField } from '@/components/ui/DateField'
@@ -39,33 +40,12 @@ const COPY = {
 }
 type Copy = (typeof COPY)['ar']
 
-const STATUS_META: Record<string, { ar: string; en: string; tone: string }> = {
-  open: { ar: 'مفتوحة', en: 'Open', tone: 'bg-info/15 text-info' },
-  backlog: { ar: 'قائمة الانتظار', en: 'Backlog', tone: 'bg-surface-hover text-text-secondary' },
-  todo: { ar: 'للتنفيذ', en: 'To do', tone: 'bg-info/15 text-info' },
-  in_progress: { ar: 'قيد التنفيذ', en: 'In progress', tone: 'bg-brand-600/15 text-brand-600' },
-  waiting_client: { ar: 'بانتظار العميل', en: 'Waiting on client', tone: 'bg-warning/15 text-warning' },
-  blocked: { ar: 'متوقفة', en: 'Blocked', tone: 'bg-danger/15 text-danger' },
-  review: { ar: 'مراجعة', en: 'Review', tone: 'bg-info/15 text-info' },
-  completed: { ar: 'مكتملة', en: 'Completed', tone: 'bg-success/15 text-success' },
-  cancelled: { ar: 'ملغاة', en: 'Cancelled', tone: 'bg-surface-hover text-text-muted' },
-}
-const PRIORITY_META: Record<string, { ar: string; en: string; tone: string }> = {
-  low: { ar: 'منخفضة', en: 'Low', tone: 'text-text-muted' },
-  normal: { ar: 'عادية', en: 'Normal', tone: 'text-text-secondary' },
-  medium: { ar: 'متوسطة', en: 'Medium', tone: 'text-info' }, // legacy value written by some services
-  high: { ar: 'عالية', en: 'High', tone: 'text-warning' },
-  urgent: { ar: 'عاجلة', en: 'Urgent', tone: 'text-danger' },
-}
-
 // Filters use the canonical vocabulary (legacy 'open'/'medium' were normalized in the DB migration).
 const FILTER_STATUSES: string[] = TASK_STATUSES
 const FILTER_PRIORITIES: string[] = ['urgent', 'high', 'normal', 'low']
 /** Options for a task's status select: canonical targets, plus its own current value if any stray value survives. */
 const statusOptions = (current: string): string[] =>
   (TASK_STATUSES as string[]).includes(current) ? TASK_STATUSES : [current, ...TASK_STATUSES]
-const statusLabel = (s: string, ar: boolean) => (STATUS_META[s] ? (ar ? STATUS_META[s].ar : STATUS_META[s].en) : s)
-const priorityLabel = (p: string, ar: boolean) => (PRIORITY_META[p] ? (ar ? PRIORITY_META[p].ar : PRIORITY_META[p].en) : p)
 
 export function TasksPage() {
   const locale = useUi((s) => s.locale)

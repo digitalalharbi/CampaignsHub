@@ -321,3 +321,46 @@ export async function detachBinding(projectId: string, bindingId: string): Promi
   const res = await api.delete<ApiEnvelope<null>>(`/projects/${projectId}/integrations/bindings/${bindingId}`)
   return res.data.data
 }
+
+/**
+ * SYNC-001 — one row per attempt the pipeline made for this project's accounts.
+ *
+ * `provider_rows`, `parsed_rows` and `mapped_rows` are NULLABLE on purpose: the migration that added
+ * them says a 0 would be a claim about a stage that never reported. A reader must be able to tell
+ * «the provider returned nothing» from «we never got that far», so the type keeps the distinction.
+ */
+export interface SyncRun {
+  id: string
+  provider: string
+  status: string
+  trigger: string | null
+  account: string | null
+  account_external_id: string | null
+  window_start: string | null
+  window_end: string | null
+  provider_rows: number | null
+  parsed_rows: number | null
+  mapped_rows: number | null
+  metrics_imported: number
+  duration_seconds: number | null
+  attempts: number
+  started_at: string | null
+  finished_at: string | null
+  error: string | null
+  is_demo: boolean
+  /** §8 — consecutive identical answers are said once, with how many times they were said. */
+  repeats: number
+  repeats_since: string | null
+}
+
+export interface SyncRunLog {
+  runs: SyncRun[]
+  summary: Record<string, number>
+  /** Every run that matched, not the page of them below — OPS-LEDGER-001. */
+  runs_total: number
+  runs_withheld: number
+}
+
+export function listSyncRuns(projectId: string): Promise<SyncRunLog> {
+  return getData<SyncRunLog>(`/projects/${projectId}/sync-runs`)
+}

@@ -10,6 +10,8 @@ import {
   syncBinding,
 } from './api'
 import { PlatformIntegrationsPanel } from './PlatformIntegrationsPanel'
+import { ProjectSyncHistory } from './ProjectSyncHistory'
+import { PRIORITY_META, STATUS_META, priorityLabel, statusLabel } from '@/features/tasks/labels'
 import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -335,6 +337,8 @@ export function ProjectIntegrationsPage() {
         )}
       </Card>
 
+      <ProjectSyncHistory projectId={projectId} />
+
       {/* Project-scoped tasks — these change when the active project changes (no leakage). */}
       <Card>
         <CardTitle>{t('project_tasks')}</CardTitle>
@@ -351,11 +355,21 @@ export function ProjectIntegrationsPage() {
             {tasks.data?.tasks.map((task) => (
               <div key={task.id} className="flex items-center justify-between rounded-[9px] border border-border p-2.5">
                 <span className="text-sm font-semibold">{task.title}</span>
+                {/*
+                  The task's state and urgency by NAME. This printed the columns — «in_progress» and
+                  «high» in the middle of an Arabic page — while the tasks page itself has named both
+                  all along. Importing its map rather than writing a second one is what keeps the two
+                  surfaces calling `waiting_client` the same thing.
+                */}
                 <div className="flex items-center gap-2">
-                  <Badge tone={task.priority === 'high' || task.priority === 'urgent' ? 'warning' : 'neutral'}>
-                    {task.priority}
-                  </Badge>
-                  <Badge tone={task.is_overdue ? 'danger' : 'info'}>{task.status}</Badge>
+                  <span className={`whitespace-nowrap text-[11px] font-bold ${PRIORITY_META[task.priority]?.tone ?? 'text-text-secondary'}`}>
+                    ● {priorityLabel(task.priority, lang === 'ar')}
+                  </span>
+                  <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    task.is_overdue ? 'bg-danger/15 text-danger' : STATUS_META[task.status]?.tone ?? 'bg-surface-hover text-text-secondary'
+                  }`}>
+                    {statusLabel(task.status, lang === 'ar')}
+                  </span>
                 </div>
               </div>
             ))}
