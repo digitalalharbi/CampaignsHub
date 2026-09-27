@@ -35,10 +35,13 @@ use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Requests\Services\PortalTenantResolver;
 use App\Domains\Requests\Services\RequestJourneyService;
 use App\Domains\Requests\Services\RequestUploadAttacher;
+use App\Domains\Taxonomy\Models\TaxonomyDefinition;
+use App\Domains\Taxonomy\Models\TaxonomyOption;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
+use App\Domains\Tenancy\Scopes\TenantScope;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -745,6 +748,63 @@ final class ClientPortalController
     }
 
     /** @return array<string,mixed> client-safe report + its active-share descriptor (never the raw token). */
+    /** @var array<string, array{ar: string, en: string}>|null */
+    private ?array $typeLabels = null;
+
+    /**
+     * `report.type`'s labels, read once per request.
+     *
+     * Platform options UNION this tenant's own, which is the rule `TaxonomyService::options()`
+     * applies and the same set the agency side of the product reads. So a tenant that renamed
+     * «monthly» in its own taxonomy has its client shown that word rather than the platform's, and
+     * no other tenant's renaming can reach this reader.
+     *
+     * A key with no option falls back to the raw value at the call site rather than to an empty
+     * pill: an unlabelled new type should read as itself, not as nothing.
+     *
+     * @return array<string, array{ar: string, en: string}>
+     */
+    private function typeLabels(): array
+    {
+        if ($this->typeLabels !== null) {
+            return $this->typeLabels;
+        }
+
+        /*
+         * `withoutGlobalScope` is required, not a shortcut: `TaxonomyOption` carries `TenantScope`,
+         * which pins every query to `tenant_id = <current>` — and these rows are the platform's,
+         * with a NULL tenant. Left in place the scope returns nothing and every label goes null.
+         * `TaxonomyService::options()` drops the same scope for the same reason.
+         */
+        /* The definition carries the same scope, so `whereHas` would re-apply it to the subquery. */
+        $definitionId = TaxonomyDefinition::withoutGlobalScope(TenantScope::class)
+            ->where('key', 'report.type')
+            ->value('id');
+
+        if ($definitionId === null) {
+            return $this->typeLabels = [];
+        }
+
+        $tenantId = app(TenantContext::class)->hasTenant()
+            ? app(TenantContext::class)->tenantId()
+            : null;
+
+        return $this->typeLabels = TaxonomyOption::withoutGlobalScope(TenantScope::class)
+            ->where('taxonomy_definition_id', $definitionId)
+            ->where(static function (Builder $q) use ($tenantId): void {
+                $q->whereNull('tenant_id');
+                if ($tenantId !== null) {
+                    $q->orWhere('tenant_id', $tenantId);
+                }
+            })
+            ->where('is_active', true)
+            ->get(['key', 'label_ar', 'label_en'])
+            ->mapWithKeys(static fn (TaxonomyOption $o): array => [
+                (string) $o->key => ['ar' => (string) $o->label_ar, 'en' => (string) $o->label_en],
+            ])
+            ->all();
+    }
+
     private function reportShape(Report $r): array
     {
         /** @var ReportShare|null $share */
@@ -754,6 +814,18 @@ final class ClientPortalController
             'id' => (string) $r->getKey(),
             'name' => $r->name,
             'type' => $r->type,
+            /*
+             * The word the client reads, in both languages, resolved where the taxonomy lives.
+             *
+             * The portal rendered `type` raw, so a client whose page is Arabic throughout met a bare
+             * «monthly» in the middle of it. The labels already exist — `report.type` is a system
+             * taxonomy with `label_ar` and `label_en` for every key — but they are reached through a
+             * tenant endpoint, and the reader here is a client contact who is not a tenant operator
+             * and must not be sent to ask for them. Both languages travel with the row because the
+             * locale is the reader's, chosen in their browser, and the server does not know it.
+             */
+            'type_label_ar' => $this->typeLabels()[$r->type]['ar'] ?? null,
+            'type_label_en' => $this->typeLabels()[$r->type]['en'] ?? null,
             'audience' => $r->audience,
             'status' => $r->status,
             'period_start' => optional($r->period_start)->toDateString(),

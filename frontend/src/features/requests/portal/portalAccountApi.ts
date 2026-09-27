@@ -290,6 +290,9 @@ export interface PortalReport {
   id: string
   name: string
   type: string
+  /** The type as a word, both languages, resolved from the `report.type` taxonomy by the server. */
+  type_label_ar: string | null
+  type_label_en: string | null
   audience: string
   status: string
   period_start: string | null
