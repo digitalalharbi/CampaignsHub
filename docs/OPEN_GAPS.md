@@ -142,7 +142,15 @@ Severity: `Blocker` · `High` · `Medium` · `Low` · `Watch` (unreproduced, mon
 ## G-006 — No catch-all 404 route
 
 - **Severity:** Medium
-- **Status:** OPEN (observed 2026-07-27 during G-005 testing)
+- **Status:** **CLOSED (verified 2026-09-27).** The route exists — `router.tsx` ends with
+  `{ path: '*', element: <NotFoundPage />, errorElement: <NotFoundPage /> }`, last in the list so it
+  can only match what nothing else did, and it is wired as the `errorElement` too, which is what
+  replaces the dev ErrorBoundary this gap was opened against.
+  Seen rendered, not just read: opening `/agency/notifications` and `/agency/branding` (paths that
+  exist under `/app` but not under `/agency`) draws the product's own styled page — «الصفحة غير
+  موجودة / ربما تغيّر العنوان أو كُتب خطأ», the attempted path in a field, and a «العودة إلى الصفحة
+  الرئيسية» button — with the app's typography and dark ground, not «Hey developer».
+- **Was:** OPEN (observed 2026-07-27 during G-005 testing)
 - **Symptom:** Unknown paths (e.g. `/campaigns/42` — wrong shape) fall through to React Router's default
   ErrorBoundary ("Unexpected Application Error! 404 Not Found — Hey developer"), an un-styled dev screen.
 - **Next action:** add a styled `NotFound` element as a catch-all `{ path: '*' }` inside and outside the auth
