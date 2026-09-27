@@ -180,6 +180,8 @@ export interface PortfolioOverview {
       name: string
       status: string
       client_workspace_id: string
+      /** Whose project it is, readable. Null only if the workspace row is gone. */
+      client_name: string | null
       accounts: number
       providers: string[]
       data_last_synced_at: string | null

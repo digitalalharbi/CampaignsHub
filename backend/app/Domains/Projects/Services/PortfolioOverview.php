@@ -90,6 +90,9 @@ final class PortfolioOverview
                 'name' => (string) $project->name,
                 'status' => $status,
                 'client_workspace_id' => (string) $project->client_workspace_id,
+                'client_name' => $project->clientWorkspace?->name !== null
+                    ? (string) $project->clientWorkspace->name
+                    : null,
                 'accounts' => $summaries[$id]['accounts'] ?? 0,
                 'providers' => $summaries[$id]['providers'] ?? [],
                 'data_last_synced_at' => $summaries[$id]['data_last_synced_at'] ?? null,
@@ -141,7 +144,18 @@ final class PortfolioOverview
             $query->whereIn('id', $reachable);
         }
 
-        return $query->orderBy('name')->get();
+        /*
+         * The client comes with the project, because the card has to name it.
+         *
+         * «جميع المشاريع» is the one view that crosses clients by definition, so two projects called
+         * «Q3 Launch» are only told apart by whose they are. A `client_workspace_id` cannot do that
+         * for a human. Ordering by client first then name also stops identical names from landing
+         * side by side with nothing between them.
+         */
+        return $query->with('clientWorkspace:id,name')
+            ->orderBy('client_workspace_id')
+            ->orderBy('name')
+            ->get();
     }
 
     /**
