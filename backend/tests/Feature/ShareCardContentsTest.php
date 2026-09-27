@@ -337,8 +337,18 @@ final class ShareCardContentsTest extends TestCase
     {
         config(['reports.chromium.enabled' => true]);
 
-        if (! is_file((string) config('reports.chromium.require_base'))) {
-            $this->markTestSkipped('no Playwright install to draw with on this machine');
+        /*
+         * ASK THE RENDERER, not the filesystem.
+         *
+         * This gate looked for `require_base` — the frontend's package.json — which is in every
+         * checkout, including the `backend` job that installs no browser. So it answered «yes» where
+         * nothing could draw: the card came back null, `og:image` fell to the agency's mark, the
+         * fixture has none, and the assertion below failed on a machine that was never going to draw
+         * a card. Drawing one is the only honest form of the question, and it is cheap after the
+         * first — the answer is cached, so the fetch below serves it from disk.
+         */
+        if (app(ShareCardRenderer::class)->png($this->share, $this->report) === null) {
+            $this->markTestSkipped('this machine cannot draw a card — no browser, or the renderer refused');
         }
 
         $token = $this->token;
