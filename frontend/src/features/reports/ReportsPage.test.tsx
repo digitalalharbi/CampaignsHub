@@ -28,10 +28,10 @@ vi.mock('@/features/taxonomy/taxonomyApi', () => ({
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
-  return { ...actual, listReports: vi.fn(), createReport: vi.fn() }
+  return { ...actual, listReports: vi.fn(), createReport: vi.fn(), listReportSections: vi.fn() }
 })
 
-import { createReport, listReports } from './api'
+import { createReport, listReportSections, listReports } from './api'
 
 describe('ReportsPage — engine-fed builder', () => {
   beforeEach(() => {
@@ -117,6 +117,49 @@ describe('ReportsPage — engine-fed builder', () => {
     await waitFor(() =>
       expect(createReport).toHaveBeenCalledWith('p1', expect.objectContaining({ mode: 'snapshot' })),
     )
+  })
+
+  /**
+   * REPORT-CREATION-UX-001 — the builder says what it is about to make.
+   *
+   * The audience already decides which sections a report carries, and the builder chose one without
+   * ever naming the consequence: an operator picked «client» and found out what that meant by
+   * opening the finished report.
+   */
+  it('names the sections the chosen audience implies', async () => {
+    vi.mocked(listReportSections).mockResolvedValue({
+      sections: [
+        { key: 'kpis', title_ar: 'المؤشرات', title_en: 'KPIs', default_client: true, default_internal: true },
+        { key: 'detailed_tables', title_ar: 'جداول تفصيلية', title_en: 'Detailed tables', default_client: false, default_internal: true },
+      ],
+    } as never)
+    renderWithProviders(<ReportsPage />, { locale: 'en' })
+
+    fireEvent.click(screen.getByText(/تقرير محفوظ|Saved report/))
+
+    const preview = await screen.findByTestId('rb-section-preview')
+    // A client report carries the KPIs and not the internal-only tables.
+    expect(preview).toHaveTextContent('KPIs')
+    expect(preview).not.toHaveTextContent('Detailed tables')
+    // And it does not pretend this is the last chance to decide.
+    expect(preview).toHaveTextContent(/changed after/i)
+  })
+
+  /**
+   * It fails QUIET. A creation screen that blocked on a description of ITSELF would be worse than
+   * one that says nothing, so a registry that will not load leaves the builder as it was.
+   */
+  it('still builds a report when the section registry will not load', async () => {
+    vi.mocked(listReportSections).mockRejectedValue(new Error('nope'))
+    vi.mocked(createReport).mockResolvedValue({} as never)
+    renderWithProviders(<ReportsPage />, { locale: 'en' })
+
+    fireEvent.click(screen.getByText(/تقرير محفوظ|Saved report/))
+    await screen.findByRole('combobox', { name: /نوع التقرير|Report type/ })
+    expect(screen.queryByTestId('rb-section-preview')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText(/إنشاء وتوليد|Create and generate/))
+    await waitFor(() => expect(createReport).toHaveBeenCalled())
   })
 
   it('surfaces a server validation error in the builder ErrorSummary', async () => {
