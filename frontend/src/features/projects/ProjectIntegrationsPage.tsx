@@ -21,6 +21,34 @@ import { fmtClock, fmtDateTime } from '@/lib/datetime'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 
+/**
+ * What a connection's state means to somebody reading a project's account list.
+ *
+ * An unrecognised state shows as ITSELF rather than as a guess or a blank — a state the product
+ * does not know is worth seeing, which is the choice `projectRoleLabel` makes for the same reason.
+ */
+const CONNECTION_LABELS: Record<string, { ar: string; en: string }> = {
+  error: { ar: 'خطأ في الاتصال', en: 'Connection error' },
+  revoked: { ar: 'أُلغي الإذن', en: 'Access revoked' },
+  expired: { ar: 'انتهت صلاحية الإذن', en: 'Authorisation expired' },
+  disabled: { ar: 'الاتصال معطّل', en: 'Connection disabled' },
+  awaiting_credentials: { ar: 'بانتظار بيانات الاعتماد', en: 'Awaiting credentials' },
+}
+
+const CONNECTION_TONE: Record<string, 'danger' | 'warning'> = {
+  error: 'danger',
+  revoked: 'danger',
+  expired: 'danger',
+  disabled: 'warning',
+  awaiting_credentials: 'warning',
+}
+
+function connectionLabel(status: string, ar: boolean): string {
+  const label = CONNECTION_LABELS[status]
+
+  return label ? (ar ? label.ar : label.en) : status
+}
+
 export function ProjectIntegrationsPage() {
   const t = useT()
   const lang = useUi((s) => s.locale)
@@ -242,6 +270,23 @@ export function ProjectIntegrationsPage() {
                     <Badge tone="info">{b.purpose}</Badge>
                     {b.is_primary && <Badge tone="success">{t('primary')}</Badge>}
                     {!b.is_active && <Badge tone="danger">{t('disabled')}</Badge>}
+                    {/*
+                      The CONNECTION's health, which this row has always been sent and never shown.
+                      `connection_status` arrives on every account — `ProjectIntegrationController`
+                      reads it off the connection — and appeared nowhere in the frontend outside the
+                      type declaration. So an account whose authorisation had been revoked looked
+                      exactly like a working one: same name, same type, same id, and «آخر تحديث»
+                      simply stopped moving. This is the page an operator opens to ask why the
+                      numbers stopped, and it was the one page that could answer and did not.
+
+                      Silent while healthy, like the «disabled» badge beside it: a list where every
+                      row carries a green tick teaches a reader to stop reading the badges.
+                    */}
+                    {b.account?.connection_status != null && b.account.connection_status !== 'connected' && (
+                      <Badge tone={CONNECTION_TONE[b.account.connection_status] ?? 'warning'}>
+                        {connectionLabel(b.account.connection_status, lang === 'ar')}
+                      </Badge>
+                    )}
                   </div>
                   <span className="text-xs text-text-muted">
                     {b.account?.account_type} · <span className="tnum">{b.account?.external_id}</span>

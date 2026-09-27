@@ -85,4 +85,55 @@ describe('the project integrations counters', () => {
     const platforms = (await screen.findByText('Platforms')).closest('div') as HTMLElement
     expect(within(platforms).getByText('1')).toBeInTheDocument()
   })
+
+  /**
+   * A revoked connection says so on the row.
+   *
+   * `connection_status` arrives on every account and appeared nowhere in the frontend outside the
+   * type declaration. So an account whose authorisation had been revoked looked exactly like a
+   * working one — same name, same type, same id — and «آخر تحديث» simply stopped moving. This is
+   * the page an operator opens to ask why the numbers stopped.
+   */
+  it('says when a bound account’s connection is not healthy', async () => {
+    vi.mocked(getData).mockImplementation((path: string) => {
+      if (path === `/projects/${PROJECT}/integrations`) {
+        return Promise.resolve([
+          { ...binding, account: { ...binding.account, connection_status: 'revoked' } },
+        ] as never)
+      }
+      if (path === '/projects') return Promise.resolve([{ id: PROJECT, name: 'Demo' }] as never)
+      if (path.endsWith('/integrations/platforms')) {
+        return Promise.resolve({
+          platforms: [],
+          summary: { total: 0, with_credentials: 0, with_accounts: 0, discovered_campaigns: 0 },
+        } as never)
+      }
+
+      return Promise.resolve([] as never)
+    })
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/projects/:projectId/integrations" element={<ProjectIntegrationsPage />} />
+      </Routes>,
+      { locale: 'en', route: `/projects/${PROJECT}/integrations` },
+    )
+
+    await screen.findByText(/Sandbox Ad Account/)
+    expect(screen.getByText('Access revoked')).toBeInTheDocument()
+  })
+
+  /** A healthy connection stays quiet — a list where every row carries a tick teaches nobody to read it. */
+  it('says nothing when the connection is healthy', async () => {
+    renderWithProviders(
+      <Routes>
+        <Route path="/projects/:projectId/integrations" element={<ProjectIntegrationsPage />} />
+      </Routes>,
+      { locale: 'en', route: `/projects/${PROJECT}/integrations` },
+    )
+
+    await screen.findByText(/Sandbox Ad Account/)
+    expect(screen.queryByText('Access revoked')).toBeNull()
+    expect(screen.queryByText('connected')).toBeNull()
+  })
 })
