@@ -83,11 +83,6 @@ async function openCampaigns(page: Page, locale: 'ar' | 'en') {
 /**
  * Name the window, and PROVE it was named.
  *
- * `DateField` opens its calendar on focus, and `fill()` focuses — so filling «from» leaves a popover
- * hanging directly over «to», and the second fill is then aiming at a control something else is
- * covering. Escape closes it (`DateField` listens for it on `document`), so each field is reached
- * with nothing in front of it.
- *
  * The value is asserted after each fill because this helper proved nothing about its own effect:
  * `waitForLoadState('networkidle')` is a guarantee about the NETWORK, and a period that never
  * reached React issues no request at all — so it resolved instantly and the test walked on with an
@@ -99,10 +94,18 @@ async function openCampaigns(page: Page, locale: 'ar' | 'en') {
  * the grouping renders and the helper is what was unreliable.
  */
 async function setPeriod(page: Page) {
+  /*
+   * No Escape between the fields, and that is load-bearing rather than an omission.
+   *
+   * A first version pressed it to dismiss the calendar `DateField` opens on focus. `Modal` closes
+   * on Escape too — `Modal.tsx` binds it on `document` — and this builder IS a modal, so the
+   * keypress shut the whole thing and every step after it failed. It turned a webkit-only failure
+   * into a chromium one as well. `fill()` already waits for the field to be actionable, and the
+   * assertion below waits through the remount, so nothing needed dismissing.
+   */
   for (const [id, date] of [['#scope-from', day(30)], ['#scope-to', day(1)]] as const) {
     const field = page.locator(id)
     await field.fill(date)
-    await page.keyboard.press('Escape')
     await expect(field, `${id} did not keep the date it was given`).toHaveValue(date)
   }
 
