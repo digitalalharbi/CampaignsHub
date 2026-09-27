@@ -41,6 +41,7 @@ use App\Domains\Reports\Console\PdfFactsCommand;
 use App\Domains\Reports\Console\RegenerateDemoExportsCommand;
 use App\Domains\Reports\Console\RenderAcceptanceExportCommand;
 use App\Domains\Reports\Console\ReportsHealthCommand;
+use App\Domains\Reports\Console\ShareCardCheckCommand;
 use App\Domains\Requests\Console\EvaluateSla;
 use App\Domains\Requests\Console\PruneUploadSessions;
 use App\Domains\Tenancy\Middleware\EnsurePlatformAdmin;
@@ -83,6 +84,7 @@ return Application::configure(basePath: dirname(__DIR__))
         InvalidateLegacyExportsCommand::class,
         RegenerateDemoExportsCommand::class,
         DownloadCheckCommand::class,
+        ShareCardCheckCommand::class,
         PdfFactsCommand::class,
         RenderAcceptanceExportCommand::class,
         ReportsHealthCommand::class,
