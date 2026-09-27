@@ -105,8 +105,21 @@ async function setPeriod(page: Page) {
    */
   for (const [id, date] of [['#scope-from', day(30)], ['#scope-to', day(1)]] as const) {
     const field = page.locator(id)
-    await field.fill(date)
-    await expect(field, `${id} did not keep the date it was given`).toHaveValue(date)
+
+    /*
+     * The FILL is retried, not the wait extended.
+     *
+     * The picker unmounts and remounts once the first date is set, measured by watching the DOM
+     * after filling «from»: `from=GONE to=GONE`, then both back with the value kept. A fill that
+     * lands inside that window is typed into a field that is about to be torn down, and the
+     * remount does not carry it — so «to» stays empty, the window is never fully named, and the
+     * grouping heading never exists. Waiting longer cannot help: the keystrokes are already gone.
+     * Retrying the action re-types into the field that came back.
+     */
+    await expect(async () => {
+      await field.fill(date)
+      await expect(field, `${id} did not keep the date it was given`).toHaveValue(date)
+    }).toPass({ timeout: 15000 })
   }
 
   /* The options query is keyed on the period, so the list is re-fetched for the window just named. */
