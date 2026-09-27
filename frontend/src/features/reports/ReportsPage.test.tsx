@@ -105,6 +105,54 @@ describe('ReportsPage — engine-fed builder', () => {
     )
   })
 
+  /**
+   * WHOSE report this is, chosen at creation — REPORT-CREATION-UX-001's last clause.
+   *
+   * A report about a client resolves at the client layer: the client's name leads and the client's
+   * mark is drawn, with the agency underneath. That is right for most client reports and wrong for
+   * an agency that wants its own mark on the document it issued, and nothing in this screen ever
+   * wrote `config['branding']`, which every surface already reads.
+   *
+   * What travels is a LAYER, never an identity: a screen that could post a `logo_url` could put any
+   * agency's mark on any client's report, so the server resolves what that layer actually holds.
+   */
+  it('offers whose identity the report carries and sends the chosen layer', async () => {
+    vi.mocked(createReport).mockResolvedValue({} as never)
+    renderWithProviders(<ReportsPage />, { locale: 'en' })
+
+    fireEvent.click(screen.getByText(/تقرير محفوظ|Saved report/))
+    await screen.findByRole('combobox', { name: /نوع التقرير|Report type/ })
+
+    expect(screen.getByTestId('rb-identity-auto')).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByTestId('rb-identity-agency'))
+    expect(screen.getByTestId('rb-identity-agency')).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByText(/إنشاء وتوليد|Create and generate/))
+
+    await waitFor(() =>
+      expect(createReport).toHaveBeenCalledWith('p1', expect.objectContaining({ branding_identity: 'agency' })),
+    )
+  })
+
+  /**
+   * «Automatic» sends NOTHING, which is the whole point of it being a third answer.
+   *
+   * Posting a default would freeze a decision on every report nobody made, and every report created
+   * before this chooser existed would then mean something different from one created after.
+   */
+  it('sends no identity at all when the operator leaves it automatic', async () => {
+    vi.mocked(createReport).mockResolvedValue({} as never)
+    renderWithProviders(<ReportsPage />, { locale: 'en' })
+
+    fireEvent.click(screen.getByText(/تقرير محفوظ|Saved report/))
+    await screen.findByRole('combobox', { name: /نوع التقرير|Report type/ })
+    fireEvent.click(screen.getByText(/إنشاء وتوليد|Create and generate/))
+
+    await waitFor(() => expect(createReport).toHaveBeenCalled())
+    expect(vi.mocked(createReport).mock.calls[0]![1]).not.toHaveProperty('branding_identity')
+  })
+
   /** And the default still travels, so nothing an operator does not touch changes meaning. */
   it('sends snapshot when the operator chooses nothing', async () => {
     vi.mocked(createReport).mockResolvedValue({} as never)
