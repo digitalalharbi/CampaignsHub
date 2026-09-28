@@ -70,6 +70,27 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     locale: 'en-US',
+    /*
+     * GATE-BUILT-APP-001 — the built app, WITHOUT its service worker.
+     *
+     * `registerServiceWorker()` is guarded by `import.meta.env.PROD`, so serving a built app turned
+     * the worker on in the gate for the first time — and `sw.js` answers navigations network-first
+     * with a cached shell. A request the worker serves never reaches Playwright's interception, so
+     * `page.route('**\/metrics/summary*', … 500)` stopped being able to refuse anything:
+     * `a-failure-is-not-a-zero` read «rows» where it had asked for «error», which is the precise
+     * claim that spec exists to make.
+     *
+     * Blocking it is a scope statement, not a weakening. What the gate is for is the application —
+     * its routes, its figures, its refusals — and that is now exercised against the same bytes
+     * production serves, with no transform step and no optimizer. The worker's own behaviour is a
+     * different question, answered where it can be answered honestly: `src/app/pwa.test.ts` holds
+     * the first-install and update cases, which is where the reload defect this change uncovered is
+     * pinned.
+     *
+     * The alternative was to leave request interception silently unreliable in whichever specs the
+     * cache happened to answer, which is the kind of quiet unreliability this whole PR is removing.
+     */
+    serviceWorkers: 'block',
   },
   projects: [
     { name: 'setup', testMatch: /auth\.setup\.ts/ },
