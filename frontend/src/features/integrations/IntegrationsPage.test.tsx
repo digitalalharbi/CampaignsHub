@@ -410,6 +410,46 @@ describe('an authorisation with nothing selected yet', () => {
     expect(screen.queryByTestId('connector-sync-snapchat')).toBeNull()
   })
 
+  /**
+   * META-INSIGHTS-GRANT-001 — the card says WHICH kind of reconnect this is.
+   *
+   * Production's Meta connection passes OAuth, discovers its account, and is refused every figure
+   * with «(#200) Ad account owner has NOT grant ads_management or ads_read permission» — the ad
+   * account owner's grant, made in Business Manager after consent. The card showed a green
+   * connection over a sync that could never succeed and offered «choose your accounts» next.
+   *
+   * `ads_read` and no more: it is sufficient for Insights, and naming `business_management` would
+   * send a customer to grant a capability this product does not need.
+   */
+  it('says the account is connected but ads_read was not granted', async () => {
+    rows.data = [connector({ key: 'meta', state: 'connected', accounts: 17 })]
+    const entry = {
+      connection: { id: 'conn-meta', provider: 'meta', label: 'Meta', label_ar: 'ميتا', client_workspace_id: null },
+      state: 'needs_selection' as const,
+      discovered: 17,
+      assigned: 0,
+      synced: 0,
+      has_parent: true,
+      resumable: false,
+      next_step: 'reconnect' as const,
+      user_state: 'REAUTH_REQUIRED' as const,
+      reauth_reason: 'insights_not_authorised' as const,
+      granted_scopes: ['public_profile'],
+    }
+    wizardStates.connections = [entry]
+    wizardStates.resumable = []
+
+    renderWithProviders(<IntegrationsPage />, { route: '/app/integrations', locale: 'ar' })
+
+    const note = await screen.findByTestId('connector-insights-denied-meta')
+    expect(note.textContent).toBe('الحساب مرتبط، لكن صلاحية ads_read غير ممنوحة — أعد الربط.')
+    expect(note.textContent).not.toContain('business_management')
+    expect(note.textContent).not.toContain('ads_management')
+    // «Choose your accounts» is the wrong next step for a connection that will be refused the moment
+    // it reads one, and it is what this card was offering.
+    expect(screen.queryByTestId('connector-needs-selection-meta')).toBeNull()
+  })
+
   it('offers to resume the unfinished connection instead of authorising again', async () => {
     rows.data = [connector({ key: 'snapchat', state: 'connected', accounts: 309 })]
     needsSelection()

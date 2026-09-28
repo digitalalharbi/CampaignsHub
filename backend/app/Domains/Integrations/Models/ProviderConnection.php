@@ -36,6 +36,8 @@ final class ProviderConnection extends Model
         'last_successful_sync_at' => 'datetime',
         'last_discovery_attempted_at' => 'datetime',
         'last_discovery_succeeded_at' => 'datetime',
+        /* META-INSIGHTS-GRANT-001 — when the provider last refused to read insights, or null. */
+        'insights_denied_at' => 'datetime',
     ];
 
     /** @return HasMany<ExternalAccount, $this> */

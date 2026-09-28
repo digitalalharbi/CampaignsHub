@@ -625,6 +625,29 @@ function ConnectorCard({
               ? 'هذه المنصة غير متاحة للربط حاليًا. يتولّى مشغّل المنصة تجهيزها.'
               : 'This platform is not open for connecting yet. The platform operator is setting it up.'}
           </span>
+        ) : wizard?.reauth_reason === 'insights_not_authorised' ? (
+          /*
+           * META-INSIGHTS-GRANT-001 — «connected» is not «allowed to read insights», and this is the
+           * card that kept saying otherwise.
+           *
+           * OAuth completes, the catalogue fills, and every sync is refused with «(#200) Ad account
+           * owner has NOT grant ads_management or ads_read permission» — a grant the ad account's
+           * owner makes in Business Manager, after consent. The page showed a green connection over
+           * a sync that could never succeed, and offered «choose your accounts» as the next step.
+           *
+           * ABOVE the error branch, because `last_error` will be carrying that same refusal and the
+           * raw provider sentence is the less useful of the two: this one names the scope and the
+           * action, and the technical text stays available under «التفاصيل التقنية» either way.
+           *
+           * `ads_read` and no more: it is sufficient for Insights, `ads_management` is the write
+           * scope over the same surface, and `business_management` is a different capability
+           * altogether. Asking for more than the product needs is its own kind of wrong.
+           */
+          <span data-testid={`connector-insights-denied-${c.key}`}>
+            {ar
+              ? 'الحساب مرتبط، لكن صلاحية ads_read غير ممنوحة — أعد الربط.'
+              : 'The account is connected, but ads_read has not been granted — reconnect.'}
+          </span>
         ) : state === 'error' ? (
           <ProviderErrorNote error={c.connection_error} locale={ar ? 'ar' : 'en'} testId={`connector-error-${c.key}`} />
         ) : wizard?.state === 'needs_selection' ? (

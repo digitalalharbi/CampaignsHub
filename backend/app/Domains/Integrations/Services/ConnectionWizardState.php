@@ -8,6 +8,7 @@ use App\Domains\Integrations\Catalogue\ProviderHierarchy;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Support\InsightsAuthorisation;
 
 /**
  * ORCH-100 §39 §41 — where a connection has got to, worked out from the record rather than remembered.
@@ -94,6 +95,9 @@ final class ConnectionWizardState
      *     resumable: bool,
      *     next_step: ?string,
      *     user_state: string,
+     *     reauth_reason: ?string,
+     *     granted_scopes: list<string>,
+     *     insights_denied_at: ?string,
      *     health: array{connected:int, healthy:int, needs_attention:int, pending_first_sync:int, states:array<string,int>},
      * }
      */
@@ -172,7 +176,29 @@ final class ConnectionWizardState
             + ($health['states'][AccountHealth::ACCESS_LOST] ?? 0);
         $authorisationLost = ($health['connected'] ?? 0) > 0 && $lostAccess === $health['connected'];
 
+        /*
+         * META-INSIGHTS-GRANT-001 — «connected» is not «allowed to read insights».
+         *
+         * A Meta connection can pass OAuth completely and still be refused every figure with «(#200)
+         * Ad account owner has NOT grant ads_management or ads_read permission» — an ad account's own
+         * grant, decided in Business Manager after consent. The page showed that as a green
+         * connection sitting above a sync that could never succeed.
+         *
+         * Two ways to know, and they answer different halves. The recorded REFUSAL is authoritative
+         * and covers the case a scope list cannot: a grant naming `ads_read` that the account owner
+         * never honoured. The GRANT covers the case no sync has tested yet — a consent that never
+         * asked for a read scope at all is refused before anything is called.
+         */
+        $insightsBlocked = $connection->insights_denied_at !== null
+            || ! InsightsAuthorisation::grantedBy($connection->provider, $connection->scopes);
+
         $userState = match (true) {
+            /*
+             * ABOVE selection and syncing, deliberately. «Choose your accounts» is the wrong next
+             * step for a connection that will be refused the moment it reads one, and it is the step
+             * this page was offering.
+             */
+            $insightsBlocked => self::USER_REAUTH_REQUIRED,
             $state === self::ACCESS_REVOKED, $authorisationLost => self::USER_REAUTH_REQUIRED,
             $state === self::NO_ACCOUNTS => self::USER_AUTH_REQUIRED,
             $state === self::NEEDS_SELECTION => self::USER_ACCOUNT_SELECTION_REQUIRED,
@@ -187,6 +213,15 @@ final class ConnectionWizardState
         return [
             'state' => $state,
             'user_state' => $userState,
+            /*
+             * WHY re-authorising is being asked for, so the page can say it rather than offer a bare
+             * «Reconnect». A withdrawn authorisation and an ungranted read scope are the same button
+             * and two different sentences, and the customer can only act on one of them.
+             */
+            'reauth_reason' => $insightsBlocked ? 'insights_not_authorised' : null,
+            /* The grant itself, surfaced — an operator asking «what did we actually get?» has an answer. */
+            'granted_scopes' => is_array($connection->scopes) ? array_values($connection->scopes) : [],
+            'insights_denied_at' => optional($connection->insights_denied_at)->toIso8601String(),
             'discovered' => $discovered,
             /*
              * Both numbers, because they answer different questions and the interface needs both: the

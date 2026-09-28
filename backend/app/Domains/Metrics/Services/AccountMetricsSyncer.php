@@ -18,6 +18,7 @@ use App\Domains\Integrations\Providers\ReportsEntityGrains;
 use App\Domains\Integrations\Providers\SnapchatConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Support\InsightsAuthorisation;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\Actions\UpsertEntityDailyMetrics;
@@ -143,10 +144,14 @@ final class AccountMetricsSyncer
         try {
             $result = $connector->syncInsights($account->external_id, $from->toDateString(), $to->toDateString());
         } catch (Throwable $e) {
+            $this->noteInsightsRefusal($connection ?? null, $e->getMessage());
+
             return $this->finish($run, SyncRunStatus::Failed, 0, $e->getMessage(), $account, $this->counts($connector), 'provider_error');
         }
 
         if (! $result->success) {
+            $this->noteInsightsRefusal($connection ?? null, $result->message);
+
             return $this->finish(
                 $run,
                 SyncRunStatus::Failed,
@@ -156,6 +161,17 @@ final class AccountMetricsSyncer
                 $this->counts($connector),
                 'provider_error',
             );
+        }
+
+        /*
+         * Insights ANSWERED, so whatever refusal was remembered is no longer true.
+         *
+         * Cleared on the evidence rather than on a schedule: the grant that was missing is now
+         * present, and the one thing that could prove it just happened. Written only when there is
+         * something to clear, so an ordinary sync does not touch the row.
+         */
+        if (($connection ?? null) !== null && $connection->insights_denied_at !== null) {
+            $connection->forceFill(['insights_denied_at' => null])->save();
         }
 
         [$upserted, $skipped] = $this->ingest($account, $result->records);
@@ -411,6 +427,31 @@ final class AccountMetricsSyncer
      *
      * @return array<string,int|null>
      */
+    /**
+     * META-INSIGHTS-GRANT-001 — remember a refusal the scope list could never have predicted.
+     *
+     * «(#200) Ad account owner has NOT grant ads_management or ads_read permission» is decided by the
+     * ad account's owner in Business Manager AFTER consent, so a token whose granted scopes name
+     * `ads_read` is refused all the same. Nothing but the provider's own answer can establish it, and
+     * without this the page kept showing a green connection over a sync that could never succeed —
+     * every layer reporting success and no figure ever arriving.
+     *
+     * Stamped once. A second failure does not move the timestamp, because «since when» is the useful
+     * fact and re-stamping it every half hour would make an old problem look new.
+     */
+    private function noteInsightsRefusal(?ProviderConnection $connection, ?string $message): void
+    {
+        if ($connection === null || $connection->insights_denied_at !== null) {
+            return;
+        }
+
+        if (! InsightsAuthorisation::refusedBy($message)) {
+            return;
+        }
+
+        $connection->forceFill(['insights_denied_at' => Carbon::now()])->save();
+    }
+
     private function counts(object $connector): array
     {
         return $connector instanceof ApiAdvertisingConnector

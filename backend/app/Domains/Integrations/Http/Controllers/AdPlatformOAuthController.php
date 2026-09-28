@@ -8,6 +8,7 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateRoundTrip;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\AuthorizationState;
 use App\Domains\Integrations\OAuth\MetaCredentialProfile;
@@ -15,6 +16,7 @@ use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\PlatformOAuth;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Services\AccountDiscovery;
+use App\Domains\Integrations\Services\FirstSync;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -239,6 +241,20 @@ final class AdPlatformOAuthController extends Controller
 
             // The first real round trip. Until this returns, nothing is called connected.
             $discovered = $this->discoverAccounts($connection);
+
+            /*
+             * A RECONNECT fetches immediately — META-INSIGHTS-GRANT-001 §10.
+             *
+             * Re-authorising an existing connection left every binding in place and queued nothing,
+             * so the accounts a customer had already chosen sat untouched until the half-hourly
+             * sweep came round. After a reconnect performed BECAUSE the figures were missing, that
+             * is the one wait nobody will read as anything but «it still does not work».
+             *
+             * Only accounts this connection already holds a live binding for: a reconnect is not a
+             * selection, and pulling a catalogue's worth of accounts nobody chose would charge the
+             * plan and fill the dashboard with work the customer never asked for.
+             */
+            $this->refetchBoundAccounts($connection);
         } catch (Throwable $e) {
             // Redacted before it is trimmed: a provider's own failure message names the URL that
             // failed, and one platform's discovery URL carries the app secret (SecretNeverInLoggedUrlTest).
@@ -270,6 +286,32 @@ final class AdPlatformOAuthController extends Controller
     private function discoverAccounts(ProviderConnection $connection): int
     {
         return $this->discovery->refresh($connection)['discovered'];
+    }
+
+    /**
+     * Queue a sync for every account this connection already feeds a project with.
+     *
+     * Deliberately silent about its outcome: the customer is mid-redirect and the sync is a queued
+     * job, so the page reports what it can see — the connection, the catalogue — and the run log
+     * reports the rest. A failure here must not turn a successful authorisation into an error
+     * screen, which is why the whole thing is inside the caller's try and reports nothing of its own.
+     */
+    private function refetchBoundAccounts(ProviderConnection $connection): void
+    {
+        $bound = ProjectIntegrationBinding::withoutGlobalScopes()
+            ->whereIn(
+                'external_account_id',
+                ExternalAccount::withoutGlobalScopes()
+                    ->where('provider_connection_id', $connection->getKey())
+                    ->select('id'),
+            )
+            ->where('is_active', true)
+            ->distinct()
+            ->pluck('external_account_id')
+            ->map(static fn ($id): string => (string) $id)
+            ->all();
+
+        app(FirstSync::class)->start($bound, source: 'reconnect');
     }
 
     private function credentialsOr404(string $provider): PlatformCredentials
