@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { aFreshSaudiNumber, csrfHeaders, signInWithPhone, switchToEnglish } from './helpers'
+import { aFreshSaudiNumber, csrfHeaders, openLogin, signInWithPhone, switchToEnglish } from './helpers'
 
 /**
  * LOGIN-OTP-001 + PHONE-SA-001 — one production door, and a phone field that speaks this market's
@@ -47,7 +47,7 @@ test.describe('the sign-in box offers one door', () => {
 
   /** Saudi Arabia is the default and needs no typing — the brief's first phone requirement. */
   test('the country opens on +966 and offers others', async ({ page }) => {
-    await page.goto('/login?e2e=phone')
+    await openLogin(page, 'phone')
 
     const dial = page.getByTestId('login-phone-number-dial-code')
     await expect(dial).toHaveValue('966')
@@ -59,7 +59,7 @@ test.describe('the sign-in box offers one door', () => {
   })
 
   test('a number it cannot read is refused before anything is sent', async ({ page }) => {
-    await page.goto('/login?e2e=phone')
+    await openLogin(page, 'phone')
     await switchToEnglish(page)
 
     await page.getByTestId('login-phone-number').fill('not a phone')
@@ -127,7 +127,7 @@ test.describe('signing in with a mobile number', () => {
    * have accounts here; signing them in would be worse still.
    */
   test('a number nobody holds is answered the same way, and signs nobody in', async ({ page }) => {
-    await page.goto('/login?e2e=phone')
+    await openLogin(page, 'phone')
     await switchToEnglish(page)
 
     await page.getByTestId('login-phone-number').fill('0500000001')

@@ -234,10 +234,17 @@ export async function createCampaign(page: Page, name: string) {
    * happened by the time the click landed. The form then posted an empty name, the server refused
    * it, and the modal stayed open showing a validation error on a field the test had just filled.
    * Waiting on the value is waiting for the precondition the next line depends on.
+   *
+   * And waiting for as long as its neighbours do. This guard was written for a render that had not
+   * happened yet and then given expect's DEFAULT five seconds, while the wait two lines below gets
+   * fifteen and the one above twenty. On a loaded runner the render it exists to absorb outlasted
+   * its own budget and the guard failed as «Expected: "E2E Link B …" / Received: ""» — the guard
+   * reporting the very condition it was added to wait through. Reproduced locally on chromium first,
+   * where the whole spec passes in 36s, so the number was the only thing wrong.
    */
   const nameField = page.getByLabel(/Campaign name|اسم الحملة/)
   await nameField.fill(name)
-  await expect(nameField).toHaveValue(name)
+  await expect(nameField, 'the form never took the name it was given').toHaveValue(name, { timeout: 15_000 })
 
   const save = page.getByRole('button', { name: /^Save$|^حفظ$/ })
   await save.click()
@@ -394,7 +401,7 @@ export async function seededProject(request: APIRequestContext, name: string): P
  * `/login?redirect=%2Fapp%2Freports` after being bounced off a guarded page, and that parameter
  * surviving the sign-in IS what those tests are about.
  */
-async function openLogin(page: Page, form?: 'phone'): Promise<void> {
+export async function openLogin(page: Page, form?: 'phone'): Promise<void> {
   /*
    * Built from a RELATIVE path, never from `current.origin`.
    *
@@ -412,6 +419,25 @@ async function openLogin(page: Page, form?: 'phone'): Promise<void> {
   if (!here || (form && current.searchParams.get('e2e') !== form)) {
     const qs = search.toString()
     await page.goto(`/login${qs === '' ? '' : `?${qs}`}`)
+  }
+
+  /*
+   * GATE-BUILT-APP-001 — the mobile form does not EXIST in the app the gate now serves.
+   *
+   * `phoneCompat` is `import.meta.env.DEV && params.get('e2e') === 'phone'`, and the outer gate is
+   * deliberate: LOGIN-CARD-001 wants the mobile path eliminated from a production bundle rather than
+   * merely hidden, so that the visual baselines, a live review and a customer all see one sign-in
+   * card. The gate used to serve a dev server, where that flag is true; it now serves the built app,
+   * where the form is not in the bytes at all.
+   *
+   * So these skip, and they say why. What that costs is stated rather than glossed: the mobile
+   * sign-in path has NO browser coverage in CI any more. It keeps `PhoneSignInTest` on the server
+   * and `registration-onboarding.spec.ts` for the verification gate, and it can still be driven
+   * locally against `npm run dev`. If the path is ever put on the production card, this skip stops
+   * firing on its own — the form will be there.
+   */
+  if (form === 'phone' && (await page.getByTestId('login-phone').count()) === 0) {
+    test.skip(true, 'the mobile form is eliminated from a production build by design (LOGIN-CARD-001) — the gate serves one')
   }
 }
 

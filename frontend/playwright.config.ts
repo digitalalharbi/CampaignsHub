@@ -1,5 +1,21 @@
 import { defineConfig, devices } from '@playwright/test'
+import { buildApp } from './e2e/buildApp'
 import { E2E_API_TARGET, E2E_BACKEND_ENV, E2E_BACKEND_PORT, E2E_FRONTEND_PORT, E2E_ORIGIN, E2E_PRINT_ORIGIN, E2E_PRINT_PORT } from './e2e/env'
+
+/*
+ * GATE-BUILT-APP-001 — built HERE, at config load, because everything later is too late.
+ *
+ * Playwright builds its startup list as plugin setup, THEN `globalSetup` — and a `webServer` entry
+ * is a plugin. A build in `globalSetup` therefore runs after `vite preview` has already been asked
+ * for a `dist` that does not exist: the server came up on :5273, Playwright waited its sixty seconds
+ * for the URL, and all three gates failed the same way inside three minutes. The same code passed
+ * locally off a `dist` an earlier manual build had left behind, which is exactly the accidental
+ * evidence this whole change exists to remove.
+ *
+ * Config load is the one point that precedes both the servers and `globalSetup`, whoever invoked
+ * Playwright and however — `npm run gate`, CI, or one ad-hoc spec.
+ */
+buildApp()
 
 /**
  * E2E config. Self-contained: Playwright starts BOTH servers itself.
@@ -54,6 +70,27 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     locale: 'en-US',
+    /*
+     * GATE-BUILT-APP-001 — the built app, WITHOUT its service worker.
+     *
+     * `registerServiceWorker()` is guarded by `import.meta.env.PROD`, so serving a built app turned
+     * the worker on in the gate for the first time — and `sw.js` answers navigations network-first
+     * with a cached shell. A request the worker serves never reaches Playwright's interception, so
+     * `page.route('**\/metrics/summary*', … 500)` stopped being able to refuse anything:
+     * `a-failure-is-not-a-zero` read «rows» where it had asked for «error», which is the precise
+     * claim that spec exists to make.
+     *
+     * Blocking it is a scope statement, not a weakening. What the gate is for is the application —
+     * its routes, its figures, its refusals — and that is now exercised against the same bytes
+     * production serves, with no transform step and no optimizer. The worker's own behaviour is a
+     * different question, answered where it can be answered honestly: `src/app/pwa.test.ts` holds
+     * the first-install and update cases, which is where the reload defect this change uncovered is
+     * pinned.
+     *
+     * The alternative was to leave request interception silently unreliable in whichever specs the
+     * cache happened to answer, which is the kind of quiet unreliability this whole PR is removing.
+     */
+    serviceWorkers: 'block',
   },
   projects: [
     { name: 'setup', testMatch: /auth\.setup\.ts/ },
@@ -117,7 +154,16 @@ export default defineConfig({
        * above would be bypassed silently, with a green run to show for it. A port nothing else uses
        * makes that impossible instead of merely unlikely.
        */
-      command: `npm run dev -- --port ${E2E_FRONTEND_PORT}`,
+      /*
+       * GATE-BUILT-APP-001 — `preview` over the built `dist`, not `dev`.
+       *
+       * `global-setup` has already built it. A dev server transforms a route's module graph on its
+       * FIRST visit, which is why `/agency/tasks` — the largest graph in the agency rail — kept
+       * timing out on webkit, the slowest browser, on commits byte-identical to a green run. Five
+       * occurrences, each reproduced locally, none a defect in the page. Serving bytes off disk has
+       * no first visit to be slow.
+       */
+      command: `npm run preview -- --port ${E2E_FRONTEND_PORT} --strictPort`,
       url: E2E_ORIGIN,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
@@ -155,7 +201,7 @@ export default defineConfig({
        * Two servers rather than one switch: switching Chromium printing off also removes the proof
        * that the exported Arabic PDF is a real Chromium file, which this product had to fix once.
        */
-      command: `npm run dev -- --port ${E2E_PRINT_PORT}`,
+      command: `npm run preview -- --port ${E2E_PRINT_PORT} --strictPort`,
       url: E2E_PRINT_ORIGIN,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
@@ -168,9 +214,13 @@ export default defineConfig({
        * the browser as «Load failed», the proxy as 502, and a `page.goto` as a navigation that never
        * fires `load`.
        */
-      /* The print server's too — GATE-VITE-001 was diagnosed from a hypothesis about exactly this. */
+      /*
+       * `VITE_CACHE_DIR` is gone with the dev servers that needed it: GATE-VITE-001 was two
+       * OPTIMIZERS rewriting one `node_modules/.vite` under each other. `vite preview` runs no
+       * optimizer and holds no dependency cache, so there is nothing left for the two to share.
+       */
       stdout: 'pipe',
-      env: { VITE_API_TARGET: E2E_API_TARGET, VITE_CACHE_DIR: 'node_modules/.vite-print' },
+      env: { VITE_API_TARGET: E2E_API_TARGET },
     },
   ],
 })

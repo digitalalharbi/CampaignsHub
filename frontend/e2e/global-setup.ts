@@ -27,6 +27,7 @@ import { E2E_BACKEND_ENV } from './env'
  *      which means the gate needs no `.env.e2e` on disk, and a clean checkout works unchanged.
  */
 export default async function globalSetup() {
+
   /*
    * The one way to NOT reseed, and it exists for exactly one purpose.
    *
