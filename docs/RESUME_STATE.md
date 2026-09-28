@@ -78,6 +78,14 @@ passed against the unfixed code: the gate's own integrations page does not repro
 probed at eight widths from 640 to 1280. The fix stands on a browser measurement, and the code says
 so where the fix is.
 
+**`vitest run --reporter=basic` runs NOTHING and exits 0.** Vitest 4 has no reporter by that name;
+it fails at startup with «Failed to load custom Reporter from basic» and the process still exits 0,
+so a wrapper that greps for «Failed Tests» sees a clean run. Two whole-suite runs reported here as
+green were that. The per-file runs, which pass no reporter flag, were real — and CI caught the one
+thing the fake runs let through: `ltrNumeralAlignment` on a `<dd … dir="ltr">` in the new sync panel,
+which is a correct guard catching a real defect. **Never read an exit code as a test result; read the
+«Tests N passed» line.**
+
 **Still true and still Owner-only:** the Production branding evidence
 (`BRANDING-RENDER-EVIDENCE-001`), and live OAuth round-trips against real providers. Everything else
 in the integrations lane is now exercised locally, including detach and return, which answered 201
