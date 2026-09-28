@@ -1475,7 +1475,24 @@ function CreativeGridCard({
              */
             <VideoPoster
               src={video}
-              className="h-full w-full object-cover"
+              /*
+               * CONTENT-PREVIEW-SHAPES-001 applies to the FILM as well as the still.
+               *
+               * The image branch above has honoured «a story is contained, never covered» since the
+               * rule was written; this one has always been `object-cover` with no shape in it. So a
+               * 9:16 film whose frame does not match its declared shape — which is every film whose
+               * platform returned a landscape cover, and every one in the demo — is cropped to the
+               * middle third of the box, and on a story that is the logo and the call to action.
+               * Measured on the library: a 480×270 frame drawn `cover` inside a 225×399 box.
+               *
+               * The same expression rather than a second rule, so the two branches cannot drift into
+               * disagreeing about what a portrait creative is.
+               */
+              className={`h-full w-full ${
+                previewShape(creative.width, creative.height, creative.aspect_ratio) === 'portrait'
+                  ? 'object-contain'
+                  : 'object-cover'
+              }`}
               onUnavailable={() => setBrokenVideo(true)}
             />
           ) : showPreviewPanel ? (
