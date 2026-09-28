@@ -140,6 +140,18 @@ export interface ConnectionWizard {
    * written before it existed still renders.
    */
   user_state?: 'NOT_CONNECTED' | 'AUTH_REQUIRED' | 'ACCOUNT_SELECTION_REQUIRED' | 'SYNCING' | 'HEALTHY' | 'NO_DATA' | 'ATTENTION_REQUIRED' | 'REAUTH_REQUIRED'
+  /**
+   * WHY re-authorising is being asked for — META-INSIGHTS-GRANT-001.
+   *
+   * `REAUTH_REQUIRED` is one button and two situations. A withdrawn authorisation and an ad account
+   * whose owner never granted `ads_read` both need the same press and need two different sentences,
+   * and only one of them is something the customer can go and fix in Business Manager.
+   */
+  reauth_reason?: 'insights_not_authorised' | null
+  /** The grant as recorded at authorisation, so «what did we actually get?» has an answer. */
+  granted_scopes?: string[]
+  /** When the provider last refused to read insights, or null. */
+  insights_denied_at?: string | null
   /** What this connection's accounts add up to, so the card can stop claiming one state for all of them. */
   health?: ConnectionHealthSummary
 }

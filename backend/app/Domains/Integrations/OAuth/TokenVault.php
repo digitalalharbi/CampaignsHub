@@ -159,6 +159,20 @@ final class TokenVault
                 'last_health_check_at' => Carbon::now(),
             ], static fn ($v) => $v !== null))->save();
 
+            /*
+             * A NEW authorisation clears a remembered insights refusal — META-INSIGHTS-GRANT-001.
+             *
+             * Separate from the `array_filter` above because null is the value being written, and
+             * that filter exists to leave unknown facts alone. This is not an unknown fact: somebody
+             * has just been through consent, so whatever the previous grant could not do is no
+             * longer what this connection holds. If the new one cannot read insights either, the
+             * next sync says so and stamps it again.
+             *
+             * Deliberately NOT done in `store()`: a token REFRESH is not a new grant, and clearing
+             * it there would make the warning disappear every hour on its own.
+             */
+            $existing->forceFill(['insights_denied_at' => null])->save();
+
             return $existing;
         }
 
