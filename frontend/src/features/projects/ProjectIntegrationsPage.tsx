@@ -10,6 +10,8 @@ import {
   syncBinding,
 } from './api'
 import { PlatformIntegrationsPanel } from './PlatformIntegrationsPanel'
+import { ProjectSyncHistory } from './ProjectSyncHistory'
+import { PRIORITY_META, STATUS_META, priorityLabel, statusLabel } from '@/features/tasks/labels'
 import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -20,6 +22,46 @@ import { listExternalCampaigns } from '@/features/campaigns/api'
 import { fmtClock, fmtDateTime } from '@/lib/datetime'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
+
+/**
+ * What a connection's state means to somebody reading a project's account list.
+ *
+ * An unrecognised state shows as ITSELF rather than as a guess or a blank — a state the product
+ * does not know is worth seeing, which is the choice `projectRoleLabel` makes for the same reason.
+ */
+const CONNECTION_LABELS: Record<string, { ar: string; en: string }> = {
+  error: { ar: 'خطأ في الاتصال', en: 'Connection error' },
+  revoked: { ar: 'أُلغي الإذن', en: 'Access revoked' },
+  expired: { ar: 'انتهت صلاحية الإذن', en: 'Authorisation expired' },
+  disabled: { ar: 'الاتصال معطّل', en: 'Connection disabled' },
+}
+
+/**
+ * States this page knows and deliberately does not restate — INTEGRATION-DATASOURCE-WIZARD-001 §12.
+ *
+ * `awaiting_credentials` is a fact about what keys this INSTALL holds. It is the platform operator's
+ * number, nothing on a project page can change it, and on a customer's own project it reads as «none
+ * of your platforms work» — which is why the platform panel above stopped saying it, and why
+ * `integrations.spec.ts` asserts those words never reach this page. The project-level consequence is
+ * already stated there: this platform is not feeding this project yet.
+ *
+ * Listed rather than simply absent, because the fallback shows an unknown state as itself: left out,
+ * the row would print the raw `awaiting_credentials`, which is worse than both.
+ */
+const CONNECTION_UNSAID = new Set(['connected', 'awaiting_credentials'])
+
+const CONNECTION_TONE: Record<string, 'danger' | 'warning'> = {
+  error: 'danger',
+  revoked: 'danger',
+  expired: 'danger',
+  disabled: 'warning',
+}
+
+function connectionLabel(status: string, ar: boolean): string {
+  const label = CONNECTION_LABELS[status]
+
+  return label ? (ar ? label.ar : label.en) : status
+}
 
 export function ProjectIntegrationsPage() {
   const t = useT()
@@ -109,7 +151,18 @@ export function ProjectIntegrationsPage() {
   const missing = bindings.isError && toApiError(bindings.error).status === 404
 
   const rows = bindings.data ?? []
-  const providers = [...new Set((campaigns.data ?? []).map((c) => c.provider).filter(Boolean))]
+  /*
+   * The platforms BOUND to this project, which is what the counter beneath claims to count.
+   *
+   * It read them off the discovered CAMPAIGNS instead, so a project with an account bound and
+   * nothing synced yet drew «المنصات 0» directly above a list naming that very platform — on the
+   * one panel whose title is «الحسابات المرتبطة بهذا المشروع». Zero is not a smaller version of
+   * one here; it is a different claim, and the false one is the one that looks like data.
+   *
+   * Bindings are the right source for the same reason the account count beside it uses them: both
+   * answer «what is attached to this project», and only «الحملات» answers «what has arrived».
+   */
+  const providers = [...new Set(rows.map((b) => b.provider).filter(Boolean))]
   const lastSync = rows.map((b) => b.account?.last_synced_at).filter(Boolean).sort().at(-1) ?? null
   const discoveredCampaigns = campaigns.data?.length ?? 0
 
@@ -231,6 +284,23 @@ export function ProjectIntegrationsPage() {
                     <Badge tone="info">{b.purpose}</Badge>
                     {b.is_primary && <Badge tone="success">{t('primary')}</Badge>}
                     {!b.is_active && <Badge tone="danger">{t('disabled')}</Badge>}
+                    {/*
+                      The CONNECTION's health, which this row has always been sent and never shown.
+                      `connection_status` arrives on every account — `ProjectIntegrationController`
+                      reads it off the connection — and appeared nowhere in the frontend outside the
+                      type declaration. So an account whose authorisation had been revoked looked
+                      exactly like a working one: same name, same type, same id, and «آخر تحديث»
+                      simply stopped moving. This is the page an operator opens to ask why the
+                      numbers stopped, and it was the one page that could answer and did not.
+
+                      Silent while healthy, like the «disabled» badge beside it: a list where every
+                      row carries a green tick teaches a reader to stop reading the badges.
+                    */}
+                    {b.account?.connection_status != null && !CONNECTION_UNSAID.has(b.account.connection_status) && (
+                      <Badge tone={CONNECTION_TONE[b.account.connection_status] ?? 'warning'}>
+                        {connectionLabel(b.account.connection_status, lang === 'ar')}
+                      </Badge>
+                    )}
                   </div>
                   <span className="text-xs text-text-muted">
                     {b.account?.account_type} · <span className="tnum">{b.account?.external_id}</span>
@@ -265,8 +335,18 @@ export function ProjectIntegrationsPage() {
                   >
                     <RefreshCw size={14} /> {t('sync')}
                   </Button>
+                  {/*
+                    Detaching is reversible and the control says so, because nothing else on the page
+                    does. It stops this account feeding this project and keeps the binding row, so
+                    the months of figures it has already attributed stay this project's and
+                    re-selecting the account from «إدارة مصادر البيانات» brings it back to the same
+                    row — the same thing deselecting has always done, which is the point.
+                  */}
                   <Button
                     variant="ghost"
+                    title={lang === 'ar'
+                      ? 'يتوقف هذا الحساب عن تغذية المشروع. الأرقام السابقة تبقى، ويمكن اختياره مجددًا من إدارة مصادر البيانات.'
+                      : 'This account stops feeding the project. Its past figures stay, and it can be selected again from Manage data sources.'}
                     loading={detachMutation.isPending && detachMutation.variables === b.id}
                     onClick={() => detachMutation.mutate(b.id)}
                   >
@@ -278,6 +358,8 @@ export function ProjectIntegrationsPage() {
           </div>
         )}
       </Card>
+
+      <ProjectSyncHistory projectId={projectId} />
 
       {/* Project-scoped tasks — these change when the active project changes (no leakage). */}
       <Card>
@@ -295,11 +377,21 @@ export function ProjectIntegrationsPage() {
             {tasks.data?.tasks.map((task) => (
               <div key={task.id} className="flex items-center justify-between rounded-[9px] border border-border p-2.5">
                 <span className="text-sm font-semibold">{task.title}</span>
+                {/*
+                  The task's state and urgency by NAME. This printed the columns — «in_progress» and
+                  «high» in the middle of an Arabic page — while the tasks page itself has named both
+                  all along. Importing its map rather than writing a second one is what keeps the two
+                  surfaces calling `waiting_client` the same thing.
+                */}
                 <div className="flex items-center gap-2">
-                  <Badge tone={task.priority === 'high' || task.priority === 'urgent' ? 'warning' : 'neutral'}>
-                    {task.priority}
-                  </Badge>
-                  <Badge tone={task.is_overdue ? 'danger' : 'info'}>{task.status}</Badge>
+                  <span className={`whitespace-nowrap text-[11px] font-bold ${PRIORITY_META[task.priority]?.tone ?? 'text-text-secondary'}`}>
+                    ● {priorityLabel(task.priority, lang === 'ar')}
+                  </span>
+                  <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    task.is_overdue ? 'bg-danger/15 text-danger' : STATUS_META[task.status]?.tone ?? 'bg-surface-hover text-text-secondary'
+                  }`}>
+                    {statusLabel(task.status, lang === 'ar')}
+                  </span>
                 </div>
               </div>
             ))}

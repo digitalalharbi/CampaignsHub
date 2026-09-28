@@ -292,7 +292,22 @@ final class DemoAnalyticsSeeder extends Seeder
             ['meta', 'success', $today, 2400, null],
             ['google', 'success', $today, 1800, null],
             ['tiktok', 'success', $today, 1600, null],
-            ['snapchat', 'partial', $today, 900, 'Rate limited on 1 account; retried.'],
+            /*
+             * `partial_mapping`, and a sentence that means it.
+             *
+             * This row said `partial` — a word INTEG-RUNTIME §8 retired, because it answered two
+             * questions at once: «the provider had nothing» and «the provider answered and we could
+             * not place some rows». The migration that split it re-labelled every historical row
+             * from its own error text and `SyncRunStatus` has held the six words since; the demo
+             * seeder kept writing the fifth. So the one non-green run a reader meets in this
+             * environment carried a status the product no longer defines, and every surface that
+             * matches on the vocabulary fell through to «unknown» for it.
+             *
+             * The sentence changes with it. «Rate limited; retried» is not what `partial_mapping`
+             * means, and a demo row whose status and error disagree teaches the wrong reading of
+             * both.
+             */
+            ['snapchat', 'partial_mapping', $today, 900, '3 provider campaign ids are not linked to a campaign here; their rows were not attached.'],
             ['meta', 'failed', $today->copy()->subDays(1), 0, 'Token expired — reconnect required.'],
         ];
         foreach ($runs as [$provider, $status, $day, $upserted, $error]) {

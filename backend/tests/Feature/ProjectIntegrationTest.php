@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -151,6 +152,53 @@ final class ProjectIntegrationTest extends TestCase
         $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$this->projectB->id}/integrations/bindings", [
             'external_account_id' => $accountId, 'purpose' => 'advertising',
         ])->assertCreated();
+    }
+
+    /**
+     * Detaching DEACTIVATES the binding; it does not delete it.
+     *
+     * Reaching the same outcome through «Manage accounts» never deleted: `ApplyAccountSelection`
+     * sets `is_active = false` and says why — the binding is what makes a metric row this project's,
+     * so a delete orphans months of history the project is still entitled to show, and re-selecting
+     * the account reactivates the same row rather than charging the plan for it twice.
+     *
+     * Every one of those reasons is true of the «فصل» button on the project page, which is one click
+     * with no confirmation behind it, and it deleted. The same account detached there and deselected
+     * here ended in two different states, and only one could be undone.
+     *
+     * The reader-facing outcome is unchanged and is asserted first: the project lists no bound
+     * account afterwards, and the account can be bound elsewhere.
+     */
+    public function test_detaching_deactivates_the_binding_and_keeps_its_history(): void
+    {
+        $accountId = $this->connectAndGetAdAccount($this->projectA);
+        $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$this->projectA->id}/integrations/bindings", [
+            'external_account_id' => $accountId, 'purpose' => 'advertising',
+        ])->assertCreated();
+
+        $bindingId = $this->actingAs($this->user, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/integrations")->json('data.0.id');
+
+        $this->actingAs($this->user, 'sanctum')
+            ->deleteJson("/api/v1/projects/{$this->projectA->id}/integrations/bindings/{$bindingId}")
+            ->assertOk();
+
+        // What the reader sees is unchanged: nothing is bound to this project any more.
+        $this->actingAs($this->user, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/integrations")->assertJsonCount(0, 'data');
+
+        // The row survives, carrying the attribution of every metric it has ever claimed.
+        $this->assertDatabaseHas('project_integration_bindings', [
+            'id' => $bindingId, 'external_account_id' => $accountId, 'is_active' => false, 'is_primary' => false,
+        ]);
+
+        // And re-selecting the same account for the same project reuses that row rather than making a second.
+        $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$this->projectA->id}/integrations/bindings", [
+            'external_account_id' => $accountId, 'purpose' => 'advertising',
+        ])->assertCreated();
+
+        $this->assertSame(1, ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('external_account_id', $accountId)->count());
     }
 
     public function test_revoking_the_connection_disables_all_its_bindings(): void

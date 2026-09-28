@@ -138,7 +138,43 @@ final class ConfirmAccountSelection
             $queueFor = $newIds->map(fn (ExternalAccount $a): string => (string) $a->getKey())->values()->all();
             DB::afterCommit(fn () => $this->firstSync->start($queueFor));
 
+            /*
+             * The rows this project ALREADY HOLDS for these accounts and is not using.
+             *
+             * Removal deactivates so months of attribution survive and the account can come back to
+             * the same row. Nothing ever brought one back: every lookup on the way in filtered to
+             * `is_active`, so a dormant row was invisible to the code that should have reused it —
+             * and fatal to the `create` that ran instead, the unique index being on (project,
+             * account, purpose) and saying nothing about `is_active`. Deselecting an account and
+             * then selecting it again answered 500 on a duplicate key.
+             *
+             * A returning account still costs a slot and still starts a sync: it is being added to
+             * this project now, whatever the row remembers. What it does not do is arrive as a
+             * SECOND row, which is precisely the history the first one was kept for.
+             */
+            $dormant = ProjectIntegrationBinding::withoutGlobalScope(ProjectScope::class)
+                ->where('project_id', $project->getKey())
+                ->where('purpose', $purpose)
+                ->where('is_active', false)
+                ->whereIn('external_account_id', $newIds->map(fn (ExternalAccount $a): string => (string) $a->getKey())->all())
+                ->get()
+                ->keyBy('external_account_id');
+
             foreach ($newIds as $account) {
+                $revived = $dormant->get($account->getKey());
+
+                if ($revived !== null) {
+                    $revived->update([
+                        'is_active' => true,
+                        'is_primary' => $primaryAccountId !== null && (string) $account->getKey() === $primaryAccountId,
+                        'campaign_management_enabled' => $purpose === 'advertising',
+                        'tracking_enabled' => in_array($purpose, ['tracking', 'conversion_api'], true),
+                    ]);
+                    $existing->put((string) $account->getKey(), $revived);
+
+                    continue;
+                }
+
                 $existing->put((string) $account->getKey(), ProjectIntegrationBinding::withoutGlobalScope(ProjectScope::class)->create([
                     'tenant_id' => $connection->tenant_id,
                     'project_id' => $project->getKey(),
