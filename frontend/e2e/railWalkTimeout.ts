@@ -41,7 +41,9 @@
  * The structural fix is not a bigger number. The gate serves a DEV server, so a first paint includes
  * an on-demand transform of the route's module graph, and `/agency/tasks` is the largest graph in
  * the rail — which is why the same route, on the slowest browser, is the one that keeps timing out.
- * `fix/gate-serves-a-built-app` is the branch for that.
+ * #572 is that fix: the gate builds once at config load and both servers run `vite preview` over the
+ * result, so there is no first visit left to be slow. Measured on the same walk that timed out at
+ * forty-five seconds here — webkit 6.5s from a deleted `dist`.
  */
 export const RAIL_PAINT_TIMEOUT = 45_000
 
