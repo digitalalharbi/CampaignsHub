@@ -234,10 +234,17 @@ export async function createCampaign(page: Page, name: string) {
    * happened by the time the click landed. The form then posted an empty name, the server refused
    * it, and the modal stayed open showing a validation error on a field the test had just filled.
    * Waiting on the value is waiting for the precondition the next line depends on.
+   *
+   * And waiting for as long as its neighbours do. This guard was written for a render that had not
+   * happened yet and then given expect's DEFAULT five seconds, while the wait two lines below gets
+   * fifteen and the one above twenty. On a loaded runner the render it exists to absorb outlasted
+   * its own budget and the guard failed as «Expected: "E2E Link B …" / Received: ""» — the guard
+   * reporting the very condition it was added to wait through. Reproduced locally on chromium first,
+   * where the whole spec passes in 36s, so the number was the only thing wrong.
    */
   const nameField = page.getByLabel(/Campaign name|اسم الحملة/)
   await nameField.fill(name)
-  await expect(nameField).toHaveValue(name)
+  await expect(nameField, 'the form never took the name it was given').toHaveValue(name, { timeout: 15_000 })
 
   const save = page.getByRole('button', { name: /^Save$|^حفظ$/ })
   await save.click()
