@@ -23,6 +23,26 @@
  * The number is deliberately generous rather than tuned to the observed edge. A ceiling set just
  * above the last failure is a ceiling that fails again on a busier day.
  */
+/*
+ * FIFTH occurrence, 2026-09-28 (#569) — and the first to exceed this ceiling.
+ *
+ * `/agency/tasks` «rendered nothing» on webkit while chromium and firefox passed the same commit,
+ * 620 tests passing around it. Reproduced per the protocol above before anything was re-run, and the
+ * evidence says the page is not the subject: `git diff 60f4c1f7 33cf861e -- src/features/tasks
+ * src/app` is EMPTY — the route's code is byte-identical to the commit whose webkit gate was green
+ * an hour earlier — and the same spec run locally on webkit passed all eighteen cases, the walk
+ * among them, in 1.1 minutes.
+ *
+ * What is new is that forty-five seconds was not enough. The number above was chosen to be generous
+ * rather than tuned to the observed edge, and the edge has now passed it. Raising it again would be
+ * tuning to the last failure, which this file already argues against — so it stays, and the finding
+ * is recorded where the next reader of a red webkit gate will meet it.
+ *
+ * The structural fix is not a bigger number. The gate serves a DEV server, so a first paint includes
+ * an on-demand transform of the route's module graph, and `/agency/tasks` is the largest graph in
+ * the rail — which is why the same route, on the slowest browser, is the one that keeps timing out.
+ * `fix/gate-serves-a-built-app` is the branch for that.
+ */
 export const RAIL_PAINT_TIMEOUT = 45_000
 
 /** Per-path budget for a walk that visits many routes in one test, on the same reasoning. */
