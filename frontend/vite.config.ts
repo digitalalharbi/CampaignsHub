@@ -8,6 +8,21 @@ import { defineConfig } from 'vitest/config'
 const API_TARGET = process.env.VITE_API_TARGET ?? 'http://127.0.0.1:8000'
 
 /**
+ * GATE-BUILT-APP-001 — the same hops for the dev server AND for `vite preview`.
+ *
+ * `server.proxy` and `preview.proxy` are separate options and neither inherits the other, so a gate
+ * that serves the BUILT app needs this map twice or not at all. Written once and referenced twice,
+ * because two copies of «`/l/` goes to Laravel, and the trailing slash is load-bearing» is two
+ * chances to fix one of them and ship the other.
+ */
+const HOPS = {
+  '/api': { target: API_TARGET, changeOrigin: true },
+  '/sanctum': { target: API_TARGET, changeOrigin: true },
+  '/l/': { target: API_TARGET, changeOrigin: true },
+  '/demo': { target: API_TARGET, changeOrigin: true },
+} as const
+
+/**
  * GATE-VITE-001 — one dependency cache per dev server, never one shared between two.
  *
  * The gate runs TWO dev servers at once: the tests' own, and a second one that exists solely so the
@@ -61,45 +76,31 @@ export default defineConfig({
         realpathSync(fileURLToPath(new URL('./node_modules', import.meta.url))),
       ],
     },
-    proxy: {
-      /*
-       * Proxy API calls to the Laravel backend during development.
-       *
-       * The target is overridable because the E2E gate runs its own backend on :8100 against its own
-       * database (E2E-ISO-001). Hard-coding :8000 here would send the gate's requests to whatever
-       * dev server happened to be listening — i.e. to the development database, which is the exact
-       * leak that isolation removes. `playwright.config.ts` sets `VITE_API_TARGET`; a developer's
-       * `npm run dev` sets nothing and keeps the default.
-       */
-      '/api': { target: API_TARGET, changeOrigin: true },
-      '/sanctum': { target: API_TARGET, changeOrigin: true },
-      /*
-       * SHORT-LINK-PRODUCTION-001 — the hop belongs to Laravel here too.
-       *
-       * `/l/{slug}` is a web route. Without this the dev server answers it from the SPA fallback,
-       * which is EXACTLY the production defect — a minted link rendering the app's not-found page —
-       * and it would make the gate's hop test unable to tell a fixed edge from a broken one.
-       *
-       * The trailing slash is load-bearing. A Vite proxy key is a PREFIX, so `'/l'` also captures
-       * `/login` — every auth setup timed out on a sign-in page that was being proxied to Laravel.
-       */
-      '/l/': { target: API_TARGET, changeOrigin: true },
-      /*
-       * AD-MEDIA-RECOVERY-001 — the app's OWN media, served by the app.
-       *
-       * A creative asset we host is stored as a path so it survives a port, a host and a deploy
-       * (`AD-MEDIA-RECOVERY-001` in `CreativePresenter::safe()`). In production the SPA and the API
-       * share an origin and the path resolves to Laravel's `public/`. In development they do not, so
-       * without this the browser asked VITE for the file, Vite answered with the SPA shell — 200,
-       * `text/html`, three kilobytes — and the player failed with `DEMUXER_ERROR_COULD_NOT_OPEN`
-       * against a document pretending to be a video.
-       *
-       * That is the worst shape of this bug: every layer reports success and the user sees a dead
-       * player, which is why it survived unit tests that assert the payload and the markup.
-       */
-      '/demo': { target: API_TARGET, changeOrigin: true },
-    },
+    /*
+     * The same hops, named once above — every comment that used to live here moved with them.
+     */
+    proxy: HOPS,
   },
+  /*
+   * GATE-BUILT-APP-001 — what the E2E gate serves.
+   *
+   * The gate used to run `vite dev`, so the FIRST visit to a route paid for an on-demand transform of
+   * that route's module graph. `/agency/tasks` has the largest graph in the agency rail and webkit is
+   * the slowest of the three browsers, which is why one route on one browser kept timing out on
+   * commits whose code was byte-identical to a green run — five times, each reproduced locally and
+   * none of them a defect in the page. `railWalkTimeout.ts` carries that history.
+   *
+   * A built app has no transform step at all: `dist` is bytes on disk, the same bytes production
+   * serves. The hops still have to work, which is why they are shared rather than copied, and the SPA
+   * fallback is `vite preview`'s default for a built `index.html`, which is what keeps a deep link
+   * like `/agency/tasks` resolving to the app instead of a 404.
+   *
+   * A developer's `npm run dev` is untouched.
+   */
+  preview: {
+    proxy: HOPS,
+  },
+
   test: {
     environment: 'jsdom',
     globals: true,
