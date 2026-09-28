@@ -218,7 +218,7 @@ final class MessagingService
              * exists — `/portal/messages` is the client's own. The old target could not be reached
              * by anyone who received this.
              */
-            'action_url' => '/clients/'.$thread->client_workspace_id,
+            'action_url' => '/agency/clients/'.$thread->client_workspace_id,
         ]);
     }
 

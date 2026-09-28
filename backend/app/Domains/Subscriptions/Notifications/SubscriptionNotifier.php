@@ -186,7 +186,7 @@ final class SubscriptionNotifier
             'source' => 'subscriptions',
             'entity_type' => SubscriptionNotification::class,
             'entity_id' => (string) $notification->getKey(),
-            'action_url' => '/app/subscriptions',
+            'action_url' => '/subscriptions',
             'dedup_extra' => $notification->dedup_key,
         ]);
     }

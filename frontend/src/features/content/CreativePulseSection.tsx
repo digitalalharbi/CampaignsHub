@@ -571,12 +571,41 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
                   {data.insights.shown}/{data.insights.total}
                 </span>
               </p>
+              {/*
+                One card per FINDING, not per row that produced it.
+
+                A rule that fires on many creatives produced one card each, and where their figures
+                matched exactly — which happens whenever several ads share a name and a budget — the
+                cards came out byte-identical: same title, same sentence, same dates, same link.
+                Seven in a row on the demo tenant. The finding is worth reading once; which
+                creatives it covers is the part that differs, so that is what the card names.
+
+                Grouped on the RENDERED text rather than on the rule, deliberately. Two creatives
+                that trip the same rule with different figures say different things and stay two
+                cards — collapsing those would hide a number somebody needs.
+              */}
               <ul className="mt-3 flex flex-col gap-2">
-                {data.insights.items.map((item) => (
+                {Object.values(
+                  data.insights.items.reduce<Record<string, { item: typeof data.insights.items[number]; names: string[] }>>(
+                    (groups, item) => {
+                      const said = `${item.title_ar}|${item.detail_ar}|${item.action_ar}`
+                      const group = groups[said]
+                      if (group === undefined) {
+                        groups[said] = { item, names: [] }
+                      } else if (item.creative_name) {
+                        group.names.push(item.creative_name)
+                      }
+
+                      return groups
+                    },
+                    {},
+                  ),
+                ).map(({ item, names }) => (
                   <CreativeInsightCard
                     key={item.id}
                     item={item}
                     locale={ar ? 'ar' : 'en'}
+                    alsoNamed={names}
                     creativeHref={item.creative_id ? drill({ creative: item.creative_id }) : null}
                   />
                 ))}

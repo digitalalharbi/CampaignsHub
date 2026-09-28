@@ -57,7 +57,16 @@ final class ClientManagementService
                 'source' => 'clients',
                 'entity_type' => 'client_workspace',
                 'entity_id' => $client->id,
-                'action_url' => "/clients/{$client->id}",
+                /*
+                   * Explicit, because `clients` exists ONLY under /agency.
+                   *
+                   * A portal-relative link resolves against the portal the reader is LOOKING at,
+                   * not the one their membership belongs to — so an operator who happens to be in
+                   * /app when the bell rings gets `/app/clients/…`, which is not a route. Naming
+                   * the portal is right in exactly this case and no other: same destination from
+                   * /agency, a working one from anywhere else.
+                   */
+                'action_url' => "/agency/clients/{$client->id}",
                 'dedup_extra' => 'needs_attention',
             ]);
         }

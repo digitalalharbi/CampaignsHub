@@ -442,8 +442,18 @@ test.describe('the dashboard’s creative section', () => {
    * panel finally did, React collapsed the repeats of one rule: it rendered nine while the honest
    * counter beside it read «12 of 91». A list that drops rows while reporting the full count is worse
    * than one that reports fewer.
+   *
+   * That principle is unchanged; the arithmetic is. The panel now draws ONE card for findings whose
+   * rendered text is identical and names the creatives it also covers — seven byte-identical cards
+   * on the demo tenant became one. So a card is no longer one finding, and counting cards against
+   * the counter compares two different quantities.
+   *
+   * What still has to hold, and what this now asserts, is that NOTHING WAS DROPPED: every card
+   * stands for itself plus the findings it names, and those add up to exactly what the counter
+   * promises. That is the same guarantee, stated where grouping cannot slip past it — a collapse
+   * that lost rows would fail this as surely as it failed the equality it replaced.
    */
-  test('renders exactly as many findings as its own counter promises', async ({ page, request }) => {
+  test('accounts for exactly as many findings as its own counter promises', async ({ page, request }) => {
     const projectId = await seededProject(request, STORE_PROJECT)
     await selectProject(page, projectId)
     await page.goto('/agency/dashboard')
@@ -455,7 +465,17 @@ test.describe('the dashboard’s creative section', () => {
 
     const claimed = Number((await findings.innerText()).match(/(\d+)\s*\/\s*\d+/)?.[1] ?? -1)
     expect(claimed, 'the findings panel states no «shown/total»').toBeGreaterThanOrEqual(0)
-    expect(await findings.getByRole('listitem').count()).toBe(claimed)
+    const cards = findings.getByRole('listitem')
+    const drawn = await cards.count()
+
+    /* Each card stands for itself plus the findings it names beneath it. */
+    let accounted = 0
+    for (let i = 0; i < drawn; i++) {
+      accounted += 1 + Number(await cards.nth(i).getAttribute('data-also-count') ?? 0)
+    }
+
+    expect(accounted, `${drawn} cards accounted for ${accounted} findings, counter promised ${claimed}`)
+      .toBe(claimed)
   })
 })
 
