@@ -137,6 +137,49 @@ describe('the project integrations counters', () => {
     expect(screen.getByText('Access revoked')).toBeInTheDocument()
   })
 
+  /**
+   * The install's CREDENTIAL state is not restated to a project reader — §12.
+   *
+   * `awaiting_credentials` says what keys this install holds. It is the platform operator's number,
+   * nothing on a project page can change it, and on a customer's own project it reads as «none of
+   * your platforms work» — which is exactly why the platform panel above stopped saying it and why
+   * `integrations.spec.ts` asserts those words never reach this page. The badge I added for
+   * connection health had the state in its map, so a bound account behind a credential-less install
+   * would have put the sentence back on the page the rule was written for, and failed that spec.
+   *
+   * Silence rather than the raw key: the fallback shows an unknown state as itself, so leaving it
+   * out of the map would have printed `awaiting_credentials`, which is worse than both.
+   */
+  it('does not restate the install’s credential state on a project row', async () => {
+    vi.mocked(getData).mockImplementation((path: string) => {
+      if (path === `/projects/${PROJECT}/integrations`) {
+        return Promise.resolve([
+          { ...binding, account: { ...binding.account, connection_status: 'awaiting_credentials' } },
+        ] as never)
+      }
+      if (path === '/projects') return Promise.resolve([{ id: PROJECT, name: 'Demo' }] as never)
+      if (path.endsWith('/integrations/platforms')) {
+        return Promise.resolve({
+          platforms: [],
+          summary: { total: 0, with_credentials: 0, with_accounts: 0, discovered_campaigns: 0 },
+        } as never)
+      }
+
+      return Promise.resolve([] as never)
+    })
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/projects/:projectId/integrations" element={<ProjectIntegrationsPage />} />
+      </Routes>,
+      { locale: 'en', route: `/projects/${PROJECT}/integrations` },
+    )
+
+    await screen.findByText(/Sandbox Ad Account/)
+    expect(screen.queryByText(/Awaiting credentials/i)).not.toBeInTheDocument()
+    expect(screen.queryByText('awaiting_credentials')).not.toBeInTheDocument()
+  })
+
   /** A healthy connection stays quiet — a list where every row carries a tick teaches nobody to read it. */
   it('says nothing when the connection is healthy', async () => {
     renderWithProviders(

@@ -128,6 +128,32 @@ final class ManageAccountSelectionTest extends TestCase
         ]);
     }
 
+    /**
+     * An account put aside can come BACK — which is the reason the row was kept.
+     *
+     * Removal deactivates so months of attribution survive and «re-selecting the same account
+     * reactivates the same row». Nothing exercised the second half. The unique index is on
+     * (project, account, purpose) and says nothing about `is_active`, while every lookup on the way
+     * back in filtered to the active rows — so the deactivated row was invisible to the code that
+     * would have reused it and fatal to the insert that ran instead.
+     */
+    public function test_an_account_put_aside_can_be_selected_again(): void
+    {
+        $account = $this->discovered('act-returns');
+
+        $this->apply([$account->id])->assertOk();
+        $this->apply([])->assertOk();
+        $this->assertSame(0, $this->activeBindings());
+
+        $back = $this->apply([$account->id])->assertOk();
+
+        $this->assertSame([(string) $account->id], $back->json('data.added'));
+        $this->assertSame(1, $this->activeBindings());
+        // The SAME row, or the history it was kept for went with the second one.
+        $this->assertSame(1, ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('external_account_id', $account->id)->count());
+    }
+
     /** The same desired set twice is the same decision — the second time changes nothing. */
     public function test_the_same_selection_applied_twice_changes_nothing_the_second_time(): void
     {

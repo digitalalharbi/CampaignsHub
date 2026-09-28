@@ -34,15 +34,27 @@ const CONNECTION_LABELS: Record<string, { ar: string; en: string }> = {
   revoked: { ar: 'أُلغي الإذن', en: 'Access revoked' },
   expired: { ar: 'انتهت صلاحية الإذن', en: 'Authorisation expired' },
   disabled: { ar: 'الاتصال معطّل', en: 'Connection disabled' },
-  awaiting_credentials: { ar: 'بانتظار بيانات الاعتماد', en: 'Awaiting credentials' },
 }
+
+/**
+ * States this page knows and deliberately does not restate — INTEGRATION-DATASOURCE-WIZARD-001 §12.
+ *
+ * `awaiting_credentials` is a fact about what keys this INSTALL holds. It is the platform operator's
+ * number, nothing on a project page can change it, and on a customer's own project it reads as «none
+ * of your platforms work» — which is why the platform panel above stopped saying it, and why
+ * `integrations.spec.ts` asserts those words never reach this page. The project-level consequence is
+ * already stated there: this platform is not feeding this project yet.
+ *
+ * Listed rather than simply absent, because the fallback shows an unknown state as itself: left out,
+ * the row would print the raw `awaiting_credentials`, which is worse than both.
+ */
+const CONNECTION_UNSAID = new Set(['connected', 'awaiting_credentials'])
 
 const CONNECTION_TONE: Record<string, 'danger' | 'warning'> = {
   error: 'danger',
   revoked: 'danger',
   expired: 'danger',
   disabled: 'warning',
-  awaiting_credentials: 'warning',
 }
 
 function connectionLabel(status: string, ar: boolean): string {
@@ -284,7 +296,7 @@ export function ProjectIntegrationsPage() {
                       Silent while healthy, like the «disabled» badge beside it: a list where every
                       row carries a green tick teaches a reader to stop reading the badges.
                     */}
-                    {b.account?.connection_status != null && b.account.connection_status !== 'connected' && (
+                    {b.account?.connection_status != null && !CONNECTION_UNSAID.has(b.account.connection_status) && (
                       <Badge tone={CONNECTION_TONE[b.account.connection_status] ?? 'warning'}>
                         {connectionLabel(b.account.connection_status, lang === 'ar')}
                       </Badge>
@@ -323,8 +335,18 @@ export function ProjectIntegrationsPage() {
                   >
                     <RefreshCw size={14} /> {t('sync')}
                   </Button>
+                  {/*
+                    Detaching is reversible and the control says so, because nothing else on the page
+                    does. It stops this account feeding this project and keeps the binding row, so
+                    the months of figures it has already attributed stay this project's and
+                    re-selecting the account from «إدارة مصادر البيانات» brings it back to the same
+                    row — the same thing deselecting has always done, which is the point.
+                  */}
                   <Button
                     variant="ghost"
+                    title={lang === 'ar'
+                      ? 'يتوقف هذا الحساب عن تغذية المشروع. الأرقام السابقة تبقى، ويمكن اختياره مجددًا من إدارة مصادر البيانات.'
+                      : 'This account stops feeding the project. Its past figures stay, and it can be selected again from Manage data sources.'}
                     loading={detachMutation.isPending && detachMutation.variables === b.id}
                     onClick={() => detachMutation.mutate(b.id)}
                   >

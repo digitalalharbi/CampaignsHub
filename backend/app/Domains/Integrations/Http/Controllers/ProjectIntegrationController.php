@@ -75,7 +75,21 @@ final class ProjectIntegrationController extends Controller
     {
         abort_unless($request->user()->hasPermission('integrations.view'), 403);
 
-        $bindings = ProjectIntegrationBinding::with('externalAccount.connection')->latest()->get()
+        /*
+         * The bindings that are ACTIVE — which is what «the accounts bound to this project» means.
+         *
+         * A deactivated binding is retained HISTORY, not a bound account: `ApplyAccountSelection`
+         * keeps the row so the metric rows it attributed stay this project's, and re-selecting the
+         * account reactivates the same row. Returning them here made a deselected account go on
+         * counting toward «الحسابات المرتبطة بهذا المشروع» and toward «المنصات» beside it, and put a
+         * row in the list badged «معطّل» that no longer feeds anything.
+         *
+         * Every read that decides anything already scopes this way — `AccountAssignment` and
+         * `ConfirmAccountSelection` both do, which is why a deactivated binding does not block the
+         * account from being bound elsewhere. This is the listing catching up with them.
+         */
+        $bindings = ProjectIntegrationBinding::with('externalAccount.connection')
+            ->where('is_active', true)->latest()->get()
             ->map(fn (ProjectIntegrationBinding $b) => $this->bindingArray($b));
 
         return ApiResponse::success($bindings, 'Project integrations retrieved.');
@@ -185,18 +199,35 @@ final class ProjectIntegrationController extends Controller
 
                 abort_if($elsewhere, 409, 'This account is already connected to another project. Detach it there first.');
 
+                /*
+                 * The row for this (project, account, purpose), ACTIVE OR NOT.
+                 *
+                 * It asked for an active one only, and a deactivated row is exactly what deselecting
+                 * — and now detaching — leaves behind. The unique index is on the triple and does not
+                 * mention `is_active`, so the create below hit it: re-selecting an account that had
+                 * been detached answered 500 on a duplicate key. The row is kept precisely so the
+                 * account can come back to it with its history, which is the whole reason removal
+                 * deactivates rather than deletes.
+                 */
                 $existing = ProjectIntegrationBinding::withoutGlobalScope(ProjectScope::class)
                     ->where('external_account_id', $account->id)
                     ->where('project_id', $project->id)
-                    ->where('is_active', true)
+                    ->where('purpose', $validated['purpose'])
                     ->first();
 
                 // Confirming twice is the same decision, not a second one — and must not cost a slot.
-                if ($existing !== null) {
+                if ($existing !== null && $existing->is_active) {
                     return $existing;
                 }
 
                 $this->guardQuota($account->tenant_id);
+
+                /* Coming back to a binding that was put aside: the same row, reactivated. */
+                if ($existing !== null) {
+                    $existing->update(['is_active' => true]);
+
+                    return $existing;
+                }
 
                 return ProjectIntegrationBinding::create([
                     // project_id auto-filled from ProjectContext by BelongsToProject.
@@ -503,7 +534,21 @@ final class ProjectIntegrationController extends Controller
         abort_if($model === null, 404, 'Binding not found for this project.');
 
         $audit->log(action: 'integration.detached', entityType: ProjectIntegrationBinding::class, entityId: (string) $model->id, before: ['project' => $model->project_id, 'account' => $model->external_account_id]);
-        $model->delete();
+
+        /*
+         * DEACTIVATES, like deselection — the two doors to this outcome must agree.
+         *
+         * This deleted the row. Reaching the same outcome through «Manage accounts» does not:
+         * `ApplyAccountSelection` sets `is_active = false` and says why — the binding is what makes a
+         * metric row this project's, so a delete orphans months of history the project is still
+         * entitled to show, and re-selecting the same account reactivates the same row rather than
+         * charging the plan for it twice.
+         *
+         * Every one of those reasons is true of this button, which is one click on a project page
+         * with no confirmation behind it. The same account detached here and deselected there ended
+         * up in two different states, and only one of them could be undone.
+         */
+        $model->update(['is_active' => false, 'is_primary' => false]);
 
         return ApiResponse::success(null, 'Binding detached (connection kept).');
     }
