@@ -1,5 +1,21 @@
 import { defineConfig, devices } from '@playwright/test'
+import { buildApp } from './e2e/buildApp'
 import { E2E_API_TARGET, E2E_BACKEND_ENV, E2E_BACKEND_PORT, E2E_FRONTEND_PORT, E2E_ORIGIN, E2E_PRINT_ORIGIN, E2E_PRINT_PORT } from './e2e/env'
+
+/*
+ * GATE-BUILT-APP-001 — built HERE, at config load, because everything later is too late.
+ *
+ * Playwright builds its startup list as plugin setup, THEN `globalSetup` — and a `webServer` entry
+ * is a plugin. A build in `globalSetup` therefore runs after `vite preview` has already been asked
+ * for a `dist` that does not exist: the server came up on :5273, Playwright waited its sixty seconds
+ * for the URL, and all three gates failed the same way inside three minutes. The same code passed
+ * locally off a `dist` an earlier manual build had left behind, which is exactly the accidental
+ * evidence this whole change exists to remove.
+ *
+ * Config load is the one point that precedes both the servers and `globalSetup`, whoever invoked
+ * Playwright and however — `npm run gate`, CI, or one ad-hoc spec.
+ */
+buildApp()
 
 /**
  * E2E config. Self-contained: Playwright starts BOTH servers itself.
