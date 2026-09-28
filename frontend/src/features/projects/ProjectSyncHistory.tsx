@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { listSyncRuns, type SyncRun } from './api'
 import { Badge } from '@/components/ui/Badge'
+import { Num } from '@/components/ui/Num'
 import { Card, CardTitle } from '@/components/ui/Card'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { fmtClock } from '@/lib/datetime'
@@ -83,7 +84,12 @@ function Run({ run, ar }: { run: SyncRun; ar: boolean }) {
         {run.window_start && run.window_end && (
           <div>
             <dt className="inline text-text-muted">{ar ? 'الفترة' : 'Window'}: </dt>
-            <dd className="tnum inline" dir="ltr">{run.window_start} → {run.window_end}</dd>
+            {/*
+              The RUN is isolated, not the cell. `dir` on a `<dd>` re-bases its alignment too, so
+              under Arabic the range lands on the opposite edge from «الفترة» — which is what
+              `ltrNumeralAlignment` catches by name, and it caught this one.
+            */}
+            <dd className="inline"><Num className="tnum">{run.window_start} → {run.window_end}</Num></dd>
           </div>
         )}
         {rows.map(([label, value]) => (
