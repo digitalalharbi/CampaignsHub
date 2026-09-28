@@ -15,6 +15,12 @@ Open and in CI: **#569** (`intlane`, the project integrations surface), **#570**
 **#571** (`cccdraft`), **#513** (the gate serves a built app). They are restacked SERIALLY — `strict`
 means every merge invalidates every other PR, and batching them starves the runners.
 
+**Deployed and verified by what production SERVES, not by the workflow's own word.** The first
+deploy of `dbb87d22` failed on `dial tcp ***:***: i/o timeout` — the VPS SSH again, the third time
+this month — and succeeded on re-run. `https://campaignshub.io/assets/index-O1e66jLF.js` contains
+«محتويين آخرين» and `data-also-count`, both of which exist only because of #568, so the box is
+running that commit's frontend and not the previous one.
+
 The line below is the older record and is kept for its reasoning, not its SHA.
 
 Merged since `288bc48d` (#422), in order: #423 the premium launch success experience · #424 one
