@@ -6,6 +6,9 @@
 export function registerServiceWorker(): void {
   if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return
 
+  /* Whether a worker was already driving this page when it loaded — see the listener below. */
+  const hadController = Boolean(navigator.serviceWorker.controller)
+
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js')
@@ -26,10 +29,26 @@ export function registerServiceWorker(): void {
       })
       .catch(() => undefined)
 
-    // Reload once the new worker takes control.
+    /*
+     * Reload when an UPDATE takes control — never when the first worker claims the page.
+     *
+     * `sw.js` calls `clients.claim()` in its `activate` handler, so a first install fires
+     * `controllerchange` too. This reloaded on that, which means every first-time visitor to
+     * production got an automatic refresh — the one thing the note at the top of this file promises
+     * does not happen. There is nothing to reload INTO on a first install: the page is already
+     * running the version the worker just cached.
+     *
+     * Found by the E2E gate the day it started serving a built app instead of a dev server, where
+     * `import.meta.env.PROD` is false and none of this runs at all: seventeen specs failed with
+     * «Execution context was destroyed, most likely because of a navigation», which is what a page
+     * reloading underneath a test looks like.
+     *
+     * Read BEFORE `register()` resolves, because by then the new worker may already control the page
+     * and the question «was there one before?» can no longer be asked.
+     */
     let reloaded = false
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (reloaded) return
+      if (!hadController || reloaded) return
       reloaded = true
       window.location.reload()
     })
