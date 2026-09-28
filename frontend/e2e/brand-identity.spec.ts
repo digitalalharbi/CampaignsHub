@@ -19,6 +19,31 @@ const MARK_PATHS = [
 
 /** The rendered mark, asked of the DOM rather than of the source. */
 async function markIn(page: Page, selector: string) {
+  /*
+   * WAIT for the mark to be on screen before photographing it.
+   *
+   * Everything below is a single `page.evaluate` — one snapshot, taken the instant it is asked for.
+   * A mark that had not mounted yet therefore read as a mark that does not exist, and the webkit
+   * gate failed «the public header drew no canonical mark / Received: null» on a commit that does
+   * not touch the marketing header, while chromium and firefox passed it.
+   *
+   * The wait is for a RENDERED host rather than an attached one, because the same selector matches
+   * two lockups — the full one and the mark-only variant that takes over below 480px — and waiting
+   * for «attached» could be satisfied by the hidden one while the visible one is still arriving. The
+   * snapshot then picks the same host this predicate found.
+   *
+   * Every call site asserts the mark is NOT null, so nothing here is waiting for an absence.
+   */
+  await page.waitForFunction(
+    (sel) => [...document.querySelectorAll(sel)].some((h) => {
+      const box = h.getBoundingClientRect()
+
+      return box.width > 0 && box.height > 0
+    }),
+    selector,
+    { timeout: 15_000 },
+  )
+
   return page.evaluate((sel) => {
     /*
      * The RENDERED one, where a selector matches more than one.

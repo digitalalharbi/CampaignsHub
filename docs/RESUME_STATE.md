@@ -7,7 +7,21 @@ disagree, Git is right.**
 
 ## Where Git is
 
-`origin/main` = **`312a7572` (#433)**.
+`origin/main` = **`dbb87d22` (#568)** — one card per finding, the portal named only where one portal
+has the page, the session named on every `/auth/memberships` answer, the scratch spec #567 leaked
+deleted, and the money guard judged after every response has been read.
+
+Open and in CI: **#569** (`intlane`, the project integrations surface), **#570** (`notiflane`),
+**#571** (`cccdraft`), **#513** (the gate serves a built app). They are restacked SERIALLY — `strict`
+means every merge invalidates every other PR, and batching them starves the runners.
+
+**Deployed and verified by what production SERVES, not by the workflow's own word.** The first
+deploy of `dbb87d22` failed on `dial tcp ***:***: i/o timeout` — the VPS SSH again, the third time
+this month — and succeeded on re-run. `https://campaignshub.io/assets/index-O1e66jLF.js` contains
+«محتويين آخرين» and `data-also-count`, both of which exist only because of #568, so the box is
+running that commit's frontend and not the previous one.
+
+The line below is the older record and is kept for its reasoning, not its SHA.
 
 Merged since `288bc48d` (#422), in order: #423 the premium launch success experience · #424 one
 definition of «needs attention» · #425 the error-persistence contract and the Save-accounts
@@ -20,6 +34,62 @@ fetched with the HTML · #431 the wizard's first-sync outcome · #433 what askin
 hero heading's own weight. `mergeStateStatus=BLOCKED`; `frontend` and `image` green, `backend` and
 the three `gate` checks not reported. It belongs to the Marketing lane and **must not be absorbed
 into the Content or Reports closure branches.**
+
+## 2026-09-28 — main was the defect, and the register was arguing with the code
+
+**`origin/main` carried a broken scratch spec for a day.** `frontend/e2e/__parity.spec.ts` — a
+diagnostic file with no assertions that writes to `/tmp` — reached main inside #567's squash. It
+failed chromium and webkit on EVERY branch cut from main afterwards, which is what #569's red gates
+actually were. Confirmed rather than inferred: `git ls-tree origin/main` had the blob, #568 (which
+deletes it) went green on chromium and webkit on the same code that had failed on #569.
+
+The lesson is about the squash, not the file: a PR assembled from many cherry-picks carries whatever
+the working tree held, and nothing in the gate notices a spec that passes locally and fails under
+load. **Check `git status` before the commit that becomes a PR, not after.**
+
+**The money guard was judging before the evidence was in.** `shared-link-hidden-money` failed firefox
+on #568 with «a hidden spend figure reached a client», over a body reading `الإنفاق — —` (spend
+correctly withheld) beside `الإيرادات 508K SAR` — revenue, under a key that link does not hide. The
+same accusation had failed webkit earlier and been «fixed» by draining `pending` before each hunt;
+`settle()` returns immediately when nothing is in flight, and "nothing in flight" is not "everything
+has arrived". The accusation is now recorded with its spelling and judged after
+`await Promise.all(pending)`, where the innocent set is complete however the browser ordered things.
+
+**What the integrations lane turned out to be.** Every item below was found by opening the page, not
+by reading the row that claims it:
+
+- The «ربط غير مكتمل» banner described `unfinished[0]` and named no platform. The demo tenant has
+  FOUR authorisations waiting for a selection.
+- `detach` DELETED the binding while deselection deactivates it — and the row is kept precisely so
+  months of attribution survive. Same outcome, two states, one of them irreversible.
+- The return that retention was for never worked: the unique index is on (project, account, purpose)
+  and every lookup on the way back in filtered to `is_active`, so deselecting an account and
+  selecting it again answered **500 on a duplicate key**. INTEGRATION-DATASOURCE-WIZARD-001 §8 has
+  asserted that behaviour as working since it was written.
+- `SyncRunController::index` had served the run log since the pipeline was built and **nothing read
+  it**. The only reference to that endpoint in the frontend was an `invalidateQueries` call naming a
+  query no component had registered.
+- `DemoAnalyticsSeeder` wrote sync status `partial`, a word INTEG-RUNTIME §8 retired.
+- The platform card crushed its name to fourteen pixels at 768 and 1024 — correct at 390 and 1440,
+  which are the two widths every sweep in the suite checks.
+
+**A guard that could not fail was removed rather than kept.** The e2e written for that last one
+passed against the unfixed code: the gate's own integrations page does not reproduce the crush,
+probed at eight widths from 640 to 1280. The fix stands on a browser measurement, and the code says
+so where the fix is.
+
+**`vitest run --reporter=basic` runs NOTHING and exits 0.** Vitest 4 has no reporter by that name;
+it fails at startup with «Failed to load custom Reporter from basic» and the process still exits 0,
+so a wrapper that greps for «Failed Tests» sees a clean run. Two whole-suite runs reported here as
+green were that. The per-file runs, which pass no reporter flag, were real — and CI caught the one
+thing the fake runs let through: `ltrNumeralAlignment` on a `<dd … dir="ltr">` in the new sync panel,
+which is a correct guard catching a real defect. **Never read an exit code as a test result; read the
+«Tests N passed» line.**
+
+**Still true and still Owner-only:** the Production branding evidence
+(`BRANDING-RENDER-EVIDENCE-001`), and live OAuth round-trips against real providers. Everything else
+in the integrations lane is now exercised locally, including detach and return, which answered 201
+carrying the same binding id the detach had deactivated.
 
 ## 2026-09-27 — the queue drained, and what it cost to drain it
 

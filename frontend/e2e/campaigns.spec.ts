@@ -12,6 +12,21 @@ import { AUTH, seededProject, switchToEnglish, selectProject } from './helpers'
  */
 async function openCardsView(page: import('@playwright/test').Page) {
   await page.getByTestId('view-cards').click()
+
+  /*
+   * Wait for the view to BE the cards view before anybody clicks a card in it.
+   *
+   * This returned the moment the switch was pressed, so the next line's `.click()` absorbed the
+   * render — and a `click` auto-waits against the TEST's budget, not its own. When the render was
+   * slow the whole test died at thirty seconds saying «locator.click: Test timeout exceeded», which
+   * names the last thing that happened rather than the thing that was slow.
+   *
+   * It failed that way on the firefox gate while passing locally in 2.3 seconds. The fix is not a
+   * larger budget — the sibling below has one of those and says why — but for the helper to finish
+   * what it started: a caller that asks for the cards view gets the cards view.
+   */
+  await expect(page.getByTestId('campaign-card').first(), 'the cards view never rendered a card')
+    .toBeVisible({ timeout: 20_000 })
 }
 
 /**
