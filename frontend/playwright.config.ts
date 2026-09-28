@@ -117,7 +117,16 @@ export default defineConfig({
        * above would be bypassed silently, with a green run to show for it. A port nothing else uses
        * makes that impossible instead of merely unlikely.
        */
-      command: `npm run dev -- --port ${E2E_FRONTEND_PORT}`,
+      /*
+       * GATE-BUILT-APP-001 — `preview` over the built `dist`, not `dev`.
+       *
+       * `global-setup` has already built it. A dev server transforms a route's module graph on its
+       * FIRST visit, which is why `/agency/tasks` — the largest graph in the agency rail — kept
+       * timing out on webkit, the slowest browser, on commits byte-identical to a green run. Five
+       * occurrences, each reproduced locally, none a defect in the page. Serving bytes off disk has
+       * no first visit to be slow.
+       */
+      command: `npm run preview -- --port ${E2E_FRONTEND_PORT} --strictPort`,
       url: E2E_ORIGIN,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
@@ -155,7 +164,7 @@ export default defineConfig({
        * Two servers rather than one switch: switching Chromium printing off also removes the proof
        * that the exported Arabic PDF is a real Chromium file, which this product had to fix once.
        */
-      command: `npm run dev -- --port ${E2E_PRINT_PORT}`,
+      command: `npm run preview -- --port ${E2E_PRINT_PORT} --strictPort`,
       url: E2E_PRINT_ORIGIN,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
@@ -168,9 +177,13 @@ export default defineConfig({
        * the browser as «Load failed», the proxy as 502, and a `page.goto` as a navigation that never
        * fires `load`.
        */
-      /* The print server's too — GATE-VITE-001 was diagnosed from a hypothesis about exactly this. */
+      /*
+       * `VITE_CACHE_DIR` is gone with the dev servers that needed it: GATE-VITE-001 was two
+       * OPTIMIZERS rewriting one `node_modules/.vite` under each other. `vite preview` runs no
+       * optimizer and holds no dependency cache, so there is nothing left for the two to share.
+       */
       stdout: 'pipe',
-      env: { VITE_API_TARGET: E2E_API_TARGET, VITE_CACHE_DIR: 'node_modules/.vite-print' },
+      env: { VITE_API_TARGET: E2E_API_TARGET },
     },
   ],
 })
