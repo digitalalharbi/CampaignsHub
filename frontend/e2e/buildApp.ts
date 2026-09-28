@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { readdirSync, statSync } from 'node:fs'
 
 /**
  * GATE-BUILT-APP-001 — build the app BEFORE Playwright starts anything, because nothing later will do.
@@ -32,6 +33,10 @@ export function buildApp(): void {
     return
   }
 
+  if (isCurrent()) {
+    return
+  }
+
   const began = Date.now()
   process.stdout.write('\n[e2e] building the app the gate will serve…\n')
 
@@ -48,4 +53,53 @@ export function buildApp(): void {
   }
 
   process.stdout.write(`[e2e] built in ${Math.round((Date.now() - began) / 1000)}s\n`)
+}
+
+/** The newest mtime under `path`, skipping nothing: every file `vite build` reads is a source. */
+function newestUnder(path: string): number {
+  let newest = 0
+
+  try {
+    const entry = statSync(path)
+
+    if (!entry.isDirectory()) {
+      return entry.mtimeMs
+    }
+
+    for (const child of readdirSync(path)) {
+      newest = Math.max(newest, newestUnder(`${path}/${child}`))
+    }
+  } catch {
+    // A source that is not there cannot be newer than the build. `index.html` and the lockfile are
+    // both listed by name below and both exist; this is for a path that legitimately may not.
+    return 0
+  }
+
+  return newest
+}
+
+/**
+ * Whether `dist` already reflects every source it is built from.
+ *
+ * `src` plus the three files outside it that change what is emitted. `node_modules` is deliberately
+ * not walked — reinstalling dependencies is what `package-lock.json` stands for here, and walking a
+ * quarter of a million files to ask a question the lockfile already answers would cost more than the
+ * build it is trying to avoid.
+ */
+function isCurrent(): boolean {
+  const here = new URL('..', import.meta.url).pathname
+  const built = newestUnder(`${here}dist/index.html`)
+
+  if (built === 0) {
+    return false
+  }
+
+  const newestSource = Math.max(
+    newestUnder(`${here}src`),
+    newestUnder(`${here}index.html`),
+    newestUnder(`${here}vite.config.ts`),
+    newestUnder(`${here}package-lock.json`),
+  )
+
+  return built > newestSource
 }
