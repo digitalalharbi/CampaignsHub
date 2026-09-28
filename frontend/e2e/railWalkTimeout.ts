@@ -38,12 +38,15 @@
  * tuning to the last failure, which this file already argues against — so it stays, and the finding
  * is recorded where the next reader of a red webkit gate will meet it.
  *
- * The structural fix is not a bigger number. The gate serves a DEV server, so a first paint includes
- * an on-demand transform of the route's module graph, and `/agency/tasks` is the largest graph in
- * the rail — which is why the same route, on the slowest browser, is the one that keeps timing out.
- * #572 is that fix: the gate builds once at config load and both servers run `vite preview` over the
- * result, so there is no first visit left to be slow. Measured on the same walk that timed out at
- * forty-five seconds here — webkit 6.5s from a deleted `dist`.
+ * The structural fix was never a bigger number. The gate USED TO serve a dev server, so a first
+ * paint included an on-demand transform of the route's module graph, and `/agency/tasks` is the
+ * largest graph in the rail — which is why the same route, on the slowest browser, was the one that
+ * kept timing out. #572 removed it: the gate builds once and both servers run `vite preview` over
+ * the result, so there is no first visit left to be slow. Measured on the same walk that timed out
+ * at forty-five seconds here — webkit 6.5s from a deleted `dist`.
+ *
+ * This ceiling stays anyway. It costs nothing when a page paints in seven seconds, and it is the
+ * thing that would absorb a slow runner rather than a slow app if one ever appears again.
  */
 export const RAIL_PAINT_TIMEOUT = 45_000
 
