@@ -196,6 +196,37 @@ final class AccountAssignment
     }
 
     /**
+     * The accounts a CONNECTION actually feeds a project with — what a reconnect refetches.
+     *
+     * SAAS-ACCOUNT-SCOPE. Re-authorising refreshes the INVENTORY, which is what «discovered» means
+     * and is right. The risk is that the refresh is read as a selection: an authorisation that can
+     * now see more accounts would start reading them, charged to the plan and filed into a project
+     * nobody picked. Consent to SEE an account has never been instruction to sync it — the first
+     * live Snapchat consent catalogued 309.
+     *
+     * Named and tested rather than inlined at the call site, because «which accounts does a
+     * reconnect fetch» is a policy, and a policy written inside a controller is one nobody can check.
+     *
+     * @return list<string>
+     */
+    public function activeAccountIdsForConnection(string $connectionId): array
+    {
+        return ProjectIntegrationBinding::withoutGlobalScopes()
+            ->whereIn(
+                'external_account_id',
+                ExternalAccount::withoutGlobalScopes()
+                    ->where('provider_connection_id', $connectionId)
+                    ->select('id'),
+            )
+            ->where('is_active', true)
+            ->distinct()
+            ->pluck('external_account_id')
+            ->map(static fn (mixed $id): string => (string) $id)
+            ->values()
+            ->all();
+    }
+
+    /**
      * The accounts a project currently draws from — the only ones a project-wide sync may touch.
      *
      * RUNTIME-100 §29. «Sync this project» has to mean the accounts somebody assigned to it, not
