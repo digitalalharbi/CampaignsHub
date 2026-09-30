@@ -747,6 +747,40 @@ function ConnectorCard({
             <KeyRound size={13} aria-hidden />
             <span className="sr-only">{ar ? 'يحتاج إعدادًا من مشغّل المنصة' : 'Needs setup by the platform operator'}</span>
           </span>
+        ) : needsReauth ? (
+          /*
+           * RE-AUTHORISATION OUTRANKS «a sync is running» — and it has to, or the card deadlocks.
+           *
+           * Seen on Production: the Meta card showed the chip «يحتاج إعادة مصادقة» and the sentence
+           * «الحساب مرتبط، لكن صلاحية ads_read غير ممنوحة — أعد الربط» above an action area that
+           * said «المزامنة جارية الآن» and offered NO button. The page told the reader to reconnect
+           * and then hid the only control that could — while the sync it was reporting could never
+           * succeed, because the authorisation it would use is the one being refused.
+           *
+           * `syncing` came first in this chain, so it won. It is the weaker claim of the two: a run
+           * being open says what the pipeline is doing, and this says the pipeline cannot do it.
+           * «Sync now» and «Manage accounts» stay hidden for the reason the branch below already
+           * gives — both call the platform with the token being refused — so reconnecting is the
+           * whole menu, with disconnect left as the way out.
+           */
+          <>
+            <ReconnectButton
+              ar={ar}
+              busy={authorizing}
+              urgent
+              onConfirm={onAuthorize}
+              testId={`connector-reconnect-${c.key}`}
+            />
+            <span className="ms-auto" />
+            <DisconnectButton
+              connectionId={wizard?.connection.id ?? null}
+              accounts={wizard?.health?.connected ?? c.accounts ?? 0}
+              ar={ar}
+              busy={disconnecting}
+              onConfirm={onDisconnect}
+              testId={`connector-disconnect-${c.key}`}
+            />
+          </>
         ) : state === 'syncing' ? (
           <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
             <Loader2 size={13} className="animate-spin" /> {ar ? 'المزامنة جارية الآن' : 'A sync is running now'}
