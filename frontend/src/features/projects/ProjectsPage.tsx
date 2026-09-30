@@ -1,8 +1,7 @@
-import { StatCard } from '@/components/ui/StatCard'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, Clock, Copy, FolderKanban, Pause, Pencil, Play, Plug, Plus, RotateCcw, Search, Trash2, Users } from 'lucide-react'
+import { AlertTriangle, Clock, Copy, FolderKanban, Megaphone, Pause, Pencil, Play, Plug, Plus, RotateCcw, Search, Trash2, Users } from 'lucide-react'
 import {
   archiveProject,
   createProject,
@@ -23,11 +22,13 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
 import { EmptyState, Skeleton } from '@/components/ui/States'
+import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
+import { StatCard } from '@/components/ui/StatCard'
 import { ErrorSummary, type FieldError } from '@/components/forms'
 import { toApiError } from '@/lib/api/client'
 import { usePortalPath } from '@/app/portalPath'
 import { useT } from '@/lib/i18n'
-import { adAccounts, days as countedDays, hours as countedHours, members } from '@/lib/counted'
+import { adAccounts, campaigns as countedCampaigns, days as countedDays, hours as countedHours, members } from '@/lib/counted'
 import { useAuth } from '@/stores/auth'
 import { useUi, type Locale } from '@/stores/ui'
 
@@ -66,8 +67,8 @@ export function projectStatusLabel(status: string, ar: boolean): string {
 const PROJ_ERR_TITLE = { ar: 'يرجى تصحيح الأخطاء التالية', en: 'Please fix the following errors' } as const
 /** Summary/toolbar copy — local bilingual (shared i18n dictionary is untouched). */
 const PROJ_COPY = {
-  ar: { search_ph: 'ابحث باسم المشروع…', all: 'الكل', total: 'إجمالي المشاريع', active: 'نشطة', paused: 'متوقفة', onboarding: 'قيد الإعداد', no_match: 'لا مشاريع تطابق البحث أو الفلتر.' },
-  en: { search_ph: 'Search by project name…', all: 'All', total: 'Total projects', active: 'Active', paused: 'Paused', onboarding: 'Onboarding', no_match: 'No projects match your search or filter.' },
+  ar: { search_ph: 'ابحث باسم المشروع…', all: 'الكل', total: 'إجمالي المشاريع', active: 'نشطة', paused: 'متوقفة', onboarding: 'قيد الإعداد', no_match: 'لا مشاريع تطابق البحث أو الفلتر.', attention: 'تحتاج متابعة', healthy: 'سليمة' },
+  en: { search_ph: 'Search by project name…', all: 'All', total: 'Total projects', active: 'Active', paused: 'Paused', onboarding: 'Onboarding', no_match: 'No projects match your search or filter.', attention: 'Need attention', healthy: 'Healthy' },
 } as const
 /**
  * PROJECT-DELETE-001 §34–§35 — the destructive dialog's own words, and the notice after every act.
@@ -310,38 +311,72 @@ export function ProjectsPage() {
   })
   const statusChips: string[] = ['all', ...STATUSES]
 
+  const needingAttention = items.filter((p) => p.summary?.attention != null).length
+  const freshest = items
+    .map((p) => p.summary?.data_last_synced_at ?? null)
+    .filter((at): at is string => at !== null)
+    .sort()
+    .at(-1) ?? null
+
   return (
     <section className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{t('projects')}</h1>
-          {/*
-            What this category is FOR — UX-IDENTITY-001.
+      {/*
+        PRODUCT-VISUAL-001 §4 §10 — the same head grammar the portfolio uses.
+        
+        Two surfaces about the same subject that answer «where am I» in two different shapes make a
+        reader re-learn the page each time they switch. The numbers differ — this is the operational
+        directory and that is the executive summary — and the four context answers do not.
+      */}
+      <PageIntro
+        testid="projects-intro"
+        title={t('projects')}
+        purpose={locale === 'ar'
+          ? 'كل مشروع مساحة معزولة لعميل واحد — حساباته الإعلانية وحملاته وفريقه وتقاريره.'
+          : 'Each project is one client’s isolated workspace — its ad accounts, campaigns, team and reports.'}
+        badges={items.length > 0
+          ? (
+            <Badge tone={needingAttention > 0 ? 'warning' : 'success'} data-testid="projects-health">
+              {needingAttention > 0 ? `${pc.attention}: ${needingAttention}` : pc.healthy}
+            </Badge>
+          )
+          : undefined}
+        meta={items.length > 0
+          ? <DataFreshness lastSyncAt={freshest} ar={locale === 'ar'} staleAfterHours={STALE_AFTER_HOURS} testid="projects-freshness" />
+          : undefined}
+        actions={
+          <>
+            <Button variant={showArchived ? 'secondary' : 'ghost'} onClick={() => setShowArchived((v) => !v)}>
+              {showArchived ? t('hide_archived') : t('show_archived')}
+            </Button>
+            <Button
+              onClick={() => {
+                setCreating(true)
+                setName('')
+                setWorkspaceId('')
+              }}
+            >
+              <Plus size={15} /> {t('new_project')}
+            </Button>
+          </>
+        }
+        kpis={!projects.isLoading && items.length > 0
+          ? (
+            <>
+              {/*
+                The same four counts, at a quarter of the height — §34.
 
-            It said «مصدر البيانات: CampaignsHub API», which is plumbing: it tells the reader where
-            the rows came from and nothing about what a project is or what they can do here.
-          */}
-          <p className="mt-1 max-w-2xl text-sm text-text-secondary">
-            {locale === 'ar'
-              ? 'كل مشروع مساحة معزولة لعميل واحد — حساباته الإعلانية وحملاته وفريقه وتقاريره.'
-              : 'Each project is one client’s isolated workspace — its ad accounts, campaigns, team and reports.'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant={showArchived ? 'secondary' : 'ghost'} onClick={() => setShowArchived((v) => !v)}>
-            {showArchived ? t('hide_archived') : t('show_archived')}
-          </Button>
-          <Button
-            onClick={() => {
-              setCreating(true)
-              setName('')
-              setWorkspaceId('')
-            }}
-          >
-            <Plus size={15} /> {t('new_project')}
-          </Button>
-        </div>
-      </div>
+                They were four cards tall enough to push the project list below the fold on a
+                laptop, each holding one number and a great deal of nothing. A count is a line, not
+                a panel, and the space belongs to the projects a reader came to look at.
+              */}
+              <StatCard label={pc.total} value={summary.total.toLocaleString('en-US')} tone="brand" dot testid="projects-kpi-total" />
+              <StatCard label={pc.active} value={summary.active.toLocaleString('en-US')} tone="success" dot testid="projects-kpi-active" />
+              <StatCard label={pc.paused} value={summary.paused.toLocaleString('en-US')} tone={summary.paused > 0 ? 'warning' : 'neutral'} dot testid="projects-kpi-paused" />
+              <StatCard label={pc.onboarding} value={summary.onboarding.toLocaleString('en-US')} tone="neutral" dot testid="projects-kpi-onboarding" />
+            </>
+          )
+          : undefined}
+      />
 
       {/*
         PROJECT-DELETE-001 §34 — no lifecycle act leaves the reader guessing whether it happened.
@@ -360,16 +395,6 @@ export function ProjectsPage() {
           <button type="button" onClick={() => setNotice(null)} className="text-xs font-semibold opacity-80 hover:opacity-100">
             {locale === 'ar' ? 'إغلاق' : 'Dismiss'}
           </button>
-        </div>
-      )}
-
-      {/* Summary — the portfolio at a glance. */}
-      {!projects.isLoading && items.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <ProjSummaryCard label={pc.total} value={summary.total} tone="brand" />
-          <ProjSummaryCard label={pc.active} value={summary.active} tone="success" />
-          <ProjSummaryCard label={pc.paused} value={summary.paused} tone="warning" />
-          <ProjSummaryCard label={pc.onboarding} value={summary.onboarding} tone="muted" />
         </div>
       )}
 
@@ -457,6 +482,17 @@ export function ProjectsPage() {
                         <Users size={12} aria-hidden />
                         {members(p.summary.team_members, locale)}
                       </span>
+                      {/*
+                        What is RUNNING in it, beside what it is connected to.
+                        «3 accounts» and nothing else cannot tell a client being managed from one
+                        that was connected months ago and left.
+                      */}
+                      {typeof p.summary.campaigns === 'number' && (
+                        <span data-testid="project-campaigns" className="inline-flex items-center gap-1 tnum">
+                          <Megaphone size={12} aria-hidden />
+                          {countedCampaigns(p.summary.campaigns, locale)}
+                        </span>
+                      )}
                       {/* Freshness, because «is this client current» is the other half of the question. */}
                       <span className="inline-flex items-center gap-1 text-text-muted">
                         <Clock size={12} aria-hidden />
@@ -684,8 +720,3 @@ export function ProjectsPage() {
   )
 }
 
-function ProjSummaryCard({ label, value, tone }: { label: string; value: number; tone: 'brand' | 'success' | 'warning' | 'muted' }) {
-  return (
-    <StatCard label={label} value={value} tone={tone === 'muted' ? 'neutral' : tone} dot />
-  )
-}

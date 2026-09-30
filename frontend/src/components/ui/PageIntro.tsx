@@ -103,14 +103,68 @@ export function PageIntro({
  * asking to be trusted on nothing. «لم تتم بعد» is a real answer and is shown as one — an empty
  * space here reads as «just now», which is the one thing it never means.
  */
-export function DataFreshness({ lastSyncAt, ar }: { lastSyncAt: string | null | undefined; ar: boolean }) {
+/**
+ * The product's staleness threshold, in hours — `DataFreshnessService::STALE_AFTER_HOURS` and
+ * `ProjectListSummary::STALE_AFTER_HOURS`, which agree with each other and now with the browser.
+ *
+ * Stated once here rather than at each call site: a page whose badge says «محدّثة» over a project
+ * the server has already marked `stale` is two rulebooks disagreeing in front of the reader.
+ */
+export const STALE_AFTER_HOURS = 48
+
+export function DataFreshness({ lastSyncAt, ar, staleAfterHours, testid = 'data-freshness' }: {
+  lastSyncAt: string | null | undefined
+  ar: boolean
+  /**
+   * PRODUCT-VISUAL-001 §4 — say the STATE, not only the timestamp.
+   *
+   * «آخر مزامنة: 2026-09-28» asks every reader to do the arithmetic and decide for themselves
+   * whether that is fine, and they will answer differently. With a threshold the product does the
+   * deciding once and says the word — so «متأخرة» means the same thing on every surface, which is
+   * the whole point of a shared component saying it.
+   *
+   * Absent, the timestamp is shown alone, exactly as before: a surface with no honest threshold
+   * must not invent one, and a wrong «up to date» is worse than no verdict.
+   *
+   * {@link STALE_AFTER_HOURS} is the product's own number and is what callers should pass. It is 48
+   * rather than 24 for the reason the server gives: the platforms restate the previous day for
+   * hours and several sweep on a multi-hour cron, so a badge flipping to «متأخرة» every morning
+   * before the first sweep would be wrong more often than right.
+   */
+  staleAfterHours?: number
+  testid?: string
+}) {
+  const state = lastSyncAt === null || lastSyncAt === undefined
+    ? 'never'
+    : staleAfterHours === undefined
+      ? 'unknown'
+      : (Date.now() - new Date(lastSyncAt).getTime()) / 3_600_000 > staleAfterHours
+        ? 'stale'
+        : 'fresh'
+
+  const word = state === 'never'
+    ? (ar ? 'لم تصل بيانات بعد' : 'No data yet')
+    : state === 'stale'
+      ? (ar ? 'البيانات متأخرة' : 'Data is behind')
+      : state === 'fresh'
+        ? (ar ? 'البيانات محدّثة' : 'Up to date')
+        : null
+
   return (
-    <span data-testid="data-freshness" className="inline-flex items-center gap-1">
+    <span data-testid={testid} data-state={state} className="inline-flex items-center gap-1">
       <RefreshCw size={12} aria-hidden />
-      {ar ? 'آخر مزامنة' : 'Last sync'}:{' '}
-      <span dir="ltr" className="tnum">
-        {lastSyncAt ? lastSyncAt.slice(0, 16).replace('T', ' ') : ar ? 'لم تتم بعد' : 'not yet'}
-      </span>
+      {word !== null && <span className={state === 'stale' ? 'font-semibold text-warning' : undefined}>{word}</span>}
+      {state !== 'never' && (
+        <>
+          {word !== null && <span aria-hidden>·</span>}
+          <span dir="ltr" className="tnum">
+            {(lastSyncAt as string).slice(0, 16).replace('T', ' ')}
+          </span>
+        </>
+      )}
+      {word === null && state === 'never' && (
+        <span dir="ltr" className="tnum">{ar ? 'لم تتم بعد' : 'not yet'}</span>
+      )}
     </span>
   )
 }

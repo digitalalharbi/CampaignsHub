@@ -76,7 +76,16 @@ describe('the agency dashboard carries the client budget rung', () => {
     vi.mocked(fetchClientBudgets).mockRejectedValue(new Error('nope'))
     renderWithProviders(<AgencyDashboardPage />, { locale: 'en' })
 
-    expect(await screen.findByTestId('agency-scope-banner')).toBeVisible()
+    /*
+     * The HEAD is the probe, not the scope banner.
+     *
+     * The banner is now drawn only for a restricted membership — an unrestricted reader was being
+     * told that unqualified figures cover everything, which is what unqualified figures already
+     * mean. The claim under test never was about the banner: it is that a budget failure leaves the
+     * dashboard standing, and the head and the counts are what standing looks like.
+     */
+    expect(await screen.findByTestId('agency-intro')).toBeVisible()
+    expect(screen.getByTestId('agency-scope')).toHaveTextContent('All clients')
     expect(screen.queryByTestId('client-budgets')).toBeNull()
   })
 })

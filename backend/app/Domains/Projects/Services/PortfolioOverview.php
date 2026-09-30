@@ -66,6 +66,9 @@ final class PortfolioOverview
                 'projects' => ['total' => 0, 'by_status' => [], 'items' => []],
                 'spend' => ['by_currency' => [], 'comparable' => true],
                 'attention' => ['total' => 0, 'by_state' => []],
+                'trend' => ['by_currency' => []],
+                'contribution' => ['by_currency' => []],
+                'campaigns' => ['total' => 0, 'by_project' => []],
             ];
         }
 
@@ -117,7 +120,170 @@ final class PortfolioOverview
             ],
             'spend' => $this->spendByCurrency($projects->modelKeys(), $tenantId, $from, $to),
             'attention' => ['total' => array_sum($attention), 'by_state' => $attention],
+            /*
+             * PORTFOLIO-VISUAL-001 §9 — what HAPPENED, and where it came from.
+             *
+             * A portfolio page that states four totals answers «how much» and nothing else: an owner
+             * reading it cannot tell a quiet week from a broken integration, or which client moved
+             * the number. The three below are the smallest set that turns the same rows into that
+             * answer, and each one is per currency for the same reason the totals are — a line
+             * whose points are two currencies added together is a shape, not a measurement.
+             */
+            'trend' => $this->trendByCurrency($projects->modelKeys(), $tenantId, $from, $to),
+            'contribution' => $this->contributionByCurrency($projects->modelKeys(), $tenantId, $from, $to, $projects),
+            'campaigns' => $this->campaignCounts($projects->modelKeys(), $tenantId),
         ];
+    }
+
+    /**
+     * Daily spend per currency across the window.
+     *
+     * Days with no spend are NOT filled with zeros: a gap in this series is «we have no row for that
+     * day», which on a portfolio is usually a sync that has not landed rather than a day nobody
+     * spent anything. Inventing a zero there draws a line to the floor and calls a missing
+     * measurement a real one.
+     *
+     * @param  list<string>  $projectIds
+     * @return array<string,mixed>
+     */
+    private function trendByCurrency(array $projectIds, string $tenantId, Carbon $from, Carbon $to): array
+    {
+        if ($projectIds === []) {
+            return ['by_currency' => []];
+        }
+
+        $query = DB::table('daily_metrics')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('project_id', $projectIds)
+            ->where('metric_key', 'spend')
+            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
+
+        BoundAccountVisibility::apply($query, 'daily_metrics');
+
+        $rows = $query
+            ->groupBy('project_currency', 'metric_date')
+            ->orderBy('metric_date')
+            ->get([
+                'project_currency',
+                'metric_date',
+                DB::raw('sum(converted_amount) as spend'),
+            ]);
+
+        $series = [];
+        foreach ($rows as $row) {
+            $currency = is_string($row->project_currency) ? $row->project_currency : '';
+            if ($currency === '') {
+                continue;
+            }
+
+            $series[$currency][] = [
+                'date' => Carbon::parse((string) $row->metric_date)->toDateString(),
+                'spend' => round((float) $row->spend, 2),
+            ];
+        }
+
+        ksort($series);
+
+        return [
+            'by_currency' => array_values(array_map(
+                static fn (string $currency): array => ['currency' => $currency, 'points' => $series[$currency]],
+                array_keys($series),
+            )),
+        ];
+    }
+
+    /**
+     * Which projects the spend came from, ranked, per currency.
+     *
+     * Ranked rather than alphabetical because the question is «who moved it», and the answer is
+     * almost always in the first three rows. Every project that reported is returned — the page
+     * decides how many to draw, and a server that truncated would make «other» unmeasurable.
+     *
+     * @param  list<string>  $projectIds
+     * @param  Collection<int, Project>  $projects
+     * @return array<string,mixed>
+     */
+    private function contributionByCurrency(array $projectIds, string $tenantId, Carbon $from, Carbon $to, Collection $projects): array
+    {
+        if ($projectIds === []) {
+            return ['by_currency' => []];
+        }
+
+        $names = $projects->mapWithKeys(
+            static fn (Project $p): array => [(string) $p->getKey() => (string) $p->name],
+        )->all();
+
+        $query = DB::table('daily_metrics')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('project_id', $projectIds)
+            ->where('metric_key', 'spend')
+            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
+
+        BoundAccountVisibility::apply($query, 'daily_metrics');
+
+        $rows = $query
+            ->groupBy('project_currency', 'project_id')
+            ->get([
+                'project_currency',
+                'project_id',
+                DB::raw('sum(converted_amount) as spend'),
+            ]);
+
+        $byCurrency = [];
+        foreach ($rows as $row) {
+            $currency = is_string($row->project_currency) ? $row->project_currency : '';
+            $projectId = (string) $row->project_id;
+            if ($currency === '' || ! isset($names[$projectId])) {
+                continue;
+            }
+
+            $byCurrency[$currency][] = [
+                'id' => $projectId,
+                'name' => $names[$projectId],
+                'spend' => round((float) $row->spend, 2),
+            ];
+        }
+
+        ksort($byCurrency);
+
+        $out = [];
+        foreach ($byCurrency as $currency => $items) {
+            usort($items, static fn (array $a, array $b): int => $b['spend'] <=> $a['spend']);
+            $out[] = ['currency' => $currency, 'projects' => $items];
+        }
+
+        return ['by_currency' => $out];
+    }
+
+    /**
+     * How many campaigns each project actually holds.
+     *
+     * The canonical rows, not a guess from metrics: a project with spend and no discovered campaign
+     * is a real and different state from one with neither, and the page says which. Unlinked rows
+     * are excluded because they no longer belong to the project that once held them.
+     *
+     * @param  list<string>  $projectIds
+     * @return array<string,mixed>
+     */
+    private function campaignCounts(array $projectIds, string $tenantId): array
+    {
+        if ($projectIds === []) {
+            return ['total' => 0, 'by_project' => []];
+        }
+
+        $rows = DB::table('external_campaigns')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('project_id', $projectIds)
+            ->whereNull('unlinked_at')
+            ->groupBy('project_id')
+            ->get(['project_id', DB::raw('count(*) as total')]);
+
+        $byProject = [];
+        foreach ($rows as $row) {
+            $byProject[(string) $row->project_id] = (int) $row->total;
+        }
+
+        return ['total' => array_sum($byProject), 'by_project' => $byProject];
     }
 
     /**

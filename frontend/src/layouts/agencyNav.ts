@@ -53,28 +53,46 @@ export const agencyNavGroups: readonly NavGroup[] = [
   },
   {
     key: 'clients',
-    // Clients and their projects together: for an agency these are one thought, and splitting them
-    // across two headings made «which projects does this client have?» a navigation problem.
-    ar: 'العملاء والمشاريع', en: 'Clients & projects', icon: Building2,
+    ar: 'العملاء', en: 'Clients', icon: Building2,
+    leaves: [{ to: '/agency/clients', ar: 'العملاء', en: 'Clients', icon: Building2 }],
+  },
+  {
+    /*
+     * NAV-IA-001 — ONE projects category, and its children are short.
+     *
+     * «المشاريع» and «جميع المشاريع» sat side by side as siblings. Two entries whose labels differ
+     * by one word read as two versions of the same place, and the longer one reads as «the same
+     * thing, but more» — so a reader chooses by guessing. They are not two versions of anything:
+     * one is the operational directory of projects, the other is the agency's own portfolio scope.
+     *
+     * A parent that is a GROUP and not a destination says that: «المشاريع» names the subject, and
+     * «القائمة» and «الملخص» name the two ways of looking at it. Short, because a sidebar label is
+     * scanned and not read — «نظرة عامة على المشاريع» under a heading that already says المشاريع is
+     * the same word twice.
+     *
+     * PORTFOLIO-SCOPE-001 §36 is unchanged by the rename: the portfolio scope is still ENTERED by
+     * its own address, and the page itself still says «جميع المشاريع» where the figures are. What
+     * moved is the label on the rail, not the semantics of the scope.
+     */
+    key: 'projects',
+    ar: 'المشاريع', en: 'Projects', icon: FolderKanban,
     leaves: [
-      { to: '/agency/clients', ar: 'العملاء', en: 'Clients', icon: Building2 },
-      { to: '/agency/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban },
-      /*
-       * PORTFOLIO-SCOPE-001 §36 — the agency scope is ENTERED, not inferred.
-       *
-       * The route exists in this portal too, and an agency is the reader this view was built for:
-       * how many clients are running, which need somebody today, what is being spent. Reachable
-       * only by typing the URL would leave «all projects» as something people arrive at by clearing
-       * a filter, which is the state this whole unit removes.
-       */
-      { to: '/agency/portfolio', ar: 'جميع المشاريع', en: 'All projects', icon: Layers },
+      { to: '/agency/projects', ar: 'القائمة', en: 'List', icon: ListChecks },
+      { to: '/agency/portfolio', ar: 'الملخص', en: 'Overview', icon: Layers },
     ],
   },
   {
     key: 'campaigns',
-    // What is actually running, and the creative in it. Content sat under «Work» beside requests,
-    // which put a design library next to an inbox.
-    ar: 'الحملات', en: 'Campaigns', icon: Megaphone,
+    /*
+     * What is actually running, and the creative in it. Content sat under «Work» beside requests,
+     * which put a design library next to an inbox.
+     *
+     * NAV-IA-001 — the heading names BOTH, so its first child stops repeating it. «Campaigns →
+     * Campaigns, Content» reads as a category with a stray extra item; «Campaigns & content» reads
+     * as what it is, and the two children are then the two halves rather than the subject and an
+     * afterthought.
+     */
+    ar: 'الحملات والمحتوى', en: 'Campaigns & content', icon: Megaphone,
     leaves: [
       { to: '/agency/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone },
       { to: '/agency/content', ar: 'المحتويات', en: 'Content', icon: Images },

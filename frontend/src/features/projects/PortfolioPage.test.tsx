@@ -83,10 +83,16 @@ describe('the portfolio page', () => {
   it('states each currency on its own and refuses a single total', async () => {
     renderWithProviders(<PortfolioPage />, { locale: 'ar' })
 
-    const spend = await screen.findByTestId('portfolio-spend')
+    /*
+     * The breakdown moved into the trend card when the page was rebuilt around what HAPPENED rather
+     * than four totals — the head now leads with one currency, because a KPI is a single figure and
+     * the estate is not. The claim is unchanged and is asserted on both halves: every currency is
+     * stated somewhere a reader can find it, and no sum of them appears anywhere on the page.
+     */
+    const spend = await screen.findByTestId('portfolio-spend-breakdown')
     expect(within(spend).getByTestId('portfolio-spend-SAR')).toHaveTextContent('12,500')
     expect(within(spend).getByTestId('portfolio-spend-USD')).toHaveTextContent('400')
-    expect(spend.textContent).not.toContain('12,900')
+    expect(document.body.textContent).not.toContain('12,900')
     expect(screen.getByTestId('portfolio-not-comparable')).toBeInTheDocument()
   })
 
