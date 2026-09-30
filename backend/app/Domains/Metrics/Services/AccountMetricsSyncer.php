@@ -146,7 +146,7 @@ final class AccountMetricsSyncer
         } catch (Throwable $e) {
             $this->noteInsightsRefusal($connection ?? null, $e->getMessage());
 
-            return $this->finish($run, SyncRunStatus::Failed, 0, $e->getMessage(), $account, $this->counts($connector), 'provider_error');
+            return $this->finish($run, SyncRunStatus::Failed, 0, $e->getMessage(), $account, $this->counts($connector), $this->categorise($e->getMessage()));
         }
 
         if (! $result->success) {
@@ -159,7 +159,7 @@ final class AccountMetricsSyncer
                 $result->message ?? 'The provider reported a failed sync.',
                 $account,
                 $this->counts($connector),
-                'provider_error',
+                $this->categorise($result->message),
             );
         }
 
@@ -427,6 +427,24 @@ final class AccountMetricsSyncer
      *
      * @return array<string,int|null>
      */
+    /**
+     * WHICH account was refused — META-INSIGHTS-GRANT-001, the account half.
+     *
+     * «(#200) Ad account owner has NOT grant ads_management or ads_read permission» names an AD
+     * ACCOUNT's grant, and one authorisation can hold many accounts with different answers. Filed as
+     * `provider_error` it read as «Meta is broken»; filed here it reads as «this account is not
+     * granted», which is the sentence somebody can act on — they go to Business Manager and grant it
+     * on that asset, for that user.
+     *
+     * The connection-level record beside this answers a different question — «can this authorisation
+     * read insights at all?» — and both are needed: the connection decides what the card offers, the
+     * account decides which name the card says.
+     */
+    private function categorise(?string $message): string
+    {
+        return InsightsAuthorisation::refusedBy($message) ? 'insights_not_authorised' : 'provider_error';
+    }
+
     /**
      * META-INSIGHTS-GRANT-001 — remember a refusal the scope list could never have predicted.
      *

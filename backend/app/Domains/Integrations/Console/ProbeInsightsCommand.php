@@ -13,6 +13,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Integrations\Support\InsightsAuthorisation;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 use Throwable;
@@ -159,6 +160,7 @@ final class ProbeInsightsCommand extends Command
         } catch (Throwable $e) {
             $this->line('');
             $this->error('  The provider call threw: '.$e->getMessage());
+            $this->classifyRefusal($account, $e->getMessage());
             // The receipt is printed for a refusal too — it is the case that needs it most.
             $this->reportCalls($connector);
 
@@ -168,6 +170,7 @@ final class ProbeInsightsCommand extends Command
         if (! $result->success) {
             $this->line('');
             $this->error('  The provider refused: '.($result->message ?? 'no message given'));
+            $this->classifyRefusal($account, $result->message);
             $this->reportCalls($connector);
 
             return self::SUCCESS;
@@ -823,6 +826,35 @@ final class ProbeInsightsCommand extends Command
     private static function redactObjectIds(string $url): string
     {
         return (string) preg_replace('#/(interaction_zones|creativeelements)/[^/?]+#', '/$1/…', $url);
+    }
+
+    /**
+     * Name the ONE refusal that has a named owner and a named action.
+     *
+     * The probe's job is to print what the provider said, and for most refusals that is the whole
+     * answer. «(#200) Ad account owner has NOT grant ads_management or ads_read permission» is the
+     * exception: read literally it invites re-authorising, re-exchanging the token, or suspecting the
+     * app — and none of those touch it. The grant is made on the ASSET, for a USER, in Business
+     * Manager, and until somebody does that this account is refused however many times it is asked.
+     *
+     * So the account is named, because one authorisation holds many and only some may be refused;
+     * and `ads_read` is named alone, because it is sufficient for Insights. `ads_management` is the
+     * write scope over the same surface and `business_management` is a different capability
+     * altogether — asking for either would send somebody to grant more than this product needs.
+     */
+    private function classifyRefusal(ExternalAccount $account, ?string $message): void
+    {
+        if (! InsightsAuthorisation::refusedBy($message)) {
+            return;
+        }
+
+        $this->line('');
+        $this->warn('  THIS IS AN ASSET GRANT, NOT AN AUTHORISATION PROBLEM.');
+        $this->line(sprintf('  Account        : %s  (%s)', $account->name, $account->external_id));
+        $this->line('  What is missing: ads_read on THIS ad account, for the authorised user.');
+        $this->line('  Where           : Business Manager → this ad account → People/Partners → grant the user access.');
+        $this->line('  What will NOT help: re-exchanging the token, or reconnecting, while the asset grant is absent.');
+        $this->line('  ads_read is sufficient for insights. business_management is a different capability.');
     }
 
     private function reportCalls(object $connector): void
