@@ -53,23 +53,25 @@ async function openAds(page: Page, locale: 'ar' | 'en') {
   }
 
   const tab = page.getByRole('tab', { name: COPY[locale].ads })
-  await tab.click()
+
   /*
-   * A state flip, waited for like every other wait in this file.
+   * Click until it TAKES, rather than clicking once and waiting longer.
    *
-   * `aria-selected` turning true is React applying state and re-rendering — asynchronous, and on a
-   * loaded runner sharing three browsers it outlasted `expect`'s DEFAULT five seconds while the
-   * assertion on the very next line is given thirty. It failed as «Expected: "true" / Received:
-   * "false"», which is the guard reporting the condition it exists to wait through, not a tab that
-   * refuses to select: the same spec passes locally on firefox in 55 seconds and passed chromium in
-   * the same CI run.
+   * This wait was raised to fifteen seconds for exactly this failure and then failed again at 16.2s
+   * on firefox, which is the evidence that a longer budget was the wrong fix: a click delivered
+   * before React has attached the tab's handler is LOST, and no amount of waiting recovers a click
+   * that nothing received. A `toPass` loop re-clicks and re-checks, so a lost click costs one
+   * retry and a slow render costs nothing.
    *
-   * Six sibling call sites make the same assertion on the same default budget —
+   * Six sibling call sites assert the same flip on the default five seconds —
    * `analytics-normalization`, `auth-redesign`, `homepage`, `one-ad-level`,
-   * `platform-within-objective` and `responsive-audit`. Named here so the next one is an edit rather
-   * than another investigation.
+   * `platform-within-objective` and `responsive-audit`. Named here so the next one is an edit
+   * rather than another investigation.
    */
-  await expect(tab, 'the ads tab never became selected').toHaveAttribute('aria-selected', 'true', { timeout: 15_000 })
+  await expect(async () => {
+    await tab.click()
+    await expect(tab, 'the ads tab never became selected').toHaveAttribute('aria-selected', 'true', { timeout: 5_000 })
+  }).toPass({ timeout: 30_000 })
 
   return page.getByTestId('entity-table-ad')
 }
