@@ -49,6 +49,7 @@ function provider(over: Partial<EstateProvider> = {}): EstateProvider {
     campaigns: 4,
     active_campaigns: 2,
     last_success_at: '2026-09-30T09:00:00+00:00',
+    next_sync_at: '2026-09-30T10:00:00+00:00',
     ...over,
   }
 }
@@ -115,7 +116,7 @@ describe('the connected estate', () => {
     expect(screen.getByTestId('estate-auth-meta')).toHaveTextContent('Authorisation needs renewing')
     expect(screen.getByTestId('estate-sync-meta')).toHaveTextContent('Syncing')
     expect(screen.getByTestId('estate-reauth-meta')).toBeInTheDocument()
-    expect(screen.queryByTestId('estate-sync-now-meta')).toBeNull()
+    expect(screen.queryByTestId('estate-run-sync-meta')).toBeNull()
   })
 
   /** DISCOVERED != SELECTED: the unchosen are a number, never rows under a client's name. */
@@ -168,5 +169,55 @@ describe('the connected estate', () => {
     fireEvent.click(await screen.findByTestId('estate-connect'))
 
     await waitFor(() => expect(screen.getByTestId('ad-platforms-panel')).toBeInTheDocument())
+  })
+})
+
+/**
+ * INTEGRATION-DATASOURCE-WIZARD-001 §6 — the acts a connected estate admits, told apart.
+ *
+ * «Refresh the account list» and «Reconnect» are the pair support transcripts are full of: somebody
+ * makes an account on the platform, does not find it here, and re-authorises — a round trip through
+ * a consent screen to do what one tick in the picker would have done, and one the non-authoriser
+ * cannot complete at all. Disconnect is the third and is nothing like either.
+ */
+describe('what the estate lets a customer do next', () => {
+  beforeEach(() => {
+    estate.data = { projects: [project()], unselected_accounts: 0 }
+  })
+
+  it('offers refreshing the catalogue as its own act, separate from re-authorising', async () => {
+    renderWithProviders(<IntegrationsPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Razah/ }))
+
+    expect(screen.getByTestId('estate-refresh-meta')).toBeInTheDocument()
+    expect(screen.queryByTestId('estate-reauth-meta')).toBeNull()
+  })
+
+  /** Disconnecting names the number of accounts that stop syncing before it will go. */
+  it('states the consequence of disconnecting before it will do it', async () => {
+    renderWithProviders(<IntegrationsPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Razah/ }))
+    fireEvent.click(screen.getByTestId('estate-disconnect-meta'))
+
+    expect(screen.getByTestId('estate-disconnect-meta')).toHaveTextContent('stop syncing')
+  })
+
+  /** Null is «it is not going to», and the row says that rather than leaving a blank. */
+  it('says a refused connection will not sync again until it is fixed', async () => {
+    estate.data = {
+      projects: [project({
+        health: 'reauth',
+        providers: [provider({ connection_state: 'REAUTH_REQUIRED', health: 'reauth', next_sync_at: null })],
+      })],
+      unselected_accounts: 0,
+    }
+
+    renderWithProviders(<IntegrationsPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Razah/ }))
+
+    expect(screen.getByTestId('estate-provider-meta')).toHaveTextContent('Not until this is fixed')
   })
 })

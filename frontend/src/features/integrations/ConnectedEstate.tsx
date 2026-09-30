@@ -6,6 +6,7 @@ import {
   type ConnectionState, type EstateHealth, type EstateProject, type EstateProvider, type SyncState,
 } from './api'
 import { AccountsPanel } from './AccountsPanel'
+import { DisconnectButton } from './ConnectorActions'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
@@ -44,12 +45,17 @@ import { useUi } from '@/stores/ui'
  * foot of the list, which is the honest way to show that an authorisation reaches further than this
  * page lists without putting a stranger's spend under somebody's name.
  */
-export function ConnectedEstate({ onConnect, onManage, onReauthorise, onSync, busySync }: {
+export function ConnectedEstate({ onConnect, onManage, onReauthorise, onSync, onRefresh, onDisconnect, busySync, busyRefresh, busyDisconnect }: {
   onConnect: () => void
   onManage: (provider: EstateProvider, project: EstateProject) => void
   onReauthorise: (provider: EstateProvider) => void
   onSync: (provider: EstateProvider) => void
+  /** Re-read the provider's catalogue with the token we already hold — not a re-authorisation. */
+  onRefresh: (provider: EstateProvider) => void
+  onDisconnect: (connectionId: string) => void
   busySync: string | null
+  busyRefresh: string | null
+  busyDisconnect: string | null
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const estate = useQuery({ queryKey: ['connected-estate'], queryFn: fetchConnectedEstate })
@@ -123,7 +129,11 @@ export function ConnectedEstate({ onConnect, onManage, onReauthorise, onSync, bu
               onManage={onManage}
               onReauthorise={onReauthorise}
               onSync={onSync}
+              onRefresh={onRefresh}
+              onDisconnect={onDisconnect}
               busySync={busySync}
+              busyRefresh={busyRefresh}
+              busyDisconnect={busyDisconnect}
             />
           ))}
         </ul>
@@ -140,13 +150,17 @@ export function ConnectedEstate({ onConnect, onManage, onReauthorise, onSync, bu
   )
 }
 
-function ProjectRow({ project, ar, onManage, onReauthorise, onSync, busySync }: {
+function ProjectRow({ project, ar, onManage, onReauthorise, onSync, onRefresh, onDisconnect, busySync, busyRefresh, busyDisconnect }: {
   project: EstateProject
   ar: boolean
   onManage: (provider: EstateProvider, project: EstateProject) => void
   onReauthorise: (provider: EstateProvider) => void
   onSync: (provider: EstateProvider) => void
+  onRefresh: (provider: EstateProvider) => void
+  onDisconnect: (connectionId: string) => void
   busySync: string | null
+  busyRefresh: string | null
+  busyDisconnect: string | null
 }) {
   const [open, setOpen] = useState(false)
   const health = HEALTH[project.health]
@@ -211,7 +225,11 @@ function ProjectRow({ project, ar, onManage, onReauthorise, onSync, busySync }: 
               onManage={onManage}
               onReauthorise={onReauthorise}
               onSync={onSync}
+              onRefresh={onRefresh}
+              onDisconnect={onDisconnect}
               busy={busySync === provider.key}
+              busyRefresh={busyRefresh === provider.key}
+              busyDisconnect={busyDisconnect === provider.connection_id}
             />
           ))}
 
@@ -226,14 +244,18 @@ function ProjectRow({ project, ar, onManage, onReauthorise, onSync, busySync }: 
   )
 }
 
-function ProviderBlock({ provider, project, ar, onManage, onReauthorise, onSync, busy }: {
+function ProviderBlock({ provider, project, ar, onManage, onReauthorise, onSync, onRefresh, onDisconnect, busy, busyRefresh, busyDisconnect }: {
   provider: EstateProvider
   project: EstateProject
   ar: boolean
   onManage: (provider: EstateProvider, project: EstateProject) => void
   onReauthorise: (provider: EstateProvider) => void
   onSync: (provider: EstateProvider) => void
+  onRefresh: (provider: EstateProvider) => void
+  onDisconnect: (connectionId: string) => void
   busy: boolean
+  busyRefresh: boolean
+  busyDisconnect: boolean
 }) {
   const auth = CONNECTION[provider.connection_state]
   const data = SYNC[provider.sync_state]
@@ -274,6 +296,19 @@ function ProviderBlock({ provider, project, ar, onManage, onReauthorise, onSync,
               : fmtDateTime(provider.last_success_at)}
           </dd>
         </div>
+        <div className="flex gap-1">
+          <dt>{ar ? 'المزامنة القادمة' : 'Next sync'}</dt>
+          <dd className="font-semibold text-text-primary">
+            {/*
+              Null is «this is not going to sync», not «unknown» — the server only states a time for
+              a connection that can actually run one. Saying «in 12 minutes» over a refused grant is
+              the most confident kind of wrong.
+            */}
+            {provider.next_sync_at === null
+              ? (ar ? 'لن تبدأ قبل المعالجة' : 'Not until this is fixed')
+              : fmtDateTime(provider.next_sync_at)}
+          </dd>
+        </div>
         {provider.currencies.length > 0 && (
           <div className="flex gap-1">
             {/* Listed, never summed: two currencies added together is a number that means nothing. */}
@@ -294,7 +329,7 @@ function ProviderBlock({ provider, project, ar, onManage, onReauthorise, onSync,
             <Plug size={14} /> {ar ? 'إعادة المصادقة' : 'Reconnect'}
           </Button>
         ) : (
-          <Button variant="ghost" loading={busy} onClick={() => onSync(provider)} data-testid={`estate-sync-now-${provider.key}`}>
+          <Button variant="ghost" loading={busy} onClick={() => onSync(provider)} data-testid={`estate-run-sync-${provider.key}`}>
             <RefreshCw size={14} /> {ar ? 'مزامنة الآن' : 'Sync now'}
           </Button>
         )}
@@ -302,6 +337,39 @@ function ProviderBlock({ provider, project, ar, onManage, onReauthorise, onSync,
         <Button variant="ghost" onClick={() => onManage(provider, project)} data-testid={`estate-manage-${provider.key}`}>
           {ar ? 'إدارة الحسابات' : 'Manage accounts'}
         </Button>
+
+        {/*
+          «Refresh the list» is the answer to «I made an account on the platform and it is not here»,
+          and it is NOT reconnecting: it re-reads the catalogue with the token we already hold. That
+          confusion is the one this programme found in support transcripts — people re-authorise to
+          do what one tick in the picker would have done, and the ones who are not the original
+          authoriser cannot complete it at all.
+        */}
+        <Button
+          variant="ghost"
+          loading={busyRefresh}
+          disabled={provider.connection_id === null}
+          onClick={() => onRefresh(provider)}
+          data-testid={`estate-refresh-${provider.key}`}
+        >
+          <RefreshCw size={14} /> {ar ? 'تحديث قائمة الحسابات' : 'Refresh account list'}
+        </Button>
+
+        <span className="ms-auto" />
+
+        {/*
+          Disconnecting and deselecting are different acts and are deliberately far apart on this
+          row: «إدارة الحسابات» above removes ONE account from THIS client, and this ends the whole
+          authorisation for every client it feeds. The button states that count before it goes.
+        */}
+        <DisconnectButton
+          connectionId={provider.connection_id}
+          accounts={provider.accounts}
+          ar={ar}
+          busy={busyDisconnect}
+          onConfirm={onDisconnect}
+          testId={`estate-disconnect-${provider.key}`}
+        />
       </div>
     </div>
   )

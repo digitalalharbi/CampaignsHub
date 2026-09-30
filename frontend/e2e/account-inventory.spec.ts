@@ -26,7 +26,15 @@ import { AUTH, E2E_ORIGIN } from './helpers'
 test.use({ storageState: AUTH.owner })
 
 /** The agency portal. `/app/*` is the advertiser tree and is guarded (LOGIN-002). */
-const INTEGRATIONS = '/agency/integrations'
+/*
+ * `?view=platforms` — INTEGRATION-DATASOURCE-WIZARD-001 §17.
+ *
+ * The page now opens on the CLIENT lens once anything is connected, and these assertions are about
+ * the PROVIDER cards. Asking for the lens in the URL is how a runbook, a support reply or a deep
+ * link asks for it too; clicking the switch first would test the switch in every spec that is not
+ * about it.
+ */
+const INTEGRATIONS = '/agency/integrations?view=platforms'
 
 async function connectSandbox(request: import('@playwright/test').APIRequestContext): Promise<void> {
   const projects = await request.get('/api/v1/projects', {

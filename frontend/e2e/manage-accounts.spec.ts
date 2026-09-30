@@ -21,7 +21,15 @@ import { AUTH, E2E_ORIGIN, selectProject } from './helpers'
  */
 test.use({ storageState: AUTH.owner })
 
-const INTEGRATIONS = '/agency/integrations'
+/*
+ * `?view=platforms` — INTEGRATION-DATASOURCE-WIZARD-001 §17.
+ *
+ * The page now opens on the CLIENT lens once anything is connected, and these assertions are about
+ * the PROVIDER cards. Asking for the lens in the URL is how a runbook, a support reply or a deep
+ * link asks for it too; clicking the switch first would test the switch in every spec that is not
+ * about it.
+ */
+const INTEGRATIONS = '/agency/integrations?view=platforms'
 
 /** A sandbox connection with discovered accounts, established through the API. */
 async function connectSandbox(request: import('@playwright/test').APIRequestContext): Promise<string> {

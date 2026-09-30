@@ -13,6 +13,7 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Support\InsightsAuthorisation;
 use App\Domains\Integrations\Support\IntegrationTruth;
+use App\Domains\Integrations\Support\NextScheduledSync;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -222,6 +223,15 @@ final class ConnectedEstateController extends Controller
             'last_success_at' => $this->latest(
                 $rows->pluck('last_synced_at')->filter()->map(fn (Carbon $c): string => $c->toIso8601String())->all(),
             ),
+            /*
+             * INTEGRATION-SYNC-VISIBILITY-001 — «when will this update itself», stated only where it
+             * is true. A connection that needs re-authorising is on the scheduler in the sense that
+             * the command will run and is not going to sync anything, and «next sync in 12 minutes»
+             * over one of those is the most confident kind of wrong.
+             */
+            'next_sync_at' => NextScheduledSync::at(
+                $connectionState === IntegrationTruth::CONNECTED,
+            )?->toIso8601String(),
         ];
     }
 

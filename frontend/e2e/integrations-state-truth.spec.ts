@@ -24,7 +24,7 @@ import { AUTH, switchToEnglish } from './helpers'
 test.use({ storageState: AUTH.owner })
 
 test('every platform states which kind of not-connected it is', async ({ page }) => {
-  await page.goto('/agency/integrations')
+  await page.goto('/agency/integrations?view=platforms')
   await switchToEnglish(page)
 
   const panel = page.getByTestId('ad-platforms-panel')
@@ -49,7 +49,7 @@ test('every platform states which kind of not-connected it is', async ({ page })
 })
 
 test('an unfinished connection is surfaced with the way to finish it', async ({ page }) => {
-  await page.goto('/agency/integrations')
+  await page.goto('/agency/integrations?view=platforms')
   await switchToEnglish(page)
 
   await expect(page.getByTestId('ad-platforms-panel')).toBeVisible({ timeout: 30000 })
@@ -75,7 +75,7 @@ test('an unfinished connection is surfaced with the way to finish it', async ({ 
 })
 
 test('the integrations page prints no placeholder value', async ({ page }) => {
-  await page.goto('/agency/integrations')
+  await page.goto('/agency/integrations?view=platforms')
   await switchToEnglish(page)
 
   await expect(page.getByTestId('ad-platforms-panel')).toBeVisible({ timeout: 30000 })

@@ -637,6 +637,8 @@ export interface EstateProvider {
   campaigns: number
   active_campaigns: number
   last_success_at: string | null
+  /** When it will update itself next, or null — which means «it is not going to», never «unknown». */
+  next_sync_at: string | null
 }
 
 /**

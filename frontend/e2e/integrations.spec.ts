@@ -44,7 +44,7 @@ test.describe('the integrations surface', () => {
   }
 
   test('the six ad platforms are offered, in the product order', async ({ page }) => {
-    await page.goto('/app/integrations')
+    await page.goto('/app/integrations?view=platforms')
     await expect(page.locator('main')).toBeVisible()
     await expect.poll(async () => (await platformKeys(page)).length, { timeout: 20000 }).toBe(6)
 
@@ -59,7 +59,7 @@ test.describe('the integrations surface', () => {
    * product integrates with and had no way to learn the other two existed.
    */
   test('the two stores complete the eight, in their own section', async ({ page }) => {
-    await page.goto('/app/integrations')
+    await page.goto('/app/integrations?view=platforms')
     await expect(page.locator('main')).toBeVisible()
     await expect.poll(async () => (await storeKeys(page)).length, { timeout: 20000 }).toBe(2)
 
@@ -75,7 +75,7 @@ test.describe('the integrations surface', () => {
    * field that does not apply — which is why the store keys must NOT appear among the platform cards.
    */
   test('a store is never rendered as an ad platform', async ({ page }) => {
-    await page.goto('/app/integrations')
+    await page.goto('/app/integrations?view=platforms')
     await expect.poll(async () => (await platformKeys(page)).length, { timeout: 20000 }).toBe(6)
 
     const platforms = await platformKeys(page)
@@ -92,7 +92,7 @@ test.describe('the integrations surface', () => {
    * need; listing it here made it a provider the customer could choose.
    */
   test('the local fake is not offered as a provider', async ({ page }) => {
-    await page.goto('/app/integrations')
+    await page.goto('/app/integrations?view=platforms')
     await expect.poll(async () => (await platformKeys(page)).length, { timeout: 20000 }).toBe(6)
 
     expect(await platformKeys(page)).not.toContain('sandbox')
@@ -105,7 +105,7 @@ test.describe('the integrations surface', () => {
    * No provider has credentials in any environment, so nothing on this page may read as connected.
    */
   test('no platform claims a connection it does not have', async ({ page }) => {
-    await page.goto('/app/integrations')
+    await page.goto('/app/integrations?view=platforms')
     const main = page.locator('main')
     await expect(main).toBeVisible()
     await expect.poll(async () => (await main.innerText()).length, { timeout: 20000 }).toBeGreaterThan(100)
@@ -131,7 +131,7 @@ test.describe('the integrations surface', () => {
    * dead control.
    */
   test('an operator-blocked platform explains itself and offers no dead control', async ({ page }) => {
-    await page.goto('/app/integrations')
+    await page.goto('/app/integrations?view=platforms')
     await expect.poll(async () => (await platformKeys(page)).length, { timeout: 20000 }).toBe(6)
 
     for (const platform of AD_PLATFORMS) {
@@ -166,7 +166,7 @@ test.describe('the integrations surface', () => {
    * one deliberate click away rather than three hundred rows under the cards.
    */
   test('stores and the discovered accounts are on the same page as the platforms', async ({ page }) => {
-    await page.goto('/app/integrations')
+    await page.goto('/app/integrations?view=platforms')
     await expect(page.getByTestId('ad-platforms-panel')).toBeVisible()
 
     const toggle = page.getByTestId('toggle-account-inventory')
@@ -183,7 +183,7 @@ test.describe('the integrations surface', () => {
 
   /** And it is CLOSED until somebody asks: the page is a catalogue, not an inventory. */
   test('the account inventory is not rendered until it is asked for', async ({ page }) => {
-    await page.goto('/app/integrations')
+    await page.goto('/app/integrations?view=platforms')
     await expect(page.getByTestId('ad-platforms-panel')).toBeVisible()
 
     await expect(page.getByTestId('toggle-account-inventory')).toHaveAttribute('aria-expanded', 'false')

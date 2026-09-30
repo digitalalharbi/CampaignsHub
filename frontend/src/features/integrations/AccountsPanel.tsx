@@ -166,7 +166,15 @@ export function AccountsPanel({ project, heading }: {
   const summary = accountsQuery.data?.summary
 
   return (
-    <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4">
+    <section
+      className={heading === false
+        /*
+         * Embedded in a row that already draws a card: a second border and a second padding inside
+         * the first is what took the width away from the account rows on a phone.
+         */
+        ? 'flex flex-col gap-3'
+        : 'flex flex-col gap-3 rounded-xl border border-border bg-surface p-4'}
+    >
       {heading !== false && (
         <header className="flex flex-col gap-0.5">
           <h2 className="text-base font-bold text-text-primary">{c.title}</h2>
@@ -225,7 +233,14 @@ export function AccountsPanel({ project, heading }: {
               data-linked={account.is_linked}
               className="flex flex-wrap items-start gap-3 rounded-lg border border-border bg-background p-3"
             >
-              <div className="min-w-0 flex-1">
+              {/*
+                `basis-full` until there is room for a second column, and it is load-bearing on a
+                phone. `flex-1` alone let the actions — two buttons that do not wrap — keep their
+                min-content width and squeeze this column to about sixty pixels, which stacked the
+                account's name, id and project one character wide. Measured at 390px inside the
+                estate's expanded row, where the nesting takes the available width down furthest.
+              */}
+              <div className="min-w-0 flex-1 basis-full sm:basis-0">
                 <div className="flex flex-wrap items-center gap-2">
                   {/* The NAME leads. Always words — the server never returns an id here. */}
                   <span className="truncate text-sm font-semibold text-text-primary">{account.name}</span>
