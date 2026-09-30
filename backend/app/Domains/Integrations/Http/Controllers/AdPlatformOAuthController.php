@@ -124,6 +124,21 @@ final class AdPlatformOAuthController extends Controller
             'client_workspace_id' => ['sometimes', 'nullable', 'uuid', Rule::exists('client_workspaces', 'id')
                 ->where('tenant_id', $tenant->tenantId())
                 ->whereNull('deleted_at')],
+            /*
+             * INTEGRATION-DATASOURCE-WIZARD-001 §17 — the DESTINATION, chosen before the provider flow.
+             *
+             * «Which client are these accounts for» is asked once, on the way in, and then it stops
+             * being a question: it rides the state through the consent screen and comes back on the
+             * callback, so the account picker has a destination instead of a fourth step asking for
+             * one after the fact.
+             *
+             * Checked against this tenant with the same rule the workspace uses, and for the same
+             * reason: the value is carried across a public callback, and a string that is only
+             * shaped like a uuid is how one tenant's live credential gets filed under another's.
+             */
+            'project_id' => ['sometimes', 'nullable', 'uuid', Rule::exists('projects', 'id')
+                ->where('tenant_id', $tenant->tenantId())
+                ->whereNull('deleted_at')],
         ]);
 
         /*
@@ -143,7 +158,10 @@ final class AdPlatformOAuthController extends Controller
             provider: $creds->platform,
             userId: $request->user()->getKey(),
             clientWorkspaceId: $validated['client_workspace_id'] ?? null,
-            extra: $verifier === null ? [] : ['code_verifier' => $verifier],
+            extra: array_filter([
+                'code_verifier' => $verifier,
+                'project_id' => $validated['project_id'] ?? null,
+            ], static fn ($v): bool => $v !== null),
         );
 
         return ApiResponse::success([
@@ -268,7 +286,22 @@ final class AdPlatformOAuthController extends Controller
             after: ['provider' => $creds->platform, 'ad_accounts' => $discovered],
         );
 
-        return $this->back($creds->platform, 'connected', null, $discovered);
+        return $this->back(
+            $creds->platform,
+            'connected',
+            null,
+            $discovered,
+            /*
+             * The connection and the destination, handed back to the page that started this.
+             *
+             * Without them the return from a consent screen lands on «something is connected» and
+             * the reader has to find their own way to the account picker — which is the maze this
+             * flow replaced. With them the browser reopens the SAME flow, on the SAME connection,
+             * with the client already decided.
+             */
+            connectionId: (string) $connection->getKey(),
+            projectId: isset($record['project_id']) ? (string) $record['project_id'] : null,
+        );
     }
 
     /**
@@ -312,12 +345,21 @@ final class AdPlatformOAuthController extends Controller
     }
 
     /** Back to the SPA's integrations page, carrying an outcome it can render in the reader's language. */
-    private function back(string $provider, string $outcome, ?string $reason, int $accounts = 0): RedirectResponse
-    {
+    private function back(
+        string $provider,
+        string $outcome,
+        ?string $reason,
+        int $accounts = 0,
+        ?string $connectionId = null,
+        ?string $projectId = null,
+    ): RedirectResponse {
         return redirect()->away(Frontend::origin().'/app/integrations?'.http_build_query(array_filter([
             'provider' => $provider,
             'outcome' => $outcome,
             'accounts' => $outcome === 'connected' ? (string) $accounts : null,
+            // What to reopen, and for whom. Absent on a refusal: there is no flow to resume.
+            'connection' => $connectionId,
+            'project' => $projectId,
             // Trimmed: a provider error body can be a page long and this is going in a URL.
             'reason' => $reason === null ? null : mb_substr($reason, 0, 180),
         ], static fn ($v) => $v !== null && $v !== '')));

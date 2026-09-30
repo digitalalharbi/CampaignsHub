@@ -364,61 +364,45 @@ describe('what the wizard says the first sync did', () => {
 })
 
 /**
- * INTEGRATION-DATASOURCE-WIZARD-001 §3 — the steps are visible, and they are THIS connection's steps.
+ * INTEGRATION-DATASOURCE-WIZARD-001 §24 — a destination already in hand is not asked for again.
  *
- * The wizard always had steps; a reader could never see them. Meeting one screen at a time with a
- * Back button and no map is the difference between «finish this» and «how much more of this is
- * there», and it decides whether somebody completes the flow at all.
- *
- * The harder half is that the map must not promise a question that will never be asked: a provider
- * with no hierarchy has no scope step, and a wizard opened from a project has no client step.
+ * The stepper itself lives in `ConnectionFlow` now and is asserted there; what belongs here is the
+ * BEHAVIOUR it draws: a wizard whose client was chosen before the consent screen goes from the
+ * accounts straight to the confirmation, because a step that asks a question it knows the answer to
+ * is the same defect §4 removed from the single-organisation step.
  */
-describe('ConnectionWizard — the steps a reader can see', () => {
+describe('ConnectionWizard — the client step exists only when there is a client to choose', () => {
   afterEach(() => {
     state.parents = [{ external_id: 'org-1', name: 'Acme Media', account_count: 2 }]
   })
 
-  it('names every step, marks the one the reader is on, and counts from one', async () => {
-    state.parents = [
-      { external_id: 'org-1', name: 'Acme Media', account_count: 2 },
-      { external_id: 'org-2', name: 'Beta Media', account_count: 4 },
-    ]
+  it('goes from the accounts to the confirmation when the client is already decided', async () => {
+    state.parents = [{ external_id: 'org-1', name: 'Acme Media', account_count: 2 }]
 
-    renderWithProviders(<ConnectionWizard connectionId="conn-1" onClose={() => {}} />)
+    renderWithProviders(
+      <ConnectionWizard connectionId="conn-1" destinationProjectId="proj-1" onClose={() => {}} />,
+    )
 
-    const stepper = await screen.findByTestId('wizard-stepper')
-    expect(stepper).toHaveTextContent('Scope')
-    expect(stepper).toHaveTextContent('Ad accounts')
-    expect(stepper).toHaveTextContent('Client')
-    expect(stepper).toHaveTextContent('Confirm')
-    expect(screen.getByTestId('wizard-stepper-parent')).toHaveAttribute('aria-current', 'step')
-    expect(screen.getByTestId('wizard-stepper-accounts')).toHaveAttribute('data-state', 'todo')
+    await screen.findByTestId('wizard-step-accounts')
+    const boxes = await screen.findAllByRole('checkbox')
+    boxes.forEach((b) => fireEvent.click(b))
+    fireEvent.click(screen.getByRole('button', { name: /متابعة|Continue/ }))
+
+    expect(await screen.findByTestId('wizard-step-review')).toBeInTheDocument()
+    expect(screen.queryByTestId('wizard-step-project')).toBeNull()
   })
 
-  /** A provider with no hierarchy is not shown a scope step it will never be asked. */
-  it('leaves the scope step out when there is no scope to choose', async () => {
+  /** Without one it still asks, because then it genuinely does not know. */
+  it('still asks for the client when nothing decided one', async () => {
     state.parents = [{ external_id: 'org-1', name: 'Acme Media', account_count: 2 }]
 
     renderWithProviders(<ConnectionWizard connectionId="conn-1" onClose={() => {}} />)
 
-    await screen.findByTestId('wizard-stepper')
-    expect(screen.queryByTestId('wizard-stepper-parent')).toBeNull()
-    expect(screen.getByTestId('wizard-stepper-accounts')).toHaveAttribute('aria-current', 'step')
-  })
+    await screen.findByTestId('wizard-step-accounts')
+    const boxes = await screen.findAllByRole('checkbox')
+    boxes.forEach((b) => fireEvent.click(b))
+    fireEvent.click(screen.getByRole('button', { name: /متابعة|Continue/ }))
 
-  /**
-   * Opened from a project, the project is already decided — so it is not offered as a step.
-   *
-   * Listing «Client» there would be a question with a predetermined answer, which is the same defect
-   * as the single-organisation step this programme removed in §4.
-   */
-  it('leaves the client step out when the wizard was opened from a project', async () => {
-    state.parents = [{ external_id: 'org-1', name: 'Acme Media', account_count: 2 }]
-
-    renderWithProviders(<ConnectionWizard connectionId="conn-1" manageProjectId="proj-1" onClose={() => {}} />)
-
-    await screen.findByTestId('wizard-stepper')
-    expect(screen.queryByTestId('wizard-stepper-project')).toBeNull()
-    expect(screen.getByTestId('wizard-stepper-accounts')).toHaveAttribute('aria-current', 'step')
+    expect(await screen.findByTestId('wizard-step-project')).toBeInTheDocument()
   })
 })

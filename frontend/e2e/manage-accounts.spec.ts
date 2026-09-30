@@ -21,15 +21,7 @@ import { AUTH, E2E_ORIGIN, selectProject } from './helpers'
  */
 test.use({ storageState: AUTH.owner })
 
-/*
- * `?view=platforms` — INTEGRATION-DATASOURCE-WIZARD-001 §17.
- *
- * The page now opens on the CLIENT lens once anything is connected, and these assertions are about
- * the PROVIDER cards. Asking for the lens in the URL is how a runbook, a support reply or a deep
- * link asks for it too; clicking the switch first would test the switch in every spec that is not
- * about it.
- */
-const INTEGRATIONS = '/agency/integrations?view=platforms'
+const INTEGRATIONS = '/agency/integrations'
 
 /** A sandbox connection with discovered accounts, established through the API. */
 async function connectSandbox(request: import('@playwright/test').APIRequestContext): Promise<string> {
@@ -65,29 +57,38 @@ test('an operator changes which accounts a project uses, without authorising aga
   await selectProject(page, projectId)
 
   await page.goto(INTEGRATIONS)
-  await expect(page.getByTestId('ad-platforms-panel')).toBeVisible({ timeout: 20000 })
+  await expect(page.getByTestId('connection-hub')).toBeVisible({ timeout: 20000 })
 
   /*
-   * «Manage accounts» is offered only for a connected source and only when a project is in hand —
-   * a binding belongs to a project, so the control is absent rather than present and refusing.
-   */
-  const manage = page.locator('[data-testid^="connector-manage-"]').first()
-
-  /*
-   * Skipped where no source is CONNECTED, and it says which state it found.
+   * «إدارة الحسابات» reached the way a reader reaches it: open the source's own menu (§22).
    *
-   * The gate database holds no platform credentials — every card reads «awaiting credentials», which
-   * is the honest state for an install with no provider app configured — so there is no connected
-   * source to manage. The journey below is asserted the moment one exists; until then the diff is
-   * covered by `ManageAccountSelectionTest` (server) and `ManageAccounts.test.tsx` (browser), and
-   * the production evidence lives on the real LinkedIn and Snapchat connections.
+   * The control used to sit on a provider card; it now belongs to the AUTHORISATION, because that is
+   * what owns a catalogue of accounts. Skipped where no source exists at all, saying what it found —
+   * the gate holds no platform credentials, so a run with an empty hub is the honest state of an
+   * install with no provider app configured, and the diff is covered by `ManageAccountSelectionTest`
+   * (server) and `ManageAccounts.test.tsx` (browser) meanwhile.
    */
-  if ((await manage.count()) === 0) {
-    const states = await page.locator('[data-testid^="connector-state-"]').allInnerTexts()
-    test.skip(true, `no connected source to manage — cards read: ${states.join(', ') || 'none rendered'}`)
+  /*
+   * The SANDBOX row — the authorisation this test created two lines up, not whichever sorts first.
+   *
+   * `.first()` was incidental and it bit: it managed the agency's Google authorisation, whose only
+   * account feeds a different client, so the save was refused 403 by a project this reader does not
+   * manage. The row under test is the one the test owns.
+   */
+  const actions = page
+    .locator('li[data-provider="sandbox"] [data-testid^="hub-actions-"]')
+    // The row carries the menu twice — once beside the name for a phone, once at the end for a
+    // desktop — and only one of them is ever on screen. `visible=true` picks whichever this is.
+    .locator('visible=true')
+    .first()
+
+  if ((await actions.count()) === 0) {
+    const empty = await page.getByTestId('connection-hub-empty').count()
+    test.skip(true, `no connected source to manage — hub ${empty > 0 ? 'is empty' : 'rendered no row'}`)
   }
 
-  await manage.click()
+  await actions.click()
+  await page.getByTestId('action-manage').click()
 
   const list = page.getByTestId('wizard-account-list')
   await expect(list, 'the picker never opened').toBeVisible({ timeout: 20000 })

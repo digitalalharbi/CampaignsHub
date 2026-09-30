@@ -2,83 +2,78 @@ import { expect, test } from '@playwright/test'
 import { AUTH, switchToEnglish } from './helpers'
 
 /**
- * INTEGRATION-DATASOURCE-WIZARD-001 §18 — the browser evidence the row says is missing.
+ * INTEGRATION-DATASOURCE-WIZARD-001 §§22, 26 — what the Connection Hub must never fail to say.
  *
- * ## Why this was written before anything was changed
+ * ## Why this spec was rewritten rather than deleted
  *
- * The matrix listed «select-all and the selected-count in the picker» as remaining. Both are in
- * `ConnectionWizard` — `wizard-select-page`, `wizard-clear-page`, `wizard-selected-count` — and have
- * been for some time. That is the second row in this ledger found to UNDER-state what is built, and
- * the cost is the same as over-stating: it sends the next execution at something already there.
+ * It used to walk a grid of provider cards and assert that each said WHICH kind of not-connected it
+ * was. The grid is gone — the page is a table of authorisations now — but the claim underneath it
+ * was never about cards: a surface that says «not connected» and nothing else tells a reader nothing
+ * about whose move it is. The hub answers that with two chips per row and an explicit empty state,
+ * and this holds it to that.
  *
- * A row is corrected from evidence, not from a file listing, because a control can exist in the tree
- * and still not reach a reader. This is that evidence.
+ * ## What the gate can and cannot show
  *
- * ## What it holds
- *
- * Every platform card states its OWN state — available, needs the operator, awaiting credentials —
- * rather than a single «not connected» that would be true of all three and useful for none. An
- * account is deliberately NOT connected here: the gate database holds no platform credentials, and
- * a spec that needed them would be one nobody can run.
+ * The gate database holds no platform credentials, so nothing here is authorised by a real provider.
+ * Whatever connections the seed does hold, the invariants below are true of any of them.
  */
 test.use({ storageState: AUTH.owner })
 
-test('every platform states which kind of not-connected it is', async ({ page }) => {
-  await page.goto('/agency/integrations?view=platforms')
+test('the hub says which state every authorisation is in, on both axes', async ({ page }) => {
+  await page.goto('/agency/integrations')
   await switchToEnglish(page)
 
-  const panel = page.getByTestId('ad-platforms-panel')
-  await expect(panel).toBeVisible({ timeout: 30000 })
+  await expect(page.getByTestId('connection-hub')).toBeVisible({ timeout: 30000 })
 
-  const cards = page.getByTestId('platform-card')
-  /* `count()` does not wait; the panel paints before the cards it holds. */
-  await expect(cards.first(), 'the page listed no platforms at all').toBeVisible({ timeout: 20000 })
+  const rows = page.locator('[data-testid^="hub-row-"]')
+  const count = await rows.count()
 
-  const count = await cards.count()
+  if (count === 0) {
+    // Empty is a state and is designed as one: it says what is missing and offers the one act.
+    await expect(page.getByTestId('connection-hub-empty')).toBeVisible()
+    await expect(page.getByTestId('hub-connect-empty')).toBeVisible()
+    return
+  }
 
-  /*
-   * Each card carries a state badge. «Not connected» alone would be true of every card on a fresh
-   * account and would tell a reader nothing about whose move it is — theirs, or the platform
-   * operator's, or nobody's until credentials arrive.
-   */
   for (let i = 0; i < count; i++) {
-    const key = await cards.nth(i).getAttribute('data-platform')
+    const id = ((await rows.nth(i).getAttribute('data-testid')) ?? '').replace('hub-row-', '')
 
-    await expect(page.getByTestId(`connector-state-${key}`), `«${key}» has no state`).toBeVisible()
+    // BOTH, always. Either alone is the collapse that hid a Reconnect button on Production.
+    await expect(page.getByTestId(`hub-auth-${id}`), `«${id}» has no authorisation state`).toBeVisible()
+    await expect(page.getByTestId(`hub-sync-${id}`), `«${id}» has no data state`).toBeVisible()
+    // «1 of 17» — chosen over reachable, which is the sentence that stops «everything syncs».
+    await expect(page.getByTestId(`hub-accounts-${id}`)).toContainText(/of|من/)
   }
 })
 
-test('an unfinished connection is surfaced with the way to finish it', async ({ page }) => {
-  await page.goto('/agency/integrations?view=platforms')
+/**
+ * An authorisation nobody finished is surfaced WITH the way to finish it.
+ *
+ * Consent completed, catalogue full, not one account chosen: nothing syncs and the page otherwise
+ * looks complete. Either no such row exists, or the row carries its own way back — what must not
+ * happen is one sitting in the account with nothing on screen about it.
+ */
+test('an unfinished authorisation carries the way to finish it', async ({ page }) => {
+  await page.goto('/agency/integrations')
   await switchToEnglish(page)
 
-  await expect(page.getByTestId('ad-platforms-panel')).toBeVisible({ timeout: 30000 })
+  await expect(page.getByTestId('connection-hub')).toBeVisible({ timeout: 30000 })
 
-  const unfinished = page.getByTestId('unfinished-connection')
+  const unfinished = page.locator('[data-testid^="hub-unfinished-"]')
 
-  /*
-   * Either there is one and it offers the way back, or there is none. What must not happen is a
-   * half-finished connection sitting in the account with nothing on screen about it — an operator
-   * would authorise a platform, never pick the accounts, and see a page that looks complete.
-   */
   if (await unfinished.count() > 0) {
-    /*
-     * A button PER unfinished authorisation, each naming its platform: the banner used to describe
-     * `unfinished[0]` alone and name no provider, so a workspace with four authorisations waiting
-     * for a selection was told about one. `.first()` rather than a fixed id because which platforms
-     * are mid-selection is the environment's business, not this test's.
-     */
-    const buttons = unfinished.getByRole('button')
-    await expect(buttons.first()).toBeVisible()
-    expect(await buttons.count(), 'an unfinished connection with no way to finish it').toBeGreaterThan(0)
+    await expect(unfinished.first()).toBeVisible()
+    await unfinished.first().click()
+    await expect(page.getByTestId('connection-drawer')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('drawer-tab-accounts')).toHaveAttribute('aria-current', 'page')
   }
 })
 
 test('the integrations page prints no placeholder value', async ({ page }) => {
-  await page.goto('/agency/integrations?view=platforms')
+  await page.goto('/agency/integrations')
   await switchToEnglish(page)
 
-  await expect(page.getByTestId('ad-platforms-panel')).toBeVisible({ timeout: 30000 })
+  await expect(page.getByTestId('connection-hub')).toBeVisible({ timeout: 30000 })
 
   const text = (await page.locator('main').innerText()).replace(/\s+/g, ' ')
 

@@ -106,12 +106,20 @@ export async function connectConnector(key: string): Promise<{ key: string; stat
 export async function startPlatformOAuth(
   provider: string,
   clientWorkspaceId?: string | null,
+  /*
+   * INTEGRATION-DATASOURCE-WIZARD-001 §17 — the DESTINATION, decided before the consent screen.
+   *
+   * «Which client are these accounts for» is asked once, on the way in. It rides the verified state
+   * across the provider and comes back on the callback, so the account picker opens with a client
+   * already in hand instead of asking for one as a fourth step after the fact.
+   */
+  projectId?: string | null,
 ): Promise<{ authorization_url: string }> {
   await ensureCsrfCookie()
-  return postData<{ authorization_url: string }>(
-    `/integrations/${provider}/oauth/start`,
-    clientWorkspaceId ? { client_workspace_id: clientWorkspaceId } : {},
-  )
+  return postData<{ authorization_url: string }>(`/integrations/${provider}/oauth/start`, {
+    ...(clientWorkspaceId ? { client_workspace_id: clientWorkspaceId } : {}),
+    ...(projectId ? { project_id: projectId } : {}),
+  })
 }
 
 export async function syncConnector(key: string): Promise<{ success: boolean; count: number }> {
@@ -617,58 +625,51 @@ export async function backfillAccount(
 
 
 /**
- * INTEGRATION-DATASOURCE-WIZARD-001 §17 — the connected estate, as a customer holds it.
+ * INTEGRATION-DATASOURCE-WIZARD-001 §17 — the Connection Hub: one row per AUTHORISATION.
  *
- * One row per PROJECT, because a project is the thing an agency invoices, reports on and is asked
- * about. Built from ACTIVE bindings only: an account consent merely revealed has no client and no
- * place here, and `unselected_accounts` states how many of those exist as a number rather than
- * putting them under somebody's name.
+ * Not one per provider. Two Meta authorisations — the agency's own and a client's, granted by two
+ * different people — expire, fail and get reconnected independently, and the card that merged them
+ * could not say which of the two had gone stale.
  */
-export interface EstateProvider {
+export interface HubConnection {
+  id: string
+  provider: string
+  label: string
+  label_ar: string
+  connection_name: string
+  /** The CampaignsHub user who authorised it. Null is «nobody recorded it», never an invented email. */
+  authorised_by: { name: string; email: string } | null
+  authorised_at: string | null
+  /** Chosen of reachable — «1 of 17 accounts», which is ACCOUNT-SCOPE-ISOLATION-001 in four words. */
+  selected_accounts: number
+  discovered_accounts: number
+  connection_state: ConnectionState
+  sync_state: SyncState
+  /** At least one reachable account carries a sync error category of its own. */
+  needs_attention: boolean
+  last_success_at: string | null
+  next_sync_at: string | null
+  /** The clients this authorisation feeds — the answer to «who breaks if it lapses». */
+  projects: Array<{ id: string; name: string }>
+  has_parent: boolean
+  discovery_blocked_reason: string | null
+  token_expires_at: string | null
+}
+
+/** A provider a NEW authorisation can be started for: enabled, and with its system keys present. */
+export interface ConnectableProvider {
   key: string
   label: string
   label_ar: string
-  connection_id: string | null
-  connection_state: ConnectionState
-  sync_state: SyncState
-  health: EstateHealth
-  accounts: number
-  currencies: string[]
-  campaigns: number
-  active_campaigns: number
-  last_success_at: string | null
-  /** When it will update itself next, or null — which means «it is not going to», never «unknown». */
-  next_sync_at: string | null
+  kind: 'advertising' | 'commerce'
+  has_parent: boolean
 }
 
-/**
- * One word for a row, ranked worst first.
- *
- * `no_data` is deliberately not an error and never red: the authorisation works, the provider
- * answered, and the answer was «nothing happened». Calling that a failure teaches people to
- * distrust a working connection.
- */
-export type EstateHealth = 'reauth' | 'attention' | 'syncing' | 'no_data' | 'complete'
-
-export interface EstateProject {
-  id: string
-  name: string
-  status: string
-  client: { id: string; name: string } | null
-  providers: EstateProvider[]
-  accounts: number
-  campaigns: number
-  active_campaigns: number
-  last_success_at: string | null
-  health: EstateHealth
+export interface ConnectionHub {
+  connections: HubConnection[]
+  connectable: ConnectableProvider[]
 }
 
-export interface ConnectedEstate {
-  projects: EstateProject[]
-  /** Discovered under some authorisation and chosen by nobody. A count, never rows. */
-  unselected_accounts: number
-}
-
-export function fetchConnectedEstate(): Promise<ConnectedEstate> {
-  return getData<ConnectedEstate>('/integrations/estate')
+export function fetchConnectionHub(): Promise<ConnectionHub> {
+  return getData<ConnectionHub>('/integrations/hub')
 }

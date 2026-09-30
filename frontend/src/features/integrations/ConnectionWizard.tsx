@@ -8,7 +8,6 @@ import {
 } from './api'
 import { createProject, listClientWorkspaces, listProjects } from '@/features/projects/api'
 import { Button } from '@/components/ui/Button'
-import { Num } from '@/components/ui/Num'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { Refusal } from '@/lib/api/errors'
@@ -98,9 +97,27 @@ interface Props {
    * valid is exactly the cost this removes.
    */
   manageProjectId?: string | null
+  /**
+   * INTEGRATION-DATASOURCE-WIZARD-001 §17 — the destination, decided before the consent screen.
+   *
+   * Different from `manageProjectId` and deliberately so. Managing SAVES a desired set against an
+   * existing selection; this is a NEW connection whose client was chosen on the way in, rides the
+   * OAuth state across the provider and comes back on the callback. So the confirm path — quota,
+   * workspace fence, first sync — is the one that runs, and the project step simply never appears:
+   * it is a question with an answer already in hand, which is the same defect §4 removed from the
+   * single-organisation step.
+   */
+  destinationProjectId?: string | null
+  /** The flow outside draws the stepper, so the wizard reports where it is instead of drawing one. */
+  onStepChange?: (step: Step) => void
+  /** Replaces the wizard's own footer close, so a receipt can own the way out. */
+  chrome?: boolean
 }
 
-export function ConnectionWizard({ connectionId, onClose, manageProjectId = null }: Props) {
+export function ConnectionWizard({
+  connectionId, onClose, manageProjectId = null, destinationProjectId = null,
+  onStepChange, chrome = true,
+}: Props) {
   const managing = manageProjectId !== null
   const ar = useUi((s) => s.locale) === 'ar'
   const queryClient = useQueryClient()
@@ -142,7 +159,7 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
 
   const [parent, setParent] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [projectId, setProjectId] = useState<string | null>(null)
+  const [projectId, setProjectId] = useState<string | null>(destinationProjectId)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [step, setStep] = useState<Step | null>(null)
@@ -150,6 +167,19 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
   // The opening step is the connection's own state, so a wizard reopened days later resumes where it
   // stopped instead of starting again (ORCH-100 §39).
   const current: Step = step ?? (parentStepNeeded ? 'parent' : 'accounts')
+
+  /*
+   * «Continue» from the accounts goes to the review when the client is already decided.
+   *
+   * Managing has no project step because it is editing one project's selection; a destination
+   * chosen before the consent screen has none for the same reason — the answer is already here, and
+   * a step that asks a question it knows the answer to is the defect §4 removed from the
+   * single-organisation step.
+   */
+  const projectStepNeeded = !managing && destinationProjectId === null
+
+  // The flow outside draws the stepper; it needs to know which stage is live without owning the state.
+  useEffect(() => { onStepChange?.(current) }, [current, onStepChange])
 
   /*
    * What this project holds right now — read ONCE, before the catalogue's first page.
@@ -379,12 +409,6 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
 
   const h = hierarchy.data
   const providerLabel = ar ? h.connection.label_ar : h.connection.label
-  const steps: Step[] = [
-    ...(parentStepNeeded ? ['parent' as const] : []),
-    'accounts' as const,
-    ...(managing ? [] : ['project' as const]),
-    'review' as const,
-  ]
   // Named rather than inferred from the rendering, so the prompt to refresh is a statement about the
   // DATA — «12 organisations have no name» — and not a side effect of a fallback in the markup.
   const missingParentNames = h.parents.filter((p) => !p.name).length
@@ -403,20 +427,6 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
         </p>
       </header>
 
-      {/*
-       * INTEGRATION-DATASOURCE-WIZARD-001 §3 — the steps, visible, with the one you are on named.
-       *
-       * The wizard already HAD steps; what it did not have was any way to see them. A reader met one
-       * screen at a time with a Back button and no idea whether choosing accounts was the last thing
-       * asked of them or the first of four — which is the difference between «finish this» and «how
-       * long is this going to take», and it decides whether somebody completes the flow at all.
-       *
-       * Built from the steps this connection will ACTUALLY show: the parent step is absent for a
-       * provider with no hierarchy, and the project step is absent when the wizard was opened from a
-       * project. A stepper that lists a step nobody will be asked is worse than none — it promises a
-       * question and then skips it, and the reader is left wondering what they missed.
-       */}
-      <Stepper steps={steps} current={current} ar={ar} />
 
       {current === 'parent' && (
         <section className="flex flex-col gap-3" data-testid="wizard-step-parent">
@@ -515,7 +525,24 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
             />
           </label>
 
-          {accounts.isLoading ? <Skeleton className="h-40" /> : (
+          {accounts.isLoading ? <Skeleton className="h-40" /> : (accounts.data?.accounts ?? []).length === 0 ? (
+            /*
+             * INTEGRATION-DATASOURCE-WIZARD-001 §33 — an empty picker says WHICH emptiness it is.
+             *
+             * Reached for real: a connection whose catalogue is empty — authorised, and the provider
+             * returned no ad account for this identity — opened a dialog with a header and nothing
+             * under it. An empty container is the worst of the three possible answers, because it
+             * looks like a page that failed to load, and the reader's next move is to reload rather
+             * than to re-read the catalogue or check the grant.
+             */
+            <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-text-secondary" data-testid="wizard-no-accounts">
+              {search.trim() !== ''
+                ? (ar ? 'لا نتائج لهذا البحث.' : 'No account matches that search.')
+                : (ar
+                    ? 'لم تُرجِع المنصة أي حساب إعلاني لهذه المصادقة. جرّب «تحديث الحسابات المتاحة»، أو تأكّد أن الحساب الإعلاني ممنوح لهذا المستخدم لدى المزود.'
+                    : 'The platform returned no ad account for this authorisation. Try refreshing the available accounts, or check that the ad account is granted to this user at the provider.')}
+            </p>
+          ) : (
             <>
               <ul className="flex flex-col gap-1" data-testid="wizard-account-list">
                 {(accounts.data?.accounts ?? []).map((a: DiscoveredAccount) => {
@@ -934,14 +961,20 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
       )}
 
       <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
-        <Button variant="ghost" onClick={onClose}>{ar ? 'إغلاق' : 'Close'}</Button>
+        {/*
+          Hidden when a flow wraps this: two «Close» controls on one dialog is two answers to «how do
+          I get out», and the outer one is the one that knows what to do afterwards.
+        */}
+        {chrome ? <Button variant="ghost" onClick={onClose}>{ar ? 'إغلاق' : 'Close'}</Button> : <span />}
 
         <span className="flex items-center gap-2">
           {current !== 'done' && current !== (parentStepNeeded ? 'parent' : 'accounts') && (
             <Button
               variant="secondary"
               onClick={() => setStep(
-                current === 'review' ? 'project' : current === 'project' ? 'accounts' : 'parent',
+                current === 'review'
+                  ? (projectStepNeeded ? 'project' : 'accounts')
+                  : current === 'project' ? 'accounts' : 'parent',
               )}
             >
               {ar ? <ArrowRight className="h-4 w-4" /> : <ArrowLeft className="h-4 w-4" />}
@@ -950,7 +983,7 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
           )}
 
           {current === 'accounts' && !managing && (
-            <Button disabled={selected.size === 0} onClick={() => setStep('project')}>
+            <Button disabled={selected.size === 0} onClick={() => setStep(projectStepNeeded ? 'project' : 'review')}>
               {ar ? 'متابعة' : 'Continue'}
             </Button>
           )}
@@ -984,67 +1017,4 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
       </footer>
     </div>
   )
-}
-
-/**
- * The steps of THIS connection's journey, with the current one named and the finished ones marked.
- *
- * `aria-current="step"` rather than colour alone: the current step has to be announced, and a chip
- * that is merely a different shade says nothing to a reader who is not looking at it. `done` is
- * carried on the element too, so the E2E suite asserts progress rather than a class name.
- */
-function Stepper({ steps, current, ar }: { steps: Step[]; current: Step; ar: boolean }) {
-  // `done` is the step's position, not a separate flag: everything before the current one is behind you.
-  const at = steps.indexOf(current)
-  if (at === -1 || steps.length < 2) return null
-
-  return (
-    <ol className="flex flex-wrap items-center gap-x-2 gap-y-1.5" data-testid="wizard-stepper">
-      {steps.map((step, index) => {
-        const done = index < at
-        const now = index === at
-
-        return (
-          <li key={step} className="flex items-center gap-2">
-            <span
-              data-testid={`wizard-stepper-${step}`}
-              data-state={done ? 'done' : now ? 'current' : 'todo'}
-              aria-current={now ? 'step' : undefined}
-              className={`inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-semibold ${
-                now
-                  ? 'bg-primary text-on-primary'
-                  : done
-                    ? 'bg-surface-secondary text-text-primary'
-                    : 'bg-surface-secondary text-text-muted'
-              }`}
-            >
-              <span
-                className={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${
-                  now ? 'bg-on-primary/20' : 'bg-transparent'
-                }`}
-                aria-hidden
-              >
-                {done ? <Check size={11} /> : <Num>{index + 1}</Num>}
-              </span>
-              {ar ? STEP_LABELS[step].ar : STEP_LABELS[step].en}
-            </span>
-
-            {/*
-              A plain separator, not an arrow: an arrow has a direction and this component renders in
-              both, so it would point backwards for half the product's readers.
-            */}
-            {index < steps.length - 1 && <span className="text-text-muted" aria-hidden>·</span>}
-          </li>
-        )
-      })}
-    </ol>
-  )
-}
-
-const STEP_LABELS: Record<Step, { ar: string; en: string }> = {
-  parent: { ar: 'النطاق', en: 'Scope' },
-  accounts: { ar: 'الحسابات الإعلانية', en: 'Ad accounts' },
-  project: { ar: 'العميل', en: 'Client' },
-  review: { ar: 'التأكيد', en: 'Confirm' },
-  done: { ar: 'تمت', en: 'Done' },
 }

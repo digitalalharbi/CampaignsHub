@@ -39,7 +39,7 @@ for (const vp of VIEWPORTS) {
   test(`the integrations page has no horizontal overflow @ ${vp.name}`, async ({ page }) => {
     await connectSandbox(page.request)
     await page.setViewportSize({ width: vp.width, height: vp.height })
-    await page.goto('/app/integrations?view=platforms')
+    await page.goto('/app/integrations')
     await expect(page.locator('main')).toBeVisible()
     await page.waitForLoadState('networkidle')
 
@@ -86,7 +86,7 @@ for (const vp of VIEWPORTS) {
  */
 test('the integrations page renders right-to-left in Arabic and left-to-right in English', async ({ page }) => {
   await connectSandbox(page.request)
-  await page.goto('/app/integrations?view=platforms')
+  await page.goto('/app/integrations')
   await expect(page.locator('main')).toBeVisible()
 
   const dir = await page.evaluate(() => document.documentElement.dir || getComputedStyle(document.body).direction)
@@ -104,7 +104,7 @@ test('the integrations page renders right-to-left in Arabic and left-to-right in
  */
 test('a connection with discovered accounts offers the selection step rather than claiming success', async ({ page }) => {
   await connectSandbox(page.request)
-  await page.goto('/app/integrations?view=platforms')
+  await page.goto('/app/integrations')
   await expect(page.locator('main')).toBeVisible()
   await page.waitForLoadState('networkidle')
 

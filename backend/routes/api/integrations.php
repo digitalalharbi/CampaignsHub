@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\Integrations\Http\Controllers\AccountInventoryController;
 use App\Domains\Integrations\Http\Controllers\AdPlatformOAuthController;
-use App\Domains\Integrations\Http\Controllers\ConnectedEstateController;
+use App\Domains\Integrations\Http\Controllers\ConnectionHubController;
 use App\Domains\Integrations\Http\Controllers\ConnectionWizardController;
 use App\Domains\Integrations\Http\Controllers\IntegrationController;
 use App\Domains\Integrations\Http\Controllers\IntegrationWebhookController;
@@ -56,14 +56,14 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
     Route::prefix('integrations')->name('integrations.')->group(function (): void {
         Route::get('/', [IntegrationController::class, 'index'])->name('index');
         /*
-         * INTEGRATION-DATASOURCE-WIZARD-001 §17 — the connected estate, by project.
+         * INTEGRATION-DATASOURCE-WIZARD-001 §17 — the Connection Hub, one row per authorisation.
          *
-         * A read, tenant-scoped, built only from ACTIVE bindings. It sits beside the inventory rather
-         * than replacing it: this answers «which client is connected and current», the inventory
-         * answers «what can this tenant see at all», and conflating the two is what made the old page
-         * unreadable. Above `{key}` in the file so the literal segment is never read as a provider key.
+         * A read, tenant-scoped. Aggregates only — «1 of 17 accounts», the two truths, last and next
+         * sync — because a tenant's estate is bounded by its plan and not by what fits on a screen.
+         * The accounts themselves come from the inventory, which already paginates and searches.
+         * Above `{key}` in the file so the literal segment is never read as a provider key.
          */
-        Route::get('estate', ConnectedEstateController::class)->name('estate');
+        Route::get('hub', ConnectionHubController::class)->name('hub');
         Route::get('{key}/health', [IntegrationController::class, 'health'])->name('health');
         Route::post('{key}/connect', [IntegrationController::class, 'connect'])->name('connect')
             ->middleware(EnsureWithinPlanLimit::class.':connections');

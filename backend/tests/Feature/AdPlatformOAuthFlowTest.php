@@ -6,11 +6,13 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\AuthorizationState;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -158,6 +160,68 @@ final class AdPlatformOAuthFlowTest extends TestCase
         $this->assertSame(2, ExternalAccount::withoutGlobalScopes()->count());
     }
 
+    /**
+     * INTEGRATION-DATASOURCE-WIZARD-001 §17 — the return lands back in the flow that left.
+     *
+     * «Which client are these accounts for» is asked ONCE, before the consent screen, and then stops
+     * being a question: it rides the verified state across a public callback and comes back on the
+     * redirect, together with the connection that was opened. Without those two the return from a
+     * provider lands on «something is connected» and the reader has to find their own way back to
+     * the account picker — which is the maze this flow exists to remove.
+     */
+    public function test_the_return_carries_the_connection_and_the_destination_it_left_with(): void
+    {
+        $this->configure('meta');
+        Http::fake([
+            'graph.facebook.com/*/oauth/access_token*' => Http::response(['access_token' => 'AT', 'expires_in' => 5184000]),
+            'graph.facebook.com/*/me/adaccounts*' => Http::response(['data' => [
+                ['id' => 'act_1', 'name' => 'Main', 'currency' => 'SAR', 'timezone_name' => 'Asia/Riyadh', 'account_status' => 1],
+            ]]),
+        ]);
+
+        $workspace = ClientWorkspace::create([
+            'tenant_id' => $this->tenant->id, 'name' => 'Razah', 'slug' => 'razah-'.uniqid(), 'mode' => 'managed',
+        ]);
+        $project = Project::create([
+            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $workspace->id,
+            'name' => 'Razah', 'status' => 'active',
+        ]);
+
+        $state = $this->startAndTakeState('meta', ['project_id' => $project->id]);
+
+        $response = $this->get("/api/v1/oauth/ads/meta/callback?code=abc&state={$state}")
+            ->assertRedirectContains('outcome=connected')
+            ->assertRedirectContains('project='.$project->id);
+
+        $connection = ProviderConnection::withoutGlobalScopes()->firstOrFail();
+        $this->assertStringContainsString('connection='.$connection->getKey(), (string) $response->headers->get('Location'));
+    }
+
+    /**
+     * A destination belonging to ANOTHER tenant is refused before a state exists.
+     *
+     * The value crosses a public callback and is read back as this tenant's, so a string that is
+     * merely shaped like a uuid is how one agency's live credential gets filed against another's
+     * client — the defect OAUTH-WS-001 fixed for the workspace, on a second field.
+     */
+    public function test_a_destination_from_another_tenant_is_refused(): void
+    {
+        $this->configure('meta');
+
+        $other = Tenant::create(['name' => 'B', 'slug' => 'b-'.uniqid(), 'status' => 'active']);
+        $workspace = ClientWorkspace::withoutGlobalScopes()->create([
+            'tenant_id' => $other->id, 'name' => 'Theirs', 'slug' => 't-'.uniqid(), 'mode' => 'managed',
+        ]);
+        $theirs = Project::withoutGlobalScopes()->create([
+            'tenant_id' => $other->id, 'client_workspace_id' => $workspace->id,
+            'name' => 'Theirs', 'status' => 'active',
+        ]);
+
+        $this->actingAs($this->owner, 'sanctum')
+            ->postJson('/api/v1/integrations/meta/oauth/start', ['project_id' => $theirs->id])
+            ->assertStatus(422);
+    }
+
     /** Re-authorising updates the accounts already known rather than duplicating every one. */
     public function test_authorising_again_does_not_duplicate_the_discovered_accounts(): void
     {
@@ -270,10 +334,10 @@ final class AdPlatformOAuthFlowTest extends TestCase
     }
 
     /** Run the authenticated half and return the state it minted. */
-    private function startAndTakeState(string $platform): string
+    private function startAndTakeState(string $platform, array $body = []): string
     {
         $url = $this->actingAs($this->owner, 'sanctum')
-            ->postJson("/api/v1/integrations/{$platform}/oauth/start")
+            ->postJson("/api/v1/integrations/{$platform}/oauth/start", $body)
             ->assertOk()
             ->json('data.authorization_url');
 
