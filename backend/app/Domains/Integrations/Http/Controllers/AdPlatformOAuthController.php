@@ -8,13 +8,13 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateRoundTrip;
 use App\Domains\Integrations\Models\ExternalAccount;
-use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\AuthorizationState;
 use App\Domains\Integrations\OAuth\MetaCredentialProfile;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\PlatformOAuth;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\Services\AccountDiscovery;
 use App\Domains\Integrations\Services\FirstSync;
 use App\Domains\Integrations\Support\ProviderErrorText;
@@ -298,20 +298,10 @@ final class AdPlatformOAuthController extends Controller
      */
     private function refetchBoundAccounts(ProviderConnection $connection): void
     {
-        $bound = ProjectIntegrationBinding::withoutGlobalScopes()
-            ->whereIn(
-                'external_account_id',
-                ExternalAccount::withoutGlobalScopes()
-                    ->where('provider_connection_id', $connection->getKey())
-                    ->select('id'),
-            )
-            ->where('is_active', true)
-            ->distinct()
-            ->pluck('external_account_id')
-            ->map(static fn ($id): string => (string) $id)
-            ->all();
-
-        app(FirstSync::class)->start($bound, source: 'reconnect');
+        app(FirstSync::class)->start(
+            app(AccountAssignment::class)->activeAccountIdsForConnection((string) $connection->getKey()),
+            source: 'reconnect',
+        );
     }
 
     private function credentialsOr404(string $provider): PlatformCredentials
