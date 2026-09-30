@@ -15,6 +15,20 @@ import { ensureCsrfCookie, getData, postData, putData } from '@/lib/api/client'
 export type PlatformState =
   | 'connected' | 'syncing' | 'error' | 'awaiting_credentials' | 'unavailable' | 'disconnected' | 'revoked'
 
+/**
+ * INTEGRATION-DATASOURCE-WIZARD-001 §16 — the authorisation truth. Says nothing about data.
+ *
+ * Separate from {@link SyncState} because the product spent a release answering both questions with
+ * one word, and on Production the wrong one won: a stale `running` row outranked a refused Meta
+ * grant, so the card announced «المزامنة جارية الآن» and hid the Reconnect button the same card was
+ * asking the reader to press. Two fields cannot do that to each other.
+ */
+export type ConnectionState =
+  | 'NOT_CONNECTED' | 'AWAITING_CREDENTIALS' | 'CONNECTED' | 'REAUTH_REQUIRED' | 'REVOKED'
+
+/** The data truth. Says nothing about authorisation. */
+export type SyncState = 'NEVER_SYNCED' | 'QUEUED' | 'SYNCING' | 'SUCCEEDED' | 'FAILED'
+
 export interface Connector {
   key: string
   label: string
@@ -33,6 +47,15 @@ export interface Connector {
   /** Present only for the six ad platforms; the sandbox and analytics connectors keep the old shape. */
   is_ad_platform?: boolean
   state?: PlatformState
+  /**
+   * The two independent truths, which `state` above collapses into one word.
+   *
+   * `state` is kept — it is what the older surfaces read and it is still the right shape for a card
+   * that shows a single chip. Anything that needs to show «the authorisation is refused» AND «the
+   * last run failed» at the same time reads these instead, and neither can hide the other.
+   */
+  connection_state?: ConnectionState
+  sync_state?: SyncState
   /*
    * There is deliberately no `missing` here any more. The list of absent SYSTEM credentials was being
    * served to tenants, and it is an instruction for `/admin` addressed to the wrong reader — see the
@@ -139,6 +162,8 @@ export interface ConnectionWizard {
    * three surfaces cannot invent three vocabularies for one connection. Optional so a payload
    * written before it existed still renders.
    */
+  connection_state?: ConnectionState
+  sync_state?: SyncState
   user_state?: 'NOT_CONNECTED' | 'AUTH_REQUIRED' | 'ACCOUNT_SELECTION_REQUIRED' | 'SYNCING' | 'HEALTHY' | 'NO_DATA' | 'ATTENTION_REQUIRED' | 'REAUTH_REQUIRED'
   /**
    * WHY re-authorising is being asked for — META-INSIGHTS-GRANT-001.
@@ -445,6 +470,13 @@ export interface AccountsQuery {
   connection?: string
   account_type?: 'ad_account' | 'store'
   link?: LinkFilter
+  /**
+   * INTEGRATION-DATASOURCE-WIZARD-001 §17 — «this client's accounts».
+   *
+   * The estate's expanded row asks this endpoint rather than a second one, so the health, ordering
+   * and paging a reader meets there are the ones they already know from the inventory.
+   */
+  project?: string
   q?: string
   page?: number
   per_page?: number
@@ -569,4 +601,60 @@ export async function backfillAccount(
 ): Promise<{ account_id: string; from: string; to: string; queued: boolean }> {
   await ensureCsrfCookie()
   return postData(`/accounts/${id}/backfill`, { from, to })
+}
+
+
+/**
+ * INTEGRATION-DATASOURCE-WIZARD-001 §17 — the connected estate, as a customer holds it.
+ *
+ * One row per PROJECT, because a project is the thing an agency invoices, reports on and is asked
+ * about. Built from ACTIVE bindings only: an account consent merely revealed has no client and no
+ * place here, and `unselected_accounts` states how many of those exist as a number rather than
+ * putting them under somebody's name.
+ */
+export interface EstateProvider {
+  key: string
+  label: string
+  label_ar: string
+  connection_id: string | null
+  connection_state: ConnectionState
+  sync_state: SyncState
+  health: EstateHealth
+  accounts: number
+  currencies: string[]
+  campaigns: number
+  active_campaigns: number
+  last_success_at: string | null
+}
+
+/**
+ * One word for a row, ranked worst first.
+ *
+ * `no_data` is deliberately not an error and never red: the authorisation works, the provider
+ * answered, and the answer was «nothing happened». Calling that a failure teaches people to
+ * distrust a working connection.
+ */
+export type EstateHealth = 'reauth' | 'attention' | 'syncing' | 'no_data' | 'complete'
+
+export interface EstateProject {
+  id: string
+  name: string
+  status: string
+  client: { id: string; name: string } | null
+  providers: EstateProvider[]
+  accounts: number
+  campaigns: number
+  active_campaigns: number
+  last_success_at: string | null
+  health: EstateHealth
+}
+
+export interface ConnectedEstate {
+  projects: EstateProject[]
+  /** Discovered under some authorisation and chosen by nobody. A count, never rows. */
+  unselected_accounts: number
+}
+
+export function fetchConnectedEstate(): Promise<ConnectedEstate> {
+  return getData<ConnectedEstate>('/integrations/estate')
 }

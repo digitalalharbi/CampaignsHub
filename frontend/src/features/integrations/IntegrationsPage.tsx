@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { KeyRound, Loader2, Plug, RefreshCw } from 'lucide-react'
 import {
   connectConnector, fetchResumableConnections, listConnectors, revokeConnection, startPlatformOAuth,
   syncConnector,
+  fetchConnectedEstate,
   type Connector, type PlatformState, type ResumableConnection,
 } from './api'
 import { ConnectionWizard } from './ConnectionWizard'
+import { ConnectedEstate } from './ConnectedEstate'
 import { ProviderErrorNote } from './ProviderErrorNote'
 import { AccountsPanel } from './AccountsPanel'
 import { StoresPanel } from '@/features/commerce/StoresPanel'
@@ -875,6 +877,43 @@ function ConnectorCard({
  */
 export function IntegrationsPage() {
   const ar = useUi((s) => s.locale) === 'ar'
+  const queryClient = useQueryClient()
+
+  /*
+   * INTEGRATION-DATASOURCE-WIZARD-001 §17 — which lens opens, and why it is not a fixed answer.
+   *
+   * Both views are real and both are kept. «بالمنصة» answers «is our Snapchat authorisation
+   * healthy» — an operator's question, and a good one. «بالعميل» answers «is هذا العميل complete»,
+   * which is what the product is used for all day, so once anything IS connected that is the one
+   * that opens.
+   *
+   * Before anything is connected it would open on an empty list under a heading about clients, with
+   * the six things somebody actually came to press one click away and no sign of it. A page whose
+   * first screen cannot be acted on is the failure this redesign started from, so with an empty
+   * estate the provider grid opens instead — and the switch is not offered, because there is
+   * nothing on the other side of it yet.
+   */
+  const estate = useQuery({ queryKey: ['connected-estate'], queryFn: fetchConnectedEstate, retry: false })
+  const connected = (estate.data?.projects.length ?? 0) > 0
+  const [chosenView, setChosenView] = useState<'clients' | 'platforms' | null>(null)
+  const view = chosenView ?? (connected ? 'clients' : 'platforms')
+  const setView = setChosenView
+  const [manage, setManage] = useState<{ connectionId: string; projectId: string } | null>(null)
+  const [syncing, setSyncing] = useState<string | null>(null)
+
+  const authorize = useMutation({
+    mutationFn: (provider: string) => startPlatformOAuth(provider),
+    onSuccess: ({ authorization_url: url }) => { window.location.assign(url) },
+  })
+
+  const sync = useMutation({
+    mutationFn: (key: string) => syncConnector(key),
+    onSettled: () => {
+      setSyncing(null)
+      void queryClient.invalidateQueries({ queryKey: ['connected-estate'] })
+      void queryClient.invalidateQueries({ queryKey: ['connectors'] })
+    },
+  })
   /*
    * INTEGRATION-DATASOURCE-WIZARD-001 §11 — the inventory is not the page.
    *
@@ -890,8 +929,55 @@ export function IntegrationsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <AdPlatformsPanel />
+      {/*
+        A two-way switch rather than tabs with their own URL: it is a lens on the same estate, not a
+        different place, and a reader who lands here from a notification should not have to notice
+        which one they are in before the page means anything.
+      */}
+      {connected && (
+        <div className="flex flex-wrap items-center gap-1 self-start rounded-xl border border-border bg-surface p-1">
+          <ViewButton active={view === 'clients'} onClick={() => setView('clients')} testId="estate-view-clients">
+            {ar ? 'بالعميل' : 'By client'}
+          </ViewButton>
+          <ViewButton active={view === 'platforms'} onClick={() => setView('platforms')} testId="estate-view-platforms">
+            {ar ? 'بالمنصة' : 'By platform'}
+          </ViewButton>
+        </div>
+      )}
+
+      {view === 'clients' ? (
+        <ConnectedEstate
+          onConnect={() => setView('platforms')}
+          onManage={(provider, project) => {
+            if (provider.connection_id !== null) {
+              setManage({ connectionId: provider.connection_id, projectId: project.id })
+            }
+          }}
+          onReauthorise={(provider) => authorize.mutate(provider.key)}
+          onSync={(provider) => { setSyncing(provider.key); sync.mutate(provider.key) }}
+          busySync={syncing}
+        />
+      ) : (
+        <AdPlatformsPanel />
+      )}
+
+      {/*
+        INTEG-STORES-001 — Salla and Zid keep their own journey. They are commerce connectors with a
+        store, an order stream and no ad accounts at all; pushing them through an ad-account picker
+        would ask a question they have no answer to.
+      */}
       <StoresPanel />
+
+      {manage !== null && (
+        <ConnectionWizard
+          connectionId={manage.connectionId}
+          manageProjectId={manage.projectId}
+          onClose={() => {
+            setManage(null)
+            void queryClient.invalidateQueries({ queryKey: ['connected-estate'] })
+          }}
+        />
+      )}
 
       <section className="flex flex-col gap-3">
         <button
@@ -1019,5 +1105,27 @@ function DisconnectButton({
             : `Confirm — ${accounts} account(s) stop syncing`)
         : (ar ? 'قطع الاتصال' : 'Disconnect')}
     </Button>
+  )
+}
+
+/** One lens of the estate. A pressed state, not a link: nothing about the address changes. */
+function ViewButton({ active, onClick, testId, children }: {
+  active: boolean
+  onClick: () => void
+  testId: string
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      data-testid={testId}
+      className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
+        active ? 'bg-surface-secondary text-text-primary' : 'text-text-secondary hover:text-text-primary'
+      }`}
+    >
+      {children}
+    </button>
   )
 }

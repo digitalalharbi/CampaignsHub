@@ -16,8 +16,9 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Support\IntegrationTruth;
 use App\Domains\Integrations\Support\NextScheduledSync;
-use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\AdPlatforms;
 use App\Support\ApiResponse;
@@ -31,6 +32,7 @@ final class IntegrationController extends Controller
         private readonly AdvertisingConnectorRegistry $registry,
         private readonly CommerceConnectorRegistry $stores,
         private readonly ProviderConfigurationService $settings,
+        private readonly TenantContext $tenant,
     ) {}
 
     /** Every provider this product integrates with — advertising and stores — with its live status. */
@@ -192,10 +194,23 @@ final class IntegrationController extends Controller
                 ->whereIn('id', ProjectIntegrationBinding::query()->where('is_active', true)->select('external_account_id'))
                 ->pluck('id');
 
-        $syncing = $accountIds->isNotEmpty() && MetricSyncRun::query()
-            ->whereIn('external_account_id', $accountIds)
-            ->where('status', 'running')
-            ->exists();
+        /*
+         * INTEGRATION-DATASOURCE-WIZARD-001 §16 — the DATA truth, read over the selected set only.
+         *
+         * `$syncing` below still exists because the single-word `state` this endpoint has always
+         * returned is still returned; what changes is that it is no longer the only thing a caller
+         * can ask. `sync_state` says what the pipeline is doing and `connection_state` says whether
+         * the authorisation can do it, and neither is allowed to overwrite the other.
+         *
+         * It also refuses to believe a `running` row that has been open for an hour — the state that
+         * left Production's card reading «مزامنة جارية» over a worker that had died.
+         */
+        $syncState = IntegrationTruth::syncStateFor(
+            $accountIds->map(static fn ($id): string => (string) $id)->values()->all(),
+            (string) $this->tenant->tenantId(),
+        );
+
+        $syncing = $syncState === IntegrationTruth::SYNCING;
 
         $state = match (true) {
             // Ordered so an out-of-service provider reads as such even when its keys are complete —
@@ -227,9 +242,26 @@ final class IntegrationController extends Controller
             ->whereIn('id', $accountIds)
             ->max('last_synced_at');
 
+        $connectionState = match (true) {
+            ! $this->settings->isEnabled($platform), ! $creds->isConfigured() => IntegrationTruth::AWAITING_CREDENTIALS,
+            $revoked => IntegrationTruth::REVOKED,
+            $connection === null => IntegrationTruth::NOT_CONNECTED,
+            $connection->status === 'error',
+            $connection->insights_denied_at !== null => IntegrationTruth::REAUTH_REQUIRED,
+            default => IntegrationTruth::CONNECTED,
+        };
+
         return [
             'is_ad_platform' => true,
             'state' => $state,
+            /*
+             * The two truths, unranked. A card that wants one sentence still has `state`; a card that
+             * wants to show an authorisation chip AND a data chip — which is what this product's
+             * integrations page now does — reads these and never has to guess which fact the single
+             * word was about.
+             */
+            'connection_state' => $connectionState,
+            'sync_state' => $syncState,
             'accounts' => $accountIds->count(),
             'connection_error' => $connection?->last_error,
             'token_expires_at' => $connection?->token_expires_at?->toIso8601String(),

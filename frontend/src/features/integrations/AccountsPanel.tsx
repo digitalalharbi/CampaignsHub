@@ -117,7 +117,19 @@ const COPY = {
 /** Widened so either language satisfies it — a `typeof COPY.ar` would only accept the Arabic one. */
 type Copy = typeof COPY.ar | typeof COPY.en
 
-export function AccountsPanel() {
+export function AccountsPanel({ project, heading }: {
+  /*
+   * INTEGRATION-DATASOURCE-WIZARD-001 §17 — pinned to ONE client, for the estate's expanded row.
+   *
+   * The same panel, the same request, the same per-account health and the same logs and backfill
+   * dialogs — scoped. Building a second account list for the estate would have meant two answers to
+   * «what is the state of this account», which is exactly the defect this programme has spent its
+   * PRs removing. Absent, it is the tenant-wide inventory it has always been.
+   */
+  project?: string
+  /** The estate supplies its own heading, so the panel does not repeat one inside a row. */
+  heading?: boolean
+} = {}) {
   const locale = useUi((s) => s.locale)
   const ar = locale === 'ar'
   const c = COPY[ar ? 'ar' : 'en']
@@ -131,9 +143,10 @@ export function AccountsPanel() {
     () => ({
       ...(link === 'all' ? {} : { link }),
       ...(search.trim() === '' ? {} : { q: search.trim() }),
+      ...(project === undefined ? {} : { project }),
       per_page: 50,
     }),
-    [link, search],
+    [link, search, project],
   )
 
   const accountsQuery = useQuery({
@@ -146,10 +159,12 @@ export function AccountsPanel() {
 
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4">
-      <header className="flex flex-col gap-0.5">
-        <h2 className="text-base font-bold text-text-primary">{c.title}</h2>
-        <p className="text-xs text-text-secondary">{c.subtitle}</p>
-      </header>
+      {heading !== false && (
+        <header className="flex flex-col gap-0.5">
+          <h2 className="text-base font-bold text-text-primary">{c.title}</h2>
+          <p className="text-xs text-text-secondary">{c.subtitle}</p>
+        </header>
+      )}
 
       {/* The chips are the filter AND the census — «٤ من ٣٠٩» in one control. */}
       <div className="flex flex-wrap items-center gap-2">

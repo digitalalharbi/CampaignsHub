@@ -8,6 +8,7 @@ import {
 } from './api'
 import { createProject, listClientWorkspaces, listProjects } from '@/features/projects/api'
 import { Button } from '@/components/ui/Button'
+import { Num } from '@/components/ui/Num'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { Refusal } from '@/lib/api/errors'
@@ -378,6 +379,12 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
 
   const h = hierarchy.data
   const providerLabel = ar ? h.connection.label_ar : h.connection.label
+  const steps: Step[] = [
+    ...(parentStepNeeded ? ['parent' as const] : []),
+    'accounts' as const,
+    ...(managing ? [] : ['project' as const]),
+    'review' as const,
+  ]
   // Named rather than inferred from the rendering, so the prompt to refresh is a statement about the
   // DATA — «12 organisations have no name» — and not a side effect of a fallback in the markup.
   const missingParentNames = h.parents.filter((p) => !p.name).length
@@ -395,6 +402,21 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
             : `${h.discovered_count} available · ${h.assigned_count} connected`}
         </p>
       </header>
+
+      {/*
+       * INTEGRATION-DATASOURCE-WIZARD-001 §3 — the steps, visible, with the one you are on named.
+       *
+       * The wizard already HAD steps; what it did not have was any way to see them. A reader met one
+       * screen at a time with a Back button and no idea whether choosing accounts was the last thing
+       * asked of them or the first of four — which is the difference between «finish this» and «how
+       * long is this going to take», and it decides whether somebody completes the flow at all.
+       *
+       * Built from the steps this connection will ACTUALLY show: the parent step is absent for a
+       * provider with no hierarchy, and the project step is absent when the wizard was opened from a
+       * project. A stepper that lists a step nobody will be asked is worse than none — it promises a
+       * question and then skips it, and the reader is left wondering what they missed.
+       */}
+      <Stepper steps={steps} current={current} ar={ar} />
 
       {current === 'parent' && (
         <section className="flex flex-col gap-3" data-testid="wizard-step-parent">
@@ -962,4 +984,67 @@ export function ConnectionWizard({ connectionId, onClose, manageProjectId = null
       </footer>
     </div>
   )
+}
+
+/**
+ * The steps of THIS connection's journey, with the current one named and the finished ones marked.
+ *
+ * `aria-current="step"` rather than colour alone: the current step has to be announced, and a chip
+ * that is merely a different shade says nothing to a reader who is not looking at it. `done` is
+ * carried on the element too, so the E2E suite asserts progress rather than a class name.
+ */
+function Stepper({ steps, current, ar }: { steps: Step[]; current: Step; ar: boolean }) {
+  // `done` is the step's position, not a separate flag: everything before the current one is behind you.
+  const at = steps.indexOf(current)
+  if (at === -1 || steps.length < 2) return null
+
+  return (
+    <ol className="flex flex-wrap items-center gap-x-2 gap-y-1.5" data-testid="wizard-stepper">
+      {steps.map((step, index) => {
+        const done = index < at
+        const now = index === at
+
+        return (
+          <li key={step} className="flex items-center gap-2">
+            <span
+              data-testid={`wizard-stepper-${step}`}
+              data-state={done ? 'done' : now ? 'current' : 'todo'}
+              aria-current={now ? 'step' : undefined}
+              className={`inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-semibold ${
+                now
+                  ? 'bg-primary text-on-primary'
+                  : done
+                    ? 'bg-surface-secondary text-text-primary'
+                    : 'bg-surface-secondary text-text-muted'
+              }`}
+            >
+              <span
+                className={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${
+                  now ? 'bg-on-primary/20' : 'bg-transparent'
+                }`}
+                aria-hidden
+              >
+                {done ? <Check size={11} /> : <Num>{index + 1}</Num>}
+              </span>
+              {ar ? STEP_LABELS[step].ar : STEP_LABELS[step].en}
+            </span>
+
+            {/*
+              A plain separator, not an arrow: an arrow has a direction and this component renders in
+              both, so it would point backwards for half the product's readers.
+            */}
+            {index < steps.length - 1 && <span className="text-text-muted" aria-hidden>·</span>}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+const STEP_LABELS: Record<Step, { ar: string; en: string }> = {
+  parent: { ar: 'النطاق', en: 'Scope' },
+  accounts: { ar: 'الحسابات الإعلانية', en: 'Ad accounts' },
+  project: { ar: 'العميل', en: 'Client' },
+  review: { ar: 'التأكيد', en: 'Confirm' },
+  done: { ar: 'تمت', en: 'Done' },
 }
