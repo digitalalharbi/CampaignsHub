@@ -17,6 +17,8 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardTitle } from '@/components/ui/Card'
 import { EmptyState, Skeleton } from '@/components/ui/States'
+import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
+import { StatCard } from '@/components/ui/StatCard'
 import { toApiError } from '@/lib/api/client'
 import { listExternalCampaigns } from '@/features/campaigns/api'
 import { fmtClock, fmtDateTime } from '@/lib/datetime'
@@ -149,6 +151,15 @@ export function ProjectIntegrationsPage() {
    * tenant's», deliberately, because telling a reader which would confirm the row exists.
    */
   const missing = bindings.isError && toApiError(bindings.error).status === 404
+  /*
+   * WHICH project, named in the head.
+   *
+   * The page decides where a client's money is read from and said only «تكاملات المشروع», leaving
+   * the answer in a select box beside the title. Read from the list the selector already loads, so
+   * no request is added for it; null until that lands, and the eyebrow is simply absent then rather
+   * than flashing a placeholder that looks like a project called «—».
+   */
+  const projectName = projects.data?.find((p) => p.id === projectId)?.name ?? null
 
   const rows = bindings.data ?? []
   /*
@@ -182,25 +193,50 @@ export function ProjectIntegrationsPage() {
 
   return (
     <section className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-[var(--font-heading)] text-3xl font-extrabold tracking-tight">{t('project_integrations')}</h1>
-          <p className="mt-1 text-sm text-text-secondary">{t('project_switch_hint')}</p>
-        </div>
-        {/* Project selector — switching reloads project-scoped data with no leakage. */}
-        <select
-          value={projectId}
-          onChange={(e) => navigate(`/projects/${e.target.value}/integrations`)}
-          className="rounded-[9px] border border-border bg-surface-secondary px-3 py-2 text-sm"
-          aria-label={t('projects')}
-        >
-          {projects.data?.map((p, i) => (
-            <option key={p.id} value={p.id}>
-              {p.name} #{i + 1}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/*
+        PRODUCT-VISUAL-001 §4 §11 — the same head as every other surface, with the project named.
+        
+        A 3xl heading saying «تكاملات المشروع» answered «what page is this» and left «WHICH project»
+        to a select box beside it. On a surface that decides where a client's money is read from,
+        the project is the first fact, so it is the eyebrow — and the four counts that were a row of
+        cards below the fold are the header's own KPIs.
+      */}
+      <PageIntro
+        testid="project-integrations-intro"
+        eyebrow={projectName ?? undefined}
+        title={t('project_integrations')}
+        purpose={t('project_switch_hint')}
+        meta={<DataFreshness lastSyncAt={lastSync} ar={lang === 'ar'} staleAfterHours={STALE_AFTER_HOURS} testid="project-integrations-freshness" />}
+        actions={
+          /* Project selector — switching reloads project-scoped data with no leakage. */
+          <select
+            value={projectId}
+            onChange={(e) => navigate(`/projects/${e.target.value}/integrations`)}
+            className="rounded-[9px] border border-border bg-surface-secondary px-3 py-2 text-sm"
+            aria-label={t('projects')}
+          >
+            {projects.data?.map((p, i) => (
+              <option key={p.id} value={p.id}>
+                {p.name} #{i + 1}
+              </option>
+            ))}
+          </select>
+        }
+        kpis={
+          <>
+            <StatCard label={t('bound_accounts')} value={rows.length.toLocaleString('en-US')} tone="brand" dot testid="project-kpi-accounts" />
+            <StatCard label={lang === 'ar' ? 'المنصات' : 'Platforms'} value={providers.length.toLocaleString('en-US')} tone="info" dot testid="project-kpi-platforms" />
+            <StatCard label={t('campaigns')} value={discoveredCampaigns.toLocaleString('en-US')} tone="neutral" dot testid="project-kpi-campaigns" />
+            <StatCard
+              label={t('last_updated')}
+              value={lastSync ? fmtDateTime(lastSync) : '—'}
+              tone={lastSync ? 'neutral' : 'warning'}
+              dot
+              testid="project-kpi-last-sync"
+            />
+          </>
+        }
+      />
 
       {bindError && <Alert severity={bindError.status === 409 ? 'warning' : 'danger'} title={bindError.message} />}
 
@@ -210,21 +246,6 @@ export function ProjectIntegrationsPage() {
       <h2 className="pt-2 text-lg font-bold text-text-primary">
         {lang === 'ar' ? 'الربط التقني للحسابات' : 'Account bindings'}
       </h2>
-
-      {/* Data status — the project's integration surface at a glance. */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[
-          [t('bound_accounts'), String(rows.length)],
-          [lang === 'ar' ? 'المنصات' : 'Platforms', String(providers.length)],
-          [t('campaigns'), String(discoveredCampaigns)],
-          [t('last_updated'), lastSync ? fmtDateTime(lastSync) : '—'],
-        ].map(([l, v]) => (
-          <div key={String(l)} className="flex flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
-            <span className="text-xs font-semibold text-text-secondary">{l as string}</span>
-            <span className="tnum text-xl font-extrabold text-text-primary" dir="ltr">{v as string}</span>
-          </div>
-        ))}
-      </div>
 
       {/*
         INTEGRATION-DATASOURCE-WIZARD-001 §1 §11 — connecting a source happens in ONE place, and this

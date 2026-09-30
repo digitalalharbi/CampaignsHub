@@ -84,20 +84,17 @@ describe('the project integrations counters', () => {
      * values arrive with the query, so asserting on a label reads the zeros that were there before
      * the answer came back — which is how this test first passed against the defect it exists for.
      */
-    /*
-     * Wait for the BINDING, not for the label. The counter labels render on the first pass and the
-     * values arrive with the query, so asserting on a label reads the zeros that were there before
-     * the answer came back — which is how this test first passed against the defect it exists for.
-     */
-    /*
-     * Wait for the BINDING, not for the label. The counter labels render on the first pass and the
-     * values arrive with the query, so asserting on a label reads the zeros that were there before
-     * the answer came back — which is how this test first passed against the defect it exists for.
-     */
     await screen.findByText(/Sandbox Ad Account/)
 
-    const platforms = (await screen.findByText('Platforms')).closest('div') as HTMLElement
-    expect(within(platforms).getByText('1')).toBeInTheDocument()
+    /*
+     * By testid, not by walking up from the label.
+     *
+     * The counters are `StatCard`s now — the product's own KPI card, shared with the portfolio and
+     * the projects list — and a card puts its label and its value in sibling elements. `closest`
+     * from the label therefore landed on the label's own row and found no number. The id says which
+     * counter is meant and survives the next layout change too.
+     */
+    expect(within(screen.getByTestId('project-kpi-platforms')).getByText('1')).toBeInTheDocument()
   })
 
   /**
