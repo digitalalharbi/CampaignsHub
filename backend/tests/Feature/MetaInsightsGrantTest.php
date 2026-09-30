@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Access\Models\Permission;
+use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
@@ -14,9 +17,12 @@ use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Services\AccountHealth;
 use App\Domains\Integrations\Services\ConnectionWizardState;
 use App\Domains\Integrations\Support\InsightsAuthorisation;
+use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Models\User;
+use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
@@ -233,6 +239,67 @@ final class MetaInsightsGrantTest extends TestCase
 
         $this->assertSame(AccountHealth::INSIGHTS_NOT_AUTHORISED, $health->for($chosen));
         $this->assertSame(AccountHealth::NOT_CONNECTED, $health->for($notChosen));
+    }
+
+    /**
+     * A REFUSED authorisation outranks an open run, so the card cannot deadlock.
+     *
+     * Production showed the Meta card reporting «المزامنة جارية الآن» with no button, above its own
+     * sentence asking the reader to reconnect. `syncing` is derived from a `running` MetricSyncRun,
+     * and a run started under a refused authorisation cannot succeed — so it must not outrank the
+     * refusal, exactly as a connection `error` already does not.
+     */
+    public function test_a_refused_authorisation_outranks_a_running_sync(): void
+    {
+        $connection = $this->metaConnection(['ads_read']);
+        $account = $this->account($connection, 'act_3493018704182532', 'RazahAvanue', null);
+        $this->bind($account);
+
+        MetricSyncRun::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'external_account_id' => $account->id,
+            'provider' => 'meta',
+            'status' => 'running',
+            'window_start' => Carbon::now()->subDays(7)->toDateString(),
+            'window_end' => Carbon::now()->toDateString(),
+            'started_at' => Carbon::now()->subMinutes(2),
+        ]);
+
+        $connection->forceFill(['insights_denied_at' => Carbon::now()])->save();
+
+        $this->assertSame(
+            ConnectionWizardState::USER_REAUTH_REQUIRED,
+            app(ConnectionWizardState::class)->for($connection->fresh())['user_state'],
+        );
+
+        /*
+         * And the CARD's own state, which is the half Production got wrong.
+         *
+         * `user_state` already said REAUTH_REQUIRED above; the card still reported `syncing`, because
+         * a `running` row outranked it, and the page renders «المزامنة جارية الآن» instead of the
+         * Reconnect button for that state. Both facts come from this one request, so assert on it.
+         */
+        $meta = collect($this->actingAs($this->owner(), 'sanctum')->getJson('/api/v1/integrations')
+            ->assertOk()
+            ->json('data'))->firstWhere('key', 'meta');
+
+        $this->assertSame('connected', $meta['state']);
+    }
+
+    /** A tenant owner who may read the Integration Center, for the one test that reads it over HTTP. */
+    private function owner(): User
+    {
+        $this->seed(PermissionSeeder::class);
+        app(ProviderConfigurationService::class)->save('meta', ['client_id' => 'cid', 'client_secret' => 'secret']);
+
+        $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'owner']);
+        $role->givePermissionTo(...Permission::pluck('key')->all());
+
+        $user = User::create(['name' => 'O', 'email' => 'o-'.uniqid().'@agency.test', 'password' => 'secret123']);
+        $this->grantMembership($user, $this->tenant);
+        $user->assignRole($role);
+
+        return $user;
     }
 
     private function account(ProviderConnection $connection, string $externalId, string $name, ?string $category): ExternalAccount

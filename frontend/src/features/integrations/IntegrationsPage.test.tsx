@@ -450,6 +450,47 @@ describe('an authorisation with nothing selected yet', () => {
     expect(screen.queryByTestId('connector-needs-selection-meta')).toBeNull()
   })
 
+  /**
+   * A card that needs re-authorising offers the button, even while a sync is open.
+   *
+   * Seen on Production: the Meta card carried the chip «يحتاج إعادة مصادقة» and the sentence
+   * «الحساب مرتبط، لكن صلاحية ads_read غير ممنوحة — أعد الربط» above an action area reading
+   * «المزامنة جارية الآن» with NO button at all. The page told the reader to reconnect and hid the
+   * only control that could — a deadlock, and one the reader cannot get out of.
+   *
+   * `state === 'syncing'` came first in the action chain and won. It is the weaker claim: a run
+   * being open says what the pipeline is doing; REAUTH_REQUIRED says the pipeline cannot do it,
+   * because the authorisation that sync would use is the one being refused.
+   */
+  it('offers Reconnect even while a sync is open, and stops claiming one is running', async () => {
+    rows.data = [connector({ key: 'meta', state: 'syncing', accounts: 17 })]
+    const entry = {
+      connection: { id: 'conn-meta', provider: 'meta', label: 'Meta', label_ar: 'ميتا', client_workspace_id: null },
+      state: 'first_sync_pending' as const,
+      discovered: 17,
+      assigned: 1,
+      synced: 0,
+      has_parent: true,
+      resumable: false,
+      next_step: 'reconnect' as const,
+      user_state: 'REAUTH_REQUIRED' as const,
+      reauth_reason: 'insights_not_authorised' as const,
+      granted_scopes: ['public_profile'],
+    }
+    wizardStates.connections = [entry]
+    wizardStates.resumable = []
+
+    renderWithProviders(<IntegrationsPage />, { route: '/app/integrations', locale: 'ar' })
+
+    // The one control that can help is on the card…
+    expect(await screen.findByTestId('connector-reconnect-meta')).toBeInTheDocument()
+    // …and the claim that contradicted it is gone.
+    expect(screen.queryByText('المزامنة جارية الآن')).toBeNull()
+    // Both of these call the platform with the token being refused.
+    expect(screen.queryByTestId('connector-sync-meta')).toBeNull()
+    expect(screen.queryByTestId('connector-manage-meta')).toBeNull()
+  })
+
   it('offers to resume the unfinished connection instead of authorising again', async () => {
     rows.data = [connector({ key: 'snapchat', state: 'connected', accounts: 309 })]
     needsSelection()

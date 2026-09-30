@@ -206,6 +206,19 @@ final class IntegrationController extends Controller
             $connection === null => 'disconnected',
             // An error outranks a run in progress: a stuck `running` row must not hide a broken authorisation.
             $connection->status === 'error' => 'error',
+            /*
+             * META-INSIGHTS-GRANT-001 — and so does a REFUSED authorisation, for the same reason.
+             *
+             * A run whose insights the provider is refusing cannot succeed, so reporting «a sync is
+             * running now» describes work that will end in the same refusal. On Production the card
+             * said exactly that above an action area with no button, while the sentence beside it
+             * asked the reader to reconnect: the page told somebody to act and hid the control.
+             *
+             * Reported as `connected`, which is what the connection IS — the authorisation exists
+             * and is refused on its grant, and `user_state` carries that as REAUTH_REQUIRED. This
+             * line's whole job is to stop a stale `running` row outranking it.
+             */
+            $connection->insights_denied_at !== null => 'connected',
             $syncing => 'syncing',
             default => 'connected',
         };
