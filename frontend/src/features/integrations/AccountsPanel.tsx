@@ -74,6 +74,10 @@ const COPY = {
     trigger_automatic: 'تلقائية',
     trigger_manual: 'يدوية',
     trigger_backfill: 'سحب تاريخي',
+    source_first_sync: 'أول مزامنة بعد الاختيار',
+    source_reconnect: 'بعد إعادة المصادقة',
+    source_scheduled: 'مجدولة',
+    run_waited: 'انتظرت في الطابور',
   },
   en: {
     title: 'Discovered accounts',
@@ -111,6 +115,10 @@ const COPY = {
     trigger_automatic: 'Automatic',
     trigger_manual: 'Manual',
     trigger_backfill: 'Backfill',
+    source_first_sync: 'First sync after selecting',
+    source_reconnect: 'After reconnecting',
+    source_scheduled: 'Scheduled',
+    run_waited: 'Queued for',
   },
 } as const
 
@@ -254,6 +262,7 @@ export function AccountsPanel({ project, heading }: {
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
+                  data-testid={`account-logs-${account.id}`}
                   onClick={() => setLogsFor(account)}
                   className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[11px] font-semibold text-text-primary hover:bg-surface-hover"
                 >
@@ -327,7 +336,18 @@ function LogsDialog({
     queryFn: () => getAccountLogs(account.id),
   })
 
-  const triggerLabel = (trigger: string): string => {
+  /*
+   * `source` when the server sends one, `trigger` when it does not.
+   *
+   * Not a transition to clean up later: a log is history, and a run recorded before `source` existed
+   * has only the coarser word. Falling back to it says the less precise true thing instead of
+   * inventing the precise one.
+   */
+  const triggerLabel = (run: { trigger: string; source?: string }): string => {
+    if (run.source === 'first_sync') return c.source_first_sync
+    if (run.source === 'reconnect') return c.source_reconnect
+    if (run.source === 'scheduled') return c.source_scheduled
+    const trigger = run.source ?? run.trigger
     if (trigger === 'manual') return c.trigger_manual
     if (trigger === 'backfill') return c.trigger_backfill
 
@@ -354,7 +374,7 @@ function LogsDialog({
                   >
                     {ar ? meaning.ar : meaning.en}
                   </span>
-                  <span className="rounded bg-surface-hover px-1.5 py-0.5 text-text-secondary">{triggerLabel(run.trigger)}</span>
+                  <span className="rounded bg-surface-hover px-1.5 py-0.5 text-text-secondary">{triggerLabel(run)}</span>
                   {/* §8 — the same answer, said once, with how many times it was the answer. */}
                   {run.repeats > 1 && (
                     <span className="rounded bg-surface-hover px-1.5 py-0.5 text-text-secondary" data-testid="account-log-repeats">
@@ -371,6 +391,10 @@ function LogsDialog({
                   <span>{c.run_rows}: {run.provider_rows ?? '—'}</span>
                   <span>{c.run_metrics}: {run.metrics_imported}</span>
                   <span>{c.run_duration}: {run.duration_seconds === null ? '—' : `${run.duration_seconds}s`}</span>
+                  {/* Only when it was measured: «0s» over a run nobody timed would be a claim. */}
+                  {typeof run.waited_seconds === 'number' && (
+                    <span data-testid="account-log-waited">{c.run_waited}: {run.waited_seconds}s</span>
+                  )}
                   <span>
                     {run.repeats > 1 ? c.run_since : c.run_started}:{' '}
                     {(run.repeats > 1 ? run.repeats_since : run.started_at) === null

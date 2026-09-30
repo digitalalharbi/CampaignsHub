@@ -497,6 +497,18 @@ export interface AccountSyncRun {
   provider: string
   status: string
   trigger: 'automatic' | 'manual' | 'backfill'
+  /**
+   * INTEG-RUNTIME §9 — what ASKED for this run, in the vocabulary a reader acts on.
+   *
+   * Finer than `trigger`, which only separates «a person» from «the schedule». The next move differs
+   * for every value here: a failed `first_sync` is a setup that never worked, a failed `scheduled`
+   * is something that used to work and stopped, and a failed `reconnect` is an authorisation
+   * somebody has just renewed to no effect.
+   */
+  source?: 'first_sync' | 'manual' | 'scheduled' | 'reconnect' | 'backfill'
+  /** When it was asked for, and how long it waited. Null on runs recorded before this was kept. */
+  queued_at?: string | null
+  waited_seconds?: number | null
   window_start: string | null
   window_end: string | null
   provider_rows: number | null

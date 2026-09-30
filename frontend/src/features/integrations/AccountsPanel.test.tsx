@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { AccountsPanel } from './AccountsPanel'
 import { renderWithProviders } from '@/test/utils'
 import type { AccountRow, AccountsPage } from './api'
@@ -10,7 +10,7 @@ vi.mock('./api', () => ({
   backfillAccount: vi.fn(),
 }))
 
-import { listAccounts } from './api'
+import { getAccountLogs, listAccounts } from './api'
 
 function account(overrides: Partial<AccountRow> = {}): AccountRow {
   return {
@@ -158,5 +158,64 @@ describe('AccountsPanel', () => {
     renderWithProviders(<AccountsPanel />)
 
     expect(await screen.findByTestId('inventory-empty')).toHaveTextContent(/لم يُكتشف أي حساب|Nothing discovered yet/)
+  })
+})
+
+/**
+ * INTEG-RUNTIME §9 — a run log whose lines all read the same is not a log.
+ *
+ * Every line used to say «Automatic», including the first sync after a selection and the one a
+ * reconnect kicked off. Those three failing mean three different things and need three different
+ * people, so the log says which — and, where it was measured, how long the run sat in the queue
+ * before anything began.
+ */
+describe('the account sync log', () => {
+  beforeEach(() => {
+    vi.mocked(listAccounts).mockResolvedValue(page([account({ is_linked: true })]))
+  })
+
+  it('names what asked for each run and how long it waited', async () => {
+    vi.mocked(getAccountLogs).mockResolvedValue({
+      account: account({ is_linked: true }),
+      runs: [{
+        id: 'r1', provider: 'snapchat', status: 'success', trigger: 'automatic',
+        source: 'reconnect', queued_at: '2026-09-30T10:00:00Z', waited_seconds: 20,
+        window_start: '2026-09-23', window_end: '2026-09-30',
+        provider_rows: 12, parsed_rows: 12, mapped_rows: 12, metrics_imported: 12,
+        duration_seconds: 4, attempts: 1,
+        started_at: '2026-09-30T10:00:20Z', finished_at: '2026-09-30T10:00:24Z',
+        error: null, repeats: 1, repeats_since: null,
+      }],
+    })
+
+    renderWithProviders(<AccountsPanel />)
+
+    fireEvent.click(await screen.findByTestId('account-logs-a1'))
+
+    const row = await screen.findByTestId('account-log-row')
+    expect(row).toHaveTextContent('After reconnecting')
+    expect(screen.getByTestId('account-log-waited')).toHaveTextContent('20s')
+  })
+
+  /** A run recorded before the column existed waited an unknown time, which is not «0s». */
+  it('says nothing about a wait nobody measured', async () => {
+    vi.mocked(getAccountLogs).mockResolvedValue({
+      account: account({ is_linked: true }),
+      runs: [{
+        id: 'r2', provider: 'snapchat', status: 'success', trigger: 'automatic',
+        window_start: '2026-09-23', window_end: '2026-09-30',
+        provider_rows: 1, parsed_rows: 1, mapped_rows: 1, metrics_imported: 1,
+        duration_seconds: 2, attempts: 1,
+        started_at: '2026-09-30T10:00:20Z', finished_at: '2026-09-30T10:00:22Z',
+        error: null, repeats: 1, repeats_since: null,
+      }],
+    })
+
+    renderWithProviders(<AccountsPanel />)
+
+    fireEvent.click(await screen.findByTestId('account-logs-a1'))
+
+    await screen.findByTestId('account-log-row')
+    expect(screen.queryByTestId('account-log-waited')).toBeNull()
   })
 })

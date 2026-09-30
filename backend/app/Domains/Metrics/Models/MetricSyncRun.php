@@ -23,12 +23,13 @@ final class MetricSyncRun extends Model
         'tenant_id', 'project_id', 'connection_id', 'external_account_id', 'provider',
         'status', 'window_start', 'window_end', 'metrics_upserted', 'attempts',
         'provider_raw_rows', 'parsed_rows', 'mapped_campaign_rows',
-        'started_at', 'finished_at', 'error', 'meta',
+        'queued_at', 'started_at', 'finished_at', 'error', 'meta',
     ];
 
     protected $casts = [
         'window_start' => 'date',
         'window_end' => 'date',
+        'queued_at' => 'datetime',
         'started_at' => 'datetime',
         'finished_at' => 'datetime',
         'metrics_upserted' => 'integer',
@@ -62,6 +63,52 @@ final class MetricSyncRun extends Model
             ($meta['manual'] ?? false) === true, isset($meta['triggered_by']) => 'manual',
             default => 'automatic',
         };
+    }
+
+    /**
+     * WHAT ASKED for this run — INTEG-RUNTIME §9, in the five words a sync log needs.
+     *
+     * {@see self::trigger()} answers the older, coarser question («did a person do this») and is kept
+     * for the surfaces built on it. This is the one a reader of a run log is actually asking, because
+     * the next move differs for every value: a failed `first_sync` means the setup never worked, a
+     * failed `scheduled` means something that used to work stopped, and a failed `reconnect` means
+     * the new authorisation is no better than the old one.
+     *
+     * Derived from the `meta` every dispatcher already writes rather than stored in a column of its
+     * own: a second place to say what caused a run is a second place for it to be wrong.
+     *
+     * `reconnect` outranks `first_sync` deliberately — the first sync after re-authorising is caused
+     * BY the reconnect, and reading it as an ordinary first sync loses the only fact that explains it.
+     * A run with no `meta` at all predates these flags and was the scheduler, which is what it says.
+     */
+    public function source(): string
+    {
+        $meta = (array) ($this->meta ?? []);
+        $named = is_string($meta['source'] ?? null) ? $meta['source'] : null;
+
+        return match (true) {
+            $named === 'reconnect' => 'reconnect',
+            ($meta['first_sync'] ?? false) === true => 'first_sync',
+            ($meta['backfill'] ?? false) === true, $named === 'backfill' => 'backfill',
+            ($meta['manual'] ?? false) === true, isset($meta['triggered_by']), $named === 'resync' => 'manual',
+            default => 'scheduled',
+        };
+    }
+
+    /**
+     * How long this run waited in the queue before a worker began it, or null.
+     *
+     * Null is «nobody wrote down when it was asked for», which is true of every run older than the
+     * `queued_at` column. It is not zero — a zero here would claim a run started the instant it was
+     * requested, which is the one thing a queue never does.
+     */
+    public function waitedSeconds(): ?int
+    {
+        if ($this->queued_at === null || $this->started_at === null) {
+            return null;
+        }
+
+        return max(0, (int) $this->queued_at->diffInSeconds($this->started_at));
     }
 
     /**
@@ -112,6 +159,10 @@ final class MetricSyncRun extends Model
             'provider' => $this->provider,
             'status' => $this->status,
             'trigger' => $this->trigger(),
+            // What ASKED for it, and how long it waited before anything began.
+            'source' => $this->source(),
+            'queued_at' => $this->queued_at?->toIso8601String(),
+            'waited_seconds' => $this->waitedSeconds(),
             'account' => $accountName,
             'account_external_id' => $accountExternalId,
             'window_start' => $this->window_start?->toDateString(),
