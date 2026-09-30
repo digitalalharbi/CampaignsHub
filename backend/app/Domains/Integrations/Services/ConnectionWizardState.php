@@ -9,6 +9,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Support\InsightsAuthorisation;
+use App\Domains\Integrations\Support\IntegrationTruth;
 
 /**
  * ORCH-100 §39 §41 — where a connection has got to, worked out from the record rather than remembered.
@@ -124,11 +125,23 @@ final class ConnectionWizardState
         $blocked = $connection->discovery_blocked_reason !== null;
         $discovered = $blocked ? 0 : $everDiscovered;
 
-        $assigned = ProjectIntegrationBinding::withoutGlobalScopes()
+        /*
+         * The SELECTED set itself, not only how big it is.
+         *
+         * The data truth beside this one is computed over exactly these ids, so a run belonging to an
+         * account somebody deselected last week cannot describe the connection's current state
+         * (ACCOUNT-SCOPE-ISOLATION-001).
+         */
+        $selectedIds = ProjectIntegrationBinding::withoutGlobalScopes()
             ->whereIn('external_account_id', (clone $accounts)->select('id'))
             ->where('is_active', true)
             ->distinct()
-            ->count('external_account_id');
+            ->pluck('external_account_id')
+            ->map(static fn ($id): string => (string) $id)
+            ->values()
+            ->all();
+
+        $assigned = count($selectedIds);
 
         // A real sync, not a discovery: `last_synced_at` is only written when data actually arrives
         // (DISCOVERY-NOT-SYNC-001), so this counts accounts that have genuinely produced something.
@@ -210,9 +223,26 @@ final class ConnectionWizardState
             default => self::USER_HEALTHY,
         };
 
+        /*
+         * INTEGRATION-DATASOURCE-WIZARD-001 §16 — the two independent truths, side by side.
+         *
+         * `user_state` above is the single sentence a card leads with, and it necessarily ranks these
+         * two against each other. That ranking is a PRESENTATION choice and it belongs to a surface,
+         * not to the data — so the data now carries both facts unranked, and a reader that needs to
+         * know «can it authorise» and «did data arrive» at the same time no longer has to infer one
+         * of them from the absence of the other.
+         */
+        $connectionState = match (true) {
+            in_array($connection->status, ['revoked', 'disconnected'], true) => IntegrationTruth::REVOKED,
+            $insightsBlocked, $authorisationLost, $connection->status === 'error' => IntegrationTruth::REAUTH_REQUIRED,
+            default => IntegrationTruth::CONNECTED,
+        };
+
         return [
             'state' => $state,
             'user_state' => $userState,
+            'connection_state' => $connectionState,
+            'sync_state' => IntegrationTruth::syncStateFor($selectedIds, (string) $connection->tenant_id),
             /*
              * WHY re-authorising is being asked for, so the page can say it rather than offer a bare
              * «Reconnect». A withdrawn authorisation and an ungranted read scope are the same button

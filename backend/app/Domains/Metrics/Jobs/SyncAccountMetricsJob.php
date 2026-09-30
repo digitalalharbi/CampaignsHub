@@ -75,8 +75,16 @@ final class SyncAccountMetricsJob implements ShouldBeUnique, ShouldQueue
         public readonly string $accountId,
         public readonly string $from,
         public readonly string $to,
-        private readonly array $meta = [],
-    ) {}
+        private array $meta = [],
+    ) {
+        /*
+         * Stamped HERE, in the constructor, because this is the only line in the pipeline that runs
+         * at dispatch time. The run row is written by the worker, so by the time anything else could
+         * record a time the queue wait has already happened and been lost. Every dispatcher gets it
+         * without knowing about it, and a caller that has its own idea of when it asked keeps it.
+         */
+        $this->meta['queued_at'] ??= Carbon::now()->toIso8601String();
+    }
 
     public function handle(
         AccountMetricsSyncer $syncer,

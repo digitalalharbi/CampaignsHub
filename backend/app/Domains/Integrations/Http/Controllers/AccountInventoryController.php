@@ -86,6 +86,14 @@ final class AccountInventoryController extends Controller
             'connection' => ['sometimes', 'nullable', 'uuid'],
             'account_type' => ['sometimes', 'nullable', Rule::in(['ad_account', 'store'])],
             'link' => ['sometimes', 'nullable', Rule::in(['linked', 'unlinked'])],
+            /*
+             * INTEGRATION-DATASOURCE-WIZARD-001 §17 — «this client's accounts», for the estate row.
+             *
+             * Expanding a project on the estate asks THIS endpoint rather than a second one, so the
+             * per-account health, ordering and paging a reader sees there are the ones they already
+             * know from the inventory. A filter, not a new engine.
+             */
+            'project' => ['sometimes', 'nullable', 'uuid'],
             'q' => ['sometimes', 'nullable', 'string', 'max:120'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
         ]);
@@ -122,6 +130,14 @@ final class AccountInventoryController extends Controller
             ->where('tenant_id', $tenantId)
             ->where('is_active', true)
             ->select('external_account_id');
+
+        if (($validated['project'] ?? null) !== null) {
+            $query->whereIn('id', ProjectIntegrationBinding::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('project_id', $validated['project'])
+                ->where('is_active', true)
+                ->select('external_account_id'));
+        }
 
         if (($validated['link'] ?? null) === 'linked') {
             $query->whereIn('id', $linkedIds());

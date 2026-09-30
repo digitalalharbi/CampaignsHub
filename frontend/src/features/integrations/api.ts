@@ -15,6 +15,20 @@ import { ensureCsrfCookie, getData, postData, putData } from '@/lib/api/client'
 export type PlatformState =
   | 'connected' | 'syncing' | 'error' | 'awaiting_credentials' | 'unavailable' | 'disconnected' | 'revoked'
 
+/**
+ * INTEGRATION-DATASOURCE-WIZARD-001 §16 — the authorisation truth. Says nothing about data.
+ *
+ * Separate from {@link SyncState} because the product spent a release answering both questions with
+ * one word, and on Production the wrong one won: a stale `running` row outranked a refused Meta
+ * grant, so the card announced «المزامنة جارية الآن» and hid the Reconnect button the same card was
+ * asking the reader to press. Two fields cannot do that to each other.
+ */
+export type ConnectionState =
+  | 'NOT_CONNECTED' | 'AWAITING_CREDENTIALS' | 'CONNECTED' | 'REAUTH_REQUIRED' | 'REVOKED'
+
+/** The data truth. Says nothing about authorisation. */
+export type SyncState = 'NEVER_SYNCED' | 'QUEUED' | 'SYNCING' | 'SUCCEEDED' | 'FAILED'
+
 export interface Connector {
   key: string
   label: string
@@ -33,6 +47,15 @@ export interface Connector {
   /** Present only for the six ad platforms; the sandbox and analytics connectors keep the old shape. */
   is_ad_platform?: boolean
   state?: PlatformState
+  /**
+   * The two independent truths, which `state` above collapses into one word.
+   *
+   * `state` is kept — it is what the older surfaces read and it is still the right shape for a card
+   * that shows a single chip. Anything that needs to show «the authorisation is refused» AND «the
+   * last run failed» at the same time reads these instead, and neither can hide the other.
+   */
+  connection_state?: ConnectionState
+  sync_state?: SyncState
   /*
    * There is deliberately no `missing` here any more. The list of absent SYSTEM credentials was being
    * served to tenants, and it is an instruction for `/admin` addressed to the wrong reader — see the
@@ -83,12 +106,20 @@ export async function connectConnector(key: string): Promise<{ key: string; stat
 export async function startPlatformOAuth(
   provider: string,
   clientWorkspaceId?: string | null,
+  /*
+   * INTEGRATION-DATASOURCE-WIZARD-001 §17 — the DESTINATION, decided before the consent screen.
+   *
+   * «Which client are these accounts for» is asked once, on the way in. It rides the verified state
+   * across the provider and comes back on the callback, so the account picker opens with a client
+   * already in hand instead of asking for one as a fourth step after the fact.
+   */
+  projectId?: string | null,
 ): Promise<{ authorization_url: string }> {
   await ensureCsrfCookie()
-  return postData<{ authorization_url: string }>(
-    `/integrations/${provider}/oauth/start`,
-    clientWorkspaceId ? { client_workspace_id: clientWorkspaceId } : {},
-  )
+  return postData<{ authorization_url: string }>(`/integrations/${provider}/oauth/start`, {
+    ...(clientWorkspaceId ? { client_workspace_id: clientWorkspaceId } : {}),
+    ...(projectId ? { project_id: projectId } : {}),
+  })
 }
 
 export async function syncConnector(key: string): Promise<{ success: boolean; count: number }> {
@@ -139,6 +170,8 @@ export interface ConnectionWizard {
    * three surfaces cannot invent three vocabularies for one connection. Optional so a payload
    * written before it existed still renders.
    */
+  connection_state?: ConnectionState
+  sync_state?: SyncState
   user_state?: 'NOT_CONNECTED' | 'AUTH_REQUIRED' | 'ACCOUNT_SELECTION_REQUIRED' | 'SYNCING' | 'HEALTHY' | 'NO_DATA' | 'ATTENTION_REQUIRED' | 'REAUTH_REQUIRED'
   /**
    * WHY re-authorising is being asked for — META-INSIGHTS-GRANT-001.
@@ -445,6 +478,13 @@ export interface AccountsQuery {
   connection?: string
   account_type?: 'ad_account' | 'store'
   link?: LinkFilter
+  /**
+   * INTEGRATION-DATASOURCE-WIZARD-001 §17 — «this client's accounts».
+   *
+   * The estate's expanded row asks this endpoint rather than a second one, so the health, ordering
+   * and paging a reader meets there are the ones they already know from the inventory.
+   */
+  project?: string
   q?: string
   page?: number
   per_page?: number
@@ -465,6 +505,18 @@ export interface AccountSyncRun {
   provider: string
   status: string
   trigger: 'automatic' | 'manual' | 'backfill'
+  /**
+   * INTEG-RUNTIME §9 — what ASKED for this run, in the vocabulary a reader acts on.
+   *
+   * Finer than `trigger`, which only separates «a person» from «the schedule». The next move differs
+   * for every value here: a failed `first_sync` is a setup that never worked, a failed `scheduled`
+   * is something that used to work and stopped, and a failed `reconnect` is an authorisation
+   * somebody has just renewed to no effect.
+   */
+  source?: 'first_sync' | 'manual' | 'scheduled' | 'reconnect' | 'backfill'
+  /** When it was asked for, and how long it waited. Null on runs recorded before this was kept. */
+  queued_at?: string | null
+  waited_seconds?: number | null
   window_start: string | null
   window_end: string | null
   provider_rows: number | null
@@ -569,4 +621,55 @@ export async function backfillAccount(
 ): Promise<{ account_id: string; from: string; to: string; queued: boolean }> {
   await ensureCsrfCookie()
   return postData(`/accounts/${id}/backfill`, { from, to })
+}
+
+
+/**
+ * INTEGRATION-DATASOURCE-WIZARD-001 §17 — the Connection Hub: one row per AUTHORISATION.
+ *
+ * Not one per provider. Two Meta authorisations — the agency's own and a client's, granted by two
+ * different people — expire, fail and get reconnected independently, and the card that merged them
+ * could not say which of the two had gone stale.
+ */
+export interface HubConnection {
+  id: string
+  provider: string
+  label: string
+  label_ar: string
+  connection_name: string
+  /** The CampaignsHub user who authorised it. Null is «nobody recorded it», never an invented email. */
+  authorised_by: { name: string; email: string } | null
+  authorised_at: string | null
+  /** Chosen of reachable — «1 of 17 accounts», which is ACCOUNT-SCOPE-ISOLATION-001 in four words. */
+  selected_accounts: number
+  discovered_accounts: number
+  connection_state: ConnectionState
+  sync_state: SyncState
+  /** At least one reachable account carries a sync error category of its own. */
+  needs_attention: boolean
+  last_success_at: string | null
+  next_sync_at: string | null
+  /** The clients this authorisation feeds — the answer to «who breaks if it lapses». */
+  projects: Array<{ id: string; name: string }>
+  has_parent: boolean
+  discovery_blocked_reason: string | null
+  token_expires_at: string | null
+}
+
+/** A provider a NEW authorisation can be started for: enabled, and with its system keys present. */
+export interface ConnectableProvider {
+  key: string
+  label: string
+  label_ar: string
+  kind: 'advertising' | 'commerce'
+  has_parent: boolean
+}
+
+export interface ConnectionHub {
+  connections: HubConnection[]
+  connectable: ConnectableProvider[]
+}
+
+export function fetchConnectionHub(): Promise<ConnectionHub> {
+  return getData<ConnectionHub>('/integrations/hub')
 }

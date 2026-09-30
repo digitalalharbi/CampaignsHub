@@ -74,6 +74,10 @@ const COPY = {
     trigger_automatic: 'تلقائية',
     trigger_manual: 'يدوية',
     trigger_backfill: 'سحب تاريخي',
+    source_first_sync: 'أول مزامنة بعد الاختيار',
+    source_reconnect: 'بعد إعادة المصادقة',
+    source_scheduled: 'مجدولة',
+    run_waited: 'انتظرت في الطابور',
   },
   en: {
     title: 'Discovered accounts',
@@ -111,13 +115,29 @@ const COPY = {
     trigger_automatic: 'Automatic',
     trigger_manual: 'Manual',
     trigger_backfill: 'Backfill',
+    source_first_sync: 'First sync after selecting',
+    source_reconnect: 'After reconnecting',
+    source_scheduled: 'Scheduled',
+    run_waited: 'Queued for',
   },
 } as const
 
 /** Widened so either language satisfies it — a `typeof COPY.ar` would only accept the Arabic one. */
 type Copy = typeof COPY.ar | typeof COPY.en
 
-export function AccountsPanel() {
+export function AccountsPanel({ project, heading }: {
+  /*
+   * INTEGRATION-DATASOURCE-WIZARD-001 §17 — pinned to ONE client, for the estate's expanded row.
+   *
+   * The same panel, the same request, the same per-account health and the same logs and backfill
+   * dialogs — scoped. Building a second account list for the estate would have meant two answers to
+   * «what is the state of this account», which is exactly the defect this programme has spent its
+   * PRs removing. Absent, it is the tenant-wide inventory it has always been.
+   */
+  project?: string
+  /** The estate supplies its own heading, so the panel does not repeat one inside a row. */
+  heading?: boolean
+} = {}) {
   const locale = useUi((s) => s.locale)
   const ar = locale === 'ar'
   const c = COPY[ar ? 'ar' : 'en']
@@ -131,9 +151,10 @@ export function AccountsPanel() {
     () => ({
       ...(link === 'all' ? {} : { link }),
       ...(search.trim() === '' ? {} : { q: search.trim() }),
+      ...(project === undefined ? {} : { project }),
       per_page: 50,
     }),
-    [link, search],
+    [link, search, project],
   )
 
   const accountsQuery = useQuery({
@@ -145,11 +166,21 @@ export function AccountsPanel() {
   const summary = accountsQuery.data?.summary
 
   return (
-    <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4">
-      <header className="flex flex-col gap-0.5">
-        <h2 className="text-base font-bold text-text-primary">{c.title}</h2>
-        <p className="text-xs text-text-secondary">{c.subtitle}</p>
-      </header>
+    <section
+      className={heading === false
+        /*
+         * Embedded in a row that already draws a card: a second border and a second padding inside
+         * the first is what took the width away from the account rows on a phone.
+         */
+        ? 'flex flex-col gap-3'
+        : 'flex flex-col gap-3 rounded-xl border border-border bg-surface p-4'}
+    >
+      {heading !== false && (
+        <header className="flex flex-col gap-0.5">
+          <h2 className="text-base font-bold text-text-primary">{c.title}</h2>
+          <p className="text-xs text-text-secondary">{c.subtitle}</p>
+        </header>
+      )}
 
       {/* The chips are the filter AND the census — «٤ من ٣٠٩» in one control. */}
       <div className="flex flex-wrap items-center gap-2">
@@ -202,7 +233,14 @@ export function AccountsPanel() {
               data-linked={account.is_linked}
               className="flex flex-wrap items-start gap-3 rounded-lg border border-border bg-background p-3"
             >
-              <div className="min-w-0 flex-1">
+              {/*
+                `basis-full` until there is room for a second column, and it is load-bearing on a
+                phone. `flex-1` alone let the actions — two buttons that do not wrap — keep their
+                min-content width and squeeze this column to about sixty pixels, which stacked the
+                account's name, id and project one character wide. Measured at 390px inside the
+                estate's expanded row, where the nesting takes the available width down furthest.
+              */}
+              <div className="min-w-0 flex-1 basis-full sm:basis-0">
                 <div className="flex flex-wrap items-center gap-2">
                   {/* The NAME leads. Always words — the server never returns an id here. */}
                   <span className="truncate text-sm font-semibold text-text-primary">{account.name}</span>
@@ -239,6 +277,7 @@ export function AccountsPanel() {
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
+                  data-testid={`account-logs-${account.id}`}
                   onClick={() => setLogsFor(account)}
                   className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[11px] font-semibold text-text-primary hover:bg-surface-hover"
                 >
@@ -312,7 +351,18 @@ function LogsDialog({
     queryFn: () => getAccountLogs(account.id),
   })
 
-  const triggerLabel = (trigger: string): string => {
+  /*
+   * `source` when the server sends one, `trigger` when it does not.
+   *
+   * Not a transition to clean up later: a log is history, and a run recorded before `source` existed
+   * has only the coarser word. Falling back to it says the less precise true thing instead of
+   * inventing the precise one.
+   */
+  const triggerLabel = (run: { trigger: string; source?: string }): string => {
+    if (run.source === 'first_sync') return c.source_first_sync
+    if (run.source === 'reconnect') return c.source_reconnect
+    if (run.source === 'scheduled') return c.source_scheduled
+    const trigger = run.source ?? run.trigger
     if (trigger === 'manual') return c.trigger_manual
     if (trigger === 'backfill') return c.trigger_backfill
 
@@ -339,7 +389,7 @@ function LogsDialog({
                   >
                     {ar ? meaning.ar : meaning.en}
                   </span>
-                  <span className="rounded bg-surface-hover px-1.5 py-0.5 text-text-secondary">{triggerLabel(run.trigger)}</span>
+                  <span className="rounded bg-surface-hover px-1.5 py-0.5 text-text-secondary">{triggerLabel(run)}</span>
                   {/* §8 — the same answer, said once, with how many times it was the answer. */}
                   {run.repeats > 1 && (
                     <span className="rounded bg-surface-hover px-1.5 py-0.5 text-text-secondary" data-testid="account-log-repeats">
@@ -356,6 +406,10 @@ function LogsDialog({
                   <span>{c.run_rows}: {run.provider_rows ?? '—'}</span>
                   <span>{c.run_metrics}: {run.metrics_imported}</span>
                   <span>{c.run_duration}: {run.duration_seconds === null ? '—' : `${run.duration_seconds}s`}</span>
+                  {/* Only when it was measured: «0s» over a run nobody timed would be a claim. */}
+                  {typeof run.waited_seconds === 'number' && (
+                    <span data-testid="account-log-waited">{c.run_waited}: {run.waited_seconds}s</span>
+                  )}
                   <span>
                     {run.repeats > 1 ? c.run_since : c.run_started}:{' '}
                     {(run.repeats > 1 ? run.repeats_since : run.started_at) === null

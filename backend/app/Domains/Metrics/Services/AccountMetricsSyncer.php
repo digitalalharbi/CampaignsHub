@@ -78,6 +78,10 @@ final class AccountMetricsSyncer
             'window_start' => $from->toDateString(),
             'window_end' => $to->toDateString(),
             'attempts' => 1,
+            // Written by the JOB at dispatch, so the row can say how long this waited to begin.
+            'queued_at' => isset($meta['queued_at']) && is_string($meta['queued_at'])
+                ? Carbon::parse($meta['queued_at'])
+                : null,
             'started_at' => Carbon::now(),
             'meta' => $meta,
         ])->save();

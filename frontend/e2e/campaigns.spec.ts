@@ -99,9 +99,17 @@ test('create a unified campaign and see it in the list', async ({ page }) => {
   await page.getByLabel(/Campaign name|اسم الحملة/).fill(name)
   await page.getByRole('button', { name: /^Save$|^حفظ$/ }).click()
 
-  // Refetched from the API — the new campaign appears once the list view is shown.
+  /*
+   * Refetched from the API — the new campaign appears once the list view is shown.
+   *
+   * With an explicit timeout, because this assertion waits on a ROUND TRIP: the save, the
+   * invalidation and the list's refetch. The default five seconds is a guess about how fast a
+   * machine is, and on a loaded CI runner it is the wrong guess — this failed there at 6.5s while
+   * the same assertion settles in about one second locally. The wait is for a request, so it is
+   * given a request's budget.
+   */
   await openCardsView(page)
-  await expect(page.getByText(name)).toBeVisible()
+  await expect(page.getByText(name)).toBeVisible({ timeout: 20000 })
 })
 
 test('open a campaign detail and switch tabs', async ({ page }) => {

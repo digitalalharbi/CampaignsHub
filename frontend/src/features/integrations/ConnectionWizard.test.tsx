@@ -362,3 +362,47 @@ describe('what the wizard says the first sync did', () => {
     expect(done).not.toContain('Synced successfully')
   })
 })
+
+/**
+ * INTEGRATION-DATASOURCE-WIZARD-001 §24 — a destination already in hand is not asked for again.
+ *
+ * The stepper itself lives in `ConnectionFlow` now and is asserted there; what belongs here is the
+ * BEHAVIOUR it draws: a wizard whose client was chosen before the consent screen goes from the
+ * accounts straight to the confirmation, because a step that asks a question it knows the answer to
+ * is the same defect §4 removed from the single-organisation step.
+ */
+describe('ConnectionWizard — the client step exists only when there is a client to choose', () => {
+  afterEach(() => {
+    state.parents = [{ external_id: 'org-1', name: 'Acme Media', account_count: 2 }]
+  })
+
+  it('goes from the accounts to the confirmation when the client is already decided', async () => {
+    state.parents = [{ external_id: 'org-1', name: 'Acme Media', account_count: 2 }]
+
+    renderWithProviders(
+      <ConnectionWizard connectionId="conn-1" destinationProjectId="proj-1" onClose={() => {}} />,
+    )
+
+    await screen.findByTestId('wizard-step-accounts')
+    const boxes = await screen.findAllByRole('checkbox')
+    boxes.forEach((b) => fireEvent.click(b))
+    fireEvent.click(screen.getByRole('button', { name: /متابعة|Continue/ }))
+
+    expect(await screen.findByTestId('wizard-step-review')).toBeInTheDocument()
+    expect(screen.queryByTestId('wizard-step-project')).toBeNull()
+  })
+
+  /** Without one it still asks, because then it genuinely does not know. */
+  it('still asks for the client when nothing decided one', async () => {
+    state.parents = [{ external_id: 'org-1', name: 'Acme Media', account_count: 2 }]
+
+    renderWithProviders(<ConnectionWizard connectionId="conn-1" onClose={() => {}} />)
+
+    await screen.findByTestId('wizard-step-accounts')
+    const boxes = await screen.findAllByRole('checkbox')
+    boxes.forEach((b) => fireEvent.click(b))
+    fireEvent.click(screen.getByRole('button', { name: /متابعة|Continue/ }))
+
+    expect(await screen.findByTestId('wizard-step-project')).toBeInTheDocument()
+  })
+})
