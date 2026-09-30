@@ -185,7 +185,14 @@ export interface DiscoveredAccount {
    * whose access was withdrawn used to render as a single green «متصل», and that one account is the
    * only fact on the card anybody needed.
    */
-  health?: 'not_connected' | 'revoked' | 'access_lost' | 'failed' | 'pending_first_sync' | 'delayed' | 'no_data' | 'healthy'
+  /**
+   * `insights_not_authorised` is an ASSET grant, not a failure to retry — META-INSIGHTS-GRANT-001.
+   *
+   * Meta decides `ads_read` per ad account in Business Manager, so one authorisation can hold this
+   * account refused and its siblings working. It is listed beside the others rather than folded into
+   * `failed` because the next action is different and specific: grant the scope on that asset.
+   */
+  health?: 'not_connected' | 'revoked' | 'access_lost' | 'failed' | 'insights_not_authorised' | 'pending_first_sync' | 'delayed' | 'no_data' | 'healthy'
   /** We TRIED. Distinct from `last_synced_at`, which is only written when data really arrives. */
   last_sync_attempt_at?: string | null
   /** Why it did not work, as a category — the thing that decides who has to act. */

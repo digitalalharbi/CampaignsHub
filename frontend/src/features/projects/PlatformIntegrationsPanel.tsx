@@ -34,6 +34,15 @@ function accountHealthLabel(health: string | undefined, ar: boolean): string {
     case 'pending_first_sync': return ar ? 'بانتظار أول مزامنة' : 'Awaiting the first sync'
     case 'delayed': return ar ? 'متأخرة' : 'Delayed'
     case 'failed': return ar ? 'فشلت آخر محاولة' : 'Last attempt failed'
+    /*
+      META-INSIGHTS-GRANT-001 — an ASSET grant, named on the account it is missing from.
+      «(#200) Ad account owner has NOT grant ads_management or ads_read permission» is decided per ad
+      account in Business Manager, so one authorisation can hold this account refused and its
+      siblings fine. «فشلت آخر محاولة» sent a reader to the logs; this sends them to the grant.
+      `ads_read` alone: it is sufficient for insights, and naming `business_management` would ask
+      for a capability this product does not need.
+    */
+    case 'insights_not_authorised': return ar ? 'لم تُمنح صلاحية ads_read لهذا الحساب' : 'ads_read is not granted on this account'
     case 'access_lost': return ar ? 'تعذّر الوصول' : 'Access lost'
     case 'revoked': return ar ? 'الربط ملغى' : 'Authorisation revoked'
     default: return ar ? 'مرتبطة' : 'Linked'
@@ -46,6 +55,7 @@ function accountHealthTone(health: string | undefined): string {
     case 'healthy': return 'text-success'
     case 'delayed': return 'text-warning'
     case 'failed':
+    case 'insights_not_authorised':
     case 'access_lost':
     case 'revoked': return 'text-danger'
     default: return 'text-text-muted'

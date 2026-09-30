@@ -50,6 +50,17 @@ final class AccountHealth
 
     public const FAILED = 'failed';
 
+    /**
+     * This ACCOUNT's owner has not granted the read scope — META-INSIGHTS-GRANT-001.
+     *
+     * Separated from `failed` because the next move is somebody else's and it is specific: not «look
+     * at the logs» but «grant this user `ads_read` on this asset in Business Manager». One
+     * authorisation can hold many ad accounts with different answers, so «Meta is broken» was the
+     * wrong shape of sentence — the account is the thing that was refused, and naming it is what
+     * makes the action findable.
+     */
+    public const INSIGHTS_NOT_AUTHORISED = 'insights_not_authorised';
+
     public const PENDING_FIRST_SYNC = 'pending_first_sync';
 
     public const DELAYED = 'delayed';
@@ -74,7 +85,7 @@ final class AccountHealth
     public const HEALTHY = 'healthy';
 
     /** The states that mean somebody has to do something. */
-    public const NEEDS_ATTENTION = [self::REVOKED, self::ACCESS_LOST, self::FAILED, self::DELAYED];
+    public const NEEDS_ATTENTION = [self::REVOKED, self::ACCESS_LOST, self::FAILED, self::DELAYED, self::INSIGHTS_NOT_AUTHORISED];
 
     public function __construct(private readonly AccountAssignment $assignment) {}
 
@@ -94,6 +105,15 @@ final class AccountHealth
 
         if ($account->access_lost_at !== null) {
             return self::ACCESS_LOST;
+        }
+
+        /*
+         * ABOVE the generic failure, because it is the one refusal with a named owner and a named
+         * action. Everything else under `last_sync_error_category` is «it did not work»; this is
+         * «this asset was not granted to this user», which somebody can go and fix.
+         */
+        if ($account->last_sync_error_category === self::INSIGHTS_NOT_AUTHORISED) {
+            return self::INSIGHTS_NOT_AUTHORISED;
         }
 
         if ($account->last_sync_error_category !== null) {

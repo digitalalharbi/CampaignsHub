@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Integrations\Services\AccountHealth;
 use App\Domains\Integrations\Services\ConnectionWizardState;
 use App\Domains\Integrations\Support\InsightsAuthorisation;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -187,6 +191,84 @@ final class MetaInsightsGrantTest extends TestCase
         app(TokenVault::class)->store($connection, new OAuthTokens('a-refreshed-token'));
 
         $this->assertNotNull($connection->fresh()->insights_denied_at);
+    }
+
+    /**
+     * The ACCOUNT that was refused is the one named — RazahAvanue, not «Meta».
+     *
+     * One authorisation holds many ad accounts and Meta answers per asset, so a refusal filed as
+     * `provider_error` said «Meta is broken» about an install where seventeen accounts were
+     * discovered and one was refused. The category is what routes the action, and this action has a
+     * specific owner: grant `ads_read` on THIS asset, to THIS user, in Business Manager.
+     */
+    public function test_the_account_meta_refused_is_the_account_that_carries_the_refusal(): void
+    {
+        $connection = $this->metaConnection(['ads_read']);
+        $account = $this->account($connection, 'act_3493018704182532', 'RazahAvanue', 'insights_not_authorised');
+        $this->bind($account);
+
+        $this->assertSame(AccountHealth::INSIGHTS_NOT_AUTHORISED, app(AccountHealth::class)->for($account));
+        $this->assertContains(AccountHealth::INSIGHTS_NOT_AUTHORISED, AccountHealth::NEEDS_ATTENTION);
+    }
+
+    /**
+     * ONLY the chosen account is a sync target — the acceptance account is RazahAvanue and no other.
+     *
+     * Seventeen accounts were discovered; one was chosen. An account nobody bound is `not_connected`
+     * rather than healthy or broken, because it feeds no project and the sweep never reaches it —
+     * `AdPlatformSyncSweepTest` holds that end, and this holds the reading of it. It is also why the
+     * refusal had to be recorded per account: «Meta is refused» would have been a claim about
+     * sixteen accounts nobody asked this product to read.
+     */
+    public function test_only_the_chosen_account_is_a_sync_target(): void
+    {
+        $connection = $this->metaConnection(['ads_read']);
+
+        $chosen = $this->account($connection, 'act_3493018704182532', 'RazahAvanue', 'insights_not_authorised');
+        $this->bind($chosen);
+
+        $notChosen = $this->account($connection, 'act_999', 'One of the other sixteen', null);
+
+        $health = app(AccountHealth::class);
+
+        $this->assertSame(AccountHealth::INSIGHTS_NOT_AUTHORISED, $health->for($chosen));
+        $this->assertSame(AccountHealth::NOT_CONNECTED, $health->for($notChosen));
+    }
+
+    private function account(ProviderConnection $connection, string $externalId, string $name, ?string $category): ExternalAccount
+    {
+        return ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'provider_connection_id' => $connection->id,
+            'provider' => 'meta',
+            'external_id' => $externalId,
+            'name' => $name,
+            'account_type' => 'ad_account',
+            'status' => 'active',
+            'last_synced_at' => Carbon::now()->subHour(),
+            'last_sync_error_category' => $category,
+        ]);
+    }
+
+    private function bind(ExternalAccount $account): void
+    {
+        $workspace = ClientWorkspace::create([
+            'tenant_id' => $this->tenant->id, 'name' => 'C', 'slug' => 'c-'.uniqid(), 'mode' => 'managed',
+        ]);
+        $project = Project::create([
+            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $workspace->id,
+            'name' => 'P', 'status' => 'active',
+        ]);
+
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $project->id,
+            'client_workspace_id' => $workspace->id,
+            'external_account_id' => $account->id,
+            'provider' => 'meta',
+            'purpose' => 'advertising',
+            'is_active' => true,
+        ]);
     }
 
     private function metaConnection(?array $scopes): ProviderConnection
