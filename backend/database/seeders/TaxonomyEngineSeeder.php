@@ -174,6 +174,20 @@ final class TaxonomyEngineSeeder extends Seeder
                     ['key' => 'budget_pacing', 'label_ar' => 'ضبط وتيرة الإنفاق', 'label_en' => 'Budget pacing', 'description' => 'ضبط توزيع الميزانية ووتيرة الإنفاق خلال فترة الحملة.', 'description_en' => 'Control budget distribution and spend pacing over time.', 'icon' => 'gauge'],
                     ['key' => 'seasonal_campaigns', 'label_ar' => 'الحملات الموسمية', 'label_en' => 'Seasonal campaigns', 'description' => 'تجهيز وإدارة حملات المواسم والعروض والمناسبات.', 'description_en' => 'Prepare and run seasonal, sale and event campaigns.', 'icon' => 'calendar-heart'],
                     ['key' => 'product_launch_campaigns', 'label_ar' => 'حملات إطلاق المنتجات', 'label_en' => 'Product launch campaigns', 'description' => 'حملات مخصصة لإطلاق منتج أو خدمة جديدة.', 'description_en' => 'Dedicated campaigns for launching a new product.', 'icon' => 'package-plus'],
+                    /*
+                     * A service somebody can buy WITHOUT connecting a key, and that is the point.
+                     *
+                     * Every other service here is platform-agnostic because the platform is a separate
+                     * field on the request. This one is named after its platform for the one case the
+                     * field cannot cover: a client who has no OpenAI Ads account yet. «Set up the
+                     * account» is the first line of its scope, so asking them to connect one first
+                     * would make the service impossible to request for the people most likely to want
+                     * it.
+                     *
+                     * The scope is the five lines the owner asked for and no more. A service card that
+                     * explains itself at length reads as a product nobody has sold yet.
+                     */
+                    ['key' => 'chatgpt_ads_management', 'label_ar' => 'إعلانات ChatGPT', 'label_en' => 'ChatGPT Ads', 'description' => 'إعداد الحساب، إعداد الحملات، إدارتها، القياس والتحليل، وتحسين الأداء.', 'description_en' => 'Account setup, campaign setup, management, measurement and optimisation.', 'icon' => 'message-square'],
                 ],
             ],
             [

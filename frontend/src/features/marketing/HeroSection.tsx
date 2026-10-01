@@ -8,6 +8,8 @@ import type { HomeCopy, Locale } from './homeCopy'
 import { PaidServicesPanel } from './PaidServicesPanel'
 import { HeroDashboard } from './HeroDashboard'
 import { ACCOUNT_ROUTES, journeyTo } from './journeys'
+import { PLATFORM_LABELS, PLATFORM_ORDER } from '@/lib/platforms'
+import { platformColor } from '@/features/analytics/components'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 
@@ -99,6 +101,31 @@ export function HeroSection({
             </h1>
             <p className="mt-1.5 max-w-3xl text-[13.5px] leading-snug text-text-secondary sm:mt-2 sm:text-[14px] sm:leading-relaxed">{txt('hero', 'desc', c.hero.desc)}</p>
             <p className="mt-1 max-w-3xl text-[12.5px] leading-snug text-text-muted sm:text-[13px] sm:leading-relaxed">{c.hero.support}</p>
+
+            {/*
+              PLATFORM-COVERAGE-001 — «which platforms?» answered in the first screen.
+              
+              It was answered three sections down, after a visitor had decided whether to keep
+              scrolling — and «which platforms does it read» is one of the four questions that
+              decides that. The names come from the canonical registry, so a platform the product
+              learns to read appears here without anybody remembering this file.
+
+              It states coverage and nothing about eligibility. Whether a given advertiser can buy on
+              a given platform is that platform's answer, not ours, and a homepage that implies
+              otherwise is making a promise it cannot keep.
+            */}
+            <div className="mt-3 flex flex-wrap items-center gap-1.5" data-testid="hero-platform-coverage">
+              {PLATFORM_ORDER.map((key) => (
+                <span
+                  key={key}
+                  data-testid={`hero-platform-${key}`}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 text-[12px] font-semibold text-text-secondary"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: platformColor(key) }} aria-hidden />
+                  {PLATFORM_LABELS[key][locale === 'ar' ? 'ar' : 'en']}
+                </span>
+              ))}
+            </div>
           </div>
 
           {/* The four approved benefits — below the decision on a phone, beside the promise on desktop. */}

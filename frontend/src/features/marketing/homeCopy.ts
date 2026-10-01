@@ -165,10 +165,21 @@ const ar: HomeCopy = {
     features: 'المميزات', how: 'كيف يعمل', services: 'الخدمات', integrations: 'التكاملات والتقارير',
     login: 'تسجيل الدخول', start: 'إنشاء حساب', request: 'اطلب خدمة', clientLogin: 'متابعة طلباتي', dashboard: 'لوحة التحكم',
   },
+  /*
+   * PRODUCT-IDENTITY-001 — the first screen says what the product IS.
+   *
+   * The headline described an outcome — «كل حملاتك الإعلانية المدفوعة في مكان واحد» — which is also
+   * what a dashboard screenshot, a reporting tool and an agency's landing page all promise. Three
+   * short sentences name the thing instead: every campaign, every platform, one place.
+   *
+   * The description is the operating model in one line, in the order the work actually happens:
+   * connect, organise by client, follow campaigns and budgets, analyse, share. A visitor who reads
+   * only this should be able to say what the product does.
+   */
   hero: {
     eyebrow: 'إدارة الحملات الإعلانية المدفوعة',
-    title: 'كل حملاتك الإعلانية المدفوعة في مكان واحد',
-    desc: 'تابع حملاتك وميزانياتك ونتائجك عبر المنصات، قارن الأداء، واكتشف فرص التحسين من لوحة واحدة واضحة.',
+    title: 'كل حملاتك. كل المنصات. مكان واحد.',
+    desc: 'اربط حساباتك الإعلانية، ونظّمها حسب العميل والمشروع، وتابع الحملات والميزانيات، وحلّل الأداء والإبداعات، وشارك التقارير — من مساحة عمل واحدة.',
     support: 'أدر حملاتك بنفسك، أو اختر الخدمة التي تحتاجها ودعنا نساعدك في تنفيذها.',
     points: ['متابعة موحدة لجميع المنصات', 'مقارنة واضحة بين الحملات', 'بيانات من الحسابات المرتبطة', 'تقارير وتنبيهات تساعدك على اتخاذ القرار'],
     demoTag: 'معاينة توضيحية ببيانات تجريبية',
@@ -307,10 +318,19 @@ const ar: HomeCopy = {
       },
     ],
   },
+  /*
+   * The operating model, in the order the work actually happens.
+   *
+   * The five steps here described BENEFITS — «وحّد الحملات», «تابع الميزانيات» — which is a feature
+   * list laid out horizontally. These seven are the sequence somebody performs, and two of them are
+   * the ones nobody guesses: accounts are CHOSEN after connecting, and chosen accounts are bound to
+   * a project. That is the product's shape, and a visitor who reads only this strip should be able
+   * to predict what the first hour looks like.
+   */
   journey: {
     label: 'رحلة العمل',
     cta: 'استعرض المميزات',
-    steps: ['اربط المنصات', 'وحّد الحملات', 'تابع الميزانيات', 'قارن الأداء', 'تقارير وتنبيهات'],
+    steps: ['ربط المنصات', 'اختيار الحسابات', 'ربطها بالمشاريع', 'مزامنة الحملات', 'متابعة الأداء', 'التحليل', 'التقارير'],
   },
   options: {
     title: 'كيف تريد البدء؟',
@@ -497,8 +517,8 @@ const en: HomeCopy = {
   },
   hero: {
     eyebrow: 'Paid advertising management',
-    title: 'All your paid ad campaigns in one place',
-    desc: 'Track your campaigns, budgets and results across platforms, compare performance, and spot optimization opportunities from one clear dashboard.',
+    title: 'Every campaign. Every platform. One place.',
+    desc: 'Connect your advertising accounts, organise them by client and project, follow campaigns and budgets, analyse performance and creatives, and share reports — from one workspace.',
     support: 'Run your campaigns yourself, or pick the service you need and let us help you deliver it.',
     points: ['Unified tracking across all platforms', 'Clear comparison between campaigns', 'Data from your connected accounts', 'Reports and alerts that help you decide'],
     demoTag: 'Illustrative preview with demo data',
@@ -640,7 +660,7 @@ const en: HomeCopy = {
   journey: {
     label: 'How it flows',
     cta: 'Explore the features',
-    steps: ['Connect platforms', 'Unify campaigns', 'Watch budgets', 'Compare performance', 'Reports and alerts'],
+    steps: ['Connect platforms', 'Choose accounts', 'Bind them to projects', 'Sync campaigns', 'Follow performance', 'Analyse', 'Report'],
   },
   options: {
     title: 'How do you want to start?',
