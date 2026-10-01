@@ -1,4 +1,4 @@
-import { PLATFORM_LABELS } from '@/lib/platforms'
+import { canonicalPlatform, PLATFORM_LABELS } from '@/lib/platforms'
 import type { Locale } from '@/stores/ui'
 
 type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
@@ -134,8 +134,20 @@ export function objectiveLabel(key: string, locale: Locale): string {
   return objective[key]?.[locale] ?? key
 }
 
+/**
+ * A platform's name, from whatever spelling arrived.
+ *
+ * It looked the key up verbatim, so every spelling this codebase uses other than the canonical one
+ * rendered as ITSELF: a report sending `openai` printed «openai» on a page a client pays for, and a
+ * `snapchat_ads` row printed «snapchat_ads». The map only ever held canonical keys, so the fallback
+ * was doing the work far more often than it looked.
+ *
+ * `canonicalPlatform` resolves the spelling first. The raw key is still the last resort — a platform
+ * this build has not heard of should be visible as what it is rather than as «—», which is how you
+ * find out which one it is.
+ */
 export function providerLabel(key: string, locale: Locale): string {
-  return provider[key]?.[locale] ?? key
+  return provider[canonicalPlatform(key)]?.[locale] ?? provider[key]?.[locale] ?? key
 }
 
 export function marketingPathLabel(key: string, locale: Locale): string {
