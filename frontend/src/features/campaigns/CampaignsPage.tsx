@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { StatCard as SharedStatCard } from '@/components/ui/StatCard'
+import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
+import { PeriodLabel } from '@/components/patterns/Status'
+import { listProjects } from '@/features/projects/api'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import { CampaignLink } from './CampaignLink'
 import { CampaignSecondaryStrip } from './CampaignSecondaryStrip'
@@ -38,8 +41,8 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { EmptyState, Skeleton } from '@/components/ui/States'
-import { ChartCard, PlatformDonutChart, ProgressRing, RankingBarChart, SpendEfficiencyScatter, SpendRevenueAreaChart } from '@/features/analytics/charts'
-import { useBudget, useCampaigns, usePlatforms, useSummary, useTimeseries, type BudgetRow } from '@/features/analytics/api'
+import { ChartCard, PlatformDonutChart, RankingBarChart, SpendEfficiencyScatter, SpendRevenueAreaChart } from '@/features/analytics/charts'
+import { useBudget, useCampaigns, useFreshness, usePlatforms, useSummary, useTimeseries, type BudgetRow } from '@/features/analytics/api'
 import { useLastNDaysRange } from '@/features/analytics/hooks'
 import { ProvenanceBadge, RangeTabs, TrendPill } from '@/features/analytics/components'
 import { compact, money, num } from '@/features/analytics/format'
@@ -245,6 +248,26 @@ export function CampaignsPage() {
   /* The provisional window: figures in flight, or held over from an answer asked without them. */
   const listProvisional = metricsPending || (metricsKnown && campaignsQuery.data?.judged === false)
   const summary = useSummary(projectId, range)
+
+  /*
+   * WHICH project, and HOW CURRENT — the two head facts this page could not answer.
+   *
+   * The project name comes from the list the switcher already holds, so no request is added for it.
+   * Freshness is the newest arrival across the project's own sources, from the canonical freshness
+   * endpoint every analytics surface reads — not a second rule invented here.
+   */
+  const projectList = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
+  const projectName = projectList.data?.find((p) => p.id === projectId)?.name ?? null
+
+  const freshness = useFreshness(projectId, range)
+  const freshestAt = useMemo(
+    () => (freshness.data?.rows ?? [])
+      .map((row) => row.data_freshness_at)
+      .filter((at): at is string => at !== null)
+      .sort()
+      .at(-1) ?? null,
+    [freshness.data],
+  )
   const timeseries = useTimeseries(view === 'overview' ? projectId : null, range)
   const platforms = usePlatforms(view === 'overview' ? projectId : null, range)
   const budget = useBudget(projectId, range)
@@ -675,35 +698,48 @@ export function CampaignsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header — project context */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{ar ? 'الحملات' : 'Campaigns'}</h1>
-            <ProvenanceBadge provenance={summary.data?.provenance} />
-          </div>
-          {/*
-            * VISUAL-DECISION-001 — the count is data; the sentence around it was not.
-            *
-            * «each project is isolated from the others» is a true statement about the product that
-            * every reader of this page has already learned, printed on every visit above the answer
-            * they came for. The count stays because it is a figure; the explanation goes, which is
-            * the rule this surface is being held to — data, then visual, then comparison, then the
-            * decision, and prose only for a warning or a data-quality truth.
+      {/*
+        PRODUCT-VISUAL-001 §4 §13 — the head answers WHERE, WHAT SCOPE, WHAT PERIOD, HOW FRESH.
+
+        It answered the first and nothing else: a 3xl «Campaigns», a provenance chip and a count.
+        WHICH project these campaigns belong to was only in the switcher on the rail, the period was
+        a button group three controls into the row below, and how current the figures were was
+        nowhere on the page at all — on a surface whose whole content is figures from a window.
+
+        Same `PageIntro` as the portfolio, the projects list, the dashboard and the project context,
+        so a reader crossing between them is not re-learning where the answers live.
+      */}
+      <PageIntro
+        testid="campaigns-intro"
+        eyebrow={projectName ?? undefined}
+        title={ar ? 'الحملات' : 'Campaigns'}
+        badges={<ProvenanceBadge provenance={summary.data?.provenance} />}
+        meta={
+          <>
+            <PeriodLabel from={range.from} to={range.to} testId="campaigns-period" />
+            {/*
+              Freshness from the project's own freshness endpoint — the newest arrival across its
+              sources. `null` while it answers, which `DataFreshness` already draws as «لم تصل
+              بيانات بعد» rather than as a guess.
             */}
-          <p className="mt-1 text-sm text-text-secondary">
-            <span className="tnum font-semibold text-text-primary">{countedCampaigns(counts.total, ar ? 'ar' : 'en')}</span>
-          </p>
-        </div>
-        {/*
-          * VISUAL-DECISION-001 — the operational header: find, narrow, choose a window, create.
-          *
-          * Search and the two taxonomy selects sat below the view switcher, so «find the campaign I
-          * came for» lived underneath the charts rather than beside the title. They are controls over
-          * the whole page and now read as one row with it. The state chips stay where they are —
-          * they are a narrowing OF the list and belong against the list.
-          */}
-        <div className="flex flex-wrap items-center gap-2">
+            <DataFreshness
+              lastSyncAt={freshestAt}
+              ar={ar}
+              staleAfterHours={STALE_AFTER_HOURS}
+              testid="campaigns-freshness"
+            />
+          </>
+        }
+        actions={
+          /*
+           * VISUAL-DECISION-001 — the operational header: find, narrow, choose a window, create.
+           *
+           * Search and the two taxonomy selects sat below the view switcher, so «find the campaign I
+           * came for» lived underneath the charts rather than beside the title. They are controls
+           * over the whole page and read as one row with it. The state chips stay where they are —
+           * they are a narrowing OF the list and belong against the list.
+           */
+          <>
           <div className="relative w-full sm:w-56">
             <Search size={15} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-text-muted" />
             <input
@@ -720,8 +756,44 @@ export function CampaignsPage() {
           <Select className="w-full sm:w-44" value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CANONICAL_OBJECTIVE_KEYS.map((o) => ({ value: o, label: canonicalObjectiveLabel(o, locale) }))]} />
           <RangeTabs value={days} onChange={setDays} />
           {canCreate && <Button onClick={() => setModalOpen(true)}><Plus size={16} /> {t('new_campaign')}</Button>}
-        </div>
-      </div>
+          </>
+        }
+        kpis={
+          <>
+            {/*
+              The total, counted through the shared rule rather than written beside the number.
+              «1 in total» was fine; «1 campaigns» would not have been, and the noun is what makes
+              the sub readable on its own — «Active 1 · 2 campaigns in total».
+            */}
+            <StatCard
+              label={ar ? 'نشطة' : 'Active'}
+              value={String(counts.active ?? 0)}
+              sub={ar
+                ? `${countedCampaigns(counts.total, 'ar')} إجمالًا`
+                : `${countedCampaigns(counts.total, 'en')} in total`}
+              tone="success"
+            />
+            {/*
+              ATTENTION-REQUEST-STATE-001 — «0» is an answer, and there is not one yet.
+              Pending and failed are kept apart because they need different people: one resolves
+              itself, the other is a request somebody has to look at.
+            */}
+            <StatCard
+              testid="campaigns-attention"
+              label={ar ? 'تحتاج تدخلًا' : 'Needs attention'}
+              value={metricsKnown ? String(attention.length) : '—'}
+              sub={!metricsKnown
+                ? (metricCampaigns.isError
+                    ? (ar ? 'تعذّر قراءة أرقام الحملات' : 'The campaign figures could not be read')
+                    : (ar ? 'بانتظار أرقام الحملات' : 'Waiting for the campaign figures'))
+                : attention.length > 0 ? (ar ? 'افتح القائمة' : 'Open the list') : (ar ? 'لا شيء الآن' : 'Nothing right now')}
+              tone={metricsKnown && attention.length > 0 ? 'warning' : undefined}
+            />
+            <StatCard testid="campaigns-spend" label={ar ? 'الإنفاق' : 'Spend'} value={spendText} delta={cmp(d.spend)} />
+            <StatCard label={ar ? 'النتائج' : 'Results'} value={num(k?.conversions)} delta={cmp(d.conversions)} />
+          </>
+        }
+      />
 
       {/*
         * VISUAL-DECISION-001 — four primary figures, then everything else at its own weight.
@@ -737,27 +809,6 @@ export function CampaignsPage() {
         * `campaignSecondaryStrip.test.tsx` where the cards' own tests now live. Nothing is restated
         * in a second place and nothing is computed twice.
         */}
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatCard label={ar ? 'نشطة' : 'Active'} value={String(counts.active ?? 0)} sub={ar ? `${counts.total} إجمالًا` : `${counts.total} in total`} tone="success" />
-        {/*
-          ATTENTION-REQUEST-STATE-001 — «0» is an answer, and there is not one yet.
-          Pending and failed are kept apart because they need different people: one resolves itself,
-          the other is a request somebody has to look at.
-        */}
-        <StatCard
-          testid="campaigns-attention"
-          label={ar ? 'تحتاج تدخلًا' : 'Needs attention'}
-          value={metricsKnown ? String(attention.length) : '—'}
-          sub={!metricsKnown
-            ? (metricCampaigns.isError
-                ? (ar ? 'تعذّر قراءة أرقام الحملات' : 'The campaign figures could not be read')
-                : (ar ? 'بانتظار أرقام الحملات' : 'Waiting for the campaign figures'))
-            : attention.length > 0 ? (ar ? 'افتح القائمة' : 'Open the list') : (ar ? 'لا شيء الآن' : 'Nothing right now')}
-          tone={metricsKnown && attention.length > 0 ? 'warning' : undefined}
-        />
-        <StatCard testid="campaigns-spend" label={ar ? 'الإنفاق' : 'Spend'} value={spendText} delta={cmp(d.spend)} />
-        <StatCard label={ar ? 'النتائج' : 'Results'} value={num(k?.conversions)} delta={cmp(d.conversions)} />
-      </div>
 
       {/*
         * The forecast comes from `portfolioBudget`, the same function the pacing block below reads,
@@ -904,9 +955,22 @@ export function CampaignsPage() {
                 ? <div className="flex h-[190px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'ترتيب الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend ranking unavailable — partial or multi-currency amounts'}</div>
                 : topCampaigns.data.length >= 2
                   ? <RankingBarChart data={topCampaigns.data} bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]} horizontal height={190} colorByPlatform />
-                  : budgetTotals.consumed !== null && budgetTotals.spent !== null
-                    ? <div className="flex h-[190px] items-center justify-center"><ProgressRing value={budgetTotals.consumed} sublabel={`${compact(budgetTotals.spent)} / ${compact(budgetTotals.total)}`} size={140} tone={budgetTotals.consumed > 0.95 ? 'danger' : 'brand'} /></div>
-                    : <div className="flex h-[190px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'استهلاك الميزانية غير متاح — المصروف بمبالغ جزئية أو بعملة مختلفة عن الميزانية' : 'Budget consumption unavailable — spend is partial or in a different currency'}</div>}
+                  /*
+                   * One campaign is not a ranking, and the card says so instead of drawing something else.
+                   *
+                   * Observed on a seeded project with a single campaign: the card headed «Best campaigns
+                   * · By spend» rendered a 0% BUDGET ring. Two different measurements under one title is
+                   * worse than an empty card — a reader takes the figure for the one the heading promised,
+                   * and «0%» read as «this campaign has spent nothing» when it had spent 3.67K.
+                   *
+                   * The budget consumption it was borrowing is already on this page twice: in the pacing
+                   * row above and in the secondary strip. Nothing is lost by not restating it here.
+                   */
+                  : <div className="flex h-[190px] items-center justify-center text-center text-xs text-text-muted" data-testid="campaigns-top-single">
+                      {ar
+                        ? 'حملة واحدة فقط في هذا النطاق — لا ترتيب بلا شيء تُقارن به.'
+                        : 'Only one campaign in this scope — a ranking needs something to rank against.'}
+                    </div>}
             </ChartCard>
           </div>
           {/*
@@ -1015,14 +1079,26 @@ export function CampaignsPage() {
               {/* Counted through `lib/counted`: «1 حملة» and «3 حملات» are different words. */}
               {ar
                 ? `${countedCampaigns(movement.withoutBaseline, 'ar')} بلا أساس للمقارنة — لم تكن تعمل في الفترة السابقة.`
-                : `${countedCampaigns(movement.withoutBaseline, 'en')} have no baseline to compare against — they were not running in the previous period.`}
+                : `${countedCampaigns(movement.withoutBaseline, 'en')} ${movement.withoutBaseline === 1 ? 'has' : 'have'} no baseline to compare against — ${movement.withoutBaseline === 1 ? 'it was' : 'they were'} not running in the previous period.`}
             </p>
           )}
 
           {attention.length > 0 && (
             <button onClick={() => setView('attention')} className="flex w-full items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-start text-sm text-text-primary hover:bg-warning/15">
               <TriangleAlert size={16} className="shrink-0 text-warning" />
-              <span><span className="tnum font-bold">{attention.length}</span>{ar ? ' حملة تحتاج تدخلًا — اعرض التفاصيل والأسباب.' : ' campaigns need attention — open them for the detail and the reason.'}</span>
+              {/*
+                Counted through the shared rule, and the VERB agrees with it.
+
+                «1 campaigns need attention» was on screen: the number was right, the noun was
+                plural and the verb was plural with it. Arabic had the same defect one word along —
+                «1 حملة تحتاج» is correct and «2 حملة تحتاج» is not, and the hand-written singular
+                was going to meet every other number.
+              */}
+              <span>
+                {ar
+                  ? `${countedCampaigns(attention.length, 'ar')} تحتاج تدخلًا — اعرض التفاصيل والأسباب.`
+                  : `${countedCampaigns(attention.length, 'en')} ${attention.length === 1 ? 'needs' : 'need'} attention — open ${attention.length === 1 ? 'it' : 'them'} for the detail and the reason.`}
+              </span>
             </button>
           )}
         </>

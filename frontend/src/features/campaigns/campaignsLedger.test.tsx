@@ -48,7 +48,12 @@ describe('the campaigns ledger', () => {
     )
     renderWithProviders(<CampaignsPage />, { locale: 'en' })
 
-    expect(await screen.findByText('214 campaigns')).toBeInTheDocument()
+    /*
+     * The total moved into the head's «Active» card as its sub — «180 · 214 campaigns in total» —
+     * when the page gained a `PageIntro`. It is the same figure from the same source; what changed
+     * is that it is beside the count it qualifies instead of under the title on its own.
+     */
+    expect(await screen.findByText('214 campaigns in total')).toBeInTheDocument()
   })
 
   it('says which page of how many it is showing', async () => {

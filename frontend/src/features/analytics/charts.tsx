@@ -108,7 +108,21 @@ export function MetricLineChart({
 
 // ---- Area: spend vs revenue accumulation ---------------------------------------------------------
 
+/**
+ * Spend and revenue over the window.
+ *
+ * The two series names are TRANSLATED. They were Arabic string literals, so an English reader met a
+ * legend reading «الإنفاق · الإيرادات» under an English title — observed on the campaigns overview
+ * at `/agency/campaigns` in English. A chart's legend is its only key; printing it in a language the
+ * rest of the page is not in makes the chart unreadable rather than merely untidy.
+ *
+ * The locale is read here rather than passed, so every existing call site is corrected without being
+ * touched — and `SpendEfficiencyScatter` in this same file already takes `ar` as a prop, which is
+ * what made this one's absence easy to miss.
+ */
 export function SpendRevenueAreaChart({ data, height = 288, currency = 'SAR' }: { data: Array<Record<string, unknown>>; height?: number; currency?: string }) {
+  const ar = useUi((s) => s.locale) === 'ar'
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
@@ -121,8 +135,8 @@ export function SpendRevenueAreaChart({ data, height = 288, currency = 'SAR' }: 
         <YAxis tick={AXIS} tickFormatter={(v) => compact(Number(v))} width={44} />
         <Tooltip {...tooltipProps} formatter={(v: number) => money(v, currency)} />
         <Legend wrapperStyle={{ fontSize: 13 }} />
-        <Area name="الإنفاق" type="monotone" dataKey="spend" stroke="var(--brand-600)" strokeWidth={2} fill="url(#aSpend)" isAnimationActive={false} />
-        <Area name="الإيرادات" type="monotone" dataKey="revenue" stroke="var(--info)" strokeWidth={2} fill="url(#aRev)" isAnimationActive={false} />
+        <Area name={ar ? 'الإنفاق' : 'Spend'} type="monotone" dataKey="spend" stroke="var(--brand-600)" strokeWidth={2} fill="url(#aSpend)" isAnimationActive={false} />
+        <Area name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke="var(--info)" strokeWidth={2} fill="url(#aRev)" isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
   )

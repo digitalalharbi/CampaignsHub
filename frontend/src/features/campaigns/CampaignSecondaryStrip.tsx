@@ -90,6 +90,7 @@ export function CampaignSecondaryStrip({
         * confused, so this one says what it is against.
         */}
       <Cell
+        testid="campaigns-spent-against-budget"
         label={ar ? 'المصروف من الميزانية' : 'Spent against budget'}
         value={budget.spent === null ? '—' : money(budget.spent, budget.spentCurrency ?? budget.currency ?? undefined)}
       />

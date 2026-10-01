@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { CampaignsPage } from './CampaignsPage'
 import type { UnifiedCampaign } from './types'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
@@ -128,7 +128,16 @@ describe('the spend charts over withheld money', () => {
     expect(screen.queryByText(/withheld/)).not.toBeInTheDocument()
   })
 
-  it('refuses a consumption ring when part of the spend could not be summed', async () => {
+  /*
+   * The consumption claim moved to the component that OWNS consumption.
+   *
+   * «Best campaigns · By spend» used to fall through to a budget-consumption ring whenever fewer
+   * than two campaigns were rankable — two different measurements under one title, and on a seeded
+   * single-campaign project it drew «0%» over a campaign that had spent 3.67K. The card says it has
+   * nothing to rank now, and these two keep their real claim against `BudgetPacingRow`, which is
+   * where budget consumption has always been computed and refused.
+   */
+  it('refuses a budget total when part of the spend could not be summed', async () => {
     route({
       budget: [
         budgetRow({ campaign_id: 'c1', spent: 1000 }),
@@ -140,28 +149,44 @@ describe('the spend charts over withheld money', () => {
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
     await openOverview()
 
-    expect(await screen.findByText(/Budget consumption unavailable/i)).toBeInTheDocument()
+    /*
+     * «—», not a smaller number.
+     *
+     * One row's spend is in a currency nobody supplied a rate for, so the spend across the budget
+     * rows is not ONE figure — and stating the convertible subset as the total would read as «we
+     * have barely spent» over money that was really spent. `budgetTotals` refuses, and the strip
+     * that reads it says so.
+     */
+    const strip = await screen.findByTestId('campaigns-secondary-strip')
+    await waitFor(() =>
+      expect(within(strip).getByTestId('campaigns-spent-against-budget').textContent ?? '').toContain('—'),
+    )
   })
 
-  it('still draws the ring when every campaign spend is comparable', async () => {
+  it('states the budget when every campaign spend is comparable', async () => {
     route({ budget: [budgetRow({ campaign_id: 'c1', spent: 1000 })] })
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
     /*
      * The spend figure proves the page settled before the view is switched — it is a
-     * synchronisation point, not the subject; the ring below is the subject.
-     *
-     * It reads on the secondary strip now rather than under a KPI card, the budget card having been
-     * replaced by a compact row. «1K», not «1.0K»: NUMBER-PRESENTATION-001 drops a decimal carrying
-     * no information.
+     * synchronisation point, not the subject. «1K», not «1.0K»: NUMBER-PRESENTATION-001 drops a
+     * decimal carrying no information.
      */
     await waitFor(() =>
       expect(screen.getByTestId('campaigns-secondary-strip').textContent ?? '').toContain('1K SAR'),
     )
     await openOverview()
 
-    // The ring states the real ratio; the refusal is for the withheld case alone.
-    expect(await screen.findByText('1K / 5K')).toBeInTheDocument()
-    expect(screen.queryByText(/Budget consumption unavailable/i)).not.toBeInTheDocument()
+    const strip = await screen.findByTestId('campaigns-secondary-strip')
+    expect(within(strip).getByTestId('campaigns-spent-against-budget').textContent ?? '').toContain('1K SAR')
+  })
+
+  /** And a single campaign is told it is not a ranking, rather than shown something else. */
+  it('says one campaign is not a ranking', async () => {
+    route({ budget: [budgetRow({ campaign_id: 'c1', spent: 1000 })] })
+    renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
+    await openOverview()
+
+    expect(await screen.findByTestId('campaigns-top-single')).toHaveTextContent(/Only one campaign/i)
   })
 
   /*

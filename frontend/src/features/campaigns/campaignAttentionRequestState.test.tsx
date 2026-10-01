@@ -63,11 +63,11 @@ const attentionCount = () => screen.getByTestId('campaigns-attention').textConte
  * The campaign list, not merely the card.
  *
  * The card paints before either query answers, so asserting on it straight away measures an empty
- * page and passes for the wrong reason — which is what the first draft of this file did. «2 in total»
+ * page and passes for the wrong reason — which is what the first draft of this file did. «2 campaigns in total»
  * comes from the campaigns response, so it is the anchor that says the rows are in and the only thing
  * still outstanding is the figures.
  */
-const campaignsHaveLanded = () => screen.findByText(/2 in total/)
+const campaignsHaveLanded = () => screen.findByText(/2 campaigns in total/)
 
 describe('what the workspace says while its metrics request has not answered', () => {
   beforeEach(() => {
