@@ -35,7 +35,7 @@ final class IntegrationApiTest extends TestCase
     }
 
     /**
-     * The list is the SIX ad platforms, and nothing else — INTEG-RUNTIME §2.
+     * The list is every provider this product integrates with, and nothing else — INTEG-RUNTIME §2.
      *
      * It used to assert that `sandbox` was present. The sandbox is a local fake that exists so the
      * end-to-end suite and the demo seeder have a connection to drive without a real platform
@@ -44,7 +44,7 @@ final class IntegrationApiTest extends TestCase
      * is the surface that filters it, so «what this product integrates with» and «what a test can
      * drive» stay separate facts.
      */
-    public function test_index_lists_all_eight_providers_and_no_local_fake(): void
+    public function test_index_lists_every_provider_and_no_local_fake(): void
     {
         app(TenantContext::class)->forget();
 
@@ -57,11 +57,20 @@ final class IntegrationApiTest extends TestCase
         // The SET, sorted. The product's reading order is a rendering decision and is asserted where
         // it is made — `integrations.spec.ts`, against `@/lib/platforms`.
         sort($keys);
-        // INTEG-STORES-001 — eight, which is what this controller's own comment always said. It
-        // walked the advertising registry, so Salla and Zid — declared in the same catalogue, with the
-        // same credential fields — appeared nowhere on the Integration Center. A customer looking at
-        // «integrations» saw six of the eight things this product integrates with.
-        $this->assertSame(['google_ads', 'linkedin', 'meta', 'salla', 'snapchat', 'tiktok', 'x', 'zid'], $keys);
+        /*
+         * INTEG-STORES-001 — the advertising platforms AND the stores, which is what this
+         * controller's own comment always said. It walked the advertising registry alone, so Salla
+         * and Zid — declared in the same catalogue, with the same credential fields — appeared
+         * nowhere on the Integration Center.
+         *
+         * The list is written out rather than derived from the catalogue on purpose: a test that
+         * computes its own expectation from the thing it is testing cannot fail when a provider is
+         * dropped. PLATFORM-ORDER-001 §32 holds the ORDER; this holds the SET.
+         */
+        $this->assertSame(
+            ['google_ads', 'linkedin', 'meta', 'openai_ads', 'salla', 'snapchat', 'tiktok', 'x', 'zid'],
+            $keys,
+        );
         $this->assertNotContains('sandbox', $keys);
 
         $meta = collect($data)->firstWhere('key', 'meta');

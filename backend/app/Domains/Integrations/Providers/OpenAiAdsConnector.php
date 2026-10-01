@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Providers;
 
 use App\Domains\Integrations\OAuth\OAuthTokens;
-use App\Domains\Integrations\Support\SyncResult;
+use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Arr;
 
 /**
