@@ -43,7 +43,6 @@ const OUT_OF_SCOPE = [
     one question. Giving it the product's header would be giving it the product's chrome, which is
     the thing that page is deliberately without.
   */
-  /\/features\/marketing\/VideoRequestLandingPage\.tsx$/,
   /\.test\.tsx$/,
 ]
 

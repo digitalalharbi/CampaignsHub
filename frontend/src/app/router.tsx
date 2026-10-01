@@ -34,7 +34,6 @@ import { PublicInfoPage } from '@/features/marketing/PublicInfoPage'
 import { DataDeletionPage } from '@/features/marketing/DataDeletionPage'
 import { PublicServicesPage } from '@/features/marketing/PublicServicesPage'
 import { RequestIntakePage } from '@/features/requests/RequestIntakePage'
-import { VideoRequestLandingPage } from '@/features/marketing/VideoRequestLandingPage'
 import { RequestTrackPage } from '@/features/requests/RequestTrackPage'
 import { ClientRequestsPage } from '@/features/requests/portal/ClientRequestsPage'
 import { ClientRequestDetailPage } from '@/features/requests/portal/ClientRequestDetailPage'
@@ -154,22 +153,6 @@ export const router = createBrowserRouter(withErrorBoundary([
    */
   { path: '/reset-password', element: <ResetPasswordPage /> },
   { path: '/requests/new', element: <RequestIntakePage /> },
-  /*
-    AD-LANDING-001 — the page a paid ad sends people to, at a short address of its own.
-
-    `/7kq3md` rather than `/videos`, and rather than `/l/{slug}`. Both of those were tried and both
-    were wrong in their own direction: a readable word announces itself as a named page somebody can
-    guess at, and the `/l/` prefix files the page under the short-link feature, which is a forwarder
-    and not a place anything is served from. This is neither — a short address at the root that
-    belongs to the page itself.
-
-    It needs nothing from the edge. The SPA host already answers an unmatched path with `index.html`
-    and the router matches here, which is why this is one line rather than a server change somebody
-    has to remember on the next deploy.
-
-    Public and unauthenticated by nature: the reader has no account and is not being asked for one.
-  */
-  { path: '/7kq3md', element: <VideoRequestLandingPage /> },
   { path: '/requests/track', element: <RequestTrackPage /> },
   // Public policy + company pages behind the footer links. One route with a slug so adding a page is a
   // content change, and an unknown slug renders a clear not-found state rather than a blank screen.
