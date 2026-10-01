@@ -749,7 +749,15 @@ final class ReconcileContentMetricsCommand extends Command
         $keys = [];
 
         foreach ($figures as $key => $value) {
-            if (in_array($key, ['reported', 'grain', 'active_days', 'creatives', 'from_ads', 'ratio_inputs'], true)) {
+            /*
+             * `availability` joins `reported` here, and for the same reason.
+             *
+             * It describes WHY a metric is or is not answerable — CONTENT-RESULT-AVAILABILITY-001 —
+             * and is not itself a figure anybody reads. Counting it made RUNG 3 «answer» one key
+             * more than RUNG 4 and RUNG 5 the moment it was added, and this instrument correctly
+             * reported two surfaces disagreeing about a metric called «availability».
+             */
+            if (in_array($key, ['reported', 'availability', 'grain', 'active_days', 'creatives', 'from_ads', 'ratio_inputs'], true)) {
                 continue;
             }
 

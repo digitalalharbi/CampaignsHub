@@ -295,7 +295,97 @@ final class CreativeMetrics
                 : $figures;
         }
 
-        return $this->withDecay($out, $from, $to);
+        return $this->withAvailability($this->withDecay($out, $from, $to));
+    }
+
+    /**
+     * CONTENT-RESULT-AVAILABILITY-001 — is this zero a measurement, or a shrug?
+     *
+     * `reported` answers «did a value arrive», which is the right question for a NULL column and the
+     * wrong one for a provider that answers every question it is asked. Snapchat is asked for
+     * purchases on every creative and returns `0` whether or not the account measures them, so the
+     * card printed «الطلبات 0» for a figure nobody can measure — and 0 and «—» are different claims
+     * about somebody's advertising.
+     *
+     * Applied HERE rather than inside the per-row builder because the evidence is not in the row: it
+     * is the project's whole history with that provider, which one creative's seven days cannot see.
+     * {@see CreativeResultAvailability} holds the reasoning about what counts as evidence.
+     *
+     * A key is marked `not_reported` AND its `reported` flag is cleared together, so a surface that
+     * reads either one tells the same story — there is no state where the availability map says
+     * «unavailable» and the older flag still says «the platform sent this».
+     *
+     * @param  array<string, array<string, mixed>>  $out
+     * @return array<string, array<string, mixed>>
+     */
+    private function withAvailability(array $out): array
+    {
+        if ($out === []) {
+            return $out;
+        }
+
+        /*
+         * The creative's OWN project and provider, not the request's.
+         *
+         * Reading the project from `ProjectContext` broke every portfolio-wide caller: that context
+         * is empty when nothing is selected, and an empty string reached Postgres as a uuid and
+         * failed the whole library. It was also the wrong source — one call can span projects, and
+         * the evidence has to be about the account the creative actually belongs to.
+         */
+        $owners = DB::table('external_creatives')
+            ->whereIn('id', array_keys($out))
+            ->get(['id', 'provider', 'project_id'])
+            ->keyBy(fn ($row) => (string) $row->id);
+
+        $measured = [];
+
+        foreach ($out as $id => $figures) {
+            $owner = $owners[(string) $id] ?? null;
+            $provider = (string) ($owner->provider ?? '');
+            $projectId = (string) ($owner->project_id ?? '');
+
+            if ($provider === '' || $projectId === '') {
+                continue;
+            }
+
+            $scope = $projectId.'|'.$provider;
+            $measured[$scope] ??= app(CreativeResultAvailability::class)->measured($projectId, $provider);
+
+            /*
+             * «Did it run at all» comes first, because it changes what every other answer means.
+             *
+             * A creative with no active day in the window has not sold nothing — it was not selling.
+             * Reporting zero orders for an ad that was not serving sends an operator looking for a
+             * creative problem that is a scheduling fact.
+             */
+            $idle = ((int) ($figures['active_days'] ?? 0)) === 0;
+
+            foreach (CreativeResultAvailability::keys() as $key) {
+                if (! array_key_exists($key, $figures['reported'] ?? [])) {
+                    continue;
+                }
+
+                $value = $key === 'orders' ? ($figures['conversions'] ?? null) : ($figures[$key] ?? null);
+
+                $out[$id]['availability'][$key] = match (true) {
+                    $idle => 'no_activity',
+                    ($figures['reported'][$key] ?? false) === false => 'not_reported',
+                    /*
+                     * The one new judgement: a zero from a provider that has never measured this
+                     * here. Anything non-zero is a measurement by definition and keeps its state,
+                     * and so does a zero on an account that HAS measured this before.
+                     */
+                    ((float) $value) === 0.0 && ($measured[$scope][$key] ?? false) === false => 'not_reported',
+                    default => 'reported',
+                };
+
+                if (($out[$id]['availability'][$key] ?? null) !== 'reported') {
+                    $out[$id]['reported'][$key] = false;
+                }
+            }
+        }
+
+        return $out;
     }
 
     /**

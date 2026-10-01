@@ -18,9 +18,25 @@ export type MetricState =
   /** A real, measured figure — including a real zero. */
   | { kind: 'value'; value: number }
   /** The provider does not report this metric for this creative. */
-  | { kind: 'not_provided' }
+  | { kind: 'not_provided'; reason?: UnavailableReason }
   /** Reported, but the inputs for a ratio are missing — ROAS with no revenue, CPA with no orders. */
   | { kind: 'no_data' }
+
+/**
+ * CONTENT-RESULT-AVAILABILITY-001 — why a result is «—», in the server's own words.
+ *
+ * The three the reader can meet, and they are different facts about somebody's advertising:
+ *
+ *  - `not_reported` — the platform does not measure this here. Asking again will not help.
+ *  - `not_attributable` — the campaign has the figure and it cannot be pinned to THIS creative for
+ *    THIS period. The number exists; it is not this creative's to claim.
+ *  - `no_activity` — the creative was not serving in the period, so there is nothing to have
+ *    measured. Not a gap, a schedule.
+ *
+ * `reported` is the fourth value and is the ordinary case; it never reaches the reader as a
+ * sentence because there is nothing to explain.
+ */
+export type UnavailableReason = 'not_reported' | 'not_attributable' | 'no_activity'
 
 /** Ratios that must never be shown when their denominator is absent (§15.15). */
 const DERIVED = new Set([
@@ -30,6 +46,24 @@ const DERIVED = new Set([
 
 export function metricState(metrics: CreativeMetrics | null, key: string): MetricState {
   if (metrics === null) return { kind: 'no_data' }
+
+  /*
+   * Availability is read BEFORE the number, and that order is the whole fix.
+   *
+   * A provider asked for a metric it does not measure answers `0` — Snapchat is asked for purchases
+   * on every creative and returns a zero for an account with no purchase measurement at all. So the
+   * figure arrives as a perfectly ordinary number and the old reading, which consulted `reported`
+   * only when the value was ABSENT, printed «الطلبات 0» for something nobody has ever measured.
+   *
+   * The server now says which — CONTENT-RESULT-AVAILABILITY-001 — and a reason other than
+   * `reported` outranks the figure beside it. The figure itself is left in the payload: it is real
+   * provenance and a developer surface may want it, but it is not what the card claims.
+   */
+  const availability = metrics.availability?.[key]
+
+  if (availability !== undefined && availability !== 'reported') {
+    return { kind: 'not_provided', reason: availability }
+  }
 
   const raw = metrics[key]
 
@@ -132,6 +166,38 @@ const LABELS: Record<string, { ar: string; en: string }> = {
   page_views: { ar: 'مشاهدات الصفحة', en: 'Page views' },
   engagement_rate: { ar: 'معدل التفاعل', en: 'Engagement rate' },
   cpe: { ar: 'تكلفة التفاعل', en: 'Cost per engagement' },
+}
+
+/**
+ * The sentence a reader gets instead of a figure — PRODUCT-COPY, not a status code.
+ *
+ * One line each, about the platform and the period, in the reader's own language. None of them
+ * names a column, a grain, a request or a failure, because none of those is the customer's problem:
+ * what varies is what an advertising platform exposes for an account, and a product that says so
+ * plainly is not a product that looks broken.
+ */
+export function unavailableReason(reason: UnavailableReason, locale: Locale): string {
+  const ar = locale === 'ar'
+
+  switch (reason) {
+    case 'not_reported':
+      return ar
+        ? 'بيانات التحويل غير متاحة لهذا المحتوى ضمن مستوى القياس الحالي.'
+        : 'Conversion data is not available for this content at the current level of measurement.'
+    case 'not_attributable':
+      return ar
+        ? 'تتوفر بيانات التحويل للحملة، لكن لا يمكن نسبها لهذا المحتوى بدقة خلال الفترة المحددة.'
+        : 'The campaign has conversion data, but it cannot be attributed to this content precisely for the selected period.'
+    case 'no_activity':
+      return ar
+        ? 'لم تُرسل المنصة نتيجة قابلة للقياس لهذا المحتوى خلال الفترة المحددة.'
+        : 'The platform reported no measurable result for this content during the selected period.'
+  }
+}
+
+/** The short form beside a «—», for a card that must stay compact. */
+export function unavailableChip(locale: Locale): string {
+  return locale === 'ar' ? 'غير متاح لهذا المحتوى' : 'Not available for this content'
 }
 
 export const metricLabel = (key: string, locale: Locale): string =>

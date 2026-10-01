@@ -79,6 +79,99 @@ export function frameAspect(preview: CreativePreview | null | undefined): 'verti
  * One mapping, because two surfaces choosing their own would put the same story ad in two different
  * boxes — and the reader comparing them across pages would be comparing crops rather than ads.
  */
+export type MediaAspect = 'vertical' | 'square' | 'horizontal'
+
+/**
+ * The asset's own shape, with a SQUARE band — CONTENT-PREVIEW-FIT-001.
+ *
+ * {@see previewShape} answers «portrait or not», which is the right question for choosing between a
+ * tall frame and a wide one and the wrong one for deciding whether covering will crop: it calls a
+ * 1:1 creative «landscape», so a square ad drawn into a 16:9 box loses a third of its height and
+ * nothing in the old rule could tell. The band is ±12.5% either side of 1:1 — wide enough to admit
+ * the 4:5 and 1.91:1 the platforms actually serve as their own shapes rather than as near-squares.
+ *
+ * `null` is a real answer and the important one: a shape nobody stated is a shape nothing may be
+ * cropped to.
+ */
+export function assetAspect(
+  width?: number | null,
+  height?: number | null,
+  aspectRatio?: string | null,
+): MediaAspect | null {
+  const ratio = (() => {
+    if (typeof width === 'number' && typeof height === 'number' && width > 0 && height > 0) {
+      return width / height
+    }
+
+    const parsed = (aspectRatio ?? '').match(/(\d+(?:\.\d+)?)\s*[:x\u00d7]\s*(\d+(?:\.\d+)?)/i)
+
+    if (parsed) {
+      const w = Number(parsed[1])
+      const h = Number(parsed[2])
+
+      if (w > 0 && h > 0) return w / h
+    }
+
+    return null
+  })()
+
+  if (ratio === null) return null
+  if (ratio > 1.125) return 'horizontal'
+  if (ratio < 0.889) return 'vertical'
+
+  return 'square'
+}
+
+/**
+ * CONTENT-PREVIEW-FIT-001 — cover only where the stage is provably the asset's own shape.
+ *
+ * ## The crop this removes
+ *
+ * «Opening a creative can crop the image/video. Portrait / Story / 9:16 content is especially
+ * affected… part of the actual advertisement is lost.»
+ *
+ * A crop is a claim about an ad that this product invented. The rule it replaces asked «is this
+ * portrait», and left three cases cropped: a SQUARE creative, which {@see previewShape} calls
+ * landscape and which loses a third of its height in a 16:9 box; a 4:5, for the same reason; and
+ * every asset whose dimensions the platform never sent, where the frame falls back to 16:9 because
+ * «guessing tall is a claim too» and the old rule then covered into that guess.
+ *
+ * Worse, it read the ASSET's shape from `creative.width/height` while the FRAME read
+ * `preview.aspect` — two sources for one question, free to disagree about a single creative and
+ * crop a story inside a 9:16 frame.
+ *
+ * So both halves are named here and compared. `cover` is chosen only when the stage is the asset's
+ * own shape, where it crops nothing and merely avoids a hairline of background inside a frame that
+ * already fits. Everything else is contained, which is never wrong and is occasionally letterboxed.
+ *
+ * ## A viewer always contains
+ *
+ * Opening a creative is the moment somebody judges the ad, and a viewer has room to letterbox.
+ * Nothing may be lost there whatever the stage, so that is a rule rather than a prop each caller
+ * has to remember.
+ */
+export function mediaFit(
+  asset: MediaAspect | null | undefined,
+  stage: MediaAspect | null | undefined,
+  surface: 'stage' | 'viewer' = 'stage',
+): 'contain' | 'cover' {
+  if (surface === 'viewer') return 'contain'
+
+  /* The card's frame falls back to `aspect-video` when the platform stated no shape. */
+  const stageShape = stage ?? 'horizontal'
+
+  return asset !== null && asset !== undefined && asset === stageShape ? 'cover' : 'contain'
+}
+
+/** The Tailwind utility for {@see mediaFit}, so no surface spells the class itself. */
+export function mediaFitClass(
+  asset: MediaAspect | null | undefined,
+  stage: MediaAspect | null | undefined,
+  surface: 'stage' | 'viewer' = 'stage',
+): string {
+  return mediaFit(asset, stage, surface) === 'contain' ? 'object-contain' : 'object-cover'
+}
+
 export function aspectClass(aspect: 'vertical' | 'square' | 'horizontal' | null): string | null {
   return aspect === 'vertical' ? 'aspect-[9/16]' : aspect === 'horizontal' ? 'aspect-video' : aspect === 'square' ? 'aspect-square' : null
 }

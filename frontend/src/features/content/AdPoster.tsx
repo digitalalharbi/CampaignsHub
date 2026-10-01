@@ -1,6 +1,6 @@
 import { useUi } from '@/stores/ui'
 import { ImageOff } from 'lucide-react'
-import { absenceLabel, absenceShort, clientAbsence, posterSource, previewShape, readPreview } from './adPreview'
+import { absenceLabel, absenceShort, assetAspect, clientAbsence, mediaFit, posterSource, previewShape, readPreview, type MediaAspect } from './adPreview'
 import type { CreativePreview } from './api'
 import { PosterImage } from './PosterImage'
 
@@ -20,6 +20,7 @@ export function AdPoster({
   height,
   aspectRatio,
   fit,
+  stage,
   forClient = false,
 }: {
   preview: CreativePreview | null | undefined
@@ -45,6 +46,17 @@ export function AdPoster({
    * different change from the one this row is about.
    */
   fit?: 'contain' | 'cover'
+  /**
+   * CONTENT-PREVIEW-FIT-001 — the shape of the BOX this is being drawn into.
+   *
+   * Half of «will covering crop this», and the half nothing was asking for. The fit was derived
+   * from the asset alone, which cannot answer the question: a 16:9 film covers a 16:9 tile
+   * perfectly and loses a third of itself in a square one.
+   *
+   * `null`/absent means «a landscape tile», which is what every caller here draws and what the
+   * content card falls back to when the platform stated no shape.
+   */
+  stage?: MediaAspect | null
   /**
    * CONTENT-PREVIEW-SHAPES-001 — the asset's own dimensions, where the platform reported them.
    *
@@ -144,21 +156,28 @@ export function AdPoster({
     )
   }
 
-  /*
-   * A portrait asset is contained, never covered — the whole frame is the point of a story. The
-   * backdrop is what stops the letter-boxing reading as a broken image: a picture floating on the
-   * page looks like a layout fault, and one sitting on a surface looks deliberate.
-   */
   const portrait = previewShape(width, height, aspectRatio) === 'portrait'
 
   /*
-   * One fit utility, chosen once. `fit` when the caller states it, otherwise the shape rule this
-   * component has always applied — so nothing that does not ask changes.
+   * CONTENT-PREVIEW-FIT-001 — contained unless the stage is provably the asset's own shape.
    *
-   * A contained asset gets the surface behind it for the reason the comment above gives: letter-boxing
-   * on bare page reads as a broken image, and on a surface it reads as deliberate.
+   * This asked «is this portrait», and three shapes were cropped by the answer: a SQUARE creative,
+   * which `previewShape` calls landscape and which loses a third of its height in a 16:9 box; a 4:5,
+   * for the same reason; and every asset whose dimensions the platform never sent, which was covered
+   * into whatever box the caller happened to draw.
+   *
+   * The caller's own `fit` still wins where it states one — `AdPreviewDialog` passes `contain`
+   * because a viewer may never lose anything — and this is the default for everyone else: cover
+   * only where the asset's shape is known AND equals `stage`, which is a landscape tile unless the
+   * caller says otherwise. So a 16:9 thumbnail still fills its tile exactly as before, and the
+   * three shapes that were being cropped stop being cropped.
+   *
+   * A contained asset gets the surface behind it, because letter-boxing on bare page reads as a
+   * broken image and on a surface it reads as deliberate.
    */
-  const contained = fit === undefined ? portrait : fit === 'contain'
+  const contained = fit === undefined
+    ? mediaFit(assetAspect(width, height, aspectRatio), stage ?? null) === 'contain'
+    : fit === 'contain'
 
   return (
     <PosterImage
