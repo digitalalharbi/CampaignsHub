@@ -439,8 +439,19 @@ const ar: HomeCopy = {
        */
       {
         label: 'ChatGPT Ads',
-        desc: 'الحملات والمجموعات والإعلانات ونتائجها اليومية',
-        status: 'يتطلب حساب إعلانات OpenAI ومفتاح واجهة',
+        /*
+          The requirement belongs in the DESCRIPTION, where sentences fit.
+          
+          It was the status, and the status is a pill: `shrink-0`, sized by its text, inside a card
+          343px wide on a phone. «يتطلب حساب إعلانات OpenAI ومفتاح واجهة» rendered 275px wide and
+          pushed the whole page sideways by 23px in English at 375 — caught by the responsive gate,
+          which measures `clientWidth` rather than `innerWidth` and so sees the scrollbar too.
+          
+          The pill says a STATE, like every other row's. The honesty is unchanged: it still states
+          what this platform needs and still claims no availability.
+        */
+        desc: 'الحملات والمجموعات والإعلانات ونتائجها اليومية — بحساب إعلانات OpenAI ومفتاح واجهة.',
+        status: 'يتطلب مفتاحك',
         tone: 'await',
       },
     ],
@@ -762,8 +773,8 @@ const en: HomeCopy = {
       { label: 'LinkedIn Ads', desc: 'B2B and lead-generation campaigns', status: 'Available to connect', tone: 'ok' },
       {
         label: 'ChatGPT Ads',
-        desc: 'Campaigns, ad groups, ads and their daily results',
-        status: 'Requires an OpenAI Ads account and an API key',
+        desc: 'Campaigns, ad groups, ads and their daily results — with an OpenAI Ads account and an API key.',
+        status: 'Your key required',
         tone: 'await',
       },
     ],
