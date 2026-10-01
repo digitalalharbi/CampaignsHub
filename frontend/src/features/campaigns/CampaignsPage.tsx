@@ -93,7 +93,20 @@ const VIEWS: Array<{ id: ViewMode; ar: string; en: string; icon: typeof LayoutGr
   { id: 'table', ar: 'جدول', en: 'Table', icon: Rows },
   { id: 'cards', ar: 'بطاقات', en: 'Cards', icon: LayoutGrid },
   { id: 'compare', ar: 'مقارنة', en: 'Comparison', icon: GitCompare },
-  { id: 'attention', ar: 'تحتاج تدخلًا', en: 'Needs attention', icon: TriangleAlert },
+  /*
+   * «الأسباب», not «تحتاج تدخلًا» — the same words were on screen three times.
+   *
+   * The KPI card counts them, the band beside it counts them AND narrows the table to them, and
+   * this tab repeated the phrase a third time directly underneath. Three controls stacked
+   * vertically saying «Needs attention 1» is the repetition §34 names, and the three are not
+   * interchangeable: a count, a filter and an explanation.
+   *
+   * So this one is named for what it alone does. Every other entry in this switcher is a VIEW —
+   * Overview, Table, Cards, Comparison — and «Needs attention» was a filter wearing a view's
+   * clothes. What it actually shows is the REASON each campaign was flagged, which is the one
+   * thing neither the card nor the band can say.
+   */
+  { id: 'attention', ar: 'الأسباب', en: 'Reasons', icon: TriangleAlert },
 ]
 
 export function CampaignsPage() {
