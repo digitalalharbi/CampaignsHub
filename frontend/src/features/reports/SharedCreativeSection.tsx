@@ -1,4 +1,5 @@
 import { canonicalObjectiveLabel, type CanonicalObjectiveKey } from '@/features/campaigns/canonicalObjectives'
+import { AboutThisData } from '@/features/content/AboutThisData'
 import { aspectClass, clientAbsence, mediaFitClass, posterSource, readPreview } from '@/features/content/adPreview'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -279,8 +280,16 @@ export function SharedCreativeSection({
     <section className="mt-8 grid gap-4" data-testid="shared-creative-section" aria-label={t.heading}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-heading text-lg font-extrabold tracking-tight">{t.heading}</h2>
-        <p className="tnum text-xs text-text-secondary">
+        <p className="tnum flex flex-wrap items-center gap-2 text-xs text-text-secondary">
           <Num>{data.period.from} → {data.period.to}</Num>
+          {/*
+            §17 — the client is the reader most likely to mistake a provider's silence for a fault.
+
+            They did not configure the account, they cannot check the platform, and a «—» beside
+            three figures that arrived is exactly the shape of something broken. One sentence, in
+            the same words the operator's library uses, so neither surface explains it differently.
+          */}
+          <AboutThisData locale={locale} testid="shared-creative-about-data" />
         </p>
       </div>
 

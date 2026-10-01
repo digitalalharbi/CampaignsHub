@@ -7,6 +7,7 @@ import { AdPreviewDialog } from './AdPreviewDialog'
 import { creativeDialogFigures } from './creativeDialogFigures'
 import { CreativeTrend } from './CreativeTrend'
 import { CreativeCompare } from './CreativeCompare'
+import { AboutThisData } from './AboutThisData'
 import { MetricValue } from './MetricValue'
 import { metricLabel } from './metrics'
 import { canonicalFigureKeys } from './canonicalFigures'
@@ -760,6 +761,12 @@ export function CreativesPage() {
               staleAfterHours={STALE_AFTER_HOURS}
               testid="content-freshness"
             />
+            {/*
+              §17 — said once, where a reader meets it before they start wondering.
+              Four absences explained one tooltip at a time still leave the reader assembling the
+              pattern; this is the pattern, in a sentence.
+            */}
+            <AboutThisData locale={locale} testid="content-about-data" />
           </>
         }
         actions={
