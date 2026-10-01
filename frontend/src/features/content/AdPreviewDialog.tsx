@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { AdPoster } from './AdPoster'
 import { CreativeCarousel } from './CreativeCarousel'
 import { CreativeVideoPlayer } from './CreativeVideoPlayer'
-import { readPreview } from './adPreview'
+import { assetAspect, readPreview } from './adPreview'
 import { canonicalObjectiveLabel, canonicalOfRaw } from '@/features/campaigns/canonicalObjectives'
 import { providerLabel } from '@/features/campaigns/labels'
 import type { CreativeCard } from './api'
@@ -68,6 +68,12 @@ export function AdPreviewDialog({
 }) {
   const ar = locale === 'ar'
   const reading = readPreview(creative.preview, ar)
+  /*
+   * The shape the STAGE is sized for — the platform's word first, the asset's own dimensions where
+   * it said nothing. One expression, because the stage's height and the fit inside it must not be
+   * answering two different questions about one creative.
+   */
+  const stageAspect = creative.preview?.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio)
 
   /*
    * «No figures of its own» — the same test the card makes, from the same field.
@@ -157,7 +163,15 @@ export function AdPreviewDialog({
         className="flex h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto border-border bg-surface p-4 sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border lg:grid lg:max-w-[88vw] lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)] lg:items-start lg:gap-x-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-3 flex items-start justify-between gap-3 lg:col-span-2 lg:mb-0">
+        {/*
+          CONTENT-VIEWER-PORTRAIT-001 §10 — the way out stays on screen while the media scrolls.
+
+          On a phone this panel is the whole screen and its content scrolls, so a Close button at the
+          top of that column is gone as soon as the reader reaches the figures. Sticky, with the
+          panel's own background behind it, so it is a header rather than a button floating over the
+          creative.
+        */}
+        <div className="sticky top-0 z-10 -mx-4 mb-3 flex items-start justify-between gap-3 bg-surface px-4 pb-2 pt-1 sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:pb-0 sm:pt-0 lg:col-span-2 lg:mb-0">
           <h3 className="text-sm font-bold text-text-primary">{creative.name}</h3>
           <button
             type="button"
@@ -193,9 +207,24 @@ export function AdPreviewDialog({
           * way on — stays inside a 900-pixel-tall viewport without scrolling, which is what the quick
           * review is for. The neutral surface behind it is what stops letter-boxing reading as a fault.
         */}
+        {/*
+          CONTENT-VIEWER-PORTRAIT-001 — a 9:16 story must actually look like a story.
+          *
+          * One `46vh` for every shape is the right number for exactly one of them. A 16:9 film fills
+          * it; a 9:16 story contained inside it is under a third of a phone's screen — smaller than
+          * the card it was opened FROM, which is the opposite of what opening it is for. «The user
+          * must be able to see the COMPLETE Story.»
+          *
+          * So the stage is chosen by the shape and the asset is still bounded by it, which is what
+          * keeps «nothing is ever cropped» a property of the construction rather than a rule per
+          * format. A portrait creative gets most of the viewport on a phone and still fits beside
+          * its figures on a desktop, where the two-column split already gives it the room.
+        */}
         <div
           data-testid="ad-preview-dialog-stage"
-          className="flex h-[46vh] items-center justify-center overflow-hidden rounded-xl bg-surface-secondary lg:h-[58vh]"
+          className={`flex items-center justify-center overflow-hidden rounded-xl bg-surface-secondary ${
+            stageAspect === 'vertical' ? 'h-[68vh] lg:h-[64vh]' : 'h-[46vh] lg:h-[58vh]'
+          }`}
         >
         {reading.kind === 'video' ? (
           <CreativeVideoPlayer

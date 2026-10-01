@@ -8,8 +8,9 @@ import { drawableFamilies, formatKpi, formatRankingValue, rankingMetricLabel, ty
 import { AttentionBlocks } from './AttentionBlocks'
 import { sectionShown, type ReportSectionKey } from './reportSections'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
-import { clientAbsence, readPreview } from '@/features/content/adPreview'
-import type { CreativePreview } from '@/features/content/api'
+import { clientAbsence, posterSource, readPreview } from '@/features/content/adPreview'
+import { metricState } from '@/features/content/metrics'
+import type { CreativeMetrics, CreativePreview } from '@/features/content/api'
 import { PrintPlatformDrilldowns } from './PrintPlatformDrilldowns'
 import { reportPageTitle } from './sharedBranding'
 
@@ -45,6 +46,14 @@ type AdRow = {
   provider?: string | null
   spend?: number | null
   conversions?: number | null
+  /**
+   * The figures bag, where this row carries one — CONTENT-RESULT-AVAILABILITY-001.
+   *
+   * The generator builds these rows through `CreativeRows`, so the availability the Content library
+   * reads is already in the payload. This type did not admit it, which is why the document printed
+   * the raw `conversions` column and could show a measured 0 where the card shows a dash.
+   */
+  metrics?: CreativeMetrics | null
   preview?: unknown
 }
 
@@ -113,6 +122,31 @@ function isPlatformIdentity(name?: string | null): boolean {
   const own = [brand.lockup.nameEn, brand.lockup.nameAr, brand.name]
 
   return !name || own.includes(name.trim())
+}
+
+/**
+ * A result cell for the printed page, read through the availability the server stated.
+ *
+ * CONTENT-RESULT-AVAILABILITY-001 §14 — «one creative + same account + same period must tell the
+ * same factual story everywhere», and the forwarded PDF is the copy that gets quoted and filed. It
+ * read the raw column, so a zero the Content card shows as «—» printed here as a measured 0: the
+ * same number on the two surfaces, meaning opposite things, in the document a client keeps.
+ *
+ * `metrics` is absent on the ranked ad rows and present on the roster, so both shapes are accepted
+ * and the flat value is the fallback rather than the rule.
+ */
+function printedResult(
+  metrics: CreativeMetrics | null | undefined,
+  flat: number | null | undefined,
+  key = 'conversions',
+): string {
+  if (metrics) {
+    const state = metricState(metrics, key)
+
+    return state.kind === 'value' ? nfmt(state.value) : '—'
+  }
+
+  return flat === null || flat === undefined ? '—' : nfmt(Number(flat))
 }
 
 export function PrintDocument({
@@ -233,21 +267,31 @@ export function PrintDocument({
     carries a picture, and the other three carry their own sentence rather than an empty frame.
   */
   const adRows = ((data.ads ?? []) as AdRow[]).slice(0, 12).map((ad) => {
-    const preview = (ad.preview ?? null) as { state?: string; thumbnail_url?: string | null; image_url?: string | null } | null
-    const usable = preview?.state === 'available' ? (preview.thumbnail_url ?? preview.image_url ?? null) : null
+    /*
+      CONTENT-PREVIEW-FIT-001 §14 — the SAME resolver the library asks, not a second chain.
+
+      This read `thumbnail_url ?? image_url` off the envelope, and `readPreview` knows three things
+      that chain does not: a video whose poster is the only thing that arrived, a collection whose
+      hero is a film, and a catalog ad that is missing nothing by design. So the printed deck could
+      show an empty cell for a creative the library draws a picture of — «one creative, same period,
+      same scope» failing on the one document a client keeps.
+
+      The absence sentence below has always come from the shared reading. Only the picture did not.
+    */
+    const reading = readPreview(ad.preview as CreativePreview | null | undefined, false)
 
     return {
-      thumb: usable,
+      thumb: posterSource(reading),
       /*
        * CLIENT-DIAGNOSTIC-SEPARATION-001 — the forwarded file says a missing picture in the client's
        * words, as every other client surface does: never the server's operator note, and never how
        * our platform link failed.
        */
-      absence: clientAbsence(readPreview(ad.preview as CreativePreview | null | undefined, false), false).sentence,
+      absence: clientAbsence(reading, false).sentence,
       name: String(ad.name ?? '—'),
       provider: String(ad.provider ?? '—'),
       spend: ad.spend === null || ad.spend === undefined ? '—' : money(Number(ad.spend), currency),
-      results: ad.conversions === null || ad.conversions === undefined ? '—' : nfmt(Number(ad.conversions)),
+      results: printedResult(ad.metrics as CreativeMetrics | null | undefined, ad.conversions),
     }
   })
 
@@ -275,7 +319,7 @@ export function PrintDocument({
       spend: row.metrics?.spend === null || row.metrics?.spend === undefined ? '—' : money(Number(row.metrics.spend), currency),
       impressions: row.metrics?.impressions === null || row.metrics?.impressions === undefined ? '—' : nfmt(Number(row.metrics.impressions)),
       clicks: row.metrics?.clicks === null || row.metrics?.clicks === undefined ? '—' : nfmt(Number(row.metrics.clicks)),
-      results: row.metrics?.conversions === null || row.metrics?.conversions === undefined ? '—' : nfmt(Number(row.metrics.conversions)),
+      results: printedResult(row.metrics as CreativeMetrics | null | undefined, row.metrics?.conversions),
     }))
 
   // Keyed by PLATFORM since CLIENT-REPORT-ENTITY-BOUNDARY-001; an old snapshot's per-campaign rows

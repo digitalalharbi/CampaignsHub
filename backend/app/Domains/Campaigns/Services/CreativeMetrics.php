@@ -7,6 +7,7 @@ namespace App\Domains\Campaigns\Services;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
+use App\Domains\Campaigns\Enums\ResultAvailability;
 use App\Domains\Campaigns\Support\CreativeDemoPolicy;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Projects\Context\ProjectContext;
@@ -295,7 +296,67 @@ final class CreativeMetrics
                 : $figures;
         }
 
-        return $this->withDecay($out, $from, $to);
+        return $this->withAvailability($this->withDecay($out, $from, $to), $from, $to);
+    }
+
+    /**
+     * CONTENT-RESULT-AVAILABILITY-001 — is this zero a measurement, a shrug, or somebody else's?
+     *
+     * `reported` answers «did a value arrive», which is the right question for a NULL column and the
+     * wrong one for a provider that answers every question it is asked. Snapchat is asked for
+     * purchases on every creative and returns `0` whether or not the account measures them, so the
+     * card printed «الطلبات 0» for a figure nobody can measure — and 0 and «—» are different claims
+     * about somebody's advertising.
+     *
+     * Applied HERE rather than inside the per-row builder because the evidence is not in the row: it
+     * is the history of the EXACT account that served the ad, which one creative's seven days cannot
+     * see. {@see CreativeResultAvailability} holds the reasoning about what counts as evidence, and
+     * {@see ResultAvailability} the five answers.
+     *
+     * `reported` is deliberately NOT mutated. It governs `supportable()`, which strikes an
+     * unanswerable metric from the card's headline list — so clearing it would make an unverified
+     * result vanish from the card rather than appear as the dash the reader is owed. The richer
+     * state travels beside the older flag instead of collapsing into it.
+     *
+     * @param  array<string, array<string, mixed>>  $out
+     * @return array<string, array<string, mixed>>
+     */
+    private function withAvailability(array $out, Carbon $from, Carbon $to): array
+    {
+        if ($out === []) {
+            return $out;
+        }
+
+        $service = app(CreativeResultAvailability::class);
+        $accounts = $service->accountsFor(array_map('strval', array_keys($out)));
+
+        $every = array_values(array_unique(array_merge(...array_values($accounts) ?: [[]])));
+        $measured = $service->measuredByAccount($every);
+        $inPeriod = $service->recordedInPeriod($every, $from, $to);
+
+        foreach ($out as $id => $figures) {
+            $mine = $accounts[(string) $id] ?? [];
+
+            foreach (CreativeResultAvailability::keys() as $key) {
+                if (! array_key_exists($key, $figures['reported'] ?? [])) {
+                    continue;
+                }
+
+                /* `orders` is `conversions` under the name the marketing paths use. */
+                $value = $key === 'orders' ? ($figures['conversions'] ?? null) : ($figures[$key] ?? null);
+
+                $out[$id]['availability'][$key] = $service->verdict(
+                    $key,
+                    is_numeric($value) ? (float) $value : null,
+                    (bool) ($figures['reported'][$key] ?? false),
+                    $mine,
+                    $measured,
+                    $inPeriod,
+                )->value;
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -1190,6 +1251,43 @@ final class CreativeMetrics
 
         $reported['orders'] = $reported['conversions'];
         $figures['reported'] = $reported;
+
+        /*
+         * CONTENT-RESULT-AVAILABILITY-001 §14 — the strip above the cards tells the same story.
+         *
+         * «One creative + same period + same scope must tell the same factual story across card,
+         * popup, detail, analytics, report, shared report.» A library whose cards all say «—» for
+         * orders, under a headline strip saying «الطلبات 0», is the same lie at a bigger scale —
+         * and the strip is the figure a client reads first.
+         *
+         * Folded optimistically: a scope is measurable if ANY creative in it is, because one
+         * measured sale proves the provider measures sales here and a pooled total of real zeros is
+         * a real zero. A scope where NOTHING is measurable inherits that, and the strip draws the
+         * dash its cards are drawing.
+         */
+        /*
+         * CONTENT-RESULT-AVAILABILITY-001 §14 — folded CONSERVATIVELY across the set.
+         *
+         * «One creative + same account + same period must tell the same factual story everywhere»,
+         * and a headline strip is the figure a client reads first. A real figure anywhere in the set
+         * proves the sum is a real figure and wins outright; otherwise a set that does not agree is
+         * not a verified anything, and says so. One account's evidence may not certify its
+         * neighbour's zero merely because the two were added together.
+         */
+        foreach (CreativeResultAvailability::keys() as $key) {
+            $states = array_values(array_filter(array_map(
+                static fn (array $set): ?ResultAvailability => is_string($set['availability'][$key] ?? null)
+                    ? ResultAvailability::tryFrom((string) $set['availability'][$key])
+                    : null,
+                $sets,
+            )));
+
+            $folded = ResultAvailability::fold($states);
+
+            if ($folded !== null) {
+                $figures['availability'][$key] = $folded->value;
+            }
+        }
         $figures['creatives'] = count($sets);
 
         return $figures;

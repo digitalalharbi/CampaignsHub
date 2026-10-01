@@ -137,6 +137,31 @@ final class ReconcileContentMetricsCommand extends Command
             $this->line('    answered   : '.$this->answered($figures));
             $this->line('    spend      : '.$this->money($figures, 'spend'));
             $this->line('    revenue    : '.$this->money($figures, 'revenue'));
+
+            /*
+             * CONTENT-RESULT-AVAILABILITY-001 — WHY a result is or is not a figure, per creative.
+             *
+             * The owner's «for a representative creative report: creative, objective, provider,
+             * period, creative-grain result, ad-grain result, coverage, final displayed result,
+             * why». The first seven are the rungs above. This is the «why», and it is the one line
+             * that cannot be reconstructed from the figures: a `0` and a `—` look identical in a
+             * column and mean completely different things about somebody's advertising.
+             *
+             * Only the keys that HAVE an opinion are printed. A line of «reported» for twelve
+             * metrics nobody asked about is noise over the one that explains the card.
+             */
+            $availability = array_filter(
+                (array) ($figures['availability'] ?? []),
+                static fn ($state): bool => $state !== 'reported',
+            );
+
+            $this->line('    results    : '.($availability === []
+                ? 'every result this creative reports is a measured figure'
+                : implode(', ', array_map(
+                    static fn (string $key, string $state): string => "{$key} → {$state}",
+                    array_keys($availability),
+                    array_values($availability),
+                ))));
         }
 
         $this->line('');
@@ -749,7 +774,15 @@ final class ReconcileContentMetricsCommand extends Command
         $keys = [];
 
         foreach ($figures as $key => $value) {
-            if (in_array($key, ['reported', 'grain', 'active_days', 'creatives', 'from_ads', 'ratio_inputs'], true)) {
+            /*
+             * `availability` joins `reported` here, and for the same reason.
+             *
+             * It describes WHY a metric is or is not answerable — CONTENT-RESULT-AVAILABILITY-001 —
+             * and is not itself a figure anybody reads. Counting it made RUNG 3 «answer» one key
+             * more than RUNG 4 and RUNG 5 the moment it was added, and this instrument correctly
+             * reported two surfaces disagreeing about a metric called «availability».
+             */
+            if (in_array($key, ['reported', 'availability', 'grain', 'active_days', 'creatives', 'from_ads', 'ratio_inputs'], true)) {
                 continue;
             }
 

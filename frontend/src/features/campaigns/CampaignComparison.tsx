@@ -13,6 +13,7 @@ import { EmptyState, Skeleton } from '@/components/ui/States'
 import { ChartCard, MetricLineChart } from '@/features/analytics/charts'
 import { platformColor } from '@/features/analytics/components'
 import { compact, money } from '@/features/analytics/format'
+import { mediaFitClass } from '@/features/content/adPreview'
 
 const MAX = 5
 
@@ -376,7 +377,8 @@ function CreativeSplit({ rows }: { rows: CompareCampaign[] }) {
                 {r.creatives.map((cr) => (
                   <li key={cr.creative_id} className="flex items-center gap-2 rounded-lg bg-surface-secondary p-1.5">
                     {cr.thumbnail_url
-                      ? <img src={cr.thumbnail_url} alt="" className="h-9 w-9 shrink-0 rounded object-cover" />
+                      /* CONTENT-PREVIEW-FIT-001 — a 36px row tile with no reported shape contains. */
+                      ? <img src={cr.thumbnail_url} alt="" className={`h-9 w-9 shrink-0 rounded ${mediaFitClass(null, 'square', 'thumb')}`} />
                       : <span title="المنصة لم توفر معاينة" className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-surface text-text-muted"><ImageOff size={14} /></span>}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-semibold text-text-primary">{cr.name}</span>

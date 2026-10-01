@@ -8,6 +8,7 @@ import { imageLoading } from './format'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { objectiveLabel, providerLabel } from '@/features/campaigns/labels'
+import { absenceShort, mediaFitClass, posterSource, readPreview } from './adPreview'
 
 /**
  * §15.7 — creatives side by side, with a winner per metric and never an overall one.
@@ -113,16 +114,28 @@ export function CreativeCompare({
             key: creative.id,
             header: (
               <div className="space-y-1">
-                {creative.preview.thumbnail_url ?? creative.preview.image_url ? (
+                {/*
+                  CONTENT-PREVIEW-FIT-001 — the one surface where a crop does the most damage.
+                  *
+                  * This is the comparison view: two creatives beside each other, which is exactly
+                  * where «two crops this product invented» stops being a figure of speech. It rolled
+                  * its own poster chain AND covered into a fixed 80px band, so a story and a square
+                  * were compared as two different middles of themselves.
+                  *
+                  * The shared resolver and the shared fit, like every other surface — and the shared
+                  * absence wording, because the platform's raw note was the only thing a reader got
+                  * where there was no picture.
+                */}
+                {posterSource(readPreview(creative.preview, ar)) !== null ? (
                   <img
-                    src={(creative.preview.thumbnail_url ?? creative.preview.image_url) as string}
+                    src={posterSource(readPreview(creative.preview, ar)) as string}
                     alt={creative.name}
-                    loading={imageLoading(creative.preview.thumbnail_url ?? creative.preview.image_url)}
-                    className="h-20 w-full rounded object-cover"
+                    loading={imageLoading(posterSource(readPreview(creative.preview, ar)))}
+                    className={`h-20 w-full rounded ${mediaFitClass(creative.preview.aspect ?? null, null)}`}
                   />
                 ) : (
-                  <div className="flex h-20 items-center justify-center rounded bg-surface-hover text-[11px] text-text-secondary">
-                    {ar ? creative.preview.note_ar : creative.preview.note_en}
+                  <div className="flex h-20 items-center justify-center rounded bg-surface-hover px-1 text-center text-[11px] text-text-secondary">
+                    {absenceShort(readPreview(creative.preview, ar), ar) || (ar ? creative.preview.note_ar : creative.preview.note_en)}
                   </div>
                 )}
                 <p className="text-xs font-medium text-text-primary">{creative.name}</p>

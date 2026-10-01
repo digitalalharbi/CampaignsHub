@@ -10,6 +10,7 @@ import { fmtDateTime } from '@/lib/datetime'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
+import { mediaFitClass } from '@/features/content/adPreview'
 
 /**
  * CAMPDET-010 / STRUCT-001 — the real ad-set / ad hierarchy beneath a campaign.
@@ -101,7 +102,12 @@ function Ad({ ad }: { ad: AdRow }) {
     <li data-testid="ad-row" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary p-2.5 text-xs">
       <span className="flex min-w-0 items-center gap-2.5">
         {ad.creative?.thumbnail_url ? (
-          <img src={ad.creative.thumbnail_url} alt="" className="h-9 w-9 shrink-0 rounded-md object-cover" />
+          /*
+          CONTENT-PREVIEW-FIT-001 — a 36px row tile, with no shape reported for it.
+          A thumb covers only where the shape is known to match, so this contains: the rule is
+          named here rather than a crop being asserted by hand.
+          */
+          <img src={ad.creative.thumbnail_url} alt="" className={`h-9 w-9 shrink-0 rounded-md ${mediaFitClass(null, 'square', 'thumb')}`} />
         ) : (
           // Never a placeholder image that could pass for the real creative.
           <span

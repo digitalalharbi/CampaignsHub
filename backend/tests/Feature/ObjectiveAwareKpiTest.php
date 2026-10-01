@@ -143,6 +143,43 @@ final class ObjectiveAwareKpiTest extends TestCase
     }
 
     /** Sales keeps its own set — the fix must not swing the other way. */
+    /**
+     * Owner regression 3 — the result label is not always «Orders».
+     *
+     * «A creative card must not blindly use الطلبات / Orders when that is not the correct result
+     * for its objective… The content card should answer: what result was this creative actually
+     * bought for?»
+     *
+     * The families answer that and have since OBJECTIVE-AWARE-KPI-001; what was missing is a test
+     * that `orders` belongs to exactly ONE of them. Asserted as an absence across every other
+     * family, because the defect this prevents is a future family quietly acquiring it — which is
+     * how a video buy comes to be judged on purchases it was never bought to make.
+     */
+    public function test_orders_is_the_result_of_a_sales_buy_and_of_no_other(): void
+    {
+        $withOrders = [];
+
+        foreach (ObjectiveFamily::cases() as $family) {
+            if (in_array('orders', $family->headlineMetrics(), true)) {
+                $withOrders[] = $family->value;
+            }
+        }
+
+        $this->assertSame(
+            [ObjectiveFamily::Sales->value],
+            $withOrders,
+            'a family that was not bought to sell anything is judged on orders: '.implode(', ', $withOrders),
+        );
+
+        /* And each of the others leads with the result it WAS bought for. */
+        $this->assertContains('leads', ObjectiveFamily::Leads->headlineMetrics());
+        $this->assertContains('installs', ObjectiveFamily::App->headlineMetrics());
+        $this->assertContains('video_views', ObjectiveFamily::Video->headlineMetrics());
+        $this->assertContains('landing_page_views', ObjectiveFamily::Traffic->headlineMetrics());
+        $this->assertContains('engagements', ObjectiveFamily::Engagement->headlineMetrics());
+        $this->assertContains('reach', ObjectiveFamily::Awareness->headlineMetrics());
+    }
+
     public function test_a_sales_campaign_still_leads_with_orders_and_roas(): void
     {
         $headline = $this->metrics->headline('sales');

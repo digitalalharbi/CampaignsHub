@@ -18,9 +18,39 @@ export type MetricState =
   /** A real, measured figure — including a real zero. */
   | { kind: 'value'; value: number }
   /** The provider does not report this metric for this creative. */
-  | { kind: 'not_provided' }
+  | { kind: 'not_provided'; reason?: UnavailableReason }
   /** Reported, but the inputs for a ratio are missing — ROAS with no revenue, CPA with no orders. */
   | { kind: 'no_data' }
+
+/**
+ * CONTENT-RESULT-AVAILABILITY-001 — what a result figure IS, in the server's own five words.
+ *
+ * Two of them are figures and three are dashes, and the three say different things about somebody's
+ * advertising:
+ *
+ *  - `not_reported` — the platform sent no value for this here. An absent field, not a zero.
+ *  - `measurement_unverified` — a zero arrived and nothing proves this account measures the metric
+ *    at all. Deliberately not «not provided»: the provider DID send something, and what is unknown
+ *    is whether it means anything. Calling it «not provided» would replace one unsupported claim
+ *    with another.
+ *  - `not_attributable` — the figure exists for the campaign or the account in this period and is
+ *    not this creative's. The number is real; it is not this ad's to claim.
+ *
+ * `reported_value` and `real_zero_confirmed` are the two that print the figure. A zero is only ever
+ * shown as a zero under the second, because that is the only state in which «this ad sold nothing»
+ * is something the product can actually say.
+ */
+export type ResultAvailability =
+  | 'reported_value'
+  | 'real_zero_confirmed'
+  | 'not_reported'
+  | 'measurement_unverified'
+  | 'not_attributable'
+
+/** The three a reader meets as a dash and a sentence. */
+export type UnavailableReason = Exclude<ResultAvailability, 'reported_value' | 'real_zero_confirmed'>
+
+const SHOWS_FIGURE: ReadonlySet<string> = new Set(['reported_value', 'real_zero_confirmed'])
 
 /** Ratios that must never be shown when their denominator is absent (§15.15). */
 const DERIVED = new Set([
@@ -30,6 +60,24 @@ const DERIVED = new Set([
 
 export function metricState(metrics: CreativeMetrics | null, key: string): MetricState {
   if (metrics === null) return { kind: 'no_data' }
+
+  /*
+   * Availability is read BEFORE the number, and that order is the whole fix.
+   *
+   * A provider asked for a metric it does not measure answers `0` — Snapchat is asked for purchases
+   * on every creative and returns a zero for an account with no purchase measurement at all. So the
+   * figure arrives as a perfectly ordinary number and the old reading, which consulted `reported`
+   * only when the value was ABSENT, printed «الطلبات 0» for something nobody has ever measured.
+   *
+   * The server now says which — CONTENT-RESULT-AVAILABILITY-001 — and a reason other than
+   * `reported` outranks the figure beside it. The figure itself is left in the payload: it is real
+   * provenance and a developer surface may want it, but it is not what the card claims.
+   */
+  const availability = metrics.availability?.[key]
+
+  if (availability !== undefined && !SHOWS_FIGURE.has(availability)) {
+    return { kind: 'not_provided', reason: availability as UnavailableReason }
+  }
 
   const raw = metrics[key]
 
@@ -134,6 +182,46 @@ const LABELS: Record<string, { ar: string; en: string }> = {
   cpe: { ar: 'تكلفة التفاعل', en: 'Cost per engagement' },
 }
 
+/**
+ * The sentence a reader gets instead of a figure — PRODUCT-COPY, not a status code.
+ *
+ * One line each, about the platform and the period, in the reader's own language. None of them
+ * names a column, a grain, a request or a failure, because none of those is the customer's problem:
+ * what varies is what an advertising platform exposes for an account, and a product that says so
+ * plainly is not a product that looks broken.
+ */
+export function unavailableReason(reason: UnavailableReason, locale: Locale): string {
+  const ar = locale === 'ar'
+
+  switch (reason) {
+    case 'not_reported':
+      return ar
+        ? 'لم تُرسل المنصة هذا المؤشر لهذا المحتوى.'
+        : 'The platform did not send this metric for this content.'
+    case 'measurement_unverified':
+      /*
+       * Says what is unknown, and no more.
+       *
+       * «غير متاح» would claim the metric cannot be measured here, which is the claim this state
+       * exists because nobody can make: a new account with a working pixel and no sales yet looks
+       * exactly like an account with no pixel. What the reader is told is the truth — nobody has
+       * verified it — and that is also what tells them where to look.
+       */
+      return ar
+        ? 'لم يتم التحقق من توفر قياس التحويل لهذا الحساب.'
+        : 'Conversion measurement has not been verified for this account.'
+    case 'not_attributable':
+      return ar
+        ? 'تتوفر بيانات التحويل، لكن لا يمكن نسبها لهذا المحتوى بدقة خلال الفترة المحددة.'
+        : 'Conversion data is available, but it cannot be attributed to this content precisely for the selected period.'
+  }
+}
+
+/** The short form beside a «—», for a card that must stay compact. */
+export function unavailableChip(locale: Locale): string {
+  return locale === 'ar' ? 'غير متاح لهذا المحتوى' : 'Not available for this content'
+}
+
 export const metricLabel = (key: string, locale: Locale): string =>
   LABELS[key] ? LABELS[key][locale === 'ar' ? 'ar' : 'en'] : key
 
@@ -183,7 +271,22 @@ export function metricKind(key: string): 'number' | 'money' | 'percent' | 'ratio
 export function formatMetric(state: MetricState, key: string, locale: Locale, currency: string | null): string {
   const ar = locale === 'ar'
 
-  if (state.kind === 'not_provided') return ar ? 'غير مُرسَل' : 'Not provided'
+  if (state.kind === 'not_provided') {
+    /*
+     * «غير مُرسَل» is accurate for exactly one of the three reasons — CONTENT-RESULT-AVAILABILITY-001.
+     *
+     * It is a statement that the platform sent nothing, which is true of `not_reported` and false of
+     * the other two: an unverified zero DID arrive, and an unattributable figure exists and belongs
+     * to somebody else. Printing it for all three would put a wrong sentence under the figure on
+     * every surface that has no room for a tooltip.
+     *
+     * Those two render the dash here and carry their sentence where there is room for one —
+     * {@see MetricValue} on the card and the table, which is where a reader meets them.
+     */
+    return state.reason === undefined || state.reason === 'not_reported'
+      ? (ar ? 'غير مُرسَل' : 'Not provided')
+      : '—'
+  }
   if (state.kind === 'no_data') return ar ? 'لا توجد بيانات' : 'No data'
 
   const { value } = state

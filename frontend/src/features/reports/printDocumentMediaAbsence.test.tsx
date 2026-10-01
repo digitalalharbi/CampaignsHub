@@ -41,7 +41,7 @@ describe('the document PDF’s ad table', () => {
     expect(cells).toEqual([
       'No preview is available for this content.',
       'This content’s preview is not shown on this link.',
-      'This content’s preview is not available right now.',
+      'The preview is not available from the source right now; the performance figures are unaffected.',
       'No preview is available for this content.',
     ])
   })

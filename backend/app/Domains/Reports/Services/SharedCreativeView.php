@@ -535,11 +535,20 @@ final class SharedCreativeView
         unset($row['campaign_name'], $row['campaign_id'], $row['ad_set_name'], $row['ad_set_id']);
 
         foreach ($visibility->hiddenMetrics() as $metric) {
+            /*
+             * `availability` goes with the figure and its `reported` flag — CONTENT-RESULT-AVAILABILITY-001.
+             *
+             * It is a third map keyed by the same metric names, and leaving its entry behind is the
+             * failure the paragraph above names: a key present and empty tells a reader that a value
+             * exists and is being kept from them. Worse here, because this map's whole job is to say
+             * something ABOUT a metric — «this one is not measurable» is a sentence about a figure
+             * the client was not supposed to know this report holds.
+             */
             if (isset($row['metrics']) && is_array($row['metrics'])) {
-                unset($row['metrics'][$metric], $row['metrics']['reported'][$metric]);
+                unset($row['metrics'][$metric], $row['metrics']['reported'][$metric], $row['metrics']['availability'][$metric]);
             }
             if (isset($row['previous']) && is_array($row['previous'])) {
-                unset($row['previous'][$metric], $row['previous']['reported'][$metric]);
+                unset($row['previous'][$metric], $row['previous']['reported'][$metric], $row['previous']['availability'][$metric]);
             }
         }
 

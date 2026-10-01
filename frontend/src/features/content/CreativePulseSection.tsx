@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ArrowDownRight, ArrowUpRight, ChevronLeft, ChevronRight, ImageIcon, PlayCircle, TriangleAlert } from 'lucide-react'
 import { CreativeInsightCard } from './CreativeInsightCard'
-import { posterSource, readPreview } from './adPreview'
+import { absenceLabel, absenceShort, assetAspect, mediaFitClass, posterSource, readPreview } from './adPreview'
 import { getCreativePulse, type CreativeMove, type CreativeWinner, type PathComparison, type SpendByKind } from './pulse'
 import { formatMetric, metricKind, metricLabel, metricState } from './metrics'
 import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
@@ -713,12 +713,33 @@ function Poster({ creative, label }: { creative: CreativeCard; label: string }) 
    * whose poster is the only thing that arrived, and none about a creative the presenter calls
    * available while every URL on it is null.
    */
-  const src = posterSource(readPreview(creative.preview, false))
+  const ar = useUi((s) => s.locale) === 'ar'
+  const reading = readPreview(creative.preview, ar)
+  const src = posterSource(reading)
 
   if (!src) {
+    /*
+     * CONTENT-ABSENCE-NOT-A-FAULT-001 §13 — each shape in its OWN words, not one generic sentence.
+     *
+     * The ranking cards showed «لا تتوفر معاينة» for everything, which is the owner's «reads like a
+     * broken product»: a catalog ad is missing nothing, a collection is composed per product, and a
+     * film with no still is the one case where the media is completely intact. `absenceShort` has
+     * had a sentence for each of them all along and this card was not asking.
+     *
+     * `label` survives as the last resort for a shape `absenceShort` has no word for, so the box is
+     * never empty — the one outcome none of this is allowed to produce.
+     */
+    const playable = reading.kind === 'video'
+
     return (
-      <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-surface-secondary text-center text-[10px] leading-tight text-text-muted">
-        {label}
+      <span
+        data-testid="pulse-poster-absent"
+        data-absence={reading.kind === 'none' ? reading.reason : reading.kind}
+        className="flex h-16 w-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl bg-surface-secondary px-1 text-center text-[10px] leading-tight text-text-muted"
+        title={absenceLabel(reading, ar) || label}
+      >
+        {playable && <PlayCircle size={12} aria-hidden />}
+        {absenceShort(reading, ar) || label}
       </span>
     )
   }
@@ -730,7 +751,11 @@ function Poster({ creative, label }: { creative: CreativeCard; label: string }) 
       // `data:` URIs must load eagerly — a lazy one never enters the viewport observer and never
       // decodes, which is ten cards and ten blank frames with no error anywhere.
       loading={imageLoading(src)}
-      className="h-16 w-16 shrink-0 rounded-xl object-cover"
+      /*
+       * CONTENT-PREVIEW-FIT-001 — a 64px tile is square, so only a square asset may fill it.
+       * A story covered into this box was being judged on its middle sixth.
+       */
+      className={`h-16 w-16 shrink-0 rounded-xl ${mediaFitClass(creative.preview?.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio), 'square', 'thumb')}`}
     />
   )
 }

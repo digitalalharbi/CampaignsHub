@@ -7,12 +7,14 @@ import { AdPreviewDialog } from './AdPreviewDialog'
 import { creativeDialogFigures } from './creativeDialogFigures'
 import { CreativeTrend } from './CreativeTrend'
 import { CreativeCompare } from './CreativeCompare'
+import { AboutThisData } from './AboutThisData'
+import { MetricValue } from './MetricValue'
 import { metricLabel } from './metrics'
 import { canonicalFigureKeys } from './canonicalFigures'
 import { creativeGrainMissing, emptyReason, noDisplayableMetrics, type EmptyReason, type MetricsAvailability } from './availability'
-import { absenceLabel, aspectClass, posterSource, previewShape, readPreview } from './adPreview'
+import { absenceLabel, aspectClass, assetAspect, mediaFitClass, posterSource, previewShape, readPreview } from './adPreview'
 import { imageLoading } from './format'
-import { creativeFigureText, creativeMoney } from './creativeMoney'
+import { creativeMoney } from './creativeMoney'
 import { VideoPoster } from './VideoPoster'
 import { anyDisplayablePreview } from './previewPresence'
 import {
@@ -759,6 +761,12 @@ export function CreativesPage() {
               staleAfterHours={STALE_AFTER_HOURS}
               testid="content-freshness"
             />
+            {/*
+              §17 — said once, where a reader meets it before they start wondering.
+              Four absences explained one tooltip at a time still leave the reader assembling the
+              pattern; this is the pattern, in a sentence.
+            */}
+            <AboutThisData locale={locale} testid="content-about-data" />
           </>
         }
         actions={
@@ -1150,6 +1158,18 @@ export function CreativesPage() {
                  * توجد معاينة» — the product claiming to have nothing while holding the thing itself.
                  */
                 const video = poster === null && reading.kind === 'video' ? reading.src : null
+                /*
+                 * CONTENT-PREVIEW-FIT-001 — this tile is 64x40, a LANDSCAPE box.
+                 *
+                 * Everything in it was covered, so a 9:16 story was judged on its middle sixth and a
+                 * square creative lost a third of its height. Computed once for the row so the still
+                 * and the film cannot be fitted differently — which is how one creative came to be
+                 * cropped in the grid and whole in the table.
+                 */
+                const rowFit = mediaFitClass(
+                  creative.preview?.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio),
+                  'horizontal',
+                )
 
                 return (
                   <tr
@@ -1180,7 +1200,8 @@ export function CreativesPage() {
                           alt=""
                           loading={imageLoading(poster)}
                           decoding="async"
-                          className="h-10 w-16 rounded object-cover"
+                          /* CONTENT-PREVIEW-FIT-001 — a 64x40 tile is landscape; only a landscape asset fills it. */
+                          className={`h-10 w-16 rounded ${rowFit}`}
                         />
                       ) : video ? (
                         /*
@@ -1194,7 +1215,8 @@ export function CreativesPage() {
                          */
                         <VideoPoster
                           src={video}
-                          className="h-10 w-16 rounded object-cover"
+                          /* Same tile, same rule — the still and the film must not be fitted differently. */
+                          className={`h-10 w-16 rounded ${rowFit}`}
                           onUnavailable={() => undefined}
                         />
                       ) : (
@@ -1240,7 +1262,8 @@ export function CreativesPage() {
                         <span className="text-text-muted">—</span>
                       ) : (
                         <span className="tabular-nums" dir="ltr">
-                          {creativeFigureText(creative.metrics, resultKey, data?.currency ?? null, locale)}
+                          {/* Same reading as the card — a table row and a card must not disagree. */}
+                          <MetricValue metrics={creative.metrics} metricKey={resultKey} currency={data?.currency ?? null} locale={locale} />
                           <span className="ms-1 text-[11px] text-text-muted">{metricLabel(resultKey, locale)}</span>
                         </span>
                       )}
@@ -1250,7 +1273,8 @@ export function CreativesPage() {
                         <span className="text-text-muted">—</span>
                       ) : (
                         <span className="tabular-nums" dir="ltr">
-                          {creativeFigureText(creative.metrics, efficiencyKey, data?.currency ?? null, locale)}
+                          {/* Same reading as the card — a table row and a card must not disagree. */}
+                          <MetricValue metrics={creative.metrics} metricKey={efficiencyKey} currency={data?.currency ?? null} locale={locale} />
                           <span className="ms-1 text-[11px] text-text-muted">{metricLabel(efficiencyKey, locale)}</span>
                         </span>
                       )}
@@ -1498,11 +1522,13 @@ function CreativeGridCard({
                */
               fallback={null}
               onFailed={() => setBrokenPoster(true)}
-              className={`h-full w-full ${
-                previewShape(creative.width, creative.height, creative.aspect_ratio) === 'portrait'
-                  ? 'object-contain'
-                  : 'object-cover'
-              }`}
+              /*
+                CONTENT-PREVIEW-FIT-001 — one rule, read from the same source as the FRAME.
+                The stage above takes `preview.aspect`; so does the fit, so the two cannot disagree
+                about one creative. Where the platform stated no shape the frame is a guessed 16:9
+                and the asset is contained rather than cropped into it.
+              */
+              className={`h-full w-full ${mediaFitClass(preview.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio), preview.aspect ?? null)}`}
             />
           ) : video ? (
             /*
@@ -1528,11 +1554,8 @@ function CreativeGridCard({
                * The same expression rather than a second rule, so the two branches cannot drift into
                * disagreeing about what a portrait creative is.
                */
-              className={`h-full w-full ${
-                previewShape(creative.width, creative.height, creative.aspect_ratio) === 'portrait'
-                  ? 'object-contain'
-                  : 'object-cover'
-              }`}
+              /* The same rule as the still above, from the same source — see CONTENT-PREVIEW-FIT-001. */
+              className={`h-full w-full ${mediaFitClass(preview.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio), preview.aspect ?? null)}`}
               onUnavailable={() => setBrokenVideo(true)}
             />
           ) : showPreviewPanel ? (
@@ -1717,7 +1740,15 @@ function CreativeGridCard({
                         * above already carries spend; a key list that changes with the objective is
                         * the wrong thing to guard by remembering.
                         */}
-                      {creativeFigureText(creative.metrics, key, currency, locale)}</Num>
+                      {/*
+                        CONTENT-RESULT-AVAILABILITY-001 §4 — «0» and «—» are different claims.
+
+                        A result the provider cannot measure here renders as the dash with its reason
+                        one hover away, rather than as a measured zero or as four stacked «غير مُرسَل»
+                        that read like a list of faults. Everything answerable renders exactly as
+                        before, through the same reader.
+                      */}
+                      <MetricValue metrics={creative.metrics} metricKey={key} currency={currency} locale={locale} /></Num>
                     </dd>
                   </div>
                 ))}

@@ -57,7 +57,7 @@ describe('the PDF platform drill-down section', () => {
     const rows = within(section).getAllByTestId('print-drilldown-ad')
     expect(rows[0].querySelector('img')?.getAttribute('src')).toBe('https://cdn.example.com/a.jpg')
     expect(rows[1].querySelector('img')).toBeNull()
-    expect(within(rows[1]).getByTestId('print-drilldown-absence')).toHaveTextContent('This content’s preview is not available right now.')
+    expect(within(rows[1]).getByTestId('print-drilldown-absence')).toHaveTextContent('The preview is not available from the source right now; the performance figures are unaffected.')
     expect(section.textContent ?? '').not.toMatch(/resync|Platform link expired/)
     expect(section.textContent ?? '').not.toMatch(/campaign/i)
     expect(within(section).queryByTestId('print-drilldown-weakest')).not.toBeInTheDocument()

@@ -120,13 +120,26 @@ describe('a film on a content card', () => {
     expect((await filmElement()).className).toContain('object-contain')
   })
 
-  /** A landscape film fills its own landscape box — containing it would band a frame that fits. */
-  it('is covered when the creative is landscape', async () => {
+  /**
+   * CONTENT-PREVIEW-FIT-001 — and a landscape film is contained too, which this used to forbid.
+   *
+   * «A landscape film fills its own landscape box» was true about the AD and not about the FILE.
+   * The declared ratio describes what was bought; the frame the platform actually returns is
+   * frequently a different shape — a landscape cover for a 9:16 video is routine, which this
+   * codebase had already written down — so matching the declaration against the stage licensed a
+   * crop on evidence that does not say what it was read to say. Measured on the seeded library,
+   * six cards were drawn at 0.563 and 1.775 against an intrinsic 1.000 under exactly that rule.
+   *
+   * Containing costs a landscape film nothing when it really is landscape: the stage is already
+   * `aspect-video`, so the two fits are identical pixels. What it buys is that the one time the
+   * file is not the shape it was declared to be, the reader sees the whole ad instead of its middle.
+   */
+  it('is contained when the creative is landscape, because the declaration is not the file', async () => {
     vi.mocked(listCreatives).mockResolvedValue(page(film({
       name: 'Story film', aspect_ratio: '16:9', width: 1920, height: 1080,
     })))
     renderWithProviders(<CreativesPage />, { locale: 'ar' })
 
-    expect((await filmElement()).className).toContain('object-cover')
+    expect((await filmElement()).className).toContain('object-contain')
   })
 })

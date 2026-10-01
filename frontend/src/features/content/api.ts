@@ -122,6 +122,16 @@ export interface CreativeMetrics {
   active_days: number | null
   /** Which keys the provider actually sent. A key that is `false` here is «Not Provided», not zero. */
   reported: Record<string, boolean>
+  /**
+   * CONTENT-RESULT-AVAILABILITY-001 — WHY a result metric is or is not answerable.
+   *
+   * `reported` answers «did a value arrive», which is the right question for a null column and the
+   * wrong one for a provider that answers every question it is asked. A platform asked for
+   * purchases on an account that measures none returns a zero, and a zero and a «—» are different
+   * claims about somebody's advertising. Present only for the RESULT metrics a provider can answer
+   * that way; a key with no entry keeps the older reading exactly as before.
+   */
+  availability?: Record<string, import('./metrics').ResultAvailability>
   /*
    * CREATIVE-MONEY-TRUTH-001 — the withheld half of the money, which this type used to deny.
    *
@@ -143,7 +153,12 @@ export interface CreativeMetrics {
   revenue_withheld_rows?: number | null
   money_original_currency?: string | null
   money_original_currencies?: number | null
-  [key: string]: number | string | null | boolean | Record<string, boolean> | undefined
+  /*
+   * Widened once more for `availability`, for the same reason `money_original_currency` widened it:
+   * the index signature has to admit every shape the bag actually carries, or a real field has to
+   * be cast past the one check that would catch a surface reading it wrongly.
+   */
+  [key: string]: number | string | null | boolean | Record<string, boolean> | Record<string, string> | undefined
 }
 
 export type FatigueStatus = 'improving' | 'stable' | 'watch' | 'fatigued' | 'insufficient_data'

@@ -79,6 +79,98 @@ export function frameAspect(preview: CreativePreview | null | undefined): 'verti
  * One mapping, because two surfaces choosing their own would put the same story ad in two different
  * boxes — and the reader comparing them across pages would be comparing crops rather than ads.
  */
+export type MediaAspect = 'vertical' | 'square' | 'horizontal'
+
+/**
+ * The asset's own shape, with a SQUARE band — CONTENT-PREVIEW-FIT-001.
+ *
+ * {@see previewShape} answers «portrait or not», which is the right question for choosing between a
+ * tall frame and a wide one and the wrong one for deciding whether covering will crop: it calls a
+ * 1:1 creative «landscape», so a square ad drawn into a 16:9 box loses a third of its height and
+ * nothing in the old rule could tell. The band is ±12.5% either side of 1:1 — wide enough to admit
+ * the 4:5 and 1.91:1 the platforms actually serve as their own shapes rather than as near-squares.
+ *
+ * `null` is a real answer and the important one: a shape nobody stated is a shape nothing may be
+ * cropped to.
+ */
+export function assetAspect(
+  width?: number | null,
+  height?: number | null,
+  aspectRatio?: string | null,
+): MediaAspect | null {
+  const ratio = (() => {
+    if (typeof width === 'number' && typeof height === 'number' && width > 0 && height > 0) {
+      return width / height
+    }
+
+    const parsed = (aspectRatio ?? '').match(/(\d+(?:\.\d+)?)\s*[:x\u00d7]\s*(\d+(?:\.\d+)?)/i)
+
+    if (parsed) {
+      const w = Number(parsed[1])
+      const h = Number(parsed[2])
+
+      if (w > 0 && h > 0) return w / h
+    }
+
+    return null
+  })()
+
+  if (ratio === null) return null
+  if (ratio > 1.125) return 'horizontal'
+  if (ratio < 0.889) return 'vertical'
+
+  return 'square'
+}
+
+/**
+ * CONTENT-PREVIEW-FIT-001 — contain by default; cover only a decorative tile whose shape is known.
+ *
+ * ## The crop
+ *
+ * «Opening a creative can crop the image/video… The media is being forced into a stage that does
+ * not respect the source aspect ratio, so part of the actual advertisement is lost.» The owner's
+ * instruction is explicit: «Default media fit: object-fit: contain. NOT cover.»
+ *
+ * ## Why the declared aspect cannot license a crop
+ *
+ * The first attempt at this covered wherever the stated shape matched the stage, reasoning that a
+ * frame built from `preview.aspect` IS the asset's own box. Measured on the seeded library, six
+ * cards were still cropped: assets whose intrinsic ratio is 1.000 drawn into 0.563 and 1.775
+ * frames. The stated aspect describes the AD, not the file — a platform returns a landscape cover
+ * for a 9:16 video all the time, which this codebase had already written down elsewhere — so
+ * matching it against the stage proves nothing about the picture that actually arrives.
+ *
+ * Only the browser knows the file's ratio, and only after it decodes. So the rule does not try to
+ * predict it: media is contained, the stage keeps the declared shape, and an asset that genuinely
+ * matches fills it with no letterboxing at all. One that does not is shown WHOLE on the neutral
+ * ground the card already draws — «bounded stage + contained media + neutral intentional
+ * background», which is the owner's own description of the grid.
+ *
+ * ## The one exception
+ *
+ * A `thumb` is a 48–64px navigation tile — a carousel strip, a group list, a ranking row — where the
+ * reader is picking a row rather than judging an ad, and where letterboxing a square into a square
+ * costs legibility for nothing. It still contains unless the shape is known and matches.
+ */
+export function mediaFit(
+  asset: MediaAspect | null | undefined,
+  stage: MediaAspect | null | undefined,
+  surface: 'stage' | 'viewer' | 'thumb' = 'stage',
+): 'contain' | 'cover' {
+  if (surface !== 'thumb') return 'contain'
+
+  return asset !== null && asset !== undefined && asset === (stage ?? 'horizontal') ? 'cover' : 'contain'
+}
+
+/** The Tailwind utility for {@see mediaFit}, so no surface spells the class itself. */
+export function mediaFitClass(
+  asset: MediaAspect | null | undefined,
+  stage: MediaAspect | null | undefined,
+  surface: 'stage' | 'viewer' | 'thumb' = 'stage',
+): string {
+  return mediaFit(asset, stage, surface) === 'contain' ? 'object-contain' : 'object-cover'
+}
+
 export function aspectClass(aspect: 'vertical' | 'square' | 'horizontal' | null): string | null {
   return aspect === 'vertical' ? 'aspect-[9/16]' : aspect === 'horizontal' ? 'aspect-video' : aspect === 'square' ? 'aspect-square' : null
 }
@@ -159,6 +251,20 @@ export function readPreview(preview: CreativePreview | null | undefined, ar: boo
   const src = preview.image_url ?? preview.thumbnail_url
 
   return src ? { kind: 'image', src, note: null } : { kind: 'none', reason: 'no_media', note: note(preview) }
+}
+
+/**
+ * A carousel or collection CARD's own still — the one poster chain `readPreview` does not own.
+ *
+ * `readPreview` resolves the AD's media from its envelope. A card inside a carousel is a different
+ * object with its own three urls, and two surfaces were spelling its chain out by hand — which is
+ * how one of them came to prefer `image_url` and the other `thumbnail_url` for the same card.
+ *
+ * The order matches the envelope's: the file first, the listing thumbnail second. A card with only
+ * a film has no still at all, and says so by returning null rather than by borrowing the ad's.
+ */
+export function cardPoster(card: { image_url?: string | null; thumbnail_url?: string | null }): string | null {
+  return card.image_url ?? card.thumbnail_url ?? null
 }
 
 /** The still to draw for a reading — a video's poster, an image's file, or nothing. */
@@ -306,8 +412,20 @@ export function absenceLabel(reading: PreviewReading, ar: boolean): string {
  * The two are built from the same reading, so they cannot describe different absences.
  */
 export function absenceShort(reading: PreviewReading, ar: boolean): string {
+  /*
+   * CONTENT-ABSENCE-NOT-A-FAULT-001 — «فيديو بلا غلاف» described the AD as deficient.
+   *
+   * The film is there and it plays. What is absent is a still, and no platform owes one: Snapchat
+   * returns the file and no separate poster for every video creative on the live estate. «Without a
+   * cover» reads as a broken product on a card a client sees, which is the opposite of true — it is
+   * the one state where the media is completely intact.
+   *
+   * So the compact form names what the card IS showing — a video preview — and the surface draws
+   * the play affordance beside it. The long form {@see absenceLabel} already said «افتح الإعلان
+   * لتشغيله», and these two now agree.
+   */
   if (reading.kind === 'video' && reading.poster === null) {
-    return ar ? 'فيديو بلا غلاف' : 'Video, no cover'
+    return ar ? 'معاينة الفيديو' : 'Video preview'
   }
 
   if (reading.kind === 'catalog') {
@@ -318,20 +436,30 @@ export function absenceShort(reading: PreviewReading, ar: boolean): string {
     /* Composed, not absent — the long sentence's short form, and the same distinction. */
     return reading.note !== null
       ? (ar ? 'تُركَّب لكل منتج' : 'Composed per product')
-      : (ar ? 'تشكيلة بلا غلاف' : 'Collection, no hero')
+      /* And where it is genuinely absent, it is the platform's hero that is missing, not ours. */
+      : (ar ? 'لم ترسل المنصة غلافًا' : 'Platform sent no hero')
   }
 
   if (reading.kind !== 'none') {
     return ''
   }
 
+  /*
+   * Each of these names WHO the absence belongs to — CONTENT-ABSENCE-NOT-A-FAULT-001.
+   *
+   * «لا يوجد ملف» is a statement about this product's contents and reads as a gap on this side of
+   * the wire. The truth in every one of these cases is about the platform: it did not send a file,
+   * or it sent a link that has since expired, or it was never asked. Said that way the reader
+   * learns that media availability varies by provider; said the old way they learn that
+   * CampaignsHub lost something.
+   */
   const words: Record<string, [string, string]> = {
-    withheld: ['محجوب', 'Withheld'],
-    expired: ['انتهت الصلاحية', 'Link expired'],
-    unavailable: ['لا يوجد ملف', 'No file'],
-    never_fetched: ['لم يُجلب', 'Never fetched'],
-    shape_not_fetched: ['بطاقات لم تُجلب', 'Tiles not fetched'],
-    no_media: ['لا يوجد ملف', 'No file'],
+    withheld: ['الرابط محمي', 'Link protected'],
+    expired: ['انتهت صلاحية الرابط', 'Link expired'],
+    unavailable: ['لم ترسل المنصة ملفًا', 'Platform sent no file'],
+    never_fetched: ['لم يُطلب من المنصة', 'Never requested'],
+    shape_not_fetched: ['البطاقات لم تُطلب', 'Tiles never requested'],
+    no_media: ['لم ترسل المنصة ملفًا', 'Platform sent no file'],
   }
 
   const pair = words[reading.reason] ?? words.unavailable
@@ -407,8 +535,15 @@ export function clientAbsence(reading: PreviewReading, ar: boolean): { short: st
    */
   if (reading.kind === 'video' && reading.poster === null) {
     return {
-      // The established short label stands — `ReportAdsSection` reads it and a reader already knows it.
-      short: absenceShort(reading, ar),
+      /*
+       * Its OWN label, not the card's — CONTENT-ABSENCE-NOT-A-FAULT-001 §15.
+       *
+       * This borrowed `absenceShort`, which was right while that said «no cover» and is wrong now
+       * that it says «معاينة الفيديو». A printed page cannot preview anything, and `ReportAdsSection`
+       * shows this where no cover frame exists: offering a preview on either is a promise the
+       * surface cannot keep. The label names what the row IS and why there is no picture of it.
+       */
+      short: ar ? 'فيديو — لا غلاف من المنصة' : 'Video — no cover from the platform',
       sentence: ar
         ? 'محتوى هذا الإعلان فيديو، ولم ترسل المنصة صورة غلاف له.'
         : 'This ad’s content is a video, and the platform sent no cover frame for it.',
@@ -426,9 +561,23 @@ export function clientAbsence(reading: PreviewReading, ar: boolean): { short: st
   }
 
   if (reading.reason === 'expired') {
+    /*
+     * The one reassurance a client needs — CONTENT-ABSENCE-NOT-A-FAULT-001.
+     *
+     * A missing picture in a document somebody is reading raises a question about everything else on
+     * the page. The link is what expired at the source; the figures were measured and are unaffected,
+     * and saying so is the difference between «this report is incomplete» and «this ad's picture is
+     * no longer hosted».
+     */
     return ar
-      ? { short: 'المعاينة غير متاحة حاليًا', sentence: 'معاينة هذا المحتوى غير متاحة حاليًا.' }
-      : { short: 'Preview unavailable for now', sentence: 'This content’s preview is not available right now.' }
+      ? {
+          short: 'المعاينة غير متاحة حاليًا',
+          sentence: 'المعاينة غير متاحة حاليًا من المصدر، بينما تبقى بيانات الأداء متاحة.',
+        }
+      : {
+          short: 'Preview unavailable for now',
+          sentence: 'The preview is not available from the source right now; the performance figures are unaffected.',
+        }
   }
 
   return ar

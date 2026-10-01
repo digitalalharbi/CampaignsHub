@@ -39,15 +39,24 @@ describe('the ads section, across the three surfaces', () => {
   })
 
   /**
-   * The printed document must not invent a picture either.
+   * The printed document must not invent a picture either — and must not LOSE one.
    *
    * A grey box in a PDF a client keeps reads as a broken export, so the absent states print their
-   * sentence — and an `<img>` is emitted only for a preview the presenter called `available`.
+   * sentence. This asserted the state check the document used to spell out by hand:
+   * `state === 'available' ? thumbnail_url ?? image_url : null`.
+   *
+   * That chain was also the defect. `readPreview` knows three things it does not — a video whose
+   * poster is the only thing that arrived, a collection whose hero is a film, a catalog ad that is
+   * missing nothing by design — so the printed deck could show an empty cell for a creative the
+   * library draws a picture of, which is «one creative, same period, same scope» failing on the one
+   * document a client keeps. The state check lives inside the shared resolver now, so the claim is
+   * made against THAT rather than against a copy of it.
    */
   it('prints a picture only where the platform actually gave one', () => {
     const print = file('PrintDocument.tsx')
 
-    expect(print).toContain("preview?.state === 'available'")
+    expect(print, 'the printed deck resolves its own poster again').toContain('posterSource(reading)')
+    expect(print).toContain('readPreview(')
     expect(print).toContain('doc-ad-absent')
   })
 })
