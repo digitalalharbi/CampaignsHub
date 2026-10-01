@@ -474,7 +474,7 @@ function GroupDetail({
                       it. A story covered into this box is judged on its middle third, in a list
                       whose whole purpose is comparing one creative with another.
                     */
-                    className={`h-12 w-12 shrink-0 rounded ${mediaFitClass(member.preview.aspect ?? null, 'square')}`}
+                    className={`h-12 w-12 shrink-0 rounded ${mediaFitClass(member.preview.aspect ?? null, 'square', 'thumb')}`}
                   />
                 ) : (
                   <span className="h-12 w-12 shrink-0 rounded bg-surface-hover" aria-hidden />

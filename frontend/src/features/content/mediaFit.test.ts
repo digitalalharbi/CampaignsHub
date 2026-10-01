@@ -21,37 +21,32 @@ import { assetAspect, mediaFit } from './adPreview'
  * disagree about one creative and crop a story inside a 9:16 frame.
  */
 describe('how media is fitted to its stage', () => {
-  /** Owner regression 5 — a 9:16 story is fully contained wherever its stage is not 9:16. */
-  it('contains a portrait asset in a stage that is not its shape', () => {
-    expect(mediaFit('vertical', 'horizontal')).toBe('contain')
-    expect(mediaFit('vertical', null)).toBe('contain')
-  })
-
-  /** Owner regression 6 — square and 4:5 are not cropped either, which the old rule could not say. */
-  it('contains a square asset in the guessed landscape frame', () => {
-    expect(mediaFit('square', null)).toBe('contain')
-    expect(mediaFit('square', 'horizontal')).toBe('contain')
-  })
-
-  /** An asset whose shape nobody stated is a shape nothing may be cropped to. */
-  it('never covers an asset of unknown shape', () => {
-    expect(mediaFit(null, 'horizontal')).toBe('contain')
-    expect(mediaFit(undefined, null)).toBe('contain')
-  })
-
-  it('covers only where the stage is the asset’s own shape', () => {
-    expect(mediaFit('vertical', 'vertical')).toBe('cover')
-    expect(mediaFit('square', 'square')).toBe('cover')
-    expect(mediaFit('horizontal', 'horizontal')).toBe('cover')
-    /* …including the frame's own 16:9 fallback, which a 16:9 film fills exactly. */
-    expect(mediaFit('horizontal', null)).toBe('cover')
-  })
-
-  /** A viewer opened on one creative always contains: there is room, and nothing may be lost. */
-  it('always contains when the surface is a viewer', () => {
+  /**
+   * Owner regressions 5 and 6 — nothing on a judging surface is cropped, whatever its shape.
+   *
+   * Including the case the first attempt at this rule got wrong: an asset whose STATED shape
+   * matches the stage. The stated aspect describes the ad, not the file — platforms return a
+   * landscape cover for a 9:16 video routinely — so it cannot license a crop. Measured on the
+   * seeded library, six cards were drawn at 0.563 and 1.775 against an intrinsic 1.000 under
+   * exactly that reasoning.
+   */
+  it('contains on every surface where a creative is being judged', () => {
     for (const asset of ['vertical', 'square', 'horizontal', null] as const) {
-      expect(mediaFit(asset, asset, 'viewer'), `${asset} was cropped in a viewer`).toBe('contain')
+      for (const stage of ['vertical', 'square', 'horizontal', null] as const) {
+        expect(mediaFit(asset, stage), `${asset} in ${stage} was cropped`).toBe('contain')
+        expect(mediaFit(asset, stage, 'viewer'), `${asset} in ${stage} was cropped in a viewer`).toBe('contain')
+      }
     }
+  })
+
+  /**
+   * A navigation tile is the one exception, and only when the shape is known AND matches: a 48px
+   * row-picker letterboxing a square into a square costs legibility for nothing.
+   */
+  it('covers a thumbnail only where its shape is known to match', () => {
+    expect(mediaFit('square', 'square', 'thumb')).toBe('cover')
+    expect(mediaFit('vertical', 'square', 'thumb')).toBe('contain')
+    expect(mediaFit(null, 'square', 'thumb')).toBe('contain')
   })
 })
 

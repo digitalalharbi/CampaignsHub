@@ -123,51 +123,50 @@ export function assetAspect(
 }
 
 /**
- * CONTENT-PREVIEW-FIT-001 — cover only where the stage is provably the asset's own shape.
+ * CONTENT-PREVIEW-FIT-001 — contain by default; cover only a decorative tile whose shape is known.
  *
- * ## The crop this removes
+ * ## The crop
  *
- * «Opening a creative can crop the image/video. Portrait / Story / 9:16 content is especially
- * affected… part of the actual advertisement is lost.»
+ * «Opening a creative can crop the image/video… The media is being forced into a stage that does
+ * not respect the source aspect ratio, so part of the actual advertisement is lost.» The owner's
+ * instruction is explicit: «Default media fit: object-fit: contain. NOT cover.»
  *
- * A crop is a claim about an ad that this product invented. The rule it replaces asked «is this
- * portrait», and left three cases cropped: a SQUARE creative, which {@see previewShape} calls
- * landscape and which loses a third of its height in a 16:9 box; a 4:5, for the same reason; and
- * every asset whose dimensions the platform never sent, where the frame falls back to 16:9 because
- * «guessing tall is a claim too» and the old rule then covered into that guess.
+ * ## Why the declared aspect cannot license a crop
  *
- * Worse, it read the ASSET's shape from `creative.width/height` while the FRAME read
- * `preview.aspect` — two sources for one question, free to disagree about a single creative and
- * crop a story inside a 9:16 frame.
+ * The first attempt at this covered wherever the stated shape matched the stage, reasoning that a
+ * frame built from `preview.aspect` IS the asset's own box. Measured on the seeded library, six
+ * cards were still cropped: assets whose intrinsic ratio is 1.000 drawn into 0.563 and 1.775
+ * frames. The stated aspect describes the AD, not the file — a platform returns a landscape cover
+ * for a 9:16 video all the time, which this codebase had already written down elsewhere — so
+ * matching it against the stage proves nothing about the picture that actually arrives.
  *
- * So both halves are named here and compared. `cover` is chosen only when the stage is the asset's
- * own shape, where it crops nothing and merely avoids a hairline of background inside a frame that
- * already fits. Everything else is contained, which is never wrong and is occasionally letterboxed.
+ * Only the browser knows the file's ratio, and only after it decodes. So the rule does not try to
+ * predict it: media is contained, the stage keeps the declared shape, and an asset that genuinely
+ * matches fills it with no letterboxing at all. One that does not is shown WHOLE on the neutral
+ * ground the card already draws — «bounded stage + contained media + neutral intentional
+ * background», which is the owner's own description of the grid.
  *
- * ## A viewer always contains
+ * ## The one exception
  *
- * Opening a creative is the moment somebody judges the ad, and a viewer has room to letterbox.
- * Nothing may be lost there whatever the stage, so that is a rule rather than a prop each caller
- * has to remember.
+ * A `thumb` is a 48–64px navigation tile — a carousel strip, a group list, a ranking row — where the
+ * reader is picking a row rather than judging an ad, and where letterboxing a square into a square
+ * costs legibility for nothing. It still contains unless the shape is known and matches.
  */
 export function mediaFit(
   asset: MediaAspect | null | undefined,
   stage: MediaAspect | null | undefined,
-  surface: 'stage' | 'viewer' = 'stage',
+  surface: 'stage' | 'viewer' | 'thumb' = 'stage',
 ): 'contain' | 'cover' {
-  if (surface === 'viewer') return 'contain'
+  if (surface !== 'thumb') return 'contain'
 
-  /* The card's frame falls back to `aspect-video` when the platform stated no shape. */
-  const stageShape = stage ?? 'horizontal'
-
-  return asset !== null && asset !== undefined && asset === stageShape ? 'cover' : 'contain'
+  return asset !== null && asset !== undefined && asset === (stage ?? 'horizontal') ? 'cover' : 'contain'
 }
 
 /** The Tailwind utility for {@see mediaFit}, so no surface spells the class itself. */
 export function mediaFitClass(
   asset: MediaAspect | null | undefined,
   stage: MediaAspect | null | undefined,
-  surface: 'stage' | 'viewer' = 'stage',
+  surface: 'stage' | 'viewer' | 'thumb' = 'stage',
 ): string {
   return mediaFit(asset, stage, surface) === 'contain' ? 'object-contain' : 'object-cover'
 }

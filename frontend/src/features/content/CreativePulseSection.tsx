@@ -755,7 +755,7 @@ function Poster({ creative, label }: { creative: CreativeCard; label: string }) 
        * CONTENT-PREVIEW-FIT-001 — a 64px tile is square, so only a square asset may fill it.
        * A story covered into this box was being judged on its middle sixth.
        */
-      className={`h-16 w-16 shrink-0 rounded-xl ${mediaFitClass(creative.preview?.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio), 'square')}`}
+      className={`h-16 w-16 shrink-0 rounded-xl ${mediaFitClass(creative.preview?.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio), 'square', 'thumb')}`}
     />
   )
 }

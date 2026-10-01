@@ -213,6 +213,38 @@ final class CreativeResultAvailabilityTest extends TestCase
         );
     }
 
+    /**
+     * Owner regression 8 — the report and the Content surface use the same metric availability.
+     *
+     * «One creative + same period + same scope must tell the same factual story across card, popup,
+     * detail, analytics, report, shared report.» The roster is built from the same service, so this
+     * holds the thing that could still drift: a surface stripping or re-deriving the map on its way
+     * out. Asserted against the LIBRARY's answer rather than against a literal, so the two move
+     * together or the test fails.
+     */
+    public function test_the_report_roster_carries_the_same_availability_as_the_library(): void
+    {
+        $creative = $this->creative('cr-parity');
+        $this->creativeRow($creative, ['spend' => 38.36, 'impressions' => 9_400, 'clicks' => 120, 'conversions' => 0]);
+
+        $library = $this->figures($creative);
+
+        $roster = app(\App\Domains\Campaigns\Services\CreativeRows::class)->lean(
+            ExternalCreative::withoutGlobalScopes()->whereKey($creative->getKey())->get(),
+            Carbon::today()->subDays(7),
+            Carbon::today(),
+        );
+
+        $row = collect($roster)->firstWhere('id', (string) $creative->getKey());
+
+        $this->assertNotNull($row, 'the report roster lost the creative entirely');
+        $this->assertSame(
+            $library['availability']['orders'] ?? null,
+            $row['metrics']['availability']['orders'] ?? null,
+            'the report and the library disagree about whether this creative’s orders were measured',
+        );
+    }
+
     private function figures(ExternalCreative $creative): array
     {
         return app(CreativeMetrics::class)->forCreatives(

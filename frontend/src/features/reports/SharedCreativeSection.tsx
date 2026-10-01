@@ -1,5 +1,5 @@
 import { canonicalObjectiveLabel, type CanonicalObjectiveKey } from '@/features/campaigns/canonicalObjectives'
-import { aspectClass, clientAbsence, readPreview } from '@/features/content/adPreview'
+import { aspectClass, clientAbsence, mediaFitClass, readPreview } from '@/features/content/adPreview'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -853,7 +853,15 @@ function SharedCreativeDetail({
               alt={creative.name}
               loading={imageLoading(preview.image_url)}
               style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
-              className="max-h-[55vh] max-w-full object-contain transition-transform"
+              /*
+                CONTENT-VIEWER-PORTRAIT-001 §14 — the same room the library's viewer gives it.
+                A story held to 55vh is readable on a desktop and under a third of a phone's screen,
+                and a client opening a creative in their own report is judging the same ad as the
+                operator who opened it in the library.
+              */
+              className={`max-w-full object-contain transition-transform ${
+                (preview.aspect ?? null) === 'vertical' ? 'max-h-[78vh]' : 'max-h-[55vh]'
+              }`}
             />
           ) : (
             <p className="p-6 text-center text-xs text-text-muted">
@@ -1077,7 +1085,14 @@ function CreativeTile({
              * client keeps. Where the platform stated no dimensions the square stands, because a
              * guessed shape is a claim about the ad.
              */
-            className={`w-full object-cover ${aspectClass(preview.aspect ?? null) ?? 'aspect-square'}`}
+            /*
+              CONTENT-PREVIEW-FIT-001 §14 — the client's deck and the library must not disagree.
+              Where the platform stated a shape the frame IS that shape and covering crops nothing;
+              where it stated none the frame is a guessed square and the asset is contained rather
+              than cut through its own subject. The library made exactly this change in the same
+              unit, and «one creative, one story» is the point of making it twice.
+            */
+            className={`w-full ${aspectClass(preview.aspect ?? null) ?? 'aspect-square'} ${mediaFitClass(preview.aspect ?? null, preview.aspect ?? 'square')}`}
           />
         ) : (
           <span className="flex aspect-square w-full items-center justify-center px-2 text-center text-[11px] text-text-muted">
