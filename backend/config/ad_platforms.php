@@ -205,6 +205,27 @@ return [
              */
             'version' => env('LINKEDIN_ADS_VERSION', '202607'),
         ],
+
+        /*
+         * ChatGPT Ads — the first platform here that is not OAuth.
+         *
+         * There is no authorize URL and no token URL because there is no consent screen: the
+         * advertiser creates a key in their own console and it is scoped to one ad account. The
+         * entries are present and empty rather than omitted, because every reader of this config
+         * expects the shape, and an absent key reads as a platform somebody forgot to finish.
+         *
+         * No `client_id` / `client_secret` either, and that is the real difference: those are
+         * PLATFORM credentials an operator configures once for everybody, and this key belongs to
+         * the advertiser. It lives in the encrypted credential vault beside their tokens, never in
+         * platform configuration.
+         */
+        'openai_ads' => [
+            'label' => 'OpenAI Advertiser API',
+            'authorize_url' => null,
+            'token_url' => null,
+            'api_base' => env('OPENAI_ADS_API_BASE', 'https://api.ads.openai.com/v1'),
+            'scopes' => [],
+        ],
     ],
 
     /*

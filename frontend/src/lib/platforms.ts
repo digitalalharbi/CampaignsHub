@@ -1,7 +1,7 @@
 /**
- * PLATFORM-ORDER-001 — the six platforms, in one order, for the whole interface.
+ * PLATFORM-ORDER-001 — the paid-media platforms, in one order, for the whole interface.
  *
- *   1. سناب شات   2. تيك توك   3. ميتا   4. جوجل أدز   5. إكس   6. لينكدإن
+ *   1. سناب شات   2. تيك توك   3. ميتا   4. جوجل أدز   5. إكس   6. لينكدإن   7. إعلانات ChatGPT
  *
  * The mirror of `App\Support\AdPlatforms` on the server. Both exist because both render lists: the
  * API sorts what it returns, and the client sorts what it composes locally — demo data, filter chips,
@@ -17,7 +17,15 @@
  * channels `google_ads` because it also carries analytics and CRM channels.
  */
 
-export const PLATFORM_ORDER = ['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin'] as const
+/*
+ * The count is not part of the contract.
+ *
+ * This file and its backend twin both used to describe «the six platforms», and that number became
+ * an architectural assumption by repetition rather than by anybody choosing it. The list is the only
+ * thing that decides how many there are; `CanonicalPlatformOrderTest` on the server proves this copy
+ * and `AdPlatforms::ORDER` are the same list in the same order, so neither side can drift.
+ */
+export const PLATFORM_ORDER = ['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin', 'openai_ads'] as const
 
 export type AdPlatform = (typeof PLATFORM_ORDER)[number]
 
@@ -36,6 +44,11 @@ const ALIASES: Record<string, AdPlatform> = {
   x_ads: 'x',
   twitter_ads: 'x',
   linkedin_ads: 'linkedin',
+  /* The provider is OpenAI and the product is ChatGPT Ads, so both names arrive in the wild. */
+  openai: 'openai_ads',
+  chatgpt: 'openai_ads',
+  chatgpt_ads: 'openai_ads',
+  openai_advertising: 'openai_ads',
 }
 
 export function canonicalPlatform(key: string | null | undefined): string {

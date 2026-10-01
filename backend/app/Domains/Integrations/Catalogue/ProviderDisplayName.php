@@ -34,6 +34,7 @@ final class ProviderDisplayName
         'google' => ['ar' => 'إعلانات جوجل', 'en' => 'Google Ads'],
         'x' => ['ar' => 'منصة X', 'en' => 'X Ads'],
         'linkedin' => ['ar' => 'لينكدإن', 'en' => 'LinkedIn Ads'],
+        'openai_ads' => ['ar' => 'إعلانات ChatGPT', 'en' => 'ChatGPT Ads'],
         'salla' => ['ar' => 'سلة', 'en' => 'Salla'],
         'zid' => ['ar' => 'زد', 'en' => 'Zid'],
     ];

@@ -54,6 +54,14 @@ final class ProviderDefinition
         public readonly string $docsUrl,
         public readonly string $rateLimitNote,
         public readonly string $paginationNote,
+        /**
+         * INTEG-AUTH-KIND-001 — how this provider is authorised.
+         *
+         * Defaulted, so every existing definition keeps the shape it was written with and nothing
+         * that does not ask changes. A provider that states `ApiKey` has no consent screen, no
+         * scopes to request and no callback to register, and the flow stops pretending otherwise.
+         */
+        public readonly ProviderAuth $auth = ProviderAuth::OAuth,
     ) {}
 
     /** @return list<string> the keys of every field that must be present before a call is worth making */
@@ -101,6 +109,18 @@ final class ProviderDefinition
     public function redirectUri(): string
     {
         return $this->callbackBase().'/api/v1/oauth/'.$this->kind->routeSegment().'/'.$this->key.'/callback';
+    }
+
+    /**
+     * Whether a redirect URI is a thing this provider HAS.
+     *
+     * An API-key provider has nowhere to send a browser back from, so the console screen that shows
+     * «copy this into the provider's settings» has nothing to say about it — and showing a URI that
+     * no provider console will ever accept is an instruction that wastes somebody's afternoon.
+     */
+    public function hasRedirectUri(): bool
+    {
+        return $this->auth->redirectsToProvider();
     }
 
     public function webhookUrl(): ?string

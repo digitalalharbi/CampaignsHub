@@ -54,6 +54,7 @@ final class PlatformOverviewController extends Controller
         'google' => ProviderDisplayName::NAMES['google'],
         'x' => ProviderDisplayName::NAMES['x'],
         'linkedin' => ProviderDisplayName::NAMES['linkedin'],
+        'openai_ads' => ProviderDisplayName::NAMES['openai_ads'],
     ];
 
     /** What a connected platform can do. Listed even when awaiting credentials, so the gap is explicit. */

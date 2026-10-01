@@ -33,6 +33,15 @@ export const PLATFORM_COLORS: Record<string, string> = {
   snapchat: 'var(--platform-snapchat)',
   x: 'var(--platform-x)',
   linkedin: 'var(--platform-linkedin)',
+  /*
+   * ChatGPT Ads, from the same token pair as the rest — never a colour picked here.
+   *
+   * OpenAI's own mark is near-black on white, which is the exact problem the paragraph above
+   * describes for TikTok and X: on a dark ground it is a donut slice nobody can see. The token swaps
+   * to the light-on-dark mark, so the platform is legible in both themes without inventing a brand
+   * colour that is not theirs.
+   */
+  openai_ads: 'var(--platform-openai)',
 }
 export const platformColor = (p: string) => PLATFORM_COLORS[p] ?? 'var(--brand-500)'
 

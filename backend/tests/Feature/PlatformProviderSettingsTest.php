@@ -69,7 +69,7 @@ final class PlatformProviderSettingsTest extends TestCase
     // ── the catalogue ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * Eight providers, in the product's order, each carrying its OWN field list.
+     * Every provider, in the product's order, each carrying its OWN field list.
      *
      * The assertion on Google and Snapchat is the point: a generic model would give every provider
      * `client_id` + `client_secret` and let both fail as "connected, and no data".
@@ -81,7 +81,11 @@ final class PlatformProviderSettingsTest extends TestCase
             ->assertOk();
 
         $keys = array_column($response->json('data.providers'), 'key');
-        $this->assertSame(['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin', 'salla', 'zid'], $keys);
+        $this->assertSame(
+            ['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin', 'openai_ads', 'salla', 'zid'],
+            $keys,
+            'the console lists the advertising providers in the product order, then the stores',
+        );
 
         $google = collect($response->json('data.providers'))->firstWhere('key', 'google');
         /*

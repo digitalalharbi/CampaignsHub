@@ -22,10 +22,17 @@ final class PlatformOrderTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * The order, written down once — and a COUNT that is not part of the contract.
+     *
+     * ChatGPT Ads joins at the END rather than by guessing a share of this market it has not got
+     * yet. The order's own reason is how much of this market's spend each platform carries, and the
+     * existing six are not reshuffled by a new arrival (PLATFORM-ORDER-001 §32).
+     */
     public function test_the_order_is_the_products_order(): void
     {
         $this->assertSame(
-            ['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin'],
+            ['snapchat', 'tiktok', 'meta', 'google', 'x', 'linkedin', 'openai_ads'],
             AdPlatforms::ORDER,
         );
     }
@@ -40,6 +47,7 @@ final class PlatformOrderTest extends TestCase
             ['google', 'google_ads'],
             ['x', 'x_ads', 'twitter'],
             ['linkedin', 'linkedin_ads'],
+            ['openai_ads', 'openai', 'chatgpt', 'chatgpt_ads', 'openai_advertising'],
         ] as $spellings) {
             $ranks = array_map(AdPlatforms::rank(...), $spellings);
             $this->assertSame([$ranks[0]], array_values(array_unique($ranks)), implode(' / ', $spellings));

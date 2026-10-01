@@ -8,6 +8,7 @@ use App\Domains\Integrations\Contracts\AdvertisingConnector;
 use App\Domains\Integrations\Providers\GoogleAdsConnector;
 use App\Domains\Integrations\Providers\LinkedInConnector;
 use App\Domains\Integrations\Providers\MetaConnector;
+use App\Domains\Integrations\Providers\OpenAiAdsConnector;
 use App\Domains\Integrations\Providers\SnapchatConnector;
 use App\Domains\Integrations\Providers\TikTokConnector;
 use App\Domains\Integrations\Providers\XConnector;
@@ -41,6 +42,7 @@ final class AdvertisingConnectorRegistry
             XConnector::class,
             LinkedInConnector::class,
             GoogleAdsConnector::class,
+            OpenAiAdsConnector::class,
         ];
 
         if ($includeSandbox) {
