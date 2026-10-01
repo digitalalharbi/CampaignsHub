@@ -64,7 +64,7 @@ final class ChatGptAdsPresenceTest extends TestCase
         $this->assertTrue((bool) $service->is_public, 'the service exists but no client can see it');
         // Filed under a category rather than loose: the intake's required fields come from the
         // category, so a service with no parent asks for nothing and arrives unusable.
-        $parent = TaxonomyOption::query()->find($service->parent_id);
+        $parent = TaxonomyOption::query()->find($service->parent_option_id);
         $this->assertNotNull($parent, 'the service sits under no category');
         $this->assertSame('launch_manage', $parent->key);
         $this->assertContains('platforms', $service->metadata['required_field_rules'] ?? []);
