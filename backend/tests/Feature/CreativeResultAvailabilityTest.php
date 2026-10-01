@@ -245,6 +245,28 @@ final class CreativeResultAvailabilityTest extends TestCase
         );
     }
 
+    /**
+     * Owner item 20 — the instrument that answers «why» for ONE creative, on any estate.
+     *
+     * «For a representative creative from the screenshot report internally: creative, objective,
+     * provider, period, creative-grain result, ad-grain result, coverage, final displayed result,
+     * why.» The rungs already print the first seven. The «why» is the line that cannot be
+     * reconstructed from the figures — a `0` and a `—` look identical in a column — so it is
+     * printed with them, and asserted here so it cannot quietly stop being.
+     */
+    public function test_the_reconcile_walk_says_why_a_result_is_not_a_figure(): void
+    {
+        $creative = $this->creative('cr-reconcile');
+        $this->creativeRow($creative, ['spend' => 38.36, 'impressions' => 9_400, 'clicks' => 120, 'conversions' => 0]);
+
+        \Illuminate\Support\Facades\Artisan::call('content:reconcile', ['creative' => (string) $creative->getKey()]);
+        $printed = \Illuminate\Support\Facades\Artisan::output();
+
+        $this->assertStringContainsString('results    :', $printed, 'the walk stopped printing the availability verdict');
+        $this->assertStringContainsString('orders', $printed);
+        $this->assertStringContainsString('not_reported', $printed, 'the walk no longer says WHY the result is a dash');
+    }
+
     private function figures(ExternalCreative $creative): array
     {
         return app(CreativeMetrics::class)->forCreatives(
