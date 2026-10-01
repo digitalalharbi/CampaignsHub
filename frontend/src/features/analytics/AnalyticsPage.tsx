@@ -389,6 +389,45 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
    */
   const campaignSource = useCampaignOptionSource(currentProjectId, campaignIds)
 
+  /*
+   * The two controls that NARROW rather than frame.
+   *
+   * Written once and placed by surface: in line on the analysis bar, folded behind «المزيد من
+   * الفلاتر» on the dashboard. «Which campaign» and «which action» are how somebody investigates,
+   * and the surface for investigating is the other one.
+   */
+  const narrowingControls = (
+    <>
+      <FilterMulti
+        label={ar ? 'الحملة' : 'Campaign'}
+        ar={ar}
+        values={campaignIds}
+        testid={`${surface}-campaign`}
+        options={campaignSource.options}
+        search={campaignSource.search}
+        onChange={setCampaignIds}
+      />
+
+      {/*
+        CAMPAIGN-OUTCOME-DIMENSION-001 — «what did it buy», beside «what was it for».
+        Single-select in the bar and a list in the URL: one action is the question people ask, and
+        the chip row is where a second one is removed.
+      */}
+      <FilterSelect
+        label={ar ? 'الإجراء' : 'Action'}
+        value={outcomes[0] ?? 'all'}
+        testid={`${surface}-outcome`}
+        options={[
+          { value: 'all', label: ar ? 'كل الإجراءات' : 'All actions' },
+          ...OUTCOME_KEYS.map((key) => ({
+            value: key,
+            label: ar ? OUTCOME_LABEL[key].ar : OUTCOME_LABEL[key].en,
+          })),
+        ]}
+        onChange={(v) => setOutcomes(v === 'all' ? [] : [v])}
+      />
+    </>
+  )
 
   const applied: AppliedFilter[] = useMemo(() => {
     const out: AppliedFilter[] = []
@@ -517,16 +556,40 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
       />
 
 
+      {/* Declared once and placed by surface: in line on the analysis bar, folded on the dashboard. */}
       <FilterBar
         id={surface}
         ar={ar}
         applied={applied}
         onReset={() => { setProviders([]); setCampaignIds([]); setObjective('all') }}
-        advancedActive={savedViews.data?.some((v) => v.is_default) ?? false}
+        /*
+          The marker has to know about the folded controls, not only the saved views.
+          A narrowing somebody cannot see is the reason to mark the button at all.
+        */
+        advancedActive={(savedViews.data?.some((v) => v.is_default) ?? false)
+          || (! isAnalysis && (campaignIds.length > 0 || outcomes.length > 0))}
         advanced={
-          <div className="grid gap-2">
-            <span className="text-xs font-bold uppercase tracking-wide text-text-muted">{ar ? 'العروض المحفوظة' : 'Saved views'}</span>
-            <SavedViewsBar current={{ objective, providers, days }} onApply={applyView} />
+          <div className="grid gap-3">
+            <div className="grid gap-2">
+              <span className="text-xs font-bold uppercase tracking-wide text-text-muted">{ar ? 'العروض المحفوظة' : 'Saved views'}</span>
+              <SavedViewsBar current={{ objective, providers, days }} onApply={applyView} />
+            </div>
+            {/*
+              DASHBOARD-FIRST-VIEWPORT-001 — the dashboard's bar keeps the daily questions and folds
+              the narrowing ones.
+
+              Six control groups wrapped onto three rows and put 195px between the header and the
+              first figure. «Which campaign» and «which action» are how somebody INVESTIGATES, and
+              the surface for investigating is the analysis one, which still shows all six in line.
+              Period, project, platform and objective stay — they are what a reader changes while
+              reading rather than while digging.
+            */}
+            {! isAnalysis && (
+              <div className="grid gap-2">
+                <span className="text-xs font-bold uppercase tracking-wide text-text-muted">{ar ? 'تضييق أدق' : 'Narrow further'}</span>
+                <div className="flex flex-wrap items-end gap-2">{narrowingControls}</div>
+              </div>
+            )}
           </div>
         }
       >
@@ -570,36 +633,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           onChange={setProviders}
         />
 
-        <FilterMulti
-          label={ar ? 'الحملة' : 'Campaign'}
-          ar={ar}
-          values={campaignIds}
-          testid={`${surface}-campaign`}
-          options={campaignSource.options}
-          search={campaignSource.search}
-          onChange={setCampaignIds}
-        />
-
-        
-
-        {/*
-          CAMPAIGN-OUTCOME-DIMENSION-001 — «what did it buy», beside «what was it for».
-          Single-select in the bar and a list in the URL: one action is the question people ask, and
-          the chip row is where a second one is removed.
-        */}
-        <FilterSelect
-          label={ar ? 'الإجراء' : 'Action'}
-          value={outcomes[0] ?? 'all'}
-          testid={`${surface}-outcome`}
-          options={[
-            { value: 'all', label: ar ? 'كل الإجراءات' : 'All actions' },
-            ...OUTCOME_KEYS.map((key) => ({
-              value: key,
-              label: ar ? OUTCOME_LABEL[key].ar : OUTCOME_LABEL[key].en,
-            })),
-          ]}
-          onChange={(v) => setOutcomes(v === 'all' ? [] : [v])}
-        />
+        {isAnalysis && narrowingControls}
 
         <FilterSelect
           label={ar ? 'الهدف' : 'Objective'}
