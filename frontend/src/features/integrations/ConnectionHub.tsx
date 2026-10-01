@@ -4,9 +4,12 @@ import { fetchConnectionHub, type HubConnection } from './api'
 import { CONNECTION_COPY, SYNC_COPY } from './connectionCopy'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { PageIntro } from '@/components/ui/PageIntro'
+import { StatCard } from '@/components/ui/StatCard'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { Num } from '@/components/ui/Num'
 import { platformColor } from '@/features/analytics/components'
+import { adAccounts } from '@/lib/counted'
 import { fmtDateTime } from '@/lib/datetime'
 import { useUi } from '@/stores/ui'
 
@@ -43,7 +46,8 @@ export function ConnectionHub({ onConnect, onOpen, onAction }: {
   onOpen: (connection: HubConnection, tab?: 'overview' | 'accounts') => void
   onAction: (connection: HubConnection) => void
 }) {
-  const ar = useUi((s) => s.locale) === 'ar'
+  const locale = useUi((s) => s.locale)
+  const ar = locale === 'ar'
   const hub = useQuery({ queryKey: ['connection-hub'], queryFn: fetchConnectionHub })
 
   if (hub.isLoading) {
@@ -66,25 +70,69 @@ export function ConnectionHub({ onConnect, onOpen, onAction }: {
   }
 
   const connections = hub.data?.connections ?? []
+  /*
+   * The hub's own three figures. Counted from the rows it is about to draw, so the head and the
+   * list cannot disagree — and «need reconnecting» counts the authorisations that cannot work at
+   * all, which is the one number somebody opening this page is looking for.
+   */
+  const needReauth = connections.filter(
+    (c) => c.connection_state === 'REAUTH_REQUIRED' || c.connection_state === 'REVOKED',
+  ).length
+  const selectedAccounts = connections.reduce((n, c) => n + c.selected_accounts, 0)
+  const discoveredAccounts = connections.reduce((n, c) => n + c.discovered_accounts, 0)
 
   return (
     <section className="flex flex-col gap-4" data-testid="connection-hub">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-lg font-bold tracking-tight text-text-primary">
-            {ar ? 'مركز التكاملات' : 'Connection Hub'}
-          </h2>
-          <p className="mt-0.5 text-sm text-text-secondary">
-            {ar
-              ? 'كل مصدر بيانات مربوط، ومن صرّح به، وما يُزامَن منه.'
-              : 'Every connected source, who authorised it, and what it reads.'}
-          </p>
-        </div>
+      {/*
+        UX-PAGE-HERO-001 — the hub was the ONE rail surface with no shared head.
 
-        <Button onClick={onConnect} data-testid="hub-connect">
-          <Plus size={15} /> {ar ? 'ربط مصدر' : 'Connect a source'}
-        </Button>
-      </header>
+        Found by sweeping the advertiser portal: twelve routes drew exactly one `PageIntro` and
+        `/app/integrations` drew none, because this component wrote its own `<h2>` when it replaced
+        the provider grid. The rows below are untouched — what changes is that the page now answers
+        «where am I» in the same place and at the same size as every other surface.
+
+        Three figures, and they are the hub's own question rather than a repeat of any row:
+        how many authorisations exist, how many cannot work until somebody re-authorises, and how
+        many accounts are actually being read across all of them.
+      */}
+      <PageIntro
+        testid="integrations-intro"
+        title={ar ? 'مركز التكاملات' : 'Connection Hub'}
+        purpose={ar
+          ? 'كل مصدر بيانات مربوط، ومن صرّح به، وما يُزامَن منه.'
+          : 'Every connected source, who authorised it, and what it reads.'}
+        actions={
+          <Button onClick={onConnect} data-testid="hub-connect">
+            <Plus size={15} /> {ar ? 'ربط مصدر' : 'Connect a source'}
+          </Button>
+        }
+        kpis={connections.length === 0 ? undefined : (
+          <>
+            <StatCard
+              label={ar ? 'المصادر' : 'Sources'}
+              value={connections.length.toLocaleString('en-US')}
+              tone="brand"
+              dot
+              testid="hub-kpi-sources"
+            />
+            <StatCard
+              label={ar ? 'تحتاج إعادة مصادقة' : 'Need reconnecting'}
+              value={needReauth.toLocaleString('en-US')}
+              tone={needReauth > 0 ? 'danger' : 'success'}
+              dot
+              testid="hub-kpi-reauth"
+            />
+            <StatCard
+              label={ar ? 'الحسابات المختارة' : 'Selected accounts'}
+              value={selectedAccounts.toLocaleString('en-US')}
+              hint={`${ar ? 'من' : 'of'} ${adAccounts(discoveredAccounts, locale)}`}
+              tone="neutral"
+              dot
+              testid="hub-kpi-accounts"
+            />
+          </>
+        )}
+      />
 
       {connections.length === 0 ? (
         <div

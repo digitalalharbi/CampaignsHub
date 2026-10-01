@@ -602,7 +602,16 @@ function ReportRowView({
         <div className="text-xs text-text-muted">{typeLabel}</div>
       </td>
       <td className="p-3 text-text-secondary">
-        <span className="tnum">{report.period.from} → {report.period.to}</span>
+        {/*
+          `dir="ltr"`, and the row below it already knew that.
+
+          In the Arabic dark review of `/app/reports` this cell printed «2026- → 2026-09-02 10-01»:
+          a date range is an LTR run, and left in an RTL cell the bidi algorithm reorders it around
+          the arrow and the wrap lands mid-date. The card rendering of the same range sets `dir`
+          and was correct; this one did not. `whitespace-nowrap` keeps the two dates on one line so
+          there is no wrap to land badly in the first place.
+        */}
+        <span className="tnum whitespace-nowrap" dir="ltr">{report.period.from} → {report.period.to}</span>
       </td>
       <td className="p-3">
         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[report.status]}`}>

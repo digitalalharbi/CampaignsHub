@@ -1806,17 +1806,20 @@ export function BudgetPacingRow({ rows, ar }: { rows: BudgetRow[]; ar: boolean }
 
   return (
     <div className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4" data-testid="budget-pacing">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Figure label={ar ? 'الميزانية' : 'Budget'} value={money(b.budget, b.currency ?? undefined)} />
-        <Figure label={ar ? 'المصروف' : 'Spent'} value={money(b.spent, b.currency ?? undefined)} />
-        <Figure label={ar ? 'المتبقي' : 'Remaining'} value={money(b.remaining, b.currency ?? undefined)} testid="budget-remaining" />
-        <Figure
-          label={ar ? 'المتوقع' : 'Forecast'}
-          value={b.projected === null ? '—' : money(b.projected, b.currency ?? undefined)}
-          testid="budget-forecast"
-        />
-      </div>
+      {/*
+        The bar and the sentence. NOT the four figures again.
 
+        The Arabic dark review of `/app/campaigns` showed «الميزانية 795K · المصروف 3.67K · المتبقي
+        791K · المتوقع 3.67K» in the secondary strip and then the same four numbers, same order,
+        same currency, in this card a few hundred pixels below. A reader meeting a figure twice does
+        not read it twice — they stop to work out which of the two to believe.
+
+        The strip keeps them, because it is where the budget's REFUSALS live: «ميزانيات بعملات
+        مختلفة — لا تُجمع» and «المصروف غير متاح» are its wording, under a stricter spend rule than
+        this card applies. What this card has that nothing else does is the pacing — a bar drawn
+        against the budget so an overrun is visible past the end rather than clamped away, and one
+        sentence naming the overrun in money. That is what it now shows.
+      */}
       {b.pace !== null && (
         <div className="flex flex-col gap-1">
           {/* The bar is against the BUDGET, so «past the end» is visible rather than clamped away. */}
@@ -1848,11 +1851,3 @@ export function BudgetPacingRow({ rows, ar }: { rows: BudgetRow[]; ar: boolean }
   )
 }
 
-function Figure({ label, value, testid }: { label: string; value: string; testid?: string }) {
-  return (
-    <div className="flex flex-col">
-      <span className="text-xs text-text-muted">{label}</span>
-      <span className="tnum text-lg font-bold text-text-primary" data-testid={testid}>{value}</span>
-    </div>
-  )
-}

@@ -10,7 +10,8 @@ import { useT } from '@/lib/i18n'
 import { FilterBar, FilterSearch, type AppliedFilter } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
 import { usePortalPath } from '@/app/portalPath'
-import { StatCard, StatGrid } from '@/components/ui/StatCard'
+import { PageIntro } from '@/components/ui/PageIntro'
+import { StatCard } from '@/components/ui/StatCard'
 
 function statusTone(s: string | null): string {
   switch (s) {
@@ -94,27 +95,40 @@ export function ClientsPortfolioPage() {
 
   return (
     <div className="w-full">
-      <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-heading text-3xl font-extrabold tracking-tight text-text-primary">{t('clients_portfolio')}</h1>
-          <p className="mt-1 text-sm text-text-secondary">{t('clients_subtitle')}</p>
-        </div>
-        <div className="flex items-center gap-1 rounded-lg border border-border bg-surface p-1">
-          <button onClick={() => setView('cards')} aria-label={t('cc_view_cards')} aria-pressed={view === 'cards'}
-            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold ${view === 'cards' ? 'bg-brand-primary-soft text-brand-700' : 'text-text-secondary'}`}><LayoutGrid size={14} /> {t('cc_view_cards')}</button>
-          <button onClick={() => setView('table')} aria-label={t('cc_view_table')} aria-pressed={view === 'table'}
-            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold ${view === 'table' ? 'bg-brand-primary-soft text-brand-700' : 'text-text-secondary'}`}><Table2 size={14} /> {t('cc_view_table')}</button>
-        </div>
-      </header>
+      {/*
+        UX-PAGE-HERO-001 — the product's header, not this page's own.
 
-      {/* Summary — the portfolio at a glance (total is the server count; the rest reflect the loaded set). */}
-      <div className="mb-4">
-        <StatGrid>
-        <ClientSummaryCard label={ar ? 'إجمالي العملاء' : 'Total clients'} value={summary.total} tone="brand" />
-        <ClientSummaryCard label={ar ? 'نشطون' : 'Active'} value={summary.active} tone="success" />
-        <ClientSummaryCard label={ar ? 'يحتاجون متابعة' : 'Needs attention'} value={summary.attention} tone="warning" />
-        <ClientSummaryCard label={ar ? 'طلبات مفتوحة' : 'Open requests'} value={summary.openRequests} tone="info" />
-        </StatGrid>
+        The §44 walk of the agency rail found four surfaces still drawing a hand-rolled `<h1>` —
+        clients, requests, messages and finance — while every other surface in both portals used the
+        shared head. A reader crossing the rail met the same page furniture at four different sizes.
+
+        The figures move INTO the header rather than staying in a band beneath it: the portfolio's
+        four counts are what somebody opening «العملاء» came to read, and the hero slot is where
+        every other surface answers that.
+      */}
+      <div className="mb-5">
+        <PageIntro
+          testid="clients-intro"
+          title={t('clients_portfolio')}
+          purpose={t('clients_subtitle')}
+          actions={
+            <div className="flex items-center gap-1 rounded-lg border border-border bg-surface p-1">
+              <button onClick={() => setView('cards')} aria-label={t('cc_view_cards')} aria-pressed={view === 'cards'}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold ${view === 'cards' ? 'bg-brand-primary-soft text-brand-700' : 'text-text-secondary'}`}><LayoutGrid size={14} /> {t('cc_view_cards')}</button>
+              <button onClick={() => setView('table')} aria-label={t('cc_view_table')} aria-pressed={view === 'table'}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold ${view === 'table' ? 'bg-brand-primary-soft text-brand-700' : 'text-text-secondary'}`}><Table2 size={14} /> {t('cc_view_table')}</button>
+            </div>
+          }
+          kpis={
+            /* The total is the SERVER's count; the other three describe the loaded page of rows. */
+            <>
+              <ClientSummaryCard label={ar ? 'إجمالي العملاء' : 'Total clients'} value={summary.total} tone="brand" />
+              <ClientSummaryCard label={ar ? 'نشطون' : 'Active'} value={summary.active} tone="success" />
+              <ClientSummaryCard label={ar ? 'يحتاجون متابعة' : 'Needs attention'} value={summary.attention} tone="warning" />
+              <ClientSummaryCard label={ar ? 'طلبات مفتوحة' : 'Open requests'} value={summary.openRequests} tone="info" />
+            </>
+          }
+        />
       </div>
 
       {/*
