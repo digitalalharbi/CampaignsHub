@@ -227,7 +227,26 @@ export function ReportsPage() {
          * rather than competes — «is anything stuck or broken, and has it gone out» is the question
          * this library is opened with.
          */
-        kpis={s === undefined ? undefined : (
+        /*
+         * The row is drawn from the first paint, with «—» where the figures will be.
+         *
+         * `undefined` until the summary arrived meant the header GREW by a whole KPI grid the moment
+         * it did, and everything under it dropped with it — far enough that a click aimed at the
+         * filter bar's «reset» landed on what took its place, which is how the firefox gate failed
+         * `reports: narrowing names itself as a chip that can be undone`.
+         *
+         * Four real `StatCard`s rather than four skeletons, because the LABELS are known from the
+         * first frame and only the numbers are not: the reader is told what this page will tell them
+         * and that it does not know yet, which is also the honest reading of «—».
+         */
+        kpis={s === undefined ? (
+          <>
+            <StatCard label={ar ? 'التقارير' : 'Reports'} value="—" tone="brand" dot testid="reports-kpi-total" />
+            <StatCard label={ar ? 'قيد المعالجة' : 'Processing'} value="—" tone="neutral" dot testid="reports-kpi-processing" />
+            <StatCard label={ar ? 'فشل' : 'Failed'} value="—" tone="neutral" dot testid="reports-kpi-failed" />
+            <StatCard label={ar ? 'أُرسلت' : 'Sent'} value="—" tone="neutral" dot testid="reports-kpi-sent" />
+          </>
+        ) : (
           <>
             <StatCard
               label={ar ? 'التقارير' : 'Reports'}

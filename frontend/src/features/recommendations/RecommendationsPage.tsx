@@ -183,7 +183,7 @@ export function RecommendationsPage() {
       */}
       <PageIntro
         testid="recommendations-intro"
-        eyebrow={projectName ?? undefined}
+        eyebrow={projectName ?? ''}
         title={t.title}
         purpose={t.purpose}
         badges={counts.some((c) => c.count > 0)

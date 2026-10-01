@@ -472,7 +472,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
             ? 'استكشاف تفصيلي للأداء: المنصات، الحملات، القمع، المتجر، الميزانيات، وأساس كل رقم.'
             : 'A detailed look at performance — platforms, campaigns, the funnel, the store, budgets, and the basis of every figure.'}
         badges={<ProvenanceBadge provenance={provenanceSummary.data?.provenance} />}
-        eyebrow={projectName ?? undefined}
+        eyebrow={projectName ?? ''}
         meta={
           <>
             <PeriodLabel from={range.from} to={range.to} testId={`${surface}-head-period`} />

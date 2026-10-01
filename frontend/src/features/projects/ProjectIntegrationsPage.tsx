@@ -203,7 +203,7 @@ export function ProjectIntegrationsPage() {
       */}
       <PageIntro
         testid="project-integrations-intro"
-        eyebrow={projectName ?? undefined}
+        eyebrow={projectName ?? ''}
         title={t('project_integrations')}
         purpose={t('project_switch_hint')}
         meta={<DataFreshness lastSyncAt={lastSync} ar={lang === 'ar'} staleAfterHours={STALE_AFTER_HOURS} testid="project-integrations-freshness" />}

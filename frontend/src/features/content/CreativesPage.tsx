@@ -747,7 +747,7 @@ export function CreativesPage() {
       */}
       <PageIntro
         testid="content-intro"
-        eyebrow={projectName ?? undefined}
+        eyebrow={projectName ?? ''}
         title={t.title}
         purpose={t.subtitle}
         meta={

@@ -116,6 +116,8 @@ export function SpendLimitsPage() {
         purpose={ar
           ? 'حدود تضعها مساحة العمل لنفسها عبر المنصات — للمراقبة والتنبيه، لا للإيقاف.'
           : 'Limits this workspace sets for itself across platforms — for watching and warning, never for stopping.'}
+        /* The page's one action, in the head — where every other surface puts its primary action. */
+        actions={<NewSpendLimitDialog projectId={projectId} locale={locale} currency={suggestedCurrency} />}
         kpis={limits.length === 0 ? undefined : (
           <>
             <StatCard label={ar ? 'حدود مفعّلة' : 'Active limits'} value={counts.total.toLocaleString('en-US')} tone="brand" dot testid="spend-limits-kpi-total" />
@@ -130,14 +132,22 @@ export function SpendLimitsPage() {
         )}
       />
 
+      {/*
+        The same sentence was on screen three times.
+
+        The Arabic dark review of `/app/spend-limits` showed «حدود تضعها مساحة العمل لنفسها عبر
+        المنصات — للمراقبة والتنبيه» under the page title, again as this card's description, and the
+        enforcement note below it said the same thing a third way. The page holds ONE section, so a
+        card header restating the page header is not a heading — it is the page title printed twice.
+
+        What survives is the narrow title, which says what the list IS rather than what the page is
+        for, and the enforcement note, which is the API's own wording and the one statement with an
+        operational consequence in it.
+      */}
       <Panel
-        title={ar ? 'حدود الإنفاق الداخلية' : 'Internal spend limits'}
-        description={ar
-          ? 'حدود تضعها مساحة العمل لنفسها عبر المنصات — للمراقبة والتنبيه.'
-          : 'Limits this workspace sets for itself across platforms — for watching and warning.'}
+        title={ar ? 'الحدود المضبوطة' : 'Limits in place'}
         loading={q.isLoading}
         error={q.isError}
-        action={<NewSpendLimitDialog projectId={projectId} locale={locale} currency={suggestedCurrency} />}
       >
         {/*
           The sentence, first and unmissable, from the API rather than from here.

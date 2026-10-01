@@ -724,7 +724,7 @@ export function CampaignsPage() {
       */}
       <PageIntro
         testid="campaigns-intro"
-        eyebrow={projectName ?? undefined}
+        eyebrow={projectName ?? ''}
         title={ar ? 'الحملات' : 'Campaigns'}
         badges={<ProvenanceBadge provenance={summary.data?.provenance} />}
         meta={
