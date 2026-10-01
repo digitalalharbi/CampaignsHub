@@ -34,9 +34,14 @@ describe('the absence that stands in for a picture', () => {
 
     const label = screen.getByTestId('p-absent-label')
     expect(label).toBeVisible()
-    expect(label.textContent ?? '').toBe('No file')
+    /*
+      CONTENT-ABSENCE-NOT-A-FAULT-001 — «No file» was a statement about THIS product's contents and
+      read as something lost on this side of the wire. The absence belongs to the platform, and the
+      label says so.
+    */
+    expect(label.textContent ?? '').toBe('Platform sent no file')
 
-    /* Three or four words. A limit rather than an exact string, so the wording can still improve. */
+    /* Four words. A limit rather than an exact string, so the wording can still improve. */
     expect((label.textContent ?? '').split(/\s+/).length).toBeLessThanOrEqual(4)
   })
 
@@ -57,8 +62,12 @@ describe('the absence that stands in for a picture', () => {
    */
   it.each([
     ['catalog', { kind: 'catalog', state: 'available' }, 'Catalog ad'],
-    ['a coverless video', { kind: 'video', state: 'available', video_url: 'https://cdn/a.mp4' }, 'Video, no cover'],
-    ['a never-fetched row', { state: 'never_fetched' }, 'Never fetched'],
+    /*
+      A film whose platform sent no still is the one state where the media is completely intact, and
+      «Video, no cover» described the AD as deficient. The label names what the card is showing.
+    */
+    ['a coverless video', { kind: 'video', state: 'available', video_url: 'https://cdn/a.mp4' }, 'Video preview'],
+    ['a never-fetched row', { state: 'never_fetched' }, 'Never requested'],
     ['an expired link', { state: 'expired' }, 'Link expired'],
   ])('says what %s is in its own words', (_name, over, expected) => {
     renderWithProviders(<AdPoster preview={preview(over)} name="Hero" testid="p" />, { locale: 'en' })

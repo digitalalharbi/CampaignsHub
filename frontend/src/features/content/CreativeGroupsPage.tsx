@@ -5,6 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { AlertTriangle, ArrowLeft, Layers, Unlink } from 'lucide-react'
 import { formatMetric, metricKind, metricLabel, metricState } from './metrics'
 import { creativeMoney } from './creativeMoney'
+import { mediaFitClass } from './adPreview'
 import { imageLoading } from './format'
 import {
   getCreativeGroup,
@@ -468,7 +469,12 @@ function GroupDetail({
                     src={member.preview.thumbnail_url}
                     alt=""
                     loading={imageLoading(member.preview.thumbnail_url)}
-                    className="h-12 w-12 shrink-0 rounded object-cover"
+                    /*
+                      CONTENT-PREVIEW-FIT-001 — a 48px tile is square, so only a square asset fills
+                      it. A story covered into this box is judged on its middle third, in a list
+                      whose whole purpose is comparing one creative with another.
+                    */
+                    className={`h-12 w-12 shrink-0 rounded ${mediaFitClass(member.preview.aspect ?? null, 'square')}`}
                   />
                 ) : (
                   <span className="h-12 w-12 shrink-0 rounded bg-surface-hover" aria-hidden />

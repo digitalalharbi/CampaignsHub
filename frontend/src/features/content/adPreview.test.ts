@@ -379,11 +379,11 @@ describe('a dynamic collection is composed per product, not missing a hero', () 
     expect(reading.kind).toBe('video')
     expect(reading.kind === 'video' && reading.src).toBe('https://cdn.test/hero.mp4')
     /*
-     * «Video, no cover» rather than «Collection, no hero», and the difference is the whole point:
+     * «Video preview» rather than «Platform sent no hero», and the difference is the whole point:
      * the first says there is a film to play and no poster frame for it, the second says the ad has
      * nothing. One is a note about the frame; the other was a false statement about the ad.
      */
-    expect(absenceShort(reading, false)).toBe('Video, no cover')
+    expect(absenceShort(reading, false)).toBe('Video preview')
     expect(posterSource(reading)).toBeNull()
   })
 
@@ -402,7 +402,7 @@ describe('a dynamic collection is composed per product, not missing a hero', () 
     expect(printed.sentence).not.toBe('')
     expect(printed.sentence).toContain('video')
     expect(printed.sentence).toContain('no cover frame')
-    expect(printed.short).toBe('Video, no cover')
+    expect(printed.short).toBe('Video preview')
     expect(clientAbsence(readPreview(film, true), true).sentence).toContain('فيديو')
   })
 
@@ -424,6 +424,6 @@ describe('a dynamic collection is composed per product, not missing a hero', () 
     const silent = { ...dynamic, note_ar: null, note_en: null } as unknown as CreativePreview
 
     expect(absenceLabel(readPreview(silent, false), false)).toContain('sent no hero frame')
-    expect(absenceShort(readPreview(silent, false), false)).toBe('Collection, no hero')
+    expect(absenceShort(readPreview(silent, false), false)).toBe('Platform sent no hero')
   })
 })

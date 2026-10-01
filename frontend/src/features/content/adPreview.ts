@@ -399,8 +399,20 @@ export function absenceLabel(reading: PreviewReading, ar: boolean): string {
  * The two are built from the same reading, so they cannot describe different absences.
  */
 export function absenceShort(reading: PreviewReading, ar: boolean): string {
+  /*
+   * CONTENT-ABSENCE-NOT-A-FAULT-001 — «فيديو بلا غلاف» described the AD as deficient.
+   *
+   * The film is there and it plays. What is absent is a still, and no platform owes one: Snapchat
+   * returns the file and no separate poster for every video creative on the live estate. «Without a
+   * cover» reads as a broken product on a card a client sees, which is the opposite of true — it is
+   * the one state where the media is completely intact.
+   *
+   * So the compact form names what the card IS showing — a video preview — and the surface draws
+   * the play affordance beside it. The long form {@see absenceLabel} already said «افتح الإعلان
+   * لتشغيله», and these two now agree.
+   */
   if (reading.kind === 'video' && reading.poster === null) {
-    return ar ? 'فيديو بلا غلاف' : 'Video, no cover'
+    return ar ? 'معاينة الفيديو' : 'Video preview'
   }
 
   if (reading.kind === 'catalog') {
@@ -411,20 +423,30 @@ export function absenceShort(reading: PreviewReading, ar: boolean): string {
     /* Composed, not absent — the long sentence's short form, and the same distinction. */
     return reading.note !== null
       ? (ar ? 'تُركَّب لكل منتج' : 'Composed per product')
-      : (ar ? 'تشكيلة بلا غلاف' : 'Collection, no hero')
+      /* And where it is genuinely absent, it is the platform's hero that is missing, not ours. */
+      : (ar ? 'لم ترسل المنصة غلافًا' : 'Platform sent no hero')
   }
 
   if (reading.kind !== 'none') {
     return ''
   }
 
+  /*
+   * Each of these names WHO the absence belongs to — CONTENT-ABSENCE-NOT-A-FAULT-001.
+   *
+   * «لا يوجد ملف» is a statement about this product's contents and reads as a gap on this side of
+   * the wire. The truth in every one of these cases is about the platform: it did not send a file,
+   * or it sent a link that has since expired, or it was never asked. Said that way the reader
+   * learns that media availability varies by provider; said the old way they learn that
+   * CampaignsHub lost something.
+   */
   const words: Record<string, [string, string]> = {
-    withheld: ['محجوب', 'Withheld'],
-    expired: ['انتهت الصلاحية', 'Link expired'],
-    unavailable: ['لا يوجد ملف', 'No file'],
-    never_fetched: ['لم يُجلب', 'Never fetched'],
-    shape_not_fetched: ['بطاقات لم تُجلب', 'Tiles not fetched'],
-    no_media: ['لا يوجد ملف', 'No file'],
+    withheld: ['الرابط محمي', 'Link protected'],
+    expired: ['انتهت صلاحية الرابط', 'Link expired'],
+    unavailable: ['لم ترسل المنصة ملفًا', 'Platform sent no file'],
+    never_fetched: ['لم يُطلب من المنصة', 'Never requested'],
+    shape_not_fetched: ['البطاقات لم تُطلب', 'Tiles never requested'],
+    no_media: ['لم ترسل المنصة ملفًا', 'Platform sent no file'],
   }
 
   const pair = words[reading.reason] ?? words.unavailable

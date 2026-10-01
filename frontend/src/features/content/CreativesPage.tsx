@@ -1151,6 +1151,18 @@ export function CreativesPage() {
                  * توجد معاينة» — the product claiming to have nothing while holding the thing itself.
                  */
                 const video = poster === null && reading.kind === 'video' ? reading.src : null
+                /*
+                 * CONTENT-PREVIEW-FIT-001 — this tile is 64x40, a LANDSCAPE box.
+                 *
+                 * Everything in it was covered, so a 9:16 story was judged on its middle sixth and a
+                 * square creative lost a third of its height. Computed once for the row so the still
+                 * and the film cannot be fitted differently — which is how one creative came to be
+                 * cropped in the grid and whole in the table.
+                 */
+                const rowFit = mediaFitClass(
+                  creative.preview?.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio),
+                  'horizontal',
+                )
 
                 return (
                   <tr
@@ -1181,7 +1193,8 @@ export function CreativesPage() {
                           alt=""
                           loading={imageLoading(poster)}
                           decoding="async"
-                          className="h-10 w-16 rounded object-cover"
+                          /* CONTENT-PREVIEW-FIT-001 — a 64x40 tile is landscape; only a landscape asset fills it. */
+                          className={`h-10 w-16 rounded ${rowFit}`}
                         />
                       ) : video ? (
                         /*
@@ -1195,7 +1208,8 @@ export function CreativesPage() {
                          */
                         <VideoPoster
                           src={video}
-                          className="h-10 w-16 rounded object-cover"
+                          /* Same tile, same rule — the still and the film must not be fitted differently. */
+                          className={`h-10 w-16 rounded ${rowFit}`}
                           onUnavailable={() => undefined}
                         />
                       ) : (
