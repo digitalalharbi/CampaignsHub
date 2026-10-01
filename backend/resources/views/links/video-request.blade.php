@@ -90,6 +90,34 @@
 
         * { box-sizing: border-box; }
 
+        /*
+            Compatibility notes, for the phone this is actually opened on.
+
+            There is no JavaScript on this page at all, which is the strongest compatibility
+            statement available: the only interactive element is an `<a href>`, and that has worked
+            in every browser ever shipped. Everything below is about the three details that still
+            differ.
+
+            `-webkit-text-size-adjust` — iOS Safari inflates text on rotation unless told not to,
+            which on a page whose whole job is one button means the button can grow past its row.
+
+            `-webkit-tap-highlight-color` — the default grey flash on tap reads as a rendering fault
+            on a dark page. Removed, and `:active` below gives the press its own feedback so nothing
+            is lost.
+
+            `touch-action: manipulation` — removes the 300ms double-tap-zoom wait that older mobile
+            browsers still apply to a link, which on a conversion page is 300ms of «did it work».
+        */
+        html {
+            -webkit-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+        }
+
+        a {
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+
         html, body {
             margin: 0;
             padding: 0;
@@ -138,6 +166,17 @@
             The button is the page. Full width on a phone and tall enough to hit with a thumb, so it
             is unmistakably above the fold at 390px — which is where this link is actually opened.
         */
+        /*
+            `gap` in a FLEX container is iOS 14.1 and later; below that it is ignored and the icon
+            would sit against the label. The margin below is the fallback and is overridden to zero
+            where `gap` works, so no browser applies both.
+        */
+        a.cta svg { margin-inline-end: .625rem; }
+
+        @supports (gap: 1rem) {
+            a.cta svg { margin-inline-end: 0; }
+        }
+
         a.cta {
             display: flex;
             align-items: center;
@@ -155,9 +194,22 @@
             box-shadow: 0 10px 24px -12px rgba(37, 211, 102, .8);
         }
 
+        /*
+            `:focus-visible` is the modern ring and `:focus` is the fallback for the browsers that
+            never got it — declared in that order so a browser understanding both keeps the first.
+        */
+        a.cta:focus {
+            outline: 3px solid var(--brand);
+            outline-offset: 3px;
+        }
+
         a.cta:focus-visible {
             outline: 3px solid var(--brand);
             outline-offset: 3px;
+        }
+
+        a.cta:active {
+            transform: translateY(1px);
         }
 
         p.note {
@@ -167,6 +219,13 @@
             color: var(--muted);
         }
 
+        /*
+            A grid, with a block fallback underneath it.
+
+            A browser too old for `display: grid` lays these out as ordinary list items, which is the
+            same vertical stack the phone layout draws anyway — so the fallback is not a degraded
+            version of this, it IS this.
+        */
         ul.points {
             margin: 2.25rem 0 0;
             padding: 0;
@@ -174,6 +233,8 @@
             display: grid;
             gap: .625rem;
         }
+
+        ul.points li + li { margin-top: 0; }
 
         ul.points li {
             display: flex;
