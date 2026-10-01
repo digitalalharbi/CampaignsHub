@@ -560,6 +560,12 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
       <FilterBar
         id={surface}
         ar={ar}
+        /*
+          The dashboard is opened to READ and the analysis to SLICE, so they are allowed different
+          amounts of room. Dense puts each label on its control's own line — one row instead of
+          three, which is what stood between the header and the first figure.
+        */
+        density={isAnalysis ? 'comfortable' : 'dense'}
         applied={applied}
         onReset={() => { setProviders([]); setCampaignIds([]); setObjective('all') }}
         /*
@@ -593,18 +599,6 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           </div>
         }
       >
-        <FilterChips
-          label={ar ? 'الفترة' : 'Period'}
-          value={String(days)}
-          testid={`${surface}-period`}
-          options={[
-            { value: '7', label: ar ? '7 أيام' : '7 days' },
-            { value: '30', label: ar ? '30 يوم' : '30 days' },
-            { value: '90', label: ar ? '90 يوم' : '90 days' },
-          ]}
-          onChange={(v) => setDays(Number(v))}
-        />
-
         {/*
           Present from the first paint — CLICK-STABLE-001. Gated on the query, this control landed
           late, wrapped the bar onto a second row, and took the tab strip below it down 68px with it.
@@ -620,6 +614,18 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
             ...projects.map((pr) => ({ value: pr.id, label: pr.name })),
           ]}
           onChange={setCurrentProjectId}
+        />
+
+        <FilterChips
+          label={ar ? 'الفترة' : 'Period'}
+          value={String(days)}
+          testid={`${surface}-period`}
+          options={[
+            { value: '7', label: ar ? '7 أيام' : '7 days' },
+            { value: '30', label: ar ? '30 يوم' : '30 days' },
+            { value: '90', label: ar ? '90 يوم' : '90 days' },
+          ]}
+          onChange={(v) => setDays(Number(v))}
         />
 
         {/* UX-FILTERS-001 — the same visible chips the dashboard uses, and the same colours the
