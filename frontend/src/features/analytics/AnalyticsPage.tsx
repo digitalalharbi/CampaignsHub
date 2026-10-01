@@ -465,13 +465,40 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           Both purposes described the same screen, because the screen was the same. The dashboard
           promises the operational read; the analysis promises the reason behind it.
         */
+        /*
+          DASHBOARD-FIRST-VIEWPORT-001 — the dashboard says nothing about itself.
+
+          Every other surface explains what it is for, because «التقارير» could be three different
+          things. «لوحة التحكم» could not: it is the first item on the rail, it is where people
+          land, and a reader who opened it does not need a sentence telling them the account's
+          state is on it — they need the account's state.
+
+          The sentence cost a line, and the line cost the figures their place: title, purpose,
+          period, freshness and a link, each on its own band, before the first number. The owner
+          read that as «the dashboard's data ended up at the bottom», which is exactly what it was.
+
+          The analysis surface keeps its sentence. It is opened deliberately, to ask why, and what
+          it offers is genuinely not obvious from its title.
+        */
         purpose={surface === 'dashboard'
-          ? (ar
-              ? 'حالة الحساب الآن: ما يحدث، وما تغيّر، وما يحتاج انتباهك — ثم افتح التحليلات للسبب.'
-              : 'Where the account stands right now: what is happening, what changed, and what needs attention — then open Analytics for the reason.')
+          ? undefined
           : ar
             ? 'استكشاف تفصيلي للأداء: المنصات، الحملات، القمع، المتجر، الميزانيات، وأساس كل رقم.'
             : 'A detailed look at performance — platforms, campaigns, the funnel, the store, budgets, and the basis of every figure.'}
+        /*
+          «Open Analytics for the reason» was a band of its own under the header. It is an action
+          this page offers, so it sits where this header puts actions — on the title's line.
+        */
+        actions={isAnalysis ? undefined : (
+          <Link
+            to={`/app/analytics${urlTab && urlTab !== 'performance' ? `?tab=${urlTab}` : ''}`}
+            data-testid="dashboard-to-analytics"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700"
+          >
+            {ar ? 'افتح التحليلات للسبب والتفصيل' : 'Open Analytics for the reason and the detail'}
+            <ArrowLeftRight size={14} aria-hidden />
+          </Link>
+        )}
         badges={<ProvenanceBadge provenance={provenanceSummary.data?.provenance} />}
         eyebrow={projectName ?? ''}
         meta={
@@ -483,35 +510,12 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
               staleAfterHours={STALE_AFTER_HOURS}
               testid={`${surface}-freshness`}
             />
+            {/* What is feeding the figures, on the line that already says how old they are. */}
+            {!isAnalysis && <DashboardContextStrip />}
           </>
         }
       />
 
-      {/*
-        DASHBOARD-CONTEXT-001 — which platforms feed this screen, and whether any of them is unwell.
-        Only on the dashboard: the analysis surface is opened to ask why a figure moved, and this is
-        operational context for the figure itself.
-      */}
-      {!isAnalysis && <DashboardContextStrip />}
-
-      {/*
-        «What should I open next» is a door, not a dead end.
-
-        A stale `?tab=` is carried across rather than dropped: a bookmark for «budget» that lands on
-        the KPI strip with no explanation is worse than one that lands on the budget.
-      */}
-      {!isAnalysis && (
-        <div className="-mt-1">
-          <Link
-            to={`/app/analytics${urlTab && urlTab !== 'performance' ? `?tab=${urlTab}` : ''}`}
-            data-testid="dashboard-to-analytics"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700"
-          >
-            {ar ? 'افتح التحليلات للسبب والتفصيل' : 'Open Analytics for the reason and the detail'}
-            <ArrowLeftRight size={14} aria-hidden />
-          </Link>
-        </div>
-      )}
 
       <FilterBar
         id={surface}

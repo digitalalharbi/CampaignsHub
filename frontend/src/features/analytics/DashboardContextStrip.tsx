@@ -48,10 +48,14 @@ export function DashboardContextStrip() {
   const attention = connections.filter((c) => c.needs_attention).length
 
   return (
-    <div
-      data-testid="dashboard-context-strip"
-      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-border bg-surface-secondary px-3 py-2"
-    >
+    /*
+      Inline, in the header's own meta line, rather than a band of its own.
+      
+      It was a bordered strip under the head, and a reader counting bands before the first figure
+      found one more. This is context about the figures, so it belongs on the line that already
+      carries the period and the freshness — not above them with a frame around it.
+    */
+    <span data-testid="dashboard-context-strip" className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="flex items-center gap-1.5 text-[11.5px] font-bold text-text-muted">
         <Plug size={13} aria-hidden /> {ar ? 'يغذّي هذه الصفحة' : 'Feeding this page'}
       </span>
@@ -83,6 +87,6 @@ export function DashboardContextStrip() {
           {ar ? 'يحتاج انتباه' : 'Needs attention'} <Num>{attention}</Num>
         </Link>
       )}
-    </div>
+    </span>
   )
 }
