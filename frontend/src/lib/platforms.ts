@@ -51,6 +51,43 @@ const ALIASES: Record<string, AdPlatform> = {
   openai_advertising: 'openai_ads',
 }
 
+/**
+ * What each platform is CALLED, in both languages, in one place.
+ *
+ * Six files kept their own copy of this map, and each one was a separate decision about whether a
+ * platform exists: a list that had not been edited simply rendered the key — «openai_ads» where a
+ * reader expects «إعلانات ChatGPT» — and nothing failed, because printing a database value is
+ * indistinguishable from printing a label until somebody reads it.
+ *
+ * Arabic is not a transliteration of the English. «سناب شات» is what the platform is called by the
+ * people buying on it; `ChatGPT Ads` is a product name and stays Latin inside the Arabic string,
+ * which is how it is written and said here.
+ */
+export const PLATFORM_LABELS: Record<AdPlatform, { ar: string; en: string }> = {
+  snapchat: { ar: 'سناب شات', en: 'Snapchat' },
+  tiktok: { ar: 'تيك توك', en: 'TikTok' },
+  meta: { ar: 'ميتا', en: 'Meta' },
+  google: { ar: 'جوجل', en: 'Google' },
+  x: { ar: 'إكس', en: 'X' },
+  linkedin: { ar: 'لينكدإن', en: 'LinkedIn' },
+  openai_ads: { ar: 'إعلانات ChatGPT', en: 'ChatGPT Ads' },
+}
+
+/**
+ * The platform's name for a reader, from whatever spelling arrived.
+ *
+ * An unknown key comes back as itself rather than as «—» or «Unknown»: a platform this build has
+ * not heard of is a fact about this build, and showing the raw key is how somebody finds out which
+ * one it is. It is the loud failure, deliberately, and `canonicalPlatform` has already resolved
+ * every spelling the product actually uses.
+ */
+export function platformLabel(key: string | null | undefined, ar: boolean): string {
+  const canonical = canonicalPlatform(key)
+  const label = PLATFORM_LABELS[canonical as AdPlatform]
+
+  return label === undefined ? canonical : (ar ? label.ar : label.en)
+}
+
 export function canonicalPlatform(key: string | null | undefined): string {
   const k = (key ?? '').trim().toLowerCase()
   return ALIASES[k] ?? k

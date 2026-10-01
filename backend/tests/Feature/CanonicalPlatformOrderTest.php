@@ -140,4 +140,91 @@ final class CanonicalPlatformOrderTest extends TestCase
 
         return $out;
     }
+
+    /**
+     * **The other half of the same defect, on the interface side.**
+     *
+     * The server guard below scans PHP for a hard-coded count. The interface's version of that
+     * mistake is not a count — it is a LIST: a surface writes out the platforms it offers, and a
+     * platform added to the canonical order is then missing from one filter, one picker or one
+     * legend, with nothing failing anywhere. Three files were found that way (the analytics filter,
+     * the spend-limit scope and the projects card), and each one had been correct when it was
+     * written.
+     *
+     * So a literal array naming four or more canonical platforms is a second answer to «which
+     * platforms exist», and only the file that owns the answer may contain one.
+     */
+    public function test_no_interface_surface_writes_out_its_own_platform_list(): void
+    {
+        $root = base_path('../frontend/src');
+        $this->assertDirectoryExists($root, 'the interface source moved — this guard is reading a path that no longer exists');
+
+        $allowed = [
+            // The canonical list itself, and the alias table beside it.
+            'lib/platforms.ts',
+            /*
+             * Demo rows, and they must NOT follow the canonical list.
+             *
+             * This file invents a worked example for an empty workspace. Adding a platform here
+             * because the product can now read it would fabricate a month of spend, impressions and
+             * conversions for a platform nobody has connected — which is the one thing a demo is not
+             * allowed to do. It lists what it has a plausible story for, and no more.
+             */
+            'features/campaigns/overview/demoOverview.ts',
+        ];
+
+        $offenders = [];
+
+        $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS));
+
+        foreach ($files as $file) {
+            /** @var \SplFileInfo $file */
+            if (! in_array($file->getExtension(), ['ts', 'tsx'], true)) {
+                continue;
+            }
+
+            $relative = str_replace($root.'/', '', $file->getPathname());
+
+            // Tests may write a list out: a fixture's whole job is to state one case literally.
+            if (in_array($relative, $allowed, true) || str_contains($relative, '.test.')) {
+                continue;
+            }
+
+            $source = (string) file_get_contents($file->getPathname());
+
+            foreach ($this->arrayLiterals($source) as $literal) {
+                preg_match_all("/'([a-z0-9_]+)'/", $literal, $found);
+
+                $platforms = array_values(array_unique(array_filter(
+                    $found[1],
+                    static fn (string $key): bool => in_array(AdPlatforms::canonical($key), AdPlatforms::ORDER, true),
+                )));
+
+                if (count($platforms) >= 4) {
+                    $offenders[] = $relative.' → ['.implode(', ', $platforms).']';
+                }
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            "a surface writes out its own platform list instead of reading the canonical one:\n  ".implode("\n  ", $offenders),
+        );
+    }
+
+    /**
+     * Array literals in a source file, as text.
+     *
+     * Deliberately shallow — `[` to the next `]` — because what it is looking for is a flat list of
+     * keys, and a parser good enough to handle nesting would be a parser this guard has to maintain.
+     *
+     * @return list<string>
+     */
+    private function arrayLiterals(string $source): array
+    {
+        preg_match_all('/\[([^\[\]]*)\]/s', $source, $matches);
+
+        return $matches[1];
+    }
 }

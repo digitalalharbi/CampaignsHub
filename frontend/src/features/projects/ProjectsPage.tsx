@@ -15,6 +15,7 @@ import {
   type Project,
 } from './api'
 import { Badge } from '@/components/ui/Badge'
+import { PLATFORM_LABELS, PLATFORM_ORDER } from '@/lib/platforms'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
@@ -137,10 +138,16 @@ const PROJ_SURFACE = {
   },
 } as const
 
-/** The six platforms, as their owners spell them. */
-const PROJ_PLATFORM_NAMES: Record<string, string> = {
-  snapchat: 'Snapchat', meta: 'Meta', tiktok: 'TikTok', google: 'Google', linkedin: 'LinkedIn', x: 'X',
-}
+/**
+ * The platforms, as their owners spell them — from the canonical list, not a copy of it.
+ *
+ * This was six names written out here, which is a second answer to «which platforms exist». The
+ * seventh arrived and this card rendered `openai_ads` while every other surface said «إعلانات
+ * ChatGPT», because a missing key in a hand-kept map fails by printing a database value.
+ */
+const PROJ_PLATFORM_NAMES: Record<string, string> = Object.fromEntries(
+  PLATFORM_ORDER.map((key) => [key, PLATFORM_LABELS[key].en]),
+)
 
 /**
  * «قبل 3 ساعات» without a date library, and without claiming precision the card does not need.

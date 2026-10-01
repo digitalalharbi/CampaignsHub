@@ -492,6 +492,10 @@ final class TaxonomyEngineSeeder extends Seeder
                     ['key' => 'snapchat', 'label_ar' => 'سناب شات', 'label_en' => 'Snapchat', 'color' => '#fffc00'],
                     ['key' => 'x', 'label_ar' => 'إكس', 'label_en' => 'X', 'color' => '#000000'],
                     ['key' => 'linkedin', 'label_ar' => 'لينكدإن', 'label_en' => 'LinkedIn', 'color' => '#0a66c2'],
+                    // The place a client says which platform the work is for, so a platform the
+                    // product can now read has to be sayable here — otherwise the request arrives
+                    // without the one field that routes it.
+                    ['key' => 'openai_ads', 'label_ar' => 'إعلانات ChatGPT', 'label_en' => 'ChatGPT Ads', 'color' => '#10a37f'],
                     ['key' => 'microsoft', 'label_ar' => 'مايكروسوفت', 'label_en' => 'Microsoft', 'color' => '#00a4ef'],
                     ['key' => 'pinterest', 'label_ar' => 'بينترست', 'label_en' => 'Pinterest', 'color' => '#e60023'],
                 ],

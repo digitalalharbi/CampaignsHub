@@ -122,6 +122,29 @@ export async function startPlatformOAuth(
   })
 }
 
+/**
+ * INTEG-APIKEY-001 — connect a provider the advertiser holds their own key for.
+ *
+ * No redirect and no return trip: the key is posted from inside this session and the answer IS the
+ * outcome. What comes back names the connection and how many ad accounts the key could list, so the
+ * flow continues straight into the account step instead of landing on a page and asking the reader
+ * to find their way back.
+ *
+ * The key is never stored by this client, never put in the URL, and never read back — what returns
+ * is its last four characters, which is enough to recognise and useless to reuse.
+ */
+export async function connectWithApiKey(
+  provider: string,
+  apiKey: string,
+  projectId?: string | null,
+): Promise<{ provider: string; connection: string; accounts: number; key_hint: string }> {
+  await ensureCsrfCookie()
+  return postData<{ provider: string; connection: string; accounts: number; key_hint: string }>(
+    `/integrations/${provider}/api-key/connect`,
+    { api_key: apiKey, ...(projectId ? { project_id: projectId } : {}) },
+  )
+}
+
 export async function syncConnector(key: string): Promise<{ success: boolean; count: number }> {
   await ensureCsrfCookie()
   return postData<{ success: boolean; count: number }>(`/integrations/${key}/sync`)
@@ -663,6 +686,15 @@ export interface ConnectableProvider {
   label_ar: string
   kind: 'advertising' | 'commerce'
   has_parent: boolean
+  /**
+   * Which of the two ways this provider is connected — the catalogue's answer, never inferred.
+   *
+   * `oauth` leaves for the provider's consent screen and returns through the callback. `api_key`
+   * never leaves: the advertiser holds their own key and pastes it inside this session. Reading
+   * «provider, therefore consent screen» was safe while every provider was OAuth and is how a card
+   * comes to promise a redirect that never happens.
+   */
+  auth: 'oauth' | 'api_key'
 }
 
 export interface ConnectionHub {

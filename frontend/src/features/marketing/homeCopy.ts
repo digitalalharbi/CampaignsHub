@@ -391,7 +391,7 @@ const ar: HomeCopy = {
   platforms: {
     title: 'المنصات المدعومة',
     subtitle: 'اجمع بيانات حملاتك من المنصات الرئيسية في مكان واحد.',
-    note: 'المنصات الست مدعومة بالكامل — تربط حسابك الإعلاني بنفسك، ولا تظهر أي أرقام قبل أول مزامنة فعلية.',
+    note: 'تربط حسابك الإعلاني بنفسك، ولا تظهر أي أرقام قبل أول مزامنة فعلية.',
     items: [
       { label: 'Snapchat Ads', desc: 'حملات الوعي والتحويلات والكتالوج', status: 'متاحة للربط', tone: 'ok' },
       { label: 'TikTok Ads', desc: 'حملات الفيديو والمحتوى القصير', status: 'متاحة للربط', tone: 'ok' },
@@ -399,6 +399,20 @@ const ar: HomeCopy = {
       { label: 'Google Ads', desc: 'حملات البحث والتسوق والأداء الأقصى', status: 'متاحة للربط', tone: 'ok' },
       { label: 'X (Twitter) Ads', desc: 'حملات التفاعل والوصول', status: 'متاحة للربط', tone: 'ok' },
       { label: 'LinkedIn Ads', desc: 'حملات قطاع الأعمال والعملاء المحتملين', status: 'متاحة للربط', tone: 'ok' },
+      /*
+       * Stated as what it needs, not as what it offers.
+       *
+       * OpenAI has not said this is open in a market or to every advertiser, so «متاحة للربط» —
+       * which every row above has earned — would be this product answering a question on their
+       * behalf. What is true is the requirement: an Ads account and a key, both of which the
+       * advertiser either has or does not.
+       */
+      {
+        label: 'ChatGPT Ads',
+        desc: 'الحملات والمجموعات والإعلانات ونتائجها اليومية',
+        status: 'يتطلب حساب إعلانات OpenAI ومفتاح واجهة',
+        tone: 'await',
+      },
     ],
   },
   reports: {
@@ -707,7 +721,7 @@ const en: HomeCopy = {
   platforms: {
     title: 'Supported platforms',
     subtitle: 'Bring your campaign data from the main platforms into one place.',
-    note: 'All six platforms are supported — you connect your own ad account, and no figure appears before a real first sync.',
+    note: 'You connect your own ad account, and no figure appears before a real first sync.',
     items: [
       { label: 'Snapchat Ads', desc: 'Awareness, conversion and catalogue campaigns', status: 'Available to connect', tone: 'ok' },
       { label: 'TikTok Ads', desc: 'Video and short-form campaigns', status: 'Available to connect', tone: 'ok' },
@@ -715,6 +729,12 @@ const en: HomeCopy = {
       { label: 'Google Ads', desc: 'Search, Shopping and Performance Max', status: 'Available to connect', tone: 'ok' },
       { label: 'X (Twitter) Ads', desc: 'Engagement and reach campaigns', status: 'Available to connect', tone: 'ok' },
       { label: 'LinkedIn Ads', desc: 'B2B and lead-generation campaigns', status: 'Available to connect', tone: 'ok' },
+      {
+        label: 'ChatGPT Ads',
+        desc: 'Campaigns, ad groups, ads and their daily results',
+        status: 'Requires an OpenAI Ads account and an API key',
+        tone: 'await',
+      },
     ],
   },
   reports: {

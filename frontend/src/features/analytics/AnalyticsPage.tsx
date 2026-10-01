@@ -82,7 +82,7 @@ import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
 import { PeriodLabel } from '@/components/patterns/Status'
 import { listProjects } from '@/features/projects/api'
-import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
+import { canonicalPlatform, PLATFORM_ORDER } from '@/lib/platforms'
 import {
   CANONICAL_OBJECTIVE_KEYS,
   canonicalObjectiveLabel,
@@ -103,7 +103,7 @@ import { providerLabel } from '@/features/campaigns/labels'
  * filter folds by default (SIMPLIFY-001), so a check that reads the page finds no platform names at
  * all and passes for the wrong reason.
  */
-export const ANALYTICS_PLATFORMS = sortPlatforms(['meta', 'google_ads', 'tiktok', 'snapchat', 'x', 'linkedin'])
+export const ANALYTICS_PLATFORMS: readonly string[] = PLATFORM_ORDER
 
 /**
  * CAMPAIGN-OUTCOME-DIMENSION-001 — the actions a campaign can buy, for the filter control.

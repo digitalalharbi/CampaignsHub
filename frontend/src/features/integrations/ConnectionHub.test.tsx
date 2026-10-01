@@ -208,7 +208,7 @@ describe('the connection flow', () => {
   beforeEach(() => {
     hub.data = {
       connections: [],
-      connectable: [{ key: 'meta', label: 'Meta Ads', label_ar: 'ميتا', kind: 'advertising', has_parent: true }],
+      connectable: [{ key: 'meta', label: 'Meta Ads', label_ar: 'ميتا', kind: 'advertising', has_parent: true, auth: 'oauth' }],
     }
     started.calls = []
   })
@@ -265,7 +265,7 @@ describe('the connection flow', () => {
   it('leaves the organisation stage out for a provider that has none', async () => {
     hub.data = {
       connections: [],
-      connectable: [{ key: 'x', label: 'X Ads', label_ar: 'إكس', kind: 'advertising', has_parent: false }],
+      connectable: [{ key: 'x', label: 'X Ads', label_ar: 'إكس', kind: 'advertising', has_parent: false, auth: 'oauth' }],
     }
 
     renderWithProviders(<IntegrationsPage />)

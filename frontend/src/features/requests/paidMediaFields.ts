@@ -1,4 +1,4 @@
-import { sortByPlatform } from '@/lib/platforms'
+import { PLATFORM_LABELS, PLATFORM_ORDER, type AdPlatform } from '@/lib/platforms'
 /**
  * Dynamic paid-media intake — the `metadata.needs` token → field mapping.
  *
@@ -46,17 +46,24 @@ export interface PaidFieldDef {
 /**
  * Platform pick-list (a field value enum — NOT a taxonomy service list).
  *
- * In the product's order (PLATFORM-ORDER-001), so the visitor filing a request meets the six
- * platforms in the same sequence the dashboard, the connection centre and every report will use.
+ * Built FROM the canonical order, so a visitor filing a request meets the same platforms, in the
+ * same sequence, as the dashboard, the connection centre and every report. It used to be the list
+ * written out again — which meant a platform the product had just learned to read was one a client
+ * could not ask for, and the request would arrive with the one field that routes it left blank.
+ *
+ * Two names are fuller here than anywhere else, and deliberately: this is read by somebody who does
+ * not work inside the product, and «ميتا» alone is not what they call the place their ads run.
  */
-export const PAID_PLATFORMS: PaidFieldOption[] = sortByPlatform([
-  { value: 'snapchat', ar: 'سناب شات', en: 'Snapchat' },
-  { value: 'tiktok', ar: 'تيك توك', en: 'TikTok' },
-  { value: 'meta', ar: 'ميتا (فيسبوك/إنستغرام)', en: 'Meta (Facebook/Instagram)' },
-  { value: 'google', ar: 'جوجل', en: 'Google' },
-  { value: 'x', ar: 'إكس (تويتر)', en: 'X (Twitter)' },
-  { value: 'linkedin', ar: 'لينكدإن', en: 'LinkedIn' },
-], (o) => o.value)
+const PUBLIC_PLATFORM_NAMES: Partial<Record<AdPlatform, { ar: string; en: string }>> = {
+  meta: { ar: 'ميتا (فيسبوك/إنستغرام)', en: 'Meta (Facebook/Instagram)' },
+  x: { ar: 'إكس (تويتر)', en: 'X (Twitter)' },
+}
+
+export const PAID_PLATFORMS: PaidFieldOption[] = PLATFORM_ORDER.map((key) => ({
+  value: key,
+  ar: (PUBLIC_PLATFORM_NAMES[key] ?? PLATFORM_LABELS[key]).ar,
+  en: (PUBLIC_PLATFORM_NAMES[key] ?? PLATFORM_LABELS[key]).en,
+}))
 
 const OBJECTIVES: PaidFieldOption[] = [
   { value: 'sales', ar: 'المبيعات', en: 'Sales' },
@@ -99,19 +106,21 @@ const PERIODS: PaidFieldOption[] = [
 /*
  * Data sources: the ad platforms first, in the product's order, then everything else.
  *
- * `sortByPlatform` is stable, so GA4, the CRM, Salla and Zid — none of which are ad platforms and all
- * of which rank equal — keep the order written here rather than being shuffled between renders.
+ * The ad platforms come first, in the canonical order, and the rest follow in the order written
+ * below — GA4, the CRM, Salla and Zid are not ad platforms and have no place in that list.
  */
-const DATA_SOURCES: PaidFieldOption[] = sortByPlatform([
-  { value: 'snapchat', ar: 'سناب شات', en: 'Snapchat' },
-  { value: 'tiktok', ar: 'تيك توك', en: 'TikTok' },
-  { value: 'meta', ar: 'ميتا', en: 'Meta' },
-  { value: 'google_ads', ar: 'إعلانات جوجل', en: 'Google Ads' },
+const DATA_SOURCES: PaidFieldOption[] = [
+  ...PAID_PLATFORMS,
+  /*
+   * Not ad platforms, and ranked equal by `sortByPlatform`, so they keep the order written here.
+   * They stay a literal because they are not in the canonical list and must not be added to it:
+   * that list answers «what can this product connect an ad account to».
+   */
   { value: 'ga4', ar: 'GA4', en: 'GA4' },
   { value: 'crm', ar: 'نظام CRM', en: 'CRM' },
   { value: 'salla', ar: 'سلة', en: 'Salla' },
   { value: 'zid', ar: 'زد', en: 'Zid' },
-], (o) => o.value)
+]
 
 /**
  * The full needs → field map. A token missing here is simply ignored (unknown needs never crash the

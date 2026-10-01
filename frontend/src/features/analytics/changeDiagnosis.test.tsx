@@ -55,12 +55,18 @@ describe('the change diagnosis', () => {
     expect(drivers).toHaveTextContent('−2K SAR')
   })
 
-  /** The square signals answer one question each — «who», and «who is going the other way». */
+  /**
+   * The square signals answer one question each — «who», and «who is going the other way».
+   *
+   * «Google» rather than «Google Ads»: every platform now takes its name from one map, and this
+   * surface was the only one that said the product name while its neighbours said the platform's.
+   * Reading «Google Ads» beside «Meta» and «Snapchat» is the inconsistency, not the fix.
+   */
   it('separates the biggest mover from the one moving against the account', () => {
     render(payload())
 
     expect(screen.getByTestId('signal-biggest-mover')).toHaveTextContent('Meta')
-    expect(screen.getByTestId('signal-against')).toHaveTextContent('Google Ads')
+    expect(screen.getByTestId('signal-against')).toHaveTextContent('Google')
   })
 
   /**

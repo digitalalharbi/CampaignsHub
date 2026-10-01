@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, Check, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, KeyRound, ShieldCheck } from 'lucide-react'
 import {
-  startPlatformOAuth, type ConnectableProvider, type HubConnection,
+  connectWithApiKey, startPlatformOAuth, type ConnectableProvider, type HubConnection,
 } from './api'
 import { ConnectionWizard } from './ConnectionWizard'
 import { listProjects } from '@/features/projects/api'
@@ -61,6 +61,15 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
     mode === 'manage' || connection !== null ? (provider?.has_parent ?? connection?.has_parent ? 'parent' : 'accounts') : 'login',
   )
   const [finished, setFinished] = useState(false)
+  /*
+   * A connection opened by a key, which nothing upstream has seen yet.
+   *
+   * The OAuth return re-enters this flow through the page, carrying `?connection=` from the
+   * callback, so the parent always holds the row by the time the account step opens. A key connect
+   * never leaves the dialog: the response IS the connection, and waiting for the hub to refetch
+   * would put a spinner between «connected» and the question it unblocks.
+   */
+  const [openedByKey, setOpenedByKey] = useState<string | null>(null)
 
   const hasParent = connection?.has_parent ?? provider?.has_parent ?? false
   const stages: Stage[] = mode === 'manage'
@@ -72,6 +81,7 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
     : provider !== null ? (ar ? provider.label_ar : provider.label) : ''
 
   const providerKey = connection?.provider ?? provider?.key ?? ''
+  const connectionId = connection?.id ?? openedByKey
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8" role="dialog" aria-modal="true">
@@ -106,18 +116,38 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
              */
             <ChooseClient ar={ar} onChoose={setDestination} />
           ) : stage === 'login' ? (
-            <Login
-              ar={ar}
-              label={label}
-              providerKey={providerKey}
-              destination={destination}
-              onDestination={setDestination}
-            />
-          ) : connection === null ? (
+            /*
+             * One stage, two shapes, chosen by what the provider actually does.
+             *
+             * Both ask the same first question — whose accounts are these — and then diverge on the
+             * only thing that differs: one hands the reader to a consent screen, the other asks for
+             * the key they already hold. Neither is drawn for a provider of the other kind, because
+             * a «continue to…» button that never leaves, or a key box for a provider that issues no
+             * keys, is a dead end with a label on it.
+             */
+            provider?.auth === 'api_key' ? (
+              <KeyEntry
+                ar={ar}
+                label={label}
+                providerKey={providerKey}
+                destination={destination}
+                onDestination={setDestination}
+                onConnected={(id) => { setOpenedByKey(id); setStage('accounts') }}
+              />
+            ) : (
+              <Login
+                ar={ar}
+                label={label}
+                providerKey={providerKey}
+                destination={destination}
+                onDestination={setDestination}
+              />
+            )
+          ) : connectionId === null ? (
             <Skeleton className="h-48 w-full" />
           ) : (
             <ConnectionWizard
-              connectionId={connection.id}
+              connectionId={connectionId}
               chrome={false}
               manageProjectId={mode === 'manage' ? destination : null}
               destinationProjectId={mode === 'manage' ? null : destination}
@@ -166,6 +196,146 @@ function ChooseClient({ ar, onChoose }: { ar: boolean; onChoose: (id: string) =>
           ))}
         </select>
       )}
+    </div>
+  )
+}
+
+/**
+ * Stage one, for a provider the advertiser holds their own key for.
+ *
+ * ## Why this is not «the login step with a text box»
+ *
+ * The consent version of this stage ends by handing somebody to the provider, and everything it
+ * says is preparation for leaving. Nothing here leaves. The key is pasted, posted and answered in
+ * place, and the next question opens in the same dialog — so the copy stops promising a journey and
+ * starts describing one field.
+ *
+ * ## What it will not claim
+ *
+ * It does not say the provider is available in a country, in a market, or to anybody reading. OpenAI
+ * has not said so, and a product that says it on their behalf is answering a question it cannot. It
+ * says where the key is created and what one key reaches, which is what the person pasting it needs.
+ *
+ * ## The field
+ *
+ * `type="password"` with `autoComplete="off"`: a key is a secret in a shared office, and a browser
+ * offering to remember it under this origin is a copy nobody asked for. There is no «show» toggle —
+ * the thing it would reveal is the one thing this screen never needs to display back.
+ */
+function KeyEntry({ ar, label, providerKey, destination, onDestination, onConnected }: {
+  ar: boolean
+  label: string
+  providerKey: string
+  destination: string | null
+  onDestination: (id: string) => void
+  onConnected: (connectionId: string) => void
+}) {
+  const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
+  const [key, setKey] = useState('')
+
+  const connect = useMutation({
+    mutationFn: () => connectWithApiKey(providerKey, key.trim(), destination),
+    onSuccess: ({ connection }) => {
+      /*
+       * Dropped the moment it is accepted.
+       *
+       * It is already stored, encrypted, on the server; a copy left in this component would stay in
+       * memory for as long as the dialog is open and in a React DevTools tree for anybody looking.
+       */
+      setKey('')
+      onConnected(connection)
+    },
+  })
+
+  return (
+    <div className="flex flex-col gap-5" data-testid="flow-step-key">
+      <section className="flex flex-col gap-2">
+        <h3 className="text-sm font-bold text-text-primary">
+          {ar ? 'لأي عميل هذه الحسابات؟' : 'Which client are these accounts for?'}
+        </h3>
+        <p className="text-xs text-text-secondary">
+          {ar
+            ? 'يُحدَّد الآن ويبقى ثابتًا خلال الربط كله.'
+            : 'Settled now and fixed for the whole flow.'}
+        </p>
+
+        {projects.isLoading ? (
+          <Skeleton className="h-10 w-full" />
+        ) : (
+          <select
+            value={destination ?? ''}
+            onChange={(e) => onDestination(e.target.value)}
+            aria-label={ar ? 'العميل' : 'Client'}
+            data-testid="flow-destination"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:border-brand-500 focus:outline-none"
+          >
+            <option value="">{ar ? 'اختر العميل' : 'Choose a client'}</option>
+            {(projects.data ?? []).map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <label htmlFor="provider-api-key" className="flex items-center gap-2 text-sm font-bold text-text-primary">
+          <KeyRound size={15} aria-hidden /> {ar ? `مفتاح واجهة ${label}` : `${label} API key`}
+        </label>
+        <p className="text-xs text-text-secondary">
+          {ar
+            ? 'يُنشأ المفتاح من لوحة إعلانات OpenAI، وكل مفتاح يخص حسابًا إعلانيًا واحدًا.'
+            : 'The key is created in the OpenAI Ads console, and each key belongs to one ad account.'}
+        </p>
+        <input
+          id="provider-api-key"
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          dir="ltr"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          placeholder={ar ? 'الصق المفتاح هنا' : 'Paste the key here'}
+          data-testid="flow-api-key"
+          className="w-full rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm text-text-primary focus:border-brand-500 focus:outline-none"
+        />
+      </section>
+
+      <section className="flex flex-col gap-2 rounded-xl bg-surface-secondary p-4">
+        <h3 className="flex items-center gap-2 text-sm font-bold text-text-primary">
+          <ShieldCheck size={15} aria-hidden /> {ar ? `ما سيقرأه كامبينز هب من ${label}` : `What CampaignsHub will read from ${label}`}
+        </h3>
+        <ul className="flex flex-col gap-1 text-xs text-text-secondary">
+          <li>· {ar ? 'الحساب الإعلاني الذي يخصّه المفتاح واسمه وعملته.' : 'The ad account the key belongs to, its name and its currency.'}</li>
+          <li>· {ar ? 'حملاتك وأرقام أدائها للفترات التي تختارها.' : 'Your campaigns and their performance figures.'}</li>
+          <li>
+            · {ar
+              ? 'قراءة فقط — لا يُنشئ كامبينز هب حملة ولا يعدّل ميزانية ولا ينفق شيئًا.'
+              : 'Read only — CampaignsHub never creates a campaign, changes a budget or spends anything.'}
+          </li>
+          <li>
+            {/* The storage answer, said before it is asked — this is the fear that stops people pasting. */}
+            · {ar
+              ? 'يُخزَّن المفتاح مشفّرًا ولا يُعرض بعد الحفظ؛ لتغييره يُستبدل من لوحة OpenAI ثم يُلصق هنا من جديد.'
+              : 'The key is stored encrypted and never shown again; to change it, rotate it in the OpenAI console and paste the new one here.'}
+          </li>
+        </ul>
+      </section>
+
+      {connect.isError && (
+        <p className="text-sm text-danger" data-testid="flow-key-error">{toApiError(connect.error).message}</p>
+      )}
+
+      <div className="flex justify-end">
+        <Button
+          disabled={destination === null || destination === '' || key.trim() === ''}
+          loading={connect.isPending}
+          onClick={() => connect.mutate()}
+          data-testid="flow-connect-key"
+        >
+          {ar ? 'ربط الحساب' : 'Connect account'}
+          {ar ? <ArrowLeft size={15} /> : <ArrowRight size={15} />}
+        </Button>
+      </div>
     </div>
   )
 }

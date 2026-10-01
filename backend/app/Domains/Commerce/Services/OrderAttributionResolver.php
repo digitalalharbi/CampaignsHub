@@ -45,7 +45,10 @@ final class OrderAttributionResolver
      * Common `utm_source` spellings, mapped to the platform they mean.
      *
      * Only unambiguous ones. `newsletter`, `email` and `blog` are deliberately absent — they are real
-     * sources and none of them is one of the six, so mapping them would manufacture paid traffic.
+     * sources and none of them is an ad platform, so mapping them would manufacture paid traffic.
+     *
+     * These are spellings a MERCHANT writes into their own links, which is why they can be listed:
+     * the map says what a human meant by a word they chose, not what a platform appends.
      *
      * @var array<string,string>
      */
@@ -56,6 +59,7 @@ final class OrderAttributionResolver
         'snapchat' => 'snapchat', 'snap' => 'snapchat',
         'twitter' => 'x', 'x' => 'x',
         'linkedin' => 'linkedin',
+        'openai' => 'openai_ads', 'chatgpt' => 'openai_ads', 'openai_ads' => 'openai_ads', 'chatgpt_ads' => 'openai_ads',
     ];
 
     /**
