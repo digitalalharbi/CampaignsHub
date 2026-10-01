@@ -80,6 +80,7 @@ import { SPECS, layoutFor, valueReading } from './metricCatalog'
 import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
+import { DashboardContextStrip } from './DashboardContextStrip'
 import { PeriodLabel } from '@/components/patterns/Status'
 import { listProjects } from '@/features/projects/api'
 import { canonicalPlatform, PLATFORM_ORDER } from '@/lib/platforms'
@@ -485,6 +486,13 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           </>
         }
       />
+
+      {/*
+        DASHBOARD-CONTEXT-001 — which platforms feed this screen, and whether any of them is unwell.
+        Only on the dashboard: the analysis surface is opened to ask why a figure moved, and this is
+        operational context for the figure itself.
+      */}
+      {!isAnalysis && <DashboardContextStrip />}
 
       {/*
         «What should I open next» is a door, not a dead end.
