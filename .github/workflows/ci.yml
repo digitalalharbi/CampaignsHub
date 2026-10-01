@@ -223,9 +223,28 @@ jobs:
       # therefore launches chromium before it launches firefox, and installing only firefox failed
       # six tests with «Executable doesn't exist at …/chromium_headless_shell». Playwright dedupes
       # the repeat when the matrix browser IS chromium.
+      #
+      # CACHED, and the timeout raised — the webkit leg has lost this step three times.
+      #
+      # «~2 minutes when GitHub's mirror is healthy» was true and is not the whole distribution.
+      # Three runs in this programme died here, each one at exactly fifteen minutes, with the apt
+      # half (`--with-deps`) still fetching mesa and gstreamer packages — a job that ran no test and
+      # reported «gate failed», which reads as a product defect and is a download.
+      #
+      # The cache removes the browser payload on a hit (the apt packages are not cached: they are
+      # installed into the runner image, not into a directory). The key carries the Playwright
+      # version, so an upgrade misses deliberately rather than restoring browsers that no longer
+      # match. Twenty-five minutes is the bound for a cold miss — still a bound, so a genuine stall
+      # fails and names this step rather than holding the runner.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ hashFiles('frontend/package-lock.json') }}
       - name: Browsers
         working-directory: frontend
-        timeout-minutes: 15
+        timeout-minutes: 25
         run: npx playwright install --with-deps chromium ${{ matrix.browser }}
       # The report exporter's Arabic text-layer pass (CAMPAIGNSHUB-PDF-TEXTLAYER) shells out to
       # python3 + pikepdf. It is best-effort and never blocks an export, but leaving it absent here
