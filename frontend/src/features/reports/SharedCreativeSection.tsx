@@ -1,5 +1,5 @@
 import { canonicalObjectiveLabel, type CanonicalObjectiveKey } from '@/features/campaigns/canonicalObjectives'
-import { aspectClass, clientAbsence, mediaFitClass, readPreview } from '@/features/content/adPreview'
+import { aspectClass, clientAbsence, mediaFitClass, posterSource, readPreview } from '@/features/content/adPreview'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -1067,7 +1067,15 @@ function CreativeTile({
   onDetails: () => void
 }) {
   const preview = creative.preview
-  const image = preview.state === 'available' ? (preview.thumbnail_url ?? preview.image_url) : null
+  /*
+    CONTENT-PREVIEW-FIT-001 §14 — the SAME resolver the library asks.
+
+    `thumbnail_url ?? image_url` skips what `readPreview` knows: a video whose poster is all that
+    arrived, a collection whose hero is a film, a catalog ad that is missing nothing. A client's deck
+    showing an empty tile for a creative the library draws is the divergence this whole unit is
+    about, and it was two expressions apart.
+  */
+  const image = posterSource(readPreview(preview, locale === 'ar'))
 
   return (
     <div className={`grid gap-1.5 rounded-xl border p-2 ${selected ? 'border-brand-500' : 'border-border'} bg-surface`}>

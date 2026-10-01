@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Images } from 'lucide-react'
 import { CreativeVideoPlayer } from './CreativeVideoPlayer'
+import { cardPoster, mediaFitClass } from './adPreview'
 import { imageLoading } from './format'
 import type { CreativePreview } from './api'
 import type { Locale } from '@/stores/ui'
@@ -188,7 +189,7 @@ export function CreativeCarousel({
                   <CreativeVideoPlayer
                     key={`card-${current.index}`}
                     src={current.video_url}
-                    poster={current.thumbnail_url ?? current.image_url}
+                    poster={cardPoster(current)}
                     /*
                      * A carousel CARD carries no shape of its own — the platform reports one aspect
                      * for the ad, and every card is cropped to it — so the ad's is passed down
@@ -196,11 +197,11 @@ export function CreativeCarousel({
                      */
                     aspect={preview.aspect ?? null}
                   />
-                ) : current.image_url || current.thumbnail_url ? (
+                ) : cardPoster(current) !== null ? (
                   <img
-                    src={(current.image_url ?? current.thumbnail_url) as string}
+                    src={cardPoster(current) as string}
                     alt={current.headline ?? `${t.card} ${active + 1}`}
-                    loading={imageLoading((current.image_url ?? current.thumbnail_url) as string)}
+                    loading={imageLoading(cardPoster(current) as string)}
                     className="max-h-72 w-auto max-w-full rounded object-contain"
                   />
                 ) : (
@@ -245,10 +246,14 @@ export function CreativeCarousel({
                   >
                     {card.thumbnail_url || card.image_url ? (
                       <img
-                        src={(card.thumbnail_url ?? card.image_url) as string}
+                        src={cardPoster(card) as string}
                         alt=""
-                        loading={imageLoading((card.thumbnail_url ?? card.image_url) as string)}
-                        className="h-14 w-14 object-cover"
+                        loading={imageLoading(cardPoster(card) as string)}
+                        /*
+                          CONTENT-PREVIEW-FIT-001 — a 56px strip tile is a row-picker, not the ad.
+                          It covers only where the shape is known to match, and contains otherwise.
+                        */
+                        className={`h-14 w-14 ${mediaFitClass(preview.aspect ?? null, 'square', 'thumb')}`}
                       />
                     ) : (
                       <span className="flex h-14 w-14 items-center justify-center bg-surface-hover text-xs text-text-secondary">

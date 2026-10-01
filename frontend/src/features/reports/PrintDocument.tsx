@@ -8,7 +8,7 @@ import { drawableFamilies, formatKpi, formatRankingValue, rankingMetricLabel, ty
 import { AttentionBlocks } from './AttentionBlocks'
 import { sectionShown, type ReportSectionKey } from './reportSections'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
-import { clientAbsence, readPreview } from '@/features/content/adPreview'
+import { clientAbsence, posterSource, readPreview } from '@/features/content/adPreview'
 import type { CreativePreview } from '@/features/content/api'
 import { PrintPlatformDrilldowns } from './PrintPlatformDrilldowns'
 import { reportPageTitle } from './sharedBranding'
@@ -233,17 +233,27 @@ export function PrintDocument({
     carries a picture, and the other three carry their own sentence rather than an empty frame.
   */
   const adRows = ((data.ads ?? []) as AdRow[]).slice(0, 12).map((ad) => {
-    const preview = (ad.preview ?? null) as { state?: string; thumbnail_url?: string | null; image_url?: string | null } | null
-    const usable = preview?.state === 'available' ? (preview.thumbnail_url ?? preview.image_url ?? null) : null
+    /*
+      CONTENT-PREVIEW-FIT-001 §14 — the SAME resolver the library asks, not a second chain.
+
+      This read `thumbnail_url ?? image_url` off the envelope, and `readPreview` knows three things
+      that chain does not: a video whose poster is the only thing that arrived, a collection whose
+      hero is a film, and a catalog ad that is missing nothing by design. So the printed deck could
+      show an empty cell for a creative the library draws a picture of — «one creative, same period,
+      same scope» failing on the one document a client keeps.
+
+      The absence sentence below has always come from the shared reading. Only the picture did not.
+    */
+    const reading = readPreview(ad.preview as CreativePreview | null | undefined, false)
 
     return {
-      thumb: usable,
+      thumb: posterSource(reading),
       /*
        * CLIENT-DIAGNOSTIC-SEPARATION-001 — the forwarded file says a missing picture in the client's
        * words, as every other client surface does: never the server's operator note, and never how
        * our platform link failed.
        */
-      absence: clientAbsence(readPreview(ad.preview as CreativePreview | null | undefined, false), false).sentence,
+      absence: clientAbsence(reading, false).sentence,
       name: String(ad.name ?? '—'),
       provider: String(ad.provider ?? '—'),
       spend: ad.spend === null || ad.spend === undefined ? '—' : money(Number(ad.spend), currency),

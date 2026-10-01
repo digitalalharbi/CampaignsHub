@@ -253,6 +253,20 @@ export function readPreview(preview: CreativePreview | null | undefined, ar: boo
   return src ? { kind: 'image', src, note: null } : { kind: 'none', reason: 'no_media', note: note(preview) }
 }
 
+/**
+ * A carousel or collection CARD's own still — the one poster chain `readPreview` does not own.
+ *
+ * `readPreview` resolves the AD's media from its envelope. A card inside a carousel is a different
+ * object with its own three urls, and two surfaces were spelling its chain out by hand — which is
+ * how one of them came to prefer `image_url` and the other `thumbnail_url` for the same card.
+ *
+ * The order matches the envelope's: the file first, the listing thumbnail second. A card with only
+ * a film has no still at all, and says so by returning null rather than by borrowing the ad's.
+ */
+export function cardPoster(card: { image_url?: string | null; thumbnail_url?: string | null }): string | null {
+  return card.image_url ?? card.thumbnail_url ?? null
+}
+
 /** The still to draw for a reading — a video's poster, an image's file, or nothing. */
 export function posterSource(reading: PreviewReading): string | null {
   // A collection's HERO is a real frame and is drawn; the tiles beneath it are the part a still
