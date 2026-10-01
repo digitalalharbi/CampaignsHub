@@ -218,11 +218,21 @@ export function ReportsPage() {
         }
         badges={<ProvenanceBadge provenance={provenance} />}
         purpose={ar ? 'مستندات محفوظة قابلة للإنشاء والتصدير والإرسال' : 'Saved documents you can generate, export and send'}
+        /*
+         * ONE summary row, not two — §34.
+         *
+         * Adding these four to the head left the page drawing eight cards over the same four facts
+         * in two vocabularies: «فشل» above «فاشلة», «قيد المعالجة» twice. Seen in Arabic dark at
+         * 1440. The body row is gone and «مكتملة» rides along with the total, where it qualifies
+         * rather than competes — «is anything stuck or broken, and has it gone out» is the question
+         * this library is opened with.
+         */
         kpis={s === undefined ? undefined : (
           <>
             <StatCard
               label={ar ? 'التقارير' : 'Reports'}
               value={s.total.toLocaleString('en-US')}
+              hint={ar ? `${s.completed} مكتملة` : `${s.completed} completed`}
               tone="brand"
               dot
               testid="reports-kpi-total"
@@ -303,18 +313,6 @@ export function ReportsPage() {
           {ar ? 'اختر مشروعًا من الأعلى لعرض تقاريره وإنشاء رابط لحظي للعميل.' : 'Choose a project above to see its reports and create a live client link.'}
         </p>
       )}
-
-      {/* Summary */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          [ar ? 'الإجمالي' : 'Total', s?.total],
-          [ar ? 'مكتملة' : 'Completed', s?.completed],
-          [ar ? 'قيد المعالجة' : 'Processing', s?.processing],
-          [ar ? 'فاشلة' : 'Failed', s?.failed],
-        ].map(([label, v]) => (
-          <StatCard key={label as string} label={label as string} value={v ?? '—'} />
-        ))}
-      </div>
 
       {/* Section switcher — the documents themselves vs the schedules that produce them. */}
       <div className="inline-flex rounded-xl border border-border bg-surface-secondary p-1">
