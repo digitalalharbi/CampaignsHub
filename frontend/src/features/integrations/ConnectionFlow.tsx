@@ -11,6 +11,7 @@ import { Num } from '@/components/ui/Num'
 import { Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { platformColor } from '@/features/analytics/components'
+import { platformLabel } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
 
 /** The three stages a reader is asked to move through, and nothing else. */
@@ -76,9 +77,19 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
     ? (hasParent ? ['parent', 'accounts'] : ['accounts'])
     : (hasParent ? ['login', 'parent', 'accounts'] : ['login', 'accounts'])
 
-  const label = connection !== null
-    ? (ar ? connection.label_ar : connection.label)
-    : provider !== null ? (ar ? provider.label_ar : provider.label) : ''
+  const providerKeyForLabel = connection?.provider ?? provider?.key ?? ''
+
+  /*
+   * The dialog names the PLATFORM, and the hub's rows keep naming the interface.
+   *
+   * Both are right in their own place. A row on the hub is one AUTHORISATION, and «واجهة سناب شات
+   * الإعلانية» is what was authorised. This dialog asks «which platform are you connecting» and ends
+   * in a receipt somebody reads once — «تم ربط إعلانات ChatGPT», not «تم ربط واجهة OpenAI
+   * الإعلانية», which is the name of an API rather than the thing they just connected.
+   *
+   * From the canonical labels, so it cannot drift from what every other surface calls the platform.
+   */
+  const label = platformLabel(providerKeyForLabel, ar)
 
   const providerKey = connection?.provider ?? provider?.key ?? ''
   const connectionId = connection?.id ?? openedByKey

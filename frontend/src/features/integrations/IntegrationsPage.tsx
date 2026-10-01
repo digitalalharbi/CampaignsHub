@@ -13,7 +13,7 @@ import { AccountsPanel } from './AccountsPanel'
 import { StoresPanel } from '@/features/commerce/StoresPanel'
 import { Button } from '@/components/ui/Button'
 import { platformColor } from '@/features/analytics/components'
-import { sortByPlatform } from '@/lib/platforms'
+import { platformLabel, sortByPlatform } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
 
@@ -277,8 +277,10 @@ function ProviderPicker({ providers, ar, onPick, onClose }: {
                 >
                   <span className="h-7 w-1 shrink-0 rounded-full" style={{ background: platformColor(provider.key) }} aria-hidden />
                   <span className="flex min-w-0 flex-col">
+                    {/* «اختر المنصة» lists platforms. The interface's own name belongs on a hub row,
+                        which describes one authorisation, not here. */}
                     <span className="truncate text-sm font-semibold text-text-primary">
-                      {ar ? provider.label_ar : provider.label}
+                      {platformLabel(provider.key, ar)}
                     </span>
                     <span className="truncate text-xs text-text-secondary">
                       {provider.auth === 'api_key'

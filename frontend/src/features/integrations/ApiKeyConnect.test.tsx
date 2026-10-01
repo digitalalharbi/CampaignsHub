@@ -91,8 +91,13 @@ describe('connecting a provider that issues the advertiser a key', () => {
       connections: [],
       connectable: [{
         key: 'openai_ads',
-        label: 'ChatGPT Ads',
-        label_ar: 'إعلانات ChatGPT',
+        /*
+          The CATALOGUE's labels, which is what the hub actually sends — the interface's name, not
+          the platform's. The row is expected to render «إعلانات ChatGPT» anyway, and with the
+          platform name in the fixture this test passed by echoing it back.
+        */
+        label: 'OpenAI Advertiser API',
+        label_ar: 'واجهة OpenAI الإعلانية',
         kind: 'advertising',
         // No consent screen, and no parent layer: OpenAI publishes no Business Centre, Portfolio or
         // Manager Account for advertising.
