@@ -17,6 +17,15 @@ export interface ProjectSummary {
   data_last_synced_at: string | null
   team_members: number
   /**
+   * Campaigns running in this project — canonical rows, not a guess from metrics.
+   *
+   * Accounts say what it is CONNECTED to; this says what is actually running in it. A directory
+   * that shows the first without the second cannot tell a client being managed from one that was
+   * set up and forgotten. Optional, because an older cached response has no such key and a row that
+   * throws on a missing field takes the page down the first time one is replayed.
+   */
+  campaigns?: number
+  /**
    * Three named states, never a score: nothing bound, bound and never heard from, or quiet too long.
    * Each one names something to go and do — which is what a badge has to do to stay worth seeing.
    */
@@ -200,6 +209,23 @@ export interface PortfolioOverview {
     comparable: boolean
   }
   attention: { total: number; by_state: Record<string, number> }
+  /**
+   * PORTFOLIO-VISUAL-001 §9 — what HAPPENED and where it came from, per currency.
+   *
+   * Per currency for the same reason the totals are: a line whose points are two currencies added
+   * together is a shape, not a measurement. A day with no row is ABSENT from `points` rather than
+   * drawn as zero — a missing measurement is not a measured nothing, and on a portfolio the usual
+   * cause is a sync that has not landed.
+   */
+  trend: {
+    by_currency: Array<{ currency: string; points: Array<{ date: string; spend: number }> }>
+  }
+  /** Ranked, so «who moved it» is answered by the first rows rather than by reading all of them. */
+  contribution: {
+    by_currency: Array<{ currency: string; projects: Array<{ id: string; name: string; spend: number }> }>
+  }
+  /** Canonical campaign rows, so «spend but no campaign» is a state the page can show honestly. */
+  campaigns: { total: number; by_project: Record<string, number> }
 }
 
 export function fetchPortfolioOverview(range?: { from: string; to: string }): Promise<PortfolioOverview> {

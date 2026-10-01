@@ -8,6 +8,8 @@ import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { money, ratio } from '@/features/analytics/format'
 import { Skeleton } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
+import { Badge } from '@/components/ui/Badge'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
 import { clients as countedClients } from '@/lib/counted'
 import { CreativePulseSection } from '@/features/content/CreativePulseSection'
@@ -176,24 +178,47 @@ export function AgencyDashboardPage() {
 
   return (
     <div className="w-full">
-      <header className="mb-5">
-        <h1 className="font-heading text-3xl font-extrabold tracking-tight text-text-primary">
-          {ar ? 'لوحة الوكالة' : 'Agency overview'}
-        </h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          {ar
+      {/*
+        PRODUCT-VISUAL-001 §4 §34 — the same head as every other surface, and not a hero.
+
+        This opened with a 3xl heading and a sentence, which is a third of the first screen spent
+        saying the name of a page the reader navigated to deliberately. The heading is now the
+        product's standard size, and the space goes to the one thing the old head could not say:
+        the SCOPE these figures cover, beside the title rather than in a banner below it.
+      */}
+      <div className="mb-4">
+        <PageIntro
+          testid="agency-intro"
+          title={ar ? 'لوحة الوكالة' : 'Agency overview'}
+          badges={
+            <Badge tone={d.scope.is_restricted ? 'warning' : 'neutral'} data-testid="agency-scope">
+              {d.scope.is_restricted
+                ? (ar ? `${countedClients(d.scope.client_count, 'ar')} من العملاء` : countedClients(d.scope.client_count, 'en'))
+                : (ar ? 'كل العملاء' : 'All clients')}
+            </Badge>
+          }
+          purpose={ar
             ? 'كل رقم هنا محسوب على العملاء الذين تصل إليهم فعليًا — لا أكثر.'
             : 'Every figure here covers the clients you can actually reach — and no others.'}
-        </p>
-      </header>
+        />
+      </div>
 
-      {/* States the boundary before the numbers, so a subset is never read as the whole agency. */}
+      {/*
+        The boundary, stated before the numbers — but only where it IS one.
+
+        An unrestricted reader was shown a banner saying the figures cover the whole agency, which
+        is what an unqualified figure already means: a line of reassurance that costs a row on every
+        load and tells nobody anything. A RESTRICTED membership is different — a subset read as the
+        whole agency is the misreading this banner exists to prevent — so that one stays, and the
+        chip in the head carries the fact in both cases.
+      */}
       <div
         data-testid="agency-scope-banner"
+        hidden={!d.scope.is_restricted}
         className={`mb-4 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm ${
           d.scope.is_restricted
             ? 'border-info/30 bg-info/10 text-text-primary'
-            : 'border-border bg-surface-secondary text-text-secondary'
+            : 'hidden'
         }`}
       >
         <ShieldCheck size={17} className="mt-0.5 shrink-0 text-info" aria-hidden />

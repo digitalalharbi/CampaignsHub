@@ -66,6 +66,7 @@ final class ProjectListSummary
 
         $bindings = $this->bindings($ids);
         $teams = $this->teams($ids);
+        $campaigns = $this->campaigns($ids);
 
         $out = [];
         foreach ($ids as $id) {
@@ -77,6 +78,15 @@ final class ProjectListSummary
                 'providers' => $b['providers'],
                 'data_last_synced_at' => $b['last_synced_at'],
                 'team_members' => $teams[$id] ?? 0,
+                /*
+                 * PRODUCT-VISUAL-001 §10 — how much work this client actually has.
+                 *
+                 * Accounts say what it is CONNECTED to; campaigns say what is running in it, and a
+                 * project directory that shows the first without the second cannot tell a client
+                 * being managed from one that was set up and forgotten. Canonical rows, not a guess
+                 * from metrics, so «connected, and nothing running» stays a state the page can show.
+                 */
+                'campaigns' => $campaigns[$id] ?? 0,
                 'attention' => $this->attention($b),
             ];
         }
@@ -158,5 +168,30 @@ final class ProjectListSummary
         return Carbon::parse($b['last_synced_at'])->lt(now()->subHours(self::STALE_AFTER_HOURS))
             ? 'stale'
             : null;
+    }
+
+    /**
+     * Campaigns per project, from the canonical rows.
+     *
+     * Unlinked rows are excluded: a campaign that was moved off this project is not this project's
+     * work any more, and counting it would keep a finished engagement looking busy for ever.
+     *
+     * @param  list<string>  $ids
+     * @return array<string,int>
+     */
+    private function campaigns(array $ids): array
+    {
+        $rows = DB::table('external_campaigns')
+            ->whereIn('project_id', $ids)
+            ->whereNull('unlinked_at')
+            ->groupBy('project_id')
+            ->get(['project_id', DB::raw('count(*) as total')]);
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[(string) $row->project_id] = (int) $row->total;
+        }
+
+        return $out;
     }
 }

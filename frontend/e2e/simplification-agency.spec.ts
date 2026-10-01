@@ -59,9 +59,26 @@ test.describe('the agency rail', () => {
     await expect(nav).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
 
     const text = await nav.innerText()
-    for (const group of ['العملاء والمشاريع', 'الحملات', 'المهام والطلبات', 'التقارير والملفات', 'المالية', 'الإعدادات']) {
+    /*
+     * NAV-IA-001 split «العملاء والمشاريع» and renamed «الحملات».
+     *
+     * «المشاريع» and «جميع المشاريع» were siblings inside the old combined group — two labels
+     * differing by one word, which a reader chooses between by guessing. Projects is its own
+     * category now, with «القائمة» and «الملخص» inside it, and «الحملات والمحتوى» names both its
+     * halves so its first child stops repeating the heading.
+     *
+     * The claim under test is unchanged: every group is named for a job, and none of them is a
+     * catch-all. The list is the current set of jobs.
+     */
+    for (const group of ['العملاء', 'المشاريع', 'الحملات والمحتوى', 'المهام والطلبات', 'التقارير والملفات', 'المالية', 'الإعدادات']) {
       expect(text, `the rail is missing the «${group}» group`).toContain(group)
     }
+
+    // The two destinations of the projects category, named for the VIEW rather than the subject.
+    expect(text, 'the projects category lost one of its two views').toContain('القائمة')
+    expect(text, 'the projects category lost one of its two views').toContain('الملخص')
+    // And the sibling pair it replaced must not return.
+    expect(text, 'the old «جميع المشاريع» sibling is back').not.toContain('جميع المشاريع')
 
     // «العمل» and «التشغيل» were the two headings that described nothing; they must not return.
     expect(text, 'the rail still has the old catch-all groups').not.toMatch(/^\s*العمل\s*$/m)

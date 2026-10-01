@@ -43,19 +43,29 @@ export const appNavGroups: readonly NavGroup[] = [
     leaves: [{ to: '/app/dashboard', ar: 'لوحة التحكم', en: 'Dashboard', icon: LayoutDashboard, ent: 'dashboard' }],
   },
   {
+    /*
+     * NAV-IA-001 — ONE projects category, and its children are short.
+     *
+     * «المشاريع» and «جميع المشاريع» were siblings in «العمل». Two entries whose labels differ by one
+     * word read as two versions of the same place, so a reader chooses by guessing — and they are
+     * not two versions of anything: one is the directory of projects, the other is the portfolio
+     * scope. A parent that is a GROUP rather than a destination says so, and the children are named
+     * for the two ways of looking rather than repeating the subject.
+     *
+     * PORTFOLIO-SCOPE-001 §36 is untouched: the scope is still entered by its own address and the
+     * page still says «جميع المشاريع» where the figures are.
+     */
+    key: 'projects',
+    ar: 'المشاريع', en: 'Projects', icon: FolderKanban,
+    leaves: [
+      { to: '/app/projects', ar: 'القائمة', en: 'List', icon: ListChecks, ent: 'projects' },
+      { to: '/app/portfolio', ar: 'الملخص', en: 'Overview', icon: Layers, ent: 'projects' },
+    ],
+  },
+  {
     key: 'work',
     ar: 'العمل', en: 'Work', icon: Megaphone,
     leaves: [
-      { to: '/app/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban, ent: 'projects' },
-      /*
-       * PORTFOLIO-SCOPE-001 §36 — the agency scope is ENTERED, not inferred.
-       *
-       * Beside «المشاريع» rather than inside it, and with its own icon, because it is not one of
-       * them: «جميع المشاريع» answers an agency question and a project answers a client's. Leaving
-       * it off the rail is what turns «all projects» into something people arrive at by clearing a
-       * filter — which is the state this whole unit exists to remove.
-       */
-      { to: '/app/portfolio', ar: 'جميع المشاريع', en: 'All projects', icon: Layers, ent: 'projects' },
       { to: '/app/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone, ent: 'campaigns' },
       { to: '/app/content', ar: 'المحتويات', en: 'Content', icon: Images, ent: 'content' },
       /*

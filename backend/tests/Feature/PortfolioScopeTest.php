@@ -114,7 +114,7 @@ final class PortfolioScopeTest extends TestCase
         $this->project($this->acme, 'Q3 Launch', 'active');
         $this->project($this->beta, 'Q3 Launch', 'active');
 
-        $data = $this->portfolio($this->userWith(['projects.view', 'projects.view.all']));
+        $data = $this->portfolio($this->agencyWide);
 
         $sameName = array_values(array_filter(
             $data['projects']['items'],
@@ -274,6 +274,108 @@ final class PortfolioScopeTest extends TestCase
     // ── fixtures ──────────────────────────────────────────────────────────────────────────────
 
     /** @return array<string,mixed> */
+    /**
+     * PORTFOLIO-VISUAL-001 §9 — the page must be able to say WHAT HAPPENED, not only «how much».
+     *
+     * A trend per currency, because a line whose points are two currencies added together is a
+     * shape and not a measurement — the same rule the totals already obey, applied to the series.
+     */
+    public function test_the_trend_is_a_series_per_currency_and_never_one_line_across_them(): void
+    {
+        $client = $this->acme;
+        $sar = $this->project($client, 'Riyadh', 'active');
+        $usd = $this->project($client, 'Dubai', 'active');
+
+        $this->spend($sar, 'SAR', 100, null, Carbon::today()->subDays(3)->toDateString());
+        $this->spend($sar, 'SAR', 150, null, Carbon::today()->subDays(2)->toDateString());
+        $this->spend($usd, 'USD', 40, null, Carbon::today()->subDays(2)->toDateString());
+
+        $trend = $this->portfolio($this->agencyWide)['trend']['by_currency'];
+
+        $this->assertSame(['SAR', 'USD'], array_column($trend, 'currency'));
+        $this->assertCount(2, $trend[0]['points']);
+        $this->assertEqualsWithDelta(100.0, (float) $trend[0]['points'][0]['spend'], 0.01);
+        $this->assertEqualsWithDelta(150.0, (float) $trend[0]['points'][1]['spend'], 0.01);
+        $this->assertCount(1, $trend[1]['points']);
+    }
+
+    /** A day nobody reported is a GAP, not a zero: a missing measurement is not a measured nothing. */
+    public function test_a_day_with_no_row_is_absent_rather_than_drawn_as_zero(): void
+    {
+        $client = $this->acme;
+        $project = $this->project($client, 'Riyadh', 'active');
+
+        $this->spend($project, 'SAR', 100, null, Carbon::today()->subDays(5)->toDateString());
+        $this->spend($project, 'SAR', 120, null, Carbon::today()->subDays(1)->toDateString());
+
+        $points = $this->portfolio($this->agencyWide)['trend']['by_currency'][0]['points'];
+
+        $this->assertCount(2, $points);
+    }
+
+    /** «Who moved it» — ranked, per currency, and never across currencies. */
+    public function test_contribution_ranks_the_projects_that_produced_the_spend(): void
+    {
+        $client = $this->acme;
+        $small = $this->project($client, 'Small', 'active');
+        $big = $this->project($client, 'Big', 'active');
+
+        $this->spend($small, 'SAR', 100);
+        $this->spend($big, 'SAR', 900);
+
+        $contribution = $this->portfolio($this->agencyWide)['contribution']['by_currency'];
+
+        $this->assertSame('SAR', $contribution[0]['currency']);
+        $this->assertSame(['Big', 'Small'], array_column($contribution[0]['projects'], 'name'));
+        $this->assertEqualsWithDelta(900.0, (float) $contribution[0]['projects'][0]['spend'], 0.01);
+    }
+
+    /**
+     * ACCOUNT-SCOPE-ISOLATION-001 — the visuals obey the rule the totals obey.
+     *
+     * A deselected account's spend is absent from the total already; a trend or a contribution bar
+     * that still counted it would put the same money back on the page in a different shape.
+     */
+    public function test_a_deselected_accounts_spend_is_absent_from_the_trend_and_the_contribution(): void
+    {
+        $client = $this->acme;
+        $project = $this->project($client, 'Riyadh', 'active');
+
+        $this->spend($project, 'SAR', 500, $this->boundAccount($project, 'act_live', true));
+        $this->spend($project, 'SAR', 900, $this->boundAccount($project, 'act_dropped', false));
+
+        $data = $this->portfolio($this->agencyWide);
+
+        $this->assertEqualsWithDelta(500.0, (float) $data['trend']['by_currency'][0]['points'][0]['spend'], 0.01);
+        $this->assertEqualsWithDelta(500.0, (float) $data['contribution']['by_currency'][0]['projects'][0]['spend'], 0.01);
+    }
+
+    /** Campaign counts are the canonical rows, so «spend but no campaign» is a state the page can show. */
+    public function test_campaigns_are_counted_from_the_canonical_rows(): void
+    {
+        $client = $this->acme;
+        $project = $this->project($client, 'Riyadh', 'active');
+
+        DB::table('external_campaigns')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'project_id' => $project->id,
+            'client_workspace_id' => $client->id,
+            'external_account_id' => $this->boundAccount($project, 'act_campaigns', true),
+            'provider' => 'snapchat',
+            'external_id' => 'c-1',
+            'name' => 'Campaign',
+            'status' => 'ACTIVE',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $campaigns = $this->portfolio($this->agencyWide)['campaigns'];
+
+        $this->assertSame(1, $campaigns['total']);
+        $this->assertSame(1, $campaigns['by_project'][(string) $project->id]);
+    }
+
     private function portfolio(User $user): array
     {
         return $this->actingAs($user, 'sanctum')
@@ -342,7 +444,7 @@ final class PortfolioScopeTest extends TestCase
         ]);
     }
 
-    private function spend(Project $project, string $currency, float $amount, ?string $accountId = null): void
+    private function spend(Project $project, string $currency, float $amount, ?string $accountId = null, ?string $date = null): void
     {
         DB::table('daily_metrics')->insert([
             'id' => (string) Str::uuid(),
@@ -359,7 +461,7 @@ final class PortfolioScopeTest extends TestCase
             'source_type' => 'api',
             'is_demo' => false,
             'metric_key' => 'spend',
-            'metric_date' => Carbon::today()->subDay()->toDateString(),
+            'metric_date' => $date ?? Carbon::today()->subDay()->toDateString(),
             'value' => $amount,
             'project_currency' => $currency,
             'original_currency' => $currency,
