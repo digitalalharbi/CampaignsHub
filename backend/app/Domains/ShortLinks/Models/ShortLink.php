@@ -34,29 +34,13 @@ final class ShortLink extends Model
 
     public const KIND_LINK = 'link';
 
-    /**
-     * SHORT-LINKS-LANDING-001 — the one landing page this product serves.
-     *
-     * A KEY, never a URL. A column holding an address would let a short link point a reader at a
-     * page this product does not serve, which is cloaking arriving through the back door; a key can
-     * only ever name a page that exists in this repository.
-     */
-    public const LANDING_VIDEO_REQUEST = 'video_request';
-
     protected $fillable = [
         'tenant_id', 'project_id', 'slug', 'kind', 'destination', 'source_value',
-        'clicks', 'cta_clicks', 'last_clicked_at', 'is_active', 'created_by', 'landing_page',
+        'clicks', 'last_clicked_at', 'is_active', 'created_by',
     ];
-
-    /** Whether following this slug opens a page the reader decides from, rather than forwarding. */
-    public function opensLandingPage(): bool
-    {
-        return $this->landing_page === self::LANDING_VIDEO_REQUEST;
-    }
 
     protected $casts = [
         'clicks' => 'integer',
-        'cta_clicks' => 'integer',
         'last_clicked_at' => 'datetime',
         'is_active' => 'boolean',
     ];

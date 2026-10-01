@@ -34,6 +34,7 @@ import { PublicInfoPage } from '@/features/marketing/PublicInfoPage'
 import { DataDeletionPage } from '@/features/marketing/DataDeletionPage'
 import { PublicServicesPage } from '@/features/marketing/PublicServicesPage'
 import { RequestIntakePage } from '@/features/requests/RequestIntakePage'
+import { VideoRequestLandingPage } from '@/features/marketing/VideoRequestLandingPage'
 import { RequestTrackPage } from '@/features/requests/RequestTrackPage'
 import { ClientRequestsPage } from '@/features/requests/portal/ClientRequestsPage'
 import { ClientRequestDetailPage } from '@/features/requests/portal/ClientRequestDetailPage'
@@ -153,6 +154,12 @@ export const router = createBrowserRouter(withErrorBoundary([
    */
   { path: '/reset-password', element: <ResetPasswordPage /> },
   { path: '/requests/new', element: <RequestIntakePage /> },
+  /*
+    SHORT-LINKS-LANDING-001 — the page a paid ad sends people to, at an address of its own.
+    Public and unauthenticated by nature: the reader has no account here and is not being asked for
+    one. The short link keeps forwarding exactly as it always did; this page's button points at it.
+  */
+  { path: '/videos', element: <VideoRequestLandingPage /> },
   { path: '/requests/track', element: <RequestTrackPage /> },
   // Public policy + company pages behind the footer links. One route with a slug so adding a page is a
   // content change, and an unknown slug renders a clear not-found state rather than a blank screen.
