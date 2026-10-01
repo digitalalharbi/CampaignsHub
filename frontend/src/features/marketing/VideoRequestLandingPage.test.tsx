@@ -51,6 +51,25 @@ describe('the video-request landing page', () => {
     expect(document.querySelector('form'), 'a conversion page grew a form').toBeNull()
   })
 
+  /**
+   * The tab is part of the page.
+   *
+   * `index.html` carries the product's title for every other address, and a reader who opens this
+   * one from an ad would see the product named above the page that deliberately does not name it.
+   */
+  it('renames the tab, and gives the name back when it leaves', () => {
+    document.title = 'كل حملاتك الإعلانية المدفوعة في مكان واحد — CampaignsHub'
+
+    const view = renderWithProviders(<VideoRequestLandingPage />, { locale: 'ar' })
+
+    expect(document.title).toBe('اطلب الفيديوهات بسهولة')
+    expect(document.title).not.toMatch(/CampaignsHub/i)
+
+    view.unmount()
+
+    expect(document.title, 'the rest of the product kept this page\'s title').toMatch(/CampaignsHub/)
+  })
+
   /** Arabic is the page's own, not whatever the last visitor left in storage. */
   it('states its own direction and language', () => {
     renderWithProviders(<VideoRequestLandingPage />, { locale: 'en' })

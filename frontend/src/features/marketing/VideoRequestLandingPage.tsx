@@ -1,4 +1,5 @@
 import { Check, MessageCircle, Video, Zap } from 'lucide-react'
+import { useEffect } from 'react'
 
 /**
  * SHORT-LINKS-LANDING-001 — the page an ad sends people to.
@@ -39,7 +40,30 @@ import { Check, MessageCircle, Video, Zap } from 'lucide-react'
  */
 const ORDER_LINK = 'https://wa.me/966553190369'
 
+/**
+ * What the browser tab says.
+ *
+ * `index.html` carries the product's own title, which is right for every other address and wrong
+ * here: the owner asked that this page carry no system details, and the tab is the one place a
+ * reader sees them without scrolling.
+ *
+ * The limit is worth stating rather than hiding: this runs in the browser, so a link-preview
+ * crawler that does not execute scripts still reads the document's static `og:` tags. Giving this
+ * one path its own static head means an edge rule or a server-rendered document, which is the
+ * coupling that was just removed. An ad click opens the page, where this title applies.
+ */
+const PAGE_TITLE = 'اطلب الفيديوهات بسهولة'
+
 export function VideoRequestLandingPage() {
+  useEffect(() => {
+    const previous = document.title
+    document.title = PAGE_TITLE
+
+    return () => {
+      document.title = previous
+    }
+  }, [])
+
   return (
     /*
       `dir="rtl"` and `lang="ar"` on the page itself rather than inherited.
