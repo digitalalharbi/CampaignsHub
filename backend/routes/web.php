@@ -75,3 +75,14 @@ Route::get('/demo/{path}', [AppMediaController::class, 'show'])
 Route::get('/l/{slug}', [ShortLinkHopController::class, 'redirect'])
     ->where('slug', ShortLinkHops::slugPattern())
     ->name('short-links.hop');
+
+/*
+ * SHORT-LINKS-LANDING-001 — the button on a landing page, which is a DECISION rather than a visit.
+ *
+ * Under `/l/` on purpose: the edge already sends that prefix to this application (`location /l/` in
+ * `deploy/nginx-spa.conf`), and a second prefix would be a second thing to configure on a server
+ * before the feature works at all.
+ */
+Route::get('/l/{slug}/go', [ShortLinkHopController::class, 'go'])
+    ->where('slug', ShortLinkHops::slugPattern())
+    ->name('short-links.cta');
