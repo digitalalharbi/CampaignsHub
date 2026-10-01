@@ -105,6 +105,24 @@ describe('connecting a provider that issues the advertiser a key', () => {
     keyed.fail = null
   })
 
+  /**
+   * The row says which act pressing it begins.
+   *
+   * A reader who expected a consent screen and met a key box goes looking for the key with the
+   * dialog open; one told beforehand brings it.
+   */
+  it('says how the provider connects before it is pressed', async () => {
+    // Arabic explicitly: it is the product's default, and the row is read there first.
+    renderWithProviders(<IntegrationsPage />, { locale: 'ar' })
+    fireEvent.click(await screen.findByTestId('hub-connect-empty'))
+
+    const row = await screen.findByTestId('provider-pick-openai_ads')
+
+    expect(row).toHaveTextContent('إعلانات ChatGPT')
+    expect(row).toHaveTextContent('بمفتاح واجهة تملكه')
+    expect(row.textContent).not.toMatch(/تسجيل الدخول لدى المنصة/)
+  })
+
   /** **The defect this prevents.** A provider with no consent screen offered a trip to one. */
   it('asks for the key instead of sending the reader to a consent screen', async () => {
     await openTheFlow()
