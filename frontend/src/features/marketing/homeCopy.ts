@@ -47,6 +47,15 @@ export interface HomeCopy {
    * demo whose arithmetic does not add up teaches a visitor to distrust the real thing.
    */
   dashboard: {
+    /**
+     * PRODUCT-PREVIEW-001 — the three facts that make this a product and not an analytics page.
+     *
+     * The preview showed spend, campaigns, platforms, budgets and reports: everything a reporting
+     * tool shows. What a reader could not see is that this product organises accounts by CLIENT,
+     * knows how old its figures are, and says when something needs a person. Those three are the
+     * difference between «a dashboard» and «a place paid media is run from», and they cost one line.
+     */
+    estate: { projects: string; freshness: string; attention: string }
     dateRange: string
     /** Which objective these figures cover — comparing across objectives would be misleading. */
     objectiveLabel: string
@@ -224,6 +233,7 @@ const ar: HomeCopy = {
     ],
   },
   dashboard: {
+    estate: { projects: '4 عملاء · 11 حسابًا إعلانيًا', freshness: 'آخر مزامنة قبل 12 دقيقة', attention: 'حساب واحد يحتاج انتباه' },
     dateRange: '1 أبريل — 25 مايو 2026',
     objectiveLabel: 'هدف: المبيعات — تُقارن الحملات ضمن الهدف نفسه فقط',
     demoBadge: 'معاينة توضيحية ببيانات تجريبية',
@@ -563,6 +573,7 @@ const en: HomeCopy = {
     ],
   },
   dashboard: {
+    estate: { projects: '4 clients · 11 ad accounts', freshness: 'Last synced 12 minutes ago', attention: '1 account needs attention' },
     dateRange: '1 April — 25 May 2026',
     objectiveLabel: 'Objective: Sales — campaigns are compared within one objective only',
     demoBadge: 'Illustrative preview with demo data',

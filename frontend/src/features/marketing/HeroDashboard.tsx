@@ -1,4 +1,4 @@
-import { CalendarDays, Info, TrendingDown, TrendingUp } from 'lucide-react'
+import { CalendarDays, Info, RefreshCw, TrendingDown, TrendingUp, TriangleAlert, Users } from 'lucide-react'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { brand } from '@/lib/brand'
 import { useUi } from '@/stores/ui'
@@ -212,6 +212,25 @@ export function HeroDashboard({ c }: { c: HomeCopy }) {
             <span className="min-w-0 flex-1 truncate text-[10px] text-white/70">{d.reports[0].name}</span>
             <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[9px] text-white/55">{d.reports[0].when}</span>
           </div>
+        </div>
+
+        {/*
+          PRODUCT-PREVIEW-001 — the line that says this is not an analytics page.
+
+          Everything above it — spend, campaigns, platforms, budgets, reports — a reporting tool also
+          shows. These three do not: accounts are organised by CLIENT, the figures know how old they
+          are, and something is flagged when it needs a person. That is the product, and it costs one
+          line to show rather than claim.
+
+          Not a fourth panel: the preview has to stay a wide rectangle that fits without scrolling.
+        */}
+        <div
+          data-testid="preview-estate"
+          className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5 text-[9.5px]"
+        >
+          <span className="flex items-center gap-1 text-white/70"><Users size={10} className="text-brand-300" /> {d.estate.projects}</span>
+          <span className="flex items-center gap-1 text-white/55"><RefreshCw size={10} className="text-white/35" /> {d.estate.freshness}</span>
+          <span className="flex items-center gap-1 text-warning"><TriangleAlert size={10} /> {d.estate.attention}</span>
         </div>
 
         <p className="flex items-center justify-center gap-1 pt-0.5 text-[9.5px] text-white/30">
