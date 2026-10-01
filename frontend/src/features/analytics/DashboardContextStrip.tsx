@@ -56,7 +56,7 @@ export function DashboardContextStrip() {
       carries the period and the freshness — not above them with a frame around it.
     */
     <span data-testid="dashboard-context-strip" className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span className="flex items-center gap-1.5 text-[11.5px] font-bold text-text-muted">
+      <span className="flex items-center gap-1.5 text-[11px] font-bold text-text-muted">
         <Plug size={13} aria-hidden /> {ar ? 'يغذّي هذه الصفحة' : 'Feeding this page'}
       </span>
 
