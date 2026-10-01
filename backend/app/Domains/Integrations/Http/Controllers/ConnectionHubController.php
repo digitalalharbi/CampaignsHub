@@ -73,6 +73,18 @@ final class ConnectionHubController extends Controller
             ->whereNotIn('status', ['disconnected'])
             ->orderBy('provider')
             ->orderBy('created_at')
+            /*
+             * A tiebreaker, because `created_at` is not unique.
+             *
+             * Two authorisations for one provider opened in the same second share a timestamp, and
+             * Postgres is then free to return them in either order — so the hub shuffled two rows
+             * between refreshes, and the test asserting their order failed on CI about half the time
+             * while passing locally.
+             *
+             * The id is arbitrary but STABLE, which is the whole requirement: a list a reader
+             * returns to should be in the order they left it.
+             */
+            ->orderBy('id')
             ->get();
 
         /*
