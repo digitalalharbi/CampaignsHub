@@ -17,7 +17,7 @@ use Illuminate\Support\Collection;
  *
  * A **click id** (`gclid`, `fbclid`, `ttclid`, …) is minted by the platform at the moment of the
  * click. It proves the visit came from THAT PLATFORM, and it proves nothing about which campaign —
- * resolving one to a campaign requires the platform's own click-lookup API, which none of the six
+ * resolving one to a campaign requires the platform's own click-lookup API, which none of them
  * offers for this purpose. So a click id gives platform-level attribution and stops there.
  *
  * A **utm_campaign** is typed by whoever built the link. It names a campaign, which is exactly what a

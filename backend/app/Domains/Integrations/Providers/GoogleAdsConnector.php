@@ -14,7 +14,7 @@ use Illuminate\Support\Carbon;
 /**
  * Google Ads API (REST).
  *
- * The only one of the six with a query LANGUAGE rather than endpoints: campaigns and metrics both come
+ * The only provider here with a query LANGUAGE rather than endpoints: campaigns and metrics both come
  * from `googleAds:searchStream` with GAQL, and the response is a STREAM — a JSON array of chunks, each
  * with its own `results` — so a reader that expects one object silently sees the first chunk and drops
  * the rest. That is the whole reason `stream()` exists below.

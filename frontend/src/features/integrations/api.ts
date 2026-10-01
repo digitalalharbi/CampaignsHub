@@ -1,7 +1,7 @@
 import { ensureCsrfCookie, getData, postData, putData } from '@/lib/api/client'
 
 /**
- * The states one of the six ad platforms can honestly be in, as a TENANT sees them (INTEG-UI-001).
+ * The states one of the ad platforms can honestly be in, as a TENANT sees them (INTEG-UI-001).
  *
  * `disconnected` is not a failure: the platform is configured and simply nobody has authorised it
  * yet. Collapsing it into `awaiting_credentials` — the shape this page had before — told an operator

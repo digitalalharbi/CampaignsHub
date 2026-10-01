@@ -91,7 +91,7 @@ final class PlatformCredentials
          * They are not advertising platforms, and `ProviderCatalogue` keeps them described as
          * themselves. But «may we call this provider at all?» is the SAME question for a store as for
          * an ad account, and the answer has to have one definition: the moment a second credentials
-         * class existed, `isConfigured()` would mean one thing for six providers and something
+         * class existed, `isConfigured()` would mean one thing for the advertising providers and something
          * slightly laxer for the other two.
          *
          * So only the protocol half is chosen by kind — `ad_platforms.php` or `commerce_platforms.php`
@@ -119,7 +119,7 @@ final class PlatformCredentials
         ]);
     }
 
-    /** @return list<string> the six platform keys, in the products order */
+    /** @return list<string> the platform keys, in the product's order — the count is the list's to state */
     public static function keys(): array
     {
         return AdPlatforms::ORDER;

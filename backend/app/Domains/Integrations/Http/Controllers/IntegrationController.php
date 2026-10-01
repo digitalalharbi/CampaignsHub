@@ -92,12 +92,12 @@ final class IntegrationController extends Controller
         /*
          * INTEG-STORES-001 — the store providers belong on this page too.
          *
-         * The comment above says «the eight, and only the eight», and this loop walked the ADVERTISING
-         * registry, which holds six. Salla and Zid are declared in the same `ProviderCatalogue`, carry
+         * The comment above says «every catalogued provider, and only those», and this loop walked the
+         * ADVERTISING registry alone. Salla and Zid are declared in the same `ProviderCatalogue`, carry
          * the same credential fields and the same webhook configuration — and appeared nowhere on the
          * Integration Center. They were reachable only through a separate Stores panel, so a customer
-         * looking at «integrations» saw six of the eight things this product integrates with and had
-         * no way to know the other two existed.
+         * looking at «integrations» saw the advertising half of what this product integrates with and
+         * had no way to know the stores existed.
          *
          * They are appended rather than merged into the loop above because a store is not an ad
          * account: it has no `ad_account_id` and none of the five ad-platform states. Giving it those
@@ -125,7 +125,7 @@ final class IntegrationController extends Controller
     }
 
     /**
-     * The five states one of the six ad platforms can honestly be in, from a TENANT's point of view.
+     * The five states one of the ad platforms can honestly be in, from a TENANT's point of view.
      *
      * They are answers to five different questions, which is why one status string could not carry
      * them, and each admits a different action:
@@ -150,7 +150,8 @@ final class IntegrationController extends Controller
      * list still exists, on the one screen whose reader can act on it.
      *
      * A platform with no entry in `config/ad_platforms.php` gets nothing here; this block belongs
-     * only to the six, and the sandbox and analytics connectors keep their own simpler shape.
+     * only to the real ad platforms, and the sandbox and analytics connectors keep their own simpler
+     * shape.
      *
      * @return array<string,mixed>
      */

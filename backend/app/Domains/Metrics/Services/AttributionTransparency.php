@@ -252,7 +252,7 @@ final class AttributionTransparency
      * ## What it is not
      *
      * It is not identity-level attribution. There is no join between a click and a buyer here and
-     * there cannot be: conversions carry no order id, and none of the six platforms exposes a
+     * there cannot be: conversions carry no order id, and no ad platform here exposes a
      * click-to-order lookup — the same reason `dedup.platform_reported.status` is `not_possible`.
      *
      * ## Coverage is stated beside it, because it bounds how much the number means
@@ -325,7 +325,7 @@ final class AttributionTransparency
             'platform_reported' => [
                 'status' => 'not_possible',
                 'reason_ar' => 'التحويلات لا تحمل رقم طلب، ولا تتيح أي من المنصات الست ربط نقرة بطلبية. لا يمكن إثبات أن تحويلين من منصتين هما البيعة نفسها.',
-                'reason_en' => 'Conversions carry no order id, and none of the six platforms exposes a click-to-order lookup. Two conversions from two platforms cannot be proven to be one sale.',
+                'reason_en' => 'Conversions carry no order id, and no ad platform exposes a click-to-order lookup. Two conversions from two platforms cannot be proven to be one sale.',
                 'may_be_summed' => false,
             ],
             'store_confirmed' => [

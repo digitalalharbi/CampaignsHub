@@ -212,7 +212,7 @@ final class PlatformOverviewController extends Controller
             /*
              * A flat list of the project's linked sources, ad accounts and stores together.
              *
-             * The per-platform grouping above is organised around the six ad platforms; a store is
+             * The per-platform grouping above is organised around the ad platforms; a store is
              * not one of them and would have nowhere to appear. A project does not care which family
              * a source belongs to — it cares what feeds it.
              */

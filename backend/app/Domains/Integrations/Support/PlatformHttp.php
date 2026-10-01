@@ -26,7 +26,7 @@ use Illuminate\Support\Facades\Http;
  *
  * ## Why the backoff is what it is
  *
- * Exponential, and it honours `Retry-After` when the platform sends one — every one of the six does on
+ * Exponential, and it honours `Retry-After` when the platform sends one — every one of them does on
  * a 429, and ignoring it is how an integration goes from throttled to blocked. The delays are
  * deliberately longer than a web request would tolerate, which is exactly why syncs are queued: this
  * client is never on the path of somebody waiting for a page.
