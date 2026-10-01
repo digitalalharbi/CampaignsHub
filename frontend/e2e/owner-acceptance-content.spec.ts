@@ -217,9 +217,16 @@ test.describe('the content library reads as a content page', () => {
     const summary = page.getByTestId('content-summary')
     await expect(summary).toBeVisible({ timeout: 30000 })
 
-    /* Four figures. The other nine live on the creative's page and in the popup. */
+    /*
+     * Four figures — and this waits on a ROUND TRIP, so it gets a round trip's budget.
+     *
+     * `content-summary` is drawn from the first paint; the figures inside it arrive with the
+     * metrics. Counting them against expect's default five seconds is a guess about how fast the
+     * machine is, and in a full suite run it is the wrong guess: this reported «Expected 4 /
+     * Received 0» on a summary that fills a moment later.
+     */
     const figures = summary.getByTestId('content-summary-figures').locator('> div')
-    await expect(figures).toHaveCount(4)
+    await expect(figures).toHaveCount(4, { timeout: 20_000 })
 
     /* And the old thirteen-card strip is gone, not merely shrunk. */
     await expect(page.getByTestId('content-metrics')).toHaveCount(0)

@@ -1,5 +1,6 @@
-import { NavLink, Outlet } from 'react-router-dom'
-import { Building2, ExternalLink, Palette, Plug, Users } from 'lucide-react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { ExternalLink, Palette, Plug } from 'lucide-react'
+import { SETTINGS_TABS } from '@/features/settings/SettingsPage'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -7,12 +8,36 @@ import { useUi } from '@/stores/ui'
  * Personal settings (profile, password, security/sessions, language & appearance, personal
  * notifications) live under /account and are reachable ONLY from the account menu — never duplicated here.
  */
+/**
+ * SETTINGS-ONE-NAV-001 — the workspace's sections, listed HERE and nowhere else.
+ *
+ * `/settings/workspace` is one page holding five sections behind a `?tab=`, and it used to draw its
+ * own list of them. Beside this one. So a reader opening settings met two navigations in the same
+ * place for the same thing: «الإعدادات العامة» in this column and «عام» in the page's, both opening
+ * the same screen, with «العملاء», «المشاريع», «الإشعارات» and «الأمان» reachable only from the
+ * second — which made this column look like it was hiding most of settings.
+ *
+ * The sections come from `SETTINGS_TABS`, the page's own list, so the two cannot disagree about what
+ * exists or what it is called. SETTINGS-TAB-ADDRESS-001 already made the tab part of the address,
+ * which is what lets them be links at all.
+ */
+const WORKSPACE_SECTIONS = ['general', 'clients', 'projects', 'notifications', 'security'] as const
+
 const GROUPS = [
   {
     ar: 'مساحة العمل', en: 'Workspace',
     items: [
-      { to: '/settings/workspace', ar: 'الإعدادات العامة', en: 'General settings', icon: Building2 },
-      { to: '/settings/permissions', ar: 'الصلاحيات والفريق', en: 'Permissions & team', icon: Users },
+      ...WORKSPACE_SECTIONS.map((id) => {
+        const tab = SETTINGS_TABS.find((t) => t.id === id)!
+
+        return { to: `/settings/workspace?tab=${id}`, tab: id, ar: tab.ar, en: tab.en, icon: tab.icon }
+      }),
+      {
+        to: '/settings/permissions',
+        ar: SETTINGS_TABS.find((t) => t.id === 'team')!.ar,
+        en: SETTINGS_TABS.find((t) => t.id === 'team')!.en,
+        icon: SETTINGS_TABS.find((t) => t.id === 'team')!.icon,
+      },
     ],
   },
   {
@@ -50,6 +75,15 @@ const GROUPS = [
 
 export function SettingsLayout() {
   const ar = useUi((s) => s.locale) === 'ar'
+  const location = useLocation()
+  /*
+   * Which section is open, read from the address rather than from `NavLink`.
+   *
+   * `NavLink` decides `isActive` from the PATH alone, and all five workspace sections share one
+   * path — so every one of them would light up at once. The page falls back to its first tab when
+   * `?tab=` is absent, and this agrees with it.
+   */
+  const openTab = new URLSearchParams(location.search).get('tab') ?? 'general'
 
   return (
     <div className="grid w-full grid-cols-1 gap-6 lg:grid-cols-[240px_1fr]">
@@ -75,7 +109,7 @@ export function SettingsLayout() {
                   end
                   className={({ isActive }) =>
                     `flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                      isActive && !('external' in item)
+                      (('tab' in item ? isActive && item.tab === openTab : isActive) && !('external' in item))
                         ? 'bg-brand-primary-soft font-semibold text-brand-700'
                         : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
                     }`

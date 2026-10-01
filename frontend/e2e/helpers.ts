@@ -248,10 +248,30 @@ export async function createCampaign(page: Page, name: string) {
 
   const save = page.getByRole('button', { name: /^Save$|^حفظ$/ })
   await save.click()
-  // Wait for the modal to actually close before touching the page behind it — clicking the view
-  // switcher while the overlay is still up lands on the overlay and silently does nothing (this was
-  // an intermittent failure under parallel load on WebKit and Firefox).
-  await expect(save).toBeHidden({ timeout: 15000 })
+  /*
+   * Wait for the modal to actually close before touching the page behind it — clicking the view
+   * switcher while the overlay is still up lands on the overlay and silently does nothing (this was
+   * an intermittent failure under parallel load on WebKit and Firefox).
+   *
+   * And when it does NOT close, say what the dialog is showing.
+   *
+   * This failed on chromium as «Expected: hidden / Received: visible» and nothing else — which names
+   * the symptom and hides the cause, so four separate reproductions were spent asking the dialog a
+   * question the assertion could have answered. It is a dialog with words in it: a validation error,
+   * a refused request and a save that never fired look completely different, and the next occurrence
+   * should not need a bisect to tell them apart.
+   */
+  try {
+    await expect(save).toBeHidden({ timeout: 20_000 })
+  } catch (failure) {
+    const said = await page.locator('[role="dialog"]').first().innerText().catch(() => '')
+
+    throw new Error(
+      `the new-campaign dialog never closed after Save. It was showing:\n  ${
+        said.replace(/\s+/g, ' ').slice(0, 500)
+      }\n\n${failure instanceof Error ? failure.message : String(failure)}`,
+    )
+  }
 
   // CAMPAIGN-010: the page opens on the overview, so the new campaign is only visible once the card
   // list is shown. Switching here keeps every caller of this helper working.
