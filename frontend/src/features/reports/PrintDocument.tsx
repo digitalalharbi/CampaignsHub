@@ -9,7 +9,8 @@ import { AttentionBlocks } from './AttentionBlocks'
 import { sectionShown, type ReportSectionKey } from './reportSections'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { clientAbsence, posterSource, readPreview } from '@/features/content/adPreview'
-import type { CreativePreview } from '@/features/content/api'
+import { metricState } from '@/features/content/metrics'
+import type { CreativeMetrics, CreativePreview } from '@/features/content/api'
 import { PrintPlatformDrilldowns } from './PrintPlatformDrilldowns'
 import { reportPageTitle } from './sharedBranding'
 
@@ -45,6 +46,14 @@ type AdRow = {
   provider?: string | null
   spend?: number | null
   conversions?: number | null
+  /**
+   * The figures bag, where this row carries one — CONTENT-RESULT-AVAILABILITY-001.
+   *
+   * The generator builds these rows through `CreativeRows`, so the availability the Content library
+   * reads is already in the payload. This type did not admit it, which is why the document printed
+   * the raw `conversions` column and could show a measured 0 where the card shows a dash.
+   */
+  metrics?: CreativeMetrics | null
   preview?: unknown
 }
 
@@ -113,6 +122,31 @@ function isPlatformIdentity(name?: string | null): boolean {
   const own = [brand.lockup.nameEn, brand.lockup.nameAr, brand.name]
 
   return !name || own.includes(name.trim())
+}
+
+/**
+ * A result cell for the printed page, read through the availability the server stated.
+ *
+ * CONTENT-RESULT-AVAILABILITY-001 §14 — «one creative + same account + same period must tell the
+ * same factual story everywhere», and the forwarded PDF is the copy that gets quoted and filed. It
+ * read the raw column, so a zero the Content card shows as «—» printed here as a measured 0: the
+ * same number on the two surfaces, meaning opposite things, in the document a client keeps.
+ *
+ * `metrics` is absent on the ranked ad rows and present on the roster, so both shapes are accepted
+ * and the flat value is the fallback rather than the rule.
+ */
+function printedResult(
+  metrics: CreativeMetrics | null | undefined,
+  flat: number | null | undefined,
+  key = 'conversions',
+): string {
+  if (metrics) {
+    const state = metricState(metrics, key)
+
+    return state.kind === 'value' ? nfmt(state.value) : '—'
+  }
+
+  return flat === null || flat === undefined ? '—' : nfmt(Number(flat))
 }
 
 export function PrintDocument({
@@ -257,7 +291,7 @@ export function PrintDocument({
       name: String(ad.name ?? '—'),
       provider: String(ad.provider ?? '—'),
       spend: ad.spend === null || ad.spend === undefined ? '—' : money(Number(ad.spend), currency),
-      results: ad.conversions === null || ad.conversions === undefined ? '—' : nfmt(Number(ad.conversions)),
+      results: printedResult(ad.metrics as CreativeMetrics | null | undefined, ad.conversions),
     }
   })
 
@@ -285,7 +319,7 @@ export function PrintDocument({
       spend: row.metrics?.spend === null || row.metrics?.spend === undefined ? '—' : money(Number(row.metrics.spend), currency),
       impressions: row.metrics?.impressions === null || row.metrics?.impressions === undefined ? '—' : nfmt(Number(row.metrics.impressions)),
       clicks: row.metrics?.clicks === null || row.metrics?.clicks === undefined ? '—' : nfmt(Number(row.metrics.clicks)),
-      results: row.metrics?.conversions === null || row.metrics?.conversions === undefined ? '—' : nfmt(Number(row.metrics.conversions)),
+      results: printedResult(row.metrics as CreativeMetrics | null | undefined, row.metrics?.conversions),
     }))
 
   // Keyed by PLATFORM since CLIENT-REPORT-ENTITY-BOUNDARY-001; an old snapshot's per-campaign rows

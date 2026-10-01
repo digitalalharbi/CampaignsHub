@@ -3,10 +3,11 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { objectiveLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { ReportPlatformSummary } from './ReportPlatformSummary'
-import type { CreativePreview } from '@/features/content/api'
+import type { CreativeMetrics, CreativePreview } from '@/features/content/api'
 import type { Locale } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
 import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
+import { metricState } from '@/features/content/metrics'
 
 /**
  * REPORT-AD-PREVIEW-001 — the ads that ran, in the document the client keeps.
@@ -58,6 +59,8 @@ export type ReportAd = {
   impressions?: number | null
   clicks?: number | null
   conversions?: number | null
+  /** The figures bag, where this row carries one — see the Results cell below. */
+  metrics?: unknown
   ctr?: number | null
   cpa?: number | null
   roas?: number | null
@@ -520,7 +523,19 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null): 
   } else if (ad.cpa !== null && ad.cpa !== undefined && ad.cpa > 0) {
     out.push({ label: ar ? 'تكلفة النتيجة' : 'CPA', value: cash(ad.cpa, 2) ?? '—' })
   } else if (ad.conversions !== null && ad.conversions !== undefined) {
-    out.push({ label: ar ? 'النتائج' : 'Results', value: n(ad.conversions) ?? '—' })
+    /*
+     * Through the availability the server stated — CONTENT-RESULT-AVAILABILITY-001 §14.
+     *
+     * The paragraph above removed «0.00×» for exactly this reason on the ratio beside it: «nobody
+     * measured this» printing as «this earned zero», on the ads a client is deciding about. The
+     * COUNT had the same hole one line down, and it is the figure the client reads first.
+     */
+    const state = ad.metrics ? metricState(ad.metrics as CreativeMetrics, 'conversions') : null
+
+    out.push({
+      label: ar ? 'النتائج' : 'Results',
+      value: state !== null && state.kind !== 'value' ? '—' : (n(ad.conversions) ?? '—'),
+    })
   }
 
   if (ad.ctr !== null && ad.ctr !== undefined) {

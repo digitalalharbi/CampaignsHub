@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { CreativeMetrics } from './api'
-import { metricState, unavailableReason } from './metrics'
+import { formatMetric, metricState, unavailableChip, unavailableReason } from './metrics'
 
 /**
- * CONTENT-RESULT-AVAILABILITY-001 — «الطلبات 0» said two different things.
+ * CONTENT-RESULT-AVAILABILITY-001 — «الطلبات 0» said several different things.
  *
- * Either the creative was measured and sold nothing, or nobody is measuring purchases on that
- * account and the platform answered anyway. The server now says which — `availability` beside
- * `reported` — and these hold the three readings apart at the only place every surface reads them.
+ * A zero can mean the ad was measured and sold nothing, or that the platform answered a question
+ * nobody can answer for this account, or that the figure belongs to the campaign and not to this
+ * creative. The server says which — `availability` beside `reported` — and these hold the readings
+ * apart at the one place every surface reads them.
  */
 const metrics = (over: Partial<CreativeMetrics>): CreativeMetrics =>
   ({
@@ -19,51 +20,93 @@ const metrics = (over: Partial<CreativeMetrics>): CreativeMetrics =>
     ...over,
   }) as CreativeMetrics
 
-describe('a result figure the provider cannot actually measure', () => {
-  /** Owner regression 1 — unreported purchases do NOT render 0. */
+describe('a result figure whose measurement nobody has verified', () => {
+  /** Owner regression — an unverified zero does NOT render as 0. */
   it('is not a zero', () => {
     const state = metricState(
-      metrics({ reported: { conversions: false, orders: false }, availability: { orders: 'not_reported' } }),
+      metrics({ availability: { orders: 'measurement_unverified' } }),
       'orders',
     )
 
-    expect(state.kind).not.toBe('value')
+    expect(state).toEqual({ kind: 'not_provided', reason: 'measurement_unverified' })
   })
 
-  /** Owner regression 2 — a real reported zero DOES render 0. */
-  it('and a measured zero is still a zero', () => {
+  /**
+   * And it is not «not provided» either, which would be a second unsupported claim: the provider
+   * DID send something, and what is unknown is whether it means anything.
+   */
+  it('says what is unknown rather than claiming the metric is unavailable', () => {
+    const said = unavailableReason('measurement_unverified', 'ar')
+
+    expect(said).toMatch(/لم يتم التحقق/)
+    expect(said, 'the copy claims the metric cannot be measured here').not.toMatch(/غير متاح/)
+  })
+
+  /** Owner regression — a CONFIRMED zero is still a zero. */
+  it('and a confirmed zero is still a zero', () => {
     const state = metricState(
-      metrics({ conversions: 0, reported: { conversions: true, orders: true }, availability: { orders: 'reported' } }),
+      metrics({ conversions: 0, orders: 0, availability: { orders: 'real_zero_confirmed' } }),
       'orders',
     )
 
     expect(state).toEqual({ kind: 'value', value: 0 })
   })
 
+  it('a reported figure is shown as itself', () => {
+    const state = metricState(
+      metrics({ conversions: 12, orders: 12, availability: { orders: 'reported_value' } }),
+      'orders',
+    )
+
+    expect(state).toEqual({ kind: 'value', value: 12 })
+  })
+
   /**
    * The reason reaches the reader as a SENTENCE, not as an enum.
    *
-   * «METRIC_NOT_REPORTED» on a card is a developer's word for a customer's problem. Each reason maps
-   * to one plain sentence about the platform and the period, in both languages, and none of them
-   * mentions a field, a grain or a failure.
+   * «MEASUREMENT_UNVERIFIED» on a card is a developer's word for a customer's problem. Each of the
+   * three maps to one plain sentence about the platform, the account or the period, in both
+   * languages, and none of them mentions a field, a grain or a failure.
    */
   it('says why in words a customer can read', () => {
-    const notReported = unavailableReason('not_reported', 'ar')
-    const notAttributable = unavailableReason('not_attributable', 'ar')
+    const said = (['not_reported', 'measurement_unverified', 'not_attributable'] as const).map(
+      (reason) => unavailableReason(reason, 'ar'),
+    )
 
-    expect(notReported).toBeTruthy()
-    expect(notAttributable).toBeTruthy()
-    expect(notReported).not.toBe(notAttributable)
+    expect(new Set(said).size, 'two states share one sentence').toBe(3)
 
     for (const locale of ['ar', 'en'] as const) {
-      for (const reason of ['not_reported', 'not_attributable', 'no_activity'] as const) {
-        const said = unavailableReason(reason, locale)
+      for (const reason of ['not_reported', 'measurement_unverified', 'not_attributable'] as const) {
+        const sentence = unavailableReason(reason, locale)
 
-        expect(said, `${reason} (${locale}) has no sentence`).toBeTruthy()
-        expect(said, `${reason} (${locale}) leaks a technical word`).not.toMatch(
-          /\b(null|SQL|grain|API|mapping|backend|enum|field)\b/i,
+        expect(sentence, `${reason} (${locale}) has no sentence`).toBeTruthy()
+        expect(sentence, `${reason} (${locale}) leaks a technical word`).not.toMatch(
+          /\b(null|SQL|grain|API|mapping|backend|enum|field|pixel|tracking)\b/i,
         )
       }
+
+      expect(unavailableChip(locale)).toBeTruthy()
+    }
+  })
+})
+
+/**
+ * The short form has to be accurate on surfaces with no room for a tooltip.
+ *
+ * «غير مُرسَل» says the platform sent nothing. That is true of `not_reported` and false of the
+ * other two — an unverified zero DID arrive, and an unattributable figure exists and belongs to
+ * somebody else — so printing it for all three would put a wrong sentence under the figure on every
+ * table and detail row in the product.
+ */
+describe('the short form beside a figure', () => {
+  it('only claims the platform sent nothing where it did not', () => {
+    expect(formatMetric({ kind: 'not_provided', reason: 'not_reported' }, 'orders', 'ar', null)).toBe('غير مُرسَل')
+
+    for (const reason of ['measurement_unverified', 'not_attributable'] as const) {
+      expect(
+        formatMetric({ kind: 'not_provided', reason }, 'orders', 'ar', null),
+        `${reason} is being reported as a metric the platform never sent`,
+      ).toBe('—')
     }
   })
 })

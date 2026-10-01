@@ -7,6 +7,7 @@ namespace App\Domains\Campaigns\Services;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
+use App\Domains\Campaigns\Enums\ResultAvailability;
 use App\Domains\Campaigns\Support\CreativeDemoPolicy;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Projects\Context\ProjectContext;
@@ -295,11 +296,11 @@ final class CreativeMetrics
                 : $figures;
         }
 
-        return $this->withAvailability($this->withDecay($out, $from, $to));
+        return $this->withAvailability($this->withDecay($out, $from, $to), $from, $to);
     }
 
     /**
-     * CONTENT-RESULT-AVAILABILITY-001 — is this zero a measurement, or a shrug?
+     * CONTENT-RESULT-AVAILABILITY-001 — is this zero a measurement, a shrug, or somebody else's?
      *
      * `reported` answers «did a value arrive», which is the right question for a NULL column and the
      * wrong one for a provider that answers every question it is asked. Snapchat is asked for
@@ -308,80 +309,50 @@ final class CreativeMetrics
      * about somebody's advertising.
      *
      * Applied HERE rather than inside the per-row builder because the evidence is not in the row: it
-     * is the project's whole history with that provider, which one creative's seven days cannot see.
-     * {@see CreativeResultAvailability} holds the reasoning about what counts as evidence.
+     * is the history of the EXACT account that served the ad, which one creative's seven days cannot
+     * see. {@see CreativeResultAvailability} holds the reasoning about what counts as evidence, and
+     * {@see ResultAvailability} the five answers.
      *
-     * A key is marked `not_reported` AND its `reported` flag is cleared together, so a surface that
-     * reads either one tells the same story — there is no state where the availability map says
-     * «unavailable» and the older flag still says «the platform sent this».
+     * `reported` is deliberately NOT mutated. It governs `supportable()`, which strikes an
+     * unanswerable metric from the card's headline list — so clearing it would make an unverified
+     * result vanish from the card rather than appear as the dash the reader is owed. The richer
+     * state travels beside the older flag instead of collapsing into it.
      *
      * @param  array<string, array<string, mixed>>  $out
      * @return array<string, array<string, mixed>>
      */
-    private function withAvailability(array $out): array
+    private function withAvailability(array $out, Carbon $from, Carbon $to): array
     {
         if ($out === []) {
             return $out;
         }
 
-        /*
-         * The creative's OWN project and provider, not the request's.
-         *
-         * Reading the project from `ProjectContext` broke every portfolio-wide caller: that context
-         * is empty when nothing is selected, and an empty string reached Postgres as a uuid and
-         * failed the whole library. It was also the wrong source — one call can span projects, and
-         * the evidence has to be about the account the creative actually belongs to.
-         */
-        $owners = DB::table('external_creatives')
-            ->whereIn('id', array_keys($out))
-            ->get(['id', 'provider', 'project_id'])
-            ->keyBy(fn ($row) => (string) $row->id);
+        $service = app(CreativeResultAvailability::class);
+        $accounts = $service->accountsFor(array_map('strval', array_keys($out)));
 
-        $measured = [];
+        $every = array_values(array_unique(array_merge(...array_values($accounts) ?: [[]])));
+        $measured = $service->measuredByAccount($every);
+        $inPeriod = $service->recordedInPeriod($every, $from, $to);
 
         foreach ($out as $id => $figures) {
-            $owner = $owners[(string) $id] ?? null;
-            $provider = (string) ($owner->provider ?? '');
-            $projectId = (string) ($owner->project_id ?? '');
-
-            if ($provider === '' || $projectId === '') {
-                continue;
-            }
-
-            $scope = $projectId.'|'.$provider;
-            $measured[$scope] ??= app(CreativeResultAvailability::class)->measured($projectId, $provider);
-
-            /*
-             * «Did it run at all» comes first, because it changes what every other answer means.
-             *
-             * A creative with no active day in the window has not sold nothing — it was not selling.
-             * Reporting zero orders for an ad that was not serving sends an operator looking for a
-             * creative problem that is a scheduling fact.
-             */
-            $idle = ((int) ($figures['active_days'] ?? 0)) === 0;
+            $mine = $accounts[(string) $id] ?? [];
 
             foreach (CreativeResultAvailability::keys() as $key) {
                 if (! array_key_exists($key, $figures['reported'] ?? [])) {
                     continue;
                 }
 
+                /* `orders` is `conversions` under the name the marketing paths use. */
                 $value = $key === 'orders' ? ($figures['conversions'] ?? null) : ($figures[$key] ?? null);
 
-                $out[$id]['availability'][$key] = match (true) {
-                    $idle => 'no_activity',
-                    ($figures['reported'][$key] ?? false) === false => 'not_reported',
-                    /*
-                     * The one new judgement: a zero from a provider that has never measured this
-                     * here. Anything non-zero is a measurement by definition and keeps its state,
-                     * and so does a zero on an account that HAS measured this before.
-                     */
-                    ((float) $value) === 0.0 && ($measured[$scope][$key] ?? false) === false => 'not_reported',
-                    default => 'reported',
-                };
-
-                if (($out[$id]['availability'][$key] ?? null) !== 'reported') {
-                    $out[$id]['reported'][$key] = false;
-                }
+                $out[$id]['availability'][$key] = $service->verdict(
+                    $key,
+                    is_numeric($value) ? (float) $value : null,
+                    (bool) ($figures['reported'][$key] ?? false),
+                    $mine,
+                    $measured,
+                    $inPeriod,
+                )->value;
             }
         }
 
@@ -1294,22 +1265,27 @@ final class CreativeMetrics
          * a real zero. A scope where NOTHING is measurable inherits that, and the strip draws the
          * dash its cards are drawing.
          */
+        /*
+         * CONTENT-RESULT-AVAILABILITY-001 §14 — folded CONSERVATIVELY across the set.
+         *
+         * «One creative + same account + same period must tell the same factual story everywhere»,
+         * and a headline strip is the figure a client reads first. A real figure anywhere in the set
+         * proves the sum is a real figure and wins outright; otherwise a set that does not agree is
+         * not a verified anything, and says so. One account's evidence may not certify its
+         * neighbour's zero merely because the two were added together.
+         */
         foreach (CreativeResultAvailability::keys() as $key) {
             $states = array_values(array_filter(array_map(
-                static fn (array $set): ?string => is_string($set['availability'][$key] ?? null)
-                    ? (string) $set['availability'][$key]
+                static fn (array $set): ?ResultAvailability => is_string($set['availability'][$key] ?? null)
+                    ? ResultAvailability::tryFrom((string) $set['availability'][$key])
                     : null,
                 $sets,
             )));
 
-            if ($states === []) {
-                continue;
-            }
+            $folded = ResultAvailability::fold($states);
 
-            $figures['availability'][$key] = in_array('reported', $states, true) ? 'reported' : $states[0];
-
-            if ($figures['availability'][$key] !== 'reported') {
-                $figures['reported'][$key] = false;
+            if ($folded !== null) {
+                $figures['availability'][$key] = $folded->value;
             }
         }
         $figures['creatives'] = count($sets);

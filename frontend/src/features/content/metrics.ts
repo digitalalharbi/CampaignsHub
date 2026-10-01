@@ -23,20 +23,34 @@ export type MetricState =
   | { kind: 'no_data' }
 
 /**
- * CONTENT-RESULT-AVAILABILITY-001 — why a result is «—», in the server's own words.
+ * CONTENT-RESULT-AVAILABILITY-001 — what a result figure IS, in the server's own five words.
  *
- * The three the reader can meet, and they are different facts about somebody's advertising:
+ * Two of them are figures and three are dashes, and the three say different things about somebody's
+ * advertising:
  *
- *  - `not_reported` — the platform does not measure this here. Asking again will not help.
- *  - `not_attributable` — the campaign has the figure and it cannot be pinned to THIS creative for
- *    THIS period. The number exists; it is not this creative's to claim.
- *  - `no_activity` — the creative was not serving in the period, so there is nothing to have
- *    measured. Not a gap, a schedule.
+ *  - `not_reported` — the platform sent no value for this here. An absent field, not a zero.
+ *  - `measurement_unverified` — a zero arrived and nothing proves this account measures the metric
+ *    at all. Deliberately not «not provided»: the provider DID send something, and what is unknown
+ *    is whether it means anything. Calling it «not provided» would replace one unsupported claim
+ *    with another.
+ *  - `not_attributable` — the figure exists for the campaign or the account in this period and is
+ *    not this creative's. The number is real; it is not this ad's to claim.
  *
- * `reported` is the fourth value and is the ordinary case; it never reaches the reader as a
- * sentence because there is nothing to explain.
+ * `reported_value` and `real_zero_confirmed` are the two that print the figure. A zero is only ever
+ * shown as a zero under the second, because that is the only state in which «this ad sold nothing»
+ * is something the product can actually say.
  */
-export type UnavailableReason = 'not_reported' | 'not_attributable' | 'no_activity'
+export type ResultAvailability =
+  | 'reported_value'
+  | 'real_zero_confirmed'
+  | 'not_reported'
+  | 'measurement_unverified'
+  | 'not_attributable'
+
+/** The three a reader meets as a dash and a sentence. */
+export type UnavailableReason = Exclude<ResultAvailability, 'reported_value' | 'real_zero_confirmed'>
+
+const SHOWS_FIGURE: ReadonlySet<string> = new Set(['reported_value', 'real_zero_confirmed'])
 
 /** Ratios that must never be shown when their denominator is absent (§15.15). */
 const DERIVED = new Set([
@@ -61,8 +75,8 @@ export function metricState(metrics: CreativeMetrics | null, key: string): Metri
    */
   const availability = metrics.availability?.[key]
 
-  if (availability !== undefined && availability !== 'reported') {
-    return { kind: 'not_provided', reason: availability }
+  if (availability !== undefined && !SHOWS_FIGURE.has(availability)) {
+    return { kind: 'not_provided', reason: availability as UnavailableReason }
   }
 
   const raw = metrics[key]
@@ -182,16 +196,24 @@ export function unavailableReason(reason: UnavailableReason, locale: Locale): st
   switch (reason) {
     case 'not_reported':
       return ar
-        ? 'بيانات التحويل غير متاحة لهذا المحتوى ضمن مستوى القياس الحالي.'
-        : 'Conversion data is not available for this content at the current level of measurement.'
+        ? 'لم تُرسل المنصة هذا المؤشر لهذا المحتوى.'
+        : 'The platform did not send this metric for this content.'
+    case 'measurement_unverified':
+      /*
+       * Says what is unknown, and no more.
+       *
+       * «غير متاح» would claim the metric cannot be measured here, which is the claim this state
+       * exists because nobody can make: a new account with a working pixel and no sales yet looks
+       * exactly like an account with no pixel. What the reader is told is the truth — nobody has
+       * verified it — and that is also what tells them where to look.
+       */
+      return ar
+        ? 'لم يتم التحقق من توفر قياس التحويل لهذا الحساب.'
+        : 'Conversion measurement has not been verified for this account.'
     case 'not_attributable':
       return ar
-        ? 'تتوفر بيانات التحويل للحملة، لكن لا يمكن نسبها لهذا المحتوى بدقة خلال الفترة المحددة.'
-        : 'The campaign has conversion data, but it cannot be attributed to this content precisely for the selected period.'
-    case 'no_activity':
-      return ar
-        ? 'لم تُرسل المنصة نتيجة قابلة للقياس لهذا المحتوى خلال الفترة المحددة.'
-        : 'The platform reported no measurable result for this content during the selected period.'
+        ? 'تتوفر بيانات التحويل، لكن لا يمكن نسبها لهذا المحتوى بدقة خلال الفترة المحددة.'
+        : 'Conversion data is available, but it cannot be attributed to this content precisely for the selected period.'
   }
 }
 
@@ -249,7 +271,22 @@ export function metricKind(key: string): 'number' | 'money' | 'percent' | 'ratio
 export function formatMetric(state: MetricState, key: string, locale: Locale, currency: string | null): string {
   const ar = locale === 'ar'
 
-  if (state.kind === 'not_provided') return ar ? 'غير مُرسَل' : 'Not provided'
+  if (state.kind === 'not_provided') {
+    /*
+     * «غير مُرسَل» is accurate for exactly one of the three reasons — CONTENT-RESULT-AVAILABILITY-001.
+     *
+     * It is a statement that the platform sent nothing, which is true of `not_reported` and false of
+     * the other two: an unverified zero DID arrive, and an unattributable figure exists and belongs
+     * to somebody else. Printing it for all three would put a wrong sentence under the figure on
+     * every surface that has no room for a tooltip.
+     *
+     * Those two render the dash here and carry their sentence where there is room for one —
+     * {@see MetricValue} on the card and the table, which is where a reader meets them.
+     */
+    return state.reason === undefined || state.reason === 'not_reported'
+      ? (ar ? 'غير مُرسَل' : 'Not provided')
+      : '—'
+  }
   if (state.kind === 'no_data') return ar ? 'لا توجد بيانات' : 'No data'
 
   const { value } = state

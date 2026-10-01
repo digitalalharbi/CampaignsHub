@@ -1,6 +1,6 @@
 import { percent, rowCostPer, rowRoas } from '@/features/analytics/format'
 import { canonicalFigureKeys, moneyIsStatable } from './canonicalFigures'
-import { metricKind, metricLabel } from './metrics'
+import { formatMetric, metricKind, metricLabel, metricState } from './metrics'
 import { creativeMoney } from './creativeMoney'
 import { readMetricValue } from '@/lib/metricValue'
 import type { CreativeMetrics } from './api'
@@ -164,6 +164,23 @@ export function creativeDialogFigures(
 
     const raw = bag[key]
     if (typeof raw !== 'number') continue
+
+    /*
+     * CONTENT-RESULT-AVAILABILITY-001 §14 — the quick viewer is one click from the card.
+     *
+     * The card reads this result through `metricState` and may be showing a dash; this panel read
+     * the raw number and would have shown the zero beside it. «One creative, same account, same
+     * period» cannot survive two readings one click apart — it is the same defect this file already
+     * carries twice, in «the CARD is objective-aware and the popup was not» and in the money reader
+     * two surfaces disagreed about.
+     */
+    const state = metricState(metrics as CreativeMetrics | null, key)
+
+    if (state.kind !== 'value') {
+      figures.push({ key, label: metricLabel(key, locale), value: formatMetric(state, key, locale, currency) })
+
+      continue
+    }
 
     const kind = metricKind(key)
     const value = kind === 'money'

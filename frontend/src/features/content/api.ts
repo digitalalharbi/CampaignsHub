@@ -131,7 +131,7 @@ export interface CreativeMetrics {
    * claims about somebody's advertising. Present only for the RESULT metrics a provider can answer
    * that way; a key with no entry keeps the older reading exactly as before.
    */
-  availability?: Record<string, 'reported' | 'not_reported' | 'not_attributable' | 'no_activity'>
+  availability?: Record<string, import('./metrics').ResultAvailability>
   /*
    * CREATIVE-MONEY-TRUTH-001 — the withheld half of the money, which this type used to deny.
    *
