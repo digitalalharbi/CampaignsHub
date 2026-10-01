@@ -154,7 +154,18 @@ final class ProviderDefinition
             'webhooks' => $this->webhooks->value,
             'webhook_signature_header' => $this->webhookSignatureHeader,
             'webhook_url' => $this->webhookUrl(),
-            'redirect_uri' => $this->redirectUri(),
+            /*
+             * How this provider is authenticated, said out loud rather than inferred.
+             *
+             * The interface used to read «it is a provider, therefore it has a consent screen»,
+             * which held while every provider was OAuth. A reader cannot tell the two apart from any
+             * other field here — an empty scope list and a missing redirect URI are also what a
+             * half-finished OAuth definition looks like.
+             */
+            'auth' => $this->auth->value,
+            // Null rather than a derived URL for a provider that never redirects a browser: a URI no
+            // console will accept is an instruction, not a fact.
+            'redirect_uri' => $this->hasRedirectUri() ? $this->redirectUri() : null,
             'prerequisites' => $this->prerequisites,
             'prerequisites_ar' => $this->prerequisitesAr,
             'docs_url' => $this->docsUrl,

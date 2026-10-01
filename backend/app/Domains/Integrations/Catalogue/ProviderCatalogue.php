@@ -437,11 +437,26 @@ final class ProviderCatalogue
             kind: ProviderKind::Advertising,
             label: 'OpenAI Advertiser API',
             labelAr: 'واجهة OpenAI الإعلانية',
-            fields: [
-                ProviderField::secret('api_key', 'Ads API key', 'مفتاح واجهة الإعلانات',
-                    'OpenAI Ads Manager → Settings → API keys. The key is scoped to one ad account',
-                    'مدير إعلانات OpenAI ← الإعدادات ← مفاتيح الواجهة. المفتاح مرتبط بحساب إعلاني واحد'),
-            ],
+            /*
+             * Nothing for the PLATFORM OPERATOR to configure, and that is not an omission.
+             *
+             * Every other provider here has an app we register once: a client id and secret that
+             * identify CampaignsHub to the platform, shared by every tenant, with each customer's
+             * own access arriving afterwards through consent. OpenAI publishes no such app for
+             * advertising. The only credential is the advertiser's own bearer key, and it belongs to
+             * ONE ad account.
+             *
+             * A field here would be a platform-wide store for a per-tenant secret. An operator who
+             * filled it would hand every tenant on the install the same key — which is to say one
+             * customer's ad account, reported inside every other customer's workspace. The
+             * ACCOUNT-SCOPE-ISOLATION-001 guards defend the queries, and none of them can defend a
+             * credential that was shared on purpose at the top.
+             *
+             * So the key is asked for where it is used: at connect, by the tenant, stored against
+             * their connection. `isConfigured()` is therefore true for this provider with nothing
+             * entered — honest, because there is no install-level credential to be missing.
+             */
+            fields: [],
             scopes: [],
             usesPkce: false,
             supportsRefresh: false,

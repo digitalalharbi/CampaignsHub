@@ -606,7 +606,18 @@ final class PlatformProviderSettingsTest extends TestCase
         $this->assertSame(ProviderSetupState::ReadyToConnect->value, $response->json('data.state'));
     }
 
-    /** Every provider in the catalogue resolves; a typo in one entry breaks the whole console. */
+    /**
+     * Every provider in the catalogue resolves; a typo in one entry breaks the whole console.
+     *
+     * The two shape assertions are made PER AUTHENTICATION KIND rather than for every provider,
+     * because they were written when every provider was OAuth and they encoded that: an install-level
+     * field to fill, and a redirect URI to copy into the provider's console.
+     *
+     * Neither is true of a provider authenticated by a key the TENANT holds. It has no install-level
+     * credential, so a field here would be a shared store for a per-tenant secret; and it never sends
+     * a browser anywhere, so a redirect URI would be a URL no console accepts. Asserting them anyway
+     * would make «declares no operator fields» a failure — which is the honest answer for this kind.
+     */
     public function test_every_catalogued_provider_has_a_resolvable_configuration(): void
     {
         $settings = app(ProviderConfigurationService::class);
@@ -616,8 +627,17 @@ final class PlatformProviderSettingsTest extends TestCase
 
             $this->assertSame($key, $summary['key']);
             $this->assertContains($summary['state'], ProviderSetupState::values());
-            $this->assertNotSame([], $summary['fields'], "{$key} declares no fields");
-            $this->assertStringStartsWith('http', (string) $summary['redirect_uri']);
+            $this->assertContains($summary['auth'], ['oauth', 'api_key'], "{$key} declares no auth kind");
+
+            if ($summary['auth'] === 'oauth') {
+                $this->assertNotSame([], $summary['fields'], "{$key} declares no fields");
+                $this->assertStringStartsWith('http', (string) $summary['redirect_uri']);
+
+                continue;
+            }
+
+            $this->assertSame([], $summary['fields'], "{$key} asks the operator for a per-tenant secret");
+            $this->assertNull($summary['redirect_uri'], "{$key} publishes a redirect URI it never uses");
         }
     }
 }

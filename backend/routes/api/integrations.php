@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\Integrations\Http\Controllers\AccountInventoryController;
 use App\Domains\Integrations\Http\Controllers\AdPlatformOAuthController;
+use App\Domains\Integrations\Http\Controllers\ApiKeyConnectionController;
 use App\Domains\Integrations\Http\Controllers\ConnectionHubController;
 use App\Domains\Integrations\Http\Controllers\ConnectionWizardController;
 use App\Domains\Integrations\Http\Controllers\IntegrationController;
@@ -69,9 +70,29 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
             ->middleware(EnsureWithinPlanLimit::class.':connections');
         Route::post('{key}/sync', [IntegrationController::class, 'sync'])->name('sync');
 
-        // Start the authorisation for one of the six ad platforms. Returns a URL rather than a 302,
-        // because the caller is an SPA doing `fetch` and a cross-origin redirect would be swallowed.
+        // Start the authorisation for a platform that has a consent screen. Returns a URL rather than
+        // a 302, because the caller is an SPA doing `fetch` and a cross-origin redirect would be
+        // swallowed. Which platforms those are is the catalogue's answer (`ProviderAuth`), not a
+        // number written here.
         Route::post('{provider}/oauth/start', [AdPlatformOAuthController::class, 'start'])->name('oauth.start');
+
+        /*
+         * INTEG-APIKEY-001 — the other way a provider is connected: the advertiser's own key.
+         *
+         * Inside the session, and it has to be — this is the one request in the product that carries
+         * a customer's platform secret in its body, so it answers to the same auth, tenant and
+         * permission gates as everything else here and has no public half.
+         *
+         * Under the connections plan limit for the same reason the consent flow is: both end in a
+         * `ProviderConnection`, and a limit one of them could walk around is not a limit.
+         *
+         * Throttled tightly. A key is pasted once, or re-pasted after a rotation; anything faster is
+         * somebody trying keys, and each attempt is a live call to the provider made with whatever
+         * was typed.
+         */
+        Route::post('{provider}/api-key/connect', [ApiKeyConnectionController::class, 'store'])
+            ->middleware([EnsureWithinPlanLimit::class.':connections', 'throttle:10,1'])
+            ->name('api-key.connect');
     });
 
     Route::get('connections', [ProviderConnectionController::class, 'index'])->name('connections.index');
@@ -139,7 +160,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
     ->name('projects.integrations.')
     ->group(function (): void {
         Route::get('/', [ProjectIntegrationController::class, 'index'])->middleware('project.can:integrations.manage')->name('index');
-        // PROJINT-001: the same project's integrations organised by the six real ad platforms.
+        // PROJINT-001: the same project's integrations organised by the real ad platforms the registry
+        // publishes — the count is `AdPlatforms::ORDER`'s to state, not this comment's.
         Route::get('platforms', [PlatformOverviewController::class, 'index'])->middleware('project.can:integrations.manage')->name('platforms');
         // Revoking frees the slot — `usage('connections')` skips revoked and disconnected rows.
         Route::post('connect', [ProjectIntegrationController::class, 'connect'])->middleware('project.can:integrations.manage')->name('connect')

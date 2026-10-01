@@ -136,6 +136,19 @@ final class TokenVault
         ?string $clientWorkspaceId = null,
         ?int $createdBy = null,
         ?string $externalOwnerId = null,
+        /*
+         * What KIND of credential is being stored, recorded rather than assumed.
+         *
+         * This column said `oauth2` for every row because every provider was OAuth. A bearer key the
+         * advertiser issued is not an OAuth2 grant: it has no refresh token, no authorisation server
+         * and no expiry to anticipate, and an operator reading the credentials table has no other way
+         * to tell the two apart — the payload shape is identical.
+         *
+         * Nothing in this class branches on it. It stays a fact about the row, which is the point:
+         * a value that decides behaviour becomes a second place where «can this be refreshed» is
+         * answered, and that answer already lives in the token's own expiry.
+         */
+        string $credentialType = 'oauth2',
     ): ProviderConnection {
         $creds = PlatformCredentials::for($provider);
 
@@ -182,7 +195,7 @@ final class TokenVault
             'client_workspace_id' => $clientWorkspaceId,
             'provider' => $creds->platform,
             'credential_scope' => $clientWorkspaceId === null ? 'tenant_shared' : 'workspace_shared',
-            'credential_type' => 'oauth2',
+            'credential_type' => $credentialType,
             'encrypted_payload' => json_encode($tokens->toStorage(), JSON_THROW_ON_ERROR),
             'status' => 'active',
             'expires_at' => $tokens->expiresAt,
