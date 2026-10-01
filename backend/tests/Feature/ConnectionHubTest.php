@@ -84,11 +84,22 @@ final class ConnectionHubTest extends TestCase
         $this->assertSame(1, $this->hub()['connections'][0]['discovered_accounts']);
     }
 
-    /** Two authorisations for one provider are two rows, each with its own state. */
+    /**
+     * Two authorisations for one provider are two rows, each with its own state.
+     *
+     * The second is opened a second later, deliberately. The hub orders by provider and then by
+     * `created_at`, and `created_at` is not unique: two authorisations created in the same second
+     * shared a timestamp, Postgres was free to return them in either order, and this assertion
+     * failed on CI roughly half the time while passing locally. Separating them in time makes the
+     * thing being asserted — oldest authorisation first — the thing the product actually promises,
+     * rather than insertion order, which it never did.
+     */
     public function test_two_authorisations_for_one_provider_are_two_rows(): void
     {
         $ours = $this->connection();
+        Carbon::setTestNow(Carbon::now()->addSecond());
         $theirs = $this->connection();
+        Carbon::setTestNow();
         $theirs->forceFill(['insights_denied_at' => Carbon::now()])->save();
 
         $rows = $this->hub()['connections'];
