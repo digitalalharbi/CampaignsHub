@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Image as ImageIcon, Palette, Trash2, Upload } from 'lucide-react'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { toApiError } from '@/lib/api/client'
@@ -118,10 +119,13 @@ export function BrandingCenterPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 p-4 md:p-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
-        <p className="text-sm text-text-secondary">{c.subtitle}</p>
-      </header>
+      {/*
+        UX-PAGE-HERO-001 — the §44 walk reached this page through the settings shell, not the rail,
+        and found the last hand-drawn `<h1>` behind it: `text-3xl` against the product's own
+        `PAGE_TITLE`, so the branding centre was a different size from the settings page one click
+        away from it.
+      */}
+      <PageIntro testid="branding-intro" title={c.title} purpose={c.subtitle} />
 
       <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:flex-row sm:items-end">
         <label className="flex flex-1 flex-col gap-1 text-xs font-semibold text-text-secondary">
