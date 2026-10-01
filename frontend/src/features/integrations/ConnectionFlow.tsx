@@ -278,8 +278,14 @@ function KeyEntry({ ar, label, providerKey, destination, onDestination, onConnec
       </section>
 
       <section className="flex flex-col gap-2">
+        {/*
+          The field is named without the provider, and that is a fix rather than a shortening.
+          Interpolating the label read «مفتاح واجهة واجهة OpenAI الإعلانية» — the catalogue names the
+          INTERFACE, so a label built as «مفتاح واجهة …» says the word twice. The dialog's own header
+          already names the provider directly above this.
+        */}
         <label htmlFor="provider-api-key" className="flex items-center gap-2 text-sm font-bold text-text-primary">
-          <KeyRound size={15} aria-hidden /> {ar ? `مفتاح واجهة ${label}` : `${label} API key`}
+          <KeyRound size={15} aria-hidden /> {ar ? 'مفتاح الواجهة البرمجية' : 'API key'}
         </label>
         <p className="text-xs text-text-secondary">
           {ar
