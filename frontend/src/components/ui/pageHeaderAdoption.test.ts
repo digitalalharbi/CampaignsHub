@@ -36,6 +36,14 @@ const OUT_OF_SCOPE = [
   /\/features\/requests\/portal\//,
   /\/features\/admin\//,
   /\/features\/onboarding\//,
+  /*
+    AD-LANDING-001 — a paid-ad landing page is not a product surface.
+    `PageIntro` answers «where am I, what is the scope, how fresh is this» for somebody INSIDE the
+    workspace. The reader here has no workspace, arrived from an advertisement, and is being asked
+    one question. Giving it the product's header would be giving it the product's chrome, which is
+    the thing that page is deliberately without.
+  */
+  /\/features\/marketing\/VideoRequestLandingPage\.tsx$/,
   /\.test\.tsx$/,
 ]
 

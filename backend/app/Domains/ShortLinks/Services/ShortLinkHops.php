@@ -86,37 +86,6 @@ final class ShortLinkHops
     }
 
     /**
-     * The same resolution WITHOUT counting a visit — SHORT-LINKS-LANDING-001.
-     *
-     * A link that opens a landing page is followed twice: once to read the page, and once more when
-     * the reader decides. Counting the second as another visit would double every number on a link
-     * that converts well, which is the one link whose numbers anybody checks.
-     */
-    public function resolve(string $slug): ?ShortLink
-    {
-        return ShortLink::query()
-            ->withoutGlobalScope(TenantScope::class)
-            ->where('slug', $slug)
-            ->where('is_active', true)
-            ->first();
-    }
-
-    /**
-     * The reader chose. Counted apart from the visit, because they are different events.
-     *
-     * A visit says the ad was clicked; this says the offer was accepted, and a page that cannot tell
-     * them apart cannot say whether it is working. Atomic for the same reason the visit is: this is
-     * a public endpoint that can be hit hard, and a lost click is a number somebody reads as a result.
-     */
-    public function countCtaClick(ShortLink $link): void
-    {
-        ShortLink::query()
-            ->withoutGlobalScope(TenantScope::class)
-            ->whereKey($link->getKey())
-            ->update(['cta_clicks' => DB::raw('cta_clicks + 1'), 'last_clicked_at' => Carbon::now()]);
-    }
-
-    /**
      * The address a person copies — the SPA origin, which is what the owner specified.
      *
      * `https://campaignshub.io/l/{slug}`, not the API host. Built from `Frontend::origin()` rather
