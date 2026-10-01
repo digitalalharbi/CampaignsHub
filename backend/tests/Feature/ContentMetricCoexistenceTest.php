@@ -424,7 +424,13 @@ final class ContentMetricCoexistenceTest extends TestCase
         $keys = [];
 
         foreach ($figures as $key => $value) {
-            if (in_array($key, ['reported', 'grain', 'active_days', 'creatives'], true)) {
+            /*
+             * `availability` joins `reported` here: it describes WHY a metric is answerable and is
+             * not itself a figure anybody reads — CONTENT-RESULT-AVAILABILITY-001. The strip carries
+             * it too, so this exclusion is about what counts as a FIGURE rather than about hiding a
+             * divergence.
+             */
+            if (in_array($key, ['reported', 'availability', 'grain', 'active_days', 'creatives'], true)) {
                 continue;
             }
 

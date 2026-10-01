@@ -521,8 +521,15 @@ export function clientAbsence(reading: PreviewReading, ar: boolean): { short: st
    */
   if (reading.kind === 'video' && reading.poster === null) {
     return {
-      // The established short label stands — `ReportAdsSection` reads it and a reader already knows it.
-      short: absenceShort(reading, ar),
+      /*
+       * Its OWN label, not the card's — CONTENT-ABSENCE-NOT-A-FAULT-001 §15.
+       *
+       * This borrowed `absenceShort`, which was right while that said «no cover» and is wrong now
+       * that it says «معاينة الفيديو». A printed page cannot preview anything, and `ReportAdsSection`
+       * shows this where no cover frame exists: offering a preview on either is a promise the
+       * surface cannot keep. The label names what the row IS and why there is no picture of it.
+       */
+      short: ar ? 'فيديو — لا غلاف من المنصة' : 'Video — no cover from the platform',
       sentence: ar
         ? 'محتوى هذا الإعلان فيديو، ولم ترسل المنصة صورة غلاف له.'
         : 'This ad’s content is a video, and the platform sent no cover frame for it.',
@@ -540,9 +547,23 @@ export function clientAbsence(reading: PreviewReading, ar: boolean): { short: st
   }
 
   if (reading.reason === 'expired') {
+    /*
+     * The one reassurance a client needs — CONTENT-ABSENCE-NOT-A-FAULT-001.
+     *
+     * A missing picture in a document somebody is reading raises a question about everything else on
+     * the page. The link is what expired at the source; the figures were measured and are unaffected,
+     * and saying so is the difference between «this report is incomplete» and «this ad's picture is
+     * no longer hosted».
+     */
     return ar
-      ? { short: 'المعاينة غير متاحة حاليًا', sentence: 'معاينة هذا المحتوى غير متاحة حاليًا.' }
-      : { short: 'Preview unavailable for now', sentence: 'This content’s preview is not available right now.' }
+      ? {
+          short: 'المعاينة غير متاحة حاليًا',
+          sentence: 'المعاينة غير متاحة حاليًا من المصدر، بينما تبقى بيانات الأداء متاحة.',
+        }
+      : {
+          short: 'Preview unavailable for now',
+          sentence: 'The preview is not available from the source right now; the performance figures are unaffected.',
+        }
   }
 
   return ar

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Campaigns\Services;
 
+use App\Domains\Campaigns\Support\CreativeDemoPolicy;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -83,11 +85,29 @@ final class CreativeResultAvailability
      */
     public function measured(string $projectId, string $provider): array
     {
+        /*
+         * ACCOUNT-SCOPE-ISOLATION-001 — the evidence is only what this reader may see.
+         *
+         * Both of these read a figure table, so both answer to the same guard every other reader
+         * answers to. It matters more here than it looks: a tenant whose OTHER account measures
+         * purchases would otherwise lend its evidence to an account that does not, and a zero on a
+         * creative the reader can see would be licensed by a row they cannot. The source guard
+         * caught this within one run of the suite, which is what it is for.
+         *
+         * The demo policy rides along for the same reason it does on every other read of these
+         * tables: demo rows are a different world's measurements.
+         */
         $creative = $this->everNonZero(
             DB::table('creative_daily_metrics')
                 ->join('external_creatives', 'external_creatives.id', '=', 'creative_daily_metrics.creative_id')
                 ->where('creative_daily_metrics.project_id', $projectId)
-                ->where('external_creatives.provider', $provider),
+                ->where('external_creatives.provider', $provider)
+                ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'creative_daily_metrics', $projectId))
+                ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign(
+                    $q,
+                    '(select cr.external_campaign_id from external_creatives cr where cr.id = creative_daily_metrics.creative_id)',
+                    'creative_daily_metrics.project_id',
+                )),
             'creative_daily_metrics',
             'creative',
         );
@@ -95,7 +115,8 @@ final class CreativeResultAvailability
         $entity = $this->everNonZero(
             DB::table('entity_daily_metrics')
                 ->where('project_id', $projectId)
-                ->where('provider', $provider),
+                ->where('provider', $provider)
+                ->tap(fn ($q) => BoundAccountVisibility::applyToEntityMetrics($q, 'entity_daily_metrics')),
             'entity_daily_metrics',
             'entity',
         );

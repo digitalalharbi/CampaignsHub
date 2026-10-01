@@ -402,7 +402,12 @@ describe('a dynamic collection is composed per product, not missing a hero', () 
     expect(printed.sentence).not.toBe('')
     expect(printed.sentence).toContain('video')
     expect(printed.sentence).toContain('no cover frame')
-    expect(printed.short).toBe('Video preview')
+    /*
+      The printed label is its OWN — CONTENT-ABSENCE-NOT-A-FAULT-001 §15. A page that cannot play
+      anything must not offer a preview, so `clientAbsence` stopped borrowing the card's compact
+      label the moment that label started meaning «here is a video preview».
+    */
+    expect(printed.short).toBe('Video — no cover from the platform')
     expect(clientAbsence(readPreview(film, true), true).sentence).toContain('فيديو')
   })
 

@@ -1280,6 +1280,38 @@ final class CreativeMetrics
 
         $reported['orders'] = $reported['conversions'];
         $figures['reported'] = $reported;
+
+        /*
+         * CONTENT-RESULT-AVAILABILITY-001 §14 — the strip above the cards tells the same story.
+         *
+         * «One creative + same period + same scope must tell the same factual story across card,
+         * popup, detail, analytics, report, shared report.» A library whose cards all say «—» for
+         * orders, under a headline strip saying «الطلبات 0», is the same lie at a bigger scale —
+         * and the strip is the figure a client reads first.
+         *
+         * Folded optimistically: a scope is measurable if ANY creative in it is, because one
+         * measured sale proves the provider measures sales here and a pooled total of real zeros is
+         * a real zero. A scope where NOTHING is measurable inherits that, and the strip draws the
+         * dash its cards are drawing.
+         */
+        foreach (CreativeResultAvailability::keys() as $key) {
+            $states = array_values(array_filter(array_map(
+                static fn (array $set): ?string => is_string($set['availability'][$key] ?? null)
+                    ? (string) $set['availability'][$key]
+                    : null,
+                $sets,
+            )));
+
+            if ($states === []) {
+                continue;
+            }
+
+            $figures['availability'][$key] = in_array('reported', $states, true) ? 'reported' : $states[0];
+
+            if ($figures['availability'][$key] !== 'reported') {
+                $figures['reported'][$key] = false;
+            }
+        }
         $figures['creatives'] = count($sets);
 
         return $figures;

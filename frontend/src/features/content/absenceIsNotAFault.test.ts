@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { absenceShort, readPreview } from './adPreview'
+import { absenceShort, clientAbsence, readPreview } from './adPreview'
 import type { CreativePreview } from './api'
 
 /**
@@ -57,5 +57,34 @@ describe('what a card says when there is no still to draw', () => {
     const said = absenceShort(readPreview(preview({ state: 'unavailable' }), true), true)
 
     expect(said, 'an absent file still reads as a missing file rather than a provider fact').not.toBe('لا يوجد ملف')
+  })
+})
+
+/**
+ * CONTENT-ABSENCE-NOT-A-FAULT-001 §15 — the printed page cannot preview anything.
+ *
+ * «Printed/PDF report: video cannot play, so use a valid poster, a safely available representative
+ * frame, or an intentional report placeholder… "فيديو — المعاينة الثابتة غير متاحة من المنصة".»
+ *
+ * `clientAbsence` borrowed the card's compact label, which is right while the label meant «no
+ * cover» and wrong now that it means «video preview»: on paper there is no preview to offer, and
+ * the sentence has to say what the reader is looking at and why there is no picture of it.
+ */
+describe('what a printed report says in place of a film', () => {
+  it('does not offer a preview on a page that cannot play one', () => {
+    const { short } = clientAbsence(readPreview(preview(), true), true)
+
+    expect(short, 'the printed label still promises a preview').not.toBe('معاينة الفيديو')
+    expect(short).toMatch(/فيديو/)
+  })
+
+  /**
+   * And a link the source will no longer serve says that the FIGURES are still good — the one
+   * reassurance a client needs when a picture is missing from a document they are reading.
+   */
+  it('tells a client the performance figures are unaffected', () => {
+    const { sentence } = clientAbsence(readPreview(preview({ state: 'expired' }), true), true)
+
+    expect(sentence).toMatch(/الأداء/)
   })
 })
